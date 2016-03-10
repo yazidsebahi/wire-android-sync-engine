@@ -1,0 +1,77 @@
+/*
+ * Wire
+ * Copyright (C) 2016 Wire Swiss GmbH
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.waz.zms
+
+import android.app.Service
+import android.content.{Context, Intent}
+import android.os.{IBinder, PowerManager}
+import android.support.v4.content.WakefulBroadcastReceiver
+import com.waz.ZLog._
+import com.waz.service.ZMessaging
+import com.waz.threading.Threading
+
+import scala.concurrent.Future
+
+abstract class FutureService extends Service {
+  private implicit val logTag: LogTag = logTagFor[FutureService]
+
+  override def onBind(intent: Intent): IBinder = null
+
+  override def onStartCommand(intent: Intent, flags: Int, startId: Int): Int = {
+    debug(s"onStartCommand: $startId, intent: $intent")
+
+    val future = if (intent == null) Future.successful({}) else onIntent(intent, startId).recover { case ex => error("onIntent failed", ex) } (Threading.Ui)
+    future.onComplete { _ => onComplete(startId) }(Threading.Ui)
+
+    Service.START_REDELIVER_INTENT
+  }
+
+  protected def onIntent(intent: Intent, id: Int): Future[Any]
+
+  protected def onComplete(startId: Int): Unit = {
+    debug(s"onCompleted: $startId")
+    stopSelf(startId)
+  }
+}
+
+abstract class WakefulFutureService extends FutureService {
+
+  val wakeLockLevel = PowerManager.PARTIAL_WAKE_LOCK
+
+  lazy val powerManager = getApplicationContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
+  private lazy val wakeLock = powerManager.newWakeLock(wakeLockLevel, getClass.getName)
+
+  override def onStartCommand(intent: Intent, flags: Int, startId: Int): Int = {
+    wakeLock.acquire()
+    WakefulBroadcastReceiver.completeWakefulIntent(intent)
+
+    super.onStartCommand(intent, flags, startId)
+  }
+
+  override protected def onComplete(startId: Int): Unit = {
+    super.onComplete(startId)
+    wakeLock.release()
+  }
+}
+
+trait ZMessagingService extends Service {
+  final abstract override def onCreate(): Unit = {
+    super.onCreate()
+    ZMessaging.onCreate(getApplicationContext)
+  }
+}

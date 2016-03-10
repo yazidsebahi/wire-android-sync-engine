@@ -1,0 +1,93 @@
+{
+  "users":[
+    {
+        "name": "auto1 user",
+        "email": "auto1@wearezeta.com",
+        "password" : "auto1_pass"
+     },
+    {
+        "name" : "auto2 user",
+        "email" : "auto2@wearezeta.com",
+        "password" : "auto2_pass"
+     },
+    {
+      "name" : "auto3 user",
+      "email" : "auto3@wearezeta.com",
+      "password" : "auto3_pass"
+    },
+    {
+      "name" : "auto4 user",
+      "email" : "auto4@wearezeta.com",
+      "password" : "auto4_pass"
+    },
+    {
+      "name" : "auto5 user",
+      "email" : "auto5@wearezeta.com",
+      "password" : "auto5_pass"
+    },
+    {
+      "name" : "auto6 user",
+      "email" : "auto6@wearezeta.com",
+      "password" : "auto6_pass"
+    },
+    {
+      "name" : "auto7 user",
+      "email" : "auto7@wearezeta.com",
+      "password" : "auto7_pass"
+    },
+    {
+      "name" : "auto8 user",
+      "email" : "auto8@wearezeta.com",
+      "password" : "auto8_pass"
+    },
+    {
+      "name" : "auto9 user",
+      "email" : "auto9@wearezeta.com",
+      "password" : "auto9_pass"
+    }
+  ],
+
+  "conversations" : [
+      {
+          "name" : "conversation 1",
+          "participants" : ["auto1@wearezeta.com","auto2@wearezeta.com"],
+          "messages" : [
+              {
+                  "from": "auto1@wearezeta.com",
+                  "text": "Hello, World!"
+              }
+          ]
+      },
+      {
+          "name" : "conversation 2",
+          "participants" : ["auto1@wearezeta.com","auto3@wearezeta.com"],
+          "messages" : [
+              {
+                  "from": "auto1@wearezeta.com",
+                  "text": "Hello, World!"
+              }
+          ]
+      },
+      {
+          "name" : "conversation 3",
+          "participants" : ["auto1@wearezeta.com","auto4@wearezeta.com"],
+          "messages" : [
+              {
+                  "from": "auto1@wearezeta.com",
+                  "text": "Hello, World!"
+              }
+          ]
+      },
+      {
+          "name" : "conversation 4",
+          "participants" : ["auto1@wearezeta.com","auto5@wearezeta.com"],
+          "messages" : [
+              {
+                  "from": "auto1@wearezeta.com",
+                  "text": "Hello, World!"
+              }
+          ]
+      }
+  ]
+
+}

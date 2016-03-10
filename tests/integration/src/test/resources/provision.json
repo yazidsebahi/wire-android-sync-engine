@@ -1,0 +1,30 @@
+{
+  "users":[
+    {
+        "name": "Auto1",
+        "email": "auto1@wearezeta.com",
+        "password" : "auto1_pass"
+     },
+    {
+        "name" : "Auto2",
+        "email" : "auto2@wearezeta.com",
+        "password" : "auto2_pass"
+     }
+  ],
+
+  "conversations":[
+      {
+        "name" : "testconv",
+        "participants" : ["auto1@wearezeta.com","auto2@wearezeta.com"],
+        "messages" : [
+           {
+             "from": "auto1@wearezeta.com",
+             "text": "Hello, World!"
+           }, {
+             "from": "auto1@wearezeta.com",
+             "text": "Hello, World! 2"
+           }
+        ]
+      }
+  ]
+}

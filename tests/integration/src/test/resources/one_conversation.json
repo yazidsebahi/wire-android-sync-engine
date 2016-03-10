@@ -1,0 +1,27 @@
+{
+  "users":[
+    {
+        "name": "auto1 user",
+        "email": "auto1@wearezeta.com",
+        "password" : "auto1_pass"
+     },
+    {
+        "name" : "auto2 user",
+        "email" : "auto2@wearezeta.com",
+        "password" : "auto2_pass"
+     }
+  ],
+
+  "conversations" : [
+      {
+          "name" : "conversation 1",
+          "participants" : ["auto1@wearezeta.com","auto2@wearezeta.com"],
+          "messages" : [
+              {
+                  "from": "auto1@wearezeta.com",
+                  "text": "https://www.soundcloud.com/meep Hello, World!"
+              }
+          ]
+      }
+  ]
+}

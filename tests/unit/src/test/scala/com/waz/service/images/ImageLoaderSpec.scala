@@ -1,0 +1,270 @@
+/*
+ * Wire
+ * Copyright (C) 2016 Wire Swiss GmbH
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.waz.service.images
+
+import java.io.{ByteArrayInputStream, File, FileInputStream}
+
+import android.R
+import android.media.ExifInterface
+import android.util.Base64
+import com.waz.RobolectricUtils
+import com.waz.bitmap.BitmapUtils.Mime
+import com.waz.bitmap.ExifOrientation
+import com.waz.cache.{CacheEntry, Expiration}
+import com.waz.model._
+import com.waz.service.assets.DownloadKey.WireAsset
+import com.waz.service.assets.{DownloadKey, DownloaderService}
+import com.waz.service.images.ImageAssetService.BitmapRequest.Regular
+import com.waz.service.images.ImageAssetService.BitmapResult.BitmapLoaded
+import com.waz.service.images.ImageAssetService.{BitmapRequest, BitmapResult}
+import com.waz.sync.client.ImageAssetClient
+import com.waz.testutils.Matchers._
+import com.waz.testutils.MockZMessaging
+import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.IoUtils
+import org.robolectric.Robolectric
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
+
+@Config(manifest = "tests/OtrAndroidManifest.xml", reportSdk = 17)
+class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+
+  import com.waz.utils.events.EventContext.Implicits.global
+
+  var downloadRequest = Seq.empty[DownloadKey]
+  var downloadResult = Map.empty[RImageDataId, CacheEntry]
+
+  lazy val context = Robolectric.application
+  lazy val zms = new MockZMessaging() {
+    override lazy val downloader = new DownloaderService(context, cache, prefs, network) {
+      override def download(key: DownloadKey, force: Boolean)(implicit client: ImageAssetClient, expires: Expiration): CancellableFuture[Option[CacheEntry]] = {
+        downloadRequest = downloadRequest :+ key
+        key match {
+          case WireAsset(id, _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
+          case _ => CancellableFuture.successful(None)
+        }
+      }
+    }
+  }
+  lazy val service = zms.imageLoader
+
+  val fullFile = new File(getClass.getResource("/images/penguin.png").getFile).getAbsoluteFile
+  val mediumFile = new File(getClass.getResource("/images/penguin_240.png").getFile).getAbsoluteFile
+  val previewFile = new File(getClass.getResource("/images/penguin_128.png").getFile).getAbsoluteFile
+  lazy val previewData = Base64.encodeToString(IoUtils.toByteArray(new FileInputStream(previewFile)), Base64.NO_PADDING | Base64.NO_WRAP | Base64.NO_CLOSE)
+
+  val fullId = RImageDataId()
+  val mediumId = RImageDataId()
+  val previewId = RImageDataId()
+
+  lazy val convId = RConvId()
+  lazy val assetData = new ImageAssetData(AssetId(), convId, Seq(
+    ImageData("preview", "image/png", 128, 128, 480, 492, previewFile.length().toInt, Some(previewId), Some(previewData)),
+    ImageData("medium", "image/png", 240, 240, 480, 492, mediumFile.length().toInt, Some(mediumId)),
+    ImageData("full", "image/png", 480, 492, 480, 492, fullFile.length().toInt, Some(fullId))
+  ))
+
+  before {
+    Robolectric.application.getResources.getText(R.string.cancel, "") // force resource loading
+    downloadRequest = Nil
+    downloadResult = Map.empty
+  }
+
+  after {
+    ShadowLog.stream = null
+  }
+
+  def clearImageCache() = assetData.versions foreach { im =>
+    Await.result(zms.cache.remove(im.cacheKey), 5.seconds)
+  }
+
+  feature("Image downloading") {
+
+    scenario("Download image") {
+      val entry = Await.result(zms.cache.addFile("test_medium", mediumFile), 5.second)
+      downloadResult = Map(assetData.versions(1).remoteId.get -> entry)
+
+      val f = service.loadBitmap(assetData, assetData.versions(1), BitmapRequest.Regular(300))
+
+      val image = Await.result(f, 5.seconds)
+      image should not be null
+      image.getWidth shouldEqual 240
+      downloadRequest shouldEqual Seq(WireAsset(mediumId, convId))
+      entry.cacheFile should not(exist) // cache should be moved
+    }
+
+    scenario("Try loading same image multiple times concurrently") {
+      service.imageCache.remove(assetData.id, "medium")
+      clearImageCache()
+
+      val entry = Await.result(zms.cache.addFile("test_medium", mediumFile), 5.second)
+      downloadResult = Map(assetData.versions(1).remoteId.get -> entry)
+
+      val futures = Seq.fill(10) { service.loadBitmap(assetData, assetData.versions(1), BitmapRequest.Regular(300)) }
+
+      Await.result(CancellableFuture.sequence(futures)(Threading.Background), 5.seconds)
+
+      futures foreach { f =>
+        val image = Await.result(f, 5.seconds)
+        image should not be null
+        image.getWidth shouldEqual 240
+      }
+      downloadRequest shouldEqual Seq(WireAsset(mediumId, convId))
+      entry.cacheFile.exists() shouldEqual false // cache should be moved
+    }
+  }
+
+  feature("Bitmap signal") {
+
+    def prepareDownload() = {
+      service.imageCache.remove(assetData.id, "preview")
+      service.imageCache.remove(assetData.id, "full")
+      clearImageCache()
+
+      val entry = Await.result(zms.cache.addFile("test_full", fullFile), 5.second)
+      downloadResult = Map(assetData.versions(2).remoteId.get -> entry)
+      entry
+    }
+
+    class SignalListener(req: BitmapRequest) {
+      var results = Seq.empty[BitmapResult]
+      val signal = new BitmapSignal(assetData, req, service, service.imageCache)
+      val obs = signal { result => results = results :+ result }
+    }
+
+    def assertResults(req: BitmapRequest)(body: Seq[BitmapResult] => Unit) = {
+      val listener = new SignalListener(req)
+      withDelay {
+        body(listener.results.filter(_ != BitmapResult.Empty))
+      }
+    }
+
+    scenario("Load preview only") {
+      assertResults(BitmapRequest.Regular(100)) { results =>
+        results should beMatching({
+          case Seq(BitmapLoaded(b, false, _)) if b.getWidth == 128 => true
+        })
+        downloadRequest shouldBe empty
+      }
+    }
+
+    scenario("Download full image") {
+      val entry = prepareDownload()
+
+      assertResults(BitmapRequest.Regular(300)) { results =>
+        results should have size 2
+        downloadRequest shouldEqual Seq(WireAsset(fullId, convId))
+      }
+      entry.cacheFile should not(exist) // cache should be moved
+      entry.delete()
+
+      val e = Await.result(zms.cache.getEntry(assetData.versions.last.cacheKey), 5.seconds)
+      e shouldBe defined
+      e.get.cacheFile should exist
+      e.get.data.timeout should be >= 7.days.toMillis
+      e.get.data.lastUsed shouldEqual (System.currentTimeMillis() +- 1000)
+    }
+
+    scenario("Return full from image cache") {
+      assertResults(BitmapRequest.Regular(300)) { results =>
+        results should beMatching({
+          case Seq(BitmapLoaded(b, false, _)) if b.getWidth == 480 => true
+        })
+        downloadRequest shouldBe empty
+      }
+    }
+
+    scenario("Return full from download cache") {
+      service.imageCache.remove(assetData.id, "preview")
+      service.imageCache.remove(assetData.id, "full")
+
+      assertResults(BitmapRequest.Regular(300)) { results =>
+        results should beMatching({
+          case Seq(BitmapLoaded(b, false, _)) if b.getWidth == 480 => true
+        })
+        downloadRequest shouldBe empty
+      }
+    }
+
+    scenario("Download with multiple signals at the same time") {
+      prepareDownload()
+
+      val listeners = Seq.fill(2)(new SignalListener(BitmapRequest.Regular(300)))
+      withDelay {
+        listeners foreach { l =>
+          // all listeners should get preview and full image
+          l.results.filter(_ != BitmapResult.Empty) should have size 2
+        }
+      }
+      downloadRequest shouldEqual Seq(WireAsset(fullId, convId))
+    }
+
+    scenario("Stop listening on shared signal") {
+      prepareDownload()
+
+      val l1 = new SignalListener(BitmapRequest.Regular(300))
+      val l2 = new SignalListener(BitmapRequest.Regular(300))
+
+      l1.obs.destroy()
+
+      withDelay {
+        l1.results.count(_ != BitmapResult.Empty) should be < 2
+        l2.results.filter(_ != BitmapResult.Empty) should have size 2
+      }
+    }
+
+    scenario("Restart cancelled loading on new listener") {
+      prepareDownload()
+
+      var results = Seq.empty[BitmapResult]
+      val signal = new BitmapSignal(assetData, BitmapRequest.Regular(300), service, service.imageCache)
+      val obs = signal { result => results = results :+ result }
+      withDelay(results.count(_ != BitmapResult.Empty) shouldEqual 1)
+      obs.destroy()
+
+      signal { result => results = results :+ result }
+
+      withDelay {
+        results.filter(_ != BitmapResult.Empty) should have size 3
+      }
+    }
+  }
+
+  feature("exiff orientation") {
+
+    lazy val file = new File(getClass.getResource("/images/Landscape_5.jpg").getFile).getAbsoluteFile
+    lazy val bytes = IoUtils.toByteArray(new FileInputStream(file))
+
+    scenario("Fix orientation from byte array") {
+      ExifOrientation(new FileInputStream(file)) shouldEqual ExifInterface.ORIENTATION_TRANSPOSE
+      ExifOrientation(new ByteArrayInputStream(bytes)) shouldEqual ExifInterface.ORIENTATION_TRANSPOSE
+
+      val im = ImageData("medium", Mime.Unknown, 0, 0, 0, 0, bytes.length, Some(RImageDataId()), Some(Base64.encodeToString(bytes, 0)))
+      val img = ImageAssetData(AssetId(), RConvId(), Seq(im))
+
+      val bmp = Await.result(service.loadBitmap(img, im, Regular(100)), 5.seconds)
+      //      TODO: fix ShadowIOBitmap to produce corrent image - this works on device
+      //      bmp.getWidth shouldEqual 600
+      //      bmp.getHeight shouldEqual 450
+    }
+  }
+}
