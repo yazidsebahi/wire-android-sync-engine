@@ -90,8 +90,14 @@ class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
 
       imageAssets should have size 10
 
-      withClue(imageAssets.headOption) {
-        imageAssets.headOption.value.versions.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
+      val assetOfFirstTrack = for {
+        t <- tracks.headOption
+        a <- t.artwork
+        asset <- imageAssets find (_.id == a)
+      } yield asset
+
+      withClue(assetOfFirstTrack) {
+        assetOfFirstTrack.value.versions.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
           ("default", 120, 90),
           ("medium", 320, 180),
           ("high", 480, 360),

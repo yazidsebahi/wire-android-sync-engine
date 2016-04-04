@@ -40,8 +40,9 @@ import scala.concurrent.Future
 
 class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushService,
                           val lifecycle: ZmsLifecycle, val sync: SyncServiceHandle,
-                          val convs: ConversationsContentUpdater, users: UserService, private[call] val flows: FlowManagerService,
-                          media: MediaManagerService, val network: NetworkModeService, errors: ErrorsService, client: VoiceChannelClient)
+                          val convs: ConversationsContentUpdater, users: UserService,
+                          private[call] val flows: FlowManagerService, private[call] val media: MediaManagerService,
+                          val network: NetworkModeService, errors: ErrorsService, client: VoiceChannelClient)
 
   extends VoiceChannelUiService { self =>
 
@@ -184,7 +185,7 @@ class VoiceChannelService(val context: Context, val content: VoiceChannelContent
 
   private[call] def setMuted(muted: Boolean) = flows.setFlowManagerMuted(muted)
 
-  private[call] def setSpeaker(speaker: Boolean) = if (speaker) media.mediaManager.turnLoudSpeakerOn() else media.mediaManager.turnLoudSpeakerOff()
+  private[call] def setSpeaker(speaker: Boolean) = media.mediaManager foreach { mm => if (speaker) mm.turnLoudSpeakerOn() else mm.turnLoudSpeakerOff() }
 
   private[call] def getSortedParticipantIds(participants: Array[UserId]): Array[UserId] = flows.getSortedGroupCallParticipantIds(participants.map(_.str)(breakOut)) map UserId
 

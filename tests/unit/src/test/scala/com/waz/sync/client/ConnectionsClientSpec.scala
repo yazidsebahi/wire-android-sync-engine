@@ -23,7 +23,7 @@ import java.util.TimeZone
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
-import com.waz.znet.ContentEncoder.{ByteArrayRequestContent, BinaryRequestContent}
+import com.waz.znet.ContentEncoder.ByteArrayRequestContent
 import com.waz.znet.Response.HttpStatus
 import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._

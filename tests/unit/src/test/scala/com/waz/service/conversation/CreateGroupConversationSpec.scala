@@ -35,9 +35,8 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.language.implicitConversions
 
-class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
+class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
   lazy val globalStorage = new GlobalStorage(Robolectric.application)
 
@@ -135,7 +134,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
 
     listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
 
-    lastMessage(conv.id) should be('empty)
+    lastMessage(conv.id).value.msgType shouldEqual Message.Type.MEMBER_JOIN
 
     listConvs should have size 1
   }
@@ -217,12 +216,10 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
     conv.remoteId shouldEqual event.convId
 
-    lastMessage(conv.id) should be('defined)
-    val msg = lastLocalMessage(conv.id, Message.Type.MEMBER_JOIN)
-    msg should be('defined)
-
-    msg.map(_.userId) shouldEqual Some(selfUser.id)
-    msg.map(_.members.toSet) shouldEqual Some(Set(user1.id, user2.id))
+    val msg = lastMessage(conv.id).value
+    msg.msgType shouldEqual Message.Type.MEMBER_JOIN
+    msg.userId shouldEqual selfUser.id
+    msg.members shouldEqual Set(user1.id, user2.id)
 
     listConvs should have size 1
   }
@@ -269,12 +266,10 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
     conv.remoteId shouldEqual remoteId
 
-    lastMessage(conv.id) should be('defined)
-    val msg = lastLocalMessage(conv.id, Message.Type.MEMBER_JOIN)
-    msg should be('defined)
-
-    msg.map(_.userId) shouldEqual Some(selfUser.id)
-    msg.map(_.members.toSet) shouldEqual Some(Set(user1.id, user2.id))
+    val msg = lastMessage(conv.id).value
+    msg.msgType shouldEqual Message.Type.MEMBER_JOIN
+    msg.userId shouldEqual selfUser.id
+    msg.members shouldEqual Set(user1.id, user2.id)
 
     listConvs should have size 1
   }

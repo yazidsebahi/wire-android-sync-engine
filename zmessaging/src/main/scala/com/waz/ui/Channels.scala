@@ -18,16 +18,17 @@
 package com.waz.ui
 
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
-import com.waz.api.{VideoSendState, CallDirection, KindOfCall}
 import com.waz.api.VoiceChannel.JoinCallback
 import com.waz.api.impl.{ErrorResponse, VoiceChannel}
-import com.waz.model.VoiceChannelData.{ConnectionState, ChannelState}
+import com.waz.api.{CallDirection, KindOfCall, VideoSendState}
+import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
 import com.waz.model._
 import com.waz.service.UserService
 import com.waz.service.call.VoiceChannelService._
 import com.waz.threading.Threading
-import com.waz.utils._
+import com.waz.utils.{returning, JsonDecoder}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
@@ -44,7 +45,7 @@ class Channels(implicit ui: UiModule) {
     tracking = CallTrackingData(initiated = None, joined = None, established = None, duration = Duration.Zero, maxNumParticipants = 0, kindOfCall = KindOfCall.UNKNOWN, callDirection = CallDirection.INCOMING),
     video = VideoCallData.Empty, selfId = UserService.SelfUserId, revision = Revision(0)))
 
-  def getVoiceChannel(data: VoiceChannelData): VoiceChannel = returning(channels.getOrElseUpdate(data.id, new VoiceChannel(data.id, data))) { ch =>
+  def getVoiceChannel(data: VoiceChannelData): VoiceChannel = returning(getOrUpdate(channels)(data.id, new VoiceChannel(data.id, data))) { ch =>
     if (ch.data.revision < data.revision) {
       debug(s"cached voice channel data out of date, overriding... ($data instead of ${ch.data})")
       ch.set(data)

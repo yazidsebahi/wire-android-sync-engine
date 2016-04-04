@@ -17,7 +17,7 @@
  */
 package com.waz.model
 
-import java.nio.{LongBuffer, ByteBuffer}
+import java.nio.ByteBuffer
 import java.util.UUID
 
 import com.waz.utils.{JsonDecoder, JsonEncoder}

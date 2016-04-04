@@ -27,7 +27,6 @@ import com.waz.utils._
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 sealed trait SyncRequest {

@@ -27,6 +27,7 @@ import com.waz.api.impl.ImageAsset.Parcelable
 import com.waz.api.impl._
 import com.waz.bitmap.BitmapDecoder
 import com.waz.bitmap.BitmapUtils.Mime
+import com.waz.Control.getOrUpdate
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
@@ -42,7 +43,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   val localImages = new UiCache[AssetId, ImageAsset](lruSize = 5)
   val zms = ui.zms
 
-  def getImageAsset(id: AssetId): ImageAsset = images.getOrElseUpdate(id, new ImageAsset(id))
+  def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
 
   def getImageAsset(p: Parcel): api.ImageAsset = {
     p.readInt() match {
@@ -61,7 +62,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
     }
   }
 
-  def getLocalImageAsset(data: ImageAssetData) = localImages.getOrElseUpdate(data.id, new LocalImageAsset(data))
+  def getLocalImageAsset(data: ImageAssetData) = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
 
   def getOrCreateImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty

@@ -26,28 +26,27 @@ import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.koushikdutta.async.callback.CompletedCallback.NullCompletedCallback
 import com.koushikdutta.async.callback.DataCallback.NullDataCallback
-import com.koushikdutta.async.{ByteBufferList, AsyncSocket, AsyncServer}
-import com.koushikdutta.async.callback.{DataCallback, CompletedCallback}
-import com.koushikdutta.async.future.{SimpleFuture, Future}
-import com.koushikdutta.async.http.{AsyncHttpRequest, Headers, AsyncHttpResponse, AsyncHttpClient}
+import com.koushikdutta.async.callback.{CompletedCallback, DataCallback}
+import com.koushikdutta.async.future.{Future, SimpleFuture}
 import com.koushikdutta.async.http.callback.HttpConnectCallback
-import com.waz.testutils.Slow
-import com.waz.testutils.Matchers._
+import com.koushikdutta.async.http.{AsyncHttpClient, AsyncHttpRequest, AsyncHttpResponse, Headers}
+import com.koushikdutta.async.{AsyncServer, AsyncSocket, ByteBufferList}
 import com.waz.ZLog.LogTag
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
+import com.waz.testutils.Matchers._
+import com.waz.testutils.Slow
 import com.waz.threading.CancellableFuture.CancelException
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.{IoUtils, Json}
-import com.waz.znet.ContentEncoder.{GzippedRequestContent, EmptyRequestContent, JsonContentEncoder, StreamRequestContent}
+import com.waz.znet.ContentEncoder.{EmptyRequestContent, GzippedRequestContent, JsonContentEncoder, StreamRequestContent}
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, HttpStatus, SuccessHttpStatus}
 import org.json.JSONObject
-import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 
-import scala.concurrent.{TimeoutException, Await}
 import scala.concurrent.Future.successful
 import scala.concurrent.duration._
+import scala.concurrent.{Await, TimeoutException}
 import scala.util.Random
 
 class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {

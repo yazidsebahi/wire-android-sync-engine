@@ -18,17 +18,20 @@
 package com.waz.api.impl
 
 import com.waz.RobolectricUtils
-import com.waz.api.impl.otr.OtrClients
+import com.waz.api.impl.otr.{OtrClient, OtrClients}
+import com.waz.model.UserId
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service.ZMessaging
 import com.waz.testutils.{MockUiModule, MockZMessaging}
 import org.robolectric.Robolectric
 import org.scalatest._
+import org.scalatest.prop.Tables
 import org.threeten.bp.Instant
+import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import scala.util.Random
 
-class OtrClientSpec  extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
+class OtrClientSpec  extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with Tables {
 
   implicit lazy val ui = new MockUiModule(new MockZMessaging())
 
@@ -51,5 +54,19 @@ class OtrClientSpec  extends FeatureSpec with Matchers with BeforeAndAfter with 
     )
 
     Random.shuffle(clients).toVector.sorted(OtrClients.ClientOrdering).map(_.id) shouldEqual clients.map(_.id)
+  }
+
+  scenario("Ids are padded with leading zeroes") {
+
+    val clientIds = Table(
+      ("111111111111",      "[[00]] 00 [[11]] 11 [[11]] 11 [[11]] 11"),
+      ("1111111111111111",  "[[11]] 11 [[11]] 11 [[11]] 11 [[11]] 11"),
+      ("abcd111111111111",  "[[AB]] CD [[11]] 11 [[11]] 11 [[11]] 11")
+    )
+
+    forAll(clientIds) { (raw: String, formatted: String) =>
+      val client = new OtrClient(UserId(""), ClientId(raw), Client(ClientId(raw), ""))
+      client.getDisplayId shouldEqual formatted
+    }
   }
 }

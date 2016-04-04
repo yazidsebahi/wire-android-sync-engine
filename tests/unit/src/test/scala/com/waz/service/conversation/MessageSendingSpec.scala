@@ -38,7 +38,6 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.language.implicitConversions
 import scala.util.Random
 
 class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>

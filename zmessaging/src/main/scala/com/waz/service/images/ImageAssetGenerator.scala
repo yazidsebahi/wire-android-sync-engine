@@ -17,7 +17,7 @@
  */
 package com.waz.service.images
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io.File
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -25,7 +25,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
-import com.waz.cache.{CacheService, LocalData}
+import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.model._
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
@@ -60,9 +60,9 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
           else CancellableFuture.successful((file, m))
       } map {
         case (file, m) =>
-          val size = file.length().toInt
+          val size = file.length
           verbose(s"final image, size: $size, meta: $m")
-          val data = if (size > 2 * 1024) None else Some(Base64.encodeToString(IoUtils.toByteArray(new FileInputStream(file)), Base64.NO_WRAP | Base64.NO_PADDING))
+          val data = if (size > 2 * 1024) None else Some(Base64.encodeToString(IoUtils.toByteArray(file.inputStream), Base64.NO_WRAP | Base64.NO_PADDING))
           data foreach { data => cache.remove(ImageData.cacheKey(Some(remoteId))) } // no need to cache preview images
           ImageData(co.tag, m.mimeType, m.width, m.height, math.max(m.width, origWidth), math.max(m.height, origHeight), size, Some(remoteId), data)
       }
@@ -100,7 +100,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       }
     }
 
-    def generateScaled(): CancellableFuture[(File, Metadata)] = {
+    def generateScaled(): CancellableFuture[(CacheEntry, Metadata)] = {
       val (w, h) = options.calculateScaledSize(meta.width, meta.height)
       verbose(s"calculated scaled size: ($w, $h) for $meta and $options")
       loadScaled(w, h, options.cropToSquare) map { image =>
@@ -111,36 +111,36 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
 
     if (options.shouldScaleOriginalSize(meta.width, meta.height)) generateScaled()
-    else cache.addStream(ImageData.cacheKey(Some(remoteId)), input.inputStream, cacheLocation = Some(saveDir)) map { entry => (entry.cacheFile, meta) }
+    else cache.addStream(ImageData.cacheKey(Some(remoteId)), input.inputStream, cacheLocation = Some(saveDir)) map { entry => (entry, meta) }
   }
 
   private def saveFormat(mime: String, forceLossy: Boolean) =
     if (!forceLossy && mime == Mime.Png) Bitmap.CompressFormat.PNG
     else Bitmap.CompressFormat.JPEG
 
-  private def saveImage(id: RImageDataId, image: Bitmap, mime: String, options: CompressionOptions): (File, Metadata) =
-    saveImage(cache.createForFile(ImageData.cacheKey(Some(id)), cacheLocation = Some(saveDir)).cacheFile, image, mime, options)
+  private def saveImage(id: RImageDataId, image: Bitmap, mime: String, options: CompressionOptions): (CacheEntry, Metadata) =
+    saveImage(cache.createForFile(ImageData.cacheKey(Some(id)), cacheLocation = Some(saveDir)), image, mime, options)
 
-  private def saveImage(file: File, image: Bitmap, mime: String, options: CompressionOptions): (File, Metadata) = {
+  private def saveImage(file: CacheEntry, image: Bitmap, mime: String, options: CompressionOptions): (CacheEntry, Metadata) = {
     val format = saveFormat(mime, options.forceLossy)
-    IoUtils.withResource(new FileOutputStream(file)) { os => image.compress(format, options.quality, os) }
+    IoUtils.withResource(file.outputStream) { os => image.compress(format, options.quality, os) }
     (file, Metadata(image.getWidth, image.getHeight, if (format == Bitmap.CompressFormat.PNG) Mime.Png else Mime.Jpg))
   }
 
-  private[images] def shouldRecode(file: File, meta: Metadata, opts: CompressionOptions) = {
-    val size = file.length()
+  private[images] def shouldRecode(file: LocalData, meta: Metadata, opts: CompressionOptions) = {
+    val size = file.length
     opts.recodeMimes(meta.mimeType) ||
       meta.mimeType != Mime.Gif && size > opts.byteCount ||
       size > MaxGifSize ||
       meta.isRotated
   }
 
-  private def recode(id: AssetId, file: File, options: CompressionOptions, meta: Metadata) = {
+  private def recode(id: AssetId, file: CacheEntry, options: CompressionOptions, meta: Metadata) = {
     verbose(s"recode asset $id with opts: $options")
 
     def load = {
       imageCache.reserve(id, options.tag, meta.width, if (meta.isRotated) 2 * meta.height else meta.height)
-      bitmapLoader(file, 1, meta.orientation)
+      bitmapLoader(() => file.inputStream, 1, meta.orientation)
     }
 
     imageCache(id, options.tag, load) map { bitmap => saveImage(file, bitmap, Mime.Jpg, options)}

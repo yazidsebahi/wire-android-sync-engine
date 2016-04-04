@@ -18,9 +18,8 @@
 package com.waz.zms
 
 import android.app.Activity
-import android.content.{BroadcastReceiver, Intent, Context}
+import android.content.{BroadcastReceiver, Context, Intent}
 import android.support.v4.content.WakefulBroadcastReceiver
-import com.waz.ZLog
 import com.waz.ZLog._
 
 class GcmBroadcastReceiver extends BroadcastReceiver {

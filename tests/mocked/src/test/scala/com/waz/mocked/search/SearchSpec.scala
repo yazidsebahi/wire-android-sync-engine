@@ -38,7 +38,6 @@ import org.scalatest.{FeatureSpec, Inspectors}
 
 import scala.collection.breakOut
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with MockedClientApiSpec with MockBackend {
   import DefaultPushBehaviour.Implicit

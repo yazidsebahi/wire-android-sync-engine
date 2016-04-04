@@ -30,7 +30,7 @@ import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import com.wire.messages.nano.Otr
-import com.wire.messages.nano.Otr.{ClientEntry, UserEntry}
+import com.wire.messages.nano.Otr.ClientEntry
 import org.json.{JSONArray, JSONObject}
 
 import scala.collection.breakOut

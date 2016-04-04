@@ -20,11 +20,11 @@ package com.waz.service
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.media.manager.MediaManager
+import com.waz.media.manager.{MediaManagerListener, MediaManager}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{SourceSignal, EventContext}
 import com.waz.utils.{IoUtils, LoggedTry}
 import com.waz.zms.R
 import org.json.JSONObject
@@ -37,12 +37,24 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
 
   private implicit val dispatcher = new SerialDispatchQueue
   private implicit val ev = EventContext.Global
-  private implicit val logTag: LogTag = logTagFor[MediaManagerService]
 
-  lazy val mediaManager = {
+  lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
+  
+  lazy val mediaManager = LoggedTry {
     val manager = MediaManager.getInstance(context.getApplicationContext)
+    manager.addListener(listener)
     audioConfig.foreach(manager.registerMediaFromConfiguration)
     manager
+  } .toOption
+
+  lazy val listener: MediaManagerListener = new MediaManagerListener {
+    override def mediaCategoryChanged(convId: String, category: Int): Int = category // we don't need to do anything in here, I guess, and the return value gets ignored anyway
+
+    override def onPlaybackRouteChanged(route: Int): Unit = {
+      val pbr = PlaybackRoute.fromAvsIndex(route)
+      debug(s"onPlaybackRouteChanged($pbr)")
+      isSpeakerOn ! (pbr == PlaybackRoute.Speaker)
+    }
   }
 
   private lazy val prefAll = Try(context.getResources.getString(R.string.pref_sound_value_all)).getOrElse("all")
@@ -57,7 +69,7 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
   soundsPref.signal { value =>
     val intensity = intensityMap.getOrElse(value, IntensityLevel.FULL)
     verbose(s"setting intensity to: $intensity")
-    mediaManager.setIntensity(intensity)
+    mediaManager foreach (_.setIntensity(intensity))
   }
 
   lazy val audioConfig =
@@ -73,5 +85,7 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
 }
 
 object MediaManagerService {
+  private implicit val logTag: LogTag = logTagFor[MediaManagerService]
+
   private val AudioConfigAsset = "android.json"
 }

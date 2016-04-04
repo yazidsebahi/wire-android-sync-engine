@@ -84,6 +84,8 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
         }
       }
     }
+
+    service.media.isSpeakerOn.on(dispatcher) { speakerOn => update(_.copy(speaker = speakerOn), notify = true) }
   }
 
   private def restoreCallState(localState: ChannelState): Unit = if (localState == ChannelState.UserConnected) {
@@ -215,7 +217,6 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
     service.metrics = service.metrics.joined(id)
     debug(s"join $id, state: ${data.state}, dev: ${data.deviceState}, withVideo = $withVideo")
     if (data.deviceState == ConnectionState.Idle) {
-      service.setSpeaker(false)
       val caller = data.caller orElse Some(selfUserId)
       val outgoing = caller contains selfUserId
 
@@ -287,6 +288,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
   def setSpeaker(speaker: Boolean) = initFuture map { _ =>
     if (data.speaker != speaker) {
       val before = data
+      verbose(s"setSpeaker($speaker)")
       update(_.copy(speaker = speaker), notify = true)
       if (data.deviceState != ConnectionState.Idle) service.setSpeaker(speaker)
       service.content.updatedActiveChannels ! ChannelUpdate(before, data, None)

@@ -27,12 +27,13 @@ package com.waz.bitmap.gif;
 public class ImageDecoderHelper {
 
     static final int MAX_STACK_SIZE = 4096;
+    static final int PIXEL_STACK_SIZE = 8192;
     static final int NULL_CODE = -1;
 
     // LZW decoder working arrays
     private final short[] prefix = new short[MAX_STACK_SIZE];
     private final byte[] suffix = new byte[MAX_STACK_SIZE];
-    private final byte[] pixelStack = new byte[MAX_STACK_SIZE * 2];
+    private final byte[] pixelStack = new byte[PIXEL_STACK_SIZE];
 
     /**
      * Decodes LZW image data into pixel array. Adapted from John Cristy's ImageMagick.
@@ -52,6 +53,7 @@ public class ImageDecoderHelper {
         old_code = NULL_CODE;
         code_size = data_size + 1;
         code_mask = (1 << code_size) - 1;
+        if (clear >= MAX_STACK_SIZE) return;
         for (code = 0; code < clear; code++) {
             prefix[code] = 0; // XXX ArrayIndexOutOfBoundsException
             suffix[code] = (byte)code;
@@ -80,6 +82,7 @@ public class ImageDecoderHelper {
             code = datum & code_mask;
             datum >>= code_size;
             bits -= code_size;
+            if (code >= MAX_STACK_SIZE) return;
             // Interpret the code
             if (code == end_of_information) {
                 break;
@@ -104,6 +107,7 @@ public class ImageDecoderHelper {
                 code = old_code;
             }
             while (code > clear) {
+                if (top >= PIXEL_STACK_SIZE) return;
                 pixelStack[top++] = suffix[code];
                 code = prefix[code];
             }

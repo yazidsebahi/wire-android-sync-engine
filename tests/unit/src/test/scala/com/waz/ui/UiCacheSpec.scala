@@ -17,11 +17,10 @@
  */
 package com.waz.ui
 
+import com.waz.Control.getOrUpdate
 import com.waz.testutils.{MockZMessaging, MockUiModule}
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
-/**
-  */
 class UiCacheSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   implicit lazy val ui = new MockUiModule(new MockZMessaging())
@@ -32,13 +31,13 @@ class UiCacheSpec extends FeatureSpec with Matchers with RobolectricTests {
     val cache = new UiCache[String, Item] {}
     val item = new Item("item1")
 
-    cache.getOrElseUpdate("item1", item) should be(item)
+    getOrUpdate(cache)("item1", item) should be(item)
     cache.get("item1") should be(Some(item))
   }
 
   scenario("add item to cache, loose the reference, force GC") {
     val cache = new UiCache[String, Item] {}
-    cache.getOrElseUpdate("item0", new Item("item0")) should be(new Item("item0"))
+    getOrUpdate(cache)("item0", new Item("item0")) should be(new Item("item0"))
     System.gc()
 
     Thread.sleep(100)

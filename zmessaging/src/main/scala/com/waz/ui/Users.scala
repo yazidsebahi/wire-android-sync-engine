@@ -18,6 +18,7 @@
 package com.waz.ui
 
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.IConversation
@@ -42,9 +43,9 @@ class Users(implicit ui: UiModule) {
 
   def getStorage = zms(_.storage)
 
-  def getUser(id: UserId): User = users.getOrElseUpdate(id, new User(id))
+  def getUser(id: UserId): User = getOrUpdate(users)(id, new User(id))
 
-  def getUser(data: UserData): User = users.getOrElseUpdate(data.id, new User(data.id, data))
+  def getUser(data: UserData): User = getOrUpdate(users)(data.id, new User(data.id, data))
 
   def getUser(p: Parcel): api.User = getUser(JsonDecoder.decode[UserData](p.readString()))
 

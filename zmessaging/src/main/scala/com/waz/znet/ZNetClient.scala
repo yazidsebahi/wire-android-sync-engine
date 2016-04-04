@@ -23,7 +23,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.EmailAddress
-import com.waz.service.{Preference, KeyValueService, BackendConfig, GlobalModule}
+import com.waz.service.{BackendConfig, GlobalModule, Preference}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.znet.AuthenticationManager.Token
@@ -34,7 +34,6 @@ import com.waz.znet.Response._
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
-import scala.language.existentials
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 

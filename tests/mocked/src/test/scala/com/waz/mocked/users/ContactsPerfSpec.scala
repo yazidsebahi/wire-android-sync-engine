@@ -30,7 +30,6 @@ import org.scalatest.{FeatureSpec, OptionValues}
 import scala.io.Source
 
 class ContactsPerfSpec extends FeatureSpec with OptionValues with MockedClientApiSpec with MockBackend {
-  import DefaultPushBehaviour.Implicit
 
   scenario("Login, importing and loading contacts") {
     val start = nanoNow

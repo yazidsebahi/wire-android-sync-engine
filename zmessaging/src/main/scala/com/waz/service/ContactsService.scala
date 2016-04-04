@@ -50,7 +50,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{GenMap, GenSet, breakOut, mutable => mut}
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.control.NoStackTrace
 import scala.util.{Success, Try}
 
@@ -172,7 +171,9 @@ class ContactsService(user: ZUserService, context: Context, lifecycle: ZmsLifecy
 
         verbose(s"unified contacts in ${start.untilNow}: ${acceptedOrPending.size} accepted/pending user(s), ${contacts.size} total contact(s) (${notOnWire.size} not on Wire), ${onWire.size} user(s) match a contact (${onWireButUnconnected.size} not connected)")
 
-        UnifiedContacts(contacts, users, sortedIds, groupedByInitial)
+        val top10Contacts = onWire.aftersets.valuesIterator.flatMap(_.headOption).toSet.take(10).toVector
+        val totalCount = onWire.aftersets.size
+        UnifiedContacts(contacts, users, sortedIds, groupedByInitial, TopContactsOnWire(top10Contacts, totalCount))
       })
     }
 
@@ -427,7 +428,9 @@ object ContactsService {
   val CurrentAddressBookVersion = 3
   val InitialContactsBatchSize = 101
 
-  case class UnifiedContacts(contacts: GenMap[ContactId, Contact], users: Map[UserId, UserData], sorted: Vector[Either[UserId, ContactId]], groupedByInitial: SeqMap[String, IndexedSeq[Int]])
+  case class UnifiedContacts(contacts: GenMap[ContactId, Contact], users: Map[UserId, UserData], sorted: Vector[Either[UserId, ContactId]], groupedByInitial: SeqMap[String, IndexedSeq[Int]], topContactsOnWire: TopContactsOnWire)
+
+  case class TopContactsOnWire(contacts: Vector[ContactId], totalCount: Int)
 
   val Phones = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
   val Emails = ContactsContract.CommonDataKinds.Email.CONTENT_URI

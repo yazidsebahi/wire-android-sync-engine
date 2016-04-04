@@ -19,6 +19,8 @@ package com.waz.cache
 
 import java.io._
 import java.lang.System._
+import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
+import javax.crypto.{BadPaddingException, Cipher, CipherInputStream, CipherOutputStream}
 
 import android.content.Context
 import com.waz.HockeyApp
@@ -27,15 +29,17 @@ import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.Database
 import com.waz.model.Uid
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.IoUtils
+import com.waz.utils.{IoUtils, LoggedTry, returning}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalData {
   private implicit val logTag: LogTag = logTagFor[CacheEntry]
 
-  override def inputStream: InputStream = content.fold[InputStream](new FileInputStream(cacheFile))(new ByteArrayInputStream(_))
+  override def inputStream: InputStream =
+    content.fold[InputStream](CacheService.inputStream(data.encKey, new FileInputStream(cacheFile)))(new ByteArrayInputStream(_))
 
   override def length: Int = content.fold(cacheFile.length().toInt)(_.length)
 
@@ -45,11 +49,12 @@ class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalD
 
   def content = data.data
 
-  def cacheFile = service.entryFile(data.path.getOrElse(service.cacheDir), data.fileId)
+  // direct access to this file is not advised, it's content will be encrypted when on external storage, it's better to use stream api
+  private[waz] def cacheFile = service.entryFile(data.path.getOrElse(service.cacheDir), data.fileId)
 
   def outputStream = {
     cacheFile.getParentFile.mkdirs()
-    new FileOutputStream(cacheFile)
+    CacheService.outputStream(data.encKey, new FileOutputStream(cacheFile))
   }
 
   def copyDataToFile() = {
@@ -77,51 +82,61 @@ object Expiration {
 }
 
 class CacheService(context: Context, storage: Database) {
-  private implicit val logTag: LogTag = logTagFor[CacheService]
+  import CacheService._
   import Threading.Implicits.Background
 
   lazy val cacheStorage = new CacheStorage(storage, context)
 
-  def createForFile(key: String = Uid().str, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry = add(key, Right(cacheLocation))
+  def createForFile(key: String = Uid().str, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry =
+    add(CacheEntryData(key, None, timeout = timeout.timeout, path = cacheLocation.orElse(Some(intCacheDir)))) // use internal storage for this files as those won't be encrypted
 
-  def addData(key: String, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry = {
-    add(key, Left(data))(timeout)
-  }
+  def addData(key: String, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry =
+    add(CacheEntryData(key, Some(data), timeout = timeout.timeout))
 
   def addStream(key: String, in: => InputStream, cacheLocation: Option[File] = None, length: Int = -1)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CancellableFuture[CacheEntry] = CancellableFuture {
-    val path = cacheLocation.getOrElse(cacheDir)
-    try {
-      if (length > 0 && length <= CacheService.DataThreshold) {
-        addData(key, IoUtils.toByteArray(in))
-      } else {
-        val data = CacheEntryData(key, timeout = timeout.timeout, path = Some(path))
-        val file = entryFile(path, data.fileId)
-        file.getParentFile.mkdirs()
-        IoUtils.copy(in, new FileOutputStream(file))
-        add(data)
+    if (length > 0 && length <= CacheService.DataThreshold) {
+      addData(key, IoUtils.toByteArray(in))
+    } else {
+      addFileToStorage(IoUtils.copy(in, _), cacheLocation) match {
+        case Success((fileId, path, encKey)) =>
+          add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey))
+        case Failure(e) =>
+          HockeyApp.saveException(e, s"addStream($key) failed")
+          throw new Exception(s"addStream($key) failed", e)
       }
-    } catch {
-      case e: IOException =>
-        error(s"addStream($key) failed, will return expired cache entry", e)
-        HockeyApp.saveException(e, s"addStream($key) failed, returning expired cache entry")
-        add(CacheEntryData(key, path = Some(path), lastUsed = 0L)) // already expired
     }
   }
 
   def addFile(key: String, src: File, moveFile: Boolean = false, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CancellableFuture[CacheEntry] = CancellableFuture {
-    val path = cacheLocation.getOrElse(cacheDir)
-    val data = CacheEntryData(key, timeout = timeout.timeout, path = Some(path))
-    val file = entryFile(path, data.fileId)
-    try {
+    addFileToStorage(IoUtils.copy(new FileInputStream(src), _), cacheLocation) match {
+      case Success((fileId, path, encKey)) =>
+        if (moveFile) src.delete()
+        add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey))
+      case Failure(e) =>
+        HockeyApp.saveException(e, s"addFile($key) failed")
+        throw new Exception(s"addFile($key) failed", e)
+    }
+  }
+
+  private def addFileToStorage(writer: OutputStream => Unit, location: Option[File]): Try[(Uid, File, Option[AES128Key])] = {
+
+    def write(dir: File, enc: Option[AES128Key]) = {
+      val id = Uid()
+      val file = entryFile(dir, id)
       file.getParentFile.mkdirs()
-      IoUtils.copy(new FileInputStream(src), new FileOutputStream(file))
-      if (moveFile) src.delete()
-      add(data)
-    } catch {
-      case e: IOException =>
-        error(s"addFile($key) failed, will return expired cache entry", e)
-        HockeyApp.saveException( e, s"addFile($key, moveFile = $moveFile) failed, returning expired cache entry")
-        add(data.copy(lastUsed = 0L)) // already expired
+      LoggedTry.local {
+        writer(outputStream(enc, new FileOutputStream(file)))
+        (id, dir, enc)
+      }
+    }
+
+    location match {
+      case Some(dir) => write(dir, None)
+      case None =>
+        extCacheDir match {
+          case Some(dir) => write(dir, Some(AES128Key())).orElse(write(intCacheDir, None))
+          case None => write(intCacheDir, None)
+        }
     }
   }
 
@@ -134,20 +149,15 @@ class CacheService(context: Context, storage: Database) {
     }
   }
 
-  // You can either add byte data directly (for previews or otherwise very small entries), or you can add files.
-  // When adding files, you can optionally specify a parent location under which to put them.
-  private def add(key: String, data: Either[Array[Byte], Option[File]])(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry = {
-    val path = data.fold[Option[File]](_ => None, _ orElse Some(cacheDir))
-    add(CacheEntryData(key, data.left.toOption, timeout = timeout.timeout, path = path))
-  }
-
   private def add(entry: CacheEntryData) = {
     cacheStorage.add(entry)
     entry.path foreach { entryFile(_, entry.fileId).getParentFile.mkdirs() }
     new CacheEntry(entry, this)
   }
 
-  def cacheDir: File = Option(context.getExternalCacheDir).filter(_.isDirectory).getOrElse(context.getCacheDir)
+  def extCacheDir = Option(context.getExternalCacheDir).filter(_.isDirectory)
+  def intCacheDir: File = context.getCacheDir
+  def cacheDir: File = extCacheDir.getOrElse(intCacheDir)
 
   def getEntry(key: String): CancellableFuture[Option[CacheEntry]] = cacheStorage.get(key) map {
     case Some(e) => Some(new CacheEntry(e, this))
@@ -203,6 +213,33 @@ class CacheService(context: Context, storage: Database) {
 }
 
 object CacheService {
+  private implicit val logTag: LogTag = logTagFor[CacheService]
+
   val DataThreshold = 4 * 1024 // amount of data stored in db instead of a file
   val DefaultExpiryTime = 7.days
+
+  val iv = Array.fill[Byte](16)(0) // we are using random key every time, IV can be constant
+
+  def symmetricCipher(key: Array[Byte], mode: Int) =
+    returning(Cipher.getInstance("AES/CBC/PKCS5Padding")) { _.init(mode, new SecretKeySpec(key, "AES"), new IvParameterSpec(iv)) }
+
+  def outputStream(key: Option[AES128Key], os: OutputStream) =
+    key.fold(os) { k =>
+      new CipherOutputStream(os, symmetricCipher(k.bytes, Cipher.ENCRYPT_MODE))
+    }
+
+  def inputStream(key: Option[AES128Key], is: InputStream) =
+    key.fold(is) { k =>
+      new CipherInputStream(is, symmetricCipher(k.bytes, Cipher.DECRYPT_MODE)) {
+        override def close(): Unit = try {
+          super.close()
+        } catch {
+          case io: IOException =>
+            io.getCause match {
+              case _: BadPaddingException => //ignore
+              case e => throw e
+            }
+        }
+      }
+    }
 }

@@ -67,9 +67,9 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
 
   def loadCachedBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Bitmap] =
     withMemoryCache(asset.id, im.tag, if (im.width == 0) req.width else req.width min im.width) {
-      loadLocalData(im) flatMap {
-        case Some(data) => decodeBitmap(asset.id, im, req, data)
-        case None => CancellableFuture.failed(new Exception(s"No local data for: $im"))
+      loadLocalAndDecode(im)(decodeBitmap(asset.id, im, req, _)) map {
+        case Some(bmp) => bmp
+        case None => throw new Exception(s"No local data for: $im")
       }
     }
 
@@ -82,9 +82,9 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
     }
 
   def loadCachedGif(asset: ImageAssetData, im: ImageData): CancellableFuture[Gif] =
-    loadLocalData(im) flatMap {
-      case Some(data) => decodeGif(data)
-      case None => CancellableFuture.failed(new Exception("No local data for: $im"))
+    loadLocalAndDecode(im)(decodeGif) map {
+      case Some(gif) => gif
+      case None => throw new Exception(s"No local data for: $im")
     }
 
   def loadGif(asset: ImageAssetData, im: ImageData): CancellableFuture[Gif] =
@@ -168,6 +168,21 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
       .getOrElse(throw new FileNotFoundException(s"Can not load image from: $uri"))
   }
 
+  private def loadLocalAndDecode[A](im: ImageData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[Option[A]] =
+    loadLocalData(im) flatMap {
+      case Some(data) =>
+        decode(data)
+          .map(Some(_))
+          .recover {
+            case e: Throwable =>
+              warn(s"loadLocalAndDecode($im), decode failed, will delete local data", e)
+              data.delete()
+              None
+          }
+      case None =>
+        CancellableFuture successful None
+    }
+
   private def loadLocalData(img: ImageData): CancellableFuture[Option[LocalData]] = {
     verbose(s"loadLocalData")
 
@@ -229,7 +244,8 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
       inSample = computeInSampleSize(meta.width, meta.height)
       _ = verbose(s"image meta: $meta, inSampleSize: $inSample")
       _ = imageCache.reserve(assetId, im.tag, meta.width / inSample, meta.height / inSample)
-      bmp <- bitmapLoader(() => data.inputStream, inSample, meta.orientation) if bmp != bitmap.EmptyBitmap
+      bmp <- bitmapLoader(() => data.inputStream, inSample, meta.orientation)
+      _ = if (bmp == bitmap.EmptyBitmap) throw new Exception("Bitmap decoding failed, got empty bitmap")
     } yield bmp
   }
 

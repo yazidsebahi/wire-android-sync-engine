@@ -17,7 +17,7 @@
  */
 package com.waz.threading
 
-import java.util.concurrent.{atomic, CountDownLatch}
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}

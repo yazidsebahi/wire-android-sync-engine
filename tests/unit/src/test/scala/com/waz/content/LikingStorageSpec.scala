@@ -30,7 +30,6 @@ import org.scalatest.concurrent.ScalaFutures
 import org.threeten.bp.Instant
 
 import scala.collection.{SortedSet, breakOut}
-import scala.language._
 import scala.util.Random.{nextInt, shuffle}
 
 class LikingStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with ScalaFutures with DefaultPatienceConfig {

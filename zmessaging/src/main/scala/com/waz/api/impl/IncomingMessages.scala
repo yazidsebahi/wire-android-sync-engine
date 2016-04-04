@@ -47,7 +47,7 @@ class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingM
     messages.filter(_._1.localTime isAfter lastMessageTime) foreach {
       case (msg, seq) =>
         verbose(s"calling listeners for new message: $msg")
-        val message = context.messages.cachedOrUpdated(MessageAndLikes(msg, Vector.empty, false))
+        val message = context.messages.cachedOrUpdated(MessageAndLikes(msg, Vector.empty, likedBySelf = false))
         listeners.foreach(_.onIncomingMessage(message))
         if (msg.msgType == api.Message.Type.KNOCK) {
           knockListeners.foreach(_.onKnock(message))
@@ -66,7 +66,7 @@ class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingM
 
   override def get(index: Int): Message = {
     val (msg, seq) = messages(index)
-    context.messages.cachedOrUpdated(MessageAndLikes(msg, Vector.empty, false))
+    context.messages.cachedOrUpdated(MessageAndLikes(msg, Vector.empty, likedBySelf = false))
   }
 
   override def size(): Int = messages.length

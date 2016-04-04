@@ -19,9 +19,8 @@ package com.waz.bitmap.gif
 
 import com.waz.utils.IoUtils
 import org.robolectric.Robolectric
-import org.scalatest.{RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
 
 class AnimGifDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {

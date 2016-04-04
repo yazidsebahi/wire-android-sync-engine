@@ -22,7 +22,7 @@ import com.koushikdutta.async.http.WebSocket
 import com.waz.ZLog._
 import com.waz.api.impl.SearchQuery.Query
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
-import com.waz.api.{OtrClient => ApiOtrClient, _}
+import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
 import com.waz.client.RegistrationClient
 import com.waz.model.UserData._
@@ -60,6 +60,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
   class MockedZMessaging(instance: InstanceService, initUser: ZUser, initToken: Option[Token]) extends ZMessaging(instance, initUser, initToken) {
     override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, znetClient, push, prefs, network)
+    override lazy val mediamanager: MediaManagerService = new MockedMediaManagerService(context, prefs)
+
     override lazy val znetClient = new EmptyClient()
 
     override lazy val imageClient        = new ImageAssetClient(znetClient, cache) {
@@ -186,6 +188,12 @@ trait MockedFlows { test: ApiSpec =>
     mocked.convsThatSendVideo = Map.empty
     mocked.convsThatCanSendVideo = Set.empty
   }
+}
+
+trait MockedMedia { test: ApiSpec =>
+  private lazy val mocked = zmessaging.mediamanager.asInstanceOf[MockedMediaManagerService]
+
+  def changePlaybackRoute(route: PlaybackRoute): Unit = mocked.changePlaybackRoute(route)
 }
 
 trait MockedWebSocket {

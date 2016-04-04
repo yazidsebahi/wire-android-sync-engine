@@ -31,20 +31,19 @@ import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
 
 import scala.annotation.tailrec
+import scala.collection.Searching.{SearchResult, Found, InsertionPoint}
 import scala.collection.SeqView
 import scala.collection.generic.CanBuild
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
-import scala.math.abs
+import scala.math.{Ordering, abs}
 import scala.util.{Failure, Success}
 
 package object utils {
   def updateListener(body: => Unit) = new UpdateListener {
     def updated() = body
   }
-
-  def returning[T](t: T)(body: T => Unit): T = { body(t); t }
 
   def sha2(s: String): String = Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(s.getBytes("utf8")), Base64.NO_WRAP)
 
@@ -98,6 +97,20 @@ package object utils {
     def flatIterator[C, D](implicit ev: A <:< (C, TraversableOnce[D])): Iterator[(C, D)] = b.toIterator.flatMap { a =>
       val (c, ds) = ev(a)
       ds.map(d => (c, d))
+    }
+  }
+
+  implicit class RichIndexedSeq[A](val items: IndexedSeq[A]) extends AnyVal {
+    // adapted from scala.collection.Searching
+    @tailrec final def binarySearch[B](elem: B, f: A => B, from: Int = 0, to: Int = items.size)(implicit ord: Ordering[B]): SearchResult = {
+      if (to == from) InsertionPoint(from) else {
+        val idx = from + (to - from - 1) / 2
+        math.signum(ord.compare(elem, f(items(idx)))) match {
+          case -1 => binarySearch(elem, f, from, idx)(ord)
+          case  1 => binarySearch(elem, f, idx + 1, to)(ord)
+          case  _ => Found(idx)
+        }
+      }
     }
   }
 

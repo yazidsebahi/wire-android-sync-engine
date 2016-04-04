@@ -19,13 +19,13 @@ package com.waz.content
 
 import com.waz.ZLog._
 import com.waz.model.ConversationData.ConversationDataDao
+import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model._
 import com.waz.service.SearchKey
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events._
 
-import scala.Seq
 import scala.collection._
 import scala.collection.immutable.SortedSet
 import scala.concurrent.Future
@@ -56,7 +56,7 @@ class ConversationStorage(storage: ZStorage) extends CachedStorage[ConvId, Conve
 
     cs foreach (convAdded ! _)
 
-    updateSearchKey(cs filter { c => c.searchKey != c.freshSearchKey })
+    updateSearchKey(cs)
   }
 
   onDeleted.on(dispatcher) { cs =>
@@ -81,13 +81,13 @@ class ConversationStorage(storage: ZStorage) extends CachedStorage[ConvId, Conve
 
     cs foreach (convUpdated ! _)
 
-    updateSearchKey(cs collect { case (p, c) if p.name != c.name => c })
+    updateSearchKey(cs collect { case (p, c) if p.name != c.name || (p.convType == Group) != (c.convType == Group) || (c.name.nonEmpty && c.searchKey.isEmpty) => c })
   }
 
   private val init = for {
     convs <- find[ConversationData, Vector[ConversationData]](_ => true, db => ConversationDataDao.iterating(ConversationDataDao.listCursor(db)), identity)
-    updater = (_: ConversationData).copy(hasVoice = false, unjoinedCall = false) // on initial app start, no calls are assumed to be ongoing or even unjoined
-    convUpdates <- updateAll(convs .map (_.id -> updater) (breakOut))
+    updater = (c: ConversationData) => c.copy(hasVoice = false, unjoinedCall = false, searchKey = c.savedOrFreshSearchKey) // on initial app start, no calls are assumed to be ongoing or even unjoined
+    convUpdates <- updateAll2(convs.map(_.id), updater)
   } yield {
     val updated = convs map updater
     updated foreach { c =>
@@ -102,7 +102,7 @@ class ConversationStorage(storage: ZStorage) extends CachedStorage[ConvId, Conve
 
   private def updateSearchKey(cs: Seq[ConversationData]) =
     if (cs.isEmpty) Future successful Nil
-    else updateAll(cs.map(c => c.id -> { (_: ConversationData).withFreshSearchKey })(breakOut))
+    else updateAll2(cs.map(_.id), _.withFreshSearchKey)
 
   def apply[A](f: (GenMap[ConvId, ConversationData], GenMap[RConvId, ConvId]) => A): Future[A] = init map { convById => f(convById, remoteMap) }
 

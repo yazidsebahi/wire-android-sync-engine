@@ -32,9 +32,9 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.sync.SyncResult
 import com.waz.sync.client.ImageAssetClient
-import com.waz.sync.queue.ConvLock
 import com.waz.testutils.MockZMessaging
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.IoUtils
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.scalatest._
@@ -131,6 +131,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     val entry = Await.result(cache.getEntry(im1.cacheKey), 1.second)
     entry should be('defined)
     entry.get.cacheFile should exist
-    entry.get.cacheFile.length() shouldEqual im.size
+    IoUtils.toByteArray(entry.get.inputStream) should have size im.size
+    entry.get.cacheFile.length().toInt shouldEqual (im.size +- 10)
   }
 }

@@ -25,7 +25,6 @@ import com.waz.ZLog._
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
-import scala.language.existentials
 import scala.util.Random
 
 trait DispatchQueue extends ExecutionContext {

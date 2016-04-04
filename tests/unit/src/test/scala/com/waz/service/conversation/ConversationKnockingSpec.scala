@@ -36,7 +36,6 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.language.implicitConversions
 
 class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background

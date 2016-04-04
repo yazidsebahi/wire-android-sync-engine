@@ -32,7 +32,7 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.LoggedTry
 import com.waz.utils.events.EventContext
 
-import scala.util.control.{NoStackTrace, NonFatal}
+import scala.util.control.NonFatal
 
 class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: MetaDataService, backendConfig: BackendConfig) {
 

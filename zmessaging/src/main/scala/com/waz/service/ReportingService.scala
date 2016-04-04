@@ -20,10 +20,12 @@ package com.waz.service
 import java.io._
 import java.util.concurrent.CountDownLatch
 
+import android.net.Uri
+import android.support.v4.content.FileProvider
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.threading.{SerialDispatchQueue, Threading}
-import com.waz.utils.{Deprecated, IoUtils, RichFuture}
+import com.waz.utils.{IoUtils, RichFuture}
 
 import scala.concurrent.Future
 
@@ -101,18 +103,23 @@ object ReportingService {
 
   def zmessagingReporter(zms: ZMessaging) = Reporter(s"ZMessaging[${zms.user}]", zms.reporting.generateStateReport)
 
-  def generateReport(): Future[File] = {
+  def generateReport(): Future[Uri] = {
     val context = ZMessaging.context
-    val name = s"se_report_${System.currentTimeMillis()}.txt"
+    val authority = s"${context.getPackageName}.debug"
+    val fileLoc = new File(s"${context.getFilesDir}", "debug")
+    if (!fileLoc.exists()) {
+      fileLoc.mkdir()
+    }
+    val file = new File(fileLoc, s"se_report_${System.currentTimeMillis()}.txt")
 
     @SuppressWarnings(Array("deprecation"))
-    lazy val writer = new PrintWriter(context.openFileOutput(name, Deprecated.MODE_WORLD_READABLE))
+    lazy val writer = new PrintWriter(file)
 
     RichFuture.processSequential(VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: ZMessaging.currentInstance.instanceMap.values.map(zmessagingReporter).toSeq :+ LogCatReporter) { reporter =>
       reporter.apply(writer)
     } map { _ =>
       writer.close()
-      new File(context.getFilesDir, name)
+      FileProvider.getUriForFile(context, authority, file)
     }
   }
 }

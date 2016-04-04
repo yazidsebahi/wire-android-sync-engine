@@ -112,7 +112,7 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
           self.getName shouldEqual "Android Test Invited"
           convs should have size 1
           convs.get(0).getOtherParticipant.getName shouldEqual "auto1 user"
-          messages should have size 3 // self join, connect request, other join
+          messages should have size 1 // started using device
         }
       }
 

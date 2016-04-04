@@ -53,7 +53,7 @@ class SyncContentUpdater(storage: ZStorage) {
       } else job
     }
   } map { jobs =>
-    returning(new SyncStorage(storage, jobs)) { storage =>
+    returningF(new SyncStorage(storage, jobs)) { storage =>
 
       jobs foreach { updateMerger(_, storage) }
 

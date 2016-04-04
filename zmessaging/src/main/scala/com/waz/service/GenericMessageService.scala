@@ -26,7 +26,6 @@ import com.waz.service.messages.{LikingsService, MessagesContentUpdater}
 import com.waz.utils._
 import org.threeten.bp.Instant
 
-import scala.concurrent.Future
 import scala.concurrent.Future.traverse
 
 class GenericMessageService(messages: MessagesContentUpdater, convs: ConversationsContentUpdater, convEvents: ConversationEventsService, images: ImageAssetService, likings: LikingsService) {

@@ -20,9 +20,8 @@ package com.waz.znet
 import java.io.ByteArrayInputStream
 import java.security.KeyStore
 import java.security.cert.CertificateFactory
-import javax.net.ssl.{X509TrustManager, TrustManagerFactory}
+import javax.net.ssl.{TrustManagerFactory, X509TrustManager}
 
-import com.waz.ZLog
 import com.waz.utils.returning
 
 object ServerTrust {

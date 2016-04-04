@@ -174,6 +174,7 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
                 verbose(s"detected duplicate message for event: $ev")
                 Future successful GenericMessage(Uid(), Duplicate)
               case REMOTE_IDENTITY_CHANGED if retry < 3 =>
+                reportOtrError(e, ev)
                 warn(s"Remote identity changed, will drop a session and try decrypting again", e)
                 for {
                   _ <- sessions.deleteSession(sessionId(ev.from, ev.sender))
@@ -181,11 +182,18 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
                   res <- decryptOtrEvent(ev, retry + 1)
                 } yield res
               case _ =>
-                HockeyApp.saveException(e, s"Could not decrypt message for event $ev")
+                reportOtrError(e, ev)
                 Future successful GenericMessage(Uid(), OtrError(e.getMessage, ev.from, ev.sender))
             }
       }
     }
+
+  // update client info and send error report to hockey, we want client info to somehow track originating platform
+  private def reportOtrError(e: CryptoException, ev: OtrEvent) = sync.syncClients(ev.from) map { _ =>
+    clients.getClient(ev.from, ev.sender) foreach { client =>
+      HockeyApp.saveException(e, s"event: $ev, client: $client")
+    }
+  }
 
   def generatePreKeysIfNeeded(remainingKeys: Seq[Int]): Future[Seq[PreKey]] = {
 

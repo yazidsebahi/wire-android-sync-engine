@@ -22,7 +22,7 @@ import com.waz.api.Verification
 import com.waz.content.{ConversationStorage, MembersStorage, OtrClientsStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.model.otr.{Client, UserClients}
+import com.waz.model.otr.UserClients
 import com.waz.service.UserService
 import com.waz.service.messages.MessagesService
 import com.waz.utils.Serialized

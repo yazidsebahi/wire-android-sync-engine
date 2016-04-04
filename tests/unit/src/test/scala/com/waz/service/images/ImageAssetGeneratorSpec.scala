@@ -17,7 +17,7 @@
  */
 package com.waz.service.images
 
-import java.io.{File, InputStream}
+import java.io.InputStream
 
 import android.graphics.{Bitmap, BitmapFactory}
 import com.waz.RobolectricUtils
@@ -26,25 +26,20 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model._
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{MockUiModule, MockZMessaging}
-import org.robolectric.Robolectric
+import com.waz.testutils.{DefaultPatienceConfig, MockUiModule, MockZMessaging}
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
-
-  lazy val tmpFile = File.createTempFile("tmp", "tmp", Robolectric.application.getFilesDir)
+class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 
   lazy val zms = new MockZMessaging()
   lazy val generator = zms.assetGenerator
   lazy val ui = new MockUiModule(zms)
 
-  override def afterAll(): Unit = {
-    tmpFile.delete()
-    super.afterAll()
-  }
+  override def afterAll(): Unit = super.afterAll()
 
   def imageAssetFor(bitmap: Bitmap): ImageData = ui.images.getOrCreateImageAssetFrom(bitmap).asInstanceOf[LocalBitmapAsset].data.versions.head
 
@@ -230,29 +225,31 @@ class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAf
 
   feature("recode based on mime type") {
 
+    lazy val tmpEntry = ui.cache.addData("tmp", Array.ofDim(100))
+
     scenario("recode profile image") {
       Seq(Mime.Jpg, Mime.Png) foreach { mime =>
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.SmallProfileOptions) shouldEqual false
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.MediumProfileOptions) shouldEqual false
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.SmallProfileOptions) shouldEqual false
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.MediumProfileOptions) shouldEqual false
       }
       Seq(Mime.Gif, Mime.Tiff, Mime.WebP, Mime.Unknown) foreach { mime =>
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.SmallProfileOptions) shouldEqual true
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.MediumProfileOptions) shouldEqual true
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.SmallProfileOptions) shouldEqual true
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.MediumProfileOptions) shouldEqual true
       }
     }
 
     scenario("recode regular image") {
-      generator.shouldRecode(tmpFile, Metadata(10, 10, Mime.Gif), ImageAssetGenerator.PreviewOptions) shouldEqual true
-      generator.shouldRecode(tmpFile, Metadata(10, 10, Mime.Gif), ImageAssetGenerator.MediumOptions) shouldEqual false
+      generator.shouldRecode(tmpEntry, Metadata(10, 10, Mime.Gif), ImageAssetGenerator.PreviewOptions) shouldEqual true
+      generator.shouldRecode(tmpEntry, Metadata(10, 10, Mime.Gif), ImageAssetGenerator.MediumOptions) shouldEqual false
 
       Seq(Mime.Jpg, Mime.Png) foreach { mime =>
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.PreviewOptions) shouldEqual false
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.MediumOptions) shouldEqual false
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.PreviewOptions) shouldEqual false
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.MediumOptions) shouldEqual false
       }
 
       Seq(Mime.Tiff, Mime.WebP, Mime.Unknown) foreach { mime =>
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.PreviewOptions) shouldEqual true
-        generator.shouldRecode(tmpFile, Metadata(10, 10, mime), ImageAssetGenerator.MediumOptions) shouldEqual true
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.PreviewOptions) shouldEqual true
+        generator.shouldRecode(tmpEntry, Metadata(10, 10, mime), ImageAssetGenerator.MediumOptions) shouldEqual true
       }
     }
   }

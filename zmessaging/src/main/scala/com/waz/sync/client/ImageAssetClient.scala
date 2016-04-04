@@ -19,7 +19,6 @@ package com.waz.sync.client
 
 import java.io.{ByteArrayInputStream, InputStream}
 
-import android.net.Uri
 import android.util.Base64
 import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
@@ -48,7 +47,7 @@ class ImageAssetClient(netClient: ZNetClient, cache: CacheService) {
     val cacheKey = req.resourcePath.getOrElse(req.absoluteUri.fold(Uid().str)(_.toString))
     netClient(req.copy(downloadCallback = Some(cb))) flatMap {
       case Response(SuccessHttpStatus(), BinaryResponse(data, mime), _) => cache.addStream(cacheKey, new ByteArrayInputStream(data)).map(Some(_))
-      case Response(SuccessHttpStatus(), FileResponse(file, mime), _) => cache.addFile(cacheKey, file, moveFile = true).map(Some(_))
+      case Response(SuccessHttpStatus(), FileResponse(file, mime), _) => CancellableFuture.successful(Some(file))
       case resp =>
         if (resp.status ne Response.Cancelled) warn(s"Unexpected response to loadImageAsset query: $resp")
         CancellableFuture.successful(None)

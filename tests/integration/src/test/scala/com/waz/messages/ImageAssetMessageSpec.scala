@@ -17,19 +17,17 @@
  */
 package com.waz.messages
 
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.AtomicLong
 
 import com.waz.api.MessageContent.Asset
 import com.waz.api.ProvisionedApiSpec
 import com.waz.api.impl.LocalImageAsset
 import com.waz.cache.CacheEntry
-import com.waz.model.{RConvId, RImageDataId}
 import com.waz.service.ZMessaging
 import com.waz.sync.client.ImageAssetClient
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture
-import com.waz.utils.compareAndSet
 import com.waz.znet.Request
 import com.waz.znet.Request._
 import org.scalatest.{FeatureSpec, Matchers}

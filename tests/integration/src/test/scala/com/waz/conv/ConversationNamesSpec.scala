@@ -51,7 +51,7 @@ class ConversationNamesSpec extends FeatureSpec with Matchers with ProvisionedAp
   }
 
   scenario("Self conversation should have the correct name to begin with.") {
-    withDelay { selfConv.getName shouldEqual "Hans van Renaming" }
+    withDelay { self.getName shouldEqual "Hans van Renaming" }
   }
 
   scenario("1-to-1 conversations should have correct names to begin with.") {
@@ -68,7 +68,6 @@ class ConversationNamesSpec extends FeatureSpec with Matchers with ProvisionedAp
   scenario("change self name without conflicts") {
     self.setName("Yeti yolo")
     withDelay { self.getName shouldEqual "Yeti yolo" }
-    withDelay { selfConv.getName shouldEqual "Yeti yolo" }
     withDelay { self.getUser.getDisplayName shouldEqual "Yeti" }
     withDelay { self.getUser.getInitials shouldEqual "YY" }
   }
@@ -76,7 +75,6 @@ class ConversationNamesSpec extends FeatureSpec with Matchers with ProvisionedAp
   scenario("Change self name with conflicts.") {
     self.setName("Freddy Meep")
     withDelay { self.getName shouldEqual "Freddy Meep" }
-    withDelay { selfConv.getName shouldEqual "Freddy Meep" }
     withDelay { self.getUser.getDisplayName shouldEqual "Freddy Meep" }
     withDelay { self.getUser.getInitials shouldEqual "FM" }
   }

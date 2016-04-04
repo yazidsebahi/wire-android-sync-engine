@@ -23,7 +23,7 @@ import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.ProgressData
 import com.waz.cache.CacheEntry
 import com.waz.model.{RConvId, RImageDataId}
-import com.waz.service.assets.DownloadKey.{External, WireAsset}
+import com.waz.service.assets.DownloadKey.WireAsset
 import com.waz.sync.client.ImageAssetClient
 import com.waz.testutils.MockGlobalModule
 import com.waz.threading.CancellableFuture

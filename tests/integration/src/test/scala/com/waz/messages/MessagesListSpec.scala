@@ -64,7 +64,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("receive messages") {
-      withDelay(msgs should have size 41)(20.seconds)
+      withDelay(msgs should have size 41)(60.seconds)
       msgs.get(30)
       withDelay(msgs.getLastReadIndex shouldEqual 30)
     }
@@ -89,7 +89,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       conv.sendMessage(new Text("Here is some text. https://www.youtube.com/watch?v=MWdG413nNkI more text https://www.youtube.com/watch?v=c0KYU2j0TM4 and even more"))
       withDelay {
         msgs should have size 61
-        msgs.getLastMessage.data.source.nonLocal shouldEqual true
+        msgs.getLastMessage.data.isLocal shouldEqual false
       }(10.seconds) // all synced
 
       val msg = msgs.get(60)
@@ -106,8 +106,8 @@ class MessagesListSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     scenario("post more messages from other side") {
       awaitUiFuture(RichFuture.traverseSequential(61 until 100) { i =>
         auto2.postMessage(remoteConvId, new Text(s"text message $i"))
-      })(25.seconds)
-      withDelay(msgs should have size 100)(15.seconds)
+      })(60.seconds)
+      withDelay(msgs should have size 100)(60.seconds)
       val msg = msgs.get(99) // post last read
       withDelay {
         conv.data.lastRead should be >= msg.data.time

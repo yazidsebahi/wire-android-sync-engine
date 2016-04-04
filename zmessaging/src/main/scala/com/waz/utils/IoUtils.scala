@@ -21,8 +21,6 @@ import java.io._
 import java.security.MessageDigest
 import java.util.zip.GZIPOutputStream
 
-import com.waz.ZLog
-
 import scala.util.control.NonFatal
 
 object IoUtils {
@@ -72,6 +70,20 @@ object IoUtils {
       os.finish()
     }
     bos.toByteArray
+  }
+
+  def skip(is: InputStream, count: Long): Boolean = {
+    val skipped = is.skip(count)
+    if (skipped < 0) false
+    else if (skipped < count) skip(is, count - skipped)
+    else true
+  }
+
+  def readFully(is: InputStream, buffer: Array[Byte], offset: Int, count: Int): Boolean = {
+    val read = is.read(buffer, offset, count)
+    if (read < 0) false
+    else if (read == count) true
+    else readFully(is, buffer, offset + read, count - read)
   }
 
   def asString(in: InputStream) = new String(toByteArray(in), "utf8")

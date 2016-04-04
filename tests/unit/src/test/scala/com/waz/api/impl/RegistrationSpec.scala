@@ -27,6 +27,7 @@ import com.waz.client.RegistrationClient
 import com.waz.model._
 import com.waz.service.InstanceService
 import com.waz.testutils.Implicits._
+import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockGlobalModule, MockInstance, MockUiModule, MockZMessaging}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.UiModule
@@ -76,6 +77,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
     override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
       override def login(user: ZUserId, credentials: Credentials) = CancellableFuture.successful(loginResponse)
+      override def access(cookie: Option[String], token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
       override def register(user: ZUserId, credentials: Credentials, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
@@ -157,17 +159,21 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
       self.setPicture(ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
 
-      var imageAsset: com.waz.api.ImageAsset = null
-      withDelay {
+      var imageAsset: com.waz.api.ImageAsset = ImageAsset.Empty
+      soon {
         imageAsset = self.getUser.getPicture
-        imageAsset.isEmpty shouldEqual false
-
-        val asset = Await.result(api.zmessaging.get.imageAssets.getImageAsset(imageAsset.data.id), 5.seconds)
-        asset should be('defined)
-        asset.map(_.convId.str) shouldEqual Some(selfUserId.str)
+        imageAsset should not be empty
       }
 
-      awaitUi(500.millis)
+      soon {
+        imageAsset.data should not be empty
+      }
+
+      val asset = api.zmessaging.get.imageAssets.getImageAsset(imageAsset.data.id).await()
+      asset should be('defined)
+      asset.map(_.convId.str) shouldEqual Some(selfUserId.str)
+
+      idle(500.millis)
       self.isLoggedIn shouldEqual true
       selfUserSyncRequested shouldEqual true
 
@@ -176,10 +182,10 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
       api.zmessaging.get.usersClient.loadSelf()
 
-      withDelay {
+      within (10.seconds) {
         self.isEmailVerified shouldEqual true
         loggedIn() shouldEqual true
-      } (10.seconds)
+      }
     }
 
     scenario("Register new user, restart the app, verify email, login again") {
@@ -212,13 +218,13 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
       self = null
 
-      awaitUi(1.second) // wait for storage to sync
+      idle(1.second) // wait for storage to sync
 
       api.onPause()
       api.onDestroy()
-      Thread.sleep(1000)
+      idle(1.second)
       api.zmessaging.foreach { zms =>
-        Await.result(zms.storage.close().flatMap(_ => zms.global.storage.close()), 10.seconds)
+        zms.storage.close().flatMap(_ => zms.global.storage.close()).await()
       }
 
       request = None

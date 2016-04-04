@@ -18,7 +18,7 @@
 package com.waz.utils
 
 import java.text.SimpleDateFormat
-import java.util.{Locale, Date, TimeZone}
+import java.util.{Date, Locale, TimeZone}
 
 import android.net.Uri
 import com.waz.model._
@@ -30,7 +30,6 @@ import org.threeten.bp.{Duration, Instant}
 import scala.collection.generic._
 import scala.language.{higherKinds, implicitConversions}
 import scala.reflect.ClassTag
-import scala.util.Try
 
 trait JsonDecoder[A] { self =>
   def apply(implicit js: JSONObject): A

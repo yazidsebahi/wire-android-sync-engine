@@ -182,12 +182,15 @@ class MessagesService(val content: MessagesContentUpdater, assets: ImageAssetSer
     addLocalMessage(MessageData(MessageId(assetId.str), convId, EventId.Zero, EventId.Zero, Message.Type.ASSET, selfUserId, MessageData.imageContent(assetId, width, height)))
   }
 
-  def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String) = {
+  def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String) =
     updateOrCreateLocalMessage(convId, Message.Type.RENAME, _.copy(name = Some(name)), MessageData(MessageId(), convId, EventId.Zero, EventId.Zero, Message.Type.RENAME, selfUserId, name = Some(name)))
-  }
 
-  def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String) = {
-    addLocalMessage(MessageData(MessageId(), convId, EventId.Zero, EventId.Zero, Message.Type.CONNECT_REQUEST, fromUser, content = MessageData.textContent(message), name = Some(name), recipient = Some(toUser)))
+  def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false) = {
+    val msg = MessageData(
+      MessageId(), convId, EventId.Zero, EventId.Zero, Message.Type.CONNECT_REQUEST, fromUser, content = MessageData.textContent(message), name = Some(name), recipient = Some(toUser),
+      time = if (fromSync) MessageData.UnknownInstant else Instant.now)
+
+    if (fromSync) messagesStorage.insert(msg) else addLocalMessage(msg)
   }
 
   def addKnockMessage(convId: ConvId, selfUserId: UserId) = {

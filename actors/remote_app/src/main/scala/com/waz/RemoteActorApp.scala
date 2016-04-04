@@ -29,7 +29,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.bytecode.Setup
 
 import scala.collection.JavaConverters._
-import scala.util.{Try, Random}
+import scala.util.Random
 
 object RemoteActorApp extends App {
 

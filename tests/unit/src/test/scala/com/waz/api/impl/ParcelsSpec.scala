@@ -17,17 +17,15 @@
  */
 package com.waz.api.impl
 
-import android.os.{Parcelable, Parcel}
+import android.os.Parcelable
 import com.waz.Generators._
-import com.waz.RobolectricUtils
-import com.waz.api
-import com.waz.model.{UserData, VoiceChannelData, ConversationData, UserId}
+import com.waz.{RobolectricUtils, api}
+import com.waz.model.{ConversationData, UserData, UserId, VoiceChannelData}
 import com.waz.service.messages.MessageAndLikes
 import com.waz.testutils._
-import com.waz.utils.{Managed, Cleanup, returning}
 import org.robolectric.Robolectric
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest._
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 class ParcelsSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with BeforeAndAfterAll with RobolectricTests with RobolectricUtils  {
 

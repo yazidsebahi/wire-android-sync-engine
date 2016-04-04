@@ -23,7 +23,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.VoiceChannelData.ChannelState
 import com.waz.model.{RConvId, VoiceChannelDeactivateEvent}
 import com.waz.provision.ActorMessage._
-import com.waz.service.{Timeouts, ZMessaging}
+import com.waz.service.Timeouts
 import com.waz.service.call.VoiceChannelService.CallJoined
 import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits._

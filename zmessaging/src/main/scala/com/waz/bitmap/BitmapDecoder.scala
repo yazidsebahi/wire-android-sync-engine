@@ -22,7 +22,6 @@ import java.io.{File, InputStream}
 import android.content.Context
 import android.graphics.BitmapFactory.Options
 import android.graphics.{Bitmap, BitmapFactory}
-import com.waz.ZLog
 import com.waz.ZLog._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.Images

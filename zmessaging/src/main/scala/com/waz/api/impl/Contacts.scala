@@ -21,7 +21,7 @@ import java.util.{Collection, Locale}
 
 import com.waz.ZLog._
 import com.waz.model._
-import com.waz.service.ContactsService.UnifiedContacts
+import com.waz.service.ContactsService.{TopContactsOnWire, UnifiedContacts}
 import com.waz.service.SearchKey
 import com.waz.threading.Threading
 import com.waz.ui._
@@ -38,7 +38,7 @@ class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.
   private implicit val logTag: LogTag = logTagFor[Contacts] + "@" + Integer.toHexString(hashCode)
 
   private val search = Signal(filtering.initial)
-  private var content = Content(UnifiedContacts(Map.empty, Map.empty, Vector.empty, SeqMap.empty), Vector.empty,
+  private var content = Content(UnifiedContacts(Map.empty, Map.empty, Vector.empty, SeqMap.empty, TopContactsOnWire(Vector.empty, 0)), Vector.empty,
     filtering.initial, Filtered(Vector.empty, SeqMap.empty))
   private var currentUpdate: Future[Unit] = Future.successful(())
   private var invitedContacts = Set.empty[ContactId]
@@ -54,7 +54,7 @@ class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.
 
   private def accessorsFor(updated: UnifiedContacts) = updated.sorted.map(_.fold(
     u => new OnWire(ui.users.getUser(updated.users(u))),
-    c => new NotOnWire(returning(ui.contactDetails.getOrElseUpdate(c, new ContactDetails(updated.contacts(c), invitedContacts(c))(ui)))(_.setCurrent(updated.contacts(c))))))
+    c => new NotOnWire(getOrCreate(c, updated))))
 
   override def search(token: String): Unit = search ! filtering.basedOn(token)
 
@@ -97,6 +97,15 @@ class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.
   override def getNumberOfContactsForInitial(initial: String): Int = content.filtered.byInitial.byKey.getOrElse(initial, Nil).size
   override def getContactForInitial(initial: String, index: Int): api.Contact =
     content.accessors(content.filtered.byInitial.byKey(initial)(index))
+
+  override def getTop10ContactsOnWire(): Collection[api.ContactDetails] = content.unifiedContacts.topContactsOnWire.contacts.map { c =>
+    getOrCreate(c, content.unifiedContacts): api.ContactDetails
+  }.asJava
+
+  override def getTotalContactsOnWireCount() = content.unifiedContacts.topContactsOnWire.totalCount
+
+  private def getOrCreate(c: ContactId, unified: UnifiedContacts) =
+    returning(ui.contactDetails.getOrElseUpdate(c, new ContactDetails(unified.contacts(c), invitedContacts(c))(ui)))(_.setCurrent(unified.contacts(c)))
 }
 
 class OnWire(ui: => User) extends api.Contact {

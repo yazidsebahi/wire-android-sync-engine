@@ -17,13 +17,15 @@
  */
 package com.waz.znet
 
-import org.json.{JSONArray, JSONObject}
-import com.koushikdutta.async.ByteBufferList
-import scala.util.{Failure, Success, Try}
 import java.io._
+
+import com.koushikdutta.async.ByteBufferList
+import com.waz.cache.{CacheEntry, CacheService}
+import org.json.{JSONArray, JSONObject}
+
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
-import com.waz.cache.CacheService
-import concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 sealed trait ResponseContent
 sealed trait JsonResponse extends ResponseContent
@@ -34,7 +36,7 @@ case class JsonArrayResponse(value: JSONArray) extends JsonResponse
 case class BinaryResponse(value: Array[Byte], mime: String) extends ResponseContent {
   override def toString: String = s"BinaryResponse(${new String(value.take(1024))}, $mime)"
 }
-case class FileResponse(value: File, mime: String) extends ResponseContent
+case class FileResponse(value: CacheEntry, mime: String) extends ResponseContent
 
 trait ResponseConsumer[T <: ResponseContent] {
   def consume(bb: ByteBufferList): Unit
@@ -97,7 +99,7 @@ object ResponseConsumer {
     override def result: Try[FileResponse] = {
       try {
         out.close()
-        ex.fold(Success(FileResponse(entry.cacheFile, mime)): Try[FileResponse]) { e => Failure(e) }
+        ex.fold(Success(FileResponse(entry, mime)): Try[FileResponse]) { e => Failure(e) }
       } catch {
         case NonFatal(e) =>
           Failure(ex.getOrElse(e))

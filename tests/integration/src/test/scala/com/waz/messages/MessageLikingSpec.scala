@@ -24,7 +24,6 @@ import com.waz.api._
 import com.waz.model.Liking.Action._
 import com.waz.model._
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageLiking, Successful}
-import com.waz.service.BackendConfig
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}

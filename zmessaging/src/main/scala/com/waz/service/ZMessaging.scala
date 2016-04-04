@@ -293,7 +293,7 @@ class ZUserService(@volatile var user: ZUser, zusers: ZUsers, keyValueService: K
   override def cookie = user.cookie
 
   override def updateCookie(cookie: Cookie) = {
-    println(s"updateCookie: $cookie, for user: $user")
+    debug(s"updateCookie: $cookie, for user: $user")
     val userWasVerified = user.emailVerified
     user = user.copy(cookie = cookie, emailVerified = user.emailVerified || cookie.isDefined)
     signal ! user

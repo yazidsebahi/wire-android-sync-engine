@@ -18,7 +18,6 @@
 package com.waz.service.conversation
 
 import scala.collection.mutable
-import com.waz.ZLog
 
 /**
  * Helper buffer detecting windows (holes) in events sequence.

@@ -17,6 +17,7 @@
  */
 package com.waz.ui
 
+import com.waz.Control.getOrUpdate
 import com.waz.api.impl.ContactDetails
 import com.waz.model.{Contact, ContactId}
 import com.waz.service.ZMessaging
@@ -29,7 +30,7 @@ import scala.concurrent.Future
 class ContactDetailsCache(module: UiModule) {
   private val details = new UiCache[ContactId, ContactDetails](lruSize = 50)(module)
   
-  def getOrElseUpdate(id: ContactId, default: => ContactDetails): ContactDetails = details.getOrElseUpdate(id, default)
+  def getOrElseUpdate(id: ContactId, default: => ContactDetails): ContactDetails = getOrUpdate(details)(id, default)
 
   new UiEventListener[IndexedSeq[Contact]] {
     def ui: UiModule = module

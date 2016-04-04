@@ -27,12 +27,10 @@ import com.waz.model._
 import com.waz.service.messages.{MessageAndLikes, MessageAndLikesNotifier}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
-import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
+import scala.collection.Searching.{Found, InsertionPoint}
 import scala.concurrent.{Await, Future}
-import scala.language.postfixOps
-import scala.util.{Try, Success}
 
 trait MsgCursor {
   def size: Int
@@ -92,8 +90,8 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
       verbose(s"indexOf($time) = $index, lastReadTime: $lastReadTime")
     }
 
-  private def asyncIndexOf(time: Instant): Future[Int] = {
-    windowLoader.currentWindow.indexOf(time) match {
+  private def asyncIndexOf(time: Instant): Future[Int] =
+    windowLoader.currentWindow flatMap (_.indexOf(time) match {
       case index if index >= 0 => Future.successful(index)
       case _ =>
         Future {
@@ -105,54 +103,58 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
             if (index < 0) lastReadIndex else index
           }
         }
-    }
-  }
+    })
 
   def prefetch(index: Int): Future[Unit] = windowLoader(index) flatMap { prefetch }
 
-  def prefetch(window: IndexWindow): Future[Unit] = {
-    val ids = window.msgs.map(_.id).filter(id => messages.get(id) == null)
-    if (ids.isEmpty) Future.successful(())
-    else {
+  def prefetch(window: IndexWindow): Future[Unit] = Future(window.msgs.iterator.filter(m => messages.get(m.id) == null).map(_.id).toVector) flatMap { ids =>
+    if (ids.isEmpty) {
+      verbose(s"prefetch at offset ${window.offset} unnecessary")
+      Future.successful(())
+    } else {
       val time = System.nanoTime()
       loader(ids) .map { ms =>
         ms foreach { m => messages.put(m.message.id, m) }
         verbose(s"pre-fetched ${ids.size} ids, got ${ms.size} msgs, for window offset: ${window.offset} in: ${(System.nanoTime() - time) / 1000 / 1000f} ms")
-      } (Threading.Ui)
+      } (Threading.Background) // LruCache is thread-safe, this mustn't be blocked by UI processing
     }
   }
 
   private var prevWindow = new IndexWindow(0, IndexedSeq.empty)
 
   /** Returns message at given index, will block if message data is not yet available for given index. */
-  override def apply(index: Int): MessageAndLikes = {
+  override def apply(index: Int): MessageAndLikes = { // implementation note: avoid all allocations on the happy path
     Threading.assertUiThread()
 
     if (index < 0 || index >= size)
       throw new IndexOutOfBoundsException(s"invalid message index: $index, available count: $size")
 
     val windowFuture = windowLoader(index)
-    val window = windowFuture.value match {
-      case Some(Success(w)) => w
-      case _ => logTime(s"loading window for index: $index") { Await.result(windowLoader(index), 5.seconds) }
-    }
+    val window =
+      if (windowFuture.value.isDefined && windowFuture.value.get.isSuccess) windowFuture.value.get.get
+      else logTime(s"loading window for index: $index")(Await.result(windowFuture, 5.seconds))
 
-    if (!window.contains(index)) {
+    if (! window.contains(index)) {
       HockeyApp.saveException(new RuntimeException(s"cursor window loading failed, requested index: $index, got window with offset: ${window.offset} and size: ${window.msgs.size}"), "")
       MessageAndLikes.Empty
     } else {
-      if (prevWindow != window) {
+      val fetching = if (prevWindow != window) {
+        verbose(s"prefetching at $index, offset: ${window.offset}")
         prevWindow = window
         prefetch(window)
-      }
+      } else futureUnit
 
       val id = window(index).id
 
-      Option(messages.get(id)).getOrElse {
-        logTime(s"loading message for id: $id, position: $index") {
-          val m = LoggedTry(Await.result(loader(Seq(id)), 500.millis).headOption).toOption.flatten
-          m foreach { messages.put(id, _) }
-          m.getOrElse(MessageAndLikes.Empty)
+      val msg = messages.get(id)
+      if (msg ne null) msg else {
+        logTime("waiting for window to prefetch")(Await.result(fetching, 5.seconds))
+        Option(messages.get(id)).getOrElse {
+          logTime(s"loading message for id: $id, position: $index") {
+            val m = LoggedTry(Await.result(loader(Seq(id)), 500.millis).headOption).toOption.flatten
+            m foreach { messages.put(id, _) }
+            m.getOrElse(MessageAndLikes.Empty)
+          }
         }
       }
     }
@@ -163,6 +165,7 @@ object MessagesCursor {
   private implicit val tag: LogTag = "MessagesCursor"
   val WindowSize = 256
   val WindowMargin = WindowSize / 4
+  val futureUnit = Future.successful(())
 
   val Empty: MsgCursor = new MsgCursor {
     override val size: Int = 0
@@ -203,13 +206,15 @@ class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
   import MessagesCursor._
   private implicit val tag = logTagFor[WindowLoader]
 
-  @volatile private var window = IndexWindow.Empty
-  @volatile private var windowFuture = Future.successful(window)
+  @volatile private[this] var window = IndexWindow.Empty
+  @volatile private[this] var windowFuture = Future.successful(window)
+  @volatile private[this] var windowLoading = windowFuture
 
   private def shouldRefresh(window: IndexWindow, index: Int) =
     window == IndexWindow.Empty || window.offset > 0 && index < window.offset + WindowMargin || index > window.offset + WindowSize - WindowMargin
 
   private def fetchWindow(index: Int) = {
+    verbose(s"fetchWindow($index)")
     val items = (index until math.min(cursor.getCount, index + MessagesCursor.WindowSize)) map { pos =>
       if (cursor.moveToPosition(pos)) Entry(cursor) else {
         error(s"can not move cursor to position: $pos, requested fetchWindow($index)")
@@ -219,20 +224,21 @@ class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
     IndexWindow(index, items)
   }
 
-  private def loadWindow(index: Int) = windowFuture .recover { case _ => window } .map {
+  private def loadWindow(index: Int) = windowLoading .recover { case _ => window } .map {
     case w if shouldRefresh(w, index) =>
       window = fetchWindow(math.max(0, index - WindowSize / 2))
+      windowFuture = Future.successful(window)
       window
     case w => w
   }
 
   def apply(index: Int): Future[IndexWindow] = {
-    if (shouldRefresh(window, index)) windowFuture = loadWindow(index)
+    if (shouldRefresh(window, index)) windowLoading = loadWindow(index)
 
-    if (window.contains(index)) Future.successful(window) else windowFuture
+    if (window.contains(index)) windowFuture else windowLoading
   }
 
-  def currentWindow = window
+  def currentWindow = windowFuture
 }
 
 case class IndexWindow(offset: Int, msgs: IndexedSeq[Entry]) {
@@ -241,10 +247,9 @@ case class IndexWindow(offset: Int, msgs: IndexedSeq[Entry]) {
 
   def apply(pos: Int) = msgs(pos - offset)
 
-  def indexOf(time: Instant) = msgs.indexWhere(!_.time.isBefore(time)) match {
-    case -1 => -1
-    case 0 => if (msgs.head.time == time) offset else -1
-    case i => i + offset
+  def indexOf(time: Instant) = msgs.binarySearch(time, _.time) match {
+    case Found(n) => n + offset
+    case InsertionPoint(n) => if (n == 0 || n == msgs.size) -1 else n + offset
   }
 }
 

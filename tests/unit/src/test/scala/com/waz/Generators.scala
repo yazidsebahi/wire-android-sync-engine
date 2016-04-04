@@ -44,7 +44,6 @@ import org.scalacheck._
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.duration.FiniteDuration
-import scala.language.implicitConversions
 
 object Generators {
   import MediaAssets._

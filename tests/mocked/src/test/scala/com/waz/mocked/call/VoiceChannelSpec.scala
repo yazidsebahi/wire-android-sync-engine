@@ -21,9 +21,10 @@ import java.util.Date
 
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
-import com.waz.mocked.{MockedFlows, MockBackend}
+import com.waz.mocked.{MockedMedia, MockedFlows, MockBackend}
 import com.waz.model.VoiceChannelData.ChannelState._
 import com.waz.model._
+import com.waz.service.PlaybackRoute
 import com.waz.service.call.VoiceChannelService.{CallJoined => VCSCallJoined, _}
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.testutils.HasId.idsOfAll
@@ -40,7 +41,7 @@ import scala.collection.{mutable, breakOut}
 import scala.concurrent.duration._
 
 @Config(application = classOf[TestApplication])
-class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with OptionValues with MockBackend with MockedClientApiSpec with MockedFlows { 
+class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with OptionValues with MockBackend with MockedClientApiSpec with MockedFlows with MockedMedia {
   import DefaultPushBehaviour.Implicit
 
   lazy val selfId = UserId(api.getSelf.getUser.getId)
@@ -344,9 +345,9 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
   feature("Taking calls") {
     var callEnd = 0L
     var callStart = 0L
+    lazy val c = conv("meep")
 
     scenario("Join an incoming call") {
-      val c = conv("meep")
       callParticipants.clear()
       spy.reset()
 
@@ -408,7 +409,6 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Mute it") {
-      val c = conv("meep")
       c.voice.mute()
 
       withDelay {
@@ -427,7 +427,6 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Unmute it") {
-      val c = conv("meep")
       c.voice.unmute()
 
       withDelay {
@@ -440,9 +439,27 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       }
     }
 
-    scenario("Transfer it to another device") {
-      val c = conv("meep")
+    scenario("Switch away from speakers") {
+      c.voice.setSpeaker(false)
+      withDelay { c.voice.isSpeaker shouldEqual false }
+    }
 
+    scenario("Speaker gets reactivated by AVS") {
+      changePlaybackRoute(PlaybackRoute.Speaker)
+      withDelay { c.voice.isSpeaker shouldEqual true }
+    }
+
+    scenario("Speaker gets deactivated again by AVS") {
+      changePlaybackRoute(PlaybackRoute.Earpiece)
+      withDelay { c.voice.isSpeaker shouldEqual false }
+    }
+
+    scenario("Switch back to speakers manually") {
+      c.voice.setSpeaker(true)
+      withDelay { c.voice.isSpeaker shouldEqual true }
+    }
+
+    scenario("Transfer it to another device") {
       awaitUi(1.second)
       transferAway(c)
       callEnd = System.currentTimeMillis
@@ -467,8 +484,6 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Transfer it back to this device") {
-      val c = conv("meep")
-
       transferHere(c)
       withDelay {
         c.voice.getState shouldEqual DeviceJoining
@@ -497,8 +512,6 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Other hangs up") {
-      val c = conv("meep")
-
       cancelCall(c)
       callEnd = System.currentTimeMillis
 

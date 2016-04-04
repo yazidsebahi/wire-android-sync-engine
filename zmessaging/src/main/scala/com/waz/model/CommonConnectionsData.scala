@@ -20,7 +20,7 @@ package com.waz.model
 import android.database.Cursor
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.utils.{Json, JsonDecoder, JsonEncoder}
+import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
 

@@ -36,4 +36,6 @@ trait Contacts extends CoreList[Contact] {
   def getInitials: Collection[String]
   def getNumberOfContactsForInitial(initial: String): Int
   def getContactForInitial(initial: String, index: Int): Contact
+  def getTop10ContactsOnWire(): Collection[ContactDetails]
+  def getTotalContactsOnWireCount(): Int
 }

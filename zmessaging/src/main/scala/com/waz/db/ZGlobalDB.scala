@@ -23,8 +23,6 @@ import com.waz.ZLog._
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.model.ZUser.ZUserDao
 
-import scala.language.existentials
-
 class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(context.getApplicationContext, ZGlobalDB.DbName + dbNameSuffix, null, ZGlobalDB.DbVersion) {
   private implicit val logTag: LogTag = logTagFor[ZGlobalDB]
 
@@ -33,7 +31,8 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
   override val migrations = Seq(
     Migration(5, 6)(addCacheEntry_Path_LastUsed_Timeout),
     Migration(6, 7)(addPhoneNumber),
-    Migration(7, 8)(addPhoneNumberVerified)
+    Migration(7, 8)(addPhoneNumberVerified),
+    Migration(8, 9){ implicit db => db.execSQL("ALTER TABLE CacheEntry ADD COLUMN enc_key TEXT") }
   )
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
@@ -71,5 +70,5 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 8
+  val DbVersion = 9
 }

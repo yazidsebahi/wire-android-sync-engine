@@ -197,6 +197,17 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
       }
     }
 
+    scenario("Top contacts includes only users who are on wire") {
+      givenSomeContacts(Seq(cII, cIV, cV, cVI, cVII, cCr), someOfThemAreOnWire = true)
+
+      afterInitialization({ implicit contacts =>
+        soon { contacts.getTotalContactsOnWireCount() shouldEqual 2 }
+        soon {
+          contacts.getTop10ContactsOnWire().asScala.map(_.getDisplayName) should contain allOf (cII.name, cIV.name)
+        }
+      })
+    }
+
     scenario("Inviting someone who is already on Wire.") {
       givenSomeContacts(Seq(cII, cIV, cV, cVI, cVII, cCr), someOfThemAreOnWire = false)
       val promisedInvitation = Promise[Either[ErrorResponse, Either[UserId, ConfirmedInvitation]]]

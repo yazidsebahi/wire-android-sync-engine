@@ -18,6 +18,7 @@
 package com.waz.ui
 
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.ConversationsList.VerificationStateCallback
 import com.waz.api.impl.{Conversation, ConversationsList}
@@ -44,9 +45,9 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
       case None => CancellableFuture.lift(zms.flatMapFuture(_.convsContent.convById(id))) map { _ map getConversation }
     }
 
-  private[waz] def convById(id: ConvId): Conversation = conversations.getOrElseUpdate(id, new Conversation(id))
+  private[waz] def convById(id: ConvId): Conversation = getOrUpdate(conversations)(id, new Conversation(id))
 
-  def getConversation(data: ConversationData) = conversations.getOrElseUpdate(data.id, new Conversation(data)) // we are assuming that ConversationData here is fresh, will not reload it
+  def getConversation(data: ConversationData) = getOrUpdate(conversations)(data.id, new Conversation(data))
 
   def getConversation(p: Parcel): IConversation = getConversation(JsonDecoder.decode[ConversationData](p.readString()))
 

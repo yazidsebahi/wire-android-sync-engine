@@ -28,7 +28,6 @@ import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
-import org.robolectric.annotation.Config
 import org.scalatest._
 
 import scala.concurrent.Future

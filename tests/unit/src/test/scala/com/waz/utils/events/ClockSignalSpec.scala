@@ -21,7 +21,6 @@ import com.waz.RobolectricUtils
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest._
-import org.scalatest.matchers.Matcher
 import org.threeten.bp.Instant, Instant.now
 
 import scala.concurrent.duration._

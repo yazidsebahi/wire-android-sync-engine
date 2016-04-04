@@ -20,6 +20,7 @@ package com.waz.conv
 import java.lang.Iterable
 
 import com.waz.api.ConversationsList.ConversationCallback
+import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
 import com.waz.api.impl.EmailCredentials
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
@@ -73,6 +74,17 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
     scenario("login") {
       login()
       withDelay { api.getSelf.isLoggedIn shouldEqual true }
+
+      info(s"client reg state: ${api.getSelf.getClientRegistrationState}")
+      if (api.getSelf.getClientRegistrationState == ClientRegistrationState.LIMIT_REACHED) {
+        val clients = api.getSelf.getOtherOtrClients
+        withDelay { clients.size should be > 0 }
+        clients foreach (_ delete (password, new DeleteCallback {
+          override def onClientDeleted(client: OtrClient): Unit = info(s"client deleted: ${client.getDisplayId}")
+          override def onDeleteFailed(error: String): Unit = info(s"failed to delete otr client: $error")
+        }))
+      }
+
       //createRandomGroupConversations(320, 180)
     }
 

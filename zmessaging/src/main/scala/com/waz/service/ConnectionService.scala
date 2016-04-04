@@ -72,19 +72,20 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
 
     val lastEvents = events.groupBy(_.to).map { case (_, es) => es.maxBy(_.lastUpdated) }
 
-    usersStorage.updateOrCreateAll(lastEvents.map { ev => ev.to -> updateOrCreate(ev) _ } (breakOut))
-  } flatMap { users =>
+    val fromSync: Set[UserId] = lastEvents.filter(_.localOrFetchTime == Event.UnknownDateTime).map(_.to)(breakOut)
+    usersStorage.updateOrCreateAll(lastEvents.map { ev => ev.to -> updateOrCreate(ev) _ } (breakOut)) map ((_, fromSync))
+  } flatMap { case (users, fromSync) =>
     val toSync = users filter { u => u.connection == ConnectionStatus.Accepted || u.connection == ConnectionStatus.PendingFromOther || u.connection == ConnectionStatus.PendingFromUser }
     sync.syncUsersIfNotEmpty(toSync.map(_.id)(breakOut)) flatMap { _ =>
       withSelfUserFuture { selfUser =>
         RichFuture.processSequential(users.grouped(16).toSeq) { us =>
-          Future.traverse(us)(updateConversationForConnection(_, selfUser))
+          Future.traverse(us)(u => updateConversationForConnection(u, selfUser, fromSync = fromSync(u.id)))
         }
       }
     }
   }
 
-  def updateConversationForConnection(user: UserData, selfUserId: UserId) = {
+  def updateConversationForConnection(user: UserData, selfUserId: UserId, fromSync: Boolean) = {
     verbose(s"updateConversationForConnection: $user")
     val convType = user.connection match {
       case ConnectionStatus.PendingFromUser | ConnectionStatus.Cancelled => ConversationType.WaitForConnection
@@ -97,7 +98,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
         convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden)) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
             case None if convType == ConversationType.Incoming =>
-              addConnectRequestMessage(conv.id, user.id, selfUserId, user.connectionMessage.getOrElse(""), user.getDisplayName)
+              addConnectRequestMessage(conv.id, user.id, selfUserId, user.connectionMessage.getOrElse(""), user.getDisplayName, fromSync = fromSync)
             case None if convType == ConversationType.OneToOne =>
               messages.addDeviceStartMessages(Seq(conv), selfUserId)
             case _ =>

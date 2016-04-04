@@ -67,7 +67,7 @@ class DeviceActor(val deviceName: String,
   override val supervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 1, withinTimeRange = 10.seconds) {
       case exc: Exception =>
-        log.error(s"device actor '$deviceName' died", exc)
+        log.error(exc, s"device actor '$deviceName' died")
         Stop
     }
 
@@ -460,6 +460,7 @@ class DeviceActor(val deviceName: String,
 
   def getConv(id: RConvId) = zmessaging.convsContent.convByRemoteId(id) flatMap {
     case None =>
+      log.warning(s"rconv id not found: $id")
       zmessaging.convsContent.convById(ConvId(id.str)) collect { case Some(conv) => conv }
     case Some(conv) =>
       Future successful conv
@@ -475,7 +476,7 @@ class DeviceActor(val deviceName: String,
       case util.Success(message) =>
         senderRef ! message
       case util.Failure(cause) =>
-        log.error("future receive failed", cause)
+        log.error(cause, "future receive failed")
         senderRef ! Failed(s"future receive failed: ${cause.getMessage}")
     }
   }

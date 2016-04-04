@@ -19,9 +19,8 @@ package com.waz.model
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import com.waz.db.Dao
 import com.waz.db.Col._
-import com.waz.utils.RichTraversableOnce
+import com.waz.db.Dao
 import org.threeten.bp.Instant
 
 object InvitedContacts {

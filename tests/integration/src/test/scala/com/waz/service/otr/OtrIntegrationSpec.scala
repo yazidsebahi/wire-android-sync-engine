@@ -25,7 +25,7 @@ import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
 import com.waz.api.impl.Message
 import com.waz.messages.BitmapSpy
-import com.waz.model.{AssetId, RConvId}
+import com.waz.model.AssetId
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._

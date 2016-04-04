@@ -19,8 +19,8 @@ package com.waz.service.media
 
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.api.{MediaProvider, Message}
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.{MediaProvider, Message}
 import com.waz.model._
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.service.images.ImageAssetService
@@ -31,7 +31,6 @@ import com.waz.utils.events.EventContext
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
-import scala.collection.breakOut
 
 class RichMediaService(assets: ImageAssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService, googleMaps: GoogleMapsMediaService) {
   import com.waz.api.Message.Part.Type._
@@ -69,11 +68,7 @@ class RichMediaService(assets: ImageAssetService, messages: MessagesContentUpdat
   private def scheduleSyncFor(ms: Seq[MessageData]) = if (ms.nonEmpty) {
     verbose(s"Scheduling sync for added rich media messages: $ms")
 
-    messagesStorage.updateAll(ms .map { m =>
-      m.id -> { (m: MessageData) =>
-        m.copy(content = m.content map { c => c.copy(syncNeeded = isSyncable(c)) })
-      }
-    } (breakOut)) map { _ =>
+    messagesStorage.updateAll2(ms.map(_.id), m => m.copy(content = m.content map (c => c.copy(syncNeeded = isSyncable(c))))) map { _ =>
       Future.traverse(ms) { m => sync.syncRichMedia(m.id) }
     }
   }

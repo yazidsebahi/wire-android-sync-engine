@@ -18,7 +18,7 @@
 package com.waz.model
 
 import com.waz.utils.JsonDecoder
-import com.waz.znet.ContentEncoder.{ByteArrayRequestContent, BinaryRequestContent}
+import com.waz.znet.ContentEncoder.ByteArrayRequestContent
 import org.json.JSONObject
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}

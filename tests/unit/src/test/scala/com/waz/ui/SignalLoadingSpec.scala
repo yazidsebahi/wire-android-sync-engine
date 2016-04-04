@@ -19,7 +19,7 @@ package com.waz.ui
 
 import com.waz.RobolectricUtils
 import com.waz.testutils.{MockUiModule, MockZMessaging}
-import com.waz.utils.events.{IntSignal, SignalSubscription}
+import com.waz.utils.events.IntSignal
 import org.robolectric.Robolectric
 import org.scalatest._
 

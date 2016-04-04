@@ -18,13 +18,11 @@
 package com.waz.bitmap
 
 import android.content.Context
-import android.content.res.Resources.NotFoundException
-import android.graphics.{Paint, Canvas, Bitmap, Color}
+import android.graphics.{Bitmap, Canvas, Color, Paint}
 import com.waz.ZLog._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.LoggedTry
 import com.waz.zms.R
-import scala.util.control.Exception.catching
 
 object BitmapPolka {
   private implicit val logTag: LogTag = logTagFor(BitmapPolka)

@@ -21,6 +21,7 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 
 import com.waz.bitmap.gif.Gif.{Frame, FrameDataSource}
+import com.waz.utils.IoUtils
 
 trait DataSource {
   var blockSize = 0
@@ -62,6 +63,16 @@ trait DataSource {
    * @return number of bytes skipped
    */
   def skipBytes(count: Int): Int
+
+  def skipFully(count: Int): Boolean = {
+    var n = count
+    while (n > 0) {
+      val c = skipBytes(n)
+      if (c < 0) return false
+      n -= c
+    }
+    true
+  }
 
   /**
    * Reads next variable length block from input.
@@ -121,10 +132,12 @@ class ByteBufferDataSource(byteBuffer: ByteBuffer) extends DataSource {
    * Reads up to 'count' bytes from input and stores them in buffer at given offset.
    * @return number of bytes read
    */
-  override def read(buffer: Array[Byte], offset: Int, count: Int): Int = {
-    byteBuffer.get(buffer, offset, count)
-    count
-  }
+  override def read(buffer: Array[Byte], offset: Int, count: Int): Int =
+    if (byteBuffer.capacity() < byteBuffer.position() + count) -1
+    else {
+      byteBuffer.get(buffer, offset, count)
+      count
+    }
 
   /**
    * Skips up to 'count' bytes from input.
@@ -219,16 +232,16 @@ class StreamFrameDataSource(stream: () => InputStream) extends FrameDataSource {
   var input = None: Option[InputStream]
 
   override def apply(frame: Frame): DataSource = {
-    if (input.isEmpty || position > frame.bufferFrameStart) {
-      position = 0
+    if (input.isEmpty || position > frame.bufferFrameStart) { position = 0
       input.foreach(_.close())
       input = Some(new BufferedInputStream(stream()))
     }
     val buffer = new Array[Byte](frame.imageDataSize)
     input.foreach { is =>
-      is.skip(frame.bufferFrameStart - position)
-      val bytes = is.read(buffer)
-      position = frame.bufferFrameStart + bytes
+      if (IoUtils.skip(is, frame.bufferFrameStart - position) && IoUtils.readFully(is, buffer, 0, buffer.length))
+        position = frame.bufferFrameStart + buffer.length
+      else
+        position = Int.MaxValue // something went wrong, will restart from new stream next time
     }
     new ByteArrayDataSource(buffer)
   }

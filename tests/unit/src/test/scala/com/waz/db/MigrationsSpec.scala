@@ -17,7 +17,7 @@
  */
 package com.waz.db
 
-import android.database.sqlite.{SQLiteOpenHelper, SQLiteDatabase}
+import android.database.sqlite.SQLiteDatabase
 import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 

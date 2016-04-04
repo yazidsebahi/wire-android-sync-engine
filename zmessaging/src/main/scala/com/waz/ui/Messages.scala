@@ -18,6 +18,7 @@
 package com.waz.ui
 
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.impl.Message
@@ -53,10 +54,10 @@ class Messages(implicit module: UiModule) {
   def cachedOrFromParcel(p: Parcel): api.Message = cachedOrUpdated(MessageAndLikes(JsonDecoder.decode[MessageData](p.readString()),
     p.createStringArray().map(UserId), p.readInt() == 1))
 
-  def cachedOrNew(id: MessageId): Message = messages.getOrElseUpdate(id, new Message(id)(module))
+  def cachedOrNew(id: MessageId): Message = getOrUpdate(messages)(id, new Message(id)(module))
 
   def cachedOrUpdated(data: MessageAndLikes, userAction: Boolean = false): Message = {
-    val msg = messages.getOrElseUpdate(data.message.id, new Message(data)(module))
+    val msg = getOrUpdate(messages)(data.message.id, new Message(data)(module))
 
     if (userAction) {
       if (msg.data.state == api.Message.Status.FAILED) {
@@ -64,10 +65,12 @@ class Messages(implicit module: UiModule) {
         module.zms(_.messages.markMessageRead(data.message.convId, data.message.id))
       }
 
-      if (msg.data.content.exists(_.syncNeeded)) module.zms(_.sync.syncRichMedia(data.message.id, Priority.High))
+      if (msg.data.content exists syncNeeded) module.zms(_.sync.syncRichMedia(data.message.id, Priority.High))
     }
     msg
   }
+
+  private[this] val syncNeeded = (_: MessageContent).syncNeeded
 
   def updateLastRead(conv: ConvId, time: Instant, event: EventId) = module.zms.flatMapFuture(_.convsUi.setLastRead(conv, time, event)).recoverWithLog(reportHockey = true)
 

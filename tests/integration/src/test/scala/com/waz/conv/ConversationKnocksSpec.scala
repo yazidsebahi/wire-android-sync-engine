@@ -149,6 +149,7 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
 
     scenario("init remote process") {
       auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
+      awaitUi(1.second)
     }
 
     scenario("Receive incoming knock message") {

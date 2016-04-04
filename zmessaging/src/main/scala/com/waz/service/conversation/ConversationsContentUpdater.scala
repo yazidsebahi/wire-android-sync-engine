@@ -143,7 +143,7 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
    * Updates remoteId if different and merges conversations if two are found for given local and remote id.
    *
    * Will not post created conversation to backend.
-   * TODO: improve - it looks to complicated and duplicates some code
+   * TODO: improve - it looks too complicated and duplicates some code
    */
   def getOneToOneConversation(toUser: UserId, selfUserId: UserId, remoteId: Option[RConvId] = None, convType: ConversationType = ConversationType.OneToOne) =
     Serialized.future(('getOneToOneConversation, toUser)) {

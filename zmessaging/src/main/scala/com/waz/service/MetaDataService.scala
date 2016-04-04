@@ -25,7 +25,6 @@ import com.waz.ZLog._
 import com.waz.api.OtrClientType
 import com.waz.sync.client._
 import com.waz.utils.{LoggedTry, returning}
-import com.waz.zms.BuildConfig
 
 import scala.util.Try
 

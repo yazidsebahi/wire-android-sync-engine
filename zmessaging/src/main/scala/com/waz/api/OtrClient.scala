@@ -32,6 +32,8 @@ trait OtrClient extends UiObservable with Parcelable {
 
   def getId: String
 
+  def getDisplayId: String
+
   def getLabel: String
 
   def getModel: String

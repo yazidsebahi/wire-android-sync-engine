@@ -18,7 +18,6 @@
 package com.waz.utils.events
 
 import android.app.{Activity, Fragment, Service}
-import android.content.Loader
 import android.view.View
 import com.waz.ZLog
 import com.waz.ZLog._

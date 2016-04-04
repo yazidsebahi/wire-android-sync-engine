@@ -35,9 +35,8 @@ import org.scalatest._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.language.implicitConversions
 
-class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
+class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricUnitTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
   lazy val globalStorage = new GlobalStorage(Robolectric.application)
 
@@ -106,12 +105,14 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     msgOpt should be('defined)
     val msg = msgOpt.get
 
-    msg.msgType shouldEqual msgType
-    convId foreach { msg.convId shouldEqual _ }
-    name foreach { name => msg.name shouldEqual Some(name) }
-    userId foreach { msg.userId shouldEqual _ }
-    eventId foreach { msg.source shouldEqual _ }
-    members foreach { msg.members.toSet shouldEqual _.toSet } // TODO: check message entries
+    withClue(msg.toString) {
+      msg.msgType shouldEqual msgType
+      convId foreach { msg.convId shouldEqual _ }
+      name foreach { name => msg.name shouldEqual Some(name) }
+      userId foreach { msg.userId shouldEqual _ }
+      eventId foreach { msg.source shouldEqual _ }
+      members foreach { msg.members.toSet shouldEqual _.toSet } // TODO: check message entries
+    }
 
     msg
   }
@@ -333,6 +334,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       When("push notification is received for only one user")
       val event = EventId(10)
+      Thread.sleep(500)
       service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, event, (msg.time - 1.milli).javaDate, selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 

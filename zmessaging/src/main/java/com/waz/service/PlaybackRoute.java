@@ -15,21 +15,23 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.service;
 
-import android.net.Uri
-import com.waz.service.ReportingService
+public enum PlaybackRoute {
+    Invalid(-1), Earpiece(0), Speaker(1), Headset(2), Bluetooth(3);
 
-object BugReporter {
-  import com.waz.threading.Threading.Implicits.Ui
+    public final int avsIndex;
 
-  def generateReport(listener: ReportListener): Unit = {
-    ReportingService.generateReport().onSuccess {
-      case fileUri => listener.onReportGenerated(fileUri)
+    PlaybackRoute(int avsIndex) {
+        this.avsIndex = avsIndex;
     }
-  }
-}
 
-trait ReportListener {
-  def onReportGenerated(fileUri: Uri): Unit
+    static PlaybackRoute fromAvsIndex(int avsIndex) {
+        for (PlaybackRoute value: PlaybackRoute.values()) {
+            if (value.avsIndex == avsIndex) {
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("unknown/invalid avs index: " + avsIndex);
+    }
 }

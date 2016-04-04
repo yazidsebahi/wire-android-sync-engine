@@ -17,7 +17,8 @@
  */
 package com.waz.service.images
 
-import android.graphics.{Bitmap, BitmapFactory}
+import android.graphics.Bitmap
+import android.support.v4.content.ContextCompat
 import com.waz.RobolectricUtils
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.gif.{Gif, GifReader}
@@ -89,7 +90,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   def asset(is: ImageData*) = ImageAssetData(AssetId(), RConvId(), is)
 
   before {
-    Try { testContext.getResources.getDrawable(android.R.color.transparent) } // force resource loading
+    Try { ContextCompat.getDrawable(testContext, android.R.color.transparent) } // force resource loading
     cachedBitmapResult = { _ => None }
     cachedGifResult = { _ => None }
     gifResult = { _ => None }

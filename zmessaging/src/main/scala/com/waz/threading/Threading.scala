@@ -69,10 +69,6 @@ object Threading {
    */
   val ImageDispatcher = new LimitedDispatchQueue(Cpus - 1, ThreadPool, "ImageDispatcher")
 
-  def assertUiThread(): Unit = {
-    if (AssertsEnabled) assert(Thread.currentThread() eq Looper.getMainLooper.getThread, s"Should be run on Ui thread, but is using: ${Thread.currentThread().getName}")
-  }
-  def assertNotUiThread(): Unit = {
-    if (AssertsEnabled) assert(Thread.currentThread() ne Looper.getMainLooper.getThread, s"Should be run on background thread, but is using: ${Thread.currentThread().getName}")
-  }
+  def assertUiThread(): Unit = if (AssertsEnabled && (Thread.currentThread ne Looper.getMainLooper.getThread)) throw new AssertionError(s"Should be run on Ui thread, but is using: ${Thread.currentThread().getName}")
+  def assertNotUiThread(): Unit = if (AssertsEnabled && (Thread.currentThread eq Looper.getMainLooper.getThread)) throw new AssertionError(s"Should be run on background thread, but is using: ${Thread.currentThread().getName}")
 }

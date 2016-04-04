@@ -18,17 +18,18 @@
 package com.waz.ui
 
 import android.support.v4.util.LruCache
+import com.waz.CacheLike
 import com.waz.ZLog._
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
-import com.waz.utils.ThrottledProcessingQueue
+import com.waz.utils.{ThrottledProcessingQueue}
 import com.waz.utils.events.{EventContext, EventStream, Subscription}
 
 import scala.collection._
 import scala.concurrent.Future
 import scala.ref.{ReferenceQueue, WeakReference}
 
-class UiCache[Key, A <: AnyRef](lruSize: Int = 0)(implicit ui: UiModule) {
+class UiCache[Key, A <: AnyRef](lruSize: Int = 0)(implicit ui: UiModule) extends CacheLike[Key, A] {
   private implicit val tag: LogTag = logTagFor[UiCache[_, _]]
 
   val queue = new ReferenceQueue[A]
@@ -39,11 +40,19 @@ class UiCache[Key, A <: AnyRef](lruSize: Int = 0)(implicit ui: UiModule) {
 
   def get(k: Key): Option[A] = {
     Threading.assertUiThread()
+    Option(getOrNull(k))
+  }
+
+  def getOrNull(k: Key): A = {
     dropQueue()
-    if (lruSize > 0) Option(lru.get(k)).orElse(items.get(k).flatMap(_.get))
-    else {
-      val res = items.get(k).flatMap(_.get)
-      res foreach { lru.put(k, _) } // update lru
+    if (lruSize > 0) {
+      val item = lru.get(k)
+      if (item ne null) item
+      else if (items contains k) items(k).underlying.get
+      else null.asInstanceOf[A]
+    } else {
+      val res = if (items contains k) items(k).underlying.get else null.asInstanceOf[A]
+      if (res ne null) lru.put(k, res) // update lru
       res
     }
   }
@@ -62,19 +71,6 @@ class UiCache[Key, A <: AnyRef](lruSize: Int = 0)(implicit ui: UiModule) {
     dropQueue()
     if (lruSize > 0) lru.put(k, item)
     items.put(k, new WeakReferenceWithKey(k, item, queue))
-  }
-
-  def getOrElseUpdate(k: Key, default: => A): A = getOrElse(k, {
-    val item = default
-    put(k, item)
-    item
-  })
-
-  def getOrElse(k: Key, default: => A): A = {
-    Threading.assertUiThread()
-    dropQueue()
-
-    get(k).getOrElse { default }
   }
 
   def update(k: Key, update: A => Unit, default: => A): A = {

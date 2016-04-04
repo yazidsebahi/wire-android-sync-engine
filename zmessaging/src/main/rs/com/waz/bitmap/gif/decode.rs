@@ -36,6 +36,7 @@ int32_t transparency;
 typedef uint8_t byte;
 
 static const uint32_t MAX_STACK_SIZE = 4096;
+static const uint32_t PIXEL_STACK_SIZE = 8192;
 static const int NULL_CODE = -1;
 
 void __attribute__((kernel)) clear(uint32_t line) { // clear a line (but only in current frame)
@@ -55,7 +56,7 @@ void __attribute__((kernel)) decode(uint32_t in) {
 
     short prefix[MAX_STACK_SIZE];
     uint8_t suffix[MAX_STACK_SIZE];
-    uint8_t pixelStack[MAX_STACK_SIZE * 2];
+    uint8_t pixelStack[PIXEL_STACK_SIZE];
     uint8_t block[256];
 
     // Initialize GIF data stream decoder.
@@ -66,6 +67,7 @@ void __attribute__((kernel)) decode(uint32_t in) {
     old_code = NULL_CODE;
     code_size = data_size + 1;
     code_mask = (1 << code_size) - 1;
+    if (clear > MAX_STACK_SIZE) return;
     for (code = 0; code < clear; code++) {
         prefix[code] = 0;
         suffix[code] = (byte)code;
@@ -109,6 +111,7 @@ void __attribute__((kernel)) decode(uint32_t in) {
         code = datum & code_mask;
         datum >>= code_size;
         bits -= code_size;
+        if (code >= MAX_STACK_SIZE) return;
         // Interpret the code
         if (code == end_of_information) {
             break;
@@ -133,6 +136,7 @@ void __attribute__((kernel)) decode(uint32_t in) {
             code = old_code;
         }
         while (code > clear) {
+            if (top >= PIXEL_STACK_SIZE) return;
             pixelStack[top++] = suffix[code];
             code = prefix[code];
         }

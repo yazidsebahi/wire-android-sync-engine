@@ -54,7 +54,7 @@ class GifReader(input: DataSource, frameData: FrameDataSource) {
    */
   def readHeader() = {
     if (input.read() != 'G' || input.read() != 'I' || input.read() != 'F') throw FormatException
-    input.skipBytes(3) // id consists of 6 bytes
+    input.skipFully(3) // id consists of 6 bytes
     readLSD()
     if (gctFlag) {
       gct = readColorTable(gctSize)

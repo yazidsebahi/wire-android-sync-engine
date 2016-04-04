@@ -31,7 +31,6 @@ import com.waz.znet._
 import org.json.JSONObject
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, RobolectricTests}
-import org.threeten.bp.Instant
 
 class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures with BeforeAndAfterAll with RobolectricTests {
 

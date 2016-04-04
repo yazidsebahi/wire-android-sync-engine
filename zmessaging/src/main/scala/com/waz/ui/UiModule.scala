@@ -20,6 +20,7 @@ package com.waz.ui
 import android.content.Context
 import android.net.Uri
 import android.os.{Handler, Looper}
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.Invitations
@@ -128,7 +129,7 @@ class UiModule(val instance: InstanceService) extends UiEventContext with ZMessa
 
   def getOtherParticipantForOneToOneConv(id: ConvId): User = users.getUser(UserId(id.str)) // one-to-one conversation has the same id as the other user, so we can access it directly
 
-  def cached[A <: AnyRef](uri: Uri, default: => A) = uiCache.getOrElseUpdate(uri, default).asInstanceOf[A]
+  def cached[A <: AnyRef](uri: Uri, default: => A) = getOrUpdate(uiCache)(uri, default).asInstanceOf[A]
 
   Threading.Ui {
     // ensure notifications service is started

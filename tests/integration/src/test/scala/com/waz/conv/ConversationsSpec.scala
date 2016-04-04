@@ -278,6 +278,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
         errors should be(empty)
       }
 
+      awaitUi(1.second)
       val count = msgs.size()
 
       conv.addMembers(List(api.getUser(provisionedUserId("auto5").str).asInstanceOf[com.waz.api.User]).asJava)

@@ -95,29 +95,27 @@ class ConversationMemberLimitSpec extends FeatureSpec with Matchers with OptionV
       errorSpy.numberOfTimesCalled shouldBe 1
       errorSpy.mostRecentError.value.getType shouldEqual CANNOT_ADD_USER_TO_FULL_CONVERSATION
       idsOfAll((errorSpy.mostRecentError.value.getUsers.asScala.toSeq: Seq[User]):_*) should contain theSameElementsAs Seq(ids.last)
-      userList should have size 128
-      idsOf(userList) should contain(ids.last)
+      userList should have size 127
+      idsOf(userList) should not contain ids.last
       errors should have size 1
       errors.get(0).getType shouldEqual CANNOT_ADD_USER_TO_FULL_CONVERSATION
       idsOfAll((errors.get(0).getUsers.asScala.toSeq: Seq[User]):_*) should contain theSameElementsAs Seq(ids.last)
     }
 
-    userListSpy.reset()
     errorListSpy.reset()
     errorSpy.reset()
     errors.get(0).dismiss()
 
     withDelay {
-      userListSpy.numberOfTimesCalled should be > 0
       errorListSpy.numberOfTimesCalled should be > 0
       errorSpy.numberOfTimesCalled shouldBe 0
-      userList should have size 127
-      idsOf(userList) should not(contain(ids.last))
       errors shouldBe empty
     }
   }
 
   scenario("Adding a member to a group conversation of size 128 when the user is already a member of that conversation.") {
+    userListSpy.reset()
+
     conv.addMembers(Seq(api.getUser(ids(100).str)).asJava)
 
     withDelay {

@@ -17,6 +17,8 @@
  */
 package com.waz.api.impl.otr
 
+import java.util.Locale
+
 import android.os.Parcel
 import com.waz.ZLog._
 import com.waz.api
@@ -100,7 +102,12 @@ class OtrClient(val userId: UserId, val clientId: ClientId, var data: Client)(im
     this
   }
 
-  override def getId: String = data.id.str
+  override def getId: String =  data.id.str
+
+  override def getDisplayId: String = f"${data.id.str.toUpperCase(Locale.ENGLISH)}%16s" replace (' ', '0') grouped 4 map { group =>
+    val (bold, normal) = group.splitAt(2)
+    s"[[$bold]] $normal"
+  } mkString " "
 
   override def getLabel = data.label
 

@@ -126,12 +126,14 @@ class BitmapSignal(img: ImageAssetData, req: BitmapRequest, imageLoader: ImageLo
 
     def detectMime(data: LocalData) = Threading.IO { IoUtils.withResource(data.inputStream)(BitmapUtils.detectImageType) }
 
-    override def loadCached() = imageLoader.loadRawCachedData(im, img.convId) flatMap {
+    override def loadCached() = imageLoader.loadRawCachedData(im, img.convId) .flatMap {
       case Some(data) => detectMime(data) flatMap {
         case Mime.Gif => gifLoader.loadCached() map (_.map(Right(_)))
         case _ => bitmapLoader.loadCached() map (_.map(Left(_)))
       }
       case None => CancellableFuture.successful(None)
+    } .recover {
+      case e: Throwable => None
     }
 
     override def load(): CancellableFuture[Data] = imageLoader.loadRawImageData(im, img.convId) flatMap {
@@ -150,9 +152,11 @@ class BitmapSignal(img: ImageAssetData, req: BitmapRequest, imageLoader: ImageLo
 
   class BitmapLoader(img: ImageAssetData, im: ImageData) extends ImageLoader {
     override type Data = Bitmap
-    override def loadCached() = imageLoader.hasCachedBitmap(img, im, req) flatMap {
+    override def loadCached() = imageLoader.hasCachedBitmap(img, im, req) .flatMap {
       case true => imageLoader.loadCachedBitmap(img, im, req).map(Some(_))
       case false => CancellableFuture.successful(None)
+    } .recover {
+      case e: Throwable => None
     }
     override def load() = imageLoader.loadBitmap(img, im, req)
     override def process(result: Bitmap) = {
@@ -193,9 +197,11 @@ class BitmapSignal(img: ImageAssetData, req: BitmapRequest, imageLoader: ImageLo
 
   class GifLoader(img: ImageAssetData, im: ImageData) extends ImageLoader {
     override type Data = Gif
-    override def loadCached() = imageLoader.hasCachedData(img, im) flatMap {
+    override def loadCached() = imageLoader.hasCachedData(img, im) .flatMap {
       case true => imageLoader.loadCachedGif(img, im).map(Some(_))
       case false => CancellableFuture.successful(None)
+    } .recover {
+      case e: Throwable => None
     }
     override def load() = imageLoader.loadGif(img, im)
     override def process(gif: Gif) = {

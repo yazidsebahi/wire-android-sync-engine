@@ -17,18 +17,23 @@
  */
 package com.waz.cache
 
+import java.io.FileInputStream
+
 import android.database.sqlite.SQLiteDatabase
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.GlobalStorage
 import com.waz.db.ZGlobalDB
+import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
+import com.waz.utils.IoUtils
 import org.robolectric.Robolectric
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests { test =>
+class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig { test =>
 
   var storage: GlobalStorage = _
   var service: CacheService = _
@@ -101,12 +106,22 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
 
     scenario("Create CacheEntry with inputStream and read it") {
-      val in = getClass.getResourceAsStream("/images/fixedit.jpg")
+      def in = getClass.getResourceAsStream("/images/fixedit.jpg")
 
-      val entry = service.addStream("foo", in)
-      val result = Await.result(entry, 10.seconds)
+      val entry = service.addStream("foo", in).future.futureValue
+      val entry1 = service.getEntry("foo").future.futureValue.get
+      assertEquals(entry1, entry)
 
-      assertEquals(Await.result(service.getEntry("foo"), 10.seconds).get, result)
+      IoUtils.toByteArray(entry1.inputStream).mkString(",") shouldEqual IoUtils.toByteArray(in).mkString(",")
+    }
+
+    scenario("Saved file should be encrypted") {
+      def in = getClass.getResourceAsStream("/images/fixedit.jpg")
+
+      val entry = service.addStream("foo", in).future.futureValue
+
+      IoUtils.toByteArray(entry.inputStream).mkString(",") shouldEqual IoUtils.toByteArray(in).mkString(",")
+      IoUtils.toByteArray(new FileInputStream(entry.cacheFile)).toSeq should not equal IoUtils.toByteArray(in).toSeq
     }
 
     scenario("Create empty CacheEntry and try to read it") { // cache should never return empty entries

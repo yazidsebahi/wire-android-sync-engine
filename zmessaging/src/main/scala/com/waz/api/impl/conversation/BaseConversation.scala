@@ -20,7 +20,6 @@ package com.waz.api.impl.conversation
 import android.os.Parcel
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.IConversation.Type
 import com.waz.api.impl._
 import com.waz.api.{Verification, IConversation, MessageContent}
 import com.waz.content.Uris
@@ -34,7 +33,7 @@ import scala.util.Try
 
 class BaseConversation(implicit ui: UiModule) extends IConversation with UiObservable with SignalLoading {
   import BaseConversation._
-  import com.waz.api.IConversation.Type._
+  import IConversation.Type._
 
   private val conversations = ui.convs
 
