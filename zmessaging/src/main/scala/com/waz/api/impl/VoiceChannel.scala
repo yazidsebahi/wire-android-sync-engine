@@ -41,8 +41,16 @@ class VoiceChannel(val id: ConvId, var data: VoiceChannelData)(implicit ui: UiMo
   private implicit val tag: LogTag = logTagFor[VoiceChannel]
 
   private var participants = Array.empty[Participant]
+  private var speaker: Boolean = false
 
   addLoader(_.voice.voiceChannelSignal(id))(set)
+  addLoader(_.mediamanager.isSpeakerOn)(updateSpeaker)
+
+  def updateSpeaker(speaker: Boolean): Unit = {
+    debug(s"update speaker to $speaker")
+    this.speaker = speaker
+    notifyChanged()
+  }
 
   def set(updated: VoiceChannelData): Unit = {
     debug(s"set($updated)")
@@ -70,8 +78,7 @@ class VoiceChannel(val id: ConvId, var data: VoiceChannelData)(implicit ui: UiMo
     }
 
     if (data.copy(participantsById = Map.empty) != updated.copy(participantsById = Map.empty) || participantsAddedOrRemoved) {
-      data = data.copy(state = updated.state, deviceState = updated.deviceState, muted = updated.muted,
-        speaker = updated.speaker, silenced = updated.silenced,
+      data = data.copy(state = updated.state, deviceState = updated.deviceState, muted = updated.muted, silenced = updated.silenced,
         participantsById = activeParticipantsById, sessionId = updated.sessionId, caller = updated.caller,
         tracking = updated.tracking, video = updated.video, selfId = updated.selfId, revision = updated.revision)
 
@@ -101,7 +108,7 @@ class VoiceChannel(val id: ConvId, var data: VoiceChannelData)(implicit ui: UiMo
 
   override def getConversation: IConversation = ui.convs.convById(data.id)
 
-  override def isSpeaker: Boolean = data.speaker
+  override def isSpeaker: Boolean = speaker
 
   override def isMuted: Boolean = data.muted
 
@@ -113,9 +120,9 @@ class VoiceChannel(val id: ConvId, var data: VoiceChannelData)(implicit ui: UiMo
   override def getCauseForCallDrop: CauseForCallStateEvent = data.tracking.cause
 
   override def setSpeaker(speaker: Boolean): Unit = {
-    if (isSpeaker != speaker) {
-      data = data.copy(speaker = speaker)
-      ui.channels.setSpeaker(data.id, speaker)
+    if (this.speaker != speaker) {
+      this.speaker = speaker
+      ui.zms.flatMapFuture(_.mediamanager.setSpeaker(speaker))
       notifyChanged()
     }
   }

@@ -37,7 +37,6 @@ case class VoiceChannelData(id: ConvId,
                             state: VoiceChannelState,
                             deviceState: api.ConnectionState,
                             muted: Boolean = false,
-                            speaker: Boolean = false,
                             silenced: Boolean = false,
                             participantsById: Map[UserId, VoiceParticipantData] = Map.empty,
                             establishedFlows: Set[UserId] = Set.empty,
@@ -180,7 +179,7 @@ object VoiceParticipantData extends ((ConvId, UserId, api.ConnectionState, Boole
 
 case class VoiceParticipantData(convId: ConvId, userId: UserId, state: api.ConnectionState, muted: Boolean = false, sendsVideo: Boolean = false, volume: Float = 0f, idx: Int = 0)
 
-object VoiceChannelData extends ((ConvId, VoiceChannelState, api.ConnectionState, Boolean, Boolean, Boolean, Map[UserId, VoiceParticipantData], Set[UserId], Option[CallSessionId], Option[CallSequenceNumber], Option[UserId], CallTrackingData, VideoCallData, UserId, Revision) => VoiceChannelData) {
+object VoiceChannelData extends ((ConvId, VoiceChannelState, api.ConnectionState, Boolean, Boolean, Map[UserId, VoiceParticipantData], Set[UserId], Option[CallSessionId], Option[CallSequenceNumber], Option[UserId], CallTrackingData, VideoCallData, UserId, Revision) => VoiceChannelData) {
 
   type ChannelState = VoiceChannelState
   object ChannelState {
@@ -236,7 +235,7 @@ object VoiceChannelData extends ((ConvId, VoiceChannelState, api.ConnectionState
 
     override def apply(implicit js: JSONObject): VoiceChannelData = VoiceChannelData(
       id = 'id, state = VoiceChannelState.valueOf('state), deviceState = api.ConnectionState.valueOf('deviceState),
-      muted = 'muted, speaker = 'speaker, silenced = 'silenced,
+      muted = 'muted, silenced = 'silenced,
       participantsById = decodeArray[VoiceParticipantData]('participants).map(p => p.userId -> p).toMap,
       establishedFlows = decodeArray[UserId]('establishedFlows).toSet,
       sessionId = decodeOptId[CallSessionId]('sessionId), lastSequenceNumber = decodeOptCallSequenceNumber('lastSequenceNumber),
@@ -257,7 +256,6 @@ object VoiceChannelData extends ((ConvId, VoiceChannelState, api.ConnectionState
       o.put("state", v.state.name)
       o.put("deviceState", v.deviceState.name())
       o.put("muted", v.muted)
-      o.put("speaker", v.speaker)
       o.put("silenced", v.silenced)
       o.put("participants", JsonEncoder.arr(v.participantsById.values.toSeq))
       o.put("establishedFlows", JsonEncoder.arr(v.establishedFlows.toSeq))

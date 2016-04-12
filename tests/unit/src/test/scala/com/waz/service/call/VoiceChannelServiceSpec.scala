@@ -156,7 +156,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.Idle
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -175,7 +174,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       withDelay {
         listChannels should have size 3
-        listChannels.map(_.active).toSeq shouldEqual Seq(false, false, false)
+        listChannels.map(_.active) shouldEqual Seq(false, false, false)
       }
     }
 
@@ -192,7 +191,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.tracking.cause shouldEqual CauseForCallStateEvent.REQUESTED
         channel.state shouldEqual ChannelState.OtherCalling
         channel.deviceState shouldEqual ConnectionState.Idle
@@ -217,7 +215,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         withClue(s"for channel ${channel.id}") {
           channel.data.muted shouldEqual false
           channel.data.tracking.cause shouldEqual CauseForCallStateEvent.REQUESTED
-          channel.data.speaker shouldEqual false
           channel.data.state shouldEqual ChannelState.OtherCalling
           channel.data.deviceState shouldEqual ConnectionState.Idle
         }
@@ -252,7 +249,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.DeviceCalling
         channel.deviceState shouldEqual ConnectionState.Connecting
       }
@@ -287,7 +283,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.UserCalling
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -302,7 +297,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.DeviceJoining
         channel.deviceState shouldEqual ConnectionState.Connecting
       }
@@ -317,7 +311,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.UserConnected
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -336,7 +329,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
 
       withDelay {
-        listChannels.map(_.data.state).toSeq shouldEqual Seq(ChannelState.UserConnected)
+        listChannels.map(_.data.state) shouldEqual Seq(ChannelState.UserConnected)
       }
 
       service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
@@ -359,7 +352,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.DeviceCalling
         channel.deviceState shouldEqual ConnectionState.Connecting
       }
@@ -397,7 +389,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.UserConnected
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -438,7 +429,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.OthersConnected
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -449,7 +439,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.DeviceJoining
         channel.deviceState shouldEqual ConnectionState.Connecting
       }
@@ -559,7 +548,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(user2.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
       withDelay {
-        listChannels.filter(_.ongoing).map(_.id).toSeq shouldEqual Seq(conv.id)
+        listChannels.filter(_.ongoing).map(_.id) shouldEqual Seq(conv.id)
         listChannels.filter(_.active).map(_.id) should contain(conv1.id)
         incoming.value.map(_.id) should contain(conv1.id)
       }
@@ -569,11 +558,11 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.dispatchEvent(idleEvent())
       service.voice.joinVoiceChannel(conv.id)
       service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
-      withDelay { listChannels.filter(_.active).map(_.id).toSeq shouldEqual Seq(conv.id) }
+      withDelay { listChannels.filter(_.active).map(_.id) shouldEqual Seq(conv.id) }
 
       service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(user2.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
       withDelay {
-        listChannels.filter(_.ongoing).map(_.id).toSeq shouldEqual Seq(conv.id)
+        listChannels.filter(_.ongoing).map(_.id) shouldEqual Seq(conv.id)
         listChannels.filter(_.active).map(_.id) should contain(conv1.id)
         incoming.value.map(_.id) should contain(conv1.id)
       }
@@ -620,14 +609,14 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.voice.joinVoiceChannel(conv.id)
 
       withDelay {
-        listChannels.map(_.data.state).toSeq shouldEqual Seq(ChannelState.DeviceJoining)
+        listChannels.map(_.data.state) shouldEqual Seq(ChannelState.DeviceJoining)
       }
 
       shadowTelManager.callState = TelephonyManager.CALL_STATE_RINGING
       Option(shadowTelManager.getListener).foreach(_.onCallStateChanged(TelephonyManager.CALL_STATE_RINGING, ""))
 
       withDelay {
-        listChannels.map(_.data.state).toSeq shouldEqual Seq(ChannelState.Idle)
+        listChannels.map(_.data.state) shouldEqual Seq(ChannelState.Idle)
         listChannels.map(_.data.tracking.cause).head shouldEqual CauseForCallStateEvent.INTERRUPTED
       }
     }
@@ -751,7 +740,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
         channel.silenced shouldEqual true
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.OtherCalling
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -780,7 +768,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
         channel.silenced shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.OtherCalling
         channel.deviceState shouldEqual ConnectionState.Idle
       }
@@ -807,7 +794,6 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
         channel.silenced shouldEqual false
-        channel.speaker shouldEqual false
         channel.state shouldEqual ChannelState.DeviceJoining
         channel.deviceState shouldEqual ConnectionState.Connecting
       }

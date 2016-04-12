@@ -53,6 +53,9 @@ class MockZMessaging(instance: InstanceService = new MockInstance, zuser: ZUser 
 
   var timeout = 5.seconds
 
+  override lazy val mediamanager: MediaManagerService = new MediaManagerService(instance.global.context, prefs) {
+    override lazy val mediaManager = None
+  }
 
   override lazy val otrClient: OtrClient = new OtrClient(znetClient) {
     var client = Option.empty[Client]

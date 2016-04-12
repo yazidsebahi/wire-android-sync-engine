@@ -56,8 +56,6 @@ class Channels(implicit ui: UiModule) {
 
   def getParticipantVolume(id: ConvId, user: UserId): Future[Float] = ui.zms.flatMapFuture(_.voice.getVoiceVolume(id, user))
 
-  def setSpeaker(id: ConvId, speaker: Boolean) = ui.zms(_.voice.setVoiceChannelSpeaker(id, speaker))
-
   def joinCall(id: ConvId, withVideo: Boolean, callback: Option[JoinCallback]): Unit = ui.zms.flatMapFuture(_.voice.joinVoiceChannel(id, withVideo)).onComplete {
     case Success(CallJoined) => callback foreach (_.onCallJoined())
     case Success(Unchanged) => callback foreach (_.onAlreadyJoined())

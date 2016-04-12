@@ -20,22 +20,23 @@ package com.waz.service
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.media.manager.{MediaManagerListener, MediaManager}
+import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{SourceSignal, EventContext}
-import com.waz.utils.{IoUtils, LoggedTry}
+import com.waz.utils.events.{EventContext, SourceSignal}
+import com.waz.utils._
 import com.waz.zms.R
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Future
 import scala.util.Try
 
 class MediaManagerService(context: Context, prefs: PreferenceService) {
   import com.waz.service.MediaManagerService._
 
-  private implicit val dispatcher = new SerialDispatchQueue
+  private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
 
   lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
@@ -69,7 +70,7 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
   soundsPref.signal { value =>
     val intensity = intensityMap.getOrElse(value, IntensityLevel.FULL)
     verbose(s"setting intensity to: $intensity")
-    mediaManager foreach (_.setIntensity(intensity))
+    withMedia { _.setIntensity(intensity) }
   }
 
   lazy val audioConfig =
@@ -82,6 +83,10 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
     }).getOrElse(Map.empty[String, Uri])
 
   def getSoundUri(name: String): Option[Uri] = audioConfigUris.get(name)
+
+  def setSpeaker(speaker: Boolean) = withMedia { mm => if (speaker) mm.turnLoudSpeakerOn() else mm.turnLoudSpeakerOff() }
+
+  private def withMedia[T](op: MediaManager => T): Future[Option[T]] = mediaManager.mapFuture(m => Future(op(m)))
 }
 
 object MediaManagerService {

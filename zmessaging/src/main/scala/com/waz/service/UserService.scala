@@ -31,7 +31,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.{CredentialsUpdateClient, UsersClient}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
 import com.waz.utils._
 import com.waz.znet.ZNetClient.ErrorOrResponse
 
@@ -64,6 +64,11 @@ class UserService(user: ZUserService, usersStorage: UsersStorage, keyValueServic
 
     sync.syncSelfUser().map(dependency => sync.syncConnections(Some(dependency)))
   }
+
+  lazy val acceptedUsers: Signal[Map[UserId, UserData]] = new AggregatingSignal[Seq[UserData], Map[UserId, UserData]](usersStorage.onChanged, usersStorage.listAcceptedUsers, { (accu, us) =>
+    val (toAdd, toRemove) = us.partition(_.connection == ConnectionStatus.Accepted)
+    accu -- toRemove.map(_.id) ++ toAdd.map(u => u.id -> u)
+  })
 
   def withSelfUser[A](f: UserId => CancellableFuture[A])(implicit ec: ExecutionContext) = getSelfUserId .flatMap {
     case Some(id) => f(id)

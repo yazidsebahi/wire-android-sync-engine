@@ -38,8 +38,6 @@ trait VoiceChannelUiService { self: VoiceChannelService =>
 
   def leaveVoiceChannel(id: ConvId): Future[VoiceChannelState] = voiceChannel(id).flatMap(_.leave(CauseForCallStateEvent.REQUESTED))
 
-  def setVoiceChannelSpeaker(id: ConvId, speaker: Boolean): Future[VoiceChannelHandle]  = voiceChannel(id).flatMap(_.setSpeaker(speaker))
-
   def muteVoiceChannel(id: ConvId): Future[VoiceChannelHandle] = setVoiceChannelMuted(id, muted = true)
 
   def unmuteVoiceChannel(id: ConvId): Future[VoiceChannelHandle] = setVoiceChannelMuted(id, muted = false)

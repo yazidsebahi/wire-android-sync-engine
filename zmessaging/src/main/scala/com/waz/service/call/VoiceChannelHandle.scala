@@ -84,8 +84,6 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
         }
       }
     }
-
-    service.media.isSpeakerOn.on(dispatcher) { speakerOn => update(_.copy(speaker = speakerOn), notify = true) }
   }
 
   private def restoreCallState(localState: ChannelState): Unit = if (localState == ChannelState.UserConnected) {
@@ -153,7 +151,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
   private def isValidCallStateTransition(event: CallStateEvent, resetSequence: Boolean): Boolean = {
     (resetSequence || !VoiceChannelService.areOutOfOrder(data.lastSequenceNumber, event.sequenceNumber)) && (data.state match {
       case DeviceJoining | DeviceConnected | UserConnected =>
-        event.participants map { p =>
+        event.participants forall { p =>
           p.toSeq.partition(_.user == selfUserId) match {
             case (Seq(self), Seq(other)) =>
               // This handles the special case of two users calling each other simultaneously, so that the push events go through faster than the PUT request response.
@@ -161,7 +159,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
               !self.joined || other.joined
             case _ => true
           }
-        } getOrElse true
+        }
       case _ => true
     })
   }
@@ -206,8 +204,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
       update(_.copy(deviceState = deviceState), notify = false)
       if (deviceState == ConnectionState.Idle) {
         service.releaseFlows(id)
-        service.setSpeaker(false)
-        update(data => data.copy(muted = false, speaker = false, tracking = data.tracking.copy(duration = data.tracking.established.fold(ZERO)(s => between(s, now)).asScala)), notify = false)
+        update(data => data.copy(muted = false, tracking = data.tracking.copy(duration = data.tracking.established.fold(ZERO)(s => between(s, now)).asScala)), notify = false)
 
       } else CallService(service.context, id) // start tracking
     }
@@ -220,7 +217,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
       val caller = data.caller orElse Some(selfUserId)
       val outgoing = caller contains selfUserId
 
-      update(data => data.copy(muted = false, speaker = false, silenced = false,
+      update(data => data.copy(muted = false, silenced = false,
         caller = caller,
         tracking = data.tracking.copy(cause = CauseForCallStateEvent.REQUESTED, callDirection = if (outgoing) CallDirection.OUTGOING else CallDirection.INCOMING),
         video = data.video.copy(isVideoCall = if (outgoing) withVideo else data.video.isVideoCall, wantsToSendVideo = withVideo),
@@ -285,17 +282,6 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
     }
   }
 
-  def setSpeaker(speaker: Boolean) = initFuture map { _ =>
-    if (data.speaker != speaker) {
-      val before = data
-      verbose(s"setSpeaker($speaker)")
-      update(_.copy(speaker = speaker), notify = true)
-      if (data.deviceState != ConnectionState.Idle) service.setSpeaker(speaker)
-      service.content.updatedActiveChannels ! ChannelUpdate(before, data, None)
-    }
-    this
-  }
-
   def setMuted(muted: Boolean) = initFuture map { _ =>
     debug(s"setMuted($muted), previously: ${data.muted}")
     if (data.muted != muted) {
@@ -340,7 +326,6 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
           }
         }
         service.setMuted(data.muted)
-        service.setSpeaker(data.speaker)
         notifyChanged()
         service.content.updatedActiveChannels ! ChannelUpdate(before, data, None)
       case ConnectionState.Connected =>

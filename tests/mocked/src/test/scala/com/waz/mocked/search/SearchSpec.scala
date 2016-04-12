@@ -208,6 +208,37 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
     }
   }
 
+  feature("Connections") {
+
+    scenario("Find all connections locally") {
+      // meeper, elmer, bugs, carrot (cartoon is self, coyote is blocked)
+      val conns = api.search.getConnections("")
+      withDelay {
+        conns should have size 4
+        val all = conns.getAll
+        all map (_.getName) shouldEqual Array("Bugs Bunny", "Carrot", "Elmer Fudd", "Road Runner")
+        all shouldEqual conns.getContacts
+        conns.getUnconnected should be(empty)
+      }
+    }
+
+    scenario("Find local connections by query") {
+      val conns = api.search.getConnections("e")
+      withDelay {
+        conns should have size 1
+        conns.getAll map (_.getId) shouldEqual Array(elmer.id.str)
+      }
+    }
+
+    scenario("Find filtered local connections") {
+      val conns = api.search.getConnections("", Array(meeper.id.str, bugs.id.str))
+      withDelay {
+        conns should have size 2
+        conns.getAll map (_.getId) shouldEqual Array(carrot.id.str, elmer.id.str)
+      }
+    }
+  }
+
   private def givenSomeUsersAndConversations(): Unit = withDelay {
     selfUser.isLoggedIn shouldBe true
     convs should have size conversations.size - 1

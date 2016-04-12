@@ -25,6 +25,7 @@ trait Search {
   def getGroupConversations(query: String, limit: Int): ConversationsSearch
 
   def getContacts(query: String): Contacts
+  def getConnections(query: String, filter: Array[String] = Array.empty): UsersSearchResult
 
   def getSyncIndicator: SyncIndicator
 }

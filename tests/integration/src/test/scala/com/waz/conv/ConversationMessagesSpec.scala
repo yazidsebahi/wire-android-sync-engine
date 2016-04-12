@@ -26,7 +26,6 @@ import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, RConvId}
 import com.waz.provision._
-import com.waz.tags.FixMe
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.UnreliableAsyncClient
@@ -174,10 +173,10 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
   feature("Receive incoming image messages") {
     scenario("auto2: Send image message") {
-      withDelay(auto2 ! SendImage(RConvId(self.getUser.getId), "src/testutils/resources/images/penguin.png"))(60.seconds)
+      auto2 ? SendImageData(RConvId(self.getUser.getId), IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))) should eventually(be(Successful))
     }
 
-    scenario("Should receive incoming image message", FixMe) {
+    scenario("Should receive incoming image message") {
       val pics = withDelay {
         returning(assets(msgs)) {
           _ should have size 2
@@ -194,19 +193,6 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       withDelay {
         asset.asInstanceOf[com.waz.api.impl.ImageAsset].data.versions should not be empty
       }(60.seconds)
-      val progress = asset.getBitmap(400, cb).getProgressIndicator
-      progress.getState shouldEqual ProgressIndicator.State.RUNNING
-
-      withDelay {
-        progress.getProgress should be > 0L
-      }(15.seconds)
-      progress.getTotalSize should be > 0L
-      progress.getState shouldEqual ProgressIndicator.State.RUNNING
-
-      withDelay {
-        progress.getState shouldEqual ProgressIndicator.State.COMPLETED
-      }
-      progress.getProgress shouldEqual progress.getTotalSize
 
       withDelay {
         pics foreach {

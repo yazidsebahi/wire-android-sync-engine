@@ -173,6 +173,10 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
       onFlowsEstablished ! EstablishedFlows(RConvId(convId), participantIds.toSet map UserId)
     }
 
+    override def changeVideoState(state: Int, reason: Int): Unit = {
+      // TODO create API for that for UI and pass it to UI
+    }
+
     override def createVideoPreview(): Unit = {
       debug("avs createVideoPreview() callback called")
       onCreateVideoPreview ! {()}

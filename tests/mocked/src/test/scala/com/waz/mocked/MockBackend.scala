@@ -138,13 +138,11 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def addGroupConversation(ms: Seq[UserId], time: Timeline = DefaultTimeline, id: RConvId = RConvId(), name: Option[String] = None, creator: UserId = selfUserId)(implicit p: PushBehaviour) = {
-    val eventId = EventId(1)
     val conv = ConversationData(ConvId(id.str), id, name, creator, ConversationType.Group)
     conversations(id) = conv
     members(id) = (selfUserId +: creator +: ms).toSet.map((u: UserId) => ConversationMemberData(u, ConvId(id.str))).toSeq
     val creationTime = time.next()
     addNotification(PushNotification(Uid(), Seq(CreateConversationEvent(Uid(), id, creationTime, creator, ConversationResponse(conv, members(id))))))
-    addEvent(MemberJoinEvent(Uid(), id, eventId, creationTime, creator, ms))
     conv
   }
 

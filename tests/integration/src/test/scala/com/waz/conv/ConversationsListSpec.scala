@@ -123,19 +123,6 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
   
   feature("conversations list state") {
 
-    scenario("clear has unread state") {
-      val state = convs.getState
-      withDelay(state.hasUnread shouldEqual true)
-
-      convs foreach { conv =>
-        val ms = conv.getMessages
-        withDelay(ms should not be empty)
-        ms.get(ms.size() - 1)
-      }
-
-      withDelay(state.hasUnread shouldEqual false)
-    }
-
     scenario("set has pending state") {
       val state = convs.getState
       state.hasPending shouldEqual false
@@ -150,13 +137,14 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
       auto4 ? Login(provisionedEmail("auto4"), "auto4_pass") should eventually(be(Successful))
     }
 
-    scenario("clear hasPending once other user accepts") {
+    scenario("clear hasPending and set hasUnread once other user accepts") {
       val state = convs.getState
       withDelay(state.hasPending shouldEqual true)
 
       auto4 ! AcceptConnection(UserId(self.getUser.getId))
 
       withDelay(state.hasPending shouldEqual false)
+      withDelay(state.hasUnread shouldEqual true)
     }
   }
 
