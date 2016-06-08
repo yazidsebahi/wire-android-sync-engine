@@ -18,16 +18,16 @@
 package com.waz.content
 
 import com.waz.RobolectricUtils
-import com.waz.api.{Verification, OtrClientType}
-import com.waz.model.{UserId, ZUserId}
+import com.waz.api.{OtrClientType, Verification}
 import com.waz.model.otr._
+import com.waz.model.{AESKey, UserId, ZUserId}
 import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
-import org.scalatest.{RobolectricTests, BeforeAndAfter, Matchers, FeatureSpec}
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
 
-import concurrent.duration._
+import scala.concurrent.duration._
 
 class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
 
@@ -39,7 +39,7 @@ class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   feature("clients storage") {
 
-    lazy val client1 = Client(ClientId("client1"), "client1", "model", Some(Instant.now), Some(Location(10, -20, "Berlin, DE")), Some("address"), Some(SignalingKey("enc", "mac")), Verification.VERIFIED, OtrClientType.DESKTOP)
+    lazy val client1 = Client(ClientId("client1"), "client1", "model", Some(Instant.now), Some(Location(10, -20, "Berlin, DE")), Some("address"), Some(SignalingKey(AESKey("enc"), "mac")), Verification.VERIFIED, OtrClientType.DESKTOP)
     lazy val client2 = Client(ClientId("client2"), "client2")
     lazy val cs = Seq(client1, client2)
     lazy val ucs = UserClients(user, cs.map(c => c.id -> c).toMap)

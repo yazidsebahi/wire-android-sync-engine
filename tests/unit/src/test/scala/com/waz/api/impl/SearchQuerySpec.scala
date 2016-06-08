@@ -50,7 +50,7 @@ class SearchQuerySpec extends FeatureSpec with Matchers with BeforeAndAfter with
         CancellableFuture.successful(userSearchResult)
       }
     }
-    override lazy val convsUi: ConversationsUiService = new ConversationsUiService(imageAssets, users, usersStorage, storage, messages, membersContent, convsContent, convsStorage, conversations, voice, sync) {
+    override lazy val convsUi: ConversationsUiService = new ConversationsUiService(assets, users, usersStorage, storage, messages, membersContent, assetsStorage, convsContent, convsStorage, network, conversations, voice, sync, lifecycle, trackingEvents, errors) {
       override def findGroupConversations(query: SearchKey, limit: Int): Future[List[ConversationData]] = {
         convSearchRequest = Some((query.asciiRepresentation, limit))
         Future.successful(convSearchResult)

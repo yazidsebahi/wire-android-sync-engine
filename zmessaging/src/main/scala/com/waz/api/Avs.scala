@@ -39,5 +39,6 @@ object Avs {
     def onPreviewReleased(): Unit
     def onViewRequested(): View
     def onViewReleased(): Unit
+    def onStateOfReceivedVideoChanged(state: AvsVideoState, reason: AvsVideoReason): Unit
   }
 }

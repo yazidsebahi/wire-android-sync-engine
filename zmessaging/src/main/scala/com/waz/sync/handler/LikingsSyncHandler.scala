@@ -20,7 +20,6 @@ package com.waz.sync.handler
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.model._
-import com.waz.model.messages.LikingMessage
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.LikingsService
 import com.waz.sync.SyncResult
@@ -38,7 +37,7 @@ class LikingsSyncHandler(client: MessagesClient, convs: ConversationsContentUpda
   def postLiking(id: ConvId, liking: Liking): Future[SyncResult] =
     convs.convById(id) flatMap {
       case Some(conv) =>
-        otrSync.postOtrMessage(conv, LikingMessage(liking)) flatMap {
+        otrSync.postOtrMessage(conv, GenericMessage(liking.message, liking.action)) flatMap {
           case Right(time) =>
             service.processLiking(Seq(liking.copy(timestamp = time.instant))) map (_ => SyncResult.Success)
           case Left(error) =>

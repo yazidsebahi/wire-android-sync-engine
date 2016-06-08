@@ -21,52 +21,52 @@ import java.util
 
 import android.content.Context
 import android.support.v4.content.ContextCompat
+import com.waz.ZLog._
 import com.waz.api.Permission.Status
 import com.waz.api.Permission.Status._
 import com.waz.api.{Permission, PermissionProvider}
 import com.waz.threading.Threading
-import com.waz.ZLog._
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.Signal
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{Promise, Future}
+import scala.concurrent.{Future, Promise}
 
 class PermissionsService(context: Context) {
-  private val logTag: LogTag = logTagFor[PermissionsService]
-  private val providerSignal = Signal(Option.empty[PermissionProvider])
+  private implicit val logTag: LogTag = logTagFor[PermissionsService]
+  private val providers = Signal(Vector.empty[PermissionProvider])
+  private val providerSignal = providers.map(_.lastOption)
+
 
   def setProvider(p: PermissionProvider): Unit = {
     Threading.assertUiThread()
-    providerSignal.publish(Some(p), Threading.Ui)
+    verbose(s"setProvider($p)")
+    providers.mutate(_ :+ p)
   }
 
-  def clearProvider(): Unit = {
+  def clearProvider(p: PermissionProvider): Unit = {
     Threading.assertUiThread()
-    providerSignal.publish(None, Threading.Ui)
+    verbose(s"clearProvider")
+    providers.mutate(_.filter(_ != p))
   }
 
   def isGranted(p: Permission): Boolean = ContextCompat.checkSelfPermission(context, p.id) == GRANTED.id
 
   def request(ps: Set[Permission], delayUntilProviderIsSet: Boolean): Future[Set[Permission]] = {
+
+    def getProvider = providerSignal.filter(_.isDefined || !delayUntilProviderIsSet).head
+
     val (alreadyGranted, remaining) = ps.partition(isGranted)
 
     if (remaining.isEmpty) Future.successful(alreadyGranted)
-    else {
-      val promisedResponse = Promise[Set[Permission]]
-
-      val sub = providerSignal.on(Threading.Ui) {
-        case Some(provider) =>
-          provider.requestPermissions(remaining.asJava, new provider.ResponseHandler {
-            override def handleResponse(r: util.Map[Permission, Status]): Unit = promisedResponse.trySuccess((r.asScala.keysIterator.filter(k => r.get(k) == GRANTED) ++ alreadyGranted).toSet)
-          })
-        case None =>
-          if (! delayUntilProviderIsSet) promisedResponse.trySuccess(alreadyGranted)
-      } (EventContext.Global)
-
-      promisedResponse.future.andThen {
-        case _ => sub.destroy()
-      } (Threading.Background)
-    }
+    else getProvider.flatMap {
+      case None => Future successful alreadyGranted
+      case Some(provider) =>
+        val promisedResponse = Promise[Set[Permission]]
+        provider.requestPermissions(remaining.asJava, new provider.ResponseHandler {
+          override def handleResponse(r: util.Map[Permission, Status]): Unit = promisedResponse.trySuccess((r.asScala.keysIterator.filter(k => r.get(k) == GRANTED) ++ alreadyGranted).toSet)
+        })
+        promisedResponse.future
+    } (Threading.Ui)
   }
 
   def requiring[A](ps: Set[Permission], delayUntilProviderIsSet: Boolean)(ifDenied: => Future[A], ifGranted: => Future[A]): Future[A] =

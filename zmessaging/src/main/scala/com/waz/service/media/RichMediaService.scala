@@ -23,7 +23,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.{MediaProvider, Message}
 import com.waz.model._
 import com.waz.model.messages.media.MediaAssetData
-import com.waz.service.images.ImageAssetService
+import com.waz.service.assets.AssetService
 import com.waz.service.messages.MessagesContentUpdater
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -32,7 +32,7 @@ import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
 
-class RichMediaService(assets: ImageAssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService, googleMaps: GoogleMapsMediaService) {
+class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService, googleMaps: GoogleMapsMediaService) {
   import com.waz.api.Message.Part.Type._
   private implicit val logTag: LogTag = logTagFor[RichMediaService]
   import Threading.Implicits.Background

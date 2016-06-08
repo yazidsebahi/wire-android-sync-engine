@@ -322,7 +322,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
             data.video.currentCaptureDevice map { dev => service.setVideoCaptureDevice(id, dev.id) } getOrElse Future.successful(()) map { _ => setVideoSendState(VideoSendState.SEND) }
           } else {
             updateParticipant(selfUserId, _.copy(sendsVideo = false))
-            errors.addError(ErrorData(Uid(), ErrorType.CANNOT_SEND_VIDEO, convId = Some(id), responseMessage = "Unable to send video, recipient does not have the required capabilities."))
+            errors.addErrorWhenActive(ErrorData(Uid(), ErrorType.CANNOT_SEND_VIDEO, convId = Some(id), responseMessage = "Unable to send video, recipient does not have the required capabilities."))
           }
         }
         service.setMuted(data.muted)

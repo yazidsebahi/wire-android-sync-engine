@@ -103,7 +103,6 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       withDelay {
         msgs.getLastMessage.getBody shouldEqual "test message 1"
         msgs.getLastMessage.data.state shouldEqual Message.Status.SENT
-        msgs.getLastMessage.data.otr shouldEqual true
       }
 
       val remoteMsgs = awaitUiFuture(Future.traverse(allRemotes) { _.findConv(groupConv.data.remoteId).map(_.getMessages) }).get
@@ -126,11 +125,6 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         withClue(msgs.map(_.getBody + "\n").sorted) {
           msgs should have size (msgCount + count)
         }
-        withClue(msgs.filter(m => m.getBody.startsWith("remote message") && !m.isOtr).map(_.getBody + "\n").sorted) {
-          msgs foreach { msg =>
-            if (msg.getBody.startsWith("remote message")) msg.data.otr shouldEqual true
-          }
-        }
       }
     }
 
@@ -147,7 +141,6 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
             withClue(s"$i ${msg.data}") {
               msg.getBody shouldEqual s"ordered message $i"
               msg.data.state shouldEqual Message.Status.SENT
-              msg.data.otr shouldEqual true
             }
           }
         }
@@ -162,7 +155,6 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       withDelay {
         msgs.getLastMessage.getBody shouldEqual text
         msgs.getLastMessage.data.state shouldEqual Message.Status.SENT
-        msgs.getLastMessage.data.otr shouldEqual true
       }
     }
   }

@@ -69,7 +69,6 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
       msgs.map(_.getBody) should contain allOf("Test message", "Test message 1")
       msgs.filter(_.getBody.startsWith("Test message")) foreach { msg =>
         msg.getMessageStatus shouldEqual Message.Status.SENT
-        msg.isOtr shouldEqual true
       }
     }
 
@@ -80,7 +79,6 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
       msgs.map(_.getBody) should contain allOf("Test message", "Test message 1", "Test message 2", "Test message 3")
       msgs.filter(_.getBody.startsWith("Test message")) foreach { msg =>
         msg.getMessageStatus shouldEqual Message.Status.SENT
-        msg.isOtr shouldEqual true
       }
     }
   }
@@ -97,7 +95,6 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
       session.exists() shouldEqual true // session should be recreated
       msgs.getLastMessage.getBody shouldEqual "Test message 4"
       msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
-      msgs.getLastMessage.isOtr shouldEqual true
     }
   }
 
@@ -108,7 +105,6 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     withDelay {
       msgs.getLastMessage.getBody shouldEqual "Test message 5"
       msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
-      msgs.getLastMessage.isOtr shouldEqual true
       msgs should have size (count + 1)
     }
   }
@@ -126,7 +122,6 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     withDelay {
       msgs should have size (count + 1)
       msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
-      msgs.getLastMessage.isOtr shouldEqual true
       msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_ERROR
     }
   }

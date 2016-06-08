@@ -23,6 +23,7 @@ import java.util.Date
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteProgram
+import com.google.protobuf.nano.{CodedInputByteBufferNano, CodedOutputByteBufferNano, MessageNano}
 import com.waz.model._
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.{JSONArray, JSONObject}
@@ -145,5 +146,31 @@ object DbTranslator {
     override def bind(value: B[A], index: Int, stmt: SQLiteProgram): Unit = if (value.isEmpty) stmt.bindNull(index) else stmt.bindString(index, literal(value))
     override def load(cursor: Cursor, index: Int): B[A] = if (cursor.isNull(index)) cbf.apply.result else JsonDecoder.arrayColl[A, B](new JSONArray(cursor.getString(index)))
     override def literal(value: B[A]): String = JsonEncoder.arr(value).toString
+  }
+  implicit def protoTranslator[A <: MessageNano : ProtoDecoder](): DbTranslator[A] = new DbTranslator[A] {
+    override def save(value: A, name: String, values: ContentValues): Unit = values.put(name, MessageNano.toByteArray(value))
+    override def bind(value: A, index: Int, stmt: SQLiteProgram): Unit = stmt.bindBlob(index, MessageNano.toByteArray(value))
+    override def load(cursor: Cursor, index: Int): A = implicitly[ProtoDecoder[A]].apply(cursor.getBlob(index))
+    override def literal(value: A): String = throw new UnsupportedOperationException("can't get sql literal for proto")
+  }
+  implicit def protoSeqTranslator[A <: MessageNano, B[C] <: Traversable[C]]()(implicit dec: ProtoDecoder[A], cbf: CanBuild[A, B[A]]): DbTranslator[B[A]] = new DbTranslator[B[A]] {
+    def toBytes(value: B[A]) = {
+      val size = value.foldLeft(0)(_ + _.getSerializedSize)
+      val buff = Array.ofDim[Byte](size)
+      val out = CodedOutputByteBufferNano.newInstance(buff)
+      value foreach { _.writeTo(out) }
+      buff
+    }
+
+    override def save(value: B[A], name: String, values: ContentValues): Unit = if (value.isEmpty) values.putNull(name) else values.put(name, toBytes(value))
+    override def bind(value: B[A], index: Int, stmt: SQLiteProgram): Unit = if (value.isEmpty) stmt.bindNull(index) else stmt.bindBlob(index, toBytes(value))
+    override def load(cursor: Cursor, index: Int): B[A] = if (cursor.isNull(index)) cbf.apply.result else {
+      val builder = cbf.apply()
+      val in = CodedInputByteBufferNano.newInstance(cursor.getBlob(index))
+      while (!in.isAtEnd)
+        builder += implicitly[ProtoDecoder[A]].apply(in)
+      builder.result()
+    }
+    override def literal(value: B[A]): String = throw new UnsupportedOperationException("can't get sql literal for proto seq")
   }
 }

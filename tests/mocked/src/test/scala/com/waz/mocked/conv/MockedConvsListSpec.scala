@@ -22,7 +22,7 @@ import com.waz.api.impl.{Conversation => Conv}
 import com.waz.api.{IConversation, MockedClientApiSpec}
 import com.waz.mocked.{MockBackend, SystemTimeline}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericMessage.LastRead
+import com.waz.model.GenericContent.LastRead
 import com.waz.model._
 import com.waz.sync.client.PushNotification
 import com.waz.testutils.Implicits._
@@ -111,7 +111,7 @@ class MockedConvsListSpec extends FeatureSpec with Matchers with Inspectors with
       val current = events.getOrElse(convId, Nil)
       val lastId = current.lastOption.fold(EventId.Zero)(_.eventId)
       val messageEvent = MessageAddEvent(Uid(), convId, EventId(lastId.sequence + 1), SystemTimeline.next(), selfUserId, "meep")
-      val updateEvent = new GenericMessageEvent(Uid(), RConvId(selfUserId.str), EventId.Zero, SystemTimeline.next(), selfUserId, GenericMessage(Uid(), LastRead(convId, messageEvent.time.instant)))
+      val updateEvent = new GenericMessageEvent(Uid(), RConvId(selfUserId.str), SystemTimeline.next(), selfUserId, GenericMessage(Uid(), LastRead(convId, messageEvent.time.instant)))
       addNotification(PushNotification(Uid(), Vector(messageEvent, updateEvent), transient = false))
 
       api.onResume()

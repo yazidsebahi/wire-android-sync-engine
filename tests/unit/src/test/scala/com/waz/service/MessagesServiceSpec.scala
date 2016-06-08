@@ -23,24 +23,33 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog.LogTag
 import com.waz.api.Message
 import com.waz.api.Message.Status
+import com.waz.api.impl.ErrorResponse.internalError
+import com.waz.content.Mime
+import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
+import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
-import com.waz.model.messages.TextMessage
-import com.waz.testutils.{MockUiModule, MockZMessaging}
+import com.waz.testutils.Matchers._
+import com.waz.testutils.{DefaultPatienceConfig, MockUiModule, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.crypto.AESUtils
 import com.waz.{api, _}
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 import org.threeten.bp.Instant
+import com.waz.testutils.Implicits._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.io.Source
 
-class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
   import Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
   implicit val tag: LogTag = "MessagesServiceSpec"
@@ -94,10 +103,11 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   feature("Push events processing") {
 
+    lazy val user2 = insertUser(UserData("user2"))
     lazy val conv = {
       val id = ConvId("b53ae017-b002-4d8c-8540-4887b58d47c7")
       returning(insertConv(ConversationData(id, RConvId(id.str), None, UserId(), ConversationType.Group))) { c =>
-        addMember(id, insertUser(UserData("user2")).id)
+        addMember(id, user2.id)
       }
     }
     lazy val convId = conv.id
@@ -108,7 +118,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       Await.ready(messages.processEvents(conv, Seq(event)), timeout)
 
       withDelay {
-        listMessages(convId) shouldEqual List(MessageData(MessageId(event.id), convId, event.eventId, event.eventId, Message.Type.TEXT, event.from, MessageData.textContent("message"), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT, firstMessage = true))
+        listMessages(convId) shouldEqual List(MessageData(MessageId(event.id), convId, event.eventId, Message.Type.TEXT, event.from, MessageData.textContent("message"), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT, firstMessage = true))
       }
     }
 
@@ -116,14 +126,76 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        AssetAddEvent(Uid(), conv.remoteId, EventId(2), new Date(), userId, assetId, ImageData("", "", 100, 100, 100, 100, 0, Some(RImageDataId()), None, sent = true, None)).withCurrentLocalTime(),
-        AssetAddEvent(Uid(), conv.remoteId, EventId(3), new Date(), userId, assetId, ImageData("", "", 10, 10, 100, 100, 0, Some(RImageDataId()), None, sent = true, None)).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime(),
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
       )
 
       Await.ready(messages.processEvents(conv, events), timeout)
 
       val msgs = listMessages(convId)
       msgs should have size 2
+    }
+
+    scenario("Keep timestamp of a first event for assets") {
+      val assetId = AssetId()
+      val userId = UserId()
+      val events = Seq(
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+      )
+      Await.ready(messages.processEvents(conv, events), timeout)
+
+      val events1 = Seq(
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+      )
+      Await.ready(messages.processEvents(conv, events1), timeout)
+
+
+      val msgs = listMessages(convId)
+      msgs should have size 3
+      msgs.last.time shouldEqual events.head.time.instant
+    }
+
+    scenario("Delete placeholder message for cancelled asset") {
+      val assetId = AssetId()
+      val userId = UserId()
+      val events = Seq(
+        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, None), UploadInProgress))).withCurrentLocalTime()
+      )
+
+      Await.ready(messages.processEvents(conv, events), timeout)
+
+      val msgs = listMessages(convId)
+      msgs should have size 4
+      val msg = msgs.last
+      msg.msgType shouldEqual Message.Type.ANY_ASSET
+
+      Await.ready(messages.processEvents(conv, Seq(
+        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Asset(UploadCancelled))).withCurrentLocalTime()
+      )), timeout)
+
+      listMessages(convId) should have size 3
+      service.assetsStorage.get(assetId).await() shouldEqual None
+    }
+
+    scenario("Process event for previously deleted message") {
+      val assetId = AssetId()
+      val userId = UserId()
+      val events = Seq(
+        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, None), UploadInProgress))).withCurrentLocalTime()
+      )
+
+      messages.processEvents(conv, events).await()
+
+      val msgs = listMessages(convId)
+      msgs should have size 4
+      val msg = msgs.last
+
+      service.messagesContent.deleteOnUserRequest(Seq(msg.id)).await()
+      listMessages(convId) should have size 3
+
+      messages.processEvents(conv, events).await()
+
+      listMessages(convId) should have size 3
     }
 
     scenario("Process all conversation events in order") {
@@ -133,7 +205,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val messages = listMessages(convId)
 
       info(s"got ${messages.length} messages")
-      messages should have size 63
+      messages should have size 59
     }
 
     scenario("Process all events multiple times") {
@@ -142,7 +214,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       processEventsFromJson("/conv/conv_events5.json")
 
       val messages = listMessages(convId)
-      messages should have size 63
+      messages should have size 59
 
       // processing same events multiple times should not affect the messages list at all
       processEventsFromJson("/conv/conv_events5.json")
@@ -152,7 +224,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       current.zip(messages) foreach {
         case (c, m) => c shouldEqual m
       }
-      current should have size 63
+      current should have size 59
       current.mkString(",") shouldEqual messages.mkString(",")
       current shouldEqual messages
     }
@@ -163,7 +235,34 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
       Await.ready(messages.processEvents(conv, Seq(event)), timeout)
 
-      listMessages(convId) shouldEqual List(MessageData(MessageId(event.id), convId, event.eventId, event.eventId, Message.Type.MISSED_CALL, event.from, Nil, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT))
+      listMessages(convId) shouldEqual List(MessageData(MessageId(event.id), convId, event.eventId, Message.Type.MISSED_CALL, event.from, Nil, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT))
+    }
+
+    lazy val assetId = AssetId()
+
+    scenario("Receive initial file asset event") {
+      delMessages(convId)
+      val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadInProgress))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, user2.id, msg)
+
+      messages.processEvents(conv, Seq(event)).futureValue
+      listMessages(convId) should have size 1
+      listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, event.eventId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
+      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, AssetStatus.UploadInProgress, event.time.instant))
+    }
+
+    scenario("Receive full file asset event") {
+      delMessages(convId)
+      val dataId = RAssetDataId()
+      val key = AESKey()
+      val sha = Sha256(AESUtils.randomKey().bytes)
+      val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadDone(AssetKey(dataId, key, sha))))
+      val event = GenericAssetEvent(Uid(), conv.remoteId, new Date(), user2.id, msg, dataId, None)
+
+      messages.processEvents(conv, Seq(event)).futureValue
+      listMessages(convId) should have size 1
+      listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, event.eventId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
+      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, AssetStatus.UploadDone(AssetKey(dataId, key, sha)), event.time.instant))
     }
   }
 
@@ -209,13 +308,12 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
   feature("Knocks") {
 
     lazy val selfId = Await.result(service.users.selfUserId.apply(), timeout)
-    lazy val eventId = EventId(1)
 
     scenario("Update local knock message on event") {
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = KnockEvent(Uid(msg.id.str), conv.remoteId, eventId, new Date, selfId, "hello")
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(false)))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -232,7 +330,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = KnockEvent(Uid(msg.id.str), conv.remoteId, eventId, new Date, selfId, "hello")
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(false)))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -249,7 +347,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = KnockEvent(Uid(msg.id.str), conv.remoteId, eventId, new Date, selfId, "hello")
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(false)))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -261,7 +359,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       }
 
       val eventId2 = EventId(2)
-      val event2 = HotKnockEvent(Uid(msg.id.str), conv.remoteId, eventId2, new Date, selfId, "hello", eventId)
+      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(true)))
       event2.localTime = new Date
 
       messages.processEvents(conv, Seq(event2.withCurrentLocalTime()))
@@ -270,15 +368,14 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         val msgs = listMessages(conv.id)
         msgs should have size 1
         msgs.last.hotKnock shouldEqual true
-        msgs.last.source shouldEqual eventId
-        msgs.last.edit shouldEqual eventId2
       }
     }
 
     scenario("update knock to hotknock for incoming events") {
       val conv = addGroup()
       val user = UserId()
-      val event = KnockEvent(Uid(), conv.remoteId, eventId, new Date, user, "hello")
+      val msgId = MessageId()
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId, Knock(false)))
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
 
@@ -288,8 +385,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         msgs.last.hotKnock shouldEqual false
       }
 
-      val eventId2 = EventId(2)
-      val event2 = HotKnockEvent(Uid(), conv.remoteId, eventId2, new Date, user, "hello", eventId)
+      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId, Knock(true)))
       event2.localTime = new Date
 
       messages.processEvents(conv, Seq(event2.withCurrentLocalTime()))
@@ -298,8 +394,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         val msgs = listMessages(conv.id)
         msgs should have size 1
         msgs.last.hotKnock shouldEqual true
-        msgs.last.source shouldEqual eventId
-        msgs.last.edit shouldEqual eventId2
       }
     }
   }
@@ -398,7 +492,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     }
 
     scenario(s"Handle generic event with mentions") {
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, EventId(2), new Date, UserId(), TextMessage("message @selfName 2", Map(selfUserId -> "selfName"))))
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), TextMessage("message @selfName 2", Map(selfUserId -> "selfName"))))
 
       withDelay {
         val ms = listMessages(conv.id)
@@ -436,9 +530,9 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       processEventsFromJson("/conv/conv_events5.json")
 
       withDelay {
-        listMessages(convId) should have size 63
+        listMessages(convId) should have size 59
         msgs.currentValue should be('defined)
-        msgs.currentValue.get.size shouldEqual 63
+        msgs.currentValue.get.size shouldEqual 59
       }
     }
 
@@ -462,7 +556,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     scenario("add asset message") {
       val conv = addGroup()
       val asset = AssetId()
-      val msg = Await.result(messages.addAssetMessage(conv.id, asset, 10, 20), timeout)
+      val msg = Await.result(messages.addImageMessage(conv.id, asset, 10, 20), timeout)
       msg.convId shouldEqual conv.id
 
       val msgs = listMessages(conv.id)
@@ -479,7 +573,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     scenario("Change state to failed if sync fails") {
       val conv = addGroup()
       val msg = addLocalMessage(conv.id)
-      Await.result(messages.messageDeliveryFailed(conv.id, msg.id), timeout)
+      Await.result(messages.messageDeliveryFailed(conv.id, msg, internalError("sync failed")), timeout)
       withDelay {
         val msgs = listMessages(conv.id)
         msgs should have size 1
@@ -491,7 +585,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     scenario("Mark read when online") {
       val conv = addGroup()
       val msg = addLocalMessage(conv.id)
-      Await.result(messages.messageDeliveryFailed(conv.id, msg.id), timeout)
+      Await.result(messages.messageDeliveryFailed(conv.id, msg, internalError("something failed")), timeout)
       Await.result(messages.markMessageRead(conv.id, msg.id), timeout)
       withDelay {
         val msgs = listMessages(conv.id)
@@ -505,7 +599,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = addLocalMessage(conv.id)
       online = false
-      Await.result(messages.messageDeliveryFailed(conv.id, msg.id), timeout)
+      Await.result(messages.messageDeliveryFailed(conv.id, msg, internalError("offline")), timeout)
       Await.result(messages.markMessageRead(conv.id, msg.id), timeout)
       withDelay {
         val msgs = listMessages(conv.id)
@@ -527,7 +621,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       incoming { _ => updateCount += 1}
 
       withDelay(updateCount shouldEqual 1)
-      service.dispatch(KnockEvent(Uid(), conv.remoteId, EventId(1), new Date, user1.id, "").withCurrentLocalTime())
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(MessageId(), Knock(false))).withCurrentLocalTime())
 
       withDelay {
         updateCount shouldEqual 2
@@ -552,15 +646,15 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
       withDelay(updateCount shouldEqual 1)
 
-      val ev = EventId(1)
-      service.dispatch(KnockEvent(Uid(), conv.remoteId, ev, new Date, user1.id, "").withCurrentLocalTime())
+      val msgId = MessageId()
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(false))).withCurrentLocalTime())
 
       withDelay {
         updateCount should be > 1
       }
       val count = updateCount
 
-      service.dispatch(HotKnockEvent(Uid(), conv.remoteId, EventId(2), new Date, user1.id, "", ev).withCurrentLocalTime())
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(true))).withCurrentLocalTime())
 
       withDelay {
         updateCount should be > count
@@ -582,7 +676,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       processEventsFromJson("/conv/conv_events5.json")
 
       val messages = listMessages(convId)
-      messages should have size 63
+      messages should have size 59
 
       Await.result(convsContent.convById(convId), 1.seconds).get.lastRead shouldEqual Instant.EPOCH
 
@@ -590,11 +684,11 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       unreadCount.disableAutowiring()
 
       convsUi.setLastRead(convId, Instant.EPOCH, EventId.Zero)
-      withDelay(unreadCount.currentValue shouldEqual Some(63))
+      withDelay(unreadCount.currentValue shouldEqual Some(59))
       convsUi.setLastRead(convId, messages(40).time, messages(40).source)
-      withDelay(unreadCount.currentValue shouldEqual Some(22))
+      withDelay(unreadCount.currentValue shouldEqual Some(18))
       convsUi.setLastRead(convId, Instant.EPOCH, EventId.Zero) // has no effect
-      withDelay(unreadCount.currentValue shouldEqual Some(22))
+      withDelay(unreadCount.currentValue shouldEqual Some(18))
       convsUi.setLastRead(convId, Instant.now(), EventId.MaxValue)
       withDelay(unreadCount.currentValue shouldEqual Some(0))
     }

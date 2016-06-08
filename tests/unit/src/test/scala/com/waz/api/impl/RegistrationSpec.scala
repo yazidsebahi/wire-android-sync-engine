@@ -169,7 +169,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
         imageAsset.data should not be empty
       }
 
-      val asset = api.zmessaging.get.imageAssets.getImageAsset(imageAsset.data.id).await()
+      val asset = api.zmessaging.get.assetsStorage.getImageAsset(imageAsset.data.id).await()
       asset should be('defined)
       asset.map(_.convId.str) shouldEqual Some(selfUserId.str)
 

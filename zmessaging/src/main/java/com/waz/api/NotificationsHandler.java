@@ -25,6 +25,7 @@ public interface NotificationsHandler {
     interface NotificationsHandlerFactory {
         NotificationsHandler getNotificationsHandler();
         CallingEventsHandler getCallingEventsHandler();
+        TrackingEventsHandler getTrackingEventsHandler();
     }
 
     interface GcmNotification {
@@ -33,6 +34,9 @@ public interface NotificationsHandler {
             CONNECT_ACCEPTED,
             CONTACT_JOIN,
             ASSET,
+            ANY_ASSET,
+            VIDEO_ASSET,
+            AUDIO_ASSET,
             TEXT,
             MEMBER_JOIN,
             MEMBER_LEAVE,

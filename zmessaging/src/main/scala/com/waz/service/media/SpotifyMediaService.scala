@@ -28,17 +28,18 @@ import com.waz.service.KeyValueService
 import com.waz.service.KeyValueService.KeyValuePref
 import com.waz.service.Preference.PrefCodec
 import com.waz.service.Preference.PrefCodec._
-import com.waz.service.images.ImageAssetService
-import com.waz.sync.client.OAuth2Client.{AccessToken, ClientId, AuthorizationCode, RefreshToken}
+import com.waz.service.assets.AssetService
+import com.waz.sync.client.OAuth2Client.{AccessToken, AuthorizationCode, ClientId, RefreshToken}
 import com.waz.sync.client.SpotifyClient
 import com.waz.threading.Threading
-import com.waz.utils.events.{SourceSignal, Signal}
+import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.znet.ZNetClient.ErrorOr
+
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import com.waz.utils._
 
-class SpotifyMediaService(client: SpotifyClient, assets: ImageAssetService, keyValue: KeyValueService) {
+class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue: KeyValueService) {
   import SpotifyMediaService._
 
   import Threading.Implicits.Background

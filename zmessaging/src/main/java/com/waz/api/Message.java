@@ -45,9 +45,9 @@ public interface Message extends UiObservable, Parcelable {
     }
 
     enum Type {
-        TEXT, ASSET, KNOCK, MEMBER_JOIN, MEMBER_LEAVE, CONNECT_REQUEST, CONNECT_ACCEPTED, RENAME, MISSED_CALL,
-        INCOMING_CALL, RICH_MEDIA, OTR_ERROR, OTR_VERIFIED, OTR_UNVERIFIED, OTR_DEVICE_ADDED, STARTED_USING_DEVICE,
-        HISTORY_LOST, UNKNOWN
+        TEXT, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, MEMBER_JOIN, MEMBER_LEAVE, CONNECT_REQUEST,
+        CONNECT_ACCEPTED, RENAME, MISSED_CALL, INCOMING_CALL, RICH_MEDIA, OTR_ERROR, OTR_VERIFIED, OTR_UNVERIFIED,
+        OTR_DEVICE_ADDED, STARTED_USING_DEVICE, HISTORY_LOST, UNKNOWN
     }
 
     /**
@@ -57,7 +57,7 @@ public interface Message extends UiObservable, Parcelable {
 
     interface Part {
         enum Type {
-            TEXT, ASSET, YOUTUBE, SOUNDCLOUD, TWITTER, SPOTIFY, WEB_LINK, GOOGLE_MAPS
+            TEXT, ASSET, ANY_ASSET, YOUTUBE, SOUNDCLOUD, TWITTER, SPOTIFY, WEB_LINK, GOOGLE_MAPS
         }
 
         Part.Type getPartType();
@@ -74,10 +74,11 @@ public interface Message extends UiObservable, Parcelable {
     String getId();
     String getConversationId();
     IConversation getConversation();
-    Type getMessageType(); // had to rename from getType() because that name is already used in native code
-    Status getMessageStatus(); // had to rename from getStatus() because that name is already used in native code
+    Type getMessageType();
+    Status getMessageStatus();
     User getUser();
     ImageAsset getImage();
+    Asset getAsset();
     String getBody();
     Instant getTime();
     boolean isDeleted();
@@ -92,7 +93,7 @@ public interface Message extends UiObservable, Parcelable {
     boolean isCreateConversation();
 
     /**
-     * Returns true if message was sent or received through OTR.
+     * @deprecated - all messages are OTR now
      */
     boolean isOtr();
 
@@ -132,6 +133,11 @@ public interface Message extends UiObservable, Parcelable {
      * Retry sending a previously failed message.
      */
     void retry();
+
+    /**
+     * Deletes message on users devices. Will not request deletion on the other side.
+     */
+    void delete();
 
     /**
      * Returns local time when this message was received.

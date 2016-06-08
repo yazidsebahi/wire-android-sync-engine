@@ -22,8 +22,8 @@ import java.util.Date
 import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.messages.TextMessage
 import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.service.otr.OtrService
 import com.waz.sync.client.MessagesClient

@@ -54,6 +54,8 @@ trait SyncServiceHandle {
   def postSelfUser(info: UserInfo): Future[SyncId]
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
   def postMessage(id: MessageId, conv: ConvId): Future[SyncId]
+  def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId]
+  def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable): Future[SyncId]
   def postLiking(id: ConvId, liking: Liking): Future[SyncId]
   def postConnection(user: UserId, name: String, message: String): Future[SyncId]
   def postConnectionStatus(user: UserId, status: ConnectionStatus): Future[SyncId]
@@ -109,6 +111,8 @@ class AndroidSyncServiceHandle(context: Context, service: SyncRequestService, ti
   def postSelfUser(info: UserInfo)              = addRequest(PostSelf(info))
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
   def postMessage(id: MessageId, conv: ConvId)  = addRequest(PostMessage(conv, id), timeout = System.currentTimeMillis() + ConversationsService.SendingTimeout.toMillis, forceRetry = true)
+  def postDeleted(conv: ConvId, msg: MessageId) = addRequest(PostDeleted(conv, msg))
+  def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, status))
   def postExcludePymk(id: UserId)               = addRequest(PostExcludePymk(id), priority = Priority.Low)
   def postAddressBook(ab: AddressBook)          = addRequest(PostAddressBook(ab))
   def postInvitation(i: Invitation)             = addRequest(PostInvitation(i))
@@ -139,33 +143,30 @@ class AndroidSyncServiceHandle(context: Context, service: SyncRequestService, ti
 trait SyncHandler {
   def apply(req: SyncRequest): Future[SyncResult]
   def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult]
-  def onDropped(req: SyncRequest): Future[Unit]
 }
 
 class ZMessagingSyncHandler(
-                             imageasset: ImageAssetSyncHandler,
-                             usersearch: UserSearchSyncHandler,
-                             users: UsersSyncHandler,
-                             messages: MessagesSyncHandler,
-                             conversation: ConversationsSyncHandler,
-                             connections: ConnectionsSyncHandler,
-                             voicechannel: VoiceChannelSyncHandler,
-                             addressbook: AddressBookSyncHandler,
-                             gcm: GcmSyncHandler,
-                             typing: TypingSyncHandler,
-                             versionblacklist: VersionBlacklistSyncHandler,
-                             richmedia: RichMediaSyncHandler,
-                             invitation: InvitationSyncHandler,
-                             otrClients: OtrClientsSyncHandler,
-                             otr: OtrSyncHandler,
-                             likingsSyncHandler: LikingsSyncHandler,
-                             lastRead: LastReadSyncHandler,
-                             cleared: ClearedSyncHandler
-                          ) extends SyncHandler {
+  asset: AssetSyncHandler,
+  usersearch: UserSearchSyncHandler,
+  users: UsersSyncHandler,
+  messages: MessagesSyncHandler,
+  conversation: ConversationsSyncHandler,
+  connections: ConnectionsSyncHandler,
+  voicechannel: VoiceChannelSyncHandler,
+  addressbook: AddressBookSyncHandler,
+  gcm: GcmSyncHandler,
+  typing: TypingSyncHandler,
+  versionblacklist: VersionBlacklistSyncHandler,
+  richmedia: RichMediaSyncHandler,
+  invitation: InvitationSyncHandler,
+  otrClients: OtrClientsSyncHandler,
+  otr: OtrSyncHandler,
+  likingsSyncHandler: LikingsSyncHandler,
+  lastRead: LastReadSyncHandler,
+  cleared: ClearedSyncHandler
+) extends SyncHandler {
 
   private implicit val logTag: LogTag = logTagFor[ZMessagingSyncHandler]
-
-  import Threading.Implicits.Background
 
   import addressbook._
   import com.waz.model.sync.SyncRequest._
@@ -208,6 +209,7 @@ class ZMessagingSyncHandler(
     case RegisterGcmToken => registerGcm()
     case PostLiking(convId, liking) => likingsSyncHandler.postLiking(convId, liking)
     case PostLastRead(convId, time) => lastRead.postLastRead(convId, time)
+    case PostDeleted(convId, msgId) => messages.postDeleted(convId, msgId)
 
     case SyncSelfClients => otrClients.syncSelfClients()
     case SyncClients(user) => otrClients.syncClients(user)
@@ -225,6 +227,7 @@ class ZMessagingSyncHandler(
 
     req match {
       case PostMessage(convId, messageId) => messages.postMessage(convId, messageId)
+      case PostAssetStatus(cid, mid, status) => messages.postAssetStatus(cid, mid, status)
 
       case PostConvJoin(convId, u) => postConversationMemberJoin(convId, u.toSeq)
       case PostConvLeave(convId, u) => postConversationMemberLeave(convId, u)
@@ -236,12 +239,5 @@ class ZMessagingSyncHandler(
 
       case PostCleared(convId, time) => cleared.postCleared(convId, time)
     }
-  }
-
-  override def onDropped(req: SyncRequest): Future[Unit] = req match {
-    case PostMessage(conv, msg) => messages.postRequestDropped(conv, msg) map { _ => () }
-    case _ =>
-      verbose(s"unhandled onDropped($req)")
-      Future.successful(())
   }
 }

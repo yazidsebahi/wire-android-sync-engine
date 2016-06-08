@@ -19,19 +19,19 @@ package com.waz.cache
 
 import java.io._
 import java.lang.System._
-import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-import javax.crypto.{BadPaddingException, Cipher, CipherInputStream, CipherOutputStream}
 
 import android.content.Context
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.Database
-import com.waz.model.Uid
+import com.waz.content.{Database, Mime}
+import com.waz.model.{AESKey, Uid}
+import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{IoUtils, LoggedTry, returning}
+import com.waz.utils.crypto.AESUtils
+import com.waz.utils.{IoUtils, returning}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -41,7 +41,7 @@ class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalD
   override def inputStream: InputStream =
     content.fold[InputStream](CacheService.inputStream(data.encKey, new FileInputStream(cacheFile)))(new ByteArrayInputStream(_))
 
-  override def length: Int = content.fold(cacheFile.length().toInt)(_.length)
+  override def length: Int = content.map(_.length.toLong).orElse(data.length).getOrElse(cacheFile.length).toInt
 
   override def file = content.fold(Option(cacheFile))(_ => None)
 
@@ -67,6 +67,8 @@ class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalD
   override def delete(): Unit = service.remove(this)
 
   override def toString: LogTag = s"CacheEntry($data)"
+
+  def updatedWithLength(len: Long)(implicit ec: ExecutionContext): Future[CacheEntry] = service.cacheStorage.insert(data.copy(length = Some(len))).map(d => new CacheEntry(d, service))
 }
 
 object CacheEntry {
@@ -87,91 +89,125 @@ class CacheService(context: Context, storage: Database) {
 
   lazy val cacheStorage = new CacheStorage(storage, context)
 
-  def createForFile(key: String = Uid().str, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry =
-    add(CacheEntryData(key, None, timeout = timeout.timeout, path = cacheLocation.orElse(Some(intCacheDir)))) // use internal storage for this files as those won't be encrypted
-
-  def addData(key: String, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry =
-    add(CacheEntryData(key, Some(data), timeout = timeout.timeout))
-
-  def addStream(key: String, in: => InputStream, cacheLocation: Option[File] = None, length: Int = -1)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CancellableFuture[CacheEntry] = CancellableFuture {
-    if (length > 0 && length <= CacheService.DataThreshold) {
-      addData(key, IoUtils.toByteArray(in))
-    } else {
-      addFileToStorage(IoUtils.copy(in, _), cacheLocation) match {
-        case Success((fileId, path, encKey)) =>
-          add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey))
-        case Failure(e) =>
-          HockeyApp.saveException(e, s"addStream($key) failed")
-          throw new Exception(s"addStream($key) failed", e)
-      }
-    }
+  // create new cache entry for file, return the entry immediately
+  def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
+    val location = if (key.isEmpty) Some(intCacheDir) else extCacheDir.orElse(Some(intCacheDir))  // use internal storage for unencrypted files
+    val entry = CacheEntryData(Uid().str, None, timeout = timeout.timeout, path = location, encKey = key)
+    cacheStorage.insert(entry)
+    entry.path foreach { entryFile(_, entry.fileId).getParentFile.mkdirs() }
+    new CacheEntry(entry, this)
   }
 
-  def addFile(key: String, src: File, moveFile: Boolean = false, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CancellableFuture[CacheEntry] = CancellableFuture {
-    addFileToStorage(IoUtils.copy(new FileInputStream(src), _), cacheLocation) match {
-      case Success((fileId, path, encKey)) =>
+  def createForFile(key: String = Uid().str,  mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Option[Long] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
+    add(CacheEntryData(key, None, timeout = timeout.timeout, mimeType = mime, fileName = name, path = cacheLocation.orElse(Some(intCacheDir)), length = length)) // use internal storage for this files as those won't be encrypted
+
+  def addData(key: String, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
+    add(CacheEntryData(key, Some(data), timeout = timeout.timeout))
+
+  def addStream[A](key: String, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+    if (length > 0 && length <= CacheService.DataThreshold) {
+      Future(IoUtils.toByteArray(in))(execution).flatMap(addData(key, _))
+    } else {
+      Future(addStreamToStorage(IoUtils.copy(in, _), cacheLocation))(execution) flatMap {
+        case Success((fileId, path, encKey, len)) =>
+          add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
+        case Failure(c: CancelException) =>
+          Future.failed(c)
+        case Failure(e) =>
+          HockeyApp.saveException(e, s"addStream($key) failed")
+          Future.failed(e)
+      }
+    }
+
+  def addFile(key: String, src: File, moveFile: Boolean = false, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+    addStreamToStorage(IoUtils.copy(new FileInputStream(src), _), cacheLocation) match {
+      case Success((fileId, path, encKey, len)) =>
         if (moveFile) src.delete()
-        add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey))
+        add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
       case Failure(e) =>
         HockeyApp.saveException(e, s"addFile($key) failed")
         throw new Exception(s"addFile($key) failed", e)
     }
-  }
 
-  private def addFileToStorage(writer: OutputStream => Unit, location: Option[File]): Try[(Uid, File, Option[AES128Key])] = {
-
-    def write(dir: File, enc: Option[AES128Key]) = {
+  private def addStreamToStorage(writer: OutputStream => Long, location: Option[File]): Try[(Uid, File, Option[AESKey], Long)] = {
+    def write(dir: File, enc: Option[AESKey]) = {
       val id = Uid()
-      val file = entryFile(dir, id)
-      file.getParentFile.mkdirs()
-      LoggedTry.local {
-        writer(outputStream(enc, new FileOutputStream(file)))
-        (id, dir, enc)
-      }
+      def entry(d: File) = returning(entryFile(d, id))(_.getParentFile.mkdirs())
+
+      Try(writer(outputStream(enc, new FileOutputStream(entry(dir))))).recoverWith {
+        case c: CancelException => Failure(c)
+        case t: Throwable =>
+          if (enc.isDefined) Try(writer(outputStream(None, new FileOutputStream(entry(intCacheDir)))))
+          else Failure(t)
+      } map (len => (id, dir, enc, len))
     }
 
     location match {
       case Some(dir) => write(dir, None)
       case None =>
         extCacheDir match {
-          case Some(dir) => write(dir, Some(AES128Key())).orElse(write(intCacheDir, None))
+          case Some(dir) => write(dir, Some(AESUtils.randomKey128()))
           case None => write(intCacheDir, None)
         }
     }
   }
 
-  def move(key: String, entry: LocalData, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
+  def move(key: String, entry: LocalData, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
     verbose(s"move($key, $entry)")
-    addStream(key, entry.inputStream, cacheLocation, entry.length) map { current =>
+
+    def copy() = addStream(key, entry.inputStream, mime, name, cacheLocation, entry.length)
+
+    val location = cacheLocation.getOrElse(cacheDir)
+    (entry match {
+      case ce: CacheEntry if ce.data.path.contains(location) =>
+        // move file to avoid copying, this should be much faster, and is safe when moving entries in the same cache location
+        val prev = ce.data
+        val moved = new CacheEntryData(key, prev.data, timeout = timeout.timeout, path = Some(location), encKey = prev.encKey, mimeType = mime, fileName = name)
+        val prevFile = entryFile(location, prev.fileId)
+        if (!prevFile.exists() || prevFile.renameTo(entryFile(location, moved.fileId))) {
+          cacheStorage.insert(moved) map { e => new CacheEntry(e, this) }
+        } else {
+          copy()
+        }
+      case _ =>
+        copy()
+    }) map { current =>
       verbose(s"moved $current, file exists: ${current.cacheFile.exists()}, deleting entry: $entry")
       entry.delete()
       current
     }
   }
 
-  private def add(entry: CacheEntryData) = {
-    cacheStorage.add(entry)
-    entry.path foreach { entryFile(_, entry.fileId).getParentFile.mkdirs() }
-    new CacheEntry(entry, this)
-  }
+  private def add(entry: CacheEntryData) =
+    cacheStorage.insert(entry) map { e =>
+      e.path foreach { entryFile(_, e.fileId).getParentFile.mkdirs() }
+      new CacheEntry(e, this)
+    }
 
   def extCacheDir = Option(context.getExternalCacheDir).filter(_.isDirectory)
   def intCacheDir: File = context.getCacheDir
   def cacheDir: File = extCacheDir.getOrElse(intCacheDir)
 
-  def getEntry(key: String): CancellableFuture[Option[CacheEntry]] = cacheStorage.get(key) map {
+  def getEntry(key: String): Future[Option[CacheEntry]] = cacheStorage.get(key) map {
     case Some(e) => Some(new CacheEntry(e, this))
     case None => None
   }
 
-  def getOrElse(key: String, default: => CancellableFuture[CacheEntry]) = getEntry(key) flatMap {
-    case Some(entry) => CancellableFuture.successful(entry)
+  def getDecryptedEntry(key: String)(implicit timeout: Expiration = CacheService.TemDataExpiryTime) =
+    getEntry(key) flatMap {
+      case Some(entry) if entry.data.encKey.isDefined =>
+        getOrElse(key + "#_decr_", addStream(Uid().str, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(intCacheDir))) map (Some(_))
+      case res => Future successful res
+    }
+
+  def getOrElse(key: String, default: => Future[CacheEntry]) = getEntry(key) flatMap {
+    case Some(entry) => Future successful entry
     case _ => default
   }
 
-  def remove(key: String): CancellableFuture[Unit] = cacheStorage.remove(key)
+  def remove(key: String): Future[Unit] = cacheStorage.remove(key)
 
-  def remove(entry: CacheEntry): CancellableFuture[Unit] = {
+  def remove(entry: CacheEntry): Future[Unit] = {
     verbose(s"remove($entry)")
     cacheStorage.remove(entry.data)
   }
@@ -192,23 +228,23 @@ class CacheService(context: Context, storage: Database) {
 
   // util method to perform local data processing with caching
   def processWithCaching(cacheKey: String, process: (InputStream, OutputStream) => Unit, data: LocalData): Future[LocalData] = {
-    def processedByteData = CancellableFuture {
+    def processedByteData = Future {
       val bos = new ByteArrayOutputStream()
       process(data.inputStream, bos)
       bos.toByteArray
     }
 
-    def processedFile = CancellableFuture {
+    def processedFile = Future {
       val file = File.createTempFile("temp", ".enc", context.getCacheDir)
       process(data.inputStream, new BufferedOutputStream(new FileOutputStream(file)))
       file
     }
 
     def saveToCache =
-      if (data.byteArray.isDefined) processedByteData.map { addData(cacheKey, _) }
+      if (data.byteArray.isDefined) processedByteData.flatMap { addData(cacheKey, _) }
       else processedFile.flatMap { addFile(cacheKey, _, moveFile = true) }
 
-    getOrElse(cacheKey, saveToCache).future
+    getOrElse(cacheKey, saveToCache)
   }
 }
 
@@ -216,30 +252,10 @@ object CacheService {
   private implicit val logTag: LogTag = logTagFor[CacheService]
 
   val DataThreshold = 4 * 1024 // amount of data stored in db instead of a file
+  val TemDataExpiryTime = 12.hours
   val DefaultExpiryTime = 7.days
 
-  val iv = Array.fill[Byte](16)(0) // we are using random key every time, IV can be constant
+  def outputStream(key: Option[AESKey], os: OutputStream) = key.fold(os) { AESUtils.outputStream(_, os) }
 
-  def symmetricCipher(key: Array[Byte], mode: Int) =
-    returning(Cipher.getInstance("AES/CBC/PKCS5Padding")) { _.init(mode, new SecretKeySpec(key, "AES"), new IvParameterSpec(iv)) }
-
-  def outputStream(key: Option[AES128Key], os: OutputStream) =
-    key.fold(os) { k =>
-      new CipherOutputStream(os, symmetricCipher(k.bytes, Cipher.ENCRYPT_MODE))
-    }
-
-  def inputStream(key: Option[AES128Key], is: InputStream) =
-    key.fold(is) { k =>
-      new CipherInputStream(is, symmetricCipher(k.bytes, Cipher.DECRYPT_MODE)) {
-        override def close(): Unit = try {
-          super.close()
-        } catch {
-          case io: IOException =>
-            io.getCause match {
-              case _: BadPaddingException => //ignore
-              case e => throw e
-            }
-        }
-      }
-    }
+  def inputStream(key: Option[AESKey], is: InputStream) = key.fold(is) { AESUtils.inputStream(_, is) }
 }

@@ -25,10 +25,10 @@ import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncJob.SyncJobDao
 import com.waz.model.sync.SyncRequest._
 import com.waz.model.sync.{SyncJob, SyncRequest}
+import com.waz.testutils.Matchers._
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.JsonEncoder._
 import org.robolectric.Robolectric
-import org.scalatest.matchers.{MatchResult, Matcher}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
@@ -81,20 +81,10 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostLiking requests") { forAll((_: PostLiking) should beUnchangedByEncodingAndDecoding) }
     scenario("PostLastRead requests") { forAll((_: PostLastRead) should beUnchangedByEncodingAndDecoding) }
     scenario("SyncPreKeys requests") { forAll((_: SyncPreKeys) should beUnchangedByEncodingAndDecoding) }
+    scenario("PostAssetStatus requests") { forAll((_: PostAssetStatus) should beUnchangedByEncodingAndDecoding) }
 
     scenario("SelfPicture requests") {
       forAll (Table("asset", Some(AssetId()), None)) { asset: Option[AssetId] => PostSelfPicture(asset) should beUnchangedByEncodingAndDecoding }
-    }
-
-    def beUnchangedByEncodingAndDecoding = Matcher[SyncRequest] { left =>
-      val json = encode(left)
-      val decoded = decode[SyncRequest](json.toString)
-      val encoded = encode(decoded)
-      MatchResult(
-        decoded == left && encode(decoded).toString == json.toString,
-        s"$left was not equal to $decoded, or ${encoded.toString(2)} was not equal to ${json.toString(2)}}",
-        s"$left staid the same after encoding, decoding and re-encoding."
-      )
     }
   }
 
@@ -117,7 +107,8 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         SyncRichMedia(MessageId()),
         SyncPreKeys(UserId(), Set(ClientId(), ClientId())),
         PostLastRead(ConvId(), Instant.now),
-        PostCleared(ConvId(), Instant.now)
+        PostCleared(ConvId(), Instant.now),
+        PostAssetStatus(ConvId(), MessageId(), AssetStatus.UploadCancelled)
       ) map { SyncJob(SyncId(), _) }
 
       SyncJobDao.insertOrReplace(requests)

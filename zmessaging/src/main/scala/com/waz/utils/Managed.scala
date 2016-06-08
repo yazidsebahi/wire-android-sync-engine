@@ -49,6 +49,10 @@ trait Cleanup[-A] {
   def apply(a: A): Unit
 }
 object Cleanup {
+  def empty[A] = new Cleanup[A] {
+    override def apply(a: A): Unit = ()
+  }
+
   implicit lazy val CloseableCleanup: Cleanup[Closeable] = new Cleanup[Closeable] {
     def apply(a: Closeable): Unit = a.close()
   }

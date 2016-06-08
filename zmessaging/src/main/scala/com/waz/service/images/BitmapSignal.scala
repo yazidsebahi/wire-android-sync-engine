@@ -25,9 +25,10 @@ import com.waz.bitmap.gif.{Gif, GifAnimator}
 import com.waz.bitmap.{BitmapPolka, BitmapUtils}
 import com.waz.cache.LocalData
 import com.waz.model.{ImageAssetData, ImageData}
-import com.waz.service.images.ImageAssetService.BitmapRequest._
-import com.waz.service.images.ImageAssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import com.waz.service.images.ImageAssetService.{BitmapRequest, BitmapResult}
+import com.waz.service.assets.AssetService
+import AssetService.BitmapRequest._
+import AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
+import AssetService.{BitmapRequest, BitmapResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.threading.{CancellableFuture, Threading}

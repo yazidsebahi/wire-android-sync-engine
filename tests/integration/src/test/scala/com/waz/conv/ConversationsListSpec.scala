@@ -22,8 +22,8 @@ import java.util.Date
 import akka.pattern.ask
 import com.waz.api.impl.{Conversation => Conv}
 import com.waz.api.{IConversation, ProvisionedApiSpec, ThreadActorSpec}
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.messages.TextMessage
 import com.waz.provision.ActorMessage.{AcceptConnection, Login, Successful}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -84,7 +84,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
       withDelay(msgs should not be empty)(15.seconds)
       val last = msgs.getLastMessage.data.source
 
-      zmessaging.eventPipeline(Seq(GenericMessageEvent(Uid(), lastConv.data.remoteId, EventId.Zero, new Date(), self.getUser.id, TextMessage("test message 1", Map.empty), otr = true).withCurrentLocalTime()))
+      zmessaging.eventPipeline(Seq(GenericMessageEvent(Uid(), lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message 1", Map.empty)).withCurrentLocalTime()))
 
       withDelay {
         msgs.getLastMessage.getBody shouldEqual "test message 1"

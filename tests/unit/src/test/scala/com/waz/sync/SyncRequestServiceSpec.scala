@@ -52,7 +52,6 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
         syncJobHandler(req)
       }
       override def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult] = apply(req)
-      override def onDropped(req: SyncRequest): Future[Unit] = Future.successful(())
     }
 
     Await.result(users.selfUserId := UserId(), 5.seconds)

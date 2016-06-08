@@ -248,7 +248,7 @@ object OtrClient {
     }
   }
 
-  sealed trait MessageResponse
+  sealed trait MessageResponse { def mismatch: ClientMismatch }
   object MessageResponse {
     case class Success(mismatch: ClientMismatch) extends MessageResponse
     case class Failure(mismatch: ClientMismatch) extends MessageResponse

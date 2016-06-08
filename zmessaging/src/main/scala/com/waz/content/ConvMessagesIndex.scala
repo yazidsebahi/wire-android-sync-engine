@@ -56,8 +56,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Fu
     val lastReadTime = returning(Signal[Instant]())(_.disableAutowiring())
   }
 
-  private val msgChanged = messages.messageChanged.map { _.filter(_.convId == conv) } filter(_.nonEmpty)
-
   object signals {
     val lastReadTime: Signal[Instant] = sources.lastReadTime
     val failedCount: Signal[Int] = sources.failedCount
@@ -68,8 +66,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Fu
 
     val unreadCount = for {
       time <- sources.lastReadTime
-      // XXX: should we use something different here? maybe aggregating signal
-      _ <- Signal.wrap(Instant.now, msgChanged.map(_ => Instant.now()) union messages.onDeleted.map(_ => Instant.now())).throttle(500.millis)
+      _ <- Signal.wrap(Instant.now, indexUpdated).throttle(500.millis)
       unread <- Signal.future(messages.countUnread(conv, time))
     } yield unread
 

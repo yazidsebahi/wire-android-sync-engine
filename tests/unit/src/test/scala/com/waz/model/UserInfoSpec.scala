@@ -32,7 +32,7 @@ class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ge
 
     scenario("Encode picture array") {
       val convId = RConvId()
-      val userInfo = UserInfo(UserId(), Some("name"), picture = Some(ImageAssetData(AssetId(), convId, Seq(ImageData("tag", "", 10, 10, 10, 10, 1, Some(RImageDataId()))))))
+      val userInfo = UserInfo(UserId(), Some("name"), picture = Some(ImageAssetData(AssetId(), convId, Seq(ImageData("tag", "", 10, 10, 10, 10, 1, Some(RAssetDataId()))))))
       val json = UserInfo.ContentEncoder(userInfo).toString
       info(json)
 

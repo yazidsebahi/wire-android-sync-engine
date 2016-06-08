@@ -23,18 +23,20 @@ import com.waz.api.NotificationsHandler.GcmNotification
 import com.waz.api.NotificationsHandler.GcmNotification.LikedContent
 import com.waz.api.NotificationsHandler.GcmNotification.Type._
 import com.waz.content._
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericMessage.{Knock, Text}
+import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, Text}
+import com.waz.model.Liking.Action.Like
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.model.messages.LikingMessage
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
+import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.collection.breakOut
 
 class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, storage: NotificationStorage, users: UserService, usersStorage: UsersStorage, convs: ConversationStorage, push: PushService) {
   import NotificationService._
@@ -58,20 +60,21 @@ class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, st
         case e: UserEvent => e
       }
       add(incoming collect {
-        case UserConnectionEvent(_, convId, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) => NotificationData(s"$CONNECT_REQUEST-$convId-$userId", msg.getOrElse(""), convId, userId, CONNECT_REQUEST, time.instant, userName = name)
-        case UserConnectionEvent(_, convId, _, userId, _, ConnectionStatus.Accepted, time, name) => NotificationData(s"$CONNECT_ACCEPTED-$convId-$userId", "", convId, userId, CONNECT_ACCEPTED, time.instant, userName = name)
+        case ev @ UserConnectionEvent(_, convId, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime => NotificationData(s"$CONNECT_REQUEST-$convId-$userId", msg.getOrElse(""), convId, userId, CONNECT_REQUEST, time.instant, userName = name)
+        case ev @ UserConnectionEvent(_, convId, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime => NotificationData(s"$CONNECT_ACCEPTED-$convId-$userId", "", convId, userId, CONNECT_ACCEPTED, time.instant, userName = name)
         case ContactJoinEvent(_, userId, _) => NotificationData(s"$CONTACT_JOIN-$userId", "", RConvId.Empty, userId, CONTACT_JOIN, Instant.EPOCH)
-        case AssetAddEvent(_, convId, _, time, userId, asset, _) => NotificationData(s"$ASSET-$asset", "", convId, userId, ASSET, time.instant)
         case MemberJoinEvent(_, convId, eventId, time, userId, members) if members != Seq(userId) => NotificationData(s"$MEMBER_JOIN-$convId-$eventId", "", convId, userId, MEMBER_JOIN, time.instant) // ignoring auto-generated member join event when user accepts connection
         case MemberLeaveEvent(_, convId, eventId, time, userId, _) => NotificationData(s"$MEMBER_LEAVE-$convId-$eventId", "", convId, userId, MEMBER_LEAVE, time.instant)
         case RenameConversationEvent(_, convId, eventId, time, userId, name) => NotificationData(s"$RENAME-$convId-$eventId", "", convId, userId, RENAME, time.instant)
         case MissedCallEvent(_, convId, eventId, time, userId) => NotificationData(s"$MISSED_CALL-$convId-$eventId", "", convId, userId, MISSED_CALL, time.instant)
-        case GenericMessageEvent(_, convId, _, time, userId, GenericMessage(id, Text(msg, mentions)), _)  => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
-        case MessageAddEvent(id, convId, eventId, time, userId, msg)                                         => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant)
-        case GenericMessageEvent(_, convId, _, time, userId, GenericMessage(id, Knock(hot)), _) => NotificationData(s"$KNOCK-$convId-$id-$hot", "", convId, userId, KNOCK, time.instant, hotKnock = hot)
-        case KnockEvent(id, convId, eventId, time, userId, _)                                      => NotificationData(s"$KNOCK-$convId-$id-false", "", convId, userId, KNOCK, time.instant)
-        case HotKnockEvent(id, convId, eventId, time, userId, _, _)                                => NotificationData(s"$KNOCK-$convId-$id-true", "", convId, userId, KNOCK, time.instant, hotKnock = true)
-        case GenericMessageEvent(_, convId, _, time, userId, LikingMessage(msg, Liking.Action.Like), _) => NotificationData(s"$LIKE-$convId-$msg-$userId", "", convId, userId, LIKE, time.instant, referencedMessage = Some(msg))
+        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Text(msg, mentions))) => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
+        case MessageAddEvent(id, convId, eventId, time, userId, msg)                                     => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant)
+        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Knock(hot))) => NotificationData(s"$KNOCK-$convId-$id-$hot", "", convId, userId, KNOCK, time.instant, hotKnock = hot)
+        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Like)) => NotificationData(s"$LIKE-$convId-$id-$userId", "", convId, userId, LIKE, time.instant, referencedMessage = Some(MessageId(id.str)))
+        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(Some(Original(Mime.Video(), _, _, _)), _, UploadDone(_))), _, _) => NotificationData(s"$VIDEO_ASSET-$id", "", convId, userId, VIDEO_ASSET, time.instant)
+        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(Some(Original(Mime.Audio(), _, _, _)), _, UploadDone(_))), _, _) => NotificationData(s"$AUDIO_ASSET-$id", "", convId, userId, AUDIO_ASSET, time.instant)
+        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(_, _, UploadDone(_))), _, _) => NotificationData(s"$ANY_ASSET-$id", "", convId, userId, ANY_ASSET, time.instant)
+        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, _: ImageAsset), _, _) => NotificationData(s"$ASSET-$id", "", convId, userId, ASSET, time.instant)
       })
     }
   }, _ => ! uiActive)
@@ -82,7 +85,7 @@ class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, st
       case (prev, msg) if prev.state != msg.state && msg.state == Message.Status.FAILED => msg
     }
     if (failedMsgs.nonEmpty) {
-      // XXX: notification dta keeps remoteId, so we need to fetch convs here
+      // XXX: notification data keeps remoteId, so we need to fetch convs here
       Future.traverse(failedMsgs) { msg =>
         convs.get(msg.convId) map {
           case Some(conv) => Some(NotificationData(s"$MESSAGE_SENDING_FAILED-${msg.id}", msg.contentString, conv.remoteId, msg.userId, MESSAGE_SENDING_FAILED, Instant.EPOCH, referencedMessage = Some(msg.id)))

@@ -19,7 +19,7 @@ package com.waz.service.conversation
 
 import com.waz.ZLog._
 import com.waz.content.ConversationStorage
-import com.waz.model.GenericMessage.{Image, Knock, Text}
+import com.waz.model.GenericContent._
 import com.waz.model._
 import com.waz.service.{EventScheduler, UserService}
 import com.waz.threading.Threading
@@ -56,10 +56,10 @@ object UnarchivingEventProcessingStage {
 
   private def shouldUnarchive(selfUserId: UserId, event: Event): Boolean = event match {
     case MemberLeaveEvent(_, _, _, _, _, leaving) if leaving contains selfUserId => false
-    case GenericMessageEvent(_, _, _, _, _, GenericMessage(_, content), _) =>
+    case GenericMessageEvent(_, _, _, _, GenericMessage(_, content)) =>
       content match {
         case _: Text  => true
-        case _: Image => true
+        case _: ImageAsset => true
         case _: Knock => true
         case _        => false
       }
@@ -70,9 +70,7 @@ object UnarchivingEventProcessingStage {
   private def unarchiveMuted(event: Event): Boolean = event match {
     case _: VoiceChannelActivateEvent => true
     case _: VoiceChannelDeactivateEvent => true
-    case _: HotKnockEvent => true
-    case _: KnockEvent => true
-    case GenericMessageEvent(_, _, _, _, _, GenericMessage(_, _: Knock), _) => true
+    case GenericMessageEvent(_, _, _, _, GenericMessage(_, _: Knock)) => true
     case _ => false
   }
 }

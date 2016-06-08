@@ -57,6 +57,7 @@ case class UserData(
   def isSelf = connection == ConnectionStatus.Self
   def isAcceptedOrPending = connection == ConnectionStatus.Accepted || connection == ConnectionStatus.PendingFromOther || connection == ConnectionStatus.PendingFromUser
   def isVerified = verified == Verification.VERIFIED
+  def isAutoConnect = isConnected && ! isSelf && connectionMessage.isEmpty
 
   def getDisplayName = if (displayName.isEmpty) name else displayName
 

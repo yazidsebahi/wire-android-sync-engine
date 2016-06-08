@@ -19,28 +19,71 @@ package com.waz.messages
 
 import java.util.concurrent.atomic.AtomicLong
 
-import com.waz.api.MessageContent.Asset
-import com.waz.api.ProvisionedApiSpec
+import com.waz.api.MessageContent.Image
 import com.waz.api.impl.LocalImageAsset
-import com.waz.cache.CacheEntry
+import com.waz.api._
+import com.waz.cache.{CacheEntry, LocalData}
+import com.waz.model.RConvId
+import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
 import com.waz.service.ZMessaging
-import com.waz.sync.client.ImageAssetClient
+import com.waz.sync.client.AssetClient
+import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture
+import com.waz.utils.IoUtils
 import com.waz.znet.Request
-import com.waz.znet.Request._
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.scalatest.{FeatureSpec, Matchers}
 
 import scala.concurrent.duration._
+import akka.pattern.ask
 
-class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedApiSpec {
+class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ThreadActorSpec {
+  import com.waz.threading.Threading.Implicits.Background
   override val provisionFile: String = "/two_users_connected.json"
 
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
   lazy val messages = conv.getMessages
+
+  lazy val auto2 = registerDevice("auto2")
+
+  scenario("init") {
+    auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
+    auto2 ? AwaitSyncCompleted should eventually(be(Successful))
+    soon {
+      conversations should not be empty
+      messages should have size 1
+    }
+  }
+
+  scenario("Post text in new conv") {
+    conv.sendMessage(new MessageContent.Text("first msg"))
+    withDelay {
+      messages.getLastMessage.getMessageType shouldEqual Message.Type.TEXT
+      messages.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+    }
+  }
+
+  scenario("Post image asset followed by text") {
+    val asset = ImageAssetFactory.getImageAsset(IoUtils.toByteArray(getClass.getResourceAsStream("/images/big.png")))
+    conv.sendMessage(new MessageContent.Image(asset))
+
+    withDelay {
+      messages.getLastMessage.getMessageType shouldEqual Message.Type.ASSET
+      messages.getLastMessage.getMessageStatus shouldEqual Message.Status.PENDING
+    }
+    val assetMsg = messages.getLastMessage
+
+    conv.sendMessage(new MessageContent.Text("test message"))
+
+    withDelay {
+      assetMsg.getMessageStatus shouldEqual Message.Status.SENT
+      messages.getLastMessage.getMessageType shouldEqual Message.Type.TEXT
+    }
+  }
 
   scenario("Post a giphy search result as message") {
     val result = api.getGiphy.search("animated")
@@ -50,7 +93,7 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
 
     (messages should have size 1).soon
     downloads.set(0)
-    conv.sendMessage(new Asset(imageFromGiphy))
+    conv.sendMessage(new Image(imageFromGiphy))
     (messages should have size 2).soon
 
     val postedImage = messages(1).getImage
@@ -62,15 +105,20 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
     withClue("Image should not be downloaded but fetched from cache instead.")(downloads.get shouldEqual 0)
   }
 
-  override lazy val zmessagingFactory: ZMessaging.Factory = (new ZMessaging(_, _, _) {
-    override lazy val imageClient = new ImageAssetClient(znetClient, cache) {
+  override lazy val zmessagingFactory: ZMessaging.Factory = new ZMessaging(_, _, _) {
+    override lazy val assetClient = new AssetClient(znetClient) {
 
-      override def loadImageAsset(req: Request[Unit], cb: ProgressCallback): CancellableFuture[Option[CacheEntry]] = {
+      override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
+        if (metadata.inline) super.postOtrAsset(convId, metadata, data, ignoreMissing)
+        else CancellableFuture.delay(3.seconds) flatMap { _ => super.postOtrAsset(convId, metadata, data, ignoreMissing) } // delay full image request
+      }
+
+      override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {
         downloads.incrementAndGet()
-        super.loadImageAsset(req, cb)
+        super.loadAsset(req)
       }
     }
-  })
+  }
 
   private val downloads = new AtomicLong(0)
 }

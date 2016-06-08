@@ -25,8 +25,8 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.MessagesStorage
 import com.waz.model._
 import com.waz.service._
+import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater, ConversationsService}
-import com.waz.service.images.ImageAssetService
 import com.waz.service.messages.MessagesService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.ConversationsClient
@@ -41,10 +41,10 @@ object ConversationsSyncHandler {
   val PostMembersLimit = 64
 }
 
-class ConversationsSyncHandler(assetSync: ImageAssetSyncHandler, network: NetworkModeService,
+class ConversationsSyncHandler(assetSync: AssetSyncHandler, network: NetworkModeService,
                                userService: UserService, messagesStorage: MessagesStorage, messagesService: MessagesService,
                                convService: ConversationsService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService,
-                               errorsService: ErrorsService, assetService: ImageAssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
+                               errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
 
   import Threading.Implicits.Background
   import com.waz.sync.handler.ConversationsSyncHandler._
@@ -134,7 +134,7 @@ class ConversationsSyncHandler(assetSync: ImageAssetSyncHandler, network: Networ
           else Future.successful(SyncResult.Success)
         }
       case Left(resp@ErrorResponse(403, msg, "not-connected")) =>
-        errorsService.addError(ErrorData(ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER, resp, convId)) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
+        errorsService.addErrorWhenActive(ErrorData(ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER, resp, convId)) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
       case Left(error) =>
         warn(s"unexpected error: $error")
         Future.successful(SyncResult(error))

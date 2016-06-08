@@ -69,7 +69,6 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
         msgs.map(_.getBody) should contain allOf("Test message", "Test message 1")
         msgs.filter(_.getBody.startsWith("Test message")) foreach { msg =>
           msg.getMessageStatus shouldEqual Message.Status.SENT
-          msg.isOtr shouldEqual true
         }
 
         auto2Clients should have size 1

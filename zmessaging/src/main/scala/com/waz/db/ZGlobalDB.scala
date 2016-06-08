@@ -32,7 +32,17 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
     Migration(5, 6)(addCacheEntry_Path_LastUsed_Timeout),
     Migration(6, 7)(addPhoneNumber),
     Migration(7, 8)(addPhoneNumberVerified),
-    Migration(8, 9){ implicit db => db.execSQL("ALTER TABLE CacheEntry ADD COLUMN enc_key TEXT") }
+    Migration(8, 9){ implicit db => db.execSQL("ALTER TABLE CacheEntry ADD COLUMN enc_key TEXT") },
+    Migration(9, 10){ implicit db =>
+      db.execSQL("ALTER TABLE CacheEntry ADD COLUMN mime TEXT default ''")
+      db.execSQL("ALTER TABLE CacheEntry ADD COLUMN file_name TEXT")
+    },
+    Migration(10, 11) { implicit db =>
+      db.execSQL("DELETE FROM CacheEntry WHERE enc_key IS NOT NULL") // encryption handling was changed, so it's easiest to just drop old cache entries
+    },
+    Migration(11, 12){ implicit db =>
+      db.execSQL("ALTER TABLE CacheEntry ADD COLUMN length INTEGER")
+    }
   )
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
@@ -67,8 +77,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
   }
 }
 
-
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 9
+  val DbVersion = 12
 }

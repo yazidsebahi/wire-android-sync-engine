@@ -22,10 +22,12 @@ import java.util.Date
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.NotificationsHandler.GcmNotification
+import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Asset
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.model.messages.TextMessage
 import com.waz.service.NotificationService.Notification
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockZMessaging
@@ -74,7 +76,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Process user connection event for an unsynced user") {
       val userId = UserId()
       val convId = RConvId()
-      Await.ready(zms.dispatch(UserConnectionEvent(Uid(), convId, selfUserId, userId, Some("hello"), ConnectionStatus.PendingFromOther, new Date, Some("other user"))), 5.seconds)
+      Await.ready(zms.dispatch(UserConnectionEvent(Uid(), convId, selfUserId, userId, Some("hello"), ConnectionStatus.PendingFromOther, new Date, Some("other user")).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
@@ -97,11 +99,24 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Process mentions event") {
       val userId = UserId(oneToOneConv.id.str)
       val convId = oneToOneConv.remoteId
-      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), convId, EventId(1), new Date, userId, TextMessage("test name", Map(selfUserId -> "name")))), 5.seconds)
+      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), convId, new Date, userId, TextMessage("test name", Map(selfUserId -> "name")))), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
           case Seq(Notification(NotificationData(_, "test name", `convId`, `userId`, GcmNotification.Type.TEXT, _, _, _, _, Seq(`selfUserId`), _, None), _, _, _, false, true, _)) => true
+        }
+      }
+    }
+
+    scenario("Process any asset event") {
+      val userId = UserId(oneToOneConv.id.str)
+      val convId = oneToOneConv.remoteId
+      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadCancelled)))), 5.seconds) // this should not generate a notification
+      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadDone(AssetKey(RAssetDataId(), AESKey(), Sha256("sha"))))), RAssetDataId(), None)), 5.seconds)
+
+      withDelay {
+        currentNotifications should beMatching {
+          case Seq(Notification(NotificationData(_, _, `convId`, `userId`, GcmNotification.Type.ANY_ASSET, _, _, _, _, _, None, None), _, _, _, false, _, _)) => true
         }
       }
     }

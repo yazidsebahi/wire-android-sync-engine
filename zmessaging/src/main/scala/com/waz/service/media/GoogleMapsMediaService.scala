@@ -20,14 +20,14 @@ package com.waz.service.media
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model._
-import com.waz.service.images.ImageAssetService
+import com.waz.service.assets.AssetService
 import com.waz.sync.client.GoogleMapsClient
 import com.waz.threading.Threading
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
 
-class GoogleMapsMediaService(assets: ImageAssetService) {
+class GoogleMapsMediaService(assets: AssetService) {
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[YouTubeMediaService]

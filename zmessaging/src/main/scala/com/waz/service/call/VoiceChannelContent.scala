@@ -29,7 +29,7 @@ import com.waz.service.{NetworkModeService, ZmsLifecycle}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events._
-import org.threeten.bp.{Duration => JsrDuration, Instant}
+import org.threeten.bp.{Instant, Duration => JsrDuration}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -107,6 +107,7 @@ class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, ha
 
   private def updateEventsOnOngoingChannelChange(channel: Option[VoiceChannelData], updated: VoiceChannelData, uiActive: Boolean, mode: NetworkMode): CallingEventsHandler => Unit = { handler =>
     debug(s"updateEventsOnOngoingChannelChange($channel, $updated, uiActive = $uiActive)")
+
     val (previous, current) = (channel map (_.state) getOrElse Idle, updated.state)
     if (previous != current) {
       if (previous == DeviceCalling) channel foreach { ch => handler.onCallingEvent(RingingEnded(ch.tracking.kindOfCall, ch.tracking.callDirection, ch.video.isVideoCall, uiActive, mode)) }
@@ -144,6 +145,7 @@ class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, ha
 
           case (_, Idle) | (_, OthersConnected) if (previous == DeviceConnected || previous == DeviceJoining) && updated.tracking.cause != CauseForCallStateEvent.REQUESTED =>
             logEvent(KindOfCallingEvent.CALL_DROPPED, updated)
+
             handler.onCallingEvent(CallDropped(
               updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode, updated.participantsById.size,
               if (updated.tracking.requestedLocally) CauseForCallEnd.SELF else CauseForCallEnd.OTHER,

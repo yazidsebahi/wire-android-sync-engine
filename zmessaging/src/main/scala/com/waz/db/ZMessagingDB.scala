@@ -34,12 +34,14 @@ import com.waz.model.InvitedContacts.InvitedContactsDao
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model.Liking.LikingDao
 import com.waz.model.MessageData.MessageDataDao
+import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.SearchEntry.SearchEntryDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.VoiceParticipantData.VoiceParticipantDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
+import org.json.JSONObject
 
 class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getApplicationContext, dbName, null, ZMessagingDB.DbVersion) {
 
@@ -50,7 +52,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
-    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao
+    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao
   )
 
   override val migrations = Seq(
@@ -60,7 +62,31 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     Migration(63, 64)(ConversationDataMigration.v64),
     Migration(64, 65) { _.execSQL(s"ALTER TABLE GcmData ADD COLUMN clear_time INTEGER") },
     Migration(65, 66)(CallLogMigration.v66),
-    Migration(66, 67)(LikingsMigration.v67)
+    Migration(66, 67)(LikingsMigration.v67),
+    Migration(67, 68) { implicit db =>
+      db.execSQL(s"DROP TABLE IF EXISTS MsgDeletion")
+      db.execSQL(s"CREATE TABLE MsgDeletion (message_id TEXT PRIMARY KEY, timestamp INTEGER)")
+    },
+    Migration(68, 69)(MessageDataMigration.v69),
+    Migration(69, 70) { implicit db =>
+      // migrate AnyAssetData preview field
+      withStatement("UPDATE Assets SET data = ? WHERE _id = ?") { stmt =>
+        forEachRow(db.query("Assets", Array("_id", "data"), "asset_type = 'Any'", null, null, null, null)) { c =>
+          val asset = new JSONObject(c.getString(1))
+          if (asset.has("preview")) {
+            val preview = new JSONObject()
+            preview.put("type", "image")
+            preview.put("img", asset.getJSONObject("preview"))
+            asset.put("preview", preview)
+
+            stmt.clearBindings()
+            stmt.bindString(1, preview.toString)
+            stmt.bindString(2, c.getString(0)) // id
+            stmt.execute()
+          }
+        }
+      }
+    }
   )
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
@@ -72,5 +98,5 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 67
+  val DbVersion = 70
 }

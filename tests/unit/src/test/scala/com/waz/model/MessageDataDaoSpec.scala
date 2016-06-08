@@ -36,14 +36,14 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   val knockUser = UserId()
 
   val events = List(
-    MessageData(MessageId(), convId, EventId(2), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(1)),
-    MessageData(MessageId(), convId, EventId(7), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(2)),
-    MessageData(MessageId(), convId, EventId(3), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(3)),
-    MessageData(MessageId(), convId, EventId(3), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(4)),
-    MessageData(MessageId(), convId, EventId(1), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
-    MessageData(MessageId(), convId, EventId(5), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
-    MessageData(MessageId(), convId, EventId(6), EventId(0), Message.Type.KNOCK, knockUser, time = Instant.ofEpochMilli(6)),
-    MessageData(MessageId(), ConvId(), EventId(8), EventId(0), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(7))
+    MessageData(MessageId(), convId, EventId(2), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(1)),
+    MessageData(MessageId(), convId, EventId(7), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(2)),
+    MessageData(MessageId(), convId, EventId(3), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(3)),
+    MessageData(MessageId(), convId, EventId(3), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(4)),
+    MessageData(MessageId(), convId, EventId(1), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
+    MessageData(MessageId(), convId, EventId(5), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
+    MessageData(MessageId(), convId, EventId(6), Message.Type.KNOCK, knockUser, time = Instant.ofEpochMilli(6)),
+    MessageData(MessageId(), ConvId(), EventId(8), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(7))
   )
 
   after {
@@ -108,7 +108,7 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     scenario("Decode message with sample content json") {
       val json = returning(new JSONArray)(arr => contents.foreach(i => arr.put(i._1)))
 
-      val msg = MessageData(MessageId(), convId, EventId(6), EventId(0), Message.Type.RICH_MEDIA, UserId())
+      val msg = MessageData(MessageId(), convId, EventId(6), Message.Type.RICH_MEDIA, UserId())
       insertOrReplace(msg)
 
       getById(msg.id) shouldEqual Some(msg)

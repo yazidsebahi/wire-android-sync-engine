@@ -67,13 +67,14 @@ class PermissionsServiceSpec extends FeatureSpec with Matchers with Inspectors w
     }
 
     scenario("With permissions provider") {
-      service.setProvider(new TailPermissionProvider)
+      val prov = new TailPermissionProvider
+      service.setProvider(prov)
 
       service.request(permissions.toSet, false).await() shouldEqual permissions.tail.toSet
       service.isGranted(permissions.head) shouldBe false
       forAll(permissions.tail)(p => service.isGranted(p) shouldBe true)
 
-      service.clearProvider()
+      service.clearProvider(prov)
 
       service.request(permissions.toSet, false).await() shouldEqual permissions.tail.toSet
       service.isGranted(permissions.head) shouldBe false
@@ -81,7 +82,6 @@ class PermissionsServiceSpec extends FeatureSpec with Matchers with Inspectors w
     }
 
     scenario("Delayed request") {
-      service.clearProvider()
       Robolectric.getShadowApplication.denyPermissions(permissions.map(_.id)(breakOut):_*)
 
       val response = service.request(permissions.toSet, true)
@@ -89,10 +89,13 @@ class PermissionsServiceSpec extends FeatureSpec with Matchers with Inspectors w
       response should not be 'completed
       forAll(permissions.tail)(p => service.isGranted(p) shouldBe false)
 
-      service.setProvider(new TailPermissionProvider)
+      val prov = new TailPermissionProvider
+      service.setProvider(prov)
       response.await() shouldEqual permissions.tail.toSet
       service.isGranted(permissions.head) shouldBe false
       forAll(permissions.tail)(p => service.isGranted(p) shouldBe true)
+
+      service.clearProvider(prov)
     }
   }
 

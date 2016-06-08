@@ -22,7 +22,7 @@ import java.util.Date
 import android.database.sqlite.SQLiteDatabase
 import com.waz.api.Message.{Status, Type}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericMessage.LastRead
+import com.waz.model.GenericContent.LastRead
 import com.waz.model._
 import com.waz.testutils.Implicits._
 import com.waz.testutils._
@@ -86,7 +86,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
     Await.result(Future.sequence(
       (from.sequence until to.sequence) map { seq =>
         val ev = EventId(seq, seq.toString)
-        zmessaging.messagesStorage.addMessage(MessageData(MessageId("m_" + seq.toString), conv, ev, ev, api.Message.Type.TEXT, UserId("u_" + seq.toString), MessageData.textContent("test " + seq), state = Status.SENT, time = timeForEvent(seq)))
+        zmessaging.messagesStorage.addMessage(MessageData(MessageId("m_" + seq.toString), conv, ev, api.Message.Type.TEXT, UserId("u_" + seq.toString), MessageData.textContent("test " + seq), state = Status.SENT, time = timeForEvent(seq)))
       }
     ), 5.seconds)
   }
@@ -118,7 +118,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
     }
 
     scenario("update last read on notification") {
-      zmessaging.dispatch(GenericMessageEvent(Uid(), RConvId(selfUserId.str), EventId.Zero, new Date, selfUserId, GenericMessage(Uid(), LastRead(conv.remoteId, timeForEvent(122)))))
+      zmessaging.dispatch(GenericMessageEvent(Uid(), RConvId(selfUserId.str), new Date, selfUserId, GenericMessage(Uid(), LastRead(conv.remoteId, timeForEvent(122)))))
 
       withDelay {
         msgs.lastRead shouldEqual timeForEvent(122)
@@ -175,9 +175,9 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
       Await.result(zmessaging.messagesStorage.addMessage(data), 5.seconds)
 
     scenario("Create conv member join message") {
-      addMessage(MessageData(MessageId(), conv.id, EventId(1), EventId.Zero, api.Message.Type.MEMBER_JOIN, user, Nil, members = Set(user), time = Instant.ofEpochMilli(1)))
-      addMessage(MessageData(MessageId(), conv.id, EventId(2), EventId.Zero, api.Message.Type.CONNECT_REQUEST, user, Seq(MessageContent(api.Message.Part.Type.TEXT, "req")), recipient = Some(selfUserId), time = Instant.ofEpochMilli(2)))
-      addMessage(MessageData(MessageId(), conv.id, EventId(3), EventId.Zero, api.Message.Type.MEMBER_JOIN, selfUserId, Nil, members = Set(selfUserId), time = Instant.ofEpochMilli(3)))
+      addMessage(MessageData(MessageId(), conv.id, EventId(1), api.Message.Type.MEMBER_JOIN, user, Nil, members = Set(user), time = Instant.ofEpochMilli(1)))
+      addMessage(MessageData(MessageId(), conv.id, EventId(2), api.Message.Type.CONNECT_REQUEST, user, Seq(MessageContent(api.Message.Part.Type.TEXT, "req")), recipient = Some(selfUserId), time = Instant.ofEpochMilli(2)))
+      addMessage(MessageData(MessageId(), conv.id, EventId(3), api.Message.Type.MEMBER_JOIN, selfUserId, Nil, members = Set(selfUserId), time = Instant.ofEpochMilli(3)))
       withDelay {
         msgs should have size 3
         msgs.get(0).isCreateConversation shouldEqual true

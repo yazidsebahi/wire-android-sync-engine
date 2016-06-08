@@ -27,13 +27,14 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.call.FlowManagerService.EstablishedFlows
 import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.tracking.TrackingEventsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, SourceSignal}
 import com.waz.utils.returning
-import org.threeten.bp.{Duration => Duration310, Instant}
+import org.threeten.bp.{Instant, Duration => Duration310}
 
 import scala.collection.breakOut
 import scala.concurrent.Future
@@ -41,7 +42,9 @@ import scala.concurrent.Future
 class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushService,
                           val lifecycle: ZmsLifecycle, val sync: SyncServiceHandle,
                           val convs: ConversationsContentUpdater, users: UserService,
-                          private[call] val flows: FlowManagerService, val network: NetworkModeService, errors: ErrorsService, client: VoiceChannelClient)
+                          private[call] val flows: FlowManagerService, val network: NetworkModeService,
+                          errors: ErrorsService, client: VoiceChannelClient,
+                          trackingEventsService: TrackingEventsService)
 
   extends VoiceChannelUiService { self =>
 
@@ -67,6 +70,21 @@ class VoiceChannelService(val context: Context, val content: VoiceChannelContent
   flows.onFlowEvent.on(dispatcher) { event => metrics = metrics.flowEvent(event.kind) }
   flows.onFlowRequest.on(dispatcher) { req => metrics = metrics.flowRequest(req) }
   flows.onFlowResponse.on(dispatcher) { req => metrics = metrics.flowResponse(req) }
+
+  flows.onAvsMetricsReceived.on(dispatcher) { avsMetrics =>
+
+    verbose(s"AVS Metrics: $avsMetrics")
+    withConversation(avsMetrics.rConvId, "onAvsMetricsReceived") { (conv, selfUser) =>
+      val channel = voiceChannel(conv.id, selfUser)
+      channel.data.tracking.joined.fold (Future.successful(())) { instant =>
+        Future.successful {
+          avsMetrics.isVideoCall = channel.data.video.isVideoCall
+          avsMetrics.kindOfCall = channel.data.tracking.kindOfCall
+          trackingEventsService.sendAvsMetrics(avsMetrics)
+        }
+      }
+    }
+  }
 
   val callStateEventsStage = EventScheduler.Stage[CallStateEvent] {
     case (_, Seq(event)) => handleCallStateEvent(event)

@@ -37,6 +37,7 @@ public interface User extends UiObservable, Parcelable {
     boolean isRelated();
     boolean isMe();
     boolean isDeleted();
+    boolean isAutoConnection();
 
     CoreList<OtrClient> getOtrClients();
     Verification getVerified();

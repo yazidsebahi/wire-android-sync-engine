@@ -33,7 +33,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorage, convs: ConversationStorage, users: UserService, sync: SyncServiceHandle) {
+class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorage, convs: ConversationStorage, users: UserService, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
 
   private implicit val tag: LogTag = logTagFor[MessagesContentUpdater]
   import Threading.Implicits.Background
@@ -42,17 +42,30 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
 
   def getMessage(msgId: MessageId) = messagesStorage.getMessage(msgId)
 
-  def deleteMessage(msg: MessageData): Future[Unit] = deleteMessage(msg.convId, msg.source)
+  def deleteMessage(msg: MessageData) = messagesStorage.delete(msg)
 
   def deleteMessagesForConversation(convId: ConvId): Future[Unit] = messagesStorage.deleteAll(convId)
 
-  def updateMessage(msgId: MessageId)(updater: MessageData => MessageData): Future[Option[MessageData]] = messagesStorage.update(msgId)(updater)
+  def updateMessage(id: MessageId)(updater: MessageData => MessageData): Future[Option[MessageData]] = messagesStorage.update(id, updater) map {
+    case Some((msg, updated)) if msg != updated =>
+      assert(updated.id == id && updated.convId == msg.convId)
+      Some(updated)
+    case _ =>
+      None
+  }
+
+  // removes messages and records deletion
+  // this is used when user deletes a message manually (on local or remote device)
+  def deleteOnUserRequest(ids: Seq[MessageId]) =
+    deletions.insert(ids.map(id => MsgDeletion(id, Instant.now()))) flatMap { _ =>
+      messagesStorage.remove(ids)
+    }
 
   def addLocalMessage(msg: MessageData, state: Status = Status.PENDING) = Serialized.future("add local message", msg.convId) {
     verbose(s"addLocalMessage: $msg")
     nextLocalEventIdAndTime(msg.convId) flatMap { case (eventId, time) =>
       verbose(s"adding message to storage: $eventId, $time")
-      messagesStorage.addMessage(msg.copy(source = eventId, edit = eventId, state = state, time = time, localTime = Instant.now))
+      messagesStorage.addMessage(msg.copy(source = eventId, state = state, time = time, localTime = Instant.now))
     }
   }
 
@@ -61,7 +74,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
     lastSentEventIdAndTime(msg.convId) flatMap { case (ev, t) =>
       val (eventId, time) = (EventId.nextLocal(ev), t.plusMillis(1))
       verbose(s"adding message to storage: $eventId, $time")
-      messagesStorage.addMessage(msg.copy(source = EventId.nextLocal(eventId), edit = eventId, state = Status.SENT, time = time, localTime = Instant.now))
+      messagesStorage.addMessage(msg.copy(source = EventId.nextLocal(eventId), state = Status.SENT, time = time, localTime = Instant.now))
     }
   }
 
@@ -103,19 +116,22 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
       }
     }
 
-  def deleteMessage(id: MessageId): Future[Unit] = messagesStorage.delete(id)
-
-  def deleteMessage(convId: ConvId, event: EventId): Future[Unit] = messagesStorage.delete(convId, event)
-
   private[service] def addMessages(convId: ConvId, msgs: Seq[MessageData]): Future[Set[MessageData]] = {
     verbose(s"addMessages($msgs)")
     val (systemMsgs, contentMsgs) = msgs.partition(_.isSystemMessage)
 
     for {
       sm <- addSystemMessages(convId, systemMsgs)
-      cm <- addContentMessages(convId, contentMsgs)
+      toAdd <- skipPreviouslyDeleted(contentMsgs)
+      cm <- addContentMessages(convId, toAdd)
     } yield sm.toSet ++ cm
   }
+
+  private def skipPreviouslyDeleted(msgs: Seq[MessageData]) =
+    deletions.getAll(msgs.map(_.id)) map { deletions =>
+      val ds: Set[MessageId] = deletions.collect { case Some(MsgDeletion(id, _)) => id } (breakOut)
+      msgs.filter(m => !ds(m.id))
+    }
 
   private def addSystemMessages(convId: ConvId, msgs: Seq[MessageData]): Future[Seq[MessageData]] =
     if (msgs.isEmpty) Future.successful(Seq.empty)
@@ -134,7 +150,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
                 val remaining = m.members.diff(msg.members)
                 if (remaining.nonEmpty) addMessage(m.copy(id = MessageId(), source = EventId.nextLocal(msg.source max m.source), members = remaining))
               }
-              messagesStorage.update(m.id)(m => msg.copy(id = m.id, localTime = m.localTime)).map(_.getOrElse(msg))
+              messagesStorage.update(m.id, m => msg.copy(id = m.id, localTime = m.localTime)).map(_.fold2(msg, _._2))
             case res =>
               verbose(s"lastLocalMessage(${msg.msgType}) returned: $res")
               messagesStorage.addMessage(msg)
@@ -154,13 +170,13 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
         else s1 min s2
 
       def mergeLocal(m: MessageData, msg: MessageData) =
-        msg.copy(id = m.id, source = mergeSource(msg.source, m.source), localTime = m.localTime, hotKnock = m.hotKnock || msg.hotKnock, otr = m.otr || msg.otr)
+        msg.copy(id = m.id, source = mergeSource(msg.source, m.source), localTime = m.localTime)
 
       def mergeMatching(prev: MessageData, msg: MessageData) = {
-        val u = prev.copy(source = mergeSource(msg.source, prev.source), time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, otr = prev.otr || msg.otr)
+        val u = prev.copy(source = mergeSource(msg.source, prev.source), time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos)
         prev.msgType match {
           case Message.Type.UNKNOWN => msg
-          case Message.Type.KNOCK => u.copy(hotKnock = prev.hotKnock || msg.hotKnock, localTime = if (msg.hotKnock && !prev.hotKnock) msg.localTime else prev.localTime, edit = prev.edit max msg.edit)
+          case Message.Type.KNOCK => u.copy(localTime = if (msg.hotKnock && !prev.hotKnock) msg.localTime else prev.localTime)
           case _ => u
         }
       }

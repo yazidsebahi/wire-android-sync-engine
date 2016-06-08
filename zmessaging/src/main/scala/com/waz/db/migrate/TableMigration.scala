@@ -50,15 +50,23 @@ abstract class TableMigration(from: TableDesc, to: TableDesc) { migration =>
 
   protected implicit def colToLoader[A](col: Col[A]): Function[Cursor, A] = col.load(_, from.colIndex(col.name))
 
-  def bindings: Seq[Binder]
+  val bindings: Seq[Binder]
 
-  def migrate(implicit db: SQLiteDatabase) = {
+  def migrate(implicit db: SQLiteDatabase) = inTransaction { tr: Transaction =>
+    var count = 0
     db.execSQL(to.createSql)
     withStatement(to.insertSql) { stmt =>
       forEachRow(db.query(from.name, from.colNames, null, null, null, null, null)) { c =>
         stmt.clearBindings()
         bindings foreach { _.copy(c, stmt) }
         stmt.execute()
+
+        count += 1
+        if (count > 10000) {
+          println(s"flushing db transaction")
+          count = 0
+          tr.flush()
+        }
       }
     }
   }

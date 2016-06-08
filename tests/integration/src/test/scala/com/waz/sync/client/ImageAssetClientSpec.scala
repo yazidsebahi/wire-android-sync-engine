@@ -23,8 +23,8 @@ import android.util.Base64
 import com.waz.api.ProvisionedApiSpec
 import com.waz.cache.LocalData
 import com.waz.model.otr.ClientId
-import com.waz.model.{AssetId, ConvId, ImageData, RImageDataId}
-import com.waz.sync.client.ImageAssetClient.OtrAssetMetadata
+import com.waz.model.{AssetId, ConvId, ImageData, RAssetDataId}
+import com.waz.sync.client.AssetClient.OtrAssetMetadata
 import com.waz.sync.client.OtrClient.EncryptedContent
 import com.waz.threading.Threading
 import com.waz.utils.{IoUtils, returning}
@@ -44,7 +44,7 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
   implicit val timeout = 10.seconds: Timeout
   implicit lazy val ec = Threading.Background
 
-  def client: ImageAssetClient = zmessaging.imageClient
+  def client: AssetClient = zmessaging.assetClient
 
   feature("sending") {
 
@@ -56,7 +56,7 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
 
       val c = ConvId(conversations.get(0).getId)
       val assetId = AssetId()
-      val data = new ImageData("tag", "image/png", 128, 128, 512, 512, imageData.length, Some(RImageDataId()), Some(Base64.encodeToString(imageData, Base64.NO_WRAP)))
+      val data = new ImageData("tag", "image/png", 128, 128, 512, 512, imageData.length, Some(RAssetDataId()), Some(Base64.encodeToString(imageData, Base64.NO_WRAP)))
 
       val response = for {
         conv <- zmessaging.convsStorage.get(c)
@@ -66,8 +66,8 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
       val res = Await.result(response, 20.seconds)
       info(s"got response: $res")
       res should be('right)
-      val Right(event) = res
-      event.assetId shouldEqual assetId
+      val Right(img) = res
+      img shouldEqual data
     }
 
     scenario("post image asset") {
@@ -80,11 +80,11 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
       val input = api.ui.images.getOrCreateImageAssetFrom(image).asInstanceOf[com.waz.api.impl.LocalImageAsset]
       val response = for {
         asset <- zmessaging.assetGenerator.generateWireAsset(AssetId(), input.data.versions.last, c, profilePicture = false).future
-        _ <- zmessaging.imageAssets.updateImageAssets(Seq(asset))
+        _ <- zmessaging.assets.updateImageAssets(Seq(asset))
         conv <- zmessaging.convsStorage.getByRemoteId(c)
         res <- Future.sequence(asset.versions map { im =>
           awaitUi(1.second)
-          zmessaging.cache.getEntry(im.cacheKey).future flatMap {
+          zmessaging.cache.getEntry(im.cacheKey) flatMap {
             case Some(entry) => client.postImageAssetData(im, asset.id, conv.get.remoteId, entry)
             case None => Future.successful(Left("meep"))
           }
@@ -106,7 +106,7 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
 
       for (i <- 0 to 10) {
         withClue(i) {
-          Await.result(client.postImageAssetData(ImageData("test", "image/png", 100, 100, 100, 100, file.length().toInt, Some(RImageDataId())), AssetId(), c, LocalData(file), nativePush = false), 5.seconds) shouldBe 'right
+          Await.result(client.postImageAssetData(ImageData("test", "image/png", 100, 100, 100, 100, file.length().toInt, Some(RAssetDataId())), AssetId(), c, LocalData(file), nativePush = false), 5.seconds) shouldBe 'right
         }
       }
     }

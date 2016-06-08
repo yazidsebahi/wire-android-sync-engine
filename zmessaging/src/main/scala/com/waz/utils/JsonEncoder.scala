@@ -38,6 +38,8 @@ object JsonEncoder {
 
   def arrString(items: Seq[String]): JSONArray = returning(new JSONArray) { arr => items foreach arr.put }
 
+  def arrNum[A: Numeric](items: Seq[A]): JSONArray = returning(new JSONArray) { arr => items foreach arr.put }
+
   def apply(encode: JSONObject => Unit): JSONObject = returning(new JSONObject)(encode)
 
   def build[A](f: A => JSONObject => Unit): JsonEncoder[A] = lift(a => returning(new JSONObject)(f(a)))

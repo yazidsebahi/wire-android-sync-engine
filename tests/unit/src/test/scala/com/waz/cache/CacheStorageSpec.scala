@@ -21,37 +21,27 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.GlobalStorage
-import com.waz.db.ZGlobalDB
 import com.waz.testutils.Matchers._
+import com.waz.testutils._
 import com.waz.utils.returning
 import org.robolectric.Robolectric
-import org.scalatest.{BeforeAndAfter, RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
 
-class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
-  var storage: GlobalStorage = _
-  var cache: CacheStorage = _
 
+class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
   implicit val timeout: FiniteDuration = 5.seconds
 
   lazy val cacheDir = Robolectric.application.getCacheDir
 
-  before {
-    storage = new GlobalStorage(Robolectric.application)
-    cache = new CacheStorage(storage, Robolectric.application)
-  }
-
-  after {
-    Thread.sleep(1000)
-    storage.close.await()
-    Robolectric.application.getDatabasePath(ZGlobalDB.DbName).getParentFile.listFiles.foreach(_.delete())
-  }
+  lazy val storage = new GlobalStorage(Robolectric.application)
+  lazy val cache = new CacheStorage(storage, Robolectric.application)
 
   feature("Cache Storage Initialization") {
     scenario("Cache entries where files and data are missing are not loaded.") {
-      CacheEntryDao.insertOrReplace(Seq(withData, withFile, withoutDataOrFile))
+      cache.insert(Seq(withData, withFile, withoutDataOrFile)).await()
 
       cache.get("withData") should eventually(be('defined))
       cache.get("withFile") should eventually(be('defined))
@@ -62,7 +52,7 @@ class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
     scenario("Expired cache entries are not loaded.") {
       val exp = expiredWithFile
-      CacheEntryDao.insertOrReplace(Seq(withData, withFile, expiredWithData, exp))
+      cache.insert(Seq(withData, withFile, expiredWithData, exp)).await()
 
       cache.get("withData") should eventually(be('defined))
       cache.get("withFile") should eventually(be('defined))
@@ -79,7 +69,7 @@ class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
     scenario("Cache entries with 'infinite' timeout.") {
       import Expiration._
-      cache.add(CacheEntryData("meep", Some(Array[Byte](1)), lastUsed = 0L, timeout = Duration.Inf.timeout, path = None))
+      cache.insert(CacheEntryData("meep", Some(Array[Byte](1)), lastUsed = 0L, timeout = Duration.Inf.timeout, path = None)).await()
       cache.get("meep") should eventually(be('defined))
     }
   }

@@ -84,7 +84,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
       }
 
       keyValue.lastSlowSyncTimestamp = System.currentTimeMillis()
-      override lazy val usersSync: UsersSyncHandler = new UsersSyncHandler(imageassetSync, users, usersStorage, imageAssets, usersClient) {
+      override lazy val usersSync: UsersSyncHandler = new UsersSyncHandler(assetSync, users, usersStorage, assetsStorage, usersClient) {
         override def syncUsers(ids: UserId*) = {
           sync.syncUsers(ids: _*)
           CancellableFuture.successful(SyncResult.Success)

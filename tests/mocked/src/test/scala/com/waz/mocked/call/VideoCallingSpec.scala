@@ -17,16 +17,20 @@
  */
 package com.waz.mocked.call
 
+import android.view.View
+import com.waz.api.Avs.VideoCallbacks
 import com.waz.api._
-import com.waz.mocked.{MockedFlows, MockBackend}
-import com.waz.model._
+import com.waz.mocked.{MockBackend, MockedFlows}
 import com.waz.model.VoiceChannelData.ChannelState._
-import com.waz.testutils.TestApplication._
-import com.waz.testutils.{TestApplication, CallJoinSpy}
+import com.waz.model._
+import com.waz.service.call.FlowManagerService.StateOfReceivedVideo
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
+import com.waz.testutils.TestApplication._
+import com.waz.testutils.{CallJoinSpy, TestApplication}
 import org.robolectric.annotation.Config
-import org.scalatest.{OptionValues, FeatureSpec}
+import org.scalatest.{FeatureSpec, OptionValues}
+
 import scala.collection.breakOut
 import scala.concurrent.duration._
 
@@ -46,7 +50,10 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
   lazy val Seq(voice, voice2, group) = Seq(conv, conv2, groupConv) map (_.getVoiceChannel)
   lazy val Seq(remoteId, remoteId2, groupRemoteId) = Seq(conv, conv2, groupConv) map (_.data.remoteId)
 
+  lazy val avs = api.getAvs
+
   val spy = new CallJoinSpy
+  val videoStateSpy = new StateOfReceivedVideoSpy
 
   override protected def beforeAll(): Unit = {
     addConnection(other)
@@ -362,7 +369,27 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
       }
     }
 
+    scenario("Received video goes bad (poor connection)") {
+      avs.setVideoListener(videoStateSpy.callbacks)
+
+      awaitUi(50.millis)
+      
+      val state = StateOfReceivedVideo(state = AvsVideoState.STOPPED, reason = AvsVideoReason.BAD_CONNECTION)
+      changeStateOfReceivedVideo(state)
+
+      withDelay { videoStateSpy.state.value shouldEqual state }
+    }
+
+    scenario("Received video goes back to normal") {
+      val state = StateOfReceivedVideo(state = AvsVideoState.STARTED, reason = AvsVideoReason.NORMAL)
+      changeStateOfReceivedVideo(state)
+
+      withDelay { videoStateSpy.state.value shouldEqual state }
+    }
+
     scenario("Other hangs up") {
+      avs.unsetVideoListener()
+
       addNotification(
         CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(200))),
         CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(200))))
@@ -459,4 +486,16 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
 
   def participants(ps: (UserId, (Boolean, Boolean))*): Set[CallParticipant] = ps.map { case (id, (joined, video)) => CallParticipant(id, joined = joined, props = if (video) Set(CallProperty.SendsVideo) else Set.empty) }(breakOut)
   def deviceState(joined: Boolean) = Some(CallDeviceState(joined = joined, props = Set.empty))
+}
+
+class StateOfReceivedVideoSpy { spy =>
+  @volatile var state = Option.empty[StateOfReceivedVideo]
+
+  val callbacks = new VideoCallbacks {
+    override def onPreviewRequested(): View = throw new IllegalStateException("should not be callled")
+    override def onViewReleased(): Unit = ()
+    override def onViewRequested(): View = throw new IllegalStateException("should not be callled")
+    override def onPreviewReleased(): Unit = ()
+    override def onStateOfReceivedVideoChanged(state: AvsVideoState, reason: AvsVideoReason): Unit = spy.state = Some(StateOfReceivedVideo(state, reason))
+  }
 }

@@ -21,9 +21,9 @@ import java.util.Date
 
 import com.waz._
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericMessage.{Image, Knock}
+import com.waz.model.GenericContent.{ImageAsset, Knock}
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.messages.TextMessage
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.CancellableFuture.CancelException
@@ -332,18 +332,18 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   def renameConv(old: Boolean = false): Unit = service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, ""))
 
-  def knock(old: Boolean = false): Unit = service.dispatchEvent(KnockEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, ""))
-  def hotKnock(old: Boolean = false): Unit = service.dispatchEvent(HotKnockEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, "", EventId.Zero))
-  def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, eventId(old), if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock(false)), true))
+  def knock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(false))))
+  def hotKnock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(true))))
+  def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock(false))))
 
   def sendTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, eventId(old), if (old) date(old) else date(old), user1.id, "hello"))
-  def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, eventId(old), if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty), true))
+  def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
 
   def sendImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(new AssetAddEvent(Uid(), conv.remoteId, eventId(old), date(old), selfUser.id, AssetId(), ImageData("preview", "", 0, 0, 0, 0, 1, Some(RImageDataId()))))
+    service.dispatchEvent(new GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(MessageId(), ImageAsset("preview", 0, 0, 0, 0, "", 1, None, None)), RAssetDataId(), None))
 
   def sendGenericImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, eventId(old), if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Image("preview", 0, 0, 0, 0, "", 0, None, None)), true))
+    service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset("preview", 0, 0, 0, 0, "", 0, None, None))))
 
   def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id))
   def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, Some("missed")))

@@ -121,7 +121,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def setPermissionProvider(p: PermissionProvider): Unit = ui.global.permissions.setProvider(p)
 
-  override def removePermissionProvider: Unit = ui.global.permissions.clearProvider()
+  override def removePermissionProvider(p: PermissionProvider): Unit = ui.global.permissions.clearProvider(p)
 
   override def getSelf: Self = ui.users.selfUser
 
@@ -219,7 +219,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getUser(id: String): User = ui.users.getUser(UserId(id))
 
-  override def getMediaManager: MediaManager = MediaManager.getInstance(context.getApplicationContext) // XXX: this assumes that getInstance returns the same instance every time (at least for the same context)
+  override def getMediaManager: MediaManager = zmessaging.flatMap(_.mediamanager.mediaManager).orNull
 
   override def getMediaResourceUri(name: String): Uri = zmessaging.flatMap(_.mediamanager.getSoundUri(name)).orNull
 

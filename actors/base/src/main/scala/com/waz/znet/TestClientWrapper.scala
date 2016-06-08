@@ -20,10 +20,11 @@ package com.waz.znet
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import com.koushikdutta.async.http.{AsyncHttpClient, AsyncHttpClientMiddleware, AsyncSSLEngineConfigurator}
+import com.koushikdutta.async.http.AsyncHttpClientMiddleware.GetSocketData
+import com.koushikdutta.async.http.spdy.SpdyMiddleware
+import com.koushikdutta.async.http.{SSLEngineSNIConfigurator, _}
 import com.waz.threading.Threading
 import com.waz.utils._
-import com.waz.ZLog._
 
 import scala.concurrent.Future
 
@@ -32,30 +33,42 @@ import scala.concurrent.Future
  * Default ssl implementation in AndroidAsync doesn't work correctly when run in RoboTests, so we need to hack it a bit.
   */
 object TestClientWrapper extends ClientWrapper {
+  import Threading.Implicits.Background
+
   def apply(client: AsyncHttpClient): Future[AsyncHttpClient] = Future {
-    client.getSSLSocketMiddleware.setSSLContext(returning(SSLContext.getInstance("TLSv1.2")) { _.init(null, null, null) })
 
-    client.getSSLSocketMiddleware.setTrustManagers(Array(new X509TrustManager {
-      override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {}
+    def prepareSSlMiddleware() = new SpdyMiddleware(client) {
 
-      override def checkClientTrusted(chain: Array[X509Certificate], authType: String): Unit = throw new SSLException("unexpected call to checkClientTrusted")
+      addEngineConfigurator(new SSLEngineSNIConfigurator)
 
-      override def getAcceptedIssuers: Array[X509Certificate] = throw new SSLException("unexpected call to getAcceptedIssuers")
-    }))
+      setSSLContext(returning(SSLContext.getInstance("TLSv1.2")) { _.init(null, null, null) })
 
-    client.getSSLSocketMiddleware.addEngineConfigurator(new AsyncSSLEngineConfigurator {
-      override def configureEngine(engine: SSLEngine, data: AsyncHttpClientMiddleware.GetSocketData, host: String, port: Int): Unit = {
-        debug(s"configureEngine: $host:$port")(logTagFor(TestClientWrapper))
-        val peerHost = engine.getClass.getSuperclass.getDeclaredField("peerHost")
-        peerHost.setAccessible(true)
-        peerHost.set(engine, host)
+      setTrustManagers(Array(new X509TrustManager {
+        override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {}
 
-        val peerPort = engine.getClass.getSuperclass.getDeclaredField("peerPort")
-        peerPort.setAccessible(true)
-        peerPort.setInt(engine, port)
+        override def checkClientTrusted(chain: Array[X509Certificate], authType: String): Unit = throw new SSLException("unexpected call to checkClientTrusted")
+
+        override def getAcceptedIssuers: Array[X509Certificate] = throw new SSLException("unexpected call to getAcceptedIssuers")
+      }))
+
+      override def createConfiguredSSLEngine(data: GetSocketData, host: String, port: Int): SSLEngine = {
+        val sslContext = getSSLContext
+        val sslEngine = sslContext.createSSLEngine(host, port)
+        import scala.collection.JavaConversions._
+        for (configurator <- engineConfigurators) {
+          configurator.configureEngine(sslEngine, data, host, port)
+        }
+
+        sslEngine
       }
-    })
+    }
+
+    client.getMiddleware.clear()
+    client.insertMiddleware(client.getSocketMiddleware)
+    client.insertMiddleware(prepareSSlMiddleware())
+    client.insertMiddleware(new HttpTransportMiddleware)
 
     client
-  } (Threading.Background)
+  }
 }
+

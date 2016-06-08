@@ -19,11 +19,14 @@ package com.waz.testutils
 
 import java.util.concurrent.CountDownLatch
 
+import scala.concurrent.duration.FiniteDuration
+
 class ReusableCountDownLatch {
   private object monitor
   @volatile private var latch = new CountDownLatch(0)
 
   def await(): Unit = latch.await()
+  def await(d: FiniteDuration) = latch.await(d.length, d.unit)
   def ofSize(size: Int)(f: CountDownLatch => Unit): Unit = monitor.synchronized {
     latch = new CountDownLatch(size)
     try f(latch) finally {

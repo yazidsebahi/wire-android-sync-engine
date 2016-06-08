@@ -20,24 +20,29 @@ package com.waz.service
 import java.io._
 import java.util.concurrent.CountDownLatch
 
+import android.content.Context
 import android.net.Uri
-import android.support.v4.content.FileProvider
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
+import com.waz.cache.{CacheService, Expiration}
+import com.waz.content.Mime
+import com.waz.content.WireContentProvider.CacheUri
+import com.waz.model.ZUserId
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.{IoUtils, RichFuture}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
-class ReportingService() {
+trait ReportingService {
   import ReportingService._
   private implicit val dispatcher = new SerialDispatchQueue(name = "ReportingService")
-  private var reporters = Seq.empty[Reporter]
-  
+  private[service] var reporters = Seq.empty[Reporter]
+
   def addStateReporter(report: PrintWriter => Future[Unit])(implicit tag: LogTag): Unit = Future {
-    reporters = reporters :+ Reporter(tag, report) 
+    reporters = reporters :+ Reporter(tag, report)
   }
-  
+
   private[service] def generateStateReport(writer: PrintWriter) =
     Future { reporters } flatMap { rs =>
       RichFuture.processSequential(rs)(_.apply(writer))
@@ -45,18 +50,40 @@ class ReportingService() {
 }
 
 object ReportingService {
-  implicit val tag: LogTag = logTagFor[ReportingService]
-  import com.waz.threading.Threading.Implicits.Background
+  private implicit val tag: LogTag = logTagFor[ReportingService]
 
   case class Reporter(name: String, report: PrintWriter => Future[Unit]) {
-    
+
     def apply(writer: PrintWriter) = {
       writer.println(s"\n###### $name:")
       report(writer)
     }
   }
+}
 
-  lazy val metadata = ZMessaging.currentGlobal.metadata
+class ZmsReportingService(user: ZUserId, global: ReportingService) extends ReportingService {
+  implicit val tag: LogTag = logTagFor[ZmsReportingService]
+  private implicit val dispatcher = new SerialDispatchQueue(name = "ZmsReportingService")
+
+  global.addStateReporter(generateStateReport)(s"ZMessaging[$user]")
+}
+
+class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, users: ZUsers, prefs: PreferenceService) extends ReportingService {
+  import ReportingService._
+  import Threading.Implicits.Background
+  implicit val tag: LogTag = logTagFor[GlobalReportingService]
+
+  def generateReport(): Future[Uri] =
+    cache.createForFile(mime = Mime("text/txt"), name = Some("wire_debug_report.txt"), cacheLocation = Some(cache.intCacheDir))(Expiration.in(12.hours)) flatMap { entry =>
+      @SuppressWarnings(Array("deprecation"))
+      lazy val writer = new PrintWriter(new OutputStreamWriter(entry.outputStream))
+
+      RichFuture.processSequential(VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter) { reporter =>
+        reporter.apply(writer)
+      } map { _ => CacheUri(entry.data, context) } andThen {
+        case _ => writer.close()
+      }
+    }
 
   val VersionReporter = Reporter("Wire", { writer =>
     import android.os.Build._
@@ -71,7 +98,7 @@ object ReportingService {
 
   val ZUsersReporter = Reporter("ZUsers", { writer =>
     writer.println(s"current: ${ZMessaging.currentInstance.currentUser.currentValue.flatten}")
-    ZMessaging.currentGlobal.users.listUsers() map { all =>
+    users.listUsers() map { all =>
       all foreach { u =>
         writer.println(u.toString)
       }
@@ -79,7 +106,7 @@ object ReportingService {
   })
 
   val GcmRegistrationReporter = Reporter("Gcm", { writer =>
-    ZMessaging.currentGlobal.prefs.withPreferences(GcmGlobalService.GcmRegistration.apply) map { writer.println }
+    prefs.withPreferences(GcmGlobalService.GcmRegistration.apply) map { writer.println }
   })
 
   val LogCatReporter = Reporter("LogCat", { writer =>
@@ -100,26 +127,5 @@ object ReportingService {
       latch.await()
     } (Threading.IO)
   })
-
-  def zmessagingReporter(zms: ZMessaging) = Reporter(s"ZMessaging[${zms.user}]", zms.reporting.generateStateReport)
-
-  def generateReport(): Future[Uri] = {
-    val context = ZMessaging.context
-    val authority = s"${context.getPackageName}.debug"
-    val fileLoc = new File(s"${context.getFilesDir}", "debug")
-    if (!fileLoc.exists()) {
-      fileLoc.mkdir()
-    }
-    val file = new File(fileLoc, s"se_report_${System.currentTimeMillis()}.txt")
-
-    @SuppressWarnings(Array("deprecation"))
-    lazy val writer = new PrintWriter(file)
-
-    RichFuture.processSequential(VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: ZMessaging.currentInstance.instanceMap.values.map(zmessagingReporter).toSeq :+ LogCatReporter) { reporter =>
-      reporter.apply(writer)
-    } map { _ =>
-      writer.close()
-      FileProvider.getUriForFile(context, authority, file)
-    }
-  }
 }
+

@@ -17,16 +17,16 @@
  */
 package com.waz.threading
 
-import java.util.concurrent.{TimeUnit, CountDownLatch, TimeoutException}
+import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 
 import com.waz.RobolectricUtils
 import com.waz.ZLog.LogTag
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture.CancelException
-import org.scalatest.{RobolectricTests, BeforeAndAfter, FeatureSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
-import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Try, Success, Random}
+import scala.concurrent.{Await, Future, Promise}
+import scala.util.{Failure, Random, Success, Try}
 import concurrent.duration._
 
 class CancellableFutureSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
@@ -63,6 +63,18 @@ class CancellableFutureSpec extends FeatureSpec with Matchers with BeforeAndAfte
     intercept[CancelException] {
       Await.result(future, 10.millis) // cancellable future reports cancellation immediately, even if original feature is still running
     }
+  }
+
+  scenario("Propagate cancel via promise") {
+    val p1 = Promise[Unit]
+    val f1 = new CancellableFuture(p1)
+    val p2 = Promise[Unit]
+    val f2 = new CancellableFuture(p2)
+    p1.tryCompleteWith(f2)
+
+    f2.cancel()
+
+    intercept[CancelException](Await.result(f1, 10.millis))
   }
 
   feature("Delayed execution") {

@@ -26,27 +26,25 @@ import android.media.ExifInterface._
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Permission
-import com.waz.{PermissionsService, bitmap}
-import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.bitmap.gif.{Gif, GifReader}
+import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
-import com.waz.model.otr.Sha256
+import com.waz.content.Mime
 import com.waz.model.{AssetId, ImageAssetData, ImageData, RConvId}
-import com.waz.service.assets.DownloadKey.{Proxied, OtrWireAsset, External, WireAsset}
-import com.waz.service.assets.DownloaderService
-import com.waz.service.images.ImageAssetService.BitmapRequest
+import com.waz.service.assets.AssetService.BitmapRequest
+import com.waz.service.assets.{AssetLoader, AssetService}
+import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.images.ImageLoader.Metadata
-import com.waz.service.otr.OtrService
-import com.waz.sync.client.ImageAssetClient
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
 import com.waz.utils.IoUtils._
 import com.waz.utils.{IoUtils, Serialized, returning}
+import com.waz.{PermissionsService, bitmap}
 
 import scala.concurrent.Future
 
-class ImageLoader(val context: Context, downloader: DownloaderService, cache: CacheService, val imageCache: MemoryImageCache,
-    client: ImageAssetClient, bitmapLoader: BitmapDecoder, permissions: PermissionsService) {
+class ImageLoader(val context: Context, cache: CacheService, val imageCache: MemoryImageCache,
+    bitmapLoader: BitmapDecoder, permissions: PermissionsService, assetLoader: AssetLoader) {
 
   import Threading.Implicits.Background
   protected def tag = "User"
@@ -62,7 +60,7 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
     CancellableFuture { (im.data, im.uri) } flatMap {
       case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(true)
       case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(true)
-      case _ => cache.getEntry(im.cacheKey).map(_.isDefined)
+      case _ => CancellableFuture lift cache.getEntry(im.cacheKey).map(_.isDefined)
     }
 
   def loadCachedBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Bitmap] =
@@ -76,7 +74,7 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
   def loadBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Bitmap] =
     Serialized(("loadBitmap", asset.id, im.tag)) {
       // serialized to avoid cache conflicts, we don't want two same requests running at the same time
-      withMemoryCache(asset.id, im.tag, req.width) {
+      withMemoryCache(asset.id, im.tag, if (im.width == 0) req.width else req.width min im.width) {
         downloadAndDecode(asset, im)(decodeBitmap(asset.id, im, req, _))
       }
     }
@@ -102,7 +100,7 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
 
   def saveImageToGallery(image: ImageAssetData): Future[Option[Uri]] = {
     def addNewFile(writer: File => Unit) = {
-      val newFile = ImageAssetService.saveImageFile(image)
+      val newFile = AssetService.saveImageFile(image)
       writer(newFile)
       val uri = Uri.fromFile(newFile)
       context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, uri))
@@ -161,13 +159,6 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
     case _ => false
   }
 
-  private def openStream(uri: Uri) = {
-    val cr = context.getContentResolver
-    Option(cr.openInputStream(uri))
-      .orElse(Option(cr.openFileDescriptor(uri, "r")).map(file => new FileInputStream(file.getFileDescriptor)))
-      .getOrElse(throw new FileNotFoundException(s"Can not load image from: $uri"))
-  }
-
   private def loadLocalAndDecode[A](im: ImageData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[Option[A]] =
     loadLocalData(im) flatMap {
       case Some(data) =>
@@ -189,42 +180,21 @@ class ImageLoader(val context: Context, downloader: DownloaderService, cache: Ca
     // wrapped in future to ensure that img.data is accessed from background thread, this is needed for local image assets (especially the one generated from bitmap), see: Images
     CancellableFuture { (img.data, img.uri) } flatMap {
       case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(Some(LocalData(data)))
-      case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(Some(LocalData(openStream(uri), -1)))
-      case _ => cache.getEntry(img.cacheKey)
+      case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(Some(LocalData(assetLoader.openStream(uri), -1)))
+      case _ => CancellableFuture lift cache.getEntry(img.cacheKey)
     }
   }
 
   private def downloadImageData(img: ImageData, convId: RConvId): CancellableFuture[Option[LocalData]] = {
-    verbose(s"downloadImageData($img, $convId)")
-    def isContentUri(uri: Uri) = uri.getScheme == ContentResolver.SCHEME_CONTENT
-
-    def decrypt(in: InputStream, out: OutputStream): Unit =
-      OtrService.decryptSymmetric(img.otrKey.get, in, out)
-
-    Serialized(("downloadImageData", img.cacheKey)) {
-      ((img.remoteId, img.uri, img.proxyPath) match {
-        case (_, Some(uri), _) if isContentUri(uri) => CancellableFuture.successful(Some(LocalData(openStream(uri), -1)))
-        case (Some(id), _, _) if img.otrKey.isDefined => downloader.download(OtrWireAsset(id, convId))(client)
-        case (Some(id), _, _) => downloader.download(WireAsset(id, convId))(client)
-        case (None, Some(uri), _) => downloader.download(External(uri))(client)
-        case (None, None, Some(path)) => downloader.download(Proxied(path))(client)
-        case (None, None, None) => CancellableFuture.failed(new Exception(s"Invalid ImageData: $img"))
-      }) flatMap {
-        case Some(entry) if img.otrKey.isDefined =>
-          verbose(s"downloaded image $img, need to decrypt it")
-          if (img.sha256.forall(_ == Sha256(IoUtils.sha256(entry.inputStream))))
-            CancellableFuture.lift(cache.processWithCaching(s"dec${img.cacheKey}_${img.otrKey.get}", decrypt, entry)) map { Some(_) }
-          else
-            CancellableFuture.failed(new Exception(s"SHA256 doesn't match for encrypted image: $img"))
-        case res =>
-          CancellableFuture.successful(res)
-      } flatMap {
-        case Some(entry) =>
-          verbose(s"downloaded image $img, got entry: $entry, data: $entry")
-          CancellableFuture.lift(cache.move(img.cacheKey, entry).map(Some(_)))
-        case None => CancellableFuture.successful(None)
-      }
+    val req = (img.remoteId, img.uri, img.proxyPath) match {
+      case (Some(id), _, _)         => Some(ImageAssetRequest(img.cacheKey, convId, id, img.otrKey, img.sha256, Mime(img.mime)))
+      case (None, Some(uri), _)     => Some(External(img.cacheKey, uri))
+      case (None, None, Some(path)) => Some(Proxied(img.cacheKey, path))
+      case (None, None, None)       => None
     }
+
+    verbose(s"downloadImageData($img, $convId), req: $req")
+    req.fold(CancellableFuture successful Option.empty[LocalData]) { assetLoader.downloadAssetData }
   }
 
   private def decodeGif(data: LocalData) = Threading.ImageDispatcher {

@@ -31,14 +31,15 @@ import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
 
 import scala.annotation.tailrec
-import scala.collection.Searching.{SearchResult, Found, InsertionPoint}
+import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
 import scala.collection.SeqView
 import scala.collection.generic.CanBuild
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
 import scala.math.{Ordering, abs}
-import scala.util.{Failure, Success}
+import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 package object utils {
   def updateListener(body: => Unit) = new UpdateListener {
@@ -57,6 +58,8 @@ package object utils {
   trait SHA2Digest {
     def apply(s: String): String
   }
+
+  def withCleanupOnFailure[A](f: => A)(pf: Throwable => Unit): A = try f catch { case NonFatal(cause) => pf(cause); throw cause }
 
   def force[A](s: Seq[A]) = s match {
     case _: Stream[_] => s.toVector
@@ -120,9 +123,25 @@ package object utils {
     def flatMapFuture[B](f: A => Future[Option[B]]): Future[Option[B]] = fold2(Future.successful(None), f(_))
   }
 
-  implicit def finiteDurationIsThreetenBPDuration(a: FiniteDuration): bp.Duration = bp.Duration.ofNanos(a.toNanos)
+  implicit class RichEither[L, R](val sum: Either[L, R]) extends AnyVal {
+    def map[S](f: R => S): Either[L, S] = sum.right.map(f)
+    def flatMap[M >: L, S](f: R => Either[M, S]): Either[M, S] = sum.right.flatMap(f)
+    def toOption(effect: L => Unit = _ => ()) = sum.fold(l => { effect(l); None }, Some(_))
+    def mapFuture[S](f: R => Future[S])(implicit ec: ExecutionContext): Future[Either[L, S]] = flatMapFuture(f(_).map(Right(_)))
+    def flatMapFuture[M >: L, S](f: R => Future[Either[M, S]])(implicit ec: ExecutionContext): Future[Either[M, S]] = sum.fold(l => Future.successful(Left(l)), r => f(r))
+  }
+
+  implicit class RichTry[A](val t: Try[A]) extends AnyVal {
+    def toRight[L](f: Throwable => L): Either[L, A] = t match {
+      case Success(s) => Right(s)
+      case Failure(t) => Left(f(t))
+    }
+  }
+
+  implicit def finiteDurationIsThreetenBPDuration(a: FiniteDuration): bp.Duration = a.asJava
 
   implicit class RichFiniteDuration(val a: FiniteDuration) extends AnyVal {
+    def asJava = bp.Duration.ofNanos(a.toNanos)
     def elapsedSince(b: bp.Instant): Boolean = b plus a isBefore now
     def untilNow = {
       val n = (nanoNow - a).toNanos.toDouble
@@ -158,9 +177,8 @@ package object utils {
     def min(b: Date) = if (a.toEpochMilli < b.getTime) a else b
   }
 
-  implicit lazy val InstantIsOrdered: Ordering[Instant] = new Ordering[Instant] {
-    def compare(a: Instant, b: Instant): Int = a compareTo b
-  }
+  implicit lazy val InstantIsOrdered: Ordering[Instant] = Ordering.ordered[Instant]
+  implicit lazy val DurationIsOrdered: Ordering[bp.Duration] = Ordering.ordered[bp.Duration]
 
   implicit class RichFuture[A](val a: Future[A]) extends AnyVal {
     def flatten[B](implicit executor: ExecutionContext, ev: A <:< Future[B]): Future[B] = a.flatMap(ev)
@@ -177,12 +195,19 @@ package object utils {
     def flatMapSome[B](f: A => Future[B])(implicit ec: ExecutionContext): Future[Option[B]] = a.flatMap(_.mapFuture(f))
     def mapOpt[B](f: A => Option[B])(implicit ec: ExecutionContext): Future[Option[B]] = a.map(_.flatMap(f))
     def flatMapOpt[B](f: A => Future[Option[B]])(implicit ec: ExecutionContext): Future[Option[B]] = a.flatMap(_.flatMapFuture(f))
+    def foldOpt[B](e: => Future[Option[B]], f: A => Future[Option[B]])(implicit ec: ExecutionContext): Future[Option[B]] = a.flatMap(_.fold(e)(f))
+    def or[L](l: => L): Future[Either[L, A]] = a.map(_.toRight(l))(Threading.Background)
   }
 
   implicit class RichFutureEither[L, R](val a: Future[Either[L, R]]) extends AnyVal {
-    def mapRight[S](f: R => S)(implicit ec: ExecutionContext): Future[Either[L, S]] = a.map(_.right map f)
-    def mapEither[S](f: R => Either[L, S])(implicit ec: ExecutionContext): Future[Either[L, S]] = a.map(_.right flatMap f)
-    def flatMapEither[S](f: R => Future[Either[L, S]])(implicit ec: ExecutionContext): Future[Either[L, S]] = a.flatMap(_.fold(l => Future.successful(Left(l)), f))
+    def mapLeft[M](f: L => M)(implicit ec: ExecutionContext): Future[Either[M, R]] = a.map(_.left map f)
+    def mapRight[S](f: R => S)(implicit ec: ExecutionContext): Future[Either[L, S]] = a.map(_ map f)
+    def mapEither[S](f: R => Either[L, S])(implicit ec: ExecutionContext): Future[Either[L, S]] = a.map(_ flatMap f)
+    def flatMapEither[M >: L, S](f: R => Future[Either[M, S]])(implicit ec: ExecutionContext): Future[Either[M, S]] = a.flatMap(_.fold(l => Future.successful(Left(l)), f))
+    def flatMapRight[S](f: R => Future[S])(implicit ec: ExecutionContext): Future[Either[L, S]] = a.flatMap(_.fold(l => Future.successful(Left(l)), r => f(r).map(Right(_))))
+    def flatMapLeft[M](f: L => Future[M])(implicit ec: ExecutionContext): Future[Either[M, R]] = a.flatMap(_.fold(l => f(l).map(Left(_)), r => Future.successful(Right(r))))
+    def foldEither[M, S](m: L => Future[M], s: R => Future[S])(implicit ec: ExecutionContext): Future[Either[M, S]] = a.flatMap(_.fold(l => m(l).map(Left(_)), r => s(r).map(Right(_))))
+    def foldEitherMerge[M, S](m: L => Future[Either[M, S]], s: R => Future[Either[M, S]])(implicit ec: ExecutionContext): Future[Either[M, S]] = a.flatMap(_.fold(l => m(l), r => s(r)))
   }
 
   object RichFuture {

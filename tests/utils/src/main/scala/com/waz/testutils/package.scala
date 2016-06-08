@@ -23,21 +23,31 @@ import android.net.Uri
 import android.os.Parcel
 import android.provider.ContactsContract
 import android.provider.ContactsContract.DisplayNameSources
+import android.provider.OpenableColumns._
+import android.webkit.MimeTypeMap
+import com.google.protobuf.nano.MessageNano
 import com.waz.api.impl._
 import com.waz.api.{CoreList, IConversation}
-import com.waz.content.MsgCursor
-import com.waz.model.{Contact, NameSource}
+import com.waz.cache.CacheEntryData
+import com.waz.content.{Mime, MsgCursor}
+import com.waz.model.nano.Messages.GenericMessage
+import com.waz.model.{Contact, MessageData, NameSource}
+import com.waz.service.ContactsService
 import com.waz.service.messages.MessageAndLikes
-import com.waz.service.{ContactsColumns, ContactsService}
 import com.waz.threading.Threading
-import com.waz.utils.events.{EventContext, Subscription, FlatMapSignal, Signal}
-import com.waz.utils.{Cleanup, Managed, returning}
+import com.waz.utils.events.{EventContext, FlatMapSignal, Signal, Subscription}
+import com.waz.utils.{CachedStorage, Cleanup, IoUtils, Managed, returning}
+import libcore.net.MimeUtils
+import org.robolectric.Robolectric._
 import org.robolectric.shadows.ShadowContentResolver
+import org.scalactic.Equality
 import org.scalatest.enablers.{Emptiness, Length}
 
+import scala.collection.JavaConverters._
 import scala.collection.breakOut
 import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.util.Try
 
 package object testutils {
 
@@ -136,7 +146,7 @@ package object testutils {
     }
 
     class SignalSink[A] {
-      private var sub = Option.empty[Subscription]
+      @volatile private var sub = Option.empty[Subscription]
       def subscribe(s: Signal[A])(implicit ctx: EventContext): Unit = sub = Some(s(v => value = Some(v)))
       def unsubscribe: Unit = sub.foreach { s =>
         s.destroy()
@@ -144,6 +154,25 @@ package object testutils {
       }
       @volatile private[testutils] var value = Option.empty[A]
       def current: Option[A] = value
+    }
+
+    implicit object GenericMessageEquality extends Equality[GenericMessage] {
+      override def areEqual(a: GenericMessage, b: Any): Boolean = {
+        b match {
+          case m: MessageNano => MessageNano.toByteArray(m).toSeq == MessageNano.toByteArray(a).toSeq
+          case _ => false
+        }
+      }
+    }
+
+    implicit object MessageDataEquality extends Equality[MessageData] {
+      override def areEqual(a: MessageData, b: Any): Boolean = {
+        b match {
+          case m: MessageData =>
+            m.copy(protos = Nil) == a.copy(protos = Nil) && m.protos.size == a.protos.size && m.protos.zip(a.protos).forall { case (p1, p2) => GenericMessageEquality.areEqual(p1, p2) }
+          case _ => false
+        }
+      }
     }
   }
 
@@ -161,14 +190,16 @@ package object testutils {
     result
   }
 
+  lazy val knownMimeTypes = returning(classOf[MimeUtils].getDeclaredField("mimeTypeToExtensionMap"))(_.setAccessible(true)).get(null).asInstanceOf[java.util.Map[String, String]].asScala.keys.toVector.map(Mime(_))
+
   import ContactsService.Col
 
   def prepareAddressBookEntries(emailAddresses: Seq[(String, String)], phoneNumbers: Seq[(String, String)])(implicit context: Context): Unit = {
     ShadowContentResolver.reset()
-    ShadowContentResolver.registerProvider(ContactsContract.AUTHORITY, new ShadowContentProvider {
+    ShadowContentResolver.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
       override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = uri match {
-        case ContactsService.Emails => cursor(Vector(Col.EmailAddress), emailAddresses map { case (a, b) => Seq(a, b) })
-        case ContactsService.Phones => cursor(Vector(Col.PhoneNumber), phoneNumbers map { case (a, b) => Seq(a, b) })
+        case ContactsService.Emails => cursor(Vector(Col.ContactId, Col.EmailAddress), emailAddresses map { case (a, b) => Seq(a, b) })
+        case ContactsService.Phones => cursor(Vector(Col.ContactId, Col.PhoneNumber), phoneNumbers map { case (a, b) => Seq(a, b) })
         case _ => null
       }
     })
@@ -180,14 +211,14 @@ package object testutils {
     val emailAddresses = contacts flatMap (c => c.emailAddresses map (e => Seq(c.id.str, e.str)))
     val phoneNumbers = contacts flatMap (c => c.phoneNumbers map (p => Seq(c.id.str, p.str)))
 
-    ShadowContentResolver.registerProvider(ContactsContract.AUTHORITY, new ShadowContentProvider {
+    ShadowContentResolver.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
       override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = {
-        def checking(cols: String*) = returning(cols.toVector)(_ => require(projection.tail.toVector == cols, s"projections should match; expected ${cols.toVector.mkString(", ")} but received ${projection.toVector.mkString(", ")}"))
+        def checking(cols: String*) = returning(cols.toVector)(_ => require(projection.toVector == cols, s"projections should match; expected ${cols.toVector.mkString(", ")} but received ${projection.toVector.mkString(", ")}"))
         uri match {
-          case ContactsService.Emails => cursor(checking(Col.EmailAddress), emailAddresses)
-          case ContactsService.Phones => cursor(checking(Col.PhoneNumber), phoneNumbers)
+          case ContactsService.Emails => cursor(checking(Col.ContactId, Col.EmailAddress), emailAddresses)
+          case ContactsService.Phones => cursor(checking(Col.ContactId, Col.PhoneNumber), phoneNumbers)
           case ContactsService.Contacts =>
-            cursor(checking(Col.Name, Col.NameSource, Col.SortKeyPrimary), contacts.sortBy(_.sortKey).map(c => Seq(c.id.str, c.name, src(c), c.sortKey)))
+            cursor(checking(Col.RowId, Col.Name, Col.NameSource, Col.SortKeyPrimary), contacts.sortBy(_.sortKey).map(c => Seq(c.id.str, c.name, src(c), c.sortKey)))
         }
       }
     })
@@ -204,7 +235,7 @@ package object testutils {
   def withParcel[A](f: Parcel => A): A = Managed(Parcel.obtain).acquire(f)
   implicit lazy val ParcelCleanup: Cleanup[Parcel] = new Cleanup[Parcel] { def apply(a: Parcel): Unit = a.recycle() }
 
-  trait ShadowContentProvider extends ContentProvider {
+  trait TestContentProvider extends ContentProvider {
     override def getType(uri: Uri): String = ""
     override def update(uri: Uri, contentValues: ContentValues, s: String, strings: Array[String]): Int = 0
     override def insert(uri: Uri, contentValues: ContentValues): Uri = null
@@ -212,12 +243,74 @@ package object testutils {
     override def onCreate(): Boolean = true
 
     def cursor(columns: Vector[String], values: TraversableOnce[TraversableOnce[String]]): Cursor =
-      utils.returning(new MatrixCursor((ContactsColumns.ContactLookup +: columns).toArray)) { c =>
+      utils.returning(new MatrixCursor(columns.toArray)) { c =>
         values foreach { row =>
           val rowArr = row.toArray[AnyRef]
-          require(rowArr.length == columns.size + 1, "number of columns did not match")
+          require(rowArr.length == columns.size, "number of columns did not match")
           c.addRow(rowArr)
         }
       }
+  }
+
+  class TestResourceContentProvider(val authority: String = "com.waz.testresources") extends TestContentProvider {
+    val mimeMap = shadowOf(MimeTypeMap.getSingleton)
+    mimeMap.addExtensionMimeTypMapping("pdf", "application/pdf")
+    mimeMap.addExtensionMimeTypMapping("mp4", Mime.Video.MP4.str)
+    mimeMap.addExtensionMimeTypMapping("m4a", Mime.Audio.MP4.str)
+
+    case class Resource(uri: Uri, mime: Mime, size: Long) {
+      def inputStream = getClass.getResourceAsStream(uri.getPath)
+      def registerStream() = resolver.registerInputStream(uri, inputStream)
+      def isEmpty = uri.toString.isEmpty
+      def name = uri.getLastPathSegment
+    }
+
+    val Empty = Resource(Uri.parse(""), Mime.Unknown, 0)
+
+    def resourceUri(path: String) = Uri.parse(s"content://$authority$path")
+
+    lazy val resolver = shadowOf(getShadowApplication.getContentResolver)
+
+    val resources = new scala.collection.mutable.HashMap[Uri, Resource]
+
+    def getResource(uri: Uri) = resources.getOrElseUpdate(uri, {
+      Try {
+        val len = IoUtils.toByteArray(getClass.getResourceAsStream(uri.getPath)).length
+        Resource(uri, Mime.fromFileName(uri.getLastPathSegment), len)
+      } getOrElse Empty
+    })
+
+    override def getType(uri: Uri): String = getResource(uri).mime.str
+
+    override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor =
+      getResource(uri) match {
+        case `Empty` => null
+        case res => cursor(Vector(DISPLAY_NAME, SIZE), Vector(Vector(res.name, res.size.toString)))
+      }
+  }
+
+  implicit object CacheEntryEquality extends Equality[CacheEntryData] {
+    override def areEqual(a: CacheEntryData, b: Any): Boolean = {
+      b match {
+        case CacheEntryData(k, d, lu, t, p, e, f, m, i, l) =>
+          k == a.key && lu == a.lastUsed && t == a.timeout && p == a.path && i == a.fileId && d.map(_.toSeq) == a.data.map(_.toSeq) && m == a.mimeType && f == a.fileName && l == a.length
+        case _ => false
+      }
+    }
+  }
+
+  implicit object CacheEntryOptionEquality extends Equality[Option[CacheEntryData]] {
+    override def areEqual(a: Option[CacheEntryData], b: Any): Boolean = (a, b) match {
+      case (None, None) => true
+      case (Some(entry), Some(b)) => CacheEntryEquality.areEqual(entry, b)
+      case _ => false
+    }
+  }
+
+
+  implicit class RichStorage[K, V](storage: CachedStorage[K, V]) {
+    def deleteAll() = storage.list() flatMap { vs =>
+      storage.remove(vs.map(storage.dao.idExtractor))
+    }
   }
 }

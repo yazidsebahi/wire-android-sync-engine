@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.ConversationStorage
-import com.waz.model.GenericMessage.LastRead
+import com.waz.model.GenericContent.LastRead
 import com.waz.model._
 import com.waz.service.{MetaDataService, UserService}
 import com.waz.sync.SyncResult

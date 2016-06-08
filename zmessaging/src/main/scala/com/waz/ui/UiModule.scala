@@ -24,7 +24,7 @@ import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.Invitations
-import com.waz.model.{ConvId, UserId}
+import com.waz.model.{AssetId, ConvId, UserId}
 import com.waz.service.{GlobalModule, GlobalNotificationService, InstanceService, ZMessaging}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events._
@@ -126,6 +126,7 @@ class UiModule(val instance: InstanceService) extends UiEventContext with ZMessa
   lazy val invitations = new Invitations(zms, convs, global.regClient)
   lazy val contactDetails = wire[ContactDetailsCache]
   lazy val notifications = wire[GlobalNotificationService]
+  lazy val assets = new UiCache[AssetId, Asset](10)(this)
 
   def getOtherParticipantForOneToOneConv(id: ConvId): User = users.getUser(UserId(id.str)) // one-to-one conversation has the same id as the other user, so we can access it directly
 

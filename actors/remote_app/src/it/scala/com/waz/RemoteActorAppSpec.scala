@@ -7,7 +7,7 @@ import akka.pattern.ask
 import akka.serialization.Serialization
 import com.waz.api.impl.Conversation
 import com.waz.api.{ProcessActorSpec, ProvisionedApiSpec}
-import com.waz.provision.ActorMessage.{Login, SendText, Successful, WaitUntilRegistered}
+import com.waz.provision.ActorMessage._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.Implicits._
 import org.robolectric.annotation.Config
@@ -89,6 +89,17 @@ class RemoteActorAppSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
     withDelay {
       msgs.getLastMessage.getBody shouldEqual "Remote message 1"
+    }
+  }
+
+  scenario("List messages from remote") {
+    val res = (auto2_1 ? GetMessages(conv.asInstanceOf[Conversation].data.remoteId)).await()
+
+    res match {
+      case ConvMessages(ms) if ms.nonEmpty =>
+        info(s"got messages: ${ms.toSeq}")
+        true
+      case _ => fail(s"unexpected: $res")
     }
   }
 }

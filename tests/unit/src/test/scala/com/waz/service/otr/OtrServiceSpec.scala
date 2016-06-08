@@ -24,14 +24,16 @@ import android.util.Base64
 import com.waz.RobolectricUtils
 import com.waz.api.Verification
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.messages.TextMessage
-import com.waz.model.otr.{Client, ClientId, OtrKey, SignalingKey}
+import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.testutils._
+import com.waz.testutils.Implicits._
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
-import org.json.JSONObject
+import com.waz.utils.crypto.AESUtils
 import com.wire.cryptobox.CryptoBox
+import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
@@ -49,12 +51,12 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
   feature("Symmetric encryption") {
 
     scenario("Encrypt and decrypt an image") {
-      val key = OtrKey()
+      val key = AESKey()
 
       def in = getClass.getResourceAsStream("/images/penguin.png")
       val tmp = File.createTempFile("img", ".enc")
 
-      val sha = OtrService.encryptSymmetric(key, in, new FileOutputStream(tmp))
+      val sha = AESUtils.encrypt(key, in, new FileOutputStream(tmp))
 
       info(s"key: $key")
       info(s"sha: s $sha")
@@ -62,7 +64,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
 
       val tmpOut = File.createTempFile("dec", ".png")
 
-      val mac1 = OtrService.decryptSymmetric(key, new FileInputStream(tmp), new FileOutputStream(tmpOut))
+      val mac1 = AESUtils.decrypt(key, new FileInputStream(tmp), new FileOutputStream(tmpOut))
 
       IoUtils.toByteArray(new FileInputStream(tmpOut)).toSeq shouldEqual IoUtils.toByteArray(in).toSeq
       mac1 shouldEqual sha
@@ -70,22 +72,22 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
 
     scenario("encrypt and decrypt data") {
       val data = Array.fill(100)(Random.nextInt.toByte)
-      val key = OtrKey()
+      val key = AESKey()
 
       val bos = new ByteArrayOutputStream()
-      val sha = OtrService.encryptSymmetric(key, new ByteArrayInputStream(data), bos)
+      val sha = AESUtils.encrypt(key, new ByteArrayInputStream(data), bos)
       val cipher = bos.toByteArray
 
       info(s"cipher len: ${cipher.length}")
 
       com.waz.utils.sha2(cipher) shouldEqual sha.str
 
-      val data1 = OtrService.decryptSymmetric(key, cipher)
+      val data1 = AESUtils.decrypt(key, cipher)
       data1.toSeq shouldEqual data.toSeq
     }
 
     scenario("decrypt gcm") {
-      val client = Client(ClientId("12f3ed50e81cc843"), "", signalingKey = Some(SignalingKey("btjQSb+hXVsQggMCtl9y3ownUBXiguv\\/g1+X25MtCeY=", "avsJUNtqWCJt8t091LXa1iuhrCx4T3YdvmwSliEmD8Y=")), verified = Verification.VERIFIED)
+      val client = Client(ClientId("12f3ed50e81cc843"), "", signalingKey = Some(SignalingKey(AESKey("btjQSb+hXVsQggMCtl9y3ownUBXiguv\\/g1+X25MtCeY="), "avsJUNtqWCJt8t091LXa1iuhrCx4T3YdvmwSliEmD8Y=")), verified = Verification.VERIFIED)
       val mac = "D883DKeiQc9KEg9iFoRDyVFLzJN0VCnmVzSQF6GtISE="
       val data = "kSTPAie6bOwLDodirEe8P9YWxpsc1pl1OCsEryoDxGmXxPshaob1BZVscYUpSHbgBbuTDt5qL7Q3gHv++GH0Jbw1bRSwBJjQsqHXHOITVO/iX4E2TXPH1yZ5lmrZkxScKt7GPYJXYZRGj1NGV8HCgFI76+A778X5xQM+JCz05T7ObqTCSYUxg46OWiumfqt/NzfiwaDCj/nNYeL596bM7gFFCD1qLxO54fWSvzkgctOXe0mqJl8VAJlY0iF4XURSSfhPsZm/GJxPpV7/JaLiR/jcA+j2Je84Yc/tLhUgNZdZCF1WU/9RKeKax+rO5V+n27SYfWn8KWuADfUW/eyBDCUf3mdrc4WNGuPcQAq9HbFm7agJJxXAYHH21NQZHTk4SmO6KATfKUqujE20xyJVbz7Mzf5MfPQrid5CvdZnlgXpaonEJigckkBXeFhbQokGcKXdLOI3zF0BOez5VDFJ1H3vHWwcSy2Yf/vSX9Lk2JIyC1s+1nSCVgFnOai/hBDD9RzUvQrpiEaJWQGhA28UkOJEZKGRqtiXY7az3L12AhL7++xc13cl3O81cRHXtU9EC9tREVseSW7BMwrPgxF2Cx3RLA+M0uHUDDEPbEACnwGt1R8lRekawC5d3rjA7SHmQolV18t/7YvmbQBUggf46mw1rT/vIyul8NPYpBUM4lqPGT30LTj6+6DsDv6viVrsEeuB9UfpZfFLFWAN5AXeJNpYGf7DRdsCf3TaHrTvz7+/8AV01dC1WNnX4TqoIkUMSct0DLp2WsO9DqEeJYgxStw0zxAO5EAoQ6FgJ2h9FltrQs6xvUbgHb7XzN7/aSOkMiDu75yh8CqnXX092R5htOa+bTbeeEmStpgpM5MynOSmY1KKf9U46/OYqxu72t2PTqPQ7+xsYmyOtrfv4cGM7WOBFAh0+MAkDls/59+MqtIP+1mh2Fw+hHJQct4QmsgI"
       val bytes = Base64.decode(data, 0)
@@ -93,7 +95,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
 
       OtrService.hmacSha256(client.signalingKey.get, bytes).toSeq shouldEqual Base64.decode(mac, 0)
 
-      val plain = OtrService.decryptSymmetric(client.signalingKey.get.encKeyBytes, bytes)
+      val plain = AESUtils.decrypt(client.signalingKey.get.encKey, bytes)
       info(new String(plain, "utf8"))
       val json = new JSONObject(new String(plain, "utf8"))
       json.has("data") shouldEqual true
@@ -183,7 +185,8 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       val content = Await.result(from.otrService.encryptMessage(from.conv.id, m), 5.seconds).content(to.self.id)(to.selfClient.id)
       val event = OtrMessageEvent(Uid(), to.conv.remoteId, new Date, from.self.id, from.selfClient.id, to.selfClient.id, content)
       val res = Await.result(to.otrService.decryptOtrEvent(event), 5.seconds)
-      res shouldEqual m
+      res shouldBe 'right
+      res.right.get shouldEqual m
       res
     }
 
@@ -217,7 +220,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
 
     scenario("init sessions by exchanging one message") {
       val m = TextMessage("test", Map.empty)
-      sendFrom1(m) shouldEqual m
+      sendFrom1(m).right.get shouldEqual m
     }
 
     scenario("don't generate content for self client when sending a message") {
@@ -245,9 +248,9 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       val session = box.initSessionFromPreKey("session1", client2.prekeys(1))
 
       val msg = TextMessage("test5", Map.empty)
-      val event = OtrMessageEvent(Uid(), client2.conv.remoteId, new Date, client1.self.id, client1.selfClient.id, client2.selfClient.id, session.encrypt(msg.toByteArray))
+      val event = OtrMessageEvent(Uid(), client2.conv.remoteId, new Date, client1.self.id, client1.selfClient.id, client2.selfClient.id, session.encrypt(GenericMessage.toByteArray(msg)))
 
-      Await.result(client2.otrService.decryptOtrEvent(event), 5.seconds) shouldEqual msg
+      Await.result(client2.otrService.decryptOtrEvent(event), 5.seconds).right.get shouldEqual msg
     }
   }
 }

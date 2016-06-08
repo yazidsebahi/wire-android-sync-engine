@@ -17,8 +17,6 @@
  */
 package com.waz.mocked.users
 
-import java.util.Date
-
 import com.waz.api.{ImageAssetFactory, MockedClientApiSpec}
 import com.waz.cache.LocalData
 import com.waz.mocked.MockBackend
@@ -86,22 +84,19 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
     def selfPictureData = selfPicture.data.versions
 
     soon {
-      sentUserInfo.value.picture.value.versions(0).remoteId shouldBe Some(RImageDataId("smallProfile-picture"))
-      sentUserInfo.value.picture.value.versions(1).remoteId shouldBe Some(RImageDataId("medium-picture"))
-      selfPictureData(0).remoteId shouldBe Some(RImageDataId("smallProfile-picture"))
-      selfPictureData(1).remoteId shouldBe Some(RImageDataId("medium-picture"))
+      sentUserInfo.value.picture.value.versions(0).remoteId shouldBe Some(RAssetDataId("smallProfile-picture"))
+      sentUserInfo.value.picture.value.versions(1).remoteId shouldBe Some(RAssetDataId("medium-picture"))
+      selfPictureData(0).remoteId shouldBe Some(RAssetDataId("smallProfile-picture"))
+      selfPictureData(1).remoteId shouldBe Some(RAssetDataId("medium-picture"))
     }
   }
 
-  override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[AssetAddEvent] = {
+  override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[ImageData] = {
     import Threading.Implicits.Background
-    def response(delay: FiniteDuration, id: String) = CancellableFuture.delayed(delay)(Right(AssetAddEvent(Uid(), convId, nextEventId(convId), new Date, selfUserId, assetId,
-      image.copy(remoteId = Some(RImageDataId(id)), data64 = None, sent = true))))
+    def response(delay: FiniteDuration, id: String) = CancellableFuture.delayed(delay)(Right(image.copy(remoteId = Some(RAssetDataId(id)), data64 = None, sent = true)))
 
-    returning {
-      if (image.tag == "medium") response(2.seconds, "medium-picture")
-      else response(100.millis, "smallProfile-picture")
-    } (_.onSuccess { case Right(e) => addEvent(e) })
+    if (image.tag == "medium") response(2.seconds, "medium-picture")
+    else response(100.millis, "smallProfile-picture")
   }
 
   override def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = {

@@ -24,6 +24,7 @@ import com.waz.{api, _}
 import com.waz.api.IncomingMessagesList.MessageListener
 import com.waz.content.ZStorage
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Knock
 import com.waz.model._
 import com.waz.service.conversation.ConversationsService
 import com.waz.testutils._
@@ -70,9 +71,10 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Update knock to hotknock in incoming messages list") {
-      val event = KnockEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), "").withCurrentLocalTime()
+      val msgId = MessageId()
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), GenericMessage(msgId, Knock(false))).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
-      val event1 = HotKnockEvent(Uid(), conv.remoteId, EventId(2), new Date, event.from, "", event.eventId).withCurrentLocalTime()
+      val event1 = GenericMessageEvent(Uid(), conv.remoteId, new Date, event.from, GenericMessage(msgId, Knock(true))).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event1) }
       withDelay {
         val msgs = incoming
@@ -129,7 +131,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
 
   feature("IncomingMessagesList") {
 
-    def md(localTime: Instant = Instant.now) = MessageData(MessageId(), conv.id, EventId(1), EventId.Zero, api.Message.Type.TEXT, conv.creator, localTime = localTime)
+    def md(localTime: Instant = Instant.now) = MessageData(MessageId(), conv.id, EventId(1), api.Message.Type.TEXT, conv.creator, localTime = localTime)
 
     def loadMessages(msgs: List[MessageData], list: IncomingMessages = new IncomingMessages) = {
       var received = Nil: List[MessageData]

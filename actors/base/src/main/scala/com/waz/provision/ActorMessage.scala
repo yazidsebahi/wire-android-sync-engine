@@ -18,6 +18,7 @@
 package com.waz.provision
 
 import akka.actor.ActorRef
+import com.waz.api.Message
 import com.waz.api.impl.AccentColor
 import com.waz.model._
 import com.waz.threading.QueueReport
@@ -150,6 +151,8 @@ object ActorMessage {
    */
   case class GetConv(name: String) extends ActorMessage
 
+  case class DeleteMessage(convId: RConvId, id: MessageId) extends ActorMessage
+
   /**
    * Send a Wire text message to a conversation
  *
@@ -172,6 +175,18 @@ object ActorMessage {
   case class SendImage(remoteId: RConvId, path: String) extends ActorMessage
 
   case class SendImageData(remoteId: RConvId, image: Array[Byte]) extends ActorMessage
+
+  /**
+    * Send generic asset to a conversation. Will return a [[Successful(messageId: String)]] to the sender.
+    */
+  case class SendAsset(remoteId: RConvId, data: Array[Byte], mime: String, fileName: String, delayPost: Boolean = false) extends ActorMessage
+
+  /**
+    * If the last message in the given conversation is an asset message, try to cancel the upload
+    */
+  case class CancelAssetUpload(message: MessageId) extends ActorMessage
+
+  case class SendFile(remoteId: RConvId, filePath: String, mime: String) extends ActorMessage
 
   /**
    * Send a connection request to another user
@@ -204,6 +219,13 @@ object ActorMessage {
    * @param users a sequence of [[UserId]]s of any users to add to the converation
    */
   case class AddMembers(remoteId: RConvId, users: UserId*) extends ActorMessage
+
+
+  /**
+   * Clear (and archive) a conversation.
+   * @param remoteId The (remote) conversation id. Note on [[RConvId]]: @see SendText
+   */
+  case class ClearConversation(remoteId: RConvId) extends ActorMessage
 
   /**
    * Send a Wire ping (Knock) to a target conversation
@@ -327,4 +349,10 @@ object ActorMessage {
   case class GetDeviceId() extends ActorMessage
 
   case class GetDeviceFingerPrint() extends ActorMessage
+
+  case class MessageInfo(id: MessageId, tpe: Message.Type)
+
+  case class ConvMessages(msgs: Array[MessageInfo]) extends ActorMessage
+
+  case class GetMessages(remoteId: RConvId) extends ActorMessage
 }

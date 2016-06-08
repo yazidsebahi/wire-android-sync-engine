@@ -61,7 +61,7 @@ class BaseConversation(implicit ui: UiModule) extends IConversation with UiObser
     }
   }
 
-  def updateType(convType: Type): IConversation = {
+  def updateType(convType: IConversation.Type): IConversation = {
     if (data.convType != convType) {
       data = data.copy(convType = convType)
       notifyChanged()

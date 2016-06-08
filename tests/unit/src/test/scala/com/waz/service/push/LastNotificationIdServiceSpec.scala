@@ -23,7 +23,7 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{Uid, ZUserId}
 import com.waz.service.LastNotificationIdService.State._
 import com.waz.service.PushService.SlowSyncRequest
-import com.waz.service.{KeyValueService, LastNotificationIdService, PushServiceSignals, ReportingService}
+import com.waz.service._
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
@@ -51,7 +51,7 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
   lazy val eventsClient = new EventsClient(new EmptyClient) {
     override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(100.millis)(Right(lastNotificationResponse))
   }
-  lazy val keyValue = new KeyValueService(new KeyValueStorage(context, new ZStorage(ZUserId(), context)), new ReportingService())
+  lazy val keyValue = new KeyValueService(new KeyValueStorage(context, new ZStorage(ZUserId(), context)), new ReportingService {})
   lazy val service = new LastNotificationIdService(keyValue, pushSignals, eventsClient, otrClient)
 
   var lastNotificationResponse = Option(PushNotification(Uid(), Nil))

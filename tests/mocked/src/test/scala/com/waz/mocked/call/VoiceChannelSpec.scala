@@ -21,7 +21,7 @@ import java.util.Date
 
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
-import com.waz.mocked.{MockedMedia, MockedFlows, MockBackend}
+import com.waz.mocked.{MockBackend, MockedFlows, MockedMedia}
 import com.waz.model.VoiceChannelData.ChannelState._
 import com.waz.model._
 import com.waz.service.PlaybackRoute
@@ -30,14 +30,14 @@ import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.testutils.HasId.idsOfAll
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils._
 import com.waz.testutils.TestApplication._
+import com.waz.testutils._
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ZNetClient._
 import org.robolectric.annotation.Config
-import org.scalatest.{OptionValues, BeforeAndAfterAll, FeatureSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues}
 
-import scala.collection.{mutable, breakOut}
+import scala.collection.{breakOut, mutable}
 import scala.concurrent.duration._
 
 @Config(application = classOf[TestApplication])

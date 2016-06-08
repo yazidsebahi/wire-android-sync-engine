@@ -40,6 +40,7 @@ public enum SyncCommand {
     PostConnectionStatus("post-conn-status"),
     PostSelfPicture("post-picture"),
     PostMessage("post-message"),
+    PostDeleted("post-deleted"),
     PostConvJoin("post-conv-join"),
     PostConvLeave("post-conv-leave"),
     PostConnection("post-connection"),
@@ -58,6 +59,7 @@ public enum SyncCommand {
     PostClientLabel("post-client-label"),
     PostLiking("post-liking"),
     PostSessionReset("post-session-reset"),
+    PostAssetStatus("post-asset-status"),
     Unknown("unknown");
 
     public final String name;

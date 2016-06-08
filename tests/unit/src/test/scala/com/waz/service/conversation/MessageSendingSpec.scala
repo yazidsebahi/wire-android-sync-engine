@@ -23,15 +23,15 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.BitmapFactory
 import com.waz._
 import com.waz.api.Message.Status
+import com.waz.api.MessageContent.Image
 import com.waz.api.{Message, MessageContent}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.testutils._, Matchers._
+import com.waz.testutils.Matchers._
+import com.waz.testutils._
 import com.waz.threading.Threading
-import com.waz.ui.UiModule
 import com.waz.utils.IoUtils.{toByteArray, withResource}
 import com.waz.utils._
-import org.robolectric.Robolectric
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
@@ -50,45 +50,41 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
 
-  var service: MockZMessaging = _
-  var ui: UiModule = _
   var messageSync = None: Option[MessageId]
   var assetSync = None: Option[AssetId]
   var lastReadSync = None: Option[(ConvId, Instant)]
+
+  lazy val service = new MockZMessaging() {
+    override val dbPrefix = Random.nextInt().toHexString
+
+    override lazy val sync = new EmptySyncService {
+      override def postMessage(id: MessageId, conv: ConvId) = {
+        messageSync = Some(id)
+        super.postMessage(id, conv)
+      }
+
+      override def postLastRead(id: ConvId, time: Instant) = {
+        test.lastReadSync = Some((id, time))
+        super.postLastRead(id, time)
+      }
+    }
+
+    insertUsers(Seq(selfUser, user1))
+    users.selfUserId := selfUser.id
+  }
+
+  lazy val ui = new MockUiModule(service)
 
   before {
     messageSync = None
     assetSync = None
     lastReadSync = None
-
-    service = new MockZMessaging() {
-      override val dbPrefix = Random.nextInt().toHexString
-
-      override lazy val sync = new EmptySyncService {
-        override def postMessage(id: MessageId, conv: ConvId) = {
-          messageSync = Some(id)
-          super.postMessage(id, conv)
-        }
-
-        override def postLastRead(id: ConvId, time: Instant) = {
-          test.lastReadSync = Some((id, time))
-          super.postLastRead(id, time)
-        }
-      }
-
-      users.selfUserId := selfUser.id
-    }
-
-    service.insertUsers(Seq(selfUser, user1))
     service.insertConv(conv)
-
-    ui = new MockUiModule(service)
   }
 
   after {
     ShadowLog.stream = null
-    Await.result(service.storage.close(), 10.seconds)
-    Robolectric.application.getDatabasePath(service.storage.dbHelper.getDatabaseName).delete()
+    service.deleteAllConvs()
   }
   
   def listMessages = service.listMessages(conv.id)
@@ -99,7 +95,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     val count = listMessages.size
     val msg = Await.result(service.convsUi.sendMessage(conv.id, content), 1.second)
     listMessages should have size (count + 1)
-    msg
+    msg.get
   }
 
   feature("Text messages") {
@@ -124,9 +120,8 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       val bitmap = withResource(imageStream)(BitmapFactory.decodeStream)
       info(s"bitmap size: (${bitmap.getWidth}, ${bitmap.getHeight})")
 
-      val msg = sendMessage(new MessageContent.Asset(ui.images.getOrCreateImageAssetFrom(toByteArray(imageStream))))
-      msg.assetId should be('defined)
-      val asset = Await.result(service.imageAssets.getImageAsset(msg.assetId.get), 5.seconds).get
+      val msg = sendMessage(new Image(ui.images.getOrCreateImageAssetFrom(toByteArray(imageStream))))
+      val asset = Await.result(service.assetsStorage.getImageAsset(msg.assetId), 5.seconds).get
 
       asset.versions should have size 2
       val im = asset.versions(1)
@@ -138,8 +133,8 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
       val entry = service.lastMessage(conv.id)
       entry.map(_.id) shouldEqual Some(msg.id)
-      entry.flatMap(_.content.headOption).map(_.width) shouldEqual Some(asset.width)
-      entry.flatMap(_.content.headOption).map(_.height) shouldEqual Some(asset.height)
+      entry.map(_.msgType) shouldEqual Some(Message.Type.ASSET)
+      entry.flatMap(_.imageDimensions) shouldEqual Some(Dim2(asset.width, asset.height))
     }
   }
 
@@ -246,6 +241,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       awaitUi(100.millis)
 
       val msg = sendMessage(new MessageContent.Text("test"))
+      awaitUi(1.second)
       Await.result(service.convsStorage.update(conv.id, _.copy(unreadCount = 0)), 1.second)
 
       val eventId = EventId(msg.source.sequence + 10, "800122000a5b8a02")

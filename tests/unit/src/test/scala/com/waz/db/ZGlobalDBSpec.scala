@@ -18,13 +18,16 @@
 package com.waz.db
 
 import android.database.sqlite.SQLiteDatabase
+import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.model.ZUser.ZUserDao
-import com.waz.model.{ZUserId, EmailAddress, PhoneNumber, ZUser}
-import com.waz.utils.DbLoader
+import com.waz.model.{EmailAddress, PhoneNumber, ZUser, ZUserId}
+import com.waz.utils.{DbLoader, Managed}
 import org.robolectric.Robolectric
 import org.scalatest._
 
-class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with DbLoader {
+import scala.util.Random
+
+class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Inspectors with BeforeAndAfter with RobolectricTests with DbLoader {
   lazy val dbHelper = new ZGlobalDB(Robolectric.application)
 
   after {
@@ -65,9 +68,7 @@ class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Bef
 
   feature("Database migrations") {
     scenario("Migrate ZUsers from 6") {
-      implicit val db = loadDb("/db/ZGlobal_6.db")
-
-      try {
+      Managed(loadDb("/db/ZGlobal_6.db")) foreach { implicit db =>
         dbHelper.onUpgrade(db, 6, ZGlobalDB.DbVersion)
 
         ZUserDao.list should have size 2
@@ -75,17 +76,28 @@ class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Bef
           user.phone shouldBe empty
           user.phoneVerified shouldBe false
         }
-      } finally db.close()
+      }
     }
 
     scenario("Migrate ZUsers from 7") {
-      implicit val db = loadDb("/db/ZGlobal_7.db")
-
-      try {
+      Managed(loadDb("/db/ZGlobal_7.db")) foreach { implicit db =>
         dbHelper.onUpgrade(db, 7, ZGlobalDB.DbVersion)
         ZUserDao.getById(ZUserId("8546c628-c9e8-45d6-82dd-7f6dcb56e171")).value.phoneVerified shouldBe false
         ZUserDao.getById(ZUserId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3")).value.phoneVerified shouldBe true
-      } finally db.close()
+      }
+    }
+
+    scenario("Add length to CacheEntry") {
+      Managed(loadDb("/db/ZGlobal_7.db")) foreach { implicit db =>
+        dbHelper.onUpgrade(db, 7, ZGlobalDB.DbVersion)
+        val entries = CacheEntryDao.list
+        entries should not be empty
+        forAll(entries)(_.length shouldBe None)
+        val changed = entries.map(_.copy(length = Some(Random.nextLong)))
+        CacheEntryDao.insertOrReplace(changed)
+        val updated = CacheEntryDao.list
+        updated shouldEqual changed
+      }
     }
   }
 }

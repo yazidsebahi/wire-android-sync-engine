@@ -70,7 +70,7 @@ class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter
   }
 
   def addMsg(content: Seq[MessageContent] = Seq(MessageContent(Message.Part.Type.YOUTUBE, link))) =
-    Await.result(service.messagesStorage.addMessage(MessageData(MessageId(), convId, EventId(1), EventId.Zero, Message.Type.RICH_MEDIA, UserId(), content)), 5.seconds)
+    Await.result(service.messagesStorage.addMessage(MessageData(MessageId(), convId, EventId(1), Message.Type.RICH_MEDIA, UserId(), content)), 5.seconds)
 
   def loadContent(msg: MessageData) = service.messagesStorage.getMessage(msg.id).map(_.map(_.content))
 

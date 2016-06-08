@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.{Part, Status}
@@ -59,7 +60,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
       override val getBody: String = c.content
       override val getImageWidth: Int = c.width
       override val getImageHeight: Int = c.height
-      override val getImage: api.ImageAsset = c.asset.fold2(ImageAsset.Empty, context.images.getImageAsset)
+      override val getImage: api.ImageAsset = c.asset.filter(_ => c.tpe == api.Message.Part.Type.ASSET).fold2(ImageAsset.Empty, context.images.getImageAsset)
 
       override val getMediaAsset: api.MediaAsset = c.richMedia .map { media =>
         if (media.hasExpired) context.zms(_.sync.syncRichMedia(id, Priority.High))
@@ -80,13 +81,17 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isDeleted: Boolean = data.state == Status.DELETED
 
-  override def isOtr: Boolean = data.otr
+  override def isOtr: Boolean = true
 
   override def getTime: Instant = data.time
 
   override def getBody: String = if (data.msgType == api.Message.Type.RICH_MEDIA) data.contentString else content.content
 
-  override def getImage = content.asset.fold2(ImageAsset.Empty, context.images.getImageAsset)
+  override def getImage = context.images.getImageAsset(data.assetId)
+
+  override def getAsset =
+    if (data.isAssetMessage) getOrUpdate(context.assets)(data.assetId, new Asset(data.assetId, id)(context))
+    else Asset.Empty
 
   override def getUser: User = context.users.getUser(data.userId)
 
@@ -102,9 +107,9 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getMembers = data.members.map(id => context.users.getUser(id))(breakOut)
 
-  override def getImageWidth: Int = content.width
+  override def getImageWidth: Int = data.imageDimensions.fold(0)(_.width)
 
-  override def getImageHeight: Int = content.height
+  override def getImageHeight: Int = data.imageDimensions.fold(0)(_.height)
 
   override def getNewConversationName: String = data.name.getOrElse("")
 
@@ -119,6 +124,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def retry(): Unit =
     if (data.state == Status.FAILED || data.state == Status.FAILED_READ) context.messages.retry(data.convId, data.id)
     else error(s"Retrying a message that has not yet failed (${data.state}): $id")
+
+  override def delete(): Unit = context.zms.flatMapFuture(_.convsUi.deleteMessage(data.convId, id))
 
   override def equals(other: Any): Boolean = other match {
     case other: Message => id == other.id
@@ -158,6 +165,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isOtr: Boolean = false
   override def retry(): Unit = ()
   override def getImage: api.ImageAsset = ImageAsset.Empty
+  override def getAsset = Asset.Empty
   override val getMembers: Array[api.User] = Array.empty
   override def getUser: api.User = EmptyUser
   override def getNewConversationName: String = ""
@@ -185,6 +193,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isLikedByThisUser: Boolean = false
   override def isLiked: Boolean = false
   override def isEmpty: Boolean = true
+  override def delete(): Unit = ()
 
   override val getParts: Array[Part] = Array.empty
 }

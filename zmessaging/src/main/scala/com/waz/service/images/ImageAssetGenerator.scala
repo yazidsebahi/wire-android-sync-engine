@@ -17,8 +17,6 @@
  */
 package com.waz.service.images
 
-import java.io.File
-
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
@@ -27,17 +25,20 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.model._
+import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
-import com.waz.utils.IoUtils
+import com.waz.utils._
+
+import scala.concurrent.Future
 
 class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLoader, imageCache: MemoryImageCache, bitmapLoader: BitmapDecoder) {
   import com.waz.service.images.ImageAssetGenerator._
   implicit private val dispatcher = Threading.ImageDispatcher
   implicit private val tag: LogTag = "ImageAssetGenerator"
 
-  lazy val saveDir = new File(context.getFilesDir, "assets")
+  lazy val saveDir = AssetService.assetDir(context)
 
   // generate wire asset from local ImageData
   def generateWireAsset(assetId: AssetId, input: ImageData, convId: RConvId, profilePicture: Boolean): CancellableFuture[ImageAssetData] =
@@ -51,28 +52,11 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
 
   private def generateAssets(assetId: AssetId, input: LocalData, meta: Metadata, convId: RConvId, options: Array[CompressionOptions]): CancellableFuture[ImageAssetData] = {
-    def generateAssetData(co: CompressionOptions, origWidth: Int, origHeight: Int): CancellableFuture[ImageData] = {
-      val remoteId = RImageDataId()
-      generateImageData(assetId, remoteId, co, input, meta) flatMap {
-        case (file, m) =>
-          verbose(s"generated image, size: ${input.length}, meta: $m")
-          if (shouldRecode(file, m, co)) recode(assetId, file, co, m)
-          else CancellableFuture.successful((file, m))
-      } map {
-        case (file, m) =>
-          val size = file.length
-          verbose(s"final image, size: $size, meta: $m")
-          val data = if (size > 2 * 1024) None else Some(Base64.encodeToString(IoUtils.toByteArray(file.inputStream), Base64.NO_WRAP | Base64.NO_PADDING))
-          data foreach { data => cache.remove(ImageData.cacheKey(Some(remoteId))) } // no need to cache preview images
-          ImageData(co.tag, m.mimeType, m.width, m.height, math.max(m.width, origWidth), math.max(m.height, origHeight), size, Some(remoteId), data)
-      }
-    }
-
     val result = Seq.newBuilder[ImageData]
-    val dummy = ImageData("", "", 0, 0, 0, 0, 0, Some(RImageDataId()))
+    val dummy = ImageData("", "", 0, 0, 0, 0, 0, Some(RAssetDataId()))
     options.foldRight(CancellableFuture.successful(dummy)) { (co, f) =>
       f.flatMap { prev =>
-        generateAssetData(co, prev.origWidth, prev.origHeight) map { data =>
+        generateAssetData(assetId, Left(input), meta, co, prev.origWidth, prev.origHeight) map { data =>
           result += data
           data
         }
@@ -82,14 +66,31 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
-  private def generateImageData(id: AssetId, remoteId: RImageDataId, options: CompressionOptions, input: LocalData, meta: Metadata) = {
+  def generateAssetData(assetId: AssetId, input: Either[LocalData, Bitmap], meta: Metadata, co: CompressionOptions, origWidth: Int, origHeight: Int): CancellableFuture[ImageData] = {
+    val remoteId = RAssetDataId()
+    generateImageData(assetId, remoteId, co, input, meta) flatMap {
+      case (file, m) =>
+        verbose(s"generated image, size: ${input.fold(_.length, _.getByteCount)}, meta: $m")
+        if (shouldRecode(file, m, co)) recode(assetId, file, co, m)
+        else CancellableFuture.successful((file, m))
+    } map {
+      case (file, m) =>
+        val size = file.length
+        verbose(s"final image, size: $size, meta: $m")
+        val data = if (size > 2 * 1024) None else Some(Base64.encodeToString(IoUtils.toByteArray(file.inputStream), Base64.NO_WRAP | Base64.NO_PADDING))
+        data foreach { data => cache.remove(ImageData.cacheKey(Some(remoteId))) } // no need to cache preview images
+        ImageData(co.tag, m.mimeType, m.width, m.height, math.max(m.width, origWidth), math.max(m.height, origHeight), size, Some(remoteId), data)
+    }
+  }
+
+  private def generateImageData(id: AssetId, remoteId: RAssetDataId, options: CompressionOptions, input: Either[LocalData, Bitmap], meta: Metadata) = {
 
     def loadScaled(w: Int, h: Int, crop: Boolean) = {
       val minWidth = if (crop) math.max(w, w * meta.width / meta.height) else w
       val sampleSize = BitmapUtils.computeInSampleSize(minWidth, meta.width)
       val memoryNeeded = (w * h) + (meta.width / sampleSize * meta.height / sampleSize) * 4
       imageCache.reserve(id, options.tag, memoryNeeded)
-      bitmapLoader(() => input.inputStream, sampleSize, meta.orientation) map { image =>
+      input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation), CancellableFuture.successful(_)) map { image =>
         if (crop) {
           verbose(s"cropping to $w")
           BitmapUtils.cropRect(image, w)
@@ -103,28 +104,34 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     def generateScaled(): CancellableFuture[(CacheEntry, Metadata)] = {
       val (w, h) = options.calculateScaledSize(meta.width, meta.height)
       verbose(s"calculated scaled size: ($w, $h) for $meta and $options")
-      loadScaled(w, h, options.cropToSquare) map { image =>
+      loadScaled(w, h, options.cropToSquare) flatMap { image =>
         verbose(s"loaded scaled: (${image.getWidth}, ${image.getHeight})")
-        imageCache.add(id, options.tag, image)
-        saveImage(remoteId, image, meta.mimeType, options)
+        save(image)
       }
     }
 
+    def save(image: Bitmap): CancellableFuture[(CacheEntry, Metadata)] = {
+      imageCache.add(id, options.tag, image)
+      saveImage(remoteId, image, meta.mimeType, options)
+    }
+
     if (options.shouldScaleOriginalSize(meta.width, meta.height)) generateScaled()
-    else cache.addStream(ImageData.cacheKey(Some(remoteId)), input.inputStream, cacheLocation = Some(saveDir)) map { entry => (entry, meta) }
+    else input.fold(
+      local => cache.addStream(ImageData.cacheKey(Some(remoteId)), local.inputStream, cacheLocation = Some(saveDir)).map((_, meta)).lift,
+      image => save(image))
   }
 
   private def saveFormat(mime: String, forceLossy: Boolean) =
     if (!forceLossy && mime == Mime.Png) Bitmap.CompressFormat.PNG
     else Bitmap.CompressFormat.JPEG
 
-  private def saveImage(id: RImageDataId, image: Bitmap, mime: String, options: CompressionOptions): (CacheEntry, Metadata) =
-    saveImage(cache.createForFile(ImageData.cacheKey(Some(id)), cacheLocation = Some(saveDir)), image, mime, options)
+  private def saveImage(id: RAssetDataId, image: Bitmap, mime: String, options: CompressionOptions): CancellableFuture[(CacheEntry, Metadata)] =
+    cache.createForFile(ImageData.cacheKey(Some(id)), cacheLocation = Some(saveDir)).flatMap(saveImage(_, image, mime, options)).lift
 
-  private def saveImage(file: CacheEntry, image: Bitmap, mime: String, options: CompressionOptions): (CacheEntry, Metadata) = {
+  private def saveImage(file: CacheEntry, image: Bitmap, mime: String, options: CompressionOptions): Future[(CacheEntry, Metadata)] = {
     val format = saveFormat(mime, options.forceLossy)
-    IoUtils.withResource(file.outputStream) { os => image.compress(format, options.quality, os) }
-    (file, Metadata(image.getWidth, image.getHeight, if (format == Bitmap.CompressFormat.PNG) Mime.Png else Mime.Jpg))
+    val (len, compressed) = IoUtils.counting(file.outputStream) { os => image.compress(format, options.quality, os) }
+    file.updatedWithLength(len).map(ce => (ce, Metadata(image.getWidth, image.getHeight, if (format == Bitmap.CompressFormat.PNG) Mime.Png else Mime.Jpg)))
   }
 
   private[images] def shouldRecode(file: LocalData, meta: Metadata, opts: CompressionOptions) = {
@@ -143,7 +150,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       bitmapLoader(() => file.inputStream, 1, meta.orientation)
     }
 
-    imageCache(id, options.tag, load) map { bitmap => saveImage(file, bitmap, Mime.Jpg, options)}
+    imageCache(id, options.tag, load).future.flatMap(saveImage(file, _, Mime.Jpg, options)).lift
   }
 }
 
@@ -175,7 +182,6 @@ case class CompressionOptions(byteCount: Int, dimension: Int, quality: Int, forc
 
   def shouldScaleOriginalSize(width: Int, height: Int): Boolean =
     width * height > maxPixelCount || (cropToSquare && width != height)
-
 
   def calculateScaledSize(origWidth: Int, origHeight: Int): (Int, Int) = {
     if (origWidth < 1 || origHeight < 1) (1, 1)

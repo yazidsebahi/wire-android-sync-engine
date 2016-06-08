@@ -20,11 +20,12 @@ package com.waz.db
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
-import com.waz.api.KindOfCallingEvent
+import com.waz.api.{KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.MessageData.MessageDataDao
+import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.utils.DbLoader
@@ -138,6 +139,26 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Be
       val entry = CallLogEntry(KindOfCallingEvent.CALL_ESTABLISHED, Some(CallSessionId()), ConvId(), Instant.now, true)
       CallLogEntryDao.insertOrReplace(entry)
       CallLogEntryDao.list should contain only entry
+    }
+
+    scenario("MsgDeletion table added in 68") {
+      implicit val db = loadDb("/db/zmessaging_60.db")
+      dbHelper.onUpgrade(db, 60, 68)
+
+      val entry = MsgDeletion(MessageId(), Instant.now())
+      MsgDeletionDao.insertOrReplace(entry)
+      MsgDeletionDao.list should contain only entry
+    }
+
+    scenario("Migrate to protobuf model in 69") {
+      implicit val db = loadDb("/db/zmessaging_60.db")
+      dbHelper.onUpgrade(db, 60, 69)
+
+      val msgs = MessageDataDao.list
+      msgs should have size 994
+      msgs foreach { m =>
+        if (m.msgType == Message.Type.KNOCK) m.protos should have size 1
+      }
     }
   }
 

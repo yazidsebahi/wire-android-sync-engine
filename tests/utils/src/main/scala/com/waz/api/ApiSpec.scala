@@ -36,6 +36,7 @@ import com.waz.testutils.RoboPermissionProvider
 import com.waz.ui.UiModule
 import com.waz.utils._
 import com.waz.utils.events.EventContext
+import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.{AsyncClient, ClientWrapper, TestClientWrapper, ZNetClient}
 import com.waz.{RoboProcess, RobolectricUtils, ShadowLogging}
 import net.hockeyapp.android.Constants
@@ -63,7 +64,9 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   protected case object InitEveryTime extends InitBehaviour
   protected case object InitManually extends InitBehaviour
 
-  lazy val zmessagingFactory: ZMessaging.Factory = (i, u, a) => new ZMessaging(i, u, a) {
+  lazy val zmessagingFactory: ZMessaging.Factory = new ApiZmessaging(_, _, _)
+
+  class ApiZmessaging(i: InstanceService, u: ZUser, a: Option[Token]) extends ZMessaging(i, u, a) {
     override lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), events =>
       returning(eventScheduler.enqueue(events))(_ => eventSpies.get.foreach(pf => events.foreach(e => pf.applyOrElse(e, (_: Event) => ())))))
 
@@ -79,7 +82,9 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   lazy val context = Robolectric.application
 
-  lazy val globalModule = new GlobalModule(context, testBackend) {
+  lazy val globalModule: GlobalModule = new ApiSpecGlobal
+
+  class ApiSpecGlobal extends GlobalModule(context, testBackend) {
     override lazy val clientWrapper: ClientWrapper = TestClientWrapper
     override lazy val client: AsyncClient = testClient
     override lazy val timeouts: Timeouts = suite.timeouts

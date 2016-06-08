@@ -45,6 +45,8 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
 
+  def getFilePreview(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
+
   def getImageAsset(p: Parcel): api.ImageAsset = {
     p.readInt() match {
       case Parcelable.FlagEmpty => ImageAsset.Empty
@@ -67,7 +69,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   def getOrCreateImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     else {
-      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RImageDataId())) {
+      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
         override lazy val data: Option[Array[Byte]] = Some(bytes)
       }
       getLocalImageAsset(ImageAssetData(idFor(bytes), RConvId(), Seq(im)))
@@ -77,7 +79,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   def getOrCreateMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     else {
-      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RImageDataId())) {
+      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
         override lazy val data: Option[Array[Byte]] = Some(bytes)
       }
       val id = AssetId("mirror_" + idFor(bytes).str)

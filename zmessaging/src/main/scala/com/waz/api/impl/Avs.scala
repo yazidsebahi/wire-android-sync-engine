@@ -49,6 +49,8 @@ class Avs(implicit ui: UiModule) extends com.waz.api.Avs  with UiObservable with
 
     fm.onReleaseVideoPreview.on(Threading.Ui) { _ => videoListener foreach (_.onPreviewReleased()) } (EventContext.Global)
     fm.onReleaseVideoView.on(Threading.Ui) { _ => videoListener foreach (_.onViewReleased()) } (EventContext.Global)
+
+    fm.onStateOfReceivedVideoChanged.on(Threading.Ui) { s => videoListener foreach (_.onStateOfReceivedVideoChanged(s.state, s.reason)) } (EventContext.Global)
   }
 
   override def setLoggingEnabled(enable: Boolean): Unit = withFlowManagerService { _.setLoggingEnabled(enable) }

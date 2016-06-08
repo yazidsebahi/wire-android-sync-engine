@@ -403,7 +403,7 @@ class ContactsService(user: ZUserService, context: Context, lifecycle: ZmsLifecy
 
         sink.done
       } finally cursor.close()
-  }(Threading.IO)
+  }(Threading.BlockingIO)
 
   def onAddressBookUploaded(ab: AddressBook, result: Seq[(UserId, Set[ContactId])]): Future[Unit] = {
     val pymk = result.map(_._1)

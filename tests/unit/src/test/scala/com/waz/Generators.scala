@@ -22,10 +22,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{Date, Locale}
 
+import android.net.Uri
 import android.util.Base64
-import com.waz.api.{Invitations, InvitationTokenFactory}
+import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Text
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserData.ConnectionStatus.{Accepted, PendingFromOther}
 import com.waz.model._
@@ -35,6 +37,7 @@ import com.waz.model.sync.SyncRequest._
 import com.waz.model.sync.{SyncJob, SyncRequest}
 import com.waz.service.SearchKey
 import com.waz.service.messages.MessageAndLikes
+import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
 import com.waz.utils.sha2
 import com.waz.znet.AuthenticationManager.Token
@@ -55,19 +58,21 @@ object Generators {
     oneOf[Event](
       resultOf(UserConnectionEvent.apply _),
       resultOf(ContactJoinEvent),
-      resultOf(AssetAddEvent),
       resultOf(MessageAddEvent),
       resultOf(MemberJoinEvent),
       resultOf(MemberLeaveEvent),
       resultOf(RenameConversationEvent),
-      resultOf(KnockEvent),
-      resultOf(HotKnockEvent),
       resultOf(VoiceChannelDeactivateEvent(_: Uid, _: RConvId, _: EventId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
   }
 
   implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))
 
   lazy val alphaNumStr = listOf(alphaNumChar).map(_.mkString)
+
+  implicit lazy val arbUri: Arbitrary[Uri] = Arbitrary(for {
+    scheme <- oneOf("file", "content", "http")
+    path <- alphaNumStr
+  } yield Uri.parse(s"$scheme://$path"))
 
   implicit lazy val arbConversationData: Arbitrary[ConversationData] = Arbitrary(for {
     id <- arbitrary[ConvId]
@@ -125,12 +130,16 @@ object Generators {
   implicit lazy val arbVoiceParticipantData: Arbitrary[VoiceParticipantData] = Arbitrary(resultOf(VoiceParticipantData))
 
   implicit lazy val arbMessageContent: Arbitrary[MessageContent] = Arbitrary(resultOf(MessageContent))
+  implicit lazy val arbGenericMessage: Arbitrary[GenericMessage] = Arbitrary(for {
+    id <- arbitrary[MessageId]
+    content = Text("test", Map.empty) // TODO: implement actual generator
+  } yield GenericMessage(id, content))
 
   implicit lazy val arbMessageData: Arbitrary[MessageData] = Arbitrary(resultOf(MessageData))
 
   implicit lazy val arbImageData: Arbitrary[ImageData] = Arbitrary(for {
     tag        <- alphaNumStr
-    remoteId   <- arbitrary[Option[RImageDataId]]
+    remoteId   <- arbitrary[Option[RAssetDataId]]
     mime       <- Gen.oneOf(Seq(Mime.Gif, Mime.Jpg, Mime.Png))
     size       <- posNum[Int]
     data       <- arbitrary[Option[Array[Byte]]].map(_.filter(_.nonEmpty).map(bytes => Base64.encodeToString(bytes, Base64.NO_CLOSE | Base64.NO_WRAP | Base64.NO_PADDING)))
@@ -148,6 +157,27 @@ object Generators {
     convId     <- arbitrary[RConvId]
     versions   <- arbitrary[Seq[ImageData]]
   } yield ImageAssetData(assetId, convId, versions.sorted))
+
+  implicit lazy val arbAnyAssetData: Arbitrary[AnyAssetData] = Arbitrary(for {
+    id      <- arbitrary[AssetId]
+    convId  <- arbitrary[RConvId]
+    mime    <- oneOf(knownMimeTypes)
+    size    <- posNum[Long]
+    name    <- optGen(alphaNumStr)
+    meta    <- arbitrary[Option[AssetMetaData]]
+    preview <- arbitrary[Option[ImageData]]
+    source  <- optGen(arbitrary[Uri])
+    status  <- arbitrary[AssetStatus]
+    time    <- arbitrary[Instant]
+  } yield AnyAssetData(id, convId, mime, size, name, meta, preview.map(AssetPreviewData.Image), source, status, time))
+
+  implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(frequency((2, oneOf[AssetStatus](AssetStatus.UploadNotStarted,
+    AssetStatus.MetaDataSent, AssetStatus.PreviewSent, AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed)),
+    (1, oneOf[AssetStatus](resultOf(AssetStatus.UploadDone), resultOf(AssetStatus.DownloadFailed)))))
+  implicit lazy val arbSyncableAssetStatus: Arbitrary[AssetStatus.Syncable] = Arbitrary(oneOf(AssetStatus.UploadCancelled, AssetStatus.UploadFailed))
+  implicit lazy val arbAssetKey: Arbitrary[AssetKey] = Arbitrary(resultOf(AssetKey))
+  implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))
+  implicit lazy val arbSha256: Arbitrary[Sha256] = Arbitrary(arbitrary[Array[Byte]].map(b => Sha256(sha2(b))))
 
   object MediaAssets {
     implicit lazy val arbArtistData: Arbitrary[ArtistData] = Arbitrary(resultOf(ArtistData))
@@ -195,7 +225,9 @@ object Generators {
       arbitrary[PostLastRead],
       arbitrary[PostTypingState],
       arbitrary[PostMessage],
-      arbitrary[PostLiking]))
+      arbitrary[PostDeleted],
+      arbitrary[PostLiking],
+      arbitrary[PostAssetStatus]))
 
     lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncVersionBlacklist, SyncConnections, SyncConnectedUsers, RegisterGcmToken))
 
@@ -216,6 +248,7 @@ object Generators {
     implicit lazy val arbPostConnectionStatusSyncRequest: Arbitrary[PostConnectionStatus] = Arbitrary(resultOf(PostConnectionStatus))
     implicit lazy val arbPostExcludePymkSyncRequest: Arbitrary[PostExcludePymk] = Arbitrary(resultOf(PostExcludePymk))
     implicit lazy val arbMessageSyncRequest: Arbitrary[PostMessage] = Arbitrary(resultOf(PostMessage))
+    implicit lazy val arbMessageDelSyncRequest: Arbitrary[PostDeleted] = Arbitrary(resultOf(PostDeleted))
     implicit lazy val arbPostConvJoinSyncRequest: Arbitrary[PostConvJoin] = Arbitrary(resultOf(PostConvJoin))
     implicit lazy val arbPostConvLeaveSyncRequest: Arbitrary[PostConvLeave] = Arbitrary(resultOf(PostConvLeave))
     implicit lazy val arbConnectionSyncRequest: Arbitrary[PostConnection] = Arbitrary(resultOf(PostConnection))
@@ -223,6 +256,7 @@ object Generators {
     implicit lazy val arbInvitationSyncRequest: Arbitrary[PostInvitation] = Arbitrary(resultOf(PostInvitation))
     implicit lazy val arbPostLiking: Arbitrary[PostLiking] = Arbitrary(resultOf(PostLiking))
     implicit lazy val arbSyncPreKey: Arbitrary[SyncPreKeys] = Arbitrary(resultOf(SyncPreKeys))
+    implicit lazy val arbPostAssetStatus: Arbitrary[PostAssetStatus] = Arbitrary(resultOf(PostAssetStatus))
   }
 
   implicit lazy val arbCallSequenceNumber: Arbitrary[CallSequenceNumber] = Arbitrary(choose(2, 999999) map CallSequenceNumber)
@@ -231,7 +265,7 @@ object Generators {
   implicit lazy val arbConvId: Arbitrary[ConvId] = Arbitrary(sideEffect(ConvId()))
   implicit lazy val arbRConvId: Arbitrary[RConvId] = Arbitrary(sideEffect(RConvId()))
   implicit lazy val arbUserId: Arbitrary[UserId] = Arbitrary(sideEffect(UserId()))
-  implicit lazy val arbRImageDataId: Arbitrary[RImageDataId] = Arbitrary(sideEffect(RImageDataId()))
+  implicit lazy val arbRAssetDataId: Arbitrary[RAssetDataId] = Arbitrary(sideEffect(RAssetDataId()))
   implicit lazy val arbAssetId: Arbitrary[AssetId] = Arbitrary(sideEffect(AssetId()))
   implicit lazy val arbSyncId: Arbitrary[SyncId] = Arbitrary(sideEffect(SyncId()))
   implicit lazy val arbGcmId: Arbitrary[GcmId] = Arbitrary(sideEffect(GcmId()))
@@ -246,7 +280,6 @@ object Generators {
   implicit lazy val arbDuration: Arbitrary[Duration] = Arbitrary(posNum[Long] map Duration.ofMillis)
   implicit lazy val arbFiniteDuration: Arbitrary[FiniteDuration] = Arbitrary(posNum[Long] map (FiniteDuration(_, TimeUnit.MILLISECONDS)))
 
-  implicit lazy val arbAssetContent: Arbitrary[AssetContent] = Arbitrary(frequency((9, arbImageData.arbitrary), (1, UnsupportedAssetContent)))
   implicit lazy val arbLiking: Arbitrary[Liking] = Arbitrary(resultOf(Liking.apply _))
   implicit lazy val arbLikingAction: Arbitrary[Liking.Action] = Arbitrary(oneOf(Liking.Action.values.toSeq))
   implicit lazy val arbMessageAndLikes: Arbitrary[MessageAndLikes] = Arbitrary(for {
@@ -262,12 +295,18 @@ object Generators {
     hex <- arbitrary[Long] map EventId.hexString
   } yield EventId(seq, hex))
 
+  implicit lazy val arbMetaData: Arbitrary[AssetMetaData] = Arbitrary(oneOf(arbImageMetaData.arbitrary, arbVideoMetaData.arbitrary, arbAudioMetaData.arbitrary))
+  implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- optGen(oneOf(ImageData.Tag.Medium, ImageData.Tag.MediumPreview, ImageData.Tag.Preview, ImageData.Tag.SmallProfile))) yield AssetMetaData.Image(d, t))
+  implicit lazy val arbVideoMetaData: Arbitrary[AssetMetaData.Video] = Arbitrary(resultOf(AssetMetaData.Video(_: Dim2, _: Duration)))
+  implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(resultOf(AssetMetaData.Audio(_: Duration, _: Seq[Float])))
+  implicit lazy val arbDim2: Arbitrary[Dim2] = Arbitrary(for (w <- genDimension; h <- genDimension) yield Dim2(w, h))
+  lazy val genDimension = chooseNum(0, 10000)
 
-  implicit def optGen[T](implicit gen: Gen[T]): Gen[Option[T]] = Gen.oneOf(Gen.const(None), gen.map(Some(_)))
+  implicit def optGen[T](implicit gen: Gen[T]): Gen[Option[T]] = frequency((1, Gen.const(None)), (2, gen.map(Some(_))))
 
   implicit lazy val arbUserInfo: Arbitrary[UserInfo] = Arbitrary(for {
     userId <- arbitrary[UserId]
-    name <- arbitrary[Option[String]]
+    name <- optGen(alphaNumStr)
     email <- arbitrary[Option[EmailAddress]]
     phone <- arbitrary[Option[PhoneNumber]]
     picture <- arbitrary[Option[ImageAssetData]]

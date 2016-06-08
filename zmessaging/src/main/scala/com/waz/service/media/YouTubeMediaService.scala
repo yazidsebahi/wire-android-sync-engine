@@ -23,14 +23,14 @@ import com.waz.api.Message
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model._
-import com.waz.service.images.ImageAssetService
+import com.waz.service.assets.AssetService
 import com.waz.sync.client.YouTubeClient
 import com.waz.threading.Threading
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
 
-class YouTubeMediaService(client: YouTubeClient, assets: ImageAssetService) {
+class YouTubeMediaService(client: YouTubeClient, assets: AssetService) {
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[YouTubeMediaService]

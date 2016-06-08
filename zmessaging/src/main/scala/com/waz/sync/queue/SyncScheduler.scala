@@ -37,6 +37,7 @@ import com.waz.zms.SyncService
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
+import scala.util.Try
 
 class SyncScheduler(context: Context, userId: ZUserId, val content: SyncContentUpdater, val network: NetworkModeService, zuser: ZUserService, service: SyncRequestService, handler: => SyncHandler) {
 
@@ -125,7 +126,7 @@ class SyncScheduler(context: Context, userId: ZUserId, val content: SyncContentU
   private[sync] def withConv[A](job: SyncJob, conv: ConvId)(f: ConvLock => Future[A]): Future[A] = {
     verbose(s"withConv($job, $conv)")
     countWaiting(job.id, getStartTime(job)) { queue.acquire(conv) } flatMap { lock =>
-      returning(f(lock)) { _.onComplete(_ => lock.release()) }
+      Try(f(lock)).recover { case t => Future.failed[A](t) }.get.andThen { case _ => lock.release() }
     }
   }
 

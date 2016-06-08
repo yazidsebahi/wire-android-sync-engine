@@ -18,12 +18,14 @@
 package com.waz.cache
 
 import android.database.sqlite.SQLiteDatabase
-import org.scalatest.{RobolectricTests, BeforeAndAfter, Matchers, FeatureSpec}
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import com.waz.db.ZGlobalDB
 import org.robolectric.Robolectric
 import java.lang.System.currentTimeMillis
+
 import scala.concurrent.duration._
 import CacheEntryData.CacheEntryDao
+import com.waz.testutils._
 
 class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
@@ -49,19 +51,19 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
     scenario("insert cacheEntry with data and load it") {
       val entry = mkEntry("foo")
       insertOrReplace(entry)
-      getByKey("foo") should be(Some(entry))
+      getByKey("foo") shouldEqual Some(entry)
     }
 
     scenario("insert cacheEntry with stream and load it") {
       val entry = CacheEntryData("foo", path = None)
       insertOrReplace(entry)
-      getByKey("foo") should be(Some(entry))
+      getByKey("foo") shouldEqual Some(entry)
     }
 
     scenario("insert cacheEntry and find it by key") {
       val entry = mkEntry("foo")
       insertOrReplace(entry)
-      getByKey(entry.key) should be(Some(entry))
+      getByKey(entry.key) shouldEqual Some(entry)
     }
 
     scenario("delete by id") {
@@ -80,14 +82,14 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
       insertOrReplace(entry1)
 
       deleteByKey(entry.key)
-      findAll should be(List(entry1))
+      findAll should contain theSameElementsAs List(entry1)
     }
 
     scenario("insert cacheEntries and find all") {
       val entries = List("foo", "bar", "woo", "hoo") map mkEntry
       entries foreach insertOrReplace
 
-      findAll should be(entries)
+      findAll should contain theSameElementsAs entries
     }
 
     scenario("insert cacheEntries and find all expired") {
@@ -96,7 +98,7 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
 
       entries ++ expiredEntries foreach insertOrReplace
 
-      findAllExpired(currentTimeMillis()) should be(expiredEntries)
+      findAllExpired(currentTimeMillis()) should contain theSameElementsAs expiredEntries
     }
 
     scenario("insert cacheEntries and delete all Expired") {
@@ -106,7 +108,7 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
       entries ++ expiredEntries foreach insertOrReplace
 
       deleteExpired(currentTimeMillis())
-      findAll should be(entries)
+      findAll should contain theSameElementsAs entries
     }
   }
 }

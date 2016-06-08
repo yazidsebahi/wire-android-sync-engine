@@ -49,7 +49,7 @@ class Self(var zuser: Option[ZUser] = None, var user: Option[User] = None)(impli
       val previousState = (this.user, this.zuser, this.upToDate, this.otrRegState)
       this.zuser = Some(zuser)
       this.upToDate = upToDate
-      updateUser(user, otrRegState)
+      update(user, otrRegState)
       if (previousState != (this.user, this.zuser, this.upToDate, this.otrRegState)) notifyChanged()
     case None =>
       user foreach (_.removeUpdateListener(userUpdateListener))
@@ -60,6 +60,12 @@ class Self(var zuser: Option[ZUser] = None, var user: Option[User] = None)(impli
   }
 
   def updateUser(u: UserData, otrRegState: ClientRegistrationState): Unit = {
+    val previousState = (this.user, this.otrRegState)
+    update(u, otrRegState)
+    if (previousState != (this.user, this.otrRegState)) notifyChanged()
+  }
+
+  private def update(u: UserData, otrRegState: ClientRegistrationState): Unit = {
     trackingId = u.trackingId
     this.otrRegState = otrRegState
     val user = users.getUser(u)

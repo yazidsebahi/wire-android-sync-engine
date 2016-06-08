@@ -31,6 +31,10 @@ trait Reader[A] {
   def apply(implicit c: Cursor): A
 }
 
+object Reader {
+  def apply[A](f: Cursor => A): Reader[A] = new Reader[A] { def apply(implicit c: Cursor): A = f(c) }
+}
+
 abstract class Dao[T, A] extends DaoIdOps[T] {
   type IdCols = Column[A]
   type IdVals = A

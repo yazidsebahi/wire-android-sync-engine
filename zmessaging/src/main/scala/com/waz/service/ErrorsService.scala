@@ -20,9 +20,9 @@ package com.waz.service
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.ErrorType
-import com.waz.content.ZStorage
+import com.waz.content.{MessagesStorage, ZStorage}
 import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model.{ConvId, ErrorData, MessageId, Uid}
+import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.RefreshingSignal
@@ -30,8 +30,9 @@ import com.waz.utils.{CachedStorage, TrimmingLruCache}
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
+import com.waz.utils._
 
-class ErrorsService(context: Context, storage: ZStorage, lifecycle: ZmsLifecycle) {
+class ErrorsService(context: Context, storage: ZStorage, lifecycle: ZmsLifecycle, messages: MessagesStorage) {
   import com.waz.utils.events.EventContext.Implicits.global
   import lifecycle._
 
@@ -86,9 +87,18 @@ class ErrorsService(context: Context, storage: ZStorage, lifecycle: ZmsLifecycle
     errorsStorage.remove(errors.map(_.id))
   }
 
-  def addError(error: ErrorData) =
+  def addErrorWhenActive(error: ErrorData) =
     if (isUiActive) errorsStorage.insert(error)
     else dismissed(error)
+
+  def addError(error: ErrorData) = errorsStorage.insert(error)
+
+  def addAssetTooLargeError(convId: ConvId, messageId: MessageId) =
+    addError(ErrorData(Uid(), ErrorType.CANNOT_SEND_ASSET_TOO_LARGE, convId = Some(convId), messages = Seq(messageId)))
+
+  def addAssetFileNotFoundError(assetId: AssetId) = messages.get(MessageId(assetId.str)) flatMapOpt { msg =>
+    addError(ErrorData(Uid(), ErrorType.CANNOT_SEND_ASSET_FILE_NOT_FOUND, convId = Some(msg.convId), messages = Seq(msg.id))) map { Some(_) }
+  }
 
   def addConvUnverifiedError(conv: ConvId, message: MessageId) = {
     def matches(err: ErrorData) =

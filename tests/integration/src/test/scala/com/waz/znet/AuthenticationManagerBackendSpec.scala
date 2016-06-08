@@ -42,7 +42,7 @@ class AuthenticationManagerBackendSpec extends FeatureSpec with Matchers with Be
   }
 
   lazy val storage = new ZStorage(ZUserId(), Robolectric.application)
-  lazy val keyValue = new KeyValueService(new KeyValueStorage(Robolectric.application, storage), new ReportingService)
+  lazy val keyValue = new KeyValueService(new KeyValueStorage(Robolectric.application, storage), new ReportingService {})
 
   lazy val client = new LoginClient(new AsyncClient(wrapper = TestClientWrapper), BackendConfig.EdgeBackend)
 

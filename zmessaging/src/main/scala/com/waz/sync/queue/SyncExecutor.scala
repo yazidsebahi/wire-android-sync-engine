@@ -72,7 +72,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
 
     if (job.optional && job.timeout > 0 && job.timeout < System.currentTimeMillis()) {
       info(s"Optional request timeout elapsed, dropping: $job")
-      content.removeSyncJob(job.id) flatMap { _ => handler.onDropped(job.request) } map { _ => SyncResult.Success}
+      content.removeSyncJob(job.id) map { _ => SyncResult.Success}
     } else {
       val future = content.updateSyncJob(job.id)(job => job.copy(attempts = job.attempts + 1, state = SyncState.SYNCING, error = None, offline = network.isOfflineMode))
         .flatMap {
@@ -100,7 +100,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
 
     def delete() = content.removeSyncJob(job.id) map { _ => result }
 
-    def drop() = content.removeSyncJob(job.id) flatMap { _ => handler.onDropped(job.request) } map { _ => result }
+    def drop() = content.removeSyncJob(job.id) map { _ => result }
 
     result match {
       case SyncResult.Success =>

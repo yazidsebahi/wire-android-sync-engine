@@ -21,7 +21,7 @@ import android.content.Context
 import android.view.View
 import com.waz.HockeyApp
 import com.waz.ZLog._
-import com.waz.api.{AvsLogLevel, VideoSendState}
+import com.waz.api._
 import com.waz.call._
 import com.waz.log.LogHandler
 import com.waz.model._
@@ -34,6 +34,7 @@ import com.waz.znet.ContentEncoder.BinaryRequestContent
 import com.waz.znet.Response.ResponseBodyDecoder
 import com.waz.znet.ResponseConsumer.ByteArrayConsumer
 import com.waz.znet._
+import org.json.{JSONException, JSONObject}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
@@ -43,6 +44,9 @@ import scala.util.Try
 
 class FlowManagerService(context: Context, netClient: ZNetClient, push: PushService, prefs: PreferenceService, network: NetworkModeService) {
   import FlowManagerService._
+
+  val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
+  val avsAudioTestFlag: Long = 1 << 1
 
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "FlowManagerService")
@@ -63,11 +67,14 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
   val onFlowRequest = new Publisher[String]
   val onFlowResponse = new Publisher[String]
   val onFlowEvent = new Publisher[UnknownCallEvent]
+  val onAvsMetricsReceived = EventStream[AvsMetrics]()
 
   val onCreateVideoView = new Publisher[(RConvId, Option[UserId])]
   val onReleaseVideoView = new Publisher[(RConvId, Option[UserId])]
   val onCreateVideoPreview = new Publisher[Unit]
   val onReleaseVideoPreview = new Publisher[Unit]
+
+  val onStateOfReceivedVideoChanged = new Publisher[StateOfReceivedVideo]
 
   val avsLogDataSignal = metricsEnabledPref.signal.zip(loggingEnabledPref.signal).zip(logLevelPref.signal) map { case ((metricsEnabled, loggingEnabled), logLevel) =>
       AvsLogData(metricsEnabled = metricsEnabled, loggingEnabled = loggingEnabled, AvsLogLevel.fromPriority(logLevel))
@@ -110,28 +117,27 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
       onFlowRequest ! s"$m $path"
       val startTime = System.currentTimeMillis
 
-      netClient(Request(m, Some(path), data = Some(BinaryRequestContent(c, t)), decoder = Some(responseDecoder))).map { resp =>
-        onFlowResponse ! f"after ${System.currentTimeMillis - startTime}%4d ms - $m $path"
-        resp match {
-          case Response(status, BinaryResponse(data, mime), _) => doWithFlowManager(_.response(status.status, mime, data, ctx))
-          case Response(status, EmptyResponse, _) => doWithFlowManager(_.response(status.status, null, null , ctx))
-          case r => error(s"unexpected response $r for FlowManager request($path, $m, $t, ${new String(c)}, $ctx)")
-        }
-      } (dispatcher)
+      path match {
+        case MetricsUrlRE(convId) => onAvsMetricsReceived ! AvsMetrics(RConvId(convId), content)
+        case _ => netClient(Request(m, Some(path), data = Some(BinaryRequestContent(c, t)), decoder = Some(responseDecoder))).map { resp =>
+          onFlowResponse ! f"after ${System.currentTimeMillis - startTime}%4d ms - $m $path"
+          resp match {
+            case Response(status, BinaryResponse(data, mime), _) => doWithFlowManager(_.response(status.status, mime, data, ctx))
+            case Response(status, EmptyResponse, _) => doWithFlowManager(_.response(status.status, null, null , ctx))
+            case r => error(s"unexpected response $r for FlowManager request($path, $m, $t, ${new String(c)}, $ctx)")
+          }
+        } (dispatcher)
+      }
       0
     }
   }
 
+
   lazy val flowManager: Option[FlowManager] = LoggedTry {
-    val fm = new FlowManager(context, requestHandler)
+    val fm = new FlowManager(context, requestHandler, if (prefs.uiPreferences.getBoolean(prefs.autoAnswerCallPrefKey, false)) avsAudioTestFlag else 0)
     fm.addListener(flowListener)
     fm.setLogHandler(logHandler)
     metricsEnabledPref.signal { fm.setEnableMetrics }
-    loggingEnabledPref.signal { fm.setEnableLogging }
-    logLevelPref.signal { level =>
-      verbose(s"settingLogLevel($level)")
-      FlowManager.setLogLevel(level)
-    }
     fm
   } .toOption
 
@@ -173,9 +179,8 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
       onFlowsEstablished ! EstablishedFlows(RConvId(convId), participantIds.toSet map UserId)
     }
 
-    override def changeVideoState(state: Int, reason: Int): Unit = {
-      // TODO create API for that for UI and pass it to UI
-    }
+    override def changeVideoState(state: Int, reason: Int): Unit =
+      onStateOfReceivedVideoChanged ! returning(StateOfReceivedVideo(AvsVideoState fromState state, reason = AvsVideoReason fromReason reason)) { s => debug(s"avs changeVideoState($s)") }
 
     override def createVideoPreview(): Unit = {
       debug("avs createVideoPreview() callback called")
@@ -197,6 +202,10 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
     override def releaseVideoView(convId: String, partId: String): Unit = {
       debug(s"avs releaseVideoView($convId, $partId) callback called")
       onReleaseVideoView ! (RConvId(convId), Option(partId).map(UserId))
+    }
+
+    override def changeAudioState(state: Int): Unit = {
+      //TODO
     }
   }
 
@@ -308,10 +317,27 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
   }
 }
 
+case class AvsMetrics(protected[call] val rConvId: RConvId, private val bytes: Array[Byte]) {
+
+  def convId = rConvId.str
+
+  val json = try {
+    new JSONObject(new String(bytes))
+  } catch {
+    case e: JSONException => new JSONObject()
+  }
+
+  var isVideoCall: Boolean = false
+  var kindOfCall = KindOfCall.UNKNOWN
+
+  override def toString = s"AvsMetrics($rConvId, isVideoCall: $isVideoCall, kindOfCall: $kindOfCall, ${json.toString})"
+}
+
 object FlowManagerService {
   private implicit val logTag: LogTag = logTagFor(FlowManagerService)
 
   case class AvsLogData(metricsEnabled: Boolean, loggingEnabled: Boolean, logLevel: AvsLogLevel)
+  case class StateOfReceivedVideo(state: AvsVideoState, reason: AvsVideoReason)
   case class EstablishedFlows(convId: RConvId, users: Set[UserId])
 
   object AvsLogData {

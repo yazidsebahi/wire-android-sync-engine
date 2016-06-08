@@ -21,7 +21,7 @@ import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.{ConversationStorage, MessagesStorage}
-import com.waz.model.GenericMessage.Cleared
+import com.waz.model.GenericContent.Cleared
 import com.waz.model._
 import com.waz.service.UserService
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -58,19 +58,22 @@ class ClearedSyncHandler(convs: ConversationStorage, convsContent: Conversations
   def postCleared(convId: ConvId, time: Instant): Future[SyncResult] = {
     verbose(s"postCleared($convId, $time)")
 
-    def postTime(time: Instant) =
+    def postTime(time: Instant, archive: Boolean) =
       convs.get(convId) flatMap {
         case None =>
           Future successful SyncResult(ErrorResponse.internalError(s"No conversation found for id: $convId"))
         case Some(conv) =>
           users.withSelfUserFuture { selfUserId =>
             val msg = GenericMessage(Uid(), Cleared(conv.remoteId, time))
-            otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) map (_.fold(SyncResult(_), { _ => SyncResult.Success }))
+            otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) flatMap (_.fold(e => Future.successful(SyncResult(e)), { _ =>
+              if (archive) convSync.postConversationState(conv.id, ConversationState(archived = Some(true), archiveTime = Some(time)))
+              else Future.successful(SyncResult.Success)
+            }))
           }
       }
 
     getActualClearInfo(convId, time) flatMap { case (t, archive) =>
-      postTime(t) flatMap {
+      postTime(t, archive) flatMap {
         case SyncResult.Success =>
           convsContent.updateConversationCleared(convId, t) map { _ => SyncResult.Success }
         case res =>

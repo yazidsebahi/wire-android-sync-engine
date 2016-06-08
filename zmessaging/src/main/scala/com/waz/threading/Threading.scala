@@ -25,7 +25,7 @@ import java.util.concurrent._
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{blocking, ExecutionContext}
 
 object Threading {
 
@@ -39,7 +39,7 @@ object Threading {
 
   val Cpus = math.max(2, Runtime.getRuntime.availableProcessors())
 
-  def executionContext(service: ExecutorService) = new ExecutionContext {
+  def executionContext(service: ExecutorService): ExecutionContext = new ExecutionContext {
     override def reportFailure(cause: Throwable): Unit = error(cause.getMessage, cause)("MainThreadPool")
     override def execute(runnable: Runnable): Unit = service.execute(runnable)
   }
@@ -57,6 +57,14 @@ object Threading {
   val Background = ThreadPool
 
   val IO = IOThreadPool
+
+  val BlockingIO: ExecutionContext = new ExecutionContext {
+    val delegate = ExecutionContext.fromExecutor(null: Executor) // default impl that handles block contexts correctly
+    override def execute(runnable: Runnable): Unit = delegate.execute(new Runnable {
+        override def run(): Unit = blocking(runnable.run())
+      })
+    override def reportFailure(cause: Throwable): Unit = delegate.reportFailure(cause)
+  }
 
   lazy val Ui = new UiDispatchQueue
 

@@ -67,4 +67,11 @@ object ErrorData {
 
     def listErrors(implicit db: SQLiteDatabase) = list(db.query(table.name, null, null, null, null, null, Time.name))
   }
+
+  object AssetError {
+    def unapply(err: ErrorData): Option[Seq[MessageId]] = err match {
+      case ErrorData(_, ErrorType.CANNOT_SEND_ASSET_FILE_NOT_FOUND | ErrorType.CANNOT_SEND_ASSET_TOO_LARGE, _, ms, _, _, _, _, _) => Some(ms)
+      case _ => None
+    }
+  }
 }

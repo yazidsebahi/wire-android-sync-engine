@@ -18,15 +18,13 @@
 package com.waz.model
 
 import com.waz.model.Event.EventDecoder
-import com.waz.model.GenericMessage.Text
 import com.waz.model.otr.ClientId
 import com.waz.testutils.Matchers._
 import com.waz.utils.JsonDecoder
-import org.json
 import org.json.JSONObject
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest._
+import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 
 class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with PropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
   import EventSpec._
@@ -50,20 +48,6 @@ class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with Given
       event.asInstanceOf[UserConnectionEvent].message should be(Some("Hello Test"))
     }
 
-    scenario("parse asset events") {
-      EventDecoder(new JSONObject(PreviewImageEvent)) should beMatching({
-        case AssetAddEvent(Uid("3ca6ec2e-205b-83f5-f265-a13bcdd8ea1c"), RConvId("a50acb79-d7a3-4fdc-b885-e779ac0c0689"), EventId(3, "800122000a272fd6"), _, _, AssetId("04533b8c-dab4-f461-6ab2-b602449d01b1"), ImageData("preview", "image/jpeg", 38, 29, 1802, 1352, 870, Some(RImageDataId("bff4c7c2-6071-583b-80c5-97ea96e0a85f")), Some(_), true, None, None, _, _)) => true
-      })
-
-      EventDecoder(new JSONObject(MediumImageEvent)) should beMatching({
-        case AssetAddEvent(Uid("b68a0db3-593a-1a1d-aa46-1d2ec228c474"), RConvId("a50acb79-d7a3-4fdc-b885-e779ac0c0689"), EventId(4, "800122000a272fd7"), _, _, AssetId("04533b8c-dab4-f461-6ab2-b602449d01b1"), ImageData("medium", "image/jpeg", 1802, 1352, 3264, 2448, 334927, Some(RImageDataId("da498123-6cda-5c3a-a0bd-396972801e91")), None, true, None, None, _, _)) => true
-      })
-
-      EventDecoder(new JSONObject(ImaginaryAudioEvent)) should beMatching({
-        case AssetAddEvent(_, RConvId("a50acb79-d7a3-4fdc-b885-e779ac0c0689"), EventId(5, "800122000a272fd7"), _, _, _, UnsupportedAssetContent) => true
-      })
-    }
-
     scenario("parse otr message event") {
       EventDecoder(new JSONObject(OtrMessageEvent)) match {
         case ev: OtrMessageEvent =>
@@ -77,7 +61,7 @@ class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with Given
     scenario("parse otr asset event") {
       EventDecoder(new JSONObject(OtrAssetEvent)) match {
         case ev: OtrAssetEvent =>
-          ev.dataId shouldEqual RImageDataId("fb325cac-d2d8-4afe-b236-35ac438a9e83")
+          ev.dataId shouldEqual RAssetDataId("fb325cac-d2d8-4afe-b236-35ac438a9e83")
           ev.convId shouldEqual RConvId("74f85659-4677-4b17-91dd-d49cd703b234")
           ev.sender shouldEqual ClientId("b79a049114ff051e")
           ev.recipient shouldEqual ClientId("650d1a5efc422126")
@@ -90,20 +74,13 @@ class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with Given
     scenario("parse otr asset event with data") {
       EventDecoder(new JSONObject(OtrAssetEvent1)) match {
         case ev: OtrAssetEvent =>
-          ev.dataId shouldEqual RImageDataId("2e8c9b0e-9a98-41aa-bf0e-f1395a3b5b39")
+          ev.dataId shouldEqual RAssetDataId("2e8c9b0e-9a98-41aa-bf0e-f1395a3b5b39")
           ev.convId shouldEqual RConvId("e74e62ea-1bcd-4582-ab12-bf7a0ff43931")
           ev.sender shouldEqual ClientId("80b8a91aeb4b4dd")
           ev.recipient shouldEqual ClientId("ff23d4857147e00c")
           ev.from shouldEqual UserId("dbf13c1b-b7f5-49fd-988b-9eed329d43a8")
           ev.imageData should be('defined)
         case e => fail(s"unexpected event: $e")
-      }
-    }
-
-    scenario("parse ios generated generic message") {
-      EventDecoder(new json.JSONObject(IosGenericMessage)) match {
-        case GenericMessageEvent(_, _, _, _, _, GenericMessage(_, Text("hi", _)), false) => // nice
-        case ev => fail(s"wrong event: $ev")
       }
     }
 
@@ -261,16 +238,6 @@ object EventSpec {
       |  "from": "455aa02f-2758-4459-ab15-768ed4cad936",
       |  "id": "5.800122000a272fd7",
       |  "type": "conversation.asset-add"
-      |}""".stripMargin
-
-  val IosGenericMessage =
-    """{
-      |"conversation": "5bb4f6bf-5dae-4a09-beb9-dd34b0a4edea",
-      |"time": "2015-08-27T14:29:00.190Z",
-      |"data": "CiRkZmIzMDQ4ZC02ODJhLTRhN2EtOWU0OS1iOWE3MGZiMjhmOTASBAoCaGk=",
-      |"from": "b6f31dd1-dcee-4671-b060-789ea4739605",
-      |"id": "60.800122000a54383c",
-      |"type": "conversation.client-message-add"
       |}""".stripMargin
 
   val OtrMessageEvent =

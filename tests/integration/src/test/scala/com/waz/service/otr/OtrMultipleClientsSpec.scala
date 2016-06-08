@@ -75,7 +75,6 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
       withDelay {
         msgs should have size 2
         msgs.getLastMessage.getBody shouldEqual "self message 1"
-        msgs.getLastMessage.data.otr shouldEqual true
       }
     }
   }
@@ -109,7 +108,6 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
       withDelay {
         msgs should have size (count + 1)
         msgs.getLastMessage.getBody shouldEqual "test message 1"
-        msgs.getLastMessage.data.otr shouldEqual true
       }
     }
 
@@ -121,7 +119,6 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
       withDelay {
         msgs should have size (count + 1)
         msgs.getLastMessage.getBody shouldEqual "remote message 1"
-        msgs.getLastMessage.data.otr shouldEqual true
       }
     }
   }

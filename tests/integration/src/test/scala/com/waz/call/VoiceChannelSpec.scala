@@ -34,7 +34,8 @@ import org.scalatest.{FeatureSpec, Matchers, OptionValues}
 
 import scala.concurrent.duration._
 
-class VoiceChannelSpec extends FeatureSpec with Matchers with OptionValues with ProvisionedApiSpec with ThreadActorSpec { test =>
+class VoiceChannelSpec extends FeatureSpec with Matchers with OptionValues with ProvisionedApiSpec with ThreadActorSpec {
+  test =>
 
   override val provisionFile = "/three_users_connected.json"
 
@@ -193,7 +194,9 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with OptionValues with 
       withDelay {
         channels.hasIncomingCall shouldEqual true
       }
-      withDelay { channels.getIncomingCall.getState shouldEqual ChannelState.OtherCalling }
+      withDelay {
+        channels.getIncomingCall.getState shouldEqual ChannelState.OtherCalling
+      }
       channels.hasOngoingCall shouldEqual false
       state shouldEqual Some(true)
     }

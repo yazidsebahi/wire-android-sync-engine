@@ -29,7 +29,7 @@ import org.threeten.bp.Instant
 
 import scala.reflect.ClassTag
 
-sealed trait SyncRequest {
+sealed abstract class SyncRequest {
   val cmd: SyncCommand
 
   def mergeKey: Any = cmd
@@ -47,7 +47,7 @@ sealed trait SyncRequest {
 
 sealed trait ConversationReference extends SyncRequest {
   val convId: ConvId
-  override def mergeKey: Any = (cmd, convId)
+  override val mergeKey: Any = (cmd, convId)
 }
 
 // sync requests which should be serialized (executed one by one) in a conversation context
@@ -71,34 +71,34 @@ object SyncRequest {
   case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
 
   case class PostAddressBook(addressBook: AddressBook) extends BaseRequest(Cmd.PostAddressBook) {
-    override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(other => Merged(other))
+    override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(Merged(_))
     override def isDuplicateOf(req: SyncRequest): Boolean = req.cmd == Cmd.PostAddressBook
   }
 
   case class PostInvitation(invitation: Invitation) extends BaseRequest(Cmd.PostInvitation) {
-    override def mergeKey: Any = (cmd, invitation.id, invitation.method)
-    override def merge(req: SyncRequest) = mergeHelper[PostInvitation](req)(other => Merged(other))
+    override val mergeKey: Any = (cmd, invitation.id, invitation.method)
+    override def merge(req: SyncRequest) = mergeHelper[PostInvitation](req)(Merged(_))
     override def isDuplicateOf(req: SyncRequest) = req.mergeKey == mergeKey
   }
 
   case class PostSelf(data: UserInfo) extends BaseRequest(Cmd.PostSelf) {
-    override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(other => Merged(other))
+    override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(Merged(_))
   }
 
   case class DeleteGcmToken(token: GcmId) extends BaseRequest(Cmd.DeleteGcmToken) {
-    override def mergeKey: Any = (cmd, token)
+    override val mergeKey: Any = (cmd, token)
   }
 
   case class SyncSearchQuery(queryCacheKey: Long) extends BaseRequest(Cmd.SyncSearchQuery) {
-    override def mergeKey: Any = (cmd, queryCacheKey)
+    override val mergeKey: Any = (cmd, queryCacheKey)
   }
 
   case class SyncRichMedia(messageId: MessageId) extends BaseRequest(Cmd.SyncRichMedia) {
-    override def mergeKey: Any = (cmd, messageId)
+    override val mergeKey: Any = (cmd, messageId)
   }
 
   case class PostSelfPicture(assetId: Option[AssetId]) extends BaseRequest(Cmd.PostSelfPicture) {
-    override def merge(req: SyncRequest) = mergeHelper[PostSelfPicture](req)(other => Merged(other)) // always use the latest request
+    override def merge(req: SyncRequest) = mergeHelper[PostSelfPicture](req)(Merged(_))
   }
 
   sealed abstract class RequestForConversation(cmd: SyncCommand) extends BaseRequest(cmd) with ConversationReference
@@ -108,11 +108,11 @@ object SyncRequest {
   }
 
   case class PostConv(convId: ConvId, users: Seq[UserId], name: Option[String]) extends RequestForConversation(Cmd.PostConv) with SerialExecutionWithinConversation {
-    override def merge(req: SyncRequest) = mergeHelper[PostConv](req)(other => Merged(other))
+    override def merge(req: SyncRequest) = mergeHelper[PostConv](req)(Merged(_))
   }
 
   case class PostConvName(convId: ConvId, name: String) extends RequestForConversation(Cmd.PostConvName) with SerialExecutionWithinConversation {
-    override def merge(req: SyncRequest) = mergeHelper[PostConvName](req)(other => Merged(other))
+    override def merge(req: SyncRequest) = mergeHelper[PostConvName](req)(Merged(_))
   }
 
   case class PostConvState(convId: ConvId, state: ConversationState) extends RequestForConversation(Cmd.PostConvState) with SerialExecutionWithinConversation {
@@ -120,37 +120,44 @@ object SyncRequest {
   }
 
   case class PostLastRead(convId: ConvId, time: Instant) extends RequestForConversation(Cmd.PostLastRead) {
-    override def mergeKey: Any = (cmd, convId)
-    override def merge(req: SyncRequest) = mergeHelper[PostLastRead](req) { other =>
-      Merged(PostLastRead(convId, time max other.time))
-    }
+    override val mergeKey: Any = (cmd, convId)
+    override def merge(req: SyncRequest) = mergeHelper[PostLastRead](req)(Merged(_))
   }
 
   case class PostCleared(convId: ConvId, time: Instant) extends RequestForConversation(Cmd.PostCleared) with SerialExecutionWithinConversation {
-    override def mergeKey: Any = (cmd, convId)
+    override val mergeKey: Any = (cmd, convId)
     override def merge(req: SyncRequest) = mergeHelper[PostCleared](req) { other =>
       Merged(PostCleared(convId, time max other.time))
     }
   }
 
   case class PostTypingState(convId: ConvId, isTyping: Boolean) extends RequestForConversation(Cmd.PostTypingState) with SerialExecutionWithinConversation {
-    override def merge(req: SyncRequest) = mergeHelper[PostTypingState](req)(other => Merged(other))
+    override def merge(req: SyncRequest) = mergeHelper[PostTypingState](req)(Merged(_))
   }
 
   case class PostMessage(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostMessage) with SerialExecutionWithinConversation {
-    override def mergeKey = (cmd, convId, messageId)
+    override val mergeKey = (cmd, convId, messageId)
+  }
+
+  case class PostDeleted(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostDeleted) {
+    override val mergeKey = (cmd, convId, messageId)
+  }
+
+  case class PostAssetStatus(convId: ConvId, messageId: MessageId, status: AssetStatus.Syncable) extends RequestForConversation(Cmd.PostAssetStatus) with SerialExecutionWithinConversation {
+    override val mergeKey = (cmd, convId, messageId)
+    override def merge(req: SyncRequest) = mergeHelper[PostAssetStatus](req)(Merged(_))
   }
 
   case class PostClientLabel(id: ClientId, label: String) extends BaseRequest(Cmd.PostClientLabel) {
-    override def mergeKey = (cmd, id)
+    override val mergeKey = (cmd, id)
   }
 
   case class SyncClients(user: UserId) extends BaseRequest(Cmd.SyncClients) {
-    override def mergeKey = (cmd, user)
+    override val mergeKey = (cmd, user)
   }
 
   case class SyncPreKeys(user: UserId, clients: Set[ClientId]) extends BaseRequest(Cmd.SyncPreKeys) {
-    override def mergeKey = (cmd, user)
+    override val mergeKey = (cmd, user)
 
     override def merge(req: SyncRequest) = mergeHelper[SyncPreKeys](req) { other =>
       if (other.clients.forall(clients)) Merged(this)
@@ -164,16 +171,16 @@ object SyncRequest {
   }
 
   case class PostLiking(convId: ConvId, liking: Liking) extends RequestForConversation(Cmd.PostLiking) {
-    override def mergeKey = (cmd, convId, liking.id)
+    override val mergeKey = (cmd, convId, liking.id)
   }
 
   case class PostSessionReset(convId: ConvId, userId: UserId, client: ClientId) extends RequestForConversation(Cmd.PostSessionReset) {
-    override def mergeKey: Any = (cmd, convId, userId, client)
+    override val mergeKey: Any = (cmd, convId, userId, client)
   }
 
   sealed abstract class RequestForUser(cmd: SyncCommand) extends BaseRequest(cmd) {
     val userId: UserId
-    override def mergeKey = (cmd, userId)
+    override val mergeKey = (cmd, userId)
   }
 
   case class SyncCommonConnections(userId: UserId) extends RequestForUser(Cmd.SyncCommonConnections)
@@ -231,7 +238,7 @@ object SyncRequest {
 
   // leave endpoint on backend accepts only one user as parameter (no way to remove multiple users at once)
   case class PostConvLeave(convId: ConvId, user: UserId) extends RequestForConversation(Cmd.PostConvLeave) with SerialExecutionWithinConversation {
-    override def mergeKey = (cmd, convId, user)
+    override val mergeKey = (cmd, convId, user)
   }
 
   private def mergeHelper[A <: SyncRequest : ClassTag](other: SyncRequest)(f: A => MergeResult[A]): MergeResult[A] = other match {
@@ -271,6 +278,8 @@ object SyncRequest {
         case Cmd.PostConnectionStatus  => PostConnectionStatus(userId, opt('status, js => ConnectionStatus(js.getString("status"))))
         case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
         case Cmd.PostMessage           => PostMessage(convId, messageId)
+        case Cmd.PostDeleted           => PostDeleted(convId, messageId)
+        case Cmd.PostAssetStatus       => PostAssetStatus(convId, messageId, JsonDecoder[AssetStatus.Syncable]('status))
         case Cmd.PostConvJoin          => PostConvJoin(convId, users)
         case Cmd.PostConvLeave         => PostConvLeave(convId, userId)
         case Cmd.PostConnection        => PostConnection(userId, 'name, 'message)
@@ -313,16 +322,17 @@ object SyncRequest {
       }
 
       req match {
-        case SyncUser(users)                 => o.put("users", arrString(users.toSeq map ( _.str)))
-        case SyncConversation(convs)         => o.put("convs", arrString(convs.toSeq map (_.str)))
-        case SyncSearchQuery(queryCacheKey)  => o.put("queryCacheKey", queryCacheKey)
-        case DeleteGcmToken(token)           => putId("token", token)
-        case SyncRichMedia(messageId)        => putId("message", messageId)
-        case PostSelfPicture(assetId)        => assetId.foreach(putId("asset", _))
-        case PostMessage(_, messageId)       => putId("message", messageId)
-        case PostConnectionStatus(_, status) => status foreach { status => o.put("status", status.code) }
-        case PostConvJoin(_, users)          => o.put("users", arrString(users.toSeq map (_.str)))
-        case PostConvLeave(_, user)          => putId("user", user)
+        case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
+        case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
+        case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey)
+        case DeleteGcmToken(token)            => putId("token", token)
+        case SyncRichMedia(messageId)         => putId("message", messageId)
+        case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
+        case PostMessage(_, messageId)        => putId("message", messageId)
+        case PostDeleted(_, messageId)        => putId("message", messageId)
+        case PostConnectionStatus(_, status)  => status foreach { status => o.put("status", status.code) }
+        case PostConvJoin(_, users)           => o.put("users", arrString(users.toSeq map (_.str)))
+        case PostConvLeave(_, user)           => putId("user", user)
 
         case PostConnection(_, name, message) =>
           o.put("name", name)
@@ -333,6 +343,10 @@ object SyncRequest {
 
         case PostCleared(_, time) =>
           o.put("time", time.toEpochMilli)
+
+        case PostAssetStatus(_, mid, status) =>
+          putId("message", mid)
+          o.put("status", JsonEncoder.encode(status))
 
         case PostSelf(info) => o.put("user", JsonEncoder.encode(info))
         case PostTypingState(_, typing) => o.put("typing", typing)

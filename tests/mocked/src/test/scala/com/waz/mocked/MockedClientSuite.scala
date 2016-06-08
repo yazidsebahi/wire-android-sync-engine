@@ -30,6 +30,7 @@ import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
+import com.waz.service.call.FlowManagerService.StateOfReceivedVideo
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -64,8 +65,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
     override lazy val znetClient = new EmptyClient()
 
-    override lazy val imageClient        = new ImageAssetClient(znetClient, cache) {
-      override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[AssetAddEvent] = suite.postImageAssetData(image, assetId, convId, data, nativePush)
+    override lazy val assetClient        = new AssetClient(znetClient) {
+      override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[ImageData] = suite.postImageAssetData(image, assetId, convId, data, nativePush)
     }
 
     override lazy val usersClient        = new UsersClient(znetClient) {
@@ -183,6 +184,7 @@ trait MockedFlows { test: ApiSpec =>
   def setCanSendVideo(conv: RConvId, canSend: Boolean): Unit = if (canSend) mocked.convsThatCanSendVideo += conv else mocked.convsThatCanSendVideo -= conv
   def hasConvVideoSendState(conv: RConvId, state: VideoSendState): Boolean = mocked.convsThatSendVideo.get(conv).contains(state)
   def currentVideoCaptureDeviceId(conv: RConvId): Option[String] = mocked.videoCaptureDeviceId.get(conv)
+  def changeStateOfReceivedVideo(state: StateOfReceivedVideo): Unit = zmessaging.flowmanager.onStateOfReceivedVideoChanged ! state
 
   def resetVideoCalls(): Unit = {
     mocked.convsThatSendVideo = Map.empty
@@ -239,7 +241,7 @@ trait MockedClient { test: ApiSpec =>
   def postConversationState(convId: RConvId, state: ConversationState): ErrorOrResponse[Boolean] = successful(Right(true))
   def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = successful(Right(None))
-  def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[AssetAddEvent] = successful(Left(ErrorResponse.internalError("not implemented")))
+  def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[ImageData] = successful(Left(ErrorResponse.internalError("not implemented")))
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = successful(Right(()))
   def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadOtrClients(): ErrorOrResponse[Seq[Client]] = successful(Right(Seq.empty))

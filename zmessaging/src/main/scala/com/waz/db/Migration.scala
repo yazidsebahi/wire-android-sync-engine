@@ -77,7 +77,8 @@ class Migrations(migrations: Migration*) {
   /**
    * Migrates database using provided migrations.
    * Falls back to dropping all data if migration fails.
-   * @throws IllegalStateException if no migration plan can be found
+    *
+    * @throws IllegalStateException if no migration plan can be found
    */
   @throws[IllegalStateException]("If no migration plan can be found for given versions")
   def migrate(storage: DaoDB, fromVersion: Int, toVersion: Int)(implicit db: SQLiteDatabase): Unit = {
@@ -86,10 +87,11 @@ class Migrations(migrations: Migration*) {
         case Nil => throw new IllegalStateException(s"No migration plan from: $fromVersion to: $toVersion")
         case ms =>
           try {
-            inTransaction {
-              ms.foreach { m =>
-                verbose(s"applying migration: $m")
+            ms.foreach { m =>
+              verbose(s"applying migration: $m")
+              inTransaction {
                 m(db)
+                db.execSQL(s"PRAGMA user_version = ${m.toVersion}")
               }
             }
           } catch {

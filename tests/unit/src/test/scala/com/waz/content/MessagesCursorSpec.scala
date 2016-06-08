@@ -54,7 +54,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   lazy val msgLoader = new MessageLoader {
     override def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]] = withLikes(ids map { id =>
       val seq = id.str.toLong
-      MessageData(id, convId, EventId(seq, "0"), EventId.Zero, Message.Type.TEXT, UserId(id.str), Seq(MessageContent(Message.Part.Type.TEXT, id.str)))
+      MessageData(id, convId, EventId(seq, "0"), Message.Type.TEXT, UserId(id.str), Seq(MessageContent(Message.Part.Type.TEXT, id.str)))
     })
     override def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]] = Future.successful(msgs.map { m => MessageAndLikes(m, IndexedSeq.empty, likedBySelf = false)})
   }

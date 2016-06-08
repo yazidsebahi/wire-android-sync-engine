@@ -107,7 +107,7 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
 
   private val botEmail = compile("welcome(\\+\\d+)?@wire\\.com", CASE_INSENSITIVE)
   private def isBot(u: UserData) = u.email.exists(e => botEmail.matcher(e.str).matches)
-  private def isAutoConnect(u: UserData) = u.isConnected && ! u.isSelf && u.connectionMessage.isEmpty && ! isBot(u)
+  private def isAutoConnect(u: UserData) = u.isAutoConnect && ! isBot(u)
   private def isMsgFrom(self: UserId)(m: MessageEntry) = m.user == self && interactive(m.tpe)
   private def isBotInteraction(self: UserId, bot: Option[ConvId], m: MessageData) = m.userId == self && interactive(m.msgType) && bot.exists(_ == m.convId)
   private val interactive = Set(ASSET, KNOCK, TEXT, RICH_MEDIA, ASSET)

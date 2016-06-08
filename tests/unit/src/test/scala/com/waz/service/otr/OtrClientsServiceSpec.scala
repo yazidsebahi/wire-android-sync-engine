@@ -21,7 +21,7 @@ import com.waz.RobolectricUtils
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConvId, RConvId, ConversationData, UserData}
+import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.sync.client.OtrClient
 import com.waz.testutils.MockZMessaging
@@ -33,6 +33,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
 import com.waz.utils._
 import org.threeten.bp.Instant
+
 import scala.concurrent.duration._
 
 class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
@@ -75,7 +76,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
     lazy val incoming = returning(service.otrClientsService.incomingClientsSignal)(_.disableAutowiring())
 
     scenario("update clients") {
-      service.otrClientsService.updateSelfClients(Seq(Client(ClientId("client1"), "client 1", signalingKey = Some(SignalingKey("enc", "mac")), regTime = Some(time)), Client(ClientId("client2"), "client 2", regTime = Some(time - 1.day)))).futureValue
+      service.otrClientsService.updateSelfClients(Seq(Client(ClientId("client1"), "client 1", signalingKey = Some(SignalingKey(AESKey("enc"), "mac")), regTime = Some(time)), Client(ClientId("client2"), "client 2", regTime = Some(time - 1.day)))).futureValue
       service.otrContent.clientIdPref := Some(ClientId("client1"))
 
       withDelay {
@@ -100,7 +101,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
         cs.clients.get(ClientId("client1")) shouldBe 'defined
         cs.clients.get(ClientId("client2")) shouldBe 'defined
         cs.clients.get(ClientId("client3")) shouldBe 'defined
-        cs.clients.get(ClientId("client1")).get.signalingKey shouldEqual Some(SignalingKey("enc", "mac"))
+        cs.clients.get(ClientId("client1")).get.signalingKey shouldEqual Some(SignalingKey(AESKey("enc"), "mac"))
       }
     }
 

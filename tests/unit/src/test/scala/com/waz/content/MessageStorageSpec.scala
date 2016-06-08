@@ -38,18 +38,12 @@ class MessageStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val messages = zms.messagesStorage
 
-  scenario("update message data") {
-    val msg = messages.addMessage(MessageData(MessageId(), conv.id, EventId.Zero, EventId.Zero, Message.Type.TEXT, UserId(), state = Message.Status.FAILED)).futureValue
-
-    messages.update(msg.id)(_.copy(state = Message.Status.PENDING)).futureValue shouldBe 'defined
-  }
-
   feature("Unread count") {
 
     scenario("Receive new message and last read with older event at the same time") {
-      val msg = messages.addMessage(MessageData(MessageId(), conv.id, EventId(1), EventId.Zero, Message.Type.TEXT, UserId())).futureValue
-      messages.addMessage(MessageData(MessageId(), conv.id, EventId(2), EventId.Zero, Message.Type.TEXT, UserId()))
-      messages.addMessage(MessageData(MessageId(), conv.id, EventId(3), EventId.Zero, Message.Type.TEXT, UserId()))
+      val msg = messages.addMessage(MessageData(MessageId(), conv.id, EventId(1), Message.Type.TEXT, UserId())).futureValue
+      messages.addMessage(MessageData(MessageId(), conv.id, EventId(2), Message.Type.TEXT, UserId()))
+      messages.addMessage(MessageData(MessageId(), conv.id, EventId(3), Message.Type.TEXT, UserId()))
       zms.convsContent.updateConversationLastRead(conv.id, msg.time).futureValue shouldBe 'defined
 
       withDelay {

@@ -53,13 +53,26 @@ package object db {
     while(! cursor.isAfterLast) { f(cursor); cursor.moveToNext() }
   } finally cursor.close()
 
+  class Transaction(db: SQLiteDatabase) {
+    def flush() = {
+      db.setTransactionSuccessful()
+      db.endTransaction()
+      db.beginTransactionNonExclusive()
+    }
+  }
+
   def inTransaction[A](body: => A)(implicit db: SQLiteDatabase): A =
-    if (db.inTransaction()) body
+    inTransaction(_ => body)
+
+  def inTransaction[A](body: Transaction => A)(implicit db: SQLiteDatabase): A = {
+    val tr = new Transaction(db)
+    if (db.inTransaction()) body(tr)
     else {
       db.beginTransactionNonExclusive()
-      try returning(body) { _ => db.setTransactionSuccessful() }
+      try returning(body(tr)) { _ => db.setTransactionSuccessful() }
       finally db.endTransaction()
     }
+  }
 
   private lazy val readTransactions = ReadTransactionSupport.chooseImplementation()
 

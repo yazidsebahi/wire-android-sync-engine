@@ -76,7 +76,7 @@ object RoboProcess {
     val processLogger = ProcessLogger(writeToStream, writeToStream)
 
     new Thread() {
-      override def run(): Unit = cmd ! processLogger
+      override def run(): Unit = Process(cmd, None, "LD_LIBRARY_PATH" -> System.getProperty("java.library.path")) ! processLogger
     }.start()
   }
 }
@@ -92,7 +92,8 @@ class RoboProcessRunner(suiteClass: Class[_], providedConfig: Option[Config] = N
   val shouldAcquire: String => Option[Boolean] = _ => None
   val shadows: Seq[Class[_]] = Seq(classOf[ShadowApplication], classOf[ShadowIOBitmapFactory], classOf[ShadowIOBitmap],
     classOf[ShadowIOCanvas], classOf[ShadowAudioManager2], classOf[ShadowTelephonyManager2], classOf[ShadowMatrix],
-    classOf[ShadowIOExifInterface], classOf[ShadowLooper2], classOf[ShadowSQLiteConnection2], classOf[ShadowGeocoder2])
+    classOf[ShadowIOExifInterface], classOf[ShadowLooper2], classOf[ShadowSQLiteConnection2], classOf[ShadowGeocoder2],
+    classOf[ShadowFileProvider])
 
   val configProperties: Properties =
     Option(suiteClass.getClassLoader.getResourceAsStream("org.robolectric.Config.properties")).map { resourceAsStream =>

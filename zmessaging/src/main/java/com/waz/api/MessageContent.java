@@ -53,10 +53,10 @@ public interface MessageContent<T> {
         }
     }
 
-    class Asset implements MessageContent<ImageAsset> {
+    class Image implements MessageContent<ImageAsset> {
         private final ImageAsset content;
 
-        public Asset(ImageAsset file) {
+        public Image(ImageAsset file) {
             this.content = file;
         }
 
@@ -68,6 +68,29 @@ public interface MessageContent<T> {
         @Override
         public User[] getMentions() {
             return EmptyMentions;
+        }
+    }
+
+    class Asset implements MessageContent<AssetForUpload> {
+        private final AssetForUpload content;
+        private final ErrorHandler handler;
+
+        public Asset(AssetForUpload a, ErrorHandler eh) {
+            this.content = a;
+            this.handler = eh;
+        }
+
+        @Override public AssetForUpload getContent() { return content; }
+        @Override public User[] getMentions() { return EmptyMentions; }
+        public ErrorHandler getErrorHandler() { return handler; }
+
+        public interface ErrorHandler {
+            void noWifiAndFileIsLarge(long sizeInBytes, NetworkMode net, Answer answer);
+        }
+
+        public interface Answer {
+            void ok();
+            void cancel();
         }
     }
 }

@@ -38,6 +38,11 @@ public interface ProgressIndicator extends UiObservable {
     boolean isIndefinite();
 
     /**
+     * Cancel the observed process if possible.
+     */
+    void cancel();
+
+    /**
      * Whether the respective action is currently running or already done.
      */
     State getState();

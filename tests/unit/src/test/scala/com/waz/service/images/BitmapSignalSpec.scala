@@ -24,9 +24,10 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model._
-import com.waz.service.images.ImageAssetService.BitmapRequest.Regular
-import com.waz.service.images.ImageAssetService.BitmapResult.BitmapLoaded
-import com.waz.service.images.ImageAssetService.{BitmapRequest, BitmapResult}
+import com.waz.service.assets
+import assets.AssetService.BitmapRequest.Regular
+import assets.AssetService.BitmapResult.BitmapLoaded
+import assets.AssetService.{BitmapRequest, BitmapResult}
 import com.waz.threading.CancellableFuture
 import com.waz.ui.MemoryImageCache
 import org.robolectric.annotation.Config
@@ -57,7 +58,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   lazy val imageCache = new MemoryImageCache(testContext)
 
-  lazy val loader = new ImageLoader(testContext, null, null, imageCache, null, null, null) {
+  lazy val loader = new ImageLoader(testContext, null, imageCache, null, null, null) {
 
     override def hasCachedBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Boolean] = CancellableFuture.successful(cachedBitmapResult(im).isDefined)
 
@@ -85,7 +86,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     def medium = results.collectFirst { case BitmapLoaded(b, false, _) => b }
   }
 
-  def image(tag: String, w: Int, h: Int, ow: Int, oh: Int, mime: String = Mime.Png, size: Int = 0) = ImageData(tag, mime, w, h, ow, oh, size, Some(RImageDataId()))
+  def image(tag: String, w: Int, h: Int, ow: Int, oh: Int, mime: String = Mime.Png, size: Int = 0) = ImageData(tag, mime, w, h, ow, oh, size, Some(RAssetDataId()))
 
   def asset(is: ImageData*) = ImageAssetData(AssetId(), RConvId(), is)
 

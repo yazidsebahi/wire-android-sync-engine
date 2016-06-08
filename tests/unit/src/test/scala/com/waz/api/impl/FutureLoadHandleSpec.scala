@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.api.ProgressIndicator.State
+import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.{RobolectricUtils, api}
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
@@ -34,10 +35,10 @@ class FutureLoadHandleSpec extends FeatureSpec with Matchers with RobolectricTes
   feature("Future load handler progress indicators") {
     val p = Promise[Unit]()
 
-    scenario("Initially, the progress indicator should be running.") {
+    scenario("Initially, the progress indicator state is unknown.") {
       progress = handle(p).getProgressIndicator
-      progress.isIndefinite should be(true)
-      progress.getState shouldEqual State.RUNNING
+      progress.isIndefinite should be(false)
+      progress.getState shouldEqual State.UNKNOWN
     }
 
     scenario("When completing the future successfully, the progress indicator should be completed.") {
@@ -47,7 +48,7 @@ class FutureLoadHandleSpec extends FeatureSpec with Matchers with RobolectricTes
       }
     }
 
-    scenario("WHen failing a future, the progress indicator should be failed.") {
+    scenario("When failing a future, the progress indicator should be failed.") {
       val p = Promise[Unit]()
       progress = handle(p).getProgressIndicator
       p.complete(Failure(new RuntimeException))
@@ -56,27 +57,19 @@ class FutureLoadHandleSpec extends FeatureSpec with Matchers with RobolectricTes
       }
     }
 
-    scenario("WHen cancelling a future, the progress indicator should be cancelled (for succeeding futures).") {
+    scenario("When cancelling a handle, the progress indicator should be cancelled (and underlying future cancelled).") {
       val p = Promise[Unit]()
       val lh = handle(p)
       progress = lh.getProgressIndicator
       lh.cancel()
-      p.complete(Success({}))
       withDelay {
         progress.getState shouldEqual State.CANCELLED
       }
-    }
-
-    scenario("WHen cancelling a future, the progress indicator should be cancelled (for failing futures).") {
-      val p = Promise[Unit]()
-      val lh = handle(p)
-      progress = lh.getProgressIndicator
-      lh.cancel()
-      p.complete(Failure(new RuntimeException))
-      withDelay {
-        progress.getState shouldEqual State.CANCELLED
+      p.future.value match {
+        case Some(Failure(_: CancelException)) => // expected
+        case v => fail(s"unexpected value: $v")
       }
     }
   }
-  private def handle[T](p: Promise[T]): FutureLoadHandle[T] = FutureLoadHandle(CancellableFuture.lift(p.future, {}))(_ => ())
+  private def handle[T](p: Promise[T]): FutureLoadHandle[T] = FutureLoadHandle(new CancellableFuture(p))(_ => ())
 }

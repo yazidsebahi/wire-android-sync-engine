@@ -21,10 +21,10 @@ import java.io.FileInputStream
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.GlobalStorage
-import com.waz.db.ZGlobalDB
+import com.waz.content.{GlobalStorage, Mime}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
+import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
 import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
@@ -35,49 +35,45 @@ import scala.concurrent.duration._
 
 class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig { test =>
 
-  var storage: GlobalStorage = _
-  var service: CacheService = _
-
   implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
 
   lazy val cacheDir = Robolectric.application.getCacheDir
 
-  before {
-    storage = new GlobalStorage(Robolectric.application)
-    service = new CacheService(Robolectric.application, storage)
-  }
+  lazy val storage = new GlobalStorage(Robolectric.application)
+  lazy val service = new CacheService(Robolectric.application, storage)
 
   after {
     Thread.sleep(1000) // because some operations (deleting) are scheduled on background
-    storage.close.await()
-    Robolectric.application.getDatabasePath(ZGlobalDB.DbName).getParentFile.listFiles.foreach(_.delete())
+    service.cacheStorage.list().flatMap { es => service.cacheStorage.remove(es.map(_.key)) }.await()
   }
 
   feature("Create") {
     scenario("Create CacheEntry with data") {
-      val entry = service.addData("foo", "bar".getBytes)
+      val entry = service.addData("foo", "bar".getBytes).await()
       entry.data.key should be("foo")
     }
 
     scenario("Create CacheEntry with inputStream") {
       val in = getClass.getResourceAsStream("/images/fixedit.jpg")
 
-      val entry = service.addStream("foo", in)
+      val entry = service.addStream("foo", in, Mime("image/jpeg"), Some("test.jpg"))
       val result = Await.result(entry, 10.seconds)
 
       result.data.key should be("foo")
+      result.data.mimeType shouldEqual Mime("image/jpeg")
+      result.data.fileName shouldEqual Some("test.jpg")
       result.cacheFile.exists() shouldEqual true
     }
 
     scenario("Create empty CacheEntry") {
-      val entry = service.createForFile("foo")
+      val entry = service.createForFile("foo").await()
 
       entry.data.key should be("foo")
     }
 
     scenario("Create CacheEntry with data will overwrite") {
-      val entry1 = service.addData("foo", "bar".getBytes)
-      val entry2 = service.addData("foo", "bar".getBytes)
+      val entry1 = service.addData("foo", "bar".getBytes).await()
+      val entry2 = service.addData("foo", "bar".getBytes).await()
 
       entry2.data.fileId should not be entry1.data.fileId
       entry1.cacheFile.exists() shouldEqual false
@@ -100,16 +96,16 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   feature("Read") {
 
     scenario("Create CacheEntry with data and read it") {
-      val entry = service.addData("foo", "bar".getBytes)
+      val entry = service.addData("foo", "bar".getBytes).await()
 
-      assertEquals(Await.result(service.getEntry("foo"), 10.seconds).get, entry)
+      assertEquals(service.getEntry("foo").await().get, entry)
     }
 
     scenario("Create CacheEntry with inputStream and read it") {
       def in = getClass.getResourceAsStream("/images/fixedit.jpg")
 
-      val entry = service.addStream("foo", in).future.futureValue
-      val entry1 = service.getEntry("foo").future.futureValue.get
+      val entry = service.addStream("foo", in).futureValue
+      val entry1 = service.getEntry("foo").futureValue.get
       assertEquals(entry1, entry)
 
       IoUtils.toByteArray(entry1.inputStream).mkString(",") shouldEqual IoUtils.toByteArray(in).mkString(",")
@@ -118,7 +114,7 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     scenario("Saved file should be encrypted") {
       def in = getClass.getResourceAsStream("/images/fixedit.jpg")
 
-      val entry = service.addStream("foo", in).future.futureValue
+      val entry = service.addStream("foo", in).futureValue
 
       IoUtils.toByteArray(entry.inputStream).mkString(",") shouldEqual IoUtils.toByteArray(in).mkString(",")
       IoUtils.toByteArray(new FileInputStream(entry.cacheFile)).toSeq should not equal IoUtils.toByteArray(in).toSeq
@@ -142,7 +138,7 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   feature("Delete") {
     scenario("Create CacheEntry with data and delete it") {
-      val entry = service.addData("foo", "bar".getBytes)
+      val entry = service.addData("foo", "bar".getBytes).await()
 
       Await.result(service.remove(entry), 1.second)
       Await.result(service.getEntry("foo"), 10.seconds) should be(None)
@@ -160,8 +156,8 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   feature("Sync") {
     scenario("Delete all expired") {
-      val Seq(foo, bar) = Seq("foo", "bar") map (service.createForFile(_)(Expiration(0)))
-      val Seq(goo, hoo) = Seq("goo", "hoo") map (service.addData(_, "zeta".getBytes)(Expiration(0)))
+      val Seq(foo, bar) = Seq("foo", "bar") map (service.createForFile(_)(Expiration(0)).await())
+      val Seq(goo, hoo) = Seq("goo", "hoo") map (service.addData(_, "zeta".getBytes)(Expiration(0)).await())
       Seq(foo, bar) foreach { _.cacheFile.createNewFile() }
 
       Thread.sleep(1000)

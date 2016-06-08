@@ -26,7 +26,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.PushService.SlowSyncRequest
 import com.waz.service.UserService._
-import com.waz.service.images.ImageAssetService
+import com.waz.service.assets.AssetService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.{CredentialsUpdateClient, UsersClient}
@@ -40,7 +40,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NoStackTrace
 
 class UserService(user: ZUserService, usersStorage: UsersStorage, keyValueService: KeyValueService, push: PushService, instance: InstanceService,
-                  assets: ImageAssetService, client: CredentialsUpdateClient, usersClient: UsersClient, sync: SyncServiceHandle, userCallbacks: UserDataCallbacks, lifecycle: ZmsLifecycle) {
+                  assets: AssetService, client: CredentialsUpdateClient, usersClient: UsersClient, sync: SyncServiceHandle, userCallbacks: UserDataCallbacks, lifecycle: ZmsLifecycle) {
 
   private implicit val logTag: LogTag = logTagFor[UserService]
   import Threading.Implicits.Background

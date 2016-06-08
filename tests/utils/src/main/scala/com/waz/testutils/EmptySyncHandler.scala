@@ -26,5 +26,4 @@ import scala.concurrent.Future
 class EmptySyncHandler extends SyncHandler {
   override def apply(req: SyncRequest): Future[SyncResult] = Future.successful(SyncResult.Success)
   override def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult] = Future.successful(SyncResult.Success)
-  override def onDropped(req: SyncRequest): Future[Unit] = Future.successful(())
 }

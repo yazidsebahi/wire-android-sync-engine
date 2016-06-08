@@ -21,8 +21,8 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.model.messages.media.MediaAssetData
-import com.waz.model.{MessageData, MessageContent}
-import com.waz.service.images.ImageAssetService
+import com.waz.model.{MessageContent, MessageData}
+import com.waz.service.assets.AssetService
 import com.waz.sync.client.SoundCloudClient
 import com.waz.threading.Threading
 import com.waz.znet.ZNetClient.ErrorOr
@@ -30,7 +30,7 @@ import com.waz.znet.ZNetClient.ErrorOr
 import scala.concurrent.Future
 
 
-class SoundCloudMediaService(client: SoundCloudClient, assets: ImageAssetService) {
+class SoundCloudMediaService(client: SoundCloudClient, assets: AssetService) {
   private implicit val logTag: LogTag = logTagFor[SoundCloudMediaService]
 
   import Threading.Implicits.Background

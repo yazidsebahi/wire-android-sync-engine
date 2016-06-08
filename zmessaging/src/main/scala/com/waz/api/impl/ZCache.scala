@@ -17,14 +17,16 @@
  */
 package com.waz.api.impl
 
-import com.waz.cache.{Expiration, CacheEntry, CacheService}
 import java.io.OutputStream
-import concurrent.duration._
+
+import com.waz.cache.{CacheEntry, CacheService, Expiration}
+
+import scala.concurrent.duration._
 
 class ZCache(cache: CacheService) extends com.waz.api.ZCache {
   private implicit val expiration: Expiration = 1.hour
 
-  override def createTempEntry(): ZCache.Entry = new ZCache.Entry(cache.createForFile())
+  override def createTempEntry(): ZCache.Entry = new ZCache.Entry(cache.createManagedFile())
 }
 
 object ZCache {

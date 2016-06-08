@@ -17,25 +17,22 @@
  */
 package com.waz.api.impl
 
+import com.waz.api
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.ProgressData
-import com.waz.threading.Threading
-import com.waz.api
-
-import scala.concurrent.Future
 
 class ProgressIndicator extends api.ProgressIndicator with UiObservable {
-  private var data = ProgressData(0L, -1L, State.RUNNING)
+  private var data = ProgressData.Unknown
 
-  def set(data: ProgressData): Unit = Future {
+  def set(data: ProgressData): Unit = {
     this.data = data
     notifyChanged()
-  } (Threading.Ui)
+  }
 
-  def setState(state: State): Unit = Future {
+  def setState(state: State): Unit = {
     data = data.copy(state = state)
     notifyChanged()
-  } (Threading.Ui)
+  }
 
   override def getProgress: Long = data.current
 
@@ -46,6 +43,8 @@ class ProgressIndicator extends api.ProgressIndicator with UiObservable {
   override def getState: State = data.state
 
   override def toString: String = s"ProgressIndicator($data)"
+
+  override def cancel(): Unit = ()
 }
 
 object ProgressIndicator {
@@ -53,9 +52,9 @@ object ProgressIndicator {
 
   case class ProgressData(current: Long, total: Long, state: State)
   object ProgressData {
+    val Indefinite = ProgressData(0, -1, State.RUNNING)
     val Unknown = ProgressData(0, 0, State.UNKNOWN)
   }
-
 
   object Empty extends ProgressIndicator with UiObservable {
     override def getProgress: Long = 0L
@@ -64,5 +63,10 @@ object ProgressIndicator {
     override def getState = State.UNKNOWN
     override def set(data: ProgressData): Unit = ()
     override def setState(state: State): Unit = ()
+  }
+
+  class ProgressReporter(callback: ProgressData => Unit, total: Long) {
+    def running(current: Long) = callback(ProgressData(current, total, State.RUNNING))
+    def completed() = callback(ProgressData(total, total, State.COMPLETED))
   }
 }

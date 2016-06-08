@@ -30,7 +30,7 @@ import com.waz.content._
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
 import com.waz.service._
-import com.waz.service.images.ImageAssetService
+import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -47,7 +47,7 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
                            messagesStorage: MessagesStorage, membersStorage: MembersStorage,
                            convsStorage: ConversationStorage, val content: ConversationsContentUpdater, listState: ConversationsListStateService,
                            membersContent: MembersContentUpdater, sync: SyncServiceHandle, errors: ErrorsService,
-                           messages: MessagesService, assets: ImageAssetService, storage: ZStorage,
+                           messages: MessagesService, assets: AssetService, storage: ZStorage,
                            msgContent: MessagesContentUpdater, kvService: KeyValueService, eventScheduler: => EventScheduler) {
 
   private implicit val tag: LogTag = logTagFor[ConversationsService]
@@ -282,7 +282,7 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
   }
 
   def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse) = for {
-    _ <- errors.addError(ErrorData(error, resp, conv, users))
+    _ <- errors.addErrorWhenActive(ErrorData(error, resp, conv, users))
     _ <- removeUsersFromConversation(conv, users)
     _ <- removeLocalMemberJoinMessage(conv, users.toSet)
   } yield ()

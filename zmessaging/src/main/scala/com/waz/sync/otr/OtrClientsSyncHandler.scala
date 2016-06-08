@@ -168,7 +168,7 @@ class OtrClientsSyncHandler(context: Context, user: ZUserService, users: UserSer
       LoggedTry.local(geocoder.getFromLocation(lat, lon, 1).asScala).toOption.flatMap(_.headOption).flatMap { add =>
         Option(Seq(Option(add.getLocality), Option(add.getCountryCode)).flatten.mkString(", ")).filter(_.nonEmpty)
       }
-    } (Threading.IO)
+    } (Threading.BlockingIO)
 
     def loadNames(locs: Iterable[Location]) =
       Future.traverse(locs) { l => loadName(l.lat, l.lon).map { (l.lat, l.lon) -> _ } }

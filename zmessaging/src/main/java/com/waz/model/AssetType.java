@@ -18,5 +18,6 @@
 package com.waz.model;
 
 public enum AssetType {
-    Image
+    Image,
+    Any
 }

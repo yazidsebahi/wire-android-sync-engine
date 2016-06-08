@@ -31,9 +31,10 @@ import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model._
 import com.waz.service.ZMessaging
-import com.waz.service.images.ImageAssetService.BitmapRequest._
-import com.waz.service.images.ImageAssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import com.waz.service.images.ImageAssetService.{BitmapRequest, BitmapResult}
+import com.waz.service.assets.AssetService
+import AssetService.BitmapRequest._
+import AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
+import AssetService.{BitmapRequest, BitmapResult}
 import com.waz.service.images.{BitmapSignal, ImageLoader}
 import com.waz.threading.Threading
 import com.waz.ui._
@@ -50,13 +51,18 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 
   var data = ImageAssetData.Empty
 
-  addLoader(_.assetsStorage.signal(id)) {
-    case im: ImageAssetData =>
-      if (this.data != im) {
-        this.data = im
-        notifyChanged()
-      }
-    case d => warn(s"unexpected image data for asset $id: $d")
+  protected def signal(zms: ZMessaging) =
+    zms.assetsStorage.signal(id) map {
+      case im: ImageAssetData => im
+      case AnyAssetData(_, conv, _, _, _, _, Some(AssetPreviewData.Image(preview)), _, _, _) => ImageAssetData(id, conv, Seq(preview))
+      case _ => ImageAssetData.Empty
+    }
+
+  addLoader(signal) { im =>
+    if (this.data != im) {
+      this.data = im
+      notifyChanged()
+    }
   }
 
   override def getId: String = id.str
@@ -161,7 +167,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
     bytes
   } (Threading.ImageDispatcher)
 
-  data = ImageAssetData(id, RConvId(), Seq(new ImageData("full", mime, w, h, w, h, 0, Some(RImageDataId())) {
+  data = ImageAssetData(id, RConvId(), Seq(new ImageData("full", mime, w, h, w, h, 0, Some(RAssetDataId())) {
     override lazy val data: Option[Array[Byte]] = {
       verbose(s"data requested, compress completed: ${imageData.isCompleted}")(tag)
       // XXX: this is ugly, but will only be accessed from bg thread and very rarely, so we should be fine with that hack

@@ -20,7 +20,7 @@ package com.waz.service.otr
 import akka.pattern.ask
 import android.graphics.{Bitmap, BitmapFactory}
 import com.waz.api.Message.Status
-import com.waz.api.MessageContent.Asset
+import com.waz.api.MessageContent.Image
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
 import com.waz.api.impl.Message
@@ -118,7 +118,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         msgs should have size 2
         msgs.getLastMessage.data.contentString shouldEqual "Test message"
         msgs.getLastMessage.data.state shouldEqual Status.SENT
-        msgs.getLastMessage.data.otr shouldEqual true
       }
     }
 
@@ -135,7 +134,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         msgs.drop(2).zipWithIndex foreach { case (msg, i) =>
           msg.data.contentString shouldEqual s"ordered message $i"
           msg.data.state shouldEqual Status.SENT
-          msg.data.otr shouldEqual true
         }
       }
     }
@@ -153,7 +151,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
           val last = msgs.getLastMessage
           last.getBody shouldEqual "Test message 3"
           last.asInstanceOf[Message].data.state shouldEqual Status.SENT
-          last.asInstanceOf[Message].data.otr shouldEqual true
         }
       }
     }
@@ -190,7 +187,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         msgs should have size (count + 1)
         last.data.msgType shouldEqual Message.Type.KNOCK
         last.data.state shouldEqual Status.SENT
-        last.data.otr shouldEqual true
       }
     }
 
@@ -204,7 +200,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         msgs should have size (count + 1)
         last.data.msgType shouldEqual Message.Type.KNOCK
         last.data.state shouldEqual Status.SENT
-        last.data.otr shouldEqual true
         last.getUser.getId shouldEqual auto2Id.str
       }
     }
@@ -214,14 +209,13 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("Send image asset") {
       val count = msgs.size
       val bmp = BitmapFactory.decodeStream(getClass.getResourceAsStream("/images/penguin.png"))
-      conv.sendMessage(new Asset(ImageAssetFactory.getImageAsset(bmp)))
+      conv.sendMessage(new Image(ImageAssetFactory.getImageAsset(bmp)))
 
       withDelay {
         msgs should have size (count + 1)
         val last = msgs.getLastMessage.data
         last.msgType shouldEqual Message.Type.ASSET
         last.state shouldEqual Status.SENT
-        last.otr shouldEqual true
       }
       val asset = msgs.getLastMessage.getImage
       withDelay {
@@ -236,7 +230,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       awaitUi(1.second)
       val asset = msgs.getLastMessage.getImage
       val asset1 = asset.data.copy(id = AssetId()) // create asset copy to make sure it is not cached
-      zmessaging.imageAssets.updateImageAsset(asset1)
+      zmessaging.assets.updateImageAsset(asset1)
 
       val a = api.ui.images.getImageAsset(asset1.id)
 
@@ -269,7 +263,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         val last = msgs.getLastMessage
         last.data.msgType shouldEqual Message.Type.ASSET
         last.data.state shouldEqual Status.SENT
-        last.data.otr shouldEqual true
       }
 
       val img = msgs.getLastMessage.getImage
@@ -428,13 +421,12 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("Send image asset2") {
       val count = msgs.size
       val bmp = BitmapFactory.decodeStream(getClass.getResourceAsStream("/images/penguin.png"))
-      conv.sendMessage(new Asset(ImageAssetFactory.getImageAsset(bmp)))
+      conv.sendMessage(new Image(ImageAssetFactory.getImageAsset(bmp)))
 
       withDelay {
         msgs should have size (count + 1)
         msgs.getLastMessage.data.msgType shouldEqual Message.Type.ASSET
         msgs.getLastMessage.data.state shouldEqual Status.SENT
-        msgs.getLastMessage.data.otr shouldEqual true
         // TODO: assert image data can be decoded
       }
     }
@@ -448,7 +440,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         val last = msgs.getLastMessage
         last.data.msgType shouldEqual Message.Type.ASSET
         last.data.state shouldEqual Status.SENT
-        last.data.otr shouldEqual true
       }
 
       val img = msgs.getLastMessage.getImage

@@ -23,6 +23,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.api.Message
 import com.waz.content.GlobalStorage
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Knock
 import com.waz.model._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
@@ -97,7 +98,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("update knock on event") {
       val msg = knock()
-      service.dispatchEvent(KnockEvent(Uid(msg.id.str), conv.remoteId, EventId(1), new Date, selfUser.id, ""))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
       Thread.sleep(250)
 
       val msg1 = lastMessage(conv.id)
@@ -151,17 +152,13 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val msg = knock()
       val msg1 = knock()
 
-      val event1 = EventId(1)
-      val event2 = EventId(2)
-      service.dispatchEvent(KnockEvent(Uid(msg.id.str), conv.remoteId, event1, new Date, selfUser.id, ""))
-      service.dispatchEvent(HotKnockEvent(Uid(msg1.id.str), conv.remoteId, event2, new Date, selfUser.id, "", event1))
-      service.dispatchEvent(HotKnockEvent(Uid(msg1.id.str), conv.remoteId, event2, new Date, selfUser.id, "", event1))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg1.id, Knock(true))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg1.id, Knock(true))))
       Thread.sleep(250)
 
       listMessages(conv.id) should have size 1
       val last = lastMessage(conv.id)
-      last.map(_.source) shouldEqual Some(event1)
-      last.map(_.edit) shouldEqual Some(event2)
       last.map(_.hotKnock) shouldEqual Some(true)
       messageSync shouldEqual Some(msg1.id)
     }
@@ -196,7 +193,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val msg = knock()
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), EventId.Zero, Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -209,11 +206,11 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("knock, incoming message, knock") {
       val msg = knock()
-      service.dispatchEvent(KnockEvent(Uid(msg.id.str), conv.remoteId, EventId(1), new Date, selfUser.id, ""))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
       Thread.sleep(250)
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), EventId.Zero, Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -229,7 +226,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val msg = knock()
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), EventId.Zero, Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -242,12 +239,12 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("knock, incoming knock, knock") {
       val msg = knock()
-      service.dispatchEvent(KnockEvent(Uid(msg.id.str), conv.remoteId, EventId(1), new Date, selfUser.id, ""))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
       Thread.sleep(250)
 
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), EventId.Zero, Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -280,7 +277,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
     scenario("receive single knock") {
       val incoming = service.messagesStorage.getIncomingMessages
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(KnockEvent(Uid(), conv.remoteId, EventId(1), new Date, user1.id, "").withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(MessageId(), Knock(false))).withCurrentLocalTime())
       }
 
       withDelay {
@@ -293,13 +290,13 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("receive hotknock") {
       val incoming = service.messagesStorage.getIncomingMessages
-      val ev = EventId(1)
+      val msgId = MessageId()
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(KnockEvent(Uid(), conv.remoteId, ev, new Date, user1.id, "").withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(false))).withCurrentLocalTime())
       }
 
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(HotKnockEvent(Uid(), conv.remoteId, EventId(2), new Date, user1.id, "", ev).withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(true))).withCurrentLocalTime())
       }
 
       withDelay {

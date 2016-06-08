@@ -21,8 +21,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.api.Message
-import com.waz.model.MessageData.{MessageEntry, MessageDataDao}
+import com.waz.api.{ErrorResponse, Message}
+import com.waz.api.Message.Status
+import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.{LikingsService, MessageAndLikesNotifier}
@@ -47,6 +48,9 @@ class MessagesStorage(context: Context, storage: ZStorage, selfUser: => Future[U
   val messageUpdated = onUpdated
 
   val messageChanged = EventStream.union(messageAdded, messageUpdated.map(_.map(_._2)))
+
+  val onMessageSent = EventStream[MessageData]()
+  val onMessageFailed = EventStream[(MessageData, ErrorResponse)]()
 
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
 
@@ -179,32 +183,32 @@ class MessagesStorage(context: Context, storage: ZStorage, selfUser: => Future[U
   def findMessagesFrom(conv: ConvId, time: Instant) =
     find(m => m.convId == conv && !m.time.isBefore(time), MessageDataDao.findMessagesFrom(conv, time)(_), identity)
 
-  def update(id: MessageId)(updater: MessageData => MessageData): Future[Option[MessageData]] =
-    super.update(id, updater) map {
-      case Some((msg, updated)) if msg != updated =>
-        assert(updated.id == id && updated.convId == msg.convId)
-        Some(updated)
-      case _ =>
-        None
-    }
-
-  def delete(conv: ConvId, event: EventId): Future[Unit] =
-    findMessage(conv, event) flatMap {
-      case Some(msg) => super.remove(msg.id) flatMap { _ => msgsIndex(conv).flatMap(_.delete(msg)) }
-      case None =>
-        warn(s"No message found for: $conv, $event")
-        Future.successful(())
-    }
+  def delete(msg: MessageData): Future[Unit] =
+    for {
+      _ <- super.remove(msg.id)
+      index <- msgsIndex(msg.convId)
+      _ <- index.delete(msg)
+    } yield ()
 
   def delete(id: MessageId): Future[Unit] = remove(id)
 
   override def remove(id: MessageId): Future[Unit] =
     getMessage(id) flatMap {
-      case Some(msg) => super.remove(msg.id) flatMap { _ => msgsIndex(msg.convId).flatMap(_.delete(msg)) }
+      case Some(msg) => delete(msg)
       case None =>
         warn(s"No message found for: $id")
         Future.successful(())
     }
+
+  override def remove(keys: Seq[MessageId]): Future[Unit] =
+    for {
+      fromDb <- getAll(keys)
+      msgs = fromDb.collect { case Some(m) => m }
+      _ <- super.remove(keys)
+      _ <- Future.traverse(msgs) { msg =>
+            msgsIndex(msg.convId).flatMap(_.delete(msg))
+          } map { _ => () }
+    } yield ()
 
   def delete(conv: ConvId, upTo: Instant): Future[Unit] = {
     verbose(s"delete($conv, $upTo)")

@@ -23,7 +23,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Bitmap
 import com.waz.ZLog._
-import com.waz.api.NotificationsHandler.{NotificationsHandlerFactory, GcmNotification}
+import com.waz.api.NotificationsHandler.{GcmNotification, NotificationsHandlerFactory}
 import com.waz.api._
 import com.waz.api.impl.ActiveChannel
 import com.waz.bitmap
@@ -31,9 +31,10 @@ import com.waz.bitmap.BitmapUtils
 import com.waz.model._
 import com.waz.service.NotificationService.Notification
 import com.waz.service.ZMessaging.EmptyNotificationsHandler
+import com.waz.service.assets.AssetService
 import com.waz.service.images.BitmapSignal
-import com.waz.service.images.ImageAssetService.BitmapRequest.Regular
-import com.waz.service.images.ImageAssetService.BitmapResult
+import AssetService.BitmapRequest.Regular
+import AssetService.BitmapResult
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.zms.GcmHandlerService
@@ -105,7 +106,7 @@ class GlobalNotificationService(context: Context, currentZms: Signal[Option[ZMes
       user <- caller.fold(Future.successful(Option.empty[UserData]))(zms.users.getUser)
     } yield (conv, user)) flatMap {
       case (Some(conv), Some(user)) =>
-        user.picture map (zms.imageAssets.getImageAsset(_)) getOrElse Future.successful(None) map (CallData(Some(conv.displayName), Some(user.displayName), _))
+        user.picture map (zms.assetsStorage.getImageAsset(_)) getOrElse Future.successful(None) map (CallData(Some(conv.displayName), Some(user.displayName), _))
 
       case (Some(conv), None) => Future.successful(CallData(Some(conv.displayName), None, None))
       case (None, _) => Future.successful(CallData(None, None, None)) // you know nothing, Jon Snow

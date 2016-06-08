@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{AssetAddEvent, _}
+import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.threading.CancellableFuture
@@ -83,17 +83,6 @@ class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures
     scenario("parse events 4") {
       val json = readResource("/conv/conv_events4.json")
       val events = JsonDecoder.array[Event](json.getJSONArray("events"))
-    }
-
-    scenario("parse events 5") {
-      val json = readResource("/conv/conv_events5.json")
-      val events = JsonDecoder.array[Event](json.getJSONArray("events"))
-      val conv = ConvId("b53ae017-b002-4d8c-8540-4887b58d47c7")
-      events foreach {
-        case AssetAddEvent(id, convId, eventID, time, from, assetId, asset) =>
-          convId shouldEqual RConvId(conv.str)
-        case _ => // ignore
-      }
     }
 
     scenario("parse events 6") {

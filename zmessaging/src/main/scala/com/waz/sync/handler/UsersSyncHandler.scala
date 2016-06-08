@@ -19,10 +19,9 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.UsersStorage
+import com.waz.content.{AssetsStorage, UsersStorage}
 import com.waz.model._
 import com.waz.service.UserService
-import com.waz.service.images.ImageAssetService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.UsersClient
 import com.waz.threading.Threading
@@ -30,7 +29,7 @@ import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 
-class UsersSyncHandler(assetSync: ImageAssetSyncHandler, userService: UserService, usersStorage: UsersStorage, imageService: ImageAssetService, usersClient: UsersClient) {
+class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, usersStorage: UsersStorage, assets: AssetsStorage, usersClient: UsersClient) {
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[UsersSyncHandler]
   private implicit val ec = EventContext.Global
@@ -57,7 +56,7 @@ class UsersSyncHandler(assetSync: ImageAssetSyncHandler, userService: UserServic
     case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _, _)) =>
       assetSync.postSelfImageAsset(RConvId(id.str), assetId) flatMap {
         case SyncResult.Success =>
-          imageService.getImageAsset(assetId) flatMap { asset =>
+          assets.getImageAsset(assetId) flatMap { asset =>
             updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = asset)))
           }
         case failure =>

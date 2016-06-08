@@ -102,16 +102,17 @@ object AssetId extends (String => AssetId) {
   }
 }
 
-case class RImageDataId(str: String) {
+case class RAssetDataId(str: String) {
   override def toString: String = str
 }
 
-object RImageDataId {
-  def apply(): RImageDataId = Id.random()
+object RAssetDataId {
+  val Empty = RAssetDataId("empty")
+  def apply(): RAssetDataId = Id.random()
 
-  implicit object Id extends Id[RImageDataId] {
-    override def random() = RImageDataId(Uid().toString)
-    override def decode(str: String) = RImageDataId(str)
+  implicit object Id extends Id[RAssetDataId] {
+    override def random() = RAssetDataId(Uid().toString)
+    override def decode(str: String) = RAssetDataId(str)
   }
 }
 

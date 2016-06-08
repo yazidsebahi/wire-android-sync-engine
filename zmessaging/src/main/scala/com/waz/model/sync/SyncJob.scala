@@ -46,6 +46,7 @@ case class SyncJob(id: SyncId,
 
   def mergeKey = request.mergeKey
 
+  // `job` is the newer one
   def merge(job: SyncJob): MergeResult[SyncJob] = {
     if (mergeKey != job.mergeKey) Unchanged
     else if (state == SyncState.SYNCING) {

@@ -19,46 +19,28 @@ package com.waz.cache
 
 import java.io.File
 import java.lang.System.currentTimeMillis
-import java.security.SecureRandom
 
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import android.util.Base64
-import com.waz.ZLog
-import com.waz.ZLog._
+import com.waz.content.Mime
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.db.DbTranslator.FileTranslator
-import com.waz.model.Uid
+import com.waz.model.{AESKey, Uid}
 import com.waz.utils.returning
 
-case class AES128Key(str: String) {
-  def bytes = Base64.decode(str, Base64.NO_WRAP | Base64.NO_CLOSE)
-}
-
-object AES128Key {
-  lazy val random = new SecureRandom()
-
-  def apply(): AES128Key = AES128Key(Base64.encodeToString(returning(Array.ofDim[Byte](16))(random.nextBytes), Base64.NO_WRAP | Base64.NO_CLOSE))
-}
-
 case class CacheEntryData(
-                           key: String,
-                           data: Option[Array[Byte]] = None,
-                           lastUsed: Long = currentTimeMillis(),
-                           timeout: Long = CacheService.DefaultExpiryTime.toMillis,
-                           path: Option[File] = None,
-                           encKey: Option[AES128Key] = None,
-                           fileId: Uid = Uid()) {
-
-  override def equals(obj: scala.Any): Boolean = obj match {
-    case CacheEntryData(k, d, lu, t, p, e, i) =>
-      ZLog.warn("Comparing CacheEntryData with equals - can be slow", new IllegalStateException(""))(logTagFor[CacheEntryData])
-      k == key && lu == lastUsed && t == timeout && p == path && i == fileId && d.map(_.toSeq) == data.map(_.toSeq)
-    case _ => false
-  }
-}
+  key: String,
+  data: Option[Array[Byte]] = None,
+  lastUsed: Long = currentTimeMillis(),
+  timeout: Long = CacheService.DefaultExpiryTime.toMillis,
+  path: Option[File] = None,
+  encKey: Option[AESKey] = None,
+  fileName: Option[String] = None,
+  mimeType: Mime = Mime.Unknown,
+  fileId: Uid = Uid(),
+  length: Option[Long] = None)
 
 object CacheEntryData {
 
@@ -69,13 +51,16 @@ object CacheEntryData {
     val LastUsed = long('lastUsed)(_.lastUsed)
     val Timeout = long('timeout)(_.timeout)
     val Path = opt(file('path))(_.path)
-    val EncKey = opt(text[AES128Key]('enc_key, _.str, AES128Key(_)))(_.encKey)
+    val Name = opt(text('file_name))(_.fileName)
+    val MimeType = text[Mime]('mime, _.str, Mime(_)).apply(_.mimeType)
+    val EncKey = opt(text[AESKey]('enc_key, _.str, AESKey(_)))(_.encKey)
+    val Length = opt(long('length))(_.length)
 
     override val idCol = Key
-    override val table = Table("CacheEntry", Key, Uid, Data, LastUsed, Timeout, EncKey, Path)
+    override val table = Table("CacheEntry", Key, Uid, Data, LastUsed, Timeout, EncKey, Path, MimeType, Name, Length)
 
     override def apply(implicit cursor: Cursor): CacheEntryData =
-      new CacheEntryData(Key, Data, LastUsed, Timeout, Path, EncKey, Uid)
+      new CacheEntryData(Key, Data, LastUsed, Timeout, Path, EncKey, Name, MimeType, Uid, Length)
 
     def getByKey(key: String)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
 

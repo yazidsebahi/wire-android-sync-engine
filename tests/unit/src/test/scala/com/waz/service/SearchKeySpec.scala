@@ -69,6 +69,12 @@ class SearchKeySpec extends FeatureSpec with GeneratorDrivenPropertyChecks with 
         "a fantastic phrase", "fan art", "something a fan drew"
       ))
     }
+
+    scenario("the empty string always matches") {
+      forAll { key: SearchKey =>
+        SearchKey.empty.isAtTheStartOfAnyWordIn(key) shouldBe true
+      }
+    }
   }
 
   implicit lazy val arbSearchKey: Arbitrary[SearchKey] = Arbitrary(Gen.resultOf(SearchKey))

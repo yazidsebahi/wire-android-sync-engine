@@ -34,7 +34,7 @@ object ConversationDataMigration {
     val moveConvs = new TableMigration(TableDesc("Conversations", Columns.v63.all), TableDesc("Conversations_tmp", Columns.v64.all)) {
       import Columns.{v63 => src, v64 => dst}
       
-      override def bindings: Seq[Binder] = Seq(
+      override val bindings: Seq[Binder] = Seq(
         dst.Id := src.Id,
         dst.RemoteId := src.RemoteId,
         dst.Name := src.Name,

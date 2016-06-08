@@ -17,32 +17,40 @@
  */
 package com.waz.provision
 
-import java.io.FileInputStream
+import java.io.{ByteArrayInputStream, File, FileInputStream}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import com.waz.api.MessageContent.{Asset, Text}
+import android.net.Uri
+import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
-import com.waz.api.impl.{AccentColor, ZMessagingApi}
-import com.waz.content.{Database, GlobalStorage}
+import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
+import com.waz.cache.LocalData
+import com.waz.content.{Database, GlobalStorage, Mime}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
-import com.waz.model.{ConvId, ConversationData, Liking, RConvId}
+import com.waz.model.{MessageContent => _, _}
 import com.waz.service.PreferenceService.Pref
 import com.waz.service._
+import com.waz.sync.client.AssetClient
+import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits.{CoreListAsScala, _}
-import com.waz.threading.{DispatchQueueStats, Threading}
+import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
 import com.waz.ui.UiModule
-import com.waz.utils.IoUtils
+import com.waz.utils._
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.znet.ClientWrapper
+import com.waz.znet.ZNetClient._
+import org.threeten.bp
 
+import scala.concurrent.Future.successful
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 import scala.util.Random
@@ -78,12 +86,35 @@ class DeviceActor(val deviceName: String,
     if (otrOnly) prefs.editUiPreferences(_.putBoolean("zms_send_only_otr", true))
   }
 
+  lazy val delayNextAssetPosting = new AtomicBoolean(false)
+
   lazy val instance: InstanceService = new InstanceService(application, globalModule, new ZMessaging(_, _, _) {
 
     override def metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + Random.nextInt().toHexString
       override lazy val deviceModel: String = deviceName
       override lazy val localBluetoothName: String = deviceName
+    }
+
+    override lazy val assetClient = new AssetClient(znetClient) {
+      import Threading.Implicits.Background
+
+      override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] =
+        CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap (_ => super.postOtrAsset(convId, metadata, data, ignoreMissing))
+    }
+
+    override lazy val assetMetaData = new com.waz.service.assets.MetaDataService(context, cache, assetsStorage, assets) {
+      override def loadMetaData(mime: Mime, data: LocalData): CancellableFuture[Option[AssetMetaData]] = mime match {
+        case Mime.Audio() => CancellableFuture successful Some(AssetMetaData.Audio(bp.Duration.ofSeconds(300), Seq.empty))
+        case Mime.Video() => CancellableFuture successful Some(AssetMetaData.Video(Dim2(320, 480), bp.Duration.ofSeconds(300)))
+        case _ => super.loadMetaData(mime, data)
+      }
+
+      override def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = mime match {
+        case Mime.Audio() => CancellableFuture successful Some(AssetMetaData.Audio(bp.Duration.ofSeconds(300), Seq.empty))
+        case Mime.Video() => CancellableFuture successful Some(AssetMetaData.Video(Dim2(320, 480), bp.Duration.ofSeconds(300)))
+        case _ => super.loadMetaData(mime, uri)
+      }
     }
   }) {
     override val currentUserPref: Pref[String] = global.prefs.preferenceStringSignal("current_user_" + Random.nextInt().toHexString)
@@ -213,13 +244,37 @@ class DeviceActor(val deviceName: String,
         Successful(findConvByName(name).data.remoteId.str)
       }
 
+    case GetMessages(rConvId) =>
+      for {
+        conv <- getConv(rConvId)
+        idx <- zmessaging.messagesStorage.msgsIndex(conv.id)
+        cursor <- idx.loadCursor
+      } yield {
+
+        ConvMessages(Array.tabulate(cursor.size) { i =>
+          val m = cursor(i)
+          MessageInfo(m.message.id, m.message.msgType)
+        })
+      }
+
     case CreateGroupConversation(users@_*) =>
       zmessaging.convsUi.createGroupConversation(ConvId(), users) map { _ => Successful }
+
+    case ClearConversation(remoteId) =>
+      whenConversationExists(remoteId) { conv =>
+        conv.clear()
+        Successful
+      }
 
     case SendText(remoteId, msg) =>
       whenConversationExists(remoteId) { conv =>
         conv.sendMessage(new Text(msg))
         Successful
+      }
+
+    case DeleteMessage(convId, msgId) =>
+      withConv(convId) { conv =>
+        zmessaging.convsUi.deleteMessage(conv.id, msgId)
       }
 
     case AcceptConnection(userId) =>
@@ -246,13 +301,38 @@ class DeviceActor(val deviceName: String,
 
     case SendImage(remoteId, path) =>
       whenConversationExists(remoteId) { conv =>
-        conv.sendMessage(new Asset(ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path)))))
+        conv.sendMessage(new Image(ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path)))))
         Successful
       }
 
     case SendImageData(remoteId, bytes) =>
       withConv(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, new Asset(ui.images.getOrCreateImageAssetFrom(bytes)))
+        zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.getOrCreateImageAssetFrom(bytes)))
+      }
+
+    case SendAsset(remoteId, bytes, mime, name, delay) =>
+      getConv(remoteId) flatMap  { conv =>
+        delayNextAssetPosting.set(delay)
+        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(impl.AssetForUpload(AssetId(), Some(name), Mime(mime), Some(bytes.length.toLong)) {
+          _ => new ByteArrayInputStream(bytes)
+        }, DoNothingAndProceed)).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
+      }
+
+    case CancelAssetUpload(messageId) =>
+      zmessaging.messagesStorage.getMessage(messageId).mapSome(_.assetId).flatMapSome { assetId =>
+        zmessaging.assets.cancelUpload(assetId, messageId)
+      }.map {
+        case Some(()) => Successful
+        case None     => Failed("upload not canceled: message not found or no asset ID present")
+      }
+
+    case SendFile(remoteId, path, mime) =>
+      withConv(remoteId) { conv =>
+        val file = new File(path)
+        val asset = impl.AssetForUpload(AssetId(), Some(file.getName), Mime(mime), Some(file.length)) {
+          _ => new FileInputStream(file)
+        }
+        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
       }
 
     case AddMembers(remoteId, users@_*) =>
@@ -377,7 +457,7 @@ class DeviceActor(val deviceName: String,
     case DeleteDevice(clientId, password) =>
       def find(cs: CoreList[OtrClient]) = cs.find(_.asInstanceOf[com.waz.api.impl.otr.OtrClient].clientId.str == clientId)
       waitUntil(api.getSelf.getOtherOtrClients)(find(_).isDefined) map find flatMap {
-        case None => Future successful Failed(s"Client not found: $clientId")
+        case None => successful(Failed(s"Client not found: $clientId"))
         case Some(client) =>
           val p = Promise[ActorMessage]()
           client.delete(password, new DeleteCallback {
@@ -388,7 +468,7 @@ class DeviceActor(val deviceName: String,
       }
 
     case DeleteAllOtherDevices(password) =>
-      api.zmessaging.fold[Future[ActorMessage]](Future successful Failed("no zmessaging")) { zms =>
+      api.zmessaging.fold[Future[ActorMessage]](successful(Failed("no zmessaging"))) { zms =>
         for {
           Some(user)    <- zms.users.getSelfUserId
           Some(current) <- zms.otrClientsService.getSelfClient.map(_.map(_.id))
@@ -412,22 +492,22 @@ class DeviceActor(val deviceName: String,
       }
 
     case AwaitSyncCompleted =>
-      api.zmessaging.fold[Future[ActorMessage]](Future successful Failed("no zmessaging")) { zms =>
+      api.zmessaging.fold[Future[ActorMessage]](successful(Failed("no zmessaging"))) { zms =>
         zms.syncContent.syncJobs.filter(_.isEmpty).head map { _ => Successful }
       }
 
     case ResetQueueStats =>
-      Future successful {
-        com.waz.threading.DispatchQueueStats.reset()
-        Successful
-      }
+      successful({
+              com.waz.threading.DispatchQueueStats.reset()
+              Successful
+            })
 
     case GetQueueStats =>
       println(s"dispatch queue stats")
       DispatchQueueStats.printStats(10)
-      Future successful {
-        QueueStats(DispatchQueueStats.report(10).toArray)
-      }
+      successful({
+              QueueStats(DispatchQueueStats.report(10).toArray)
+            })
   }
 
   def whenConversationsLoaded(task: ConversationsList => ActorMessage): Unit = {
@@ -463,7 +543,7 @@ class DeviceActor(val deviceName: String,
       log.warning(s"rconv id not found: $id")
       zmessaging.convsContent.convById(ConvId(id.str)) collect { case Some(conv) => conv }
     case Some(conv) =>
-      Future successful conv
+      successful(conv)
   }
 
   def FutureReceive(receive: PartialFunction[Any, Future[Any]]): Receive = {

@@ -19,12 +19,12 @@ package com.waz.mocked
 
 import java.util.concurrent.atomic.AtomicLong
 
-import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.api.impl.SearchQuery.Query
 import com.waz.api.impl.{Credentials, ErrorResponse}
+import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericMessage.{Cleared, LastRead, LikeAction}
+import com.waz.model.GenericContent.{Cleared, LastRead, LikingAction}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
@@ -170,7 +170,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def addLikingEvent(convId: RConvId, messageId: MessageId, action: Liking.Action, time: Timeline = DefaultTimeline, from: UserId = selfUserId)(implicit p: PushBehaviour) =
-    addEvent(GenericMessageEvent(Uid(), convId, nextEventId(convId), time.next(), from, GenericMessage(Uid(messageId.str), LikeAction(action))))
+    addEvent(GenericMessageEvent(Uid(), convId, time.next(), from, GenericMessage(Uid(messageId.str), action)))
 
   def addEvent(ev: ConversationEvent)(implicit p: PushBehaviour): ev.type = {
     require (ev match {
@@ -187,7 +187,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   def markAsRead(convId: RConvId, eventId: EventId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): GenericMessageEvent = {
     val t = time.next()
-    returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), EventId.Zero, t, selfUserId, GenericMessage(Uid(), LastRead(convId, t.instant)))) { lastRead =>
+    returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), t, selfUserId, GenericMessage(Uid(), LastRead(convId, t.instant)))) { lastRead =>
       addEvent(lastRead)
       conversations(convId) = conversations(convId).copy(lastRead = t.instant)
     }
@@ -195,7 +195,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   def clearConversation(convId: RConvId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): GenericMessageEvent = {
     val t = conversations(convId).lastEventTime
-    returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), EventId.Zero, time.next(), selfUserId, GenericMessage(Uid(), Cleared(convId, t)))) { clearEvent =>
+    returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), time.next(), selfUserId, GenericMessage(Uid(), Cleared(convId, t)))) { clearEvent =>
       addEvent(clearEvent)
       addEvent(MemberUpdateEvent(Uid(), convId, time.next(), selfUserId, ConversationState(archived = Some(true), archiveTime = Some(t))))
       conversations(convId) = conversations(convId).copy(cleared = t, archived = true, archiveTime = t, lastRead = clearEvent.time.instant)

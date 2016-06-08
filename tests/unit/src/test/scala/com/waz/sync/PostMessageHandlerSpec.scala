@@ -23,21 +23,26 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.AssetData.AssetDataDao
+import com.waz.content.Mime
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Asset
+import com.waz.model.GenericContent.Asset.Original
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsService.SendingTimeout
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.ClientMismatch
-import com.waz.sync.handler.ImageAssetSyncHandler
+import com.waz.sync.handler.AssetSyncHandler
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.sync.queue.ConvLock
+import com.waz.testutils.Matchers._
 import com.waz.testutils.MockZMessaging
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.EventContext
 import org.robolectric.Robolectric
+import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
@@ -58,7 +63,6 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   var postImageResult: Either[ErrorResponse, Option[Date]] = _
 
   var onLine = true
-  var zms: MockZMessaging = _
   def handler = zms.messagesSync
   def storage = zms.storage
 
@@ -66,6 +70,29 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   lazy val conv = ConversationData(ConvId(), RConvId(), None, userId, ConversationType.Group)
 
   implicit lazy val lock = new ConvLock(conv.id, zms.syncRequests.scheduler.queue)
+
+  lazy val zms: MockZMessaging = new MockZMessaging() {
+
+    usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
+    users.selfUserId := test.userId
+
+    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
+      override def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] = postMessageResponse
+    }
+
+    override def network: NetworkModeService = new NetworkModeService(context) {
+      override def isOnlineMode: Boolean = onLine
+
+      override def isOfflineMode: Boolean = !onLine
+    }
+
+    override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync) {
+      override def postOtrImageData(convId: RConvId, assetId: AssetId, asset: ImageData): Future[Either[ErrorResponse, Option[Date]]] = Future.successful(postImageResult)
+    }
+
+    insertConv(conv)
+  }
+
 
   def response(cm: ClientMismatch, ignoreMissing: Boolean = false) =
     CancellableFuture.successful {
@@ -76,31 +103,10 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     onLine = true
     postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
     postImageResult = Right(Some(new Date))
-
-    zms = new MockZMessaging() {
-
-      usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
-      users.selfUserId := test.userId
-
-      override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, imageClient, otrService, imageAssets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
-        override def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] = postMessageResponse
-      }
-
-      override def network: NetworkModeService = new NetworkModeService(context) {
-        override def isOnlineMode: Boolean = onLine
-
-        override def isOfflineMode: Boolean = !onLine
-      }
-
-      override lazy val imageassetSync = new ImageAssetSyncHandler(cache, convsContent, convEvents, imageClient, imageAssets, imageLoader, otrSync) {
-        override def postOtrImageData(convId: RConvId, assetId: AssetId, asset: ImageData): Future[Either[ErrorResponse, Option[Date]]] = Future.successful(postImageResult)
-      }
-    }
-
-    zms.insertConv(conv)
   }
 
   after {
+    ShadowLog.stream = null
     storage.close()
     Await.result(storage.close(), 10.seconds)
     Robolectric.application.getDatabasePath(storage.dbHelper.getDatabaseName).delete()
@@ -111,7 +117,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   def getMessage(id: MessageId) = Await.result(zms.messagesStorage.getMessage(id), 5.seconds)
 
   feature("Post text message") {
-    def addMessage(): MessageData = addLocalMessage(MessageData(MessageId(), conv.id, EventId.local(1), EventId.Zero, Message.Type.TEXT, userId, MessageData.textContent("text"), time = Instant.now))
+    def addMessage(): MessageData = addLocalMessage(MessageData(MessageId(), conv.id, EventId.local(1), Message.Type.TEXT, userId, MessageData.textContent("text"), time = Instant.now))
 
     scenario("Post text successfully") {
       val msg = addMessage()
@@ -161,7 +167,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       postMessageResponse = CancellableFuture.delayed(2.seconds) { Left(ErrorResponse.Cancelled) }
 
       Await.result(handler.postMessage(conv.id, msg.id), 5.seconds) shouldEqual SyncResult.Failure(Some(ErrorResponse.Cancelled), shouldRetry = false)
-      getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
+      getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED_READ)
     }
   }
 
@@ -170,14 +176,15 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     def addMessage() = {
       val data = Seq(
-        ImageData("preview", "image/jpg", 10, 10, 100, 100, 10, Some(RImageDataId())),
-        ImageData("medium", "image/jpg", 100, 100, 100, 100, 10, Some(RImageDataId()))
+        ImageData("preview", "image/jpg", 10, 10, 100, 100, 10, Some(RAssetDataId())),
+        ImageData("medium", "image/jpg", 100, 100, 100, 100, 10, Some(RAssetDataId()))
       )
 
-      val asset = AssetDataDao.insertOrReplace(ImageAssetData(AssetId(), conv.remoteId, data))
+      val asset = zms.assetsStorage.insert(ImageAssetData(AssetId(), conv.remoteId, data)).await()
       val preview = data(0)
       val medium = data(1)
-      val msg = addLocalMessage(MessageData(MessageId(), conv.id, EventId.local(1), EventId.Zero, Message.Type.ASSET, userId, MessageData.imageContent(asset.id, 100, 100), time = Instant.now))
+      val id = MessageId(asset.id.str)
+      val msg = addLocalMessage(MessageData(id, conv.id, EventId.local(1), Message.Type.ASSET, userId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
 
       (msg, asset, preview, medium)
     }
@@ -221,7 +228,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Post image fails completely due to server error after timeout") {
       val (msg, asset, preview, medium) = addMessage()
-      zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - SendingTimeout - 1.milli) }
+      zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - SendingTimeout - 1.milli) } .await()
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 

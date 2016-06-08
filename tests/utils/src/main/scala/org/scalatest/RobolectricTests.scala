@@ -31,7 +31,7 @@ trait RobolectricTests extends RobolectricSuite { self: Suite =>
 
   override def robolectricShadows: Seq[Class[_]] = Seq(classOf[ShadowApplication], classOf[ShadowIOBitmapFactory], classOf[ShadowIOBitmap],
     classOf[ShadowIOCanvas], classOf[ShadowAudioManager2], classOf[ShadowTelephonyManager2], classOf[ShadowMatrix], classOf[ShadowIOExifInterface],
-    classOf[ShadowLooper2], classOf[ShadowSQLiteConnection2], classOf[ShadowGeocoder2], classOf[ShadowCursorWindow2])
+    classOf[ShadowLooper2], classOf[ShadowSQLiteConnection2], classOf[ShadowGeocoder2], classOf[ShadowCursorWindow2], classOf[ShadowFileProvider])
 
   abstract override protected def runTest(testName: String, args: Args): Status = {
     this.testName = testName

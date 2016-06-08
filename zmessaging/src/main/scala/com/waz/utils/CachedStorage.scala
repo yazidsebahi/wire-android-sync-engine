@@ -51,7 +51,7 @@ object StorageDao {
   }
 }
 
-class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit dao: StorageDao[K, V], tag: LogTag = "CachedStorage") {
+class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit val dao: StorageDao[K, V], tag: LogTag = "CachedStorage") {
   private implicit val dispatcher = new SerialDispatchQueue(name = tag + "_Dispatcher")
 
   val onAdded = EventStream[Seq[V]]()
@@ -127,7 +127,12 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
 
   def onChanged(key: K): EventStream[V] = onChanged.map(_.view.filter(v => dao.idExtractor(v) == key).lastOption).collect { case Some(v) => v }
 
-  def optSignal(key: K): Signal[Option[V]] = new AggregatingSignal[V, Option[V]](onChanged(key), get(key), { (_, v) => Some(v) })
+  def onRemoved(key: K): EventStream[K] = onDeleted.map(_.view.filter(_ == key).lastOption).collect { case Some(k) => k }
+
+  def optSignal(key: K): Signal[Option[V]] = {
+    val changeOrDelete = onChanged(key).map(Option(_)).union(onRemoved(key).map(_ => Option.empty[V]))
+    new AggregatingSignal[Option[V], Option[V]](changeOrDelete, get(key), { (_, v) => v })
+  }
 
   def signal(key: K): Signal[V] = optSignal(key).collect { case Some(v) => v }
 
@@ -241,7 +246,7 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
     }
   }
 
-  private def updateInternal(key: K, updater: V => V)(current: V): Future[Option[(V, V)]] = {
+  protected def updateInternal(key: K, updater: V => V)(current: V): Future[Option[(V, V)]] = {
     val updated = updater(current)
     if (updated == current) Future.successful(None)
     else {

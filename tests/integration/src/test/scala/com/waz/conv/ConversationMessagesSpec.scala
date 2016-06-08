@@ -21,7 +21,7 @@ import akka.pattern.ask
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.{ConnectivityManager, NetworkInfo}
-import com.waz.api.MessageContent.{Asset, Text}
+import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, RConvId}
@@ -145,7 +145,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
       val im = api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin.png")))
       conv.getFailedCount shouldEqual 0
-      conv.sendMessage(new Asset(im))
+      conv.sendMessage(new Image(im))
 
       withDelay {
         msgs should have size (count + 1)
@@ -232,7 +232,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
     scenario("Offline, sending an image as a second message.") {
       val im = api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin_128.png")))
-      conv.sendMessage(new Asset(im))
+      conv.sendMessage(new Image(im))
       failedImageMessage = Option(withDelay {
         returning(msgs.getLastMessage)(_.getMessageType shouldEqual ApiMessage.Type.ASSET)
       })

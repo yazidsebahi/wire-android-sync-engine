@@ -166,7 +166,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
     scenario("Dismiss failed create conversation error") {
       val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("invalid group conv"), user.id, ConversationType.Group))
       addMember(conv.id, UserId())
-      addMessage(MessageData(MessageId(), conv.id, EventId(0), EventId(0), Message.Type.TEXT, UserId()))
+      addMessage(MessageData(MessageId(), conv.id, EventId(0), Message.Type.TEXT, UserId()))
       val err = ErrorDataDao.insertOrReplace(ErrorData(Uid(), ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER, Nil, Nil, Some(conv.id)))
       Await.result(service.errors.dismissError(err.id), timeout)
 

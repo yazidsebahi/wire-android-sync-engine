@@ -18,13 +18,13 @@
 package com.waz.api
 
 import android.net.Uri
-import com.waz.service.ReportingService
+import com.waz.service.ZMessaging
 
 object BugReporter {
   import com.waz.threading.Threading.Implicits.Ui
 
   def generateReport(listener: ReportListener): Unit = {
-    ReportingService.generateReport().onSuccess {
+    ZMessaging.currentGlobal.reporting.generateReport().onSuccess {
       case fileUri => listener.onReportGenerated(fileUri)
     }
   }

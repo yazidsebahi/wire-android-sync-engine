@@ -37,7 +37,6 @@ import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Inside, Matchers}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.blocking
 import scala.concurrent.duration._
 
 @Config(application = classOf[TestApplication])
@@ -337,8 +336,8 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
   private val latch = new ReusableCountDownLatch
   import com.waz.threading.Threading.Implicits.Background
-  override def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = CancellableFuture(blocking(latch.await())).flatMap(_ => super.postMessage(convId, msg, ignoreMissing))
-  override def postConversationState(convId: RConvId, updated: ConversationState): ErrorOrResponse[Boolean] = CancellableFuture(blocking(latch.await())).flatMap(_ => super.postConversationState(convId, updated))
+  override def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = CancellableFuture(latch.await(1.minute)).flatMap(_ => super.postMessage(convId, msg, ignoreMissing))
+  override def postConversationState(convId: RConvId, updated: ConversationState): ErrorOrResponse[Boolean] = CancellableFuture(latch.await(1.minute)).flatMap(_ => super.postConversationState(convId, updated))
 
   def gcms = TestApplication.notificationsSpy.gcms.lastOption.fold(Vector.empty[GcmNotification])(_.getNotifications.asScala.toVector)
 }

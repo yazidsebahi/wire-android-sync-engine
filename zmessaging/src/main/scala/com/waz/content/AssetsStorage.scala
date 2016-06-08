@@ -19,8 +19,34 @@ package com.waz.content
 
 import android.content.Context
 import com.waz.model.AssetData.AssetDataDao
-import com.waz.model.{AssetData, AssetId}
+import com.waz.model.{AnyAssetData, _}
+import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.{CachedStorage, TrimmingLruCache}
+import com.waz.utils.events.EventStream
+import com.waz.utils.{CachedStorage, TrimmingLruCache, _}
 
-class AssetsStorage(context: Context, storage: Database) extends CachedStorage[AssetId, AssetData](new TrimmingLruCache(context, Fixed(100)), storage)(AssetDataDao, "AssetsStorage")
+import scala.concurrent.Future
+
+class AssetsStorage(context: Context, storage: Database) extends CachedStorage[AssetId, AssetData](new TrimmingLruCache(context, Fixed(100)), storage)(AssetDataDao, "AssetsStorage") {
+  import Threading.Implicits.Background
+
+  val onUploadFailed = EventStream[AssetData]()
+
+  def getImageAsset(id: AssetId) = get(id) map {
+    case Some(image: ImageAssetData) => Some(image)
+    case _ => None
+  }
+
+  def getAsset(id: AssetId) = get(id) map {
+    case Some(asset: AnyAssetData) => Some(asset)
+    case _ => None
+  }
+
+  def updateAsset(id: AssetId, updater: AnyAssetData => AnyAssetData): Future[Option[AnyAssetData]] = update(id, {
+    case a: AnyAssetData => updater(a)
+    case other => other
+  }).mapOpt {
+    case (_, updated: AnyAssetData) => Some(updated)
+    case _ => None
+  }
+}

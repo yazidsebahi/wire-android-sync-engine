@@ -24,6 +24,8 @@ import com.waz.RobolectricUtils
 import com.waz.api.ImageAsset.BitmapCallback
 import com.waz.api.{ImageAsset, Message, User}
 import com.waz.model.UserId
+import com.waz.utils.JsonDecoder.{apply => _, _}
+import com.waz.utils.JsonEncoder._
 import com.waz.utils._
 import com.waz.utils.events._
 import org.robolectric.Robolectric
@@ -39,7 +41,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Awaitable, Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 object Matchers {
   import DefaultPatience.{PatienceConfig, scaled, spanScaleFactor}
@@ -102,6 +104,16 @@ object Matchers {
   def beLikedByThisUser = be('likedByThisUser)
   def haveLikesFrom(ids: UserId*): Matcher[Message] = contain.theSameElementsInOrderAs(ids).matcher[Seq[UserId]] compose ((_: Message).getLikes.map(_.data.id))
   def notHaveLikes: Matcher[Message] = be(empty).matcher[Seq[User]] compose ((_: Message).getLikes)
+  def beUnchangedByEncodingAndDecoding[A : JsonDecoder : JsonEncoder : Manifest] = Matcher[A] { left =>
+    val json = encode(left)
+    val decoded = decode[A](json.toString)
+    val encoded = encode(decoded)
+    MatchResult(
+      decoded == left && encode(decoded).toString == json.toString,
+      s"$left was not equal to $decoded, or ${json.toString(2)} was not equal to ${encoded.toString(2)}",
+      s"$left staid the same after encoding, decoding and re-encoding."
+    )
+  }
 
   implicit class ImageAssetSyntax(val im: ImageAsset) extends AnyVal {
     def shouldBeAnAnimatedGif: Bitmap = {
@@ -139,11 +151,26 @@ object Matchers {
         case Right(Success(r)) => r
       })
 
+    def whenReady[C](clue: => String = "")(g: Try[B] => C)(implicit p: PatienceConfig): C =
+      g(retryUntilRightOrTimeout(f.value.fold2(Left(()), Right(_)))(p) match {
+        case Left(()) => throw new TimeoutException(s"future did not complete in time ($p)${if (clue.nonEmpty) ": " else ""}$clue")
+        case Right(r) => r
+      })
+
     def await(clue: => String = "")(implicit p: PatienceConfig): B = afterwards(clue)(identity)
+  }
+
+  implicit class PromiseSyntax[A](val pa: Promise[A]) extends AnyVal {
+    def await(clue: => String = "")(implicit p: PatienceConfig): A = pa.future.await(clue)(p)
   }
 
   def soon[A](f: => A)(implicit p: PatienceConfig): A =
     retryUntilRightOrTimeout(try Right(f) catch { case NonFatal(e) => Left(e) })(p).fold(e => throw e, identity)
+
+  def forAsLongAs[A](someTime: FiniteDuration, after: FiniteDuration = Duration.Zero)(f: => A)(implicit p: PatienceConfig): A = {
+    if (after > Duration.Zero) idle(after)
+    retryUntilRightOrTimeout(try Left(f) catch { case NonFatal(e) => Right(e) })(p.copy(timeout = scaled(Span(someTime.toNanos, Nanoseconds)))).fold(identity, e => throw e)
+  }
 
   def idle(someTime: FiniteDuration)(implicit p: PatienceConfig): Unit =
     retryUntilRightOrTimeout(Left(()))(p.copy(timeout = scaled(Span(someTime.toNanos, Nanoseconds))))

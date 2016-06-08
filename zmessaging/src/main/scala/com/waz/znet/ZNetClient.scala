@@ -85,6 +85,7 @@ class ZNetClient(credentials: CredentialsHandler,
     new CancellableFuture[Response](handle.promise) {
       override def cancel()(implicit tag: LogTag): Boolean = {
         handle.cancelled = true
+        handle.httpFuture.foreach(_.cancel()(tag))
         super.cancel()(tag)
       }
     }
@@ -140,7 +141,8 @@ class ZNetClient(credentials: CredentialsHandler,
             debug(s"Got error response: '$resp' for request: '$request'")
             retry(handle, status.status == Status.RateLimiting)
           case Success(response)  => done(handle, response)
-          case Failure(ex)        => done(handle, Response(Response.InternalError(ex.getMessage, Some(ex))))
+          case Failure(exc: CancelException) => done(handle, Response(Cancelled))
+          case Failure(exc)        => done(handle, Response(Response.InternalError(exc.getMessage, Some(exc))))
         }
       }
     } else {

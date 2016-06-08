@@ -17,7 +17,7 @@
  */
 package com.waz.model
 
-import java.util.{UUID, Date}
+import java.util.{Date, UUID}
 
 import android.util.Base64
 import com.waz.ZLog._
@@ -55,6 +55,8 @@ sealed trait Event {
     localTime = time
     this
   }
+
+  def hasLocalTime = localTime != UnknownDateTime
 
   def localOrFetchTime = if (localTime == UnknownDateTime) notificationsFetchTime else localTime
 
@@ -126,16 +128,26 @@ case class MessageAddEvent(id: Uid, convId: RConvId, eventId: EventId, time: Dat
 case class MessageEditEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
 case class MessageDeleteEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
 
-case class KnockEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String) extends MessageEvent with UnarchivingEvent
-case class HotKnockEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
+case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent {
+  override val eventId: EventId = EventId.Zero
+}
 
-case class GenericMessageEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: GenericMessage, otr: Boolean = false) extends MessageEvent with UnarchivingEvent
+
+sealed trait OtrError
+case object Duplicate extends OtrError
+case class DecryptionError(msg: String, from: UserId, sender: ClientId) extends OtrError
+
+case class OtrErrorEvent(id: Uid, convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent with UnarchivingEvent {
+  override val eventId: EventId = EventId.Zero
+}
+
+case class GenericAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetDataId, data: Option[Array[Byte]]) extends MessageEvent with UnarchivingEvent {
+  override val eventId: EventId = EventId.Zero
+}
 
 case class TypingEvent(id: Uid, convId: RConvId, time: Date, from: UserId, isTyping: Boolean) extends ConversationEvent {
   override val eventId: EventId = EventId.Zero
 }
-
-case class AssetAddEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, assetId: AssetId, content: AssetContent) extends MessageEvent with UnarchivingEvent
 
 case class MemberJoinEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
 case class MemberLeaveEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
@@ -182,7 +194,7 @@ sealed trait OtrEvent extends ConversationEvent {
 case class OtrMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent with ConversationEvent {
   override val eventId: EventId = EventId.Zero
 }
-case class OtrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RImageDataId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent {
+case class OtrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetDataId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent {
   override val eventId: EventId = EventId.Zero
 }
 
@@ -341,32 +353,13 @@ object ConversationEvent {
   implicit lazy val ConversationEventDecoder: JsonDecoder[ConversationEvent] = new JsonDecoder[ConversationEvent] {
     private implicit val tag: LogTag = "ConversationEventDecoder"
 
-    def decodeAssetAddEvent()(implicit js: JSONObject) = {
-      val data = js.getJSONObject("data")
-      val info = data.getJSONObject("info")
-      val id = decodeOptUid('nonce)(info).getOrElse(Uid())
-      val mime = decodeString('content_type)(data)
-
-      def decodeImageData(implicit js: JSONObject) =
-        new ImageData(info.getString("tag"), mime, info.getInt("width"), info.getInt("height"),
-          info.getInt("original_width"), info.getInt("original_height"), 'content_length, decodeOptId[RImageDataId]('id), decodeOptString('data).filter(_.nonEmpty), sent = true)
-
-      val (assetId, content) =
-        if (mime startsWith "image/") (decodeAssetId('correlation_id)(info), decodeImageData(data))
-        else (AssetId(), UnsupportedAssetContent)
-
-      AssetAddEvent(id, 'conversation, 'id, 'time, 'from, assetId, content)
-    }
-
-    def decodeGenericMsg(data: String) = GenericMessage(data)
-
     def decodeBytes(str: String) = Base64.decode(str, Base64.NO_WRAP)
 
     def otrMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
       new OtrMessageEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), decodeBytes('text), decodeOptString('data) map decodeBytes)
 
     def otrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
-      new OtrAssetEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), RImageDataId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
+      new OtrAssetEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), RAssetDataId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
 
     override def apply(implicit js: JSONObject): ConversationEvent = LoggedTry {
 
@@ -386,14 +379,6 @@ object ConversationEvent {
         case "conversation.create" => CreateConversationEvent(id, 'conversation, 'time, 'from, JsonDecoder[ConversationResponse]('data))
         case "conversation.rename" => RenameConversationEvent(id, 'conversation, 'id, 'time, 'from, decodeString('name)(data.get))
         case "conversation.message-add" => MessageAddEvent(id, 'conversation, 'id, 'time, 'from, decodeString('content)(data.get))
-        case "conversation.client-message-add" =>
-          val msg = decodeGenericMsg('data)
-          GenericMessageEvent(msg.id, 'conversation, 'id, 'time, 'from, msg)
-        //case "conversation.message-edit" => TODO
-        //case "conversation.message-delete" => TODO
-        case "conversation.asset-add" => decodeAssetAddEvent()
-        case "conversation.knock" => KnockEvent(id, 'conversation, 'id, 'time, 'from, decodeOptString('content)(data.get) getOrElse "")
-        case "conversation.hot-knock" => HotKnockEvent(id, 'conversation, 'id, 'time, 'from, decodeOptString('content)(data.get) getOrElse "", decodeOptId('ref)(data.get, EventId.Id) getOrElse EventId(0))
         case "conversation.member-join" => MemberJoinEvent(id, 'conversation, 'id, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-leave" => MemberLeaveEvent(id, 'conversation, 'id, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-update" => MemberUpdateEvent(id, 'conversation, 'time, 'from, ConversationState.Decoder(data.get))

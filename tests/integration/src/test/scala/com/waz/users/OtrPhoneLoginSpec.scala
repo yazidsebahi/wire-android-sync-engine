@@ -66,9 +66,9 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
 
       withDelay {
         self.isLoggedIn shouldEqual true
-        self.getClientRegistrationState shouldEqual ClientRegistrationState.PASSWORD_MISSING
+        self.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
 
-        otrClient should be(empty)
+        otrClient should not be empty
         otherClients should have size 1
       }
 

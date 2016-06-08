@@ -64,7 +64,6 @@ class OtrAssetSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
         val last = msgs.getLastMessage
         last.data.msgType shouldEqual Message.Type.ASSET
         last.data.state shouldEqual Status.SENT
-        last.data.otr shouldEqual true
       }
 
       val img = msgs.getLastMessage.getImage

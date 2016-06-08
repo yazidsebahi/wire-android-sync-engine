@@ -68,6 +68,8 @@ class User(val id: UserId, var data: UserData = UserData.Empty)(implicit ui: UiM
 
   def isConnected = data.isConnected
 
+  override def isAutoConnection: Boolean = data.isAutoConnect
+
   def isConnectionAccepted = data.connection == ConnectionStatus.Accepted
 
   def isRelated = data.relation != Relation.Other
@@ -154,4 +156,5 @@ object EmptyUser extends com.waz.api.User {
   override def getOtrClients: CoreList[OtrClient] = new EmptyList()
   override def getVerified: Verification = Verification.UNKNOWN
   override def isDeleted: Boolean = false
+  override def isAutoConnection: Boolean = false
 }

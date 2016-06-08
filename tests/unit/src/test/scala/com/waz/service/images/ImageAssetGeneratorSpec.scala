@@ -39,8 +39,6 @@ class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAf
   lazy val generator = zms.assetGenerator
   lazy val ui = new MockUiModule(zms)
 
-  override def afterAll(): Unit = super.afterAll()
-
   def imageAssetFor(bitmap: Bitmap): ImageData = ui.images.getOrCreateImageAssetFrom(bitmap).asInstanceOf[LocalBitmapAsset].data.versions.head
 
   def imageAssetFor(imageName: String): ImageData = imageAssetFor(BitmapFactory.decodeStream(getClass.getResourceAsStream(s"/images/$imageName")))
@@ -225,7 +223,7 @@ class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAf
 
   feature("recode based on mime type") {
 
-    lazy val tmpEntry = ui.cache.addData("tmp", Array.ofDim(100))
+    lazy val tmpEntry = ui.cache.addData("tmp", Array.ofDim(100)).await()
 
     scenario("recode profile image") {
       Seq(Mime.Jpg, Mime.Png) foreach { mime =>

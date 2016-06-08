@@ -45,12 +45,15 @@ trait ResponseConsumer[T <: ResponseContent] {
 
 object ResponseConsumer {
 
-  private def copyToStream(bb: ByteBufferList, out: OutputStream): Unit = {
+  private def copyToStream(bb: ByteBufferList, out: OutputStream): Long = {
+    var count = 0L
     while (bb.size() > 0) {
       val b = bb.remove()
+      count += b.remaining()
       out.write(b.array(), b.arrayOffset() + b.position(), b.remaining())
       ByteBufferList.reclaim(b)
     }
+    count
   }
 
   object EmptyResponseConsumer extends ResponseConsumer[ResponseContent] {
@@ -82,11 +85,12 @@ object ResponseConsumer {
   }
 
   class FileConsumer(mime: String)(cache: CacheService) extends ResponseConsumer[FileResponse] {
-    val entry = cache.createForFile()(10.minutes)
-    val out = entry.outputStream
+    lazy val entry = cache.createManagedFile()(10.minutes)
+    lazy val out = entry.outputStream
+
     var ex = None: Option[Throwable]
 
-    override def consume(bb: ByteBufferList): Unit = {
+    override def consume(bb: ByteBufferList): Unit =
       try {
         copyToStream(bb, out)
       } catch {
@@ -94,16 +98,13 @@ object ResponseConsumer {
           bb.recycle()
           ex = ex.orElse(Some(e))
       }
-    }
 
-    override def result: Try[FileResponse] = {
+    override def result: Try[FileResponse] =
       try {
         out.close()
-        ex.fold(Success(FileResponse(entry, mime)): Try[FileResponse]) { e => Failure(e) }
+        ex.fold(Try(FileResponse(entry, mime))) { e => Failure(e)}
       } catch {
-        case NonFatal(e) =>
-          Failure(ex.getOrElse(e))
+        case NonFatal(e) => Failure(ex.getOrElse(e))
       }
-    }
   }
 }
