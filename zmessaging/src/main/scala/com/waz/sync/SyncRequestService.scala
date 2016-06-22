@@ -22,10 +22,10 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.SyncState
 import com.waz.api.impl.SyncIndicator
-import com.waz.content.ZStorage
+import com.waz.content.ZmsDatabase
 import com.waz.model.sync._
-import com.waz.model.{ConvId, SyncId, ZUserId}
-import com.waz.service.{NetworkModeService, ReportingService, ZUserService}
+import com.waz.model.{AccountId, ConvId, SyncId}
+import com.waz.service.{NetworkModeService, ReportingService, ZmsLifecycle}
 import com.waz.sync.SyncRequestService.SyncMatcher
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler}
 import com.waz.threading.SerialDispatchQueue
@@ -33,13 +33,13 @@ import com.waz.utils.events.Signal
 
 import scala.concurrent.Future
 
-class SyncRequestService(context: Context, userId: ZUserId, storage: ZStorage, network: NetworkModeService, zuser: ZUserService, sync: => SyncHandler, reporting: ReportingService) {
+class SyncRequestService(context: Context, accountId: AccountId, storage: ZmsDatabase, network: NetworkModeService, sync: => SyncHandler, reporting: ReportingService, lifecycle: ZmsLifecycle) {
 
   private implicit val tag = logTagFor[SyncRequestService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
   val content = new SyncContentUpdater(storage)
-  val scheduler = new SyncScheduler(context, userId, content, network, zuser, this, sync)
+  val scheduler = new SyncScheduler(context, accountId, content, network, this, sync, lifecycle)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>
@@ -68,7 +68,7 @@ object SyncRequestService {
   case class SyncMatcher(cmd: SyncCommand, convId: Option[ConvId]) {
 
     private def convMatches(job: SyncJob) = job.request match {
-      case req: ConversationReference => convId map (_ == req.convId) getOrElse true
+      case req: ConversationReference => convId forall (_ == req.convId)
       case _ => true
     }
 

@@ -30,14 +30,12 @@ import com.waz.utils.events._
 import scala.concurrent.duration._
 import scala.util.Try
 
-class AudioLinkService(val context: Context, metadata: MetaDataService, users: UserService, lifecycle: ZmsLifecycle) {
+class AudioLinkService(val context: Context, metadata: MetaDataService, userId: UserId, lifecycle: ZmsLifecycle) {
   private implicit val logTag: LogTag = logTagFor[AudioLinkService]
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "AudioLinkService")
 
   import com.waz.service.AudioLinkService._
-  import users._
-  import metadata._
 
   lazy val audioLink: AudioLink = AudioLink(this)
 
@@ -57,10 +55,8 @@ class AudioLinkService(val context: Context, metadata: MetaDataService, users: U
     }
   }
 
-  private val transmittedId = selfUserId.signal zip lifecycle.lifecycleState map {
-    case _ if !audioLinkEnabled => None
-    case (null | UserService.SelfUserId, _) => None
-    case (userId, LifecycleState.UiActive) => Some(userId)
+  private val transmittedId = lifecycle.lifecycleState map {
+    case LifecycleState.UiActive if metadata.audioLinkEnabled => Some(userId)
     case _ => None
   }
 

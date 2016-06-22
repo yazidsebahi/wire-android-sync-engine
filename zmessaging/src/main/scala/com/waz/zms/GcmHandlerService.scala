@@ -36,7 +36,7 @@ class GcmHandlerService extends WakefulFutureService with ZMessagingService {
   import Threading.Implicits.Background
 
   lazy val gcm = ZMessaging.currentGlobal.gcmGlobal
-  lazy val instance = ZMessaging.currentInstance
+  lazy val accounts = ZMessaging.currentAccounts
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
     import com.waz.zms.GcmHandlerService._
@@ -46,7 +46,7 @@ class GcmHandlerService extends WakefulFutureService with ZMessagingService {
     verbose(s"onIntent with extras: $extrasToString")
 
     if (intent.getAction == ActionClear) {
-      instance.getCurrent flatMap {
+      accounts.getCurrentZms flatMap {
         case Some(zms) => zms.notifications.clearNotifications()
         case None => Future.successful(())
       }
@@ -56,7 +56,7 @@ class GcmHandlerService extends WakefulFutureService with ZMessagingService {
     } else if (intent.hasExtra(TypeExtra) && intent.hasExtra(ContentExtra) && intent.hasExtra(MacExtra) && (intent.getStringExtra(TypeExtra) == "otr" || intent.getStringExtra(TypeExtra) == "cipher")) {
       val content = intent.getStringExtra(ContentExtra)
       val mac = intent.getStringExtra(MacExtra)
-      instance.getCurrent.map {
+      accounts.getCurrentZms.map {
         case Some(zms) => zms.otrService.decryptGcm(Base64.decode(content, Base64.NO_WRAP | Base64.NO_CLOSE), Base64.decode(mac, Base64.NO_WRAP | Base64.NO_CLOSE)) map {
           case Some(EncryptedGcm(notification)) => handleNotification(notification, None)
           case resp => warn(s"gcm decoding failed: $resp")
@@ -99,7 +99,7 @@ class GcmHandlerService extends WakefulFutureService with ZMessagingService {
   }
 
   def handleGcmNotification[A](user: Option[UserId])(body: ZMessaging => Future[A]) = {
-    instance.getCurrent flatMap {
+    accounts.getCurrentZms flatMap {
       case Some(zms) =>
         zms.users.getSelfUserId flatMap {
           case Some(userId) if user.forall(_ == userId) =>

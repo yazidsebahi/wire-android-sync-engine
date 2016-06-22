@@ -19,13 +19,15 @@ package com.waz.messages
 
 import java.util.concurrent.atomic.AtomicLong
 
+import akka.pattern.ask
 import com.waz.api.MessageContent.Image
-import com.waz.api.impl.LocalImageAsset
 import com.waz.api._
+import com.waz.api.impl.LocalImageAsset
 import com.waz.cache.{CacheEntry, LocalData}
 import com.waz.model.RConvId
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
-import com.waz.service.ZMessaging
+import com.waz.service._
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.Implicits._
@@ -37,7 +39,6 @@ import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.scalatest.{FeatureSpec, Matchers}
 
 import scala.concurrent.duration._
-import akka.pattern.ask
 
 class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ThreadActorSpec {
   import com.waz.threading.Threading.Implicits.Background
@@ -105,19 +106,22 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
     withClue("Image should not be downloaded but fetched from cache instead.")(downloads.get shouldEqual 0)
   }
 
-  override lazy val zmessagingFactory: ZMessaging.Factory = new ZMessaging(_, _, _) {
-    override lazy val assetClient = new AssetClient(znetClient) {
+  override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
+    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
+      new ZMessaging(clientId, user) {
+        override lazy val assetClient = new AssetClient(zNetClient) {
 
-      override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
-        if (metadata.inline) super.postOtrAsset(convId, metadata, data, ignoreMissing)
-        else CancellableFuture.delay(3.seconds) flatMap { _ => super.postOtrAsset(convId, metadata, data, ignoreMissing) } // delay full image request
-      }
+          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
+            if (metadata.inline) super.postOtrAsset(convId, metadata, data, ignoreMissing)
+            else CancellableFuture.delay(3.seconds) flatMap { _ => super.postOtrAsset(convId, metadata, data, ignoreMissing) } // delay full image request
+          }
 
-      override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {
-        downloads.incrementAndGet()
-        super.loadAsset(req)
+          override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {
+            downloads.incrementAndGet()
+            super.loadAsset(req)
+          }
+        }
       }
-    }
   }
 
   private val downloads = new AtomicLong(0)

@@ -52,7 +52,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
 
   feature("json serialization") {
     scenario("Simple requests") {
-      forAll (Table("request", SyncSelf, SyncConversations, SyncVersionBlacklist, SyncConnectedUsers)) { req: SyncRequest =>
+      forAll (Table("request", SyncSelf, SyncConversations, SyncConnectedUsers)) { req: SyncRequest =>
         req should beUnchangedByEncodingAndDecoding
       }
     }

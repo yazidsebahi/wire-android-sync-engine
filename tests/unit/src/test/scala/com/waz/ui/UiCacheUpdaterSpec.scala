@@ -54,7 +54,7 @@ class UiCacheUpdaterSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
   }
 
   scenario("Reload on resume") {
-    withDelay(ui.current.currentValue.flatten shouldBe 'defined)
+    withDelay(ui.currentZms.currentValue.flatten shouldBe 'defined)
     items foreach { i => cache.put(i.key, i) }
 
     reloaded shouldBe empty

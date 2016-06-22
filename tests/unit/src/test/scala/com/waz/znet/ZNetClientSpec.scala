@@ -27,13 +27,13 @@ import com.waz.RobolectricUtils
 import com.waz.ZLog.LogTag
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.EmailAddress
-import com.waz.service.{Preference, BackendConfig}
+import com.waz.service.BackendConfig
+import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{ExponentialBackoff, returning}
 import com.waz.znet.Response.{HttpStatus, ServerErrorStatus, SuccessHttpStatus}
 import org.scalatest._
-import com.waz.testutils.Matchers._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -56,10 +56,9 @@ class ZNetClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter w
     reset()
     client = new ZNetClient(
         new BasicCredentials(EmailAddress(email), Some(password)),
-        None, new AsyncClient,
+        new AsyncClient,
         BackendConfig("http://localhost:" + wireMockPort),
-        new LoginClient(new AsyncClient, BackendConfig("http://localhost:" + wireMockPort)),
-        Preference.empty) {
+        new LoginClient(new AsyncClient, BackendConfig("http://localhost:" + wireMockPort))) {
 
       override def MaxConcurrentRequests = maxConcurrentRequests
       override def LongRunning = longRunningTime

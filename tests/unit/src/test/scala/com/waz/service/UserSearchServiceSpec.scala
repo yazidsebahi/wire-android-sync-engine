@@ -40,8 +40,7 @@ import scala.concurrent.{Await, Future}
 
 class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils {
 
-  implicit def db: SQLiteDatabase = zms.storage.dbHelper.getWritableDatabase
-  def context = testContext
+  implicit def db: SQLiteDatabase = zms.storage.db.dbHelper.getWritableDatabase
 
   lazy val users = Seq(UserData("other user 1"), UserData("other user 2"), UserData("some name"),
     UserData("related user 1").copy(relation = Relation.Second),
@@ -299,7 +298,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     Given("expired query cache result")
     addCacheEntry(query(), users.take(2), System.currentTimeMillis() - SearchQueryCache.CacheExpiryTime.toMillis - 100)
     And("users in local db")
-    Await.ready(zms.storage(UserDataDao.insertOrReplace(users)(_)), 15.seconds)
+    Await.ready(zms.db(UserDataDao.insertOrReplace(users)(_)), 15.seconds)
 
     When("searching for users")
     val res = Await.result(service.searchUsers(query()), zms.timeouts.userSearch.localSearchDelay + 500.millis)
@@ -323,18 +322,18 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
   }
 
   def addCacheEntry(query: SearchQuery.Query, users: Seq[UserData], timestamp: Long = System.currentTimeMillis(), limit: Option[Int] = None): SearchQueryCache = {
-    val cache = Await.result(zms.storage { implicit db => SearchQueryCacheDao.add(query, limit) }, 5.seconds)
+    val cache = Await.result(zms.db { implicit db => SearchQueryCacheDao.add(query, limit) }, 5.seconds)
     updateCacheResults(cache, users, timestamp)
   }
 
   def deleteCache() =
-    Await.result(zms.storage { implicit db =>
+    Await.result(zms.db { implicit db =>
       SearchQueryCacheDao.deleteAll
       SearchEntryDao.deleteAll
     }, 5.seconds)
 
   def updateCacheResults(cache: SearchQueryCache, users: Seq[UserData], timestamp: Long = System.currentTimeMillis()): SearchQueryCache = {
-    Await.result(zms.storage { implicit db =>
+    Await.result(zms.db { implicit db =>
       UserDataDao.insertOrReplace(users)
       SearchEntryDao.insertOrReplace(users.sortBy(_.name).zipWithIndex map { case (u, n) => SearchEntry(cache.id, u.id, 0, n) })
       SearchQueryCacheDao.update(cache)(_.copy(timestamp = timestamp)).get

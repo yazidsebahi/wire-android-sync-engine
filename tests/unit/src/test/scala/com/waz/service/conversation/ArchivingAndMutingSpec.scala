@@ -24,7 +24,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
+import com.waz.testutils.{EmptySyncService, MockAccountService, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.znet.ZNetClient.EmptyClient
@@ -49,7 +49,16 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   before {
     messageSync = None
-    service = new MockZMessaging() {
+
+    val account = new MockAccountService() {
+      override lazy val netClient = new EmptyClient {
+        override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+          CancellableFuture.failed(new CancelException(""))
+        }
+      }
+    }
+
+    service = new MockZMessaging(account, selfUserId = selfUser.id) {
 
       override lazy val sync = new EmptySyncService {
         override def postMessage(id: MessageId, conv: ConvId) = {
@@ -58,16 +67,8 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
         }
       }
 
-      override lazy val znetClient = new EmptyClient {
-        override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-          CancellableFuture.failed(new CancelException(""))
-        }
-      }
-
       insertUsers(Seq(selfUser, user1))
       insertConv(conv)
-
-      users.selfUserId := test.selfUser.id
     }
   }
 

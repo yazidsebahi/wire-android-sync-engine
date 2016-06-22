@@ -28,12 +28,25 @@ import com.waz.model._
 import com.waz.ui._
 import com.waz.utils.{JsonEncoder, NameParts}
 
-class User(val id: UserId, var data: UserData = UserData.Empty)(implicit ui: UiModule) extends com.waz.api.User with UiObservable with SignalLoading {
+class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends com.waz.api.User with UiObservable with SignalLoading {
+
+  def this(id: UserId)(implicit ui: UiModule) = this(id, UserData(id, ""))
+  def this(data: UserData)(implicit ui: UiModule) = this(data.id, data)
+
   import User._
+
+  require(id == data.id)
 
   private var initials = computeInitials(data.name)
 
-  addLoader(_.users.userSignal(id)) { set }
+  // XXX: listen to storage directly if no ZMessaging is available
+  // this is needed for Self.getUser to work, UI accesses it before zms is fully logged in
+  accountLoader { acc =>
+    acc.zmessaging flatMap {
+      case None => acc.storage.usersStorage.signal(id)
+      case Some(zms) => zms.users.userSignal(id)
+    }
+  } { set }
 
   def set(d: UserData): Unit = {
     require(this.id == d.id)
@@ -74,7 +87,7 @@ class User(val id: UserId, var data: UserData = UserData.Empty)(implicit ui: UiM
 
   def isRelated = data.relation != Relation.Other
 
-  override def isMe: Boolean = ui.users.selfUser.user.exists(_.id == id)
+  override def isMe: Boolean = ui.users.selfUser.userId.contains(id)
 
   override def isDeleted: Boolean = data.deleted
 

@@ -42,7 +42,7 @@ class Messages(implicit module: UiModule) {
 
   new UiEventListener[MessageId] {
     def ui: UiModule = module
-    override protected def publisher(zms: ZMessaging): EventStream[MessageId] = zms.messageAndLikesNotifier.onUpdate
+    override protected def publisher(zms: ZMessaging): EventStream[MessageId] = zms.msgAndLikes.onUpdate
     override protected def onReset: Future[Unit] = Threading.Ui(messages.clear())
     override protected def onResume: Future[Unit] = Threading.Ui(messages.foreach(_.reload()))
     override protected def process(events: Seq[MessageId]): Future[Unit] = {

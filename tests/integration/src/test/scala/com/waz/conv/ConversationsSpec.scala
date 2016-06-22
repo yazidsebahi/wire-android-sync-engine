@@ -68,7 +68,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
   lazy val auto2 = registerDevice("ConversationsSpec_auto2")
   lazy val otherClient = registerDevice("ConversationsSpec_otherClient")
 
-  implicit def db: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zmessaging.db.dbHelper.getWritableDatabase
 
   def getConv(convType: IConversation.Type): IConversation = getConv(_.getType == convType, s"looking for conv type: $convType")
 

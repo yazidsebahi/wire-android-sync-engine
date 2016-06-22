@@ -19,8 +19,9 @@ package com.waz.db
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.model.ZUser.ZUserDao
-import com.waz.model.{EmailAddress, PhoneNumber, ZUser, ZUserId}
+import com.waz.model.AccountData.AccountDataDao
+import com.waz.model.KeyValueData.KeyValueDataDao
+import com.waz.model.{EmailAddress, PhoneNumber, _}
 import com.waz.utils.{DbLoader, Managed}
 import org.robolectric.Robolectric
 import org.scalatest._
@@ -39,51 +40,66 @@ class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Ins
     implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
 
     lazy val email = EmailAddress("test@test.com")
-    lazy val user = ZUser(email, "test_pass")
+    lazy val user = AccountData(email, "test_pass")
     lazy val user1 = user.copy(password = None)
     lazy val user2 = user.copy(phone = Some(PhoneNumber("meep")))
-    lazy val user3 = user2.copy(phoneVerified = true)
 
     scenario("insert new ZUser") {
-      ZUserDao.insertOrReplace(user) shouldEqual user
-      ZUserDao.getById(user.id) shouldEqual Some(user1)
+      AccountDataDao.insertOrReplace(user) shouldEqual user
+      AccountDataDao.getById(user.id) shouldEqual Some(user1)
     }
 
     scenario("load added ZUser") {
-      ZUserDao.insertOrReplace(user) shouldEqual user
-      ZUserDao.findByEmail(user.email.value) shouldEqual Some(user1)
+      AccountDataDao.insertOrReplace(user) shouldEqual user
+      AccountDataDao.findByEmail(user.email.value).acquire(_.toSeq) shouldEqual Seq(user1)
     }
 
     scenario("user with phone number") {
-      ZUserDao.insertOrReplace(user2) shouldEqual user2
-      ZUserDao.findByEmail(user2.email.value).value.phone.value shouldEqual PhoneNumber("meep")
-      ZUserDao.findByEmail(user2.email.value).value.phoneVerified shouldBe false
-    }
-
-    scenario("user with verified phone number") {
-      ZUserDao.insertOrReplace(user3) shouldEqual user3
-      ZUserDao.findByEmail(user3.email.value).value.phoneVerified shouldBe true
+      AccountDataDao.insertOrReplace(user2) shouldEqual user2
+      AccountDataDao.findByEmail(user2.email.value).acquire(_.toSeq.headOption).value.phone.value shouldEqual PhoneNumber("meep")
     }
   }
 
   feature("Database migrations") {
+
+    def createZmessagingDb(id: AccountId, userId: UserId) = {
+      val zdb = new ZMessagingDB(Robolectric.application, id.str)
+      implicit val db = zdb.getWritableDatabase
+      KeyValueDataDao.insertOrIgnore(KeyValueData("self_user_id", userId.str))
+      db.close()
+      zdb.close()
+    }
+
+    lazy val userId1 = UserId()
+    lazy val userId2 = UserId()
+
+    scenario("Prepare zms databases") {
+      createZmessagingDb(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), userId1)
+      createZmessagingDb(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), userId2)
+    }
+
     scenario("Migrate ZUsers from 6") {
       Managed(loadDb("/db/ZGlobal_6.db")) foreach { implicit db =>
         dbHelper.onUpgrade(db, 6, ZGlobalDB.DbVersion)
 
-        ZUserDao.list should have size 2
-        ZUserDao.list foreach { user =>
+        AccountDataDao.list should have size 2
+        AccountDataDao.list foreach { user =>
           user.phone shouldBe empty
-          user.phoneVerified shouldBe false
         }
+        AccountDataDao.list shouldEqual Seq(
+          AccountData(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), Some(EmailAddress("joachim.hofer+001@wearezeta.com")), "Xx/rjrJc0B/MhvaAt/aegKrs+bohYNkBTnZ3wJbl+Pg=", None, activated = true, Some("nK4NNJ7XN9-riGCcJ6YDCIXYEpHSYJWV2L9s3at1brf33Nb5TcFjY341iQHhQ7GjAS8sDgfXNx6NvzmSyXDXBQ==.v=1.k=1.d=1458844442.t=u.l=.u=e222adf6-22a0-4180-b628-936049f0899f.r=ccaae5e6"), userId = Some(userId1)),
+          AccountData(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), Some(EmailAddress("joachim.hofer+003@wearezeta.com")), "WtjSXe7G8CHlcy4PRxGoaisUr9UGyKR51zriDwIFAco=", None, activated = true, Some("u0mEC2etISwrAAf-_pNwG204HG5-Uf7EIRFFTp1TEqKGcSIXDbFC9_i8PftnKRTWSjUsAbZ-PHVIxS3eZDK-AQ==.v=1.k=1.d=1459026632.t=u.l=.u=9a01b792-42f6-4dee-a3c0-e22179d742f8.r=591684f6"), userId = Some(userId2))
+        )
       }
     }
 
     scenario("Migrate ZUsers from 7") {
       Managed(loadDb("/db/ZGlobal_7.db")) foreach { implicit db =>
         dbHelper.onUpgrade(db, 7, ZGlobalDB.DbVersion)
-        ZUserDao.getById(ZUserId("8546c628-c9e8-45d6-82dd-7f6dcb56e171")).value.phoneVerified shouldBe false
-        ZUserDao.getById(ZUserId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3")).value.phoneVerified shouldBe true
+        AccountDataDao.list shouldEqual Seq(
+          AccountData(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), Some(EmailAddress("joachim.hofer+001@wearezeta.com")), "Xx/rjrJc0B/MhvaAt/aegKrs+bohYNkBTnZ3wJbl+Pg=", None, activated = true, Some("nK4NNJ7XN9-riGCcJ6YDCIXYEpHSYJWV2L9s3at1brf33Nb5TcFjY341iQHhQ7GjAS8sDgfXNx6NvzmSyXDXBQ==.v=1.k=1.d=1458844442.t=u.l=.u=e222adf6-22a0-4180-b628-936049f0899f.r=ccaae5e6"), userId = Some(userId1)),
+          AccountData(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), Some(EmailAddress("joachim.hofer+003@wearezeta.com")), "WtjSXe7G8CHlcy4PRxGoaisUr9UGyKR51zriDwIFAco=", Some(PhoneNumber("+0123456789")), activated = true, Some("u0mEC2etISwrAAf-_pNwG204HG5-Uf7EIRFFTp1TEqKGcSIXDbFC9_i8PftnKRTWSjUsAbZ-PHVIxS3eZDK-AQ==.v=1.k=1.d=1459026632.t=u.l=.u=9a01b792-42f6-4dee-a3c0-e22179d742f8.r=591684f6"), userId = Some(userId2))
+        )
       }
     }
 

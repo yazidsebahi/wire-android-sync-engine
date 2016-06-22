@@ -76,16 +76,16 @@ object UserId extends (String => UserId) {
   }
 }
 
-case class ZUserId(str: String) {
+case class AccountId(str: String) {
   override def toString: String = str
 }
 
-object ZUserId {
-  def apply(): ZUserId = Id.random()
+object AccountId {
+  def apply(): AccountId = Id.random()
 
-  implicit object Id extends Id[ZUserId] {
-    override def random(): ZUserId = ZUserId(Uid().toString)
-    override def decode(str: String): ZUserId = ZUserId(str)
+  implicit object Id extends Id[AccountId] {
+    override def random(): AccountId = AccountId(Uid().toString)
+    override def decode(str: String): AccountId = AccountId(str)
   }
 }
 

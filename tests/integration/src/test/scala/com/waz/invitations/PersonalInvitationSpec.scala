@@ -23,9 +23,11 @@ import com.waz.api.Invitations.InvitationDetailsCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.AccentColor
+import com.waz.model.otr.ClientId
 import com.waz.model.{Contact, _}
 import com.waz.provision.InternalBackendClient
-import com.waz.service.{SearchKey, ZMessaging}
+import com.waz.service
+import com.waz.service._
 import com.waz.sync.client.InvitationClient
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.testutils.Matchers._
@@ -146,12 +148,13 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
 
-  override lazy val zmessagingFactory: ZMessaging.Factory = { (instanceService, zuser, token) =>
-    new ZMessaging(instanceService, zuser, token) {
-      override lazy val invitationClient = new InvitationClient(znetClient) {
-        override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] =
-          lift(super.postInvitation(i).andThen { case Success(Right(Right(inv))) => invitation = Some(inv) })
+  override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
+    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
+      new service.ZMessaging(clientId, user) {
+        override lazy val invitationClient = new InvitationClient(zNetClient) {
+          override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] =
+            lift(super.postInvitation(i).andThen { case Success(Right(Right(inv))) => invitation = Some(inv) })
+        }
       }
-    }
   }
 }

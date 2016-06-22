@@ -55,7 +55,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   private lazy implicit val dispatcher = Threading.Background
   private lazy implicit val ev = EventContext.Global
 
-  implicit def db: SQLiteDatabase = zms.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zms.db.dbHelper.getWritableDatabase
 
   type PostMessageReq = (RConvId, OtrMessage, Boolean)
 
@@ -64,17 +64,16 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   var onLine = true
   def handler = zms.messagesSync
-  def storage = zms.storage
+  def storage = zms.storage.db
 
   lazy val userId = UserId()
   lazy val conv = ConversationData(ConvId(), RConvId(), None, userId, ConversationType.Group)
 
   implicit lazy val lock = new ConvLock(conv.id, zms.syncRequests.scheduler.queue)
 
-  lazy val zms: MockZMessaging = new MockZMessaging() {
+  lazy val zms: MockZMessaging = new MockZMessaging(selfUserId = userId) {
 
     usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
-    users.selfUserId := test.userId
 
     override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
       override def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] = postMessageResponse

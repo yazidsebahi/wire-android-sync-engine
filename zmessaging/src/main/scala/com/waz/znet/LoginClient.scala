@@ -22,7 +22,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.client.RegistrationClient
-import com.waz.model.ZUserId
+import com.waz.model.{AccountId, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -52,7 +52,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
       math.max(nextRunTime - System.currentTimeMillis(), 0).millis
     }
 
-  def login(userId: ZUserId, credentials: Credentials): CancellableFuture[LoginResult] = throttled(loginNow(userId, credentials))
+  def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = throttled(loginNow(accountId, credentials))
 
   def access(cookie: Option[String], token: Option[Token]) = throttled(accessNow(cookie, token))
 
@@ -82,13 +82,25 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     loginFuture
   }.flatten
 
-  def loginNow(userId: ZUserId, credentials: Credentials) = {
+  def loginNow(userId: AccountId, credentials: Credentials) = {
     debug(s"trying to login: $credentials")
     client(loginUri, Request.PostMethod, loginRequestBody(userId, credentials), timeout = RegistrationClient.timeout) map responseHandler
   }
   def accessNow(cookie: Option[String], token: Option[Token]) = {
     val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.fold(Request.EmptyHeaders)(c => Map(Cookie -> s"zuid=$c"))
     client(accessUri, Request.PostMethod, EmptyRequestContent, headers, timeout = RegistrationClient.timeout) map responseHandler
+  }
+
+  def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]] = {
+    client(activateSendUri, Request.PostMethod, JsonContentEncoder(JsonEncoder(_.put("email", email.str)))) map {
+      case Response(SuccessHttpStatus(), resp, _) => Right(())
+      case Response(_, ErrorResponse(code, msg, label), _) =>
+        info(s"requestVerificationEmail failed with error: ($code, $msg, $label)")
+        Left(ErrorResponse(code, msg, label))
+      case resp =>
+        error(s"Unexpected response from resendVerificationEmail: $resp")
+        Left(ErrorResponse(400, resp.toString, "unknown"))
+    }
   }
 
   private val responseHandler: PartialFunction[Response, LoginResult] = {
@@ -103,6 +115,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
 
   private val loginUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(LoginPath).encodedQuery("persist=true").build()
   private val accessUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(AccessPath).build()
+  private val activateSendUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(ActivateSendPath).build()
 }
 
 object LoginClient {
@@ -115,10 +128,11 @@ object LoginClient {
   val CookieHeader = ".*zuid=([^;]+).*".r
   val LoginPath = "/login"
   val AccessPath = "/access"
+  val ActivateSendPath = "/activate/send"
 
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
 
-  def loginRequestBody(user: ZUserId, credentials: Credentials) = JsonContentEncoder(JsonEncoder { o =>
+  def loginRequestBody(user: AccountId, credentials: Credentials) = JsonContentEncoder(JsonEncoder { o =>
     o.put("label", user.str)  // this label can be later used for cookie revocation
     credentials.addToLoginJson(o)
   })

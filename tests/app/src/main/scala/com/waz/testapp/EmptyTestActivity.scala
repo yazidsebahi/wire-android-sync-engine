@@ -17,18 +17,55 @@
  */
 package com.waz.testapp
 
-import android.app.Activity
-import android.os.Bundle
+import java.io.File
+
+import android.app.{Activity, DownloadManager}
+import android.content.{Context, Intent}
+import android.os.{Bundle, Environment}
+import android.provider.MediaStore
+import android.view.View
+import android.view.View.OnClickListener
+import android.widget.Button
+import com.waz.ZLog._
+import com.waz.bitmap.video.VideoTranscoder
+import com.waz.content.Mime
+import com.waz.model.AssetMetaData
 import com.waz.service.ZMessaging
+import com.waz.utils._
 import com.waz.utils.events.ActivityEventContext
 
-
 class EmptyTestActivity extends Activity with ActivityEventContext {
+  private implicit val Tag: LogTag = logTagFor[EmptyTestActivity]
+  import com.waz.threading.Threading.Implicits.Ui
+
+  lazy val btnCapture = findViewById(R.id.btnCapture).asInstanceOf[Button]
 
   override def onCreate(savedInstanceState: Bundle) = {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.main)
 
     ZMessaging.onCreate(getApplication)
+
+    btnCapture.setOnClickListener(new OnClickListener {
+      override def onClick(v: View): Unit = {
+        startActivityForResult(new Intent(MediaStore.ACTION_VIDEO_CAPTURE), 1)
+      }
+    })
+  }
+
+  override def onActivityResult(requestCode: Int, resultCode: Int, data: Intent): Unit = {
+    if (resultCode == Activity.RESULT_OK && requestCode == 1) {
+      val file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "camera_video.mp4")
+      (for {
+       meta1 <- AssetMetaData.Video(this, data.getData)
+        _ = info(s"captured video meta: $meta1")
+        _ <- VideoTranscoder(this).apply(data.getData, file, { data => verbose(s"transcoding $data") }).future
+        meta2 <- AssetMetaData.Video(file)
+      } yield {
+        info(s"transcoded video meta: $meta2")
+        val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE).asInstanceOf[DownloadManager]
+        downloadManager.addCompletedDownload("camera_video.mp4", "camera_video.mp4", false, Mime.Video.MP4.str, file.getAbsolutePath, file.length(), true)
+      }).recoverWithLog()
+    }
   }
 }

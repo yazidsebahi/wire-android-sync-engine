@@ -26,7 +26,7 @@ import com.waz.utils.ThrottledProcessingQueue
 
 import scala.collection.mutable
 
-class VoiceChannelStorage(context: Context, storage: ZStorage) {
+class VoiceChannelStorage(context: Context, storage: ZmsDatabase) {
   import com.waz.content.VoiceChannelStorage._
   private implicit val logTag: LogTag = logTagFor[VoiceChannelStorage]
   implicit val dispatcher = new SerialDispatchQueue(name = "VoiceChannelStorage")

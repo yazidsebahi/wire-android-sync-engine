@@ -33,15 +33,12 @@ import com.waz.testutils.{MockZMessaging, RoboPermissionProvider}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.IoUtils
 import com.waz.znet.Request
-import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
-
-  lazy val context = Robolectric.application
 
   val fullFile = new File(getClass.getResource("/images/penguin.png").getFile).getAbsoluteFile
   val mediumFile = new File(getClass.getResource("/images/penguin_240.png").getFile).getAbsoluteFile
@@ -59,7 +56,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   ))
 
   lazy val zms = new MockZMessaging() { self =>
-    override lazy val assetClient: AssetClient = new AssetClient(znetClient) {
+    override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {
       override def loadAsset(req: Request[Unit]) = CancellableFuture.successful(loadImageResult)
     }
     permissions.setProvider(new RoboPermissionProvider)
@@ -67,7 +64,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   lazy val service: AssetService = zms.assets
   lazy val cacheService: CacheService = zms.cache
-  implicit def db: SQLiteDatabase = zms.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zms.db.dbHelper.getWritableDatabase
 
   var loadImageResult: Either[ErrorResponse, CacheEntry] = _
 

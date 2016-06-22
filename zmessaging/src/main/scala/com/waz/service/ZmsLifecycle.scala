@@ -24,9 +24,12 @@ import com.waz.utils.events.{EventContext, Signal}
 class ZmsLifecycle extends EventContext {
   private implicit val logTag: LogTag = logTagFor[ZmsLifecycle]
 
-  val lifecycleState = Signal(LifecycleState.Idle)
+  val lifecycleState = Signal(LifecycleState.Stopped)
   val uiActive = lifecycleState.map(_ == LifecycleState.UiActive)
 
+  val loggedIn = lifecycleState.map(_ != LifecycleState.Stopped)
+
+  private var _loggedIn = false
   private var syncCount = 0
   private var pushCount = 0
   private var uiCount = 0
@@ -36,6 +39,12 @@ class ZmsLifecycle extends EventContext {
   def acquireSync(source: String = ""): Unit = acquire('sync, syncCount += 1, source)
   def acquirePush(source: String = ""): Unit = acquire('push, pushCount += 1, source)
   def acquireUi(source: String = ""): Unit = acquire('ui, uiCount += 1, source)
+
+  def setLoggedIn(loggedIn: Boolean) = {
+    Threading.assertUiThread()
+    _loggedIn = loggedIn
+    updateState()
+  }
 
   private def acquire(name: Symbol, action: => Unit, source: String): Unit = {
     Threading.assertUiThread()
@@ -60,7 +69,8 @@ class ZmsLifecycle extends EventContext {
   }
 
   private def updateState() = lifecycleState ! {
-    if (uiCount > 0) LifecycleState.UiActive
+    if (!_loggedIn) LifecycleState.Stopped
+    else if (uiCount > 0) LifecycleState.UiActive
     else if (pushCount > 0) LifecycleState.Active
     else LifecycleState.Idle
   }

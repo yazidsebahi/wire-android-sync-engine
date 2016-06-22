@@ -32,7 +32,7 @@ import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.api.Permission.READ_CONTACTS
 import com.waz.api.impl.SearchQuery
-import com.waz.content.{ConversationStorage, UsersStorage, ZStorage}
+import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
@@ -53,25 +53,25 @@ import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 import scala.util.{Success, Try}
 
-class ContactsService(user: ZUserService, context: Context, lifecycle: ZmsLifecycle, keyValueService: KeyValueService,
-    prefs: PreferenceService, users: UserService, userSearchService: UserSearchService,
-    usersStorage: UsersStorage, timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZStorage,
-    sync: SyncServiceHandle, convs: ConversationStorage, permissions: PermissionsService) {
+class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorage, lifecycle: ZmsLifecycle, keyValue: KeyValueStorage,
+                      prefs: PreferenceService, users: UserService, userSearchService: UserSearchService,
+                      usersStorage: UsersStorage, timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase,
+                      sync: SyncServiceHandle, convs: ConversationStorage, permissions: PermissionsService) {
 
   import ContactsService._
-  import Threading.Implicits.Background
-  import keyValueService._
-  import lifecycle._
-  import timeouts.contacts._
   import EventContext.Implicits.global
+  import Threading.Implicits.Background
+  import lifecycle._
+  import keyValue._
+  import timeouts.contacts._
 
-  private val initFuture = init()
+  private[service] val initFuture = init()
   private def init() = permissions.request(Set(READ_CONTACTS), delayUntilProviderIsSet = true).flatMap(_ =>
     Future.sequence(Seq(requestUploadIfNeeded(), updateContactsAndMatchesOnStart())))
 
-  user.onVerifiedLogin.onChanged {
-    case Some(_) => if (initFuture.isCompleted) init()
-    case None =>
+  lifecycle.loggedIn.onChanged {
+    case true => if (initFuture.isCompleted) init()
+    case false =>
   }(EventContext.Global)
 
   shareContactsPref.signal.onChanged {
@@ -89,7 +89,7 @@ class ContactsService(user: ZUserService, context: Context, lifecycle: ZmsLifecy
 
   lifecycleState.on(Background) {
     case LifecycleState.UiActive => initFuture.flatMap(_ => requestUploadIfNeeded())
-    case _ =>
+    case state =>
   }(lifecycle)
 
   contactsObserver.onChanged.on(Background) { _ =>
@@ -257,8 +257,7 @@ class ContactsService(user: ZUserService, context: Context, lifecycle: ZmsLifecy
   def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit] = storage(ContactsOnWireDao.insertOrIgnore(rels)(_)).future.map(_ => contactsOnWire.mutate(_ ++ rels))
 
   private[service] def requestUploadIfNeeded() =
-    if (user.user.phone.isEmpty && ! user.user.emailVerified) Future.failed(UserNotYetVerifiedException)
-    else atMostOncePer(user.user.id, uploadCheckInterval) {
+    atMostOncePer(accountId, uploadCheckInterval) {
       verbose(s"requestUploadIfNeeded()")
 
       def atLeastOncePerUploadMaxDelayOrOnVersionUpgrade = for {
@@ -281,11 +280,16 @@ class ContactsService(user: ZUserService, context: Context, lifecycle: ZmsLifecy
       } yield ()
     }
 
-  private def selfUserHashes: Future[Vector[String]] = phoneNumbers.myPhoneNumber map { phone =>
-    withSHA2 { digest =>
-      Vector(user.user.email.flatMap(_.normalized.map(e => digest(e.str))), user.user.phone.map(p => digest(p.str)), phone.filterNot(user.user.phone.contains).map(p => digest(p.str))).flatten
-    }
-  }
+  private def selfUserHashes: Future[Vector[String]] =
+    for {
+      phone <- phoneNumbers.myPhoneNumber
+      account <- accountStorage.get(accountId)
+      email = account.flatMap(_.email).flatMap(_.normalized)
+      myPhone = account.flatMap(_.phone)
+    } yield
+      withSHA2 { digest =>
+        Vector(email.map(e => digest(e.str)), myPhone.map(p => digest(p.str)), phone.filterNot(myPhone.contains).map(p => digest(p.str))).flatten
+      }
 
   private[service] def addressBook: Future[AddressBook] = {
     val selfUser = selfUserHashes
@@ -455,15 +459,14 @@ object ContactsService {
 
   val PrefKey = "PREF_KEY_PRIVACY_CONTACTS"
 
-  private[service] val zUserAndTimeOfLastCheck = new AtomicReference((ZUserId(), Instant.EPOCH))
+  private[service] val zUserAndTimeOfLastCheck = new AtomicReference((AccountId(), Instant.EPOCH))
 
-  def atMostOncePer(id: ZUserId, checkInterval: FiniteDuration)(asyncEffect: => Future[Unit]): Future[Unit] = {
+  def atMostOncePer(id: AccountId, checkInterval: FiniteDuration)(asyncEffect: => Future[Unit]): Future[Unit] = {
     val previous = zUserAndTimeOfLastCheck.get
     if ((id != previous._1 || (checkInterval elapsedSince previous._2)) && zUserAndTimeOfLastCheck.compareAndSet(previous, (id, now))) asyncEffect
     else Future.failed(MayNotYetCheckAgainException)
   }
 
-  object UserNotYetVerifiedException extends RuntimeException with NoStackTrace
   object MayNotYetCheckAgainException extends RuntimeException with NoStackTrace
 }
 

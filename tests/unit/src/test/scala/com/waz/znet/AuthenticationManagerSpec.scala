@@ -21,8 +21,9 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.waz.RobolectricUtils
-import com.waz.model.{ZUserId, EmailAddress}
-import com.waz.service.{Preference, BackendConfig}
+import com.waz.content.Preference
+import com.waz.model.{AccountId, EmailAddress}
+import com.waz.service.BackendConfig
 import com.waz.testutils.Matchers._
 import com.waz.testutils.Slow
 import com.waz.threading.{CancellableFuture, Threading}
@@ -59,7 +60,7 @@ class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with Befor
 
   val email = "test@test.com"
   val password = "password"
-  val userId = ZUserId()
+  val userId = AccountId()
   val accessToken = "bb5373102ef17eb4d350d0bc84482a1357ab1a98a34b941f36c46a402b8fa62b.1.1394202093.a.333b8897-7950-42bd-964d-4f2dad285aef.10694619285061153311"
   val cookie = "23cf0ff8e4b469b481dddab57ba286a58ca1787ad877aa769ec4d97f48cbc90f.1.1394989660.u.b6f21a36-fc02-4b44-a1e6-608a7465246d"
   val cookieResponse = s"zuid=$cookie; path=/access; expires=Sun, 16-Mar-2014 17:07:40 GMT; domain=z-infra.com; Secure; HttpOnly"
@@ -67,12 +68,14 @@ class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with Befor
   lazy val client = new LoginClient(new AsyncClient(), BackendConfig("http://localhost:" + wireMockPort))
 
   def manager(callback: () => Unit = {() => }) = new AuthenticationManager(client, new BasicCredentials(EmailAddress(email), Some(password)) {
-    override val userId: ZUserId = test.userId
-    override def onInvalidCredentials(id: ZUserId): Unit = callback()
-  }, None, new Preference[Option[Token]] {
-    override def default: Option[Token] = None
-    override def :=(value: Option[Token]): Future[Unit] = Future.successful { currentAccessToken = value }
-    override def apply(): Future[Option[Token]] = Future.successful(currentAccessToken)
+    override val userId: AccountId = test.userId
+    override def onInvalidCredentials(): Unit = callback()
+
+    override val accessToken = new Preference[Option[Token]] {
+      override def default: Option[Token] = None
+      override def :=(value: Option[Token]): Future[Unit] = Future.successful { currentAccessToken = value }
+      override def apply(): Future[Option[Token]] = Future.successful(currentAccessToken)
+    }
   })
 
   def loginReqJson = s"""{"email":"$email","label":"$userId","password":"$password"}"""

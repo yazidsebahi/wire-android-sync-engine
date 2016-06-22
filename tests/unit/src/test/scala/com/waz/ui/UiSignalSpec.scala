@@ -24,6 +24,7 @@ import com.waz.testutils.{MockUiModule, MockZMessaging}
 import com.waz.utils.events.IntSignal
 import org.robolectric.Robolectric
 import org.scalatest._
+
 import scala.concurrent.duration._
 
 class UiSignalSpec extends FeatureSpec with Matchers with GivenWhenThen with RobolectricTests with RobolectricUtils with BeforeAndAfter {
@@ -34,7 +35,7 @@ class UiSignalSpec extends FeatureSpec with Matchers with GivenWhenThen with Rob
 
   implicit lazy val ui = new MockUiModule(zMessaging)
 
-  def uiSignal = new UiSignal[Int, Int](_ => valueSignal, identity)
+  def uiSignal = UiSignal(_ => valueSignal)
 
   before {
     ui.onCreate(Robolectric.application)

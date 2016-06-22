@@ -23,7 +23,6 @@ import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
-import com.waz.api.impl.TrackingEvent.assetUploadCancelled
 import com.waz.cache.CacheService
 import com.waz.content.{MessagesStorage, Mime}
 import com.waz.model.AssetData.UploadKey
@@ -164,23 +163,26 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       assetMeta.getAssetWithMetadata(msg.assetId) flatMap {
         case None => CancellableFuture successful Left(internalError("no asset found for $msg"))
         case Some(asset) if asset.status != AssetStatus.UploadNotStarted => CancellableFuture successful Right(msg.time)
-        case Some(asset) =>
-          verbose(s"postOriginal($asset)")
-          val proto = GenericMessage(msg.id, Proto.Asset(Proto.Asset.Original(asset), UploadInProgress))
-
-          CancellableFuture lift {
-            otrSync.postOtrMessage(conv, proto) flatMap {
-              case Right(time) =>
-                verbose(s"metadata uploaded: $asset")
-                assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.MetaDataSent, lastUpdate = time.instant)) flatMap { _ =>
-                  service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto), time = time.instant))
-                } map { _ => Right(time.instant) }
-              case Left(err) =>
-                warn(s"postOriginal failed: $err")
-                Future successful Left(err)
-            }
-          }
+        case Some(asset) => postAssetOriginal(asset, AssetStatus.MetaDataSent)
         }
+
+    def postAssetOriginal(asset: AnyAssetData, newStatus: AssetStatus) = {
+      verbose(s"postOriginal($asset)")
+      val proto = GenericMessage(msg.id, Proto.Asset(Proto.Asset.Original(asset), UploadInProgress))
+
+      CancellableFuture lift {
+        otrSync.postOtrMessage(conv, proto) flatMap {
+          case Right(time) =>
+            verbose(s"metadata uploaded: $asset")
+            assets.storage.updateAsset(asset.id, a => a.copy(status = newStatus, lastUpdate = time.instant)) flatMap { _ =>
+              service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto), time = time.instant))
+            } map { _ => Right(time.instant) }
+          case Left(err) =>
+            warn(s"postOriginal failed: $err")
+            Future successful Left(err)
+        }
+      }
+    }
 
     def postPreview(): CancellableFuture[Option[Instant]] =
       assetPreview.getAssetWithPreview(msg.assetId) flatMap {
@@ -204,11 +206,12 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                      _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = time.instant))
                      _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
                      _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                    } yield
-                      Some(time.instant)
+                    } yield Some(time.instant)
                   }
               }
           }
+        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Loudness(levels)), _, AssetStatus.MetaDataSent, _)) =>
+          postAssetOriginal(asset, AssetStatus.PreviewSent).map(_.toOption(resp => error(s"sending audio overview failed: $resp")))
         case _ =>
           verbose(s"No preview found for asset, ignoring")
           CancellableFuture successful None
@@ -223,7 +226,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
 
           def proto(sha: Sha256) = {
             val as = asset.preview match {
-              case Some(AssetPreviewData.Image(img@ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
+              case Some(AssetPreviewData.Image(img @ ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
                 Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(AssetKey(RAssetDataId(), key, sha)))
               case _ =>
                 Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(RAssetDataId(), key, sha)))
@@ -241,8 +244,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                   Some(updated) <- assets.storage.updateAsset(asset.id, a => a.copy(status = UploadDone(ak), lastUpdate = time.instant))
                   _ <- cache.addStream(updated.cacheKey, data.inputStream, updated.mimeType, updated.name, length = data.length)
                   _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                } yield
-                  Right(time.instant)
+                } yield Right(time.instant)
               }
           }
         case asset =>

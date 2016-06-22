@@ -23,8 +23,11 @@ import com.waz.ZLog._
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.{AssetsStorage, Mime}
 import com.waz.model.AssetMetaData.Empty
-import com.waz.model.{AnyAssetData, AssetId, AssetMetaData}
+import com.waz.model.{AnyAssetData, AssetId, AssetMetaData, Uid}
 import com.waz.threading.{CancellableFuture, Threading}
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class MetaDataService(context: Context, cache: CacheService, storage: AssetsStorage, assets: => AssetService) {
   import com.waz.threading.Threading.Implicits.Background
@@ -53,24 +56,37 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
       case None => CancellableFuture successful None
     }
 
-  def loadMetaData(mime: Mime, data: LocalData): CancellableFuture[Option[AssetMetaData]] = CancellableFuture {
-    (mime, data) match {
-      case (_, entry: CacheEntry) if entry.data.encKey.isDefined =>
-        error("can not load metadata from encrypted cache entry")
-        Some(Empty)
-      case (Mime.Video(), entry: CacheEntry) => AssetMetaData.Video(entry.cacheFile).right.toOption
-      case (Mime.Audio(), entry: CacheEntry) => AssetMetaData.Audio(entry.cacheFile)
-      case (Mime.Image(), entry: CacheEntry) => AssetMetaData.Image(entry.cacheFile)
-      case _ => Some(Empty)
-    }
-  } (Threading.IO)
+  def loadMetaData(mime: Mime, data: LocalData): CancellableFuture[Option[AssetMetaData]] = {
 
-  def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = CancellableFuture {
-    mime match {
-      case Mime.Video() => AssetMetaData.Video(context, uri).right.toOption
-      case Mime.Audio() => AssetMetaData.Audio(context, uri)
-      case Mime.Image() => AssetMetaData.Image(context, uri)
-      case _ => Some(Empty)
+    def load(entry: CacheEntry) = {
+      mime match {
+        case Mime.Video() => AssetMetaData.Video(entry.cacheFile).map { _.fold({msg => error(msg); None}, Some(_)) }
+        case Mime.Audio() => AssetMetaData.Audio(entry.cacheFile)
+        case Mime.Image() => Future { AssetMetaData.Image(entry.cacheFile) } (Threading.IO)
+        case _ => Future successful Some(Empty)
+      }
     }
-  } (Threading.BlockingIO)
+
+    data match {
+      case entry: CacheEntry if entry.data.encKey.isEmpty => CancellableFuture lift load(entry)
+      case _ =>
+        warn("loading metadata from stream (encrypted cache, or generic local data) this is slow, please avoid that")
+        for {
+          entry <- CancellableFuture lift cache.addStream(Uid().str, data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
+          res <- CancellableFuture lift load(entry)
+        } yield {
+          entry.delete()
+          res
+        }
+    }
+  }
+
+  def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = CancellableFuture lift {
+    mime match {
+      case Mime.Video() => AssetMetaData.Video(context, uri).map(_.fold({msg => error(msg); None}, Some(_)))
+      case Mime.Audio() => AssetMetaData.Audio(context, uri)
+      case Mime.Image() => Future { AssetMetaData.Image(context, uri) } (Threading.BlockingIO)
+      case _ => Future successful Some(Empty)
+    }
+  }
 }

@@ -18,12 +18,12 @@
 package com.waz.service.push
 
 import com.waz.RobolectricUtils
-import com.waz.content.{KeyValueStorage, ZStorage}
+import com.waz.content.{KeyValueStorage, ZmsDatabase}
 import com.waz.model.otr.ClientId
-import com.waz.model.{Uid, ZUserId}
+import com.waz.model.{AccountId, Uid}
 import com.waz.service.LastNotificationIdService.State._
 import com.waz.service.PushService.SlowSyncRequest
-import com.waz.service._
+import com.waz.service.{LastNotificationIdService, PushServiceSignals}
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
@@ -31,7 +31,6 @@ import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
-import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
@@ -41,9 +40,6 @@ import scala.concurrent.{Future, Promise}
 class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
 
   val wsConnected = Signal(false)
-  val otrClient = Future successful ClientId()
-
-  val context = Robolectric.application
 
   lazy val pushSignals = new PushServiceSignals {
     override val pushConnected: Signal[Boolean] = wsConnected
@@ -51,8 +47,8 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
   lazy val eventsClient = new EventsClient(new EmptyClient) {
     override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(100.millis)(Right(lastNotificationResponse))
   }
-  lazy val keyValue = new KeyValueService(new KeyValueStorage(context, new ZStorage(ZUserId(), context)), new ReportingService {})
-  lazy val service = new LastNotificationIdService(keyValue, pushSignals, eventsClient, otrClient)
+  lazy val keyValue = new KeyValueStorage(context, new ZmsDatabase(AccountId(), context))
+  lazy val service = new LastNotificationIdService(keyValue, pushSignals, eventsClient, ClientId())
 
   var lastNotificationResponse = Option(PushNotification(Uid(), Nil))
 

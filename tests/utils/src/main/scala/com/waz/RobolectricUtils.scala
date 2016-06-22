@@ -34,6 +34,7 @@ trait RobolectricUtils { self: Informing =>
 
   implicit def spanCanBeUsedAsTimeout: Span => Timeout = _.totalNanos.nanos
 
+  def context = Robolectric.application
   implicit def testContext = Robolectric.application
 
   @tailrec

@@ -42,7 +42,7 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
   override protected def beforeAll(): Unit = {
     super.beforeAll()
 
-    ZMessaging.currentInstance = instance
+    ZMessaging.currentAccounts = accounts
   }
 
   feature("Unread dot") {
@@ -64,6 +64,9 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
 
       markAllMessagesAsRead(msgs)
       api.onPause()
+      withDelay {
+        zmessaging.websocket.connected.currentValue shouldEqual Some(false)
+      }
       val newMsg = MessageAddEvent(Uid(), convId, EventId(9), new Date, userId, "meep")
       pushMessageToAppInBackground(newMsg)
 
@@ -72,9 +75,7 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
       awaitUi(1.second)
 
       withDelay {
-        withClue(msgs.map(m => (m.getBody, m.getMessageType))) {
-          msgs.getUnreadCount shouldEqual 2 // + OTR_LOST_HISTORY
-        }
+        msgs.getUnreadCount shouldEqual 2 // + OTR_LOST_HISTORY
       }
     }
 
@@ -86,6 +87,9 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
       awaitUi(1.second) // this is to make sure that we don't overwrite lastRead on backend with some older value
 
       api.onPause()
+      withDelay {
+        zmessaging.websocket.connected.currentValue shouldEqual Some(false)
+      }
       val newMsg = readNewMessageOnOtherDevice(EventId(10))
       pushMessageToAppInBackground(newMsg)
 

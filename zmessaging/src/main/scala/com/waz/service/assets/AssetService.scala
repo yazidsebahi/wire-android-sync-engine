@@ -58,7 +58,7 @@ import scala.util.Random
 class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
     loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
     permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-    metaService: MetaDataService, previewService: PreviewService, sync: SyncServiceHandle, media: RecordAndPlayService) {
+    metaService: MetaDataService, previewService: PreviewService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService) {
 
   import AssetService._
   import com.waz.threading.Threading.Implicits.Background
@@ -87,9 +87,12 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   }
 
   def assetSignal(id: AssetId) = storage.signal(id) flatMap[(AnyAssetData, api.AssetStatus)] {
-    case asset @ AnyAssetData(_, _, _, _, _, _, _, _, AssetStatus(status, Some(_)), _) =>
+    case asset @ AnyAssetData(_, _, _, _, _, meta, _, _, AssetStatus(status, Some(_)), _) =>
       cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
-        case true  => Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
+        case true  =>
+          verbose(s"asset in state DOWNLOAD_DONE, meta: $meta")
+          if (meta.isEmpty) metaService.getAssetMetadata(id) // asset downloaded but has no metadata, let's update
+          Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
         case false =>
           downloader.getDownloadState(asset.cacheKey).map(_.state) map {
             case State.RUNNING    => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS)

@@ -17,7 +17,6 @@
  */
 package com.waz.api.impl
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.CauseForCallStateEvent
 import com.waz.model.ConversationData.ConversationType
@@ -33,10 +32,10 @@ import scala.concurrent.duration._
 class ActiveVoiceChannelsSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils {
 
   lazy val selfId = UserId()
-  lazy val zmessaging = new MockZMessaging() {
-    users.selfUserId := selfId
-  }
+  lazy val zmessaging = new MockZMessaging(selfUserId = selfId)
   implicit lazy val ui = new MockUiModule(zmessaging)
+
+  val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group, lastEvent = EventId(1000))
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -47,9 +46,6 @@ class ActiveVoiceChannelsSpec extends FeatureSpec with Matchers with BeforeAndAf
     Await.ready(zmessaging.convsStorage.insert(conv), 5.seconds)
   }
 
-  val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group, lastEvent = EventId(1000))
-
-  implicit def db: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
   private implicit lazy val dispatcher = Threading.Background
 
   lazy val channels = new ActiveVoiceChannels

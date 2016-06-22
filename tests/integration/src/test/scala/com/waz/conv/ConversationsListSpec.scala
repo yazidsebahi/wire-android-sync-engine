@@ -158,7 +158,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
       withDelay(archived should not be empty)
       archived.get(0) shouldEqual conv
 
-      withDelay { Await.result(zmessaging.syncContent.syncStorage(_.getJobs), 1.second) shouldBe empty }
+      withDelay { Await.result(zmessaging.syncRequests.content.syncStorage(_.getJobs), 1.second) shouldBe empty }
 
       archived should not be empty
       archived.get(0) shouldEqual conv
@@ -168,7 +168,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
       conv.setArchived(false)
 
       withDelay { archived should be(empty) }
-      withDelay { Await.result(zmessaging.syncContent.syncStorage(_.getJobs), 1.second) shouldBe empty }
+      withDelay { Await.result(zmessaging.syncRequests.content.syncStorage(_.getJobs), 1.second) shouldBe empty }
       archived shouldBe empty
       withDelay { convs should contain(conv) }
     }

@@ -21,7 +21,7 @@ import android.content.{Context, Intent}
 import com.waz.ZLog._
 import com.waz.model.ConvId
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
-import com.waz.service.{InstanceService, ZMessaging}
+import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
@@ -36,7 +36,7 @@ class CallService extends WakefulFutureService {
 
   implicit val ec = EventContext.Global
 
-  lazy val executor = new CallExecutor(getApplicationContext, ZMessaging.currentInstance)
+  lazy val executor = new CallExecutor(getApplicationContext, ZMessaging.currentAccounts)
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
     debug(s"onIntent $intent")
@@ -90,7 +90,7 @@ object CallService {
   def silenceIntent(context: Context, conv: ConvId) = intent(context, conv, ActionSilence)
 }
 
-class CallExecutor(val context: Context, val instance: InstanceService)(implicit ec: EventContext) extends ActivePush {
+class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
 
   private implicit val logTag: LogTag = logTagFor[CallExecutor]
   import Threading.Implicits.Background

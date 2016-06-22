@@ -17,71 +17,44 @@
  */
 package com.waz.service.otr
 
-import android.content.Context
-import com.softwaremill.macwire._
 import com.waz.ZLog._
+import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.{ClientRegistrationState, Verification}
-import com.waz.content.{ConversationStorage, MembersStorage, OtrClientsStorage, UsersStorage}
+import com.waz.content._
 import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.model.{OtrClientAddEvent, OtrClientEvent, OtrClientRemoveEvent, UserId}
 import com.waz.service._
-import com.waz.service.messages.MessagesService
+import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
-import com.waz.sync.otr.OtrClientsSyncHandler
-import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 
+import scala.collection.immutable.Map
 import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class OtrClientsService(context: Context, users: UserService, zUsers: ZUserService, kvService: KeyValueService, cryptoBox: CryptoBoxService,
-                        storage: OtrClientsStorage, content: OtrContentService, push: PushService, sync: SyncServiceHandle,
-                        usersStorage: UsersStorage, apiClient: OtrClient, errors: ErrorsService, members: MembersStorage,
-                        convs: ConversationStorage, messages: MessagesService, syncRequests: SyncRequestService,
-                        clientsSync: => OtrClientsSyncHandler, timeouts: Timeouts) {
+class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, kvService: KeyValueStorage, storage: OtrClientsStorage, sync: SyncServiceHandle, lifecycle: ZmsLifecycle, updater: VerificationStateUpdater) {
 
   import OtrClientsService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private[waz] val updater = wire[VerificationStateUpdater]
-
   private lazy val lastSelfClientsSyncPref = kvService.keyValuePref("last_self_clients_sync_requested", 0L)
 
-  zUsers.onVerifiedLogin {
-    case Some(_) => requestSyncIfNeeded()
-    case None =>
+  lifecycle.lifecycleState.map(_ != LifecycleState.Stopped) {
+    case true => requestSyncIfNeeded()
+    case false =>
   }
-  push.onSlowSyncNeeded { _ => sync.syncSelfClients() }
 
   val otrClientsProcessingStage = EventScheduler.Stage[OtrClientEvent] { (convId, events) =>
-    users.withSelfUserFuture { selfUserId =>
-      RichFuture.processSequential(events) {
-        case OtrClientAddEvent(id, client) =>
-          updateClients(Map(selfUserId -> Seq(client))).flatMap(_ => sync.syncPreKeys(selfUserId, Set(client.id)))
-        case OtrClientRemoveEvent(id, clientId) =>
-          removeClients(selfUserId, Seq(clientId)) flatMap { _ =>
-            content.currentClientId flatMap {
-              case Some(`clientId`) => onCurrentClientRemoved()
-              case _ => Future.successful(())
-            }
-          }
-      }
+    RichFuture.processSequential(events) {
+      case OtrClientAddEvent(id, client) =>
+        updateClients(Map(userId -> Seq(client))).flatMap(_ => sync.syncPreKeys(userId, Set(client.id)))
+      case OtrClientRemoveEvent(id, cId) =>
+        removeClients(userId, Seq(cId))
     }
   }
-
-  def awaitClientRegistered(): Future[SyncResult] =
-    getSelfClient flatMap {
-      case None => clientsSync.syncSelfClients()
-      case Some(c) =>
-        verbose(s"awaitClientRegistered - already registered: $c, state: ${content.registrationStateSignal.currentValue}")
-        requestSyncIfNeeded() flatMap { _ =>
-          (content.registrationStatePref := ClientRegistrationState.REGISTERED) map { _ => SyncResult.Success }
-        }
-    }
 
   def requestSyncIfNeeded(retryInterval: FiniteDuration = 7.days) =
     getSelfClient.zip(lastSelfClientsSyncPref()) flatMap {
@@ -92,19 +65,18 @@ class OtrClientsService(context: Context, users: UserService, zUsers: ZUserServi
         }
     }
 
-  def deleteClient(id: ClientId, password: String) = users.withSelfUserFuture { selfUser =>
-    storage.get(selfUser) flatMap {
+  def deleteClient(id: ClientId, password: String) =
+    storage.get(userId) flatMap {
       case Some(cs) if cs.clients.contains(id) =>
-        apiClient.deleteClient(id, password).future flatMap {
+        netClient.deleteClient(id, password).future flatMap {
           case Right(_) => for {
-            _ <- storage.update(selfUser, { uc => uc.copy(clients = uc.clients - id) })
+            _ <- storage.update(userId, { uc => uc.copy(clients = uc.clients - id) })
             _ <- requestSyncIfNeeded()
           } yield Right(())
           case res => Future.successful(res)
         }
       case _ => Future.successful(Left(ErrorResponse.internalError("Client does not belong to current user or was already deleted")))
     }
-  }
 
   def getClient(id: UserId, client: ClientId) = storage.get(id) map { _.flatMap(_.clients.get(client)) }
 
@@ -117,7 +89,7 @@ class OtrClientsService(context: Context, users: UserService, zUsers: ZUserServi
         storage.updateOrCreate(id, update, create) flatMap { ucs =>
           val res = ucs.clients(client)
           if (res.isVerified) Future successful res
-          else updater.awaitUpdated() map { _ => res } // force verification state processing to ensure that OTR_UNVERIFIED message is added before anything else
+          else VerificationStateUpdater.awaitUpdated(userId) map { _ => res } // synchronize with verification state processing to ensure that OTR_UNVERIFIED message is added before anything else
         }
     }
   }
@@ -138,9 +110,7 @@ class OtrClientsService(context: Context, users: UserService, zUsers: ZUserServi
     def requestLocationSyncIfNeeded(uss: Traversable[UserClients]) = {
       val needsSync = uss.filter(_.clients.values.exists(_.regLocation.exists(!_.hasName)))
       if (needsSync.nonEmpty)
-      users.withSelfUserFuture { selfUserId =>
-        if (needsSync.exists(_.user == selfUserId)) sync.syncClientsLocation() else Future.successful(())
-      } .recoverWithLog()
+        if (needsSync.exists(_.user == userId)) sync.syncClientsLocation() else Future.successful(())
     }
 
     storage.updateOrCreateAll(ucs.map { case (u, cs) => u -> updateOrCreate(u, cs) } (breakOut)) map { res =>
@@ -154,33 +124,26 @@ class OtrClientsService(context: Context, users: UserService, zUsers: ZUserServi
     updateClients(Map(user -> clients), replace).map(_.head)
   }
 
-  def onCurrentClientRemoved() =
-    for {
-      _ <- zUsers.logout()
-      _ <- content.registrationStatePref := ClientRegistrationState.UNKNOWN
-      _ <- content.clientIdPref := None
-      _ <- cryptoBox.deleteCryptoBox()
-    } yield ()
+  def onCurrentClientRemoved() = clientId.head flatMap {
+    case Some(id) => storage.update(userId, _ - id)
+    case None => Future successful None
+  }
 
   def removeClients(user: UserId, clients: Seq[ClientId]) =
     storage.update(user, { cs =>
       cs.copy(clients = cs.clients -- clients)
     })
 
-  def updateSelfClients(clients: Seq[Client], replace: Boolean = true) = users.getSelfUser flatMap {
-    case Some(user) => updateUserClients(user.id, clients, replace)
-    case None =>
-      throw new Exception(s"No self user found in updateClients($clients)")
+  def updateSelfClients(clients: Seq[Client], replace: Boolean = true) = clientId.head flatMap { current =>
+    updateUserClients(userId, clients.map(c => if (current.contains(c.id)) c.copy(verified = Verification.VERIFIED) else c), replace)
   }
 
   def updateClientLabel(id: ClientId, label: String) =
-    users.withSelfUserFuture { selfUserId =>
-      storage.update(selfUserId, { cs =>
-        cs.clients.get(id).fold(cs) { client =>
-          cs.copy(clients = cs.clients.updated(id, client.copy(label = label)))
-        }
-      })
-    } flatMap {
+    storage.update(userId, { cs =>
+      cs.clients.get(id).fold(cs) { client =>
+        cs.copy(clients = cs.clients.updated(id, client.copy(label = label)))
+      }
+    }) flatMap {
       case Some(_) =>
         verbose(s"clientLabel updated, client: $id, label: $label")
         sync.postClientLabel(id, label)
@@ -189,50 +152,19 @@ class OtrClientsService(context: Context, users: UserService, zUsers: ZUserServi
         Future.successful(())
     }
 
-  def selfClient = content.currentClientIdSignal flatMap { _ =>
-    Signal.future(getSelfClient) collect {
-      case Some(client) => client
+  def selfClient = for {
+    uc <- storage.signal(userId)
+    cId <- clientId
+    res <- cId.flatMap(uc.clients.get).fold(Signal.empty[Client])(Signal.const)
+  } yield res
+
+  def getSelfClient: Future[Option[Client]] =
+    storage.get(userId).zip(clientId.head) map {
+      case (Some(cs), Some(id)) =>
+        verbose(s"self clients: $cs, clientId: $id")
+        cs.clients.get(id)
+      case _ => None
     }
-  }
-
-  def getSelfClient: Future[Option[Client]] = content.currentClientId flatMap {
-    case None => Future.successful(None)
-    case Some(clientId) =>
-      verbose(s"getSelfClient(), clientId: $clientId")
-      users.getSelfUser flatMap {
-        case Some(selfUser) =>
-          storage.get(selfUser.id) map {
-            case Some(cs) =>
-              verbose(s"self clients: $cs")
-              cs.clients.get(clientId)
-            case _ => None
-          }
-        case None => Future.successful(None)
-      }
-  }
-
-  def incomingClientsSignal: Signal[Seq[Client]] =
-    content.currentClientIdSignal flatMap {
-      case None => Signal const Seq.empty[Client]
-      case Some(clientId) =>
-        for {
-          userId <- users.selfUserId.signal
-          ucs <- getClientsSignal(userId)
-        } yield
-          ucs.clients.get(clientId).flatMap(_.regTime).fold(Seq.empty[Client]) { current =>
-            ucs.clients.values.filter(c => c.verified == Verification.UNKNOWN && c.regTime.exists(_.isAfter(current))).toVector
-          }
-    }
-
-  def getClients(user: UserId) = storage.get(user).map(_.fold(Seq.empty[Client])(_.clients.values.toVector))
-
-  def getClientsSignal(user: UserId) = storage.signal(user)
-
-  def updateVerified(userId: UserId, clientId: ClientId, verified: Boolean) = storage.update(userId, { uc =>
-    uc.clients.get(clientId) .fold (uc) { client =>
-      uc.copy(clients = uc.clients + (client.id -> client.copy(verified = if (verified) Verification.VERIFIED else Verification.UNVERIFIED)))
-    }
-  })
 }
 
 object OtrClientsService {

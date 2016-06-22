@@ -21,6 +21,7 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.KindOfSpotifyAccount
 import com.waz.api.Spotify.ConnectCallback
+import com.waz.service.ZMessaging
 import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.sync.client.OAuth2Client.AuthorizationCode
 import com.waz.threading.Threading
@@ -31,7 +32,7 @@ class Spotify(implicit context: UiModule) extends api.Spotify with UiObservable 
 
   private var auth = Option.empty[Authentication]
 
-  addLoader[Authentication](_.spotifyMedia.authentication)(setAuthentication)
+  addLoader((_: ZMessaging).spotifyMedia.authentication)(setAuthentication)
 
   override def connect(authorizationCode: String, callback: ConnectCallback): Unit =
     context.zms .flatMapFuture (_.spotifyMedia.connectAccount(AuthorizationCode(authorizationCode))) .map {

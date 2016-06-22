@@ -69,12 +69,10 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
   val onFlowEvent = new Publisher[UnknownCallEvent]
   val onAvsMetricsReceived = EventStream[AvsMetrics]()
 
-  val onCreateVideoView = new Publisher[(RConvId, Option[UserId])]
-  val onReleaseVideoView = new Publisher[(RConvId, Option[UserId])]
-  val onCreateVideoPreview = new Publisher[Unit]
-  val onReleaseVideoPreview = new Publisher[Unit]
+  val createVideoViewRequested = Signal[Option[(RConvId, Option[UserId])]]
+  val createVideoPreviewRequested = Signal[Boolean]
 
-  val onStateOfReceivedVideoChanged = new Publisher[StateOfReceivedVideo]
+  val stateOfReceivedVideo = Signal[StateOfReceivedVideo](UnknownState)
 
   val avsLogDataSignal = metricsEnabledPref.signal.zip(loggingEnabledPref.signal).zip(logLevelPref.signal) map { case ((metricsEnabled, loggingEnabled), logLevel) =>
       AvsLogData(metricsEnabled = metricsEnabled, loggingEnabled = loggingEnabled, AvsLogLevel.fromPriority(logLevel))
@@ -180,28 +178,28 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
     }
 
     override def changeVideoState(state: Int, reason: Int): Unit =
-      onStateOfReceivedVideoChanged ! returning(StateOfReceivedVideo(AvsVideoState fromState state, reason = AvsVideoReason fromReason reason)) { s => debug(s"avs changeVideoState($s)") }
+      stateOfReceivedVideo ! returning(StateAndReason(AvsVideoState fromState state, reason = AvsVideoReason fromReason reason)) { s => debug(s"avs changeVideoState($s)") }
 
     override def createVideoPreview(): Unit = {
       debug("avs createVideoPreview() callback called")
-      onCreateVideoPreview ! {()}
+      createVideoPreviewRequested ! true
     }
 
     override def releaseVideoPreview(): Unit = {
       debug("avs releaseVideoPreview() callback called")
-      onReleaseVideoPreview ! {()}
+      createVideoPreviewRequested ! false
     }
 
     // partId is the user id of the participant (for group calls)
     override def createVideoView(convId: String, partId: String): Unit = {
       debug(s"avs createVideoView($convId, $partId) callback called")
-      onCreateVideoView ! (RConvId(convId), Option(partId).map(UserId))
+      createVideoViewRequested ! Option((RConvId(convId), Option(partId).map(UserId)))
     }
 
     // partId is the user id of the participant (for group calls)
     override def releaseVideoView(convId: String, partId: String): Unit = {
       debug(s"avs releaseVideoView($convId, $partId) callback called")
-      onReleaseVideoView ! (RConvId(convId), Option(partId).map(UserId))
+      createVideoViewRequested ! None
     }
 
     override def changeAudioState(state: Int): Unit = {
@@ -337,8 +335,17 @@ object FlowManagerService {
   private implicit val logTag: LogTag = logTagFor(FlowManagerService)
 
   case class AvsLogData(metricsEnabled: Boolean, loggingEnabled: Boolean, logLevel: AvsLogLevel)
-  case class StateOfReceivedVideo(state: AvsVideoState, reason: AvsVideoReason)
   case class EstablishedFlows(convId: RConvId, users: Set[UserId])
+
+  sealed trait StateOfReceivedVideo {
+    def state: AvsVideoState
+    def reason: AvsVideoReason
+  }
+  case class StateAndReason(state: AvsVideoState, reason: AvsVideoReason) extends StateOfReceivedVideo
+  case object UnknownState extends StateOfReceivedVideo {
+    override def state = AvsVideoState.STOPPED
+    override def reason = AvsVideoReason.NORMAL
+  }
 
   object AvsLogData {
     val Default = AvsLogData(metricsEnabled = false, loggingEnabled = false, AvsLogLevel.DEBUG)

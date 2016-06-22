@@ -33,7 +33,7 @@ class GmsInstanceIdListenerService extends InstanceIDListenerService with ZMessa
   // this requires temporary setting android:exported="true" for the service, though (don't forget to change back afterwards!)
   override def onTokenRefresh(): Unit = {
     info("GCM: onTokenRefresh() called")
-    ZMessaging.currentInstance.getCurrent flatMap {
+    ZMessaging.currentAccounts.getCurrentZms flatMap {
       case Some(zms) =>
         debug("clearing gcm token and requesting re-registration with gcm")
         zms.gcmGlobal.unregister() flatMap { _ =>  zms.sync.registerGcm() }

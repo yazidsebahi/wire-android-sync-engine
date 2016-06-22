@@ -27,11 +27,13 @@ import com.waz.api.MessageContent.Image
 import com.waz.api.{Message, MessageContent}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
+import com.waz.service.StorageModule
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.threading.Threading
 import com.waz.utils.IoUtils.{toByteArray, withResource}
 import com.waz.utils._
+import com.waz.utils.events.EventContext
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
@@ -48,14 +50,19 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var messageSync = None: Option[MessageId]
   var assetSync = None: Option[AssetId]
   var lastReadSync = None: Option[(ConvId, Instant)]
 
-  lazy val service = new MockZMessaging() {
-    override val dbPrefix = Random.nextInt().toHexString
+  lazy val global = new MockGlobalModule {
+    override lazy val factory: MockZMessagingFactory = new MockZMessagingFactory(this) {
+      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, Random.nextInt().toHexString)
+    }
+  }
+
+  lazy val service = new MockZMessaging(new MockAccountService(new MockAccounts(global)), selfUserId = selfUser.id) {
 
     override lazy val sync = new EmptySyncService {
       override def postMessage(id: MessageId, conv: ConvId) = {
@@ -70,7 +77,6 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     }
 
     insertUsers(Seq(selfUser, user1))
-    users.selfUserId := selfUser.id
   }
 
   lazy val ui = new MockUiModule(service)
@@ -139,7 +145,6 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   }
 
   feature("Ordering") {
-    import com.waz.utils.events.EventContext.Implicits.global
     import testutils.withUpdate
 
 
@@ -161,7 +166,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     scenario("Don't update messages list if time is unchanged") {
       val msgs = service.messagesStorage.getEntries(conv.id)
       @volatile var updateCount = 0
-      msgs { _ => updateCount += 1 }
+      msgs { _ => updateCount += 1 } (EventContext.Global)
 
       val msg = withUpdate(msgs) {
         sendMessage(new MessageContent.Text("test"))

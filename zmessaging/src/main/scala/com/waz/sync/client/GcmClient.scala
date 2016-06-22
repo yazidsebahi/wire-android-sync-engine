@@ -46,12 +46,12 @@ class GcmClient(netClient: ZNetClient) {
 object GcmClient {
   val PushesPath = "/push/tokens"
 
-  case class GcmToken(token: String, app: GcmSenderId, clientId: Option[ClientId] = None, transport: String = "GCM")
+  case class GcmToken(token: String, app: GcmSenderId, clientId: ClientId, transport: String = "GCM")
   object GcmToken {
 
     implicit lazy val Decoder: JsonDecoder[GcmToken] = new JsonDecoder[GcmToken] {
       import com.waz.utils.JsonDecoder._
-      override def apply(implicit js: JSONObject): GcmToken = GcmToken('token, 'app, decodeOptId[ClientId]('client), 'transport)
+      override def apply(implicit js: JSONObject): GcmToken = GcmToken('token, 'app, decodeId[ClientId]('client), 'transport)
     }
 
     implicit lazy val Encoder: JsonEncoder[GcmToken] = new JsonEncoder[GcmToken] {
@@ -59,7 +59,7 @@ object GcmClient {
         o.put("token", v.token)
         o.put("app", v.app.str)
         o.put("transport", v.transport)
-        v.clientId foreach { c => o.put("client", c.str) }
+        o.put("client", v.clientId.str)
       }
     }
 

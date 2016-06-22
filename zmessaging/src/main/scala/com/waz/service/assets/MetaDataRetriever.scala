@@ -22,23 +22,28 @@ import java.io.File
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.{Cleanup, Managed}
 
+import scala.concurrent.Future
+
 object MetaDataRetriever {
+
+  private implicit val dispatcher = new SerialDispatchQueue(Threading.BlockingIO, "MetaDataRetriever")
 
   implicit lazy val RetrieverCleanup = new Cleanup[MediaMetadataRetriever] {
     override def apply(a: MediaMetadataRetriever): Unit = a.release()
   }
 
-  def apply[A](body: MediaMetadataRetriever => A): A = Managed(new MediaMetadataRetriever).acquire { body }
+  def apply[A](body: MediaMetadataRetriever => A): Future[A] = Future { Managed(new MediaMetadataRetriever).acquire { body } }
 
-  def apply[A](file: File)(f: MediaMetadataRetriever => A): A =
+  def apply[A](file: File)(f: MediaMetadataRetriever => A): Future[A] =
     apply { retriever =>
       retriever.setDataSource(file.getAbsolutePath)
       f(retriever)
     }
 
-  def apply[A](context: Context, uri: Uri)(f: MediaMetadataRetriever => A): A =
+  def apply[A](context: Context, uri: Uri)(f: MediaMetadataRetriever => A): Future[A] =
     apply { retriever =>
       retriever.setDataSource(context, uri)
       f(retriever)

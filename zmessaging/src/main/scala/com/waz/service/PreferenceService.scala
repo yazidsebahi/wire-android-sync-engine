@@ -19,6 +19,9 @@ package com.waz.service
 
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
+import android.os.Looper
+import com.waz.content.Preference
+import com.waz.content.Preference.PrefCodec
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.SourceSignal
 import com.waz.zms.R
@@ -47,7 +50,11 @@ class PreferenceService(context: Context) {
     editor.commit()
   }
 
+  def preference[A](key: String, defaultValue: A, prefs: => SharedPreferences = preferences)(implicit codec: PrefCodec[A]) =
+    new Pref[A](prefs, key, Option(prefs.getString(key, null)).fold(defaultValue)(codec.decode), { (prefs, value) => prefs.putString(key, codec.encode(value)) })
+
   def intPreference(key: String, prefs: => SharedPreferences = preferences, defaultValue: Int = 0) = new Pref[Int](prefs, key, prefs.getInt(key, defaultValue), _.putInt(key, _))
+  def longPreference(key: String, prefs: => SharedPreferences = preferences, defaultValue: Long = 0) = new Pref[Long](prefs, key, prefs.getLong(key, defaultValue), _.putLong(key, _))
   def preferenceStringSignal(key: String, prefs: => SharedPreferences = preferences, defaultValue: String = "") = new Pref[String](prefs, key, prefs.getString(key, defaultValue), _.putString(key, _))
   def preferenceBooleanSignal(key: String, prefs: => SharedPreferences = preferences, defaultValue: Boolean = false) = new Pref[Boolean](prefs, key, prefs.getBoolean(key, defaultValue), _.putBoolean(key, _))
 
@@ -81,17 +88,21 @@ object PreferenceService {
 
       private val listener = new OnSharedPreferenceChangeListener {
         override def onSharedPreferenceChanged(sharedPreferences: SharedPreferences, k: String): Unit =
-          if (key == k) publish(load, Threading.Ui)
+          if (key == k) {
+            if (Thread.currentThread() == Looper.getMainLooper.getThread) publish(load, Threading.Ui)
+            else publish(load)
+          }
       }
 
       override def onWire():Unit = {
-        prefs.registerOnSharedPreferenceChangeListener(listener)
         value = Some(load)
+        Threading.Ui { prefs.registerOnSharedPreferenceChangeListener(listener) } .map { _ =>
+          publish(load, Threading.Background) // load value again after registering the listener (it could have been changed in meantime)
+        } (Threading.Background)
       }
 
-      override def onUnwire(): Unit = {
-        prefs.unregisterOnSharedPreferenceChangeListener(listener)
-      }
+      override def onUnwire(): Unit =
+        Threading.Ui { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
   }
 }

@@ -24,8 +24,10 @@ import com.waz.api._
 import com.waz.api.impl.{CancelOnWarning, DoNothingAndProceed}
 import com.waz.content.Mime
 import com.waz.model._
-import com.waz.service.ZMessaging.Factory
+import com.waz.model.otr.ClientId
+import com.waz.service
 import com.waz.service.tracking.TrackingEventsService
+import com.waz.service.{UserModule, ZMessagingFactory}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -46,14 +48,16 @@ class AssetTrackingSpec extends FeatureSpec with BeforeAndAfter with Matchers wi
 
   var events = Seq.empty[TrackingEvent]
 
-  override lazy val zmessagingFactory: Factory = new ApiZmessaging(_, _, _) {
-
-    override lazy val trackingEvents: TrackingEventsService = new TrackingEventsService(handlerFactory, assetsStorage, messagesStorage, assetDownloader) {
-      override def track(event: => TrackingEvent): Future[Unit] = {
-        events = events :+ event
-        Future.successful(())
+  override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
+    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
+      new ApiZMessaging(clientId, user) {
+        override lazy val trackingEvents: TrackingEventsService = new TrackingEventsService(handlerFactory, assetsStorage, messagesStorage, assetDownloader) {
+          override def track(event: => TrackingEvent): Future[Unit] = {
+            events = events :+ event
+            Future.successful(())
+          }
+        }
       }
-    }
   }
 
   before {

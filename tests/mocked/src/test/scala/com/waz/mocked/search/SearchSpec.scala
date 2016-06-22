@@ -135,7 +135,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
 
   feature("Recommended people") {
     scenario("Include contacts in recommended people by default") {
-      zmessaging.storage(SearchQueryCacheDao.deleteAll(_))
+      zmessaging.db(SearchQueryCacheDao.deleteAll(_))
       val search = api.search.getRecommendedPeople(10)
       withDelay {
         idsOfAll(search.getAll:_*) should contain theSameElementsAs idsOfAll(recommended.take(10):_*)
@@ -143,7 +143,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
     }
 
     scenario("Search for recommended and exclude one.") {
-      zmessaging.storage(SearchQueryCacheDao.deleteAll(_))
+      zmessaging.db(SearchQueryCacheDao.deleteAll(_))
       requestedIgnore = None
       val search = api.search().getRecommendedPeople(5)
       withDelay {
@@ -184,7 +184,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
 
     scenario("Exclude just blocked users") {
       awaitUi(3.seconds) // previous tests spill into this one
-      zmessaging.storage(SearchQueryCacheDao.deleteAll(_))
+      zmessaging.db(SearchQueryCacheDao.deleteAll(_))
       searchResults.put(TopPeople, Seq(meeper, coyote, elmer, bugs, carrot).map(_.entry()))
       val topPeople = api.search.getTopPeople(12)
       withDelay {

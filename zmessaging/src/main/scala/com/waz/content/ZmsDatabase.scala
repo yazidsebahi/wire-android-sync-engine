@@ -19,13 +19,13 @@ package com.waz.content
 
 import android.content.Context
 import com.waz.db.ZMessagingDB
-import com.waz.model.ZUserId
+import com.waz.model.AccountId
 import com.waz.threading.{SerialDispatchQueue, Threading}
 
 /**
  * Single user storage. Keeps data specific to used user account.
   */
-class ZStorage(user: ZUserId, context: Context, dbNamePrefix: String = "") extends Database {
-  override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue(executor = Threading.IOThreadPool, name = "ZStorage_" + user.str.substring(24))
+class ZmsDatabase(user: AccountId, context: Context, dbNamePrefix: String = "") extends Database {
+  override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue(executor = Threading.IOThreadPool, name = "ZmsDatabase_" + user.str.substring(24))
   val dbHelper = new ZMessagingDB(context, dbNamePrefix + user.str)
 }

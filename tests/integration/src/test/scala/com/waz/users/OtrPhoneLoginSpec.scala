@@ -22,8 +22,10 @@ import java.util.UUID
 import akka.pattern.ask
 import com.waz.api._
 import com.waz.login.RegistrationUtils
-import com.waz.model.ZUserId
-import com.waz.provision.ActorMessage.{RegisterPhone, Successful}
+import com.waz.model.AccountId
+import com.waz.model.otr.ClientId
+import com.waz.provision.ActorMessage.{DeleteAllOtherDevices, RegisterPhone, Successful}
+import com.waz.provision.EmailClientSuite
 import com.waz.testutils.Matchers._
 import org.robolectric.annotation.Config
 import org.scalatest.{FeatureSpec, OptionValues}
@@ -32,17 +34,21 @@ import scala.concurrent.duration._
 import scala.util.Success
 
 @Config(manifest = "tests/OtrAndroidManifest.xml")
-class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with ProcessActorSpec with RegistrationUtils { test =>
+class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with ProcessActorSpec with RegistrationUtils with EmailClientSuite { test =>
   override val autoLogin = false
 
-  lazy val userId = ZUserId()
+  lazy val userId = AccountId()
 
   lazy val phone = randomPhoneNumber
-  override lazy val email = s"android.test+${UUID.randomUUID}@wearezeta.com"
+  override lazy val email = s"android.test+${UUID.randomUUID}@wire.com"
 
   lazy val remote = registerDevice("second_device_remote")
 
+  override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
+
   feature("Register by phone") {
+
+    var prevClientId: ClientId = null
 
     scenario("Register on remote device") {
       val code = awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.REGISTRATION)).toOption
@@ -71,16 +77,59 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
         otrClient should not be empty
         otherClients should have size 1
       }
+      zmessaging.otrClientsStorage.get(zmessaging.selfUserId).await().flatMap(_.clients.get(zmessaging.clientId).flatMap(_.signalingKey)) shouldBe defined
+      otrClient.get.asInstanceOf[com.waz.api.impl.otr.OtrClient].data.signalingKey shouldBe defined
 
-      self.setPassword("password", new CredentialsUpdateListener {
-        override def onUpdated(): Unit = ()
+      var passwordUpdated = false
+      var emailUpdated = false
+
+      self.setEmail(email, new CredentialsUpdateListener {
         override def onUpdateFailed(code: Int, message: String, label: String): Unit =
-          info(s"unable to update credentials: $code, $message, $label")
+          fail(s"unable to update credentials: $code, $message, $label")
+        override def onUpdated(): Unit = emailUpdated = true
       })
+      self.setPassword(password, new CredentialsUpdateListener {
+        override def onUpdated(): Unit = passwordUpdated = true
+        override def onUpdateFailed(code: Int, message: String, label: String): Unit =
+          fail(s"unable to update credentials: $code, $message, $label")
+      })
+
+      withDelay {
+        emailUpdated shouldEqual true
+        passwordUpdated shouldEqual true
+      }
+      emailClient.verifyEmail(email)
 
       withDelay {
         self.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
       }
+
+      prevClientId = zmessaging.clientId
+    }
+
+    scenario("Legacy activation code request is successfull") {
+      awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.LOGIN)).toOption shouldBe defined
+    }
+
+    scenario("Remove current device on backend") {
+      val self = api.getSelf
+      (remote ? DeleteAllOtherDevices(password)).await() shouldEqual Successful
+
+      withDelay {
+        self.isLoggedIn shouldEqual false
+      }
+    }
+
+    scenario("Sign back in with email") {
+      val self = awaitUiFuture(login(CredentialsFactory.emailCredentials(email, password))).toOption.value
+
+      withDelay {
+        self.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
+        self.isLoggedIn shouldEqual true
+      }
+      val clientId = zmessaging.clientId
+      clientId should not be prevClientId
+      api.account.get.account.clientId shouldEqual Some(clientId)
     }
   }
 }

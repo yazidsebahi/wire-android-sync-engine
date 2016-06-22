@@ -68,6 +68,8 @@ trait ZMessagingApi {
    */
   def requestPhoneConfirmationCode(phoneNumber: String, kindOfAccess: KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit
 
+  def requestPhoneConfirmationCall(phoneNumber: String, kindOfAccess: KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit
+
   /**
    * Verify that the given combination of a phone number and a confirmation code is valid. Used either in the registration process, in order to
    * pre-verify the phone number even before the user entered a name and proper registration starts, or when the user adds/changes her phone number later on.

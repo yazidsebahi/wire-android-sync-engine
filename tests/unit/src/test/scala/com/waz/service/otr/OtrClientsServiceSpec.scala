@@ -24,14 +24,14 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.sync.client.OtrClient
-import com.waz.testutils.MockZMessaging
+import com.waz.testutils.{MockUserModule, MockZMessaging}
 import com.waz.threading.CancellableFuture
+import com.waz.utils._
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
-import com.waz.utils._
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
@@ -46,16 +46,18 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
   var deleteResponse: Either[ErrorResponse, Unit] = Right(())
   var deleteRequest = Option.empty[(ClientId, String)]
 
-  lazy val service = new MockZMessaging() {
-    override lazy val otrClient: OtrClient = new OtrClient(znetClient) {
+  lazy val userModule = new MockUserModule(userId = selfUserId) {
+
+    override lazy val otrClient: OtrClient = new OtrClient(account.netClient) {
       override def deleteClient(id: ClientId, password: String): ErrorOrResponse[Unit] = {
         deleteRequest = Some((id, password))
         CancellableFuture.successful(deleteResponse)
       }
     }
+  }
 
+  lazy val service = new MockZMessaging(userModule, ClientId("client1")) {
     usersStorage.addOrOverwrite(selfUser).futureValue
-    users.selfUserId := selfUserId
   }
 
   before {
@@ -73,11 +75,10 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
 
     lazy val clients = returning(service.otrClientsStorage.signal(selfUserId))(_.disableAutowiring())
 
-    lazy val incoming = returning(service.otrClientsService.incomingClientsSignal)(_.disableAutowiring())
+    lazy val incoming = returning(service.otrClientsStorage.incomingClientsSignal(service.selfUserId, service.clientId))(_.disableAutowiring())
 
     scenario("update clients") {
       service.otrClientsService.updateSelfClients(Seq(Client(ClientId("client1"), "client 1", signalingKey = Some(SignalingKey(AESKey("enc"), "mac")), regTime = Some(time)), Client(ClientId("client2"), "client 2", regTime = Some(time - 1.day)))).futureValue
-      service.otrContent.clientIdPref := Some(ClientId("client1"))
 
       withDelay {
         clients.currentValue shouldBe 'defined
@@ -116,7 +117,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
     }
 
     scenario("incoming clients should only return devices in UNKNOWN state") {
-      service.otrClientsService.updateVerified(selfUserId, ClientId("client4"), verified = true).futureValue
+      service.otrClientsStorage.updateVerified(selfUserId, ClientId("client4"), verified = true).futureValue
 
       withDelay {
         incoming.currentValue shouldEqual Some(Seq.empty[Client])
@@ -143,14 +144,14 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
       service.otrClientsService.deleteClient(ClientId("client2"), "passwd").futureValue shouldEqual Right(())
       deleteRequest shouldEqual Some((ClientId("client2"), "passwd"))
 
-      service.otrClientsService.getClients(selfUserId).futureValue should have size 3
+      service.otrClientsStorage.getClients(selfUserId).futureValue should have size 3
     }
 
     scenario("Delete for current client is successful") {
       service.otrClientsService.deleteClient(ClientId("client1"), "passwd").futureValue shouldEqual Right(())
       deleteRequest shouldEqual Some((ClientId("client1"), "passwd"))
 
-      service.otrClientsService.getClients(selfUserId).futureValue should have size 2
+      service.otrClientsStorage.getClients(selfUserId).futureValue should have size 2
     }
   }
 
@@ -177,7 +178,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
       service.getUser(user1.id).map(_.verified) shouldEqual Some(UNKNOWN)
 
       clients1 foreach { c =>
-        service.otrClientsService.updateVerified(user1.id, c.id, verified = true)
+        service.otrClientsStorage.updateVerified(user1.id, c.id, verified = true)
       }
       withDelay {
         service.getUser(user1.id).map(_.verified) shouldEqual Some(VERIFIED)
@@ -189,7 +190,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
     scenario("update conversation verification state when users are verified") {
       service.getConv(conv.id).map(_.verified) shouldEqual Some(UNKNOWN)
       clients2 foreach { c =>
-        service.otrClientsService.updateVerified(user2.id, c.id, verified = true)
+        service.otrClientsStorage.updateVerified(user2.id, c.id, verified = true)
       }
 
       withDelay {
@@ -208,7 +209,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
       val msg = service.messages.addTextMessage(conv.id, "test msg").futureValue
       service.messagesStorage.update(msg.id, _.copy(state = Message.Status.SENT))
 
-      service.otrClientsService.updateVerified(user1.id, clients1.head.id, verified = false)
+      service.otrClientsStorage.updateVerified(user1.id, clients1.head.id, verified = false)
 
       withDelay {
         service.getUser(user1.id).map(_.verified) shouldEqual Some(UNVERIFIED)
@@ -240,7 +241,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
     scenario(s"switch to verified when clients are added and verified") {
       service.otrClientsService.updateUserClients(user3.id, clients3).futureValue
       clients3 foreach { c =>
-        service.otrClientsService.updateVerified(user3.id, c.id, verified = true)
+        service.otrClientsStorage.updateVerified(user3.id, c.id, verified = true)
       }
 
       withDelay {

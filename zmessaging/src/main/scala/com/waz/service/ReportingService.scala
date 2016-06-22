@@ -25,9 +25,9 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.cache.{CacheService, Expiration}
-import com.waz.content.Mime
+import com.waz.content.{AccountsStorage, Mime}
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.ZUserId
+import com.waz.model.AccountId
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.{IoUtils, RichFuture}
 
@@ -61,14 +61,14 @@ object ReportingService {
   }
 }
 
-class ZmsReportingService(user: ZUserId, global: ReportingService) extends ReportingService {
+class ZmsReportingService(user: AccountId, global: ReportingService) extends ReportingService {
   implicit val tag: LogTag = logTagFor[ZmsReportingService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZmsReportingService")
 
   global.addStateReporter(generateStateReport)(s"ZMessaging[$user]")
 }
 
-class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, users: ZUsers, prefs: PreferenceService) extends ReportingService {
+class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountsStorage, prefs: PreferenceService) extends ReportingService {
   import ReportingService._
   import Threading.Implicits.Background
   implicit val tag: LogTag = logTagFor[GlobalReportingService]
@@ -97,11 +97,9 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
   })
 
   val ZUsersReporter = Reporter("ZUsers", { writer =>
-    writer.println(s"current: ${ZMessaging.currentInstance.currentUser.currentValue.flatten}")
-    users.listUsers() map { all =>
-      all foreach { u =>
-        writer.println(u.toString)
-      }
+    writer.println(s"current: ${ZMessaging.currentAccounts.currentAccountData.currentValue}")
+    storage.list() map { all =>
+      all foreach { u => writer.println(u.toString) }
     }
   })
 
@@ -128,4 +126,3 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     } (Threading.IO)
   })
 }
-

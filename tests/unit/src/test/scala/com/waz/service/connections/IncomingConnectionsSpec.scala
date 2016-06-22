@@ -44,7 +44,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
   var syncConnection = None: Option[UserId]
   var syncUser: Seq[UserId] = Seq()
 
-  lazy val service = new MockZMessaging() {
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
     override lazy val sync = new EmptySyncService {
       override def postConnection(user: UserId, name: String, message: String) = {
         syncConnection = Some(user)
@@ -58,7 +58,6 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     insertUser(selfUser)
-    users.selfUserId := selfUser.id
   }
 
   before {

@@ -139,7 +139,9 @@ object Client {
   }
 }
 
-case class UserClients(user: UserId, clients: Map[ClientId, Client])
+case class UserClients(user: UserId, clients: Map[ClientId, Client]) {
+  def -(clientId: ClientId) = UserClients(user, clients - clientId)
+}
 
 object UserClients {
 

@@ -26,16 +26,14 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model.{MessageAddEvent, _}
-import com.waz.service._
 import com.waz.service.conversation.ConversationsService
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.sync.client._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
+import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging, _}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient._
-import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.concurrent.{ScalaFutures, ScaledTimeSpans}
 
@@ -49,69 +47,63 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
   
   private lazy implicit val dispatcher = Threading.Background
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var convsRequest = List[Option[RConvId]]()
   var postConvRequests = Seq.empty[Seq[UserId]]
   var postJoinRequests = Seq.empty[(RConvId, Seq[UserId])]
 
-  var uiActive = true
   var loadDelay = 0.seconds
   var convsResponse: ConvsGenerator = _
   var postConvResponse: Either[ErrorResponse, ConversationResponse] = _
   var postMemberJoinResponse: Either[ErrorResponse, Option[MemberJoinEvent]] = _
   var postMemberLeaveResponse: Either[ErrorResponse, Option[MemberLeaveEvent]] = _
 
-  var service: MockZMessaging = _
   def handler = service.conversationSync
 
-  before {
-    convsRequest = List()
-    convsResponse = { _ => Right(ConversationsResult(Nil, hasMore = false)) }
-    postConvResponse = Left(ErrorResponse(500, "", ""))
-    postMemberJoinResponse = Left(ErrorResponse(500, "", ""))
-    uiActive = true
-    postConvRequests = Seq.empty
-    postJoinRequests = Seq.empty
+  lazy val service = new MockZMessaging() {
 
-    service = new MockZMessaging() {
-      override lazy val conversations: ConversationsService =
-        new ConversationsService(context, push, users, usersStorage, messagesStorage, membersStorage,
-          convsStorage, convsContent, convsStats, membersContent, sync, errors, messages, assets, storage, messagesContent, keyValue, eventScheduler) {
+    lifecycle.acquireUi()
+
+    override lazy val conversations: ConversationsService =
+      new ConversationsService(context, push, users, usersStorage, messagesStorage, membersStorage,
+        convsStorage, convsContent, convsStats, sync, errors, messages, assets, db, messagesContent, kvStorage, eventScheduler) {
 
         override def updateConversations(conversations: Seq[ConversationResponse]) = Future.successful(Nil)
       }
 
-      override lazy val lifecycle: ZmsLifecycle = new ZmsLifecycle() {
-        override def isUiActive: Boolean = test.uiActive
+    override lazy val convClient = new ConversationsClient(zNetClient) {
+
+      override def loadConversations(start: Option[RConvId], limit: Int): ErrorOrResponse[ConversationsResult] = {
+        convsRequest ++= List(start)
+        CancellableFuture.delayed(loadDelay)(test.convsResponse(start))
       }
 
-      override lazy val convClient = new ConversationsClient(znetClient) {
-
-        override def loadConversations(start: Option[RConvId], limit: Int): ErrorOrResponse[ConversationsResult] = {
-          convsRequest ++= List(start)
-          CancellableFuture.delayed(loadDelay)(test.convsResponse(start))
-        }
-
-        override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
-          postConvRequests :+= users
-          CancellableFuture.successful(postConvResponse)
-        }
-        override def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = {
-          postJoinRequests :+= (conv, members)
-          CancellableFuture.successful(postMemberJoinResponse)
-        }
-        override def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = CancellableFuture.successful(postMemberLeaveResponse)
+      override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
+        postConvRequests :+= users
+        CancellableFuture.successful(postConvResponse)
       }
-
-      users.selfUserId := UserId()
+      override def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = {
+        postJoinRequests :+= (conv, members)
+        CancellableFuture.successful(postMemberJoinResponse)
+      }
+      override def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = CancellableFuture.successful(postMemberLeaveResponse)
     }
   }
 
+  before {
+    convsRequest = Nil
+    postConvRequests = Nil
+    convsResponse = { _ => Right(ConversationsResult(Nil, hasMore = false)) }
+    postConvResponse = Left(ErrorResponse(500, "", ""))
+    postMemberJoinResponse = Left(ErrorResponse(500, "", ""))
+    postConvRequests = Seq.empty
+    postJoinRequests = Seq.empty
+  }
+
   after {
-    service.storage.close()
-    Await.result(service.storage.close(), 10.seconds)
-    Robolectric.application.getDatabasePath(service.storage.dbHelper.getDatabaseName).delete()
+    service.errors.errorsStorage.deleteAll().await()
+    service.convsContent.storage.deleteAll().await()
   }
 
   feature("Sync conversations") {
@@ -143,12 +135,14 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
   feature("Error reporting") {
 
     scenario("create group conversation with unconnected user") {
+      service.lifecycle.setLoggedIn(true)
       val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
       val user1 = UserId()
       val user2 = UserId()
       service.membersStorage.add(conv.id, user1, user2).futureValue
       postConvResponse = Left(ErrorResponse(403, "", "not-connected"))
       Await.result(handler.postConversation(conv.id, Seq(user1, user2), None), 1.second) shouldEqual SyncResult.Failure(Some(postConvResponse.left.get), shouldRetry = false)
+      postConvRequests should not be empty
       ErrorDataDao.list should have size 1
       val err = ErrorDataDao.list.head
       err.errType shouldEqual ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER

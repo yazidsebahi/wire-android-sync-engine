@@ -31,28 +31,29 @@ import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
 import com.waz.cache.LocalData
-import com.waz.content.{Database, GlobalStorage, Mime}
+import com.waz.content.{Database, GlobalDatabase, Mime}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
-import com.waz.model.{MessageContent => _, _}
+import com.waz.model.otr.ClientId
+import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
 import com.waz.service.PreferenceService.Pref
 import com.waz.service._
+import com.waz.service.assets.PreviewService
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits.{CoreListAsScala, _}
 import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
 import com.waz.ui.UiModule
-import com.waz.utils._
 import com.waz.utils.RichFuture.traverseSequential
+import com.waz.utils._
 import com.waz.znet.ClientWrapper
 import com.waz.znet.ZNetClient._
-import org.threeten.bp
 
 import scala.concurrent.Future.successful
 import scala.concurrent.duration._
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{Await, Future, Promise}
 import scala.util.Random
 
 object DeviceActor {
@@ -78,46 +79,41 @@ class DeviceActor(val deviceName: String,
         log.error(exc, s"device actor '$deviceName' died")
         Stop
     }
-
-  lazy val globalModule = new GlobalModule(application, backend) {
-    ZMessaging.currentGlobal = this
-    override lazy val storage: Database = new GlobalStorage(application, Random.nextInt().toHexString)
-    override lazy val clientWrapper: ClientWrapper = wrapper
-    if (otrOnly) prefs.editUiPreferences(_.putBoolean("zms_send_only_otr", true))
-  }
-
   lazy val delayNextAssetPosting = new AtomicBoolean(false)
 
-  lazy val instance: InstanceService = new InstanceService(application, globalModule, new ZMessaging(_, _, _) {
+  lazy val globalModule = new GlobalModule(application, backend) { global =>
+    ZMessaging.currentGlobal = this
+    override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
+    override lazy val clientWrapper: ClientWrapper = wrapper
+    if (otrOnly) prefs.editUiPreferences(_.putBoolean("zms_send_only_otr", true))
 
-    override def metadata: MetaDataService = new MetaDataService(context) {
+    override lazy val metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + Random.nextInt().toHexString
       override lazy val deviceModel: String = deviceName
       override lazy val localBluetoothName: String = deviceName
     }
 
-    override lazy val assetClient = new AssetClient(znetClient) {
-      import Threading.Implicits.Background
+    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(this) {
+      override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
+        new ZMessaging(clientId, user) {
+          import Threading.Implicits.Background
 
-      override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] =
-        CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap (_ => super.postOtrAsset(convId, metadata, data, ignoreMissing))
+          override lazy val assetClient = new AssetClient(zNetClient) {
+            override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] =
+              CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap (_ => super.postOtrAsset(convId, metadata, data, ignoreMissing))
+          }
+
+          override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
+            override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetPreviewData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
+            override def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetPreviewData]] = pf.applyOrElse(mime, super.loadPreview(id, _: Mime, uri))
+            lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetPreviewData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetPreviewData.Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))) }
+          }
+        }
     }
+  }
 
-    override lazy val assetMetaData = new com.waz.service.assets.MetaDataService(context, cache, assetsStorage, assets) {
-      override def loadMetaData(mime: Mime, data: LocalData): CancellableFuture[Option[AssetMetaData]] = mime match {
-        case Mime.Audio() => CancellableFuture successful Some(AssetMetaData.Audio(bp.Duration.ofSeconds(300), Seq.empty))
-        case Mime.Video() => CancellableFuture successful Some(AssetMetaData.Video(Dim2(320, 480), bp.Duration.ofSeconds(300)))
-        case _ => super.loadMetaData(mime, data)
-      }
-
-      override def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = mime match {
-        case Mime.Audio() => CancellableFuture successful Some(AssetMetaData.Audio(bp.Duration.ofSeconds(300), Seq.empty))
-        case Mime.Video() => CancellableFuture successful Some(AssetMetaData.Video(Dim2(320, 480), bp.Duration.ofSeconds(300)))
-        case _ => super.loadMetaData(mime, uri)
-      }
-    }
-  }) {
-    override val currentUserPref: Pref[String] = global.prefs.preferenceStringSignal("current_user_" + Random.nextInt().toHexString)
+  lazy val instance = new Accounts(globalModule) {
+    override val currentAccountPref: Pref[String] = global.prefs.preferenceStringSignal("current_user_" + Random.nextInt().toHexString)
   }
   lazy val ui = new UiModule(instance)
   lazy val api = {
@@ -126,7 +122,8 @@ class DeviceActor(val deviceName: String,
     api.onResume()
     api
   }
-  lazy val zmessaging = api.zmessaging.get
+  def optZms = Await.result(api.ui.getCurrent, 5.seconds)
+  lazy val zmessaging = optZms.get
   lazy val convs = api.getConversations
   lazy val archived = convs.getArchivedConversations
   lazy val channels = api.getActiveVoiceChannels
@@ -137,7 +134,7 @@ class DeviceActor(val deviceName: String,
   implicit val defaultTimeout = 5.minutes
   implicit val execContext = context.dispatcher.prepare()
 
-  implicit def zmsDb: SQLiteDatabase = api.zmessaging.get.storage.dbHelper.getWritableDatabase
+  implicit def zmsDb: SQLiteDatabase = api.account.get.storage.db.dbHelper.getWritableDatabase
 
   val maxConnectionAttempts = 10
 
@@ -158,8 +155,8 @@ class DeviceActor(val deviceName: String,
   override def postStop(): Unit = {
     api.onPause()
     api.onDestroy()
-    api.zmessaging foreach { zms =>
-      zms.syncContent.syncStorage { storage =>
+    Await.result(api.ui.getCurrent, 5.seconds) foreach { zms =>
+      zms.syncRequests.content.syncStorage { storage =>
         storage.getJobs foreach { job => storage.remove(job.id) }
       }
     }
@@ -468,12 +465,10 @@ class DeviceActor(val deviceName: String,
       }
 
     case DeleteAllOtherDevices(password) =>
-      api.zmessaging.fold[Future[ActorMessage]](successful(Failed("no zmessaging"))) { zms =>
+      optZms.fold[Future[ActorMessage]](successful(Failed("no zmessaging"))) { zms =>
         for {
-          Some(user)    <- zms.users.getSelfUserId
-          Some(current) <- zms.otrClientsService.getSelfClient.map(_.map(_.id))
-          clients       <- zms.otrClientsService.getClients(user).map(_.map(_.id))
-          others         = clients.filter(current != _)
+          clients       <- zms.otrClientsStorage.getClients(zms.selfUserId).map(_.map(_.id))
+          others         = clients.filter(_ != zms.clientId)
           responses     <- traverseSequential(others)(zms.otrClientsService.deleteClient(_, password))
           failures       = responses.collect { case Left(err) => s"[unable to delete client: ${err.message}, ${err.code}, ${err.label}]" }
         } yield if (failures.isEmpty) Successful else Failed(failures mkString ", ")
@@ -492,8 +487,9 @@ class DeviceActor(val deviceName: String,
       }
 
     case AwaitSyncCompleted =>
-      api.zmessaging.fold[Future[ActorMessage]](successful(Failed("no zmessaging"))) { zms =>
-        zms.syncContent.syncJobs.filter(_.isEmpty).head map { _ => Successful }
+      api.zmessaging flatMap {
+        case None =>  successful(Failed("no zmessaging"))
+        case Some(zms) => zms.syncRequests.content.syncJobs.filter(_.isEmpty).head map { _ => Successful }
       }
 
     case ResetQueueStats =>

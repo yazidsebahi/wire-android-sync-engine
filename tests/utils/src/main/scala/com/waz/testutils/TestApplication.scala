@@ -18,8 +18,8 @@
 package com.waz.testutils
 
 import android.app.Application
-import com.waz.api._
 import com.waz.api.NotificationsHandler.{ActiveChannel, NotificationsHandlerFactory}
+import com.waz.api._
 import com.waz.service.ZMessaging
 
 class TestApplication extends Application with NotificationsHandlerFactory {

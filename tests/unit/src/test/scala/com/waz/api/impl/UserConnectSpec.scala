@@ -30,7 +30,6 @@ import com.waz.sync.client._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.EventContext
-import org.robolectric.Robolectric
 import org.scalatest._
 
 import scala.concurrent.Await
@@ -38,9 +37,7 @@ import scala.concurrent.duration._
 
 class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
 
-  lazy val context = Robolectric.application
-
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   implicit val timeout: Timeout = 5.seconds
   implicit val ec = EventContext.Global
@@ -52,9 +49,9 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
   var createConnectionReturnValue: Either[ErrorResponse, UserConnectionEvent] = Left(ErrorResponse(400, "msg", "label"))
 
-  lazy val service = new MockZMessaging() { self =>
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id) { self =>
 
-    override lazy val connectionsClient: ConnectionsClient = new ConnectionsClient(znetClient) {
+    override lazy val connectionsClient: ConnectionsClient = new ConnectionsClient(zNetClient) {
       override def createConnection(user: UserId, name: String, message: String) = {
         CancellableFuture.successful(createConnectionReturnValue)
       }
@@ -73,8 +70,6 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         super.postConnection(user, name, message)
       }
     }
-
-    users.selfUserId := test.selfUser.id
   }
 
   import service._

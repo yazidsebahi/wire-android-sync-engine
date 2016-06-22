@@ -20,7 +20,7 @@ package com.waz.provision
 import com.waz.ZLog._
 import com.waz.api.impl.{EmailCredentials, ErrorResponse}
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{ZUserId, EmailAddress, UserId, UserInfo}
+import com.waz.model.{AccountId, EmailAddress, UserId, UserInfo}
 import com.waz.service.GlobalModule
 import com.waz.sync.client.{ConnectionsClient, ConversationsClient, UsersClient}
 import com.waz.threading.CancellableFuture
@@ -39,7 +39,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
   val internalBackend = new InternalBackendClient(global.client, global.backend)
 
   def register(): Either[ErrorResponse, UserInfo] = Await.result(retryWithBackOff() {
-    regClient.register(ZUserId(), EmailCredentials(EmailAddress(email), Some(pass)), name, None) } .flatMap {
+    regClient.register(AccountId(), EmailCredentials(EmailAddress(email), Some(pass)), name, None) } .flatMap {
       case Right((info, cookie)) => internalBackend.activateEmail(EmailAddress(email)) map (_ => Right(info))
       case Left(error) => CancellableFuture.successful(Left(error))
     }, 60.seconds)

@@ -21,7 +21,8 @@ import java.io.FileInputStream
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.{GlobalStorage, Mime}
+import com.waz.content.GlobalDatabase
+import com.waz.content.Mime
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading.Implicits.Background
@@ -39,7 +40,7 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   lazy val cacheDir = Robolectric.application.getCacheDir
 
-  lazy val storage = new GlobalStorage(Robolectric.application)
+  lazy val storage = new GlobalDatabase(Robolectric.application)
   lazy val service = new CacheService(Robolectric.application, storage)
 
   after {

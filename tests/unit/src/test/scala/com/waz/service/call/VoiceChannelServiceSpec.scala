@@ -22,12 +22,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import android.content.Context
 import android.telephony.TelephonyManager
 import com.waz._
-import com.waz.api.{NetworkMode, CauseForCallStateEvent}
+import com.waz.api.{CauseForCallStateEvent, NetworkMode}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.CallProperties
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
 import com.waz.model._
-import com.waz.service._
+import com.waz.service.ZMessaging
 import com.waz.service.call.FlowManagerService.EstablishedFlows
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient
@@ -79,7 +79,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     request = None
     response = Left(JoinCallFailed("test-default", None, None, None))
 
-    service = new MockZMessaging() {
+    service = new MockZMessaging(selfUserId = selfUser.id) {
 
       override lazy val sync = new EmptySyncService {
         override def postMessage(id: MessageId, conv: ConvId) = {
@@ -88,21 +88,20 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         }
       }
 
-      override lazy val voiceClient: VoiceChannelClient = new VoiceChannelClient(znetClient) {
+      override lazy val voiceClient: VoiceChannelClient = new VoiceChannelClient(zNetClient) {
         override def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = {
           request = Some((deviceState, cause))
           CancellableFuture.successful(Right(response))
         }
       }
 
-      override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, znetClient, push, prefs, network) {
+      override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, push, prefs, network) {
         override lazy val flowManager = None
       }
 
       insertUsers(Seq(selfUser, user1, user2))
       Seq(conv, conv1) foreach insertConv
 
-      users.selfUserId := selfUser.id
       push.connectedPushPromise.trySuccess(push)
       network.networkMode ! NetworkMode.WIFI
 
@@ -115,8 +114,8 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
   }
 
   after {
-    Await.result(service.storage.close(), 10.seconds)
-    Robolectric.application.getDatabasePath(service.storage.dbHelper.getDatabaseName).delete()
+    Await.result(service.db.close(), 10.seconds)
+    Robolectric.application.getDatabasePath(service.db.dbHelper.getDatabaseName).delete()
   }
 
   def idleEvent(id: RConvId = conv.remoteId, idx: Option[CallSequenceNumber] = None) = CallStateEvent(Uid(), id, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)

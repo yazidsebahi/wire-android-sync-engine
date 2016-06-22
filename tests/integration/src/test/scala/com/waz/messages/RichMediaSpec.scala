@@ -42,7 +42,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = {
-    withDelay { conversations.size should be > 0 }
+    withDelay { conversations should not be empty }
     conversations.find(_.getId == auto2Id.str).get
   }
   var lastKnock = None: Option[Message]

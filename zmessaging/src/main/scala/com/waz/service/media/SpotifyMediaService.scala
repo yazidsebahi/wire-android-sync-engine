@@ -22,31 +22,29 @@ import java.util.Locale
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
+import com.waz.content.KeyValueStorage
+import com.waz.content.KeyValueStorage.KeyValuePref
+import com.waz.content.Preference.PrefCodec
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.model.{MessageContent, MessageData}
-import com.waz.service.KeyValueService
-import com.waz.service.KeyValueService.KeyValuePref
-import com.waz.service.Preference.PrefCodec
-import com.waz.service.Preference.PrefCodec._
 import com.waz.service.assets.AssetService
 import com.waz.sync.client.OAuth2Client.{AccessToken, AuthorizationCode, ClientId, RefreshToken}
 import com.waz.sync.client.SpotifyClient
 import com.waz.threading.Threading
+import com.waz.utils._
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
-import com.waz.utils._
 
-class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue: KeyValueService) {
+class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue: KeyValueStorage) {
   import SpotifyMediaService._
-
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[SpotifyMediaService]
 
-  private val spotifyRefreshTokenPref: KeyValuePref[Option[RefreshToken]] = keyValue.keyValuePref(KeyValueService.SpotifyRefreshToken, None)
+  private val spotifyRefreshTokenPref: KeyValuePref[Option[RefreshToken]] = keyValue.keyValuePref(KeyValueStorage.SpotifyRefreshToken, None)
   private val accessToken = new SourceSignal[Option[AccessToken]](Some(None))
 
   val authentication: Signal[Authentication] = spotifyRefreshTokenPref.signal zip accessToken map { case (refresh, access) =>

@@ -21,27 +21,30 @@ import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.{ClientRegistrationState, PermissionProvider}
+import com.waz.api.PermissionProvider
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
 import com.waz.api.impl.search.Search
 import com.waz.content.Uris
 import com.waz.media.manager.MediaManager
 import com.waz.model._
-import com.waz.service.ZMessaging
+import com.waz.service.AccountService
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
+import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi {
 
-  import ClientRegistrationState._
   import Threading.Implicits.Ui
-  import ui.eventContext
   private implicit val logTag: LogTag = logTagFor[ZMessagingApi]
 
-  private[waz] var zmessaging: Option[ZMessaging] = None
+  private[waz] var account: Option[AccountService] = None
+  private[waz] def zmessaging = account match {
+    case Some(acc) => acc.getZMessaging
+    case None => Future successful None
+  }
 
   private var context: Context = _
   private var resumeCount = 0
@@ -49,44 +52,33 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   private val startTime = System.nanoTime()
 
-  private val instance = ui.instance
+  private val accounts = ui.accounts
 
   lazy val cache = new ZCache(ui.global.cache)
+
+  accounts.current.on(Threading.Ui) { setAccount } (EventContext.Global)
 
   override def onCreate(context: Context): Unit = {
     verbose(s"onCreate $context, count: $createCount")
     createCount += 1
     if (this.context == null) {
       this.context = context.getApplicationContext
-      ui.current.on(Threading.Ui) { (zms: Option[ZMessaging]) => setZmessaging(zms) }
     }
     ui.onCreate(context)
   }
 
-  private def initFuture = instance.getCurrent flatMap {
-    case Some(zms) =>
-      debug("getCurrent returned zmessaging instance")
-      setZmessaging(Some(zms))
-      initUserInfo(zms, true)
-    case None =>
-      debug(s"getCurrent returned None")
-      Future.successful((None, UNKNOWN))
+  private def setAccount(zms: Option[AccountService]): Unit = if (account != zms) {
+    if (resumeCount > 0) {
+      account.foreach(_.lifecycle.releaseUi(s"replace api: $this"))
+      zms.foreach(_.lifecycle.acquireUi(s"replace api: $this"))
+    }
+    account = zms
   }
-
-  private def initUserInfo(zms: ZMessaging, assumeLoggedIn: Boolean) =
-    for {
-      user <- zms.users.getSelfUser
-      st <- zms.otrContent.registrationState
-      state <- st match {
-        case UNKNOWN if assumeLoggedIn => zms.otrClientsService.awaitClientRegistered() flatMap { _ => zms.otrContent.registrationState }
-        case _ => Future successful st
-      }
-    } yield (user, state)
 
   override def onResume(): Unit = {
     debug("onResume")
     resumeCount += 1
-    zmessaging.foreach(_.lifecycle.acquireUi(s"resume api: $this"))
+    account.foreach(_.lifecycle.acquireUi(s"resume api: $this"))
     ui.onResume()
   }
 
@@ -95,7 +87,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     assert(resumeCount > 0, "onPause should be called exactly once for every onResume")
     resumeCount -= 1
     ui.onPause()
-    zmessaging.foreach(_.lifecycle.releaseUi(s"pause api: $this"))
+    account.foreach(_.lifecycle.releaseUi(s"pause api: $this"))
   }
 
   override def onDestroy(): Unit = {
@@ -103,15 +95,15 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     assert(createCount > 0, "onDestroy should be called exactly once for every onCreate")
     assert(resumeCount == 0, s"onDestroy() was called before onPause(), this means there is some error in lifecycle callbacks")
     ui.onDestroy()
+    account = None
     createCount -= 1
   }
 
-  override def onInit(listener: api.InitListener): Unit = initFuture onComplete {
-    case Success((loggedUser, otrRegState)) =>
-      debug(s"initFuture completed, loggedUser: $loggedUser")
+  override def onInit(listener: api.InitListener): Unit = accounts.getCurrentAccountInfo onComplete {
+    case Success(accountData) =>
+      debug(s"initFuture completed, loggedUser: $accountData")
       // FIXME: this ensures that self is loaded, but it's pretty ugly
-      ui.users.selfUser.zuser = zmessaging.map(_.user.user)
-      loggedUser foreach { u => ui.users.selfUser.updateUser(u, otrRegState) }
+      ui.users.selfUser.update(accountData)
       ui.convs.convsList // force convs list loading
       debug(s"Time needed for startup: ${(System.nanoTime - startTime) / 1000 / 1000f} ms" )
       listener.onInitialized(ui.users.selfUser)
@@ -127,21 +119,13 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def login(credentials: com.waz.api.Credentials, listener: api.LoginListener): Unit = credentials match {
     case credentials: Credentials =>
-      instance.login(credentials) onComplete {
+      verbose(s"login $credentials")
+      accounts.login(credentials) onComplete {
         case Success(Left(err @ ErrorResponse(code, message, label))) =>
           error(s"Login for credentials: $credentials failed: $err")
           listener.onFailed(code, message, label)
-        case Success(Right(zms)) =>
-          setZmessaging(Some(zms))
-          updateSelfUser(zms, true) onComplete {
-            case Success(Some(user)) => listener.onSuccess(user)
-            case Success(None) =>
-              error(s"updateSelfUser returned None")
-              listener.onFailed(499, "Couldn't load self user", "internal-error")
-            case Failure(ex) =>
-              error(s"updateSelfUser failed", ex)
-              listener.onFailed(499, "Couldn't load self user", "internal-error")
-          }
+        case Success(Right(acc)) =>
+          listener.onSuccess(updateSelfUser(acc))
         case Failure(ex) =>
           error(s"Login for credentials: $credentials failed", ex)
           listener.onFailed(499, ex.getMessage, "internal-error")
@@ -149,38 +133,23 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     case _ => error("Use the Credentials factory to create credentials")
   }
 
-  private def setZmessaging(zms: Option[ZMessaging]): Unit = if (zmessaging != zms) {
-    if (resumeCount > 0) {
-      zmessaging.foreach(_.lifecycle.releaseUi(s"replace api: $this"))
-      zms.foreach(_.lifecycle.acquireUi(s"replace api: $this"))
-    }
-    zmessaging = zms
+  private def updateSelfUser(acc: AccountData) = {
+    // FIXME: this ensures that self is loaded, but it's pretty ugly
+    ui.users.selfUser.update(Some(acc))
+    ui.users.selfUser
   }
-
-  private def updateSelfUser(zms: ZMessaging, assumeLoggedIn: Boolean) =
-    initUserInfo(zms, assumeLoggedIn) map {
-      case (user, otrRegState) if zmessaging.contains(zms) =>
-        // FIXME: this ensures that self is loaded, but it's pretty ugly
-        ui.users.selfUser.zuser = zmessaging.map(_.user.user)
-        user foreach { u => ui.users.selfUser.updateUser(u, otrRegState) }
-        Some(ui.users.selfUser)
-      case _ =>
-        info(s"updateSelfUser - zmessaging instance already changed")
-        None
-    }
 
 
   override def register(credentials: com.waz.api.Credentials, name: String, accent: com.waz.api.AccentColor, listener: RegistrationListener): Unit = credentials match {
     case credentials: Credentials =>
+      verbose(s"register($credentials, $name, $accent)")
       require(accent.isInstanceOf[AccentColor])
-      instance.register(credentials, name, accent.asInstanceOf[AccentColor]) onComplete {
-        case Success(Right(zms)) =>
-          setZmessaging(Some(zms))
-          updateSelfUser(zms, credentials.autoLoginOnRegistration) onComplete {
-            case Success(Some(user)) => listener.onRegistered(user)
-            case _ => listener.onRegistrationFailed(499, "Internal error", "")
-          }
+      accounts.register(credentials, name, accent.asInstanceOf[AccentColor]) onComplete {
+        case Success(Right(acc)) =>
+          verbose(s"registration complete: $acc")
+          listener.onRegistered(updateSelfUser(acc))
         case Success(Left(ErrorResponse(code, msg, label))) =>
+          verbose(s"registration failed: $code, $msg, $label")
           listener.onRegistrationFailed(code, msg, label)
         case Failure(ex) =>
           error(s"register($credentials, $name) failed", ex)
@@ -189,20 +158,33 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     case _ => error("Use the Credentials factory to create credentials")
   }
 
-  override def requestPhoneConfirmationCode(phoneNumber: String, kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit = instance.requestPhoneConfirmationCode(PhoneNumber(phoneNumber), kindOfAccess) onComplete {
-    case Success(Right(())) => listener.onConfirmationCodeSent(kindOfAccess)
-    case Success(Left(ErrorResponse(status, msg, label))) => listener.onConfirmationCodeSendingFailed(kindOfAccess, status, msg, label)
-    case Failure(ex) => listener.onConfirmationCodeSendingFailed(kindOfAccess, 499, ex.getMessage, "")
-  }
+  override def requestPhoneConfirmationCode(phoneNumber: String, kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit =
+    accounts.requestPhoneConfirmationCode(PhoneNumber(phoneNumber), kindOfAccess) onComplete {
+      case Success(Right(())) => listener.onConfirmationCodeSent(kindOfAccess)
+      case Success(Left(ErrorResponse(status, msg, label))) => listener.onConfirmationCodeSendingFailed(kindOfAccess, status, msg, label)
+      case Failure(ex) => listener.onConfirmationCodeSendingFailed(kindOfAccess, 499, ex.getMessage, "")
+    }
+
+  override def requestPhoneConfirmationCall(phoneNumber: String, kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit =
+    accounts.requestPhoneConfirmationCall(PhoneNumber(phoneNumber), kindOfAccess) onComplete {
+      case Success(Right(())) => listener.onConfirmationCodeSent(kindOfAccess)
+      case Success(Left(ErrorResponse(status, msg, label))) => listener.onConfirmationCodeSendingFailed(kindOfAccess, status, msg, label)
+      case Failure(ex) => listener.onConfirmationCodeSendingFailed(kindOfAccess, 499, ex.getMessage, "")
+    }
 
   override def verifyPhoneNumber(phoneNumber: String, confirmationCode: String, kindOfVerification: api.KindOfVerification, listener: PhoneNumberVerificationListener): Unit =
-    instance.verifyPhoneNumber(PhoneCredentials(PhoneNumber(phoneNumber), Option(confirmationCode) map ConfirmationCode), kindOfVerification) onComplete {
+    accounts.verifyPhoneNumber(PhoneCredentials(PhoneNumber(phoneNumber), Option(confirmationCode) map ConfirmationCode), kindOfVerification) onComplete {
       case Success(Right(())) => listener.onVerified(kindOfVerification)
       case Success(Left(ErrorResponse(status, msg, label))) => listener.onVerificationFailed(kindOfVerification, status, msg, label)
       case Failure(ex) => listener.onVerificationFailed(kindOfVerification, 499, ex.getMessage, "")
     }
 
-  override def logout() = zmessaging.foreach { zms => instance.logout(zms.userId) }
+  override def logout() = ui.currentAccount.head flatMap {
+    case Some(acc) =>
+      verbose(s"logout $acc")
+      acc.logout()
+    case None => Future.successful(())
+  }
 
   override def getConversations = ui.convs.convsList
 
@@ -219,9 +201,9 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getUser(id: String): User = ui.users.getUser(UserId(id))
 
-  override def getMediaManager: MediaManager = zmessaging.flatMap(_.mediamanager.mediaManager).orNull
+  override def getMediaManager: MediaManager = ui.global.mediaManager.mediaManager.orNull
 
-  override def getMediaResourceUri(name: String): Uri = zmessaging.flatMap(_.mediamanager.getSoundUri(name)).orNull
+  override def getMediaResourceUri(name: String): Uri = ui.global.mediaManager.getSoundUri(name).orNull
 
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 

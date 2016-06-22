@@ -21,39 +21,42 @@ import akka.pattern.ask
 import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
 import com.waz.api.{CallingEventsHandler, _}
 import com.waz.model.VoiceChannelData.ChannelState
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{Login, Successful, _}
+import com.waz.service
+import com.waz.service._
 import com.waz.service.call.AvsMetrics
-import com.waz.service.{Timeouts, ZMessaging}
 import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.utils._
 import org.scalatest.{FeatureSpec, Matchers, OptionValues}
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
-class TrackingEventsSpec extends FeatureSpec with Matchers with OptionValues with ProvisionedApiSpec with ThreadActorSpec {
-  test =>
+class TrackingEventsSpec extends FeatureSpec with Matchers with OptionValues with ProvisionedApiSpec with ThreadActorSpec { test =>
+  import com.waz.threading.Threading.Implicits.Background
   override val provisionFile = "/two_users_connected.json"
 
   lazy val convs = api.getConversations
   lazy val user = api.getSelf
   lazy val channels = api.getActiveVoiceChannels
-  lazy val tracking = api.zmessaging.map(_.trackingEvents)
+  lazy val tracking = api.zmessaging.map(_.map(_.trackingEvents))
 
   val spy = new CallJoinSpy
   val handler = new MockEventsHandler
 
-  override lazy val zmessagingFactory: ZMessaging.Factory = new ApiZmessaging(_, _, _) {
-    override def handlerFactory: NotificationsHandlerFactory = new NotificationsHandlerFactory {
+  override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
 
-      override def getCallingEventsHandler: CallingEventsHandler = ???
+    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
+      new ApiZMessaging(clientId, user) {
 
-      override def getTrackingEventsHandler: TrackingEventsHandler = handler
-
-      override def getNotificationsHandler: NotificationsHandler = ???
-    }
+        override def handlerFactory: NotificationsHandlerFactory = new NotificationsHandlerFactory {
+          override def getCallingEventsHandler: CallingEventsHandler = ???
+          override def getTrackingEventsHandler: TrackingEventsHandler = handler
+          override def getNotificationsHandler: NotificationsHandler = ???
+        }
+      }
   }
 
   lazy val auto2 = registerDevice("VoiceChannelSpec_auto2")

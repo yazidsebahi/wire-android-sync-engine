@@ -31,6 +31,7 @@ import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
 import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
 import com.waz.threading.CancellableFuture
+import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
@@ -53,29 +54,27 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   var encryptedContent: EncryptedContent = EncryptedContent(Map.empty)
 
-  lazy val zms = new MockZMessaging() {
+  lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
 
-    override lazy val otrService: OtrService = new OtrService(context, userId, otrClientsService, otrContent, cryptoBox, membersStorage, keyValue, users, convsContent, sync, cache, metadata, lifecycle) {
+    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, push, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage) {
       override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent): Future[EncryptedContent] = {
         encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
         Future successful encryptedContent
       }
     }
 
-    override lazy val messagesClient: MessagesClient = new MessagesClient(znetClient) {
+    override lazy val messagesClient: MessagesClient = new MessagesClient(zNetClient) {
       override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = {
         postMsgRequests = postMsgRequests :+ (conv, content, ignoreMissing)
         CancellableFuture.successful(if (ignoreMissing || postMsgResponse.missing.isEmpty) Right(MessageResponse.Success(postMsgResponse)) else Right(MessageResponse.Failure(postMsgResponse)))
       }
     }
 
-    override lazy val otrClientsSync: OtrClientsSyncHandler = new OtrClientsSyncHandler(context, user, users, otrContent, otrClient, otrService, otrClientsStorage, errors, instance, sync, keyValue) {
+    override lazy val otrClientsSync: OtrClientsSyncHandler = new OtrClientsSyncHandler(context, accountId, selfUserId, Signal.const(Some(clientId)), otrClient, otrClientsService, otrClientsStorage, cryptoBox, kvStorage) {
       override private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] = Future.successful(None)
     }
 
     usersStorage.addOrOverwrite(selfUser).futureValue
-    (users.selfUserId := selfUser.id).futureValue
-    otrContent.clientIdPref := Some(clientId)
     otrClientsStorage.insert(UserClients(selfUser.id, Map(clientId -> Client(clientId, ""))))
   }
 

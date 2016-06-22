@@ -36,7 +36,7 @@ import scala.concurrent.Future
  * Keeps actual SyncJobs in memory, and persists all changes to db.
  * Handles merging of new requests, only adds new jobs if actually needed.
  */
-class SyncContentUpdater(storage: ZStorage) {
+class SyncContentUpdater(storage: ZmsDatabase) {
   import EventContext.Implicits.global
 
   private implicit val logTag: LogTag = logTagFor[SyncContentUpdater]

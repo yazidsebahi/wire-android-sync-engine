@@ -17,14 +17,15 @@
  */
 package com.waz.service
 
+import android.content.{Context, SharedPreferences}
 import com.waz.api._
 import com.waz.api.impl.{EmailCredentials, ZMessagingApi}
-import com.waz.model.{EmailAddress, RConvId}
-import com.waz.service.PreferenceService.Pref
-import com.waz.service.ZMessaging._
+import com.waz.content.{Database, GlobalDatabase}
+import com.waz.model.{MessageContent => _, _}
 import com.waz.testutils.Implicits._
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
+import com.waz.znet.{AsyncClient, ClientWrapper, TestClientWrapper}
 import org.scalatest.{BeforeAndAfterAll, RobolectricTests, Suite}
 
 import scala.concurrent.{Future, Promise}
@@ -68,26 +69,34 @@ class RemoteZms(ui: UiModule) extends ZMessagingApi()(ui) {
     p.future
   }
 
-  def postMessage[A](conv: RConvId, msg: MessageContent[A]) = findConv(conv).map(_.sendMessage(msg))
+  def postMessage[A](conv: RConvId, msg: MessageContent[A]) = findConv(conv).map { _.sendMessage(msg) }
 }
 
 trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Suite with ApiSpec =>
 
-  def zmsFactory(dataTag: String = Random.nextInt().toHexString): Factory = new ZMessaging(_, _, _, dataTag) {
-    override def metadata: MetaDataService = new MetaDataService(context) {
+  def globalModule(dataTag: String = Random.nextInt().toHexString): GlobalModule =  new GlobalModule(context, testBackend) { global =>
+    override lazy val clientWrapper: ClientWrapper = TestClientWrapper
+    override lazy val client: AsyncClient = testClient
+    override lazy val timeouts: Timeouts = suite.timeouts
+
+    override lazy val storage: Database = new GlobalDatabase(context, dataTag)
+    override lazy val metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + dataTag
     }
+
+    override lazy val prefs: PreferenceService = new PreferenceService(context) {
+      override lazy val preferences: SharedPreferences = context.getSharedPreferences("zmessaging_" + dataTag, Context.MODE_PRIVATE)
+      override lazy val uiPreferences: SharedPreferences = context.getSharedPreferences("zmessaging_ui_" + dataTag, Context.MODE_PRIVATE)
+    }
+    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(global) {
+      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, dataTag)
+    }
   }
-
-
-  override lazy val zmessagingFactory: Factory = zmsFactory()
 
   override protected def beforeAll(): Unit = {
     Threading.AssertsEnabled = false
     super.beforeAll()
   }
 
-  def createRemoteZms(dataTag: String = Random.nextInt().toHexString) = new RemoteZms(new UiModule(new InstanceService(context, globalModule, zmsFactory(dataTag)) {
-    override val currentUserPref: Pref[String] = globalModule.prefs.preferenceStringSignal("current_user_" + dataTag)
-  }))
+  def createRemoteZms(dataTag: String = Random.nextInt().toHexString) = new RemoteZms(new UiModule(new Accounts(globalModule(dataTag))))
 }

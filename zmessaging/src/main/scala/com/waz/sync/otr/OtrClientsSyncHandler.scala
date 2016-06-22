@@ -20,44 +20,41 @@ package com.waz.sync.otr
 import android.content.Context
 import android.location.Geocoder
 import com.waz.ZLog._
+import com.waz.api.ClientRegistrationState._
+import com.waz.api.{ClientRegistrationState, Verification, ZmsVersion}
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.{ClientRegistrationState, ZmsVersion}
-import com.waz.content.OtrClientsStorage
-import com.waz.model.UserId
+import com.waz.content.{KeyValueStorage, OtrClientsStorage}
+import com.waz.model.{AccountId, UserId}
 import com.waz.model.otr.{Client, ClientId, Location, UserClients}
-import com.waz.service._
-import com.waz.service.otr.{OtrContentService, OtrService}
+import com.waz.service.otr._
+import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient
-import com.waz.sync.{SyncResult, SyncServiceHandle}
 import com.waz.threading.Threading
+import com.waz.utils.events.Signal
 import com.waz.utils.{Locales, LoggedTry, Serialized}
 import com.waz.znet.Response.Status
 
-import scala.collection.JavaConverters._
-import scala.collection.breakOut
 import scala.concurrent.Future
+import scala.collection.breakOut
 
-class OtrClientsSyncHandler(context: Context, user: ZUserService, users: UserService, content: OtrContentService, client: OtrClient, otr: OtrService, storage: OtrClientsStorage, errors: ErrorsService, instance: InstanceService, sync: SyncServiceHandle, kvService: KeyValueService) {
-  import ClientRegistrationState._
+class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, otrClients: OtrClientsService, storage: OtrClientsStorage, cryptoBox: CryptoBoxService, kvStorage: KeyValueStorage) {
   import OtrClientsSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
-  // keeps ZMS_MAJOR_VERSION number of client registration
-  // this is used to detect problematic version updates
-  lazy val clientRegVersion = kvService.keyValuePref("otr_client_reg_version", 0)
+  lazy val sessions = cryptoBox.sessions
 
   lazy val geocoder = new Geocoder(context, Locales.currentLocale)
 
-  def syncSelfClients(): Future[SyncResult] = Serialized.future("sync-self-clients") { // serialized to avoid races between sync service and OtrClientsService.awaitClientRegistered (used from login)
+  def syncSelfClients(): Future[SyncResult] = Serialized.future("sync-self-clients", this) { // serialized to avoid races with registration
     verbose(s"syncSelfClients")
 
     def updatePreKeys(id: ClientId) =
-      client.loadRemainingPreKeys(id).future flatMap {
+      netClient.loadRemainingPreKeys(id).future flatMap {
         case Right(ids) =>
           verbose(s"remaining prekeys: $ids")
-          otr.generatePreKeysIfNeeded(ids) flatMap {
+          cryptoBox.generatePreKeysIfNeeded(ids) flatMap {
             case keys if keys.isEmpty => Future.successful(SyncResult.Success)
-            case keys => client.updateKeys(id, keys).future map {
+            case keys => netClient.updateKeys(id, keys).future map {
               case Right(_) => SyncResult.Success
               case Left(error) => SyncResult(error)
             }
@@ -65,78 +62,76 @@ class OtrClientsSyncHandler(context: Context, user: ZUserService, users: UserSer
         case Left(error) => Future.successful(SyncResult(error))
       }
 
-    client.loadClients().future flatMap {
+    netClient.loadClients().future flatMap {
       case Right(clients) =>
         verbose(s"loaded clients: $clients")
-        otr.clients.updateSelfClients(clients) flatMap { ucs =>
-          content.currentClientId flatMap {
-            case None => registerClient()
-            case Some(clientId) =>
-              if (ucs.clients.contains(clientId)) updatePreKeys(clientId)
-              else registerClient() // FIXME: should we try to register in that case, if we have an id but backend doesn't that means our device was deleted from it
+        otrClients.updateSelfClients(clients) flatMap { ucs =>
+          clientId.head flatMap {
+            case Some(id) if ucs.clients.contains(id) => updatePreKeys(id)
+            case _ => Future successful SyncResult.Success // FIXME: should we try to register in that case, our device was not registered or deleted from backend
           }
         }
       case Left(error) => Future.successful(SyncResult(error))
     }
   }
 
-  private def registerClient() = otr.createClient() flatMap {
-    case None => Future successful SyncResult(ErrorResponse.internalError("CryptoBox missing"))
-    case Some((c, lastKey, keys)) =>
-      client.postClient(user.user.id, c, lastKey, keys, user.user.password).future flatMap {
-        case Right(cl) =>
-          for {
-            _ <- otr.clients.updateSelfClients(Seq(cl), replace = false)
-            _ <- content.clientIdPref := Some(cl.id)
-            _ <- content.registrationStatePref := REGISTERED
-            _ <- clientRegVersion := ZmsVersion.ZMS_MAJOR_VERSION
-            _ = sync.registerGcm()
-          } yield
-            SyncResult.Success
-        case Left(error @ ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
-          warn(s"client registration not allowed: $error, password missing")
-          (content.registrationStatePref := PASSWORD_MISSING) map { _ => SyncResult.aborted() }
-        case Left(error @ ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
-          warn(s"client registration not allowed: $error")
-          (content.registrationStatePref := LIMIT_REACHED) map { _ => SyncResult.aborted() }
-        case Left(error) =>
-          Future.successful(SyncResult(error))
-      }
+  // keeps ZMS_MAJOR_VERSION number of client registration
+  // this can be used to detect problematic version updates
+  lazy val clientRegVersion = kvStorage.keyValuePref(ClientRegVersionPref, 0)
+
+  def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]] = Serialized.future("sync-self-clients", this) {
+    cryptoBox.createClient() flatMap {
+      case None => Future successful Left(ErrorResponse.internalError("CryptoBox missing"))
+      case Some((c, lastKey, keys)) =>
+        netClient.postClient(accountId, c, lastKey, keys, password).future flatMap {
+          case Right(cl) =>
+            for {
+              _ <- clientRegVersion := ZmsVersion.ZMS_MAJOR_VERSION
+              _ <- otrClients.updateUserClients(userId, Seq(c.copy(id = cl.id).updated(cl)), replace = false)
+            } yield Right((REGISTERED, Some(cl)))
+          case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
+            warn(s"client registration not allowed: $error, password missing")
+            Future successful Right((PASSWORD_MISSING, None))
+          case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
+            warn(s"client registration not allowed: $error")
+            Future successful Right((LIMIT_REACHED, None))
+          case Left(error) =>
+            Future.successful(Left(error))
+        }
+    }
   }
 
-  def syncClients(user: UserId): Future[SyncResult] =
-    users.withSelfUserFuture { selfUserId =>
-      verbose(s"syncClients")
+  def syncClients(user: UserId): Future[SyncResult] = clientId.head flatMap { current =>
+    verbose(s"syncClients")
 
-      def loadClients = (if (user == selfUserId) client.loadClients() else client.loadClients(user)).future
+    def hasSession(user: UserId, client: ClientId) = sessions.getSession(OtrService.sessionId(user, client)).map(_.isDefined)
 
-      def currentClientId = if (user == selfUserId) content.currentClientId else Future successful None
+    def loadClients = (if (user == userId) netClient.loadClients() else netClient.loadClients(user)).future
 
-      def withoutSession(currentId: Option[ClientId], clients: Iterable[ClientId]) =
-        Future.traverse(clients) { client =>
-          if (currentId.contains(client)) Future successful None
-          else otr.hasSession(user, client) map { if (_) None else Some(client) }
-        } map { _.flatten.toSeq }
+    def withoutSession(clients: Iterable[ClientId]) =
+      Future.traverse(clients) { client =>
+        if (current.contains(client)) Future successful None
+        else hasSession(user, client) map { if (_) None else Some(client) }
+      } map { _.flatten.toSeq }
 
-      def syncSessionsIfNeeded(clients: Iterable[ClientId]) =
-        for {
-          currentId <- currentClientId
-          toSync <- withoutSession(currentId, clients)
-          err <- if (toSync.isEmpty) Future successful None else syncSessions(Map(user -> toSync))
-        } yield
-          err.fold[SyncResult](SyncResult.Success)(SyncResult(_))
+    def syncSessionsIfNeeded(clients: Iterable[ClientId]) =
+      for {
+        toSync <- withoutSession(clients)
+        err <- if (toSync.isEmpty) Future successful None else syncSessions(Map(user -> toSync))
+      } yield
+        err.fold[SyncResult](SyncResult.Success)(SyncResult(_))
 
-      loadClients flatMap {
-        case Left(error) => Future successful SyncResult(error)
-        case Right(clients) =>
-          otr.clients.updateUserClients(user, clients, replace = true) flatMap { ucs =>
-            syncSessionsIfNeeded(ucs.clients.keys)
-          }
-      }
+    loadClients flatMap {
+      case Left(error) => Future successful SyncResult(error)
+      case Right(clients) =>
+        otrClients.updateUserClients(user, clients, replace = true) flatMap { ucs =>
+          syncSessionsIfNeeded(ucs.clients.keys)
+        }
     }
+  }
 
   def postLabel(id: ClientId, label: String): Future[SyncResult] =
-    client.postClientLabel(id, label).future map {
+    netClient.postClientLabel(id, label).future map {
       case Right(_) => SyncResult.Success
       case Left(err) => SyncResult(err)
     }
@@ -147,15 +142,15 @@ class OtrClientsSyncHandler(context: Context, user: ZUserService, users: UserSer
   }
 
   private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] =
-    client.loadPreKeys(clients).future
+    netClient.loadPreKeys(clients).future
       .flatMap {
         case Left(error) => Future.successful(Some(error))
         case Right(us) =>
           for {
-            _ <- otr.clients.updateClients(us.mapValues(_.map { case (id, key) => Client(id, "") }))
+            _ <- otrClients.updateClients(us.mapValues(_.map { case (id, key) => Client(id, "") }))
             prekeys = us.flatMap { case (u, cs) => cs map { case (c, p) => (OtrService.sessionId(u, c), p)} }
-            _ <- Future.traverse(prekeys) { case (id, p) => otr.sessions.getOrCreateSession(id, p) }
-            _ <- otr.clients.updater.awaitUpdated()
+            _ <- Future.traverse(prekeys) { case (id, p) => sessions.getOrCreateSession(id, p) }
+            _ <- VerificationStateUpdater.awaitUpdated(userId)
           } yield None
       }
       .recover {
@@ -163,6 +158,7 @@ class OtrClientsSyncHandler(context: Context, user: ZUserService, users: UserSer
       }
 
   def syncClientsLocation(): Future[SyncResult] = {
+    import scala.collection.JavaConverters._
 
     def loadName(lat: Double, lon: Double) = Future {
       LoggedTry.local(geocoder.getFromLocation(lat, lon, 1).asScala).toOption.flatMap(_.headOption).flatMap { add =>
@@ -180,32 +176,31 @@ class OtrClientsSyncHandler(context: Context, user: ZUserService, users: UserSer
         }.fold(c) { loc => c.copy(regLocation = Some(loc)) }
       })
 
-    users.withSelfUserFuture { selfUserId =>
-      storage.get(selfUserId) flatMap {
-        case None => Future successful SyncResult.Success
-        case Some(ucs) =>
-          val toSync = ucs.clients.values collect {
-            case Client(_, _, _, _, Some(loc), _, _, _, _) if !loc.hasName => loc
-          }
-          if (toSync.isEmpty) Future successful SyncResult.Success
-          else
-            for {
-              ls <- loadNames(toSync)
-              locations: Map[(Double, Double), String] = ls.collect { case (k, Some(name)) => k -> name }(breakOut)
-              update <- storage.update(selfUserId, updateClients(locations))
-            } yield {
-              update match {
-                case Some((_, UserClients(_, cs))) if cs.values.forall(_.regLocation.forall(_.hasName)) => SyncResult.Success
-                case _ =>
-                  verbose(s"user clients were not updated, locations: $locations, toSync: $toSync")
-                  SyncResult.failed()
-              }
+    storage.get(userId) flatMap {
+      case None => Future successful SyncResult.Success
+      case Some(ucs) =>
+        val toSync = ucs.clients.values collect {
+          case Client(_, _, _, _, Some(loc), _, _, _, _) if !loc.hasName => loc
+        }
+        if (toSync.isEmpty) Future successful SyncResult.Success
+        else
+          for {
+            ls <- loadNames(toSync)
+            locations: Map[(Double, Double), String] = ls.collect { case (k, Some(name)) => k -> name }(breakOut)
+            update <- storage.update(userId, updateClients(locations))
+          } yield {
+            update match {
+              case Some((_, UserClients(_, cs))) if cs.values.forall(_.regLocation.forall(_.hasName)) => SyncResult.Success
+              case _ =>
+                verbose(s"user clients were not updated, locations: $locations, toSync: $toSync")
+                SyncResult.failed()
             }
-      }
+          }
     }
   }
 }
 
 object OtrClientsSyncHandler {
   private implicit val tag: LogTag = logTagFor[OtrClientsSyncHandler]
+  val ClientRegVersionPref = "otr_client_reg_version"
 }

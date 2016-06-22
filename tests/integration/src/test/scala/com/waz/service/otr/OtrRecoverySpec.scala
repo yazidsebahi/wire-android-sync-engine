@@ -20,7 +20,7 @@ package com.waz.service.otr
 import java.io.{ByteArrayInputStream, File}
 
 import com.waz.api.MessageContent.Text
-import com.waz.api.{ClientRegistrationState, Message, MessageContent, ProvisionedApiSpec}
+import com.waz.api._
 import com.waz.service.RemoteZmsSpec
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -43,7 +43,7 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
   lazy val tag = Random.nextLong().toHexString
   lazy val auto2 = createRemoteZms(tag)
-  lazy val cryptoDir = auto2.zmessaging.get.cryptoBox.cryptoBoxDir
+  lazy val cryptoDir = auto2.account.get.cryptoBox.cryptoBoxDir
 
   lazy val auto2_1 = createRemoteZms(tag)
 
@@ -79,9 +79,11 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       val auto2Self = auto2.getSelf
       auto2Self.isLoggedIn shouldEqual true
       cryptoDir should exist
-      val cryptobox = auto2.zmessaging.get.cryptoBox
+      val cryptobox = auto2.account.get.cryptoBox
+      val db = auto2.account.get.storage.db
+      val globalDb = auto2.account.get.global.storage
 
-      info("clientId: " + auto2.zmessaging.get.otrContent.currentClientId.futureValue)
+      info("clientId: " + auto2.zmessaging.futureValue.get.clientId)
 
       auto2.logout()
 
@@ -89,28 +91,40 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
         auto2Self.isLoggedIn shouldEqual false
       }
 
-      cryptobox.close().futureValue
+      auto2.onPause()
+      auto2.onDestroy()
+      cryptobox.close().await()
+      db.close().await()
+      globalDb.close().await()
     }
 
-    scenario("corrupt auto2 otr and login back") {
+    scenario("corrupt auto2 otr identity and login again in new process") {
       val identity = new File(new File(cryptoDir, "identities"), "local")
       identity should exist
       IoUtils.copy(new ByteArrayInputStream("broken".getBytes), identity)
 
-      val auto2Self = auto2.getSelf
-      auto2Self.isLoggedIn shouldEqual false
+      var auto2Self = Option.empty[Self]
 
-      awaitUiFuture(auto2.login(provisionedEmail("auto2"), "auto2_pass"))
+      auto2_1.onInit(new InitListener {
+        override def onInitialized(user: Self): Unit = auto2Self = Some(user)
+      })
 
-      // login fails due to cryptobox failing
-      auto2Self.isLoggedIn shouldEqual false
+      soon { auto2Self.map(_.isLoggedIn) shouldEqual Some(false) }
+
+      awaitUiFuture(auto2_1.login(provisionedEmail("auto2"), "auto2_pass"))
+
+      auto2Self.map(_.isLoggedIn) shouldEqual Some(true) // login is successful
+      auto2Self.get.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
+
+      auto2_1.ui.currentZms.head.await() shouldBe defined
+      auto2_1.ui.currentZms.head.await().get.cryptoBox.cryptoBox.futureValue shouldBe 'defined
+      auto2_1.account shouldBe defined
+
+      info("clientId: " + auto2_1.zmessaging.futureValue.get.clientId)
     }
 
-    scenario("second login creates new client") {
-      val auto2Self = auto2.getSelf
-      auto2Self.isLoggedIn shouldEqual false
-
-      awaitUiFuture(auto2.login(provisionedEmail("auto2"), "auto2_pass"))
+    scenario("receive new message") {
+      val auto2Self = auto2_1.getSelf
 
       // auto2 should be logged in
       withDelay {
@@ -118,15 +132,12 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
         auto2Self.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
       }
 
-      auto2.zmessaging.get.cryptoBox.cryptoBox.futureValue shouldBe 'defined
-      info("clientId: " + auto2.zmessaging.get.otrContent.currentClientId.futureValue)
-
-      val msgs2 = awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.getMessages)).get
+      val msgs2 = awaitUiFuture(auto2_1.findConv(conv.data.remoteId).map(_.getMessages)).get
 
       conv.sendMessage(new MessageContent.Text("Test message 2"))
 
       withDelay {
-        auto2Clients should have size 2
+        auto2Clients should have size 2 // login with broken cryptobox created new device
         msgs2.getLastMessage.getBody shouldEqual "Test message 2"
       }
     }

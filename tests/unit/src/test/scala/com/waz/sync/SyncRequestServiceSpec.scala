@@ -26,9 +26,10 @@ import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync.SyncRequest._
 import com.waz.model.sync.{SyncCommand => Cmd, _}
+import com.waz.service.LifecycleState
 import com.waz.sync.queue.ConvLock
 import com.waz.testutils.Matchers._
-import com.waz.testutils.MockZMessaging
+import com.waz.testutils.{MockUserModule, MockZMessaging}
 import org.robolectric.Robolectric
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
@@ -43,9 +44,8 @@ import scala.concurrent.{Await, Future, Promise}
 class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
   import com.waz.threading.Threading.Implicits.Background
   implicit val timeout: Timeout = 5.seconds
-  lazy val context = Robolectric.application
 
-  lazy val service = new MockZMessaging() {
+  lazy val userModule = new MockUserModule() {
     override lazy val syncHandler: SyncHandler = new SyncHandler {
       override def apply(req: SyncRequest): Future[SyncResult] = {
         requested = requested :+ req
@@ -53,11 +53,11 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       }
       override def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult] = apply(req)
     }
-
-    Await.result(users.selfUserId := UserId(), 5.seconds)
   }
 
-  def zuserId = service.userId
+  lazy val service = new MockZMessaging(userModule)
+
+  def accountId = service.accountId
 
   var requested = List[SyncRequest]()
   var syncResult: SyncResult = SyncResult.Success
@@ -75,7 +75,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   after {
     syncJobHandler.all
-    Await.result(service.syncContent.listSyncJobs map { _ foreach { job => service.syncContent.removeSyncJob(job.id) } }, 5.seconds)
+    Await.result(service.syncRequests.content.listSyncJobs map { _ foreach { job => service.syncRequests.content.removeSyncJob(job.id) } }, 5.seconds)
     ShadowLog.stream = null
   }
 
@@ -164,23 +164,23 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
   scenario("execute optional priority commands one by one") {
     addRequest(SyncSelf, priority = Priority.Optional)
     addRequest(SyncConnections, priority = Priority.Optional)
-    addRequest(SyncVersionBlacklist, priority = Priority.Optional)
+    addRequest(SyncSelfClients, priority = Priority.Optional)
     awaitUi(100.millis)
     requested shouldEqual Seq(SyncSelf)
     executeScheduled should haveCommands(Cmd.SyncSelf)
     executeScheduled should haveCommands(Cmd.SyncConnections)
-    executeScheduled should haveCommands(Cmd.SyncVersionBlacklist)
+    executeScheduled should haveCommands(Cmd.SyncSelfClients)
   }
 
   scenario("execute higher priority commands concurrently") {
     addRequest(SyncSelf, priority = Priority.Low)
     addRequest(SyncConnections, priority = Priority.High)
-    addRequest(SyncVersionBlacklist, priority = Priority.Low)
+    addRequest(SyncConnectedUsers, priority = Priority.Low)
     addRequest(SyncSelfClients, priority = Priority.Normal)
     awaitUi(100.millis)
 
     executeScheduled should haveCommands(Cmd.SyncSelf, Cmd.SyncConnections, Cmd.SyncSelfClients)
-    executeScheduled should haveCommands(Cmd.SyncVersionBlacklist)
+    executeScheduled should haveCommands(Cmd.SyncConnectedUsers)
   }
 
   scenario("update priority of dependent commands") {
@@ -216,10 +216,11 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
     executeScheduled should haveCommands(Cmd.SyncSearchQuery)
   }
 
-  scenario("Pending requests get executed immediately on verification.") {
+  scenario("Pending requests get executed immediately on re-login.") {
     addRequest(SyncSelf, attempts = 10, startTime = new Date().getTime + 1000L)
     addRequest(SyncSearchQuery(-1L))
-    service.user.onVerifiedLogin ! Some(zuserId)
+    service.lifecycle.lifecycleState ! LifecycleState.Stopped
+    service.lifecycle.lifecycleState ! LifecycleState.Active
 
     awaitUi(100.millis)
     executeScheduled should haveCommandsSet(Cmd.SyncSelf, Cmd.SyncSearchQuery)

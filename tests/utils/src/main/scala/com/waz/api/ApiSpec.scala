@@ -26,21 +26,21 @@ import akka.serialization.Serialization
 import akka.util.Timeout
 import android.database.Cursor
 import com.typesafe.config.ConfigFactory
-import com.waz.model.ZUser.ZUserDao
+import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{ReleaseRemotes, SpawnRemoteDevice, WaitUntilRegistered}
 import com.waz.provision._
 import com.waz.service._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.RoboPermissionProvider
+import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils._
 import com.waz.utils.events.EventContext
-import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.{AsyncClient, ClientWrapper, TestClientWrapper, ZNetClient}
 import com.waz.{RoboProcess, RobolectricUtils, ShadowLogging}
 import net.hockeyapp.android.Constants
-import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.enablers.{Containing, Emptiness, Length}
 
@@ -52,7 +52,6 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   override protected lazy val logfileBaseDir: File = new File("target/logcat/integration")
 
-  val otrOnly = false
   val otrTempClient = false
   val autoLogin = true
   val initBehaviour: InitBehaviour = InitOnceBeforeAll
@@ -64,13 +63,17 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   protected case object InitEveryTime extends InitBehaviour
   protected case object InitManually extends InitBehaviour
 
-  lazy val zmessagingFactory: ZMessaging.Factory = new ApiZmessaging(_, _, _)
+  lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
+    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user)
+  }
 
-  class ApiZmessaging(i: InstanceService, u: ZUser, a: Option[Token]) extends ZMessaging(i, u, a) {
+  class ApiZMessaging(clientId: ClientId, user: UserModule)
+      extends ZMessaging(clientId, user) {
+
     override lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), events =>
       returning(eventScheduler.enqueue(events))(_ => eventSpies.get.foreach(pf => events.foreach(e => pf.applyOrElse(e, (_: Event) => ())))))
 
-    override lazy val otrClient = new com.waz.sync.client.OtrClient(znetClient) {
+    override lazy val otrClient = new com.waz.sync.client.OtrClient(zNetClient) {
       override private[waz] val PermanentClient = !otrTempClient
     }
   }
@@ -79,8 +82,6 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   def testBackend: BackendConfig = BackendConfig.EdgeBackend
   lazy val testClient = new AsyncClient(wrapper = TestClientWrapper)
-
-  lazy val context = Robolectric.application
 
   lazy val globalModule: GlobalModule = new ApiSpecGlobal
 
@@ -91,31 +92,32 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
     ZMessaging.currentGlobal = this
 
-    if (otrOnly) prefs.editUiPreferences(_.putBoolean("zms_send_only_otr", true))
+    override lazy val factory: ZMessagingFactory = zmessagingFactory
   }
 
-  lazy val instance: InstanceService = new InstanceService(context, globalModule, zmessagingFactory(_, _, _))
+  lazy val accounts = new Accounts(globalModule)
 
-  implicit lazy val ui = returning(new UiModule(instance)) { ZMessaging.currentUi = _ }
+  implicit lazy val ui = returning(new UiModule(accounts)) { ZMessaging.currentUi = _ }
 
   var api: impl.ZMessagingApi = _
   private var self = None: Option[Self]
-  def email = s"android.test@wearezeta.com"
+  def email = s"email@test.com"
   def password = "test_pass"
 
-  def zmessaging = api.zmessaging.get
+  def zmessaging = Await.result(api.zmessaging, 5.seconds).get
 
-  def netClient = zmessaging.znetClient
+  def netClient = zmessaging.zNetClient
 
   def znetClientFor(email: String, password: String) = new ZNetClient(email, password, new AsyncClient(wrapper = TestClientWrapper))
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
+    Threading.AssertsEnabled = false
 
     ZMessaging.context = context
     Constants.loadFromContext(context)
     ZMessaging.currentUi = ui
-    ZMessaging.currentInstance = instance
+    ZMessaging.currentAccounts = accounts
     ui.global.permissions.setProvider(new RoboPermissionProvider)
 
     if (initBehaviour == InitOnceBeforeAll) createZMessagingAndLogin()
@@ -130,7 +132,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     ZMessaging.context = context
     ZMessaging.currentGlobal = globalModule
     ZMessaging.currentUi = ui
-    ZMessaging.currentInstance = instance
+    ZMessaging.currentAccounts = accounts
 
     api = new impl.ZMessagingApi()
     api.onCreate(context)
@@ -154,7 +156,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   }
 
   protected def logoutAndDestroy(): Unit = {
-    var maybeZms = api.zmessaging
+    var maybeZms = Await.result(api.ui.getCurrent, 5.seconds)
     api.logout()
     pauseApi()
     api.onDestroy()
@@ -162,17 +164,19 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     awaitUi(500.millis)
     maybeZms.foreach { zms =>
       awaitUi(zms.websocket.connected.currentValue.forall(_ == false), "websocket connection should be disconnected")
-      zms.storage.close
-      zms.global.storage.close
-      api.ui.uiCache.clear
+      zms.storage.db.close()
+      zms.global.storage.close()
+      api.ui.uiCache.clear()
     }
+    accounts.currentAccountPref := ""
+    accounts.accountMap.clear()
     api = null
     ZMessaging.context = null
     maybeZms = null
     System.gc()
   }
 
-  def deleteUserAfterLogout(): Unit = Await.result(globalModule.storage(ZUserDao.deleteForEmail(EmailAddress(email))(_)), 10.seconds)
+  def deleteUserAfterLogout(): Unit = Await.result(globalModule.storage(AccountDataDao.deleteForEmail(EmailAddress(email))(_)), 10.seconds)
 
   def withInitializedApi[A](f: => A): A = {
     createZMessagingAndLogin()
@@ -205,7 +209,9 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     @volatile var error: Option[ErrorResponse] = None
 
     api.login(CredentialsFactory.emailCredentials(email, password), new LoginListener {
-      override def onFailed(code: Int, message: String, label: String): Unit = error = Some(impl.ErrorResponse(code, message, label))
+      override def onFailed(code: Int, message: String, label: String): Unit = {
+        error = Some(impl.ErrorResponse(code, message, label))
+      }
 
       override def onSuccess(user: Self): Unit = {
         selfUser = Some(user)
@@ -214,9 +220,19 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
     try {
       awaitUi { error.isDefined || selfUser.isDefined }(15.seconds)
-      awaitUiFuture { zmessaging.websocket.connected.filter(_ == true).head }
+      if (error.isDefined) alert(s"Login failed: $error")
+      else {
+        awaitUi { selfUser.get.accountActivated } (10.seconds)
+        awaitUi { selfUser.get.getClientRegistrationState != ClientRegistrationState.UNKNOWN }(10.seconds)
+        awaitUi { api.account.isDefined }
+        awaitUiFuture { api.account.get.zmessaging.filter(_.isDefined).head }
+        awaitUi { Await.result(api.zmessaging, 5.seconds).isDefined }
+        awaitUiFuture { zmessaging.websocket.connected.filter(_ == true).head }
+      }
     } catch {
-      case _: Throwable => alert(s"WARNING: login failed or websocket not connected, error: $error, self: $selfUser, websocket connected: ${zmessaging.websocket.connected.currentValue}")
+      case t: Throwable =>
+        t.printStackTrace()
+        alert(s"WARNING: login failed or websocket not connected, error: $error, self: $selfUser, websocket connected: ${zmessaging.websocket.connected.currentValue}")
     }
 
     error.foreach { error => alert(s"WARNING: login failed with error: $error") }
@@ -323,7 +339,7 @@ trait ActorSystemSpec extends BeforeAndAfterAll { suite: Suite with Alerting wit
  * very difficult. See the [[ProcessActorSpec]]s below to get a debug file per SE instance.
  */
 trait ThreadActorSpec extends ActorSystemSpec { suite: Suite with Alerting with Informing =>
-  val otrOnly: Boolean
+  val otrOnly: Boolean = true
   lazy val remoteProcessActor = registerProcess(this.getClass.getSimpleName, otrOnly = otrOnly)
 
   def registerDevice(deviceName: String): ActorRef =
@@ -336,7 +352,7 @@ trait ThreadActorSpec extends ActorSystemSpec { suite: Suite with Alerting with 
  * problems on the remote.
  */
 trait ProcessActorSpec extends ActorSystemSpec { suite: Suite with Alerting with Informing =>
-  val otrOnly: Boolean
+  val otrOnly: Boolean = true
 
   def registerDevice(deviceName: String): ActorRef =
     registerDevice(deviceName, registerProcess(s"${this.getClass.getSimpleName}_$deviceName", otrOnly = otrOnly))

@@ -22,6 +22,7 @@ import java.io.InputStream
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns._
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.cache.CacheEntry
 import com.waz.content.Mime
@@ -29,6 +30,7 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.AssetId
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
+import com.waz.utils.LoggedTry
 import com.waz.utils.events.Signal
 import org.threeten.bp
 
@@ -46,6 +48,8 @@ abstract class AssetForUpload(val id: AssetId) extends api.AssetForUpload {
   def openDataStream(context: Context): InputStream
 }
 object AssetForUpload {
+  private implicit val Tag: LogTag = logTagFor[AssetForUpload]
+
   def apply(i: AssetId, n: Option[String], m: Mime, s: Option[Long])(f: Context => InputStream): AssetForUpload = new AssetForUpload(i) {
     override val name = successful(n)
     override val mimeType = successful(m)
@@ -54,9 +58,11 @@ object AssetForUpload {
   }
 
   def queryContentUriInfo(context: Context, uri: Uri) = Future {
-    def mimeFromResolver = Try(Option(context.getContentResolver.getType(uri))).toOption.flatten.map(Mime(_)).filterNot(_.isEmpty)
+    def mimeFromResolver = LoggedTry(Option(context.getContentResolver.getType(uri))).toOption.flatten.map(Mime(_)).filterNot(_.isEmpty)
     def mimeFromExtension = Option(uri.getLastPathSegment).map(Mime.fromFileName).filterNot(_.isEmpty)
     def mime = mimeFromResolver orElse mimeFromExtension getOrElse Mime.Default
+
+    verbose(s"queryContentUriInfo($uri) - mimeFromResolver: $mimeFromResolver, mimeFromExtension: $mimeFromExtension")
 
     def nameFromUri = Option(uri.getLastPathSegment).filterNot(_.isEmpty)
 

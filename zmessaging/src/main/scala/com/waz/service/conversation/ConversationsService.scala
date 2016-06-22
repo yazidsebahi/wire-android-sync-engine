@@ -46,15 +46,14 @@ import scala.util.control.NoStackTrace
 class ConversationsService(context: Context, push: PushService, users: UserService, usersStorage: UsersStorage,
                            messagesStorage: MessagesStorage, membersStorage: MembersStorage,
                            convsStorage: ConversationStorage, val content: ConversationsContentUpdater, listState: ConversationsListStateService,
-                           membersContent: MembersContentUpdater, sync: SyncServiceHandle, errors: ErrorsService,
-                           messages: MessagesService, assets: AssetService, storage: ZStorage,
-                           msgContent: MessagesContentUpdater, kvService: KeyValueService, eventScheduler: => EventScheduler) {
+                           sync: SyncServiceHandle, errors: ErrorsService,
+                           messages: MessagesService, assets: AssetService, storage: ZmsDatabase,
+                           msgContent: MessagesContentUpdater, kvService: KeyValueStorage, eventScheduler: => EventScheduler) {
 
   private implicit val tag: LogTag = logTagFor[ConversationsService]
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
   import content._
-  import membersContent._
   import messages._
   import users._
 
@@ -283,7 +282,7 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
 
   def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse) = for {
     _ <- errors.addErrorWhenActive(ErrorData(error, resp, conv, users))
-    _ <- removeUsersFromConversation(conv, users)
+    _ <- membersStorage.remove(conv, users: _*)
     _ <- removeLocalMemberJoinMessage(conv, users.toSet)
   } yield ()
 }

@@ -109,7 +109,7 @@ case class UserData(
 
 object UserData {
 
-  val Empty = UserData("")
+  val Empty = UserData(UserId("EMPTY"), "")
 
   type ConnectionStatus = com.waz.api.User.ConnectionStatus
   object ConnectionStatus {

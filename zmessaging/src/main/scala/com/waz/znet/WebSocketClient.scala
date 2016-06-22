@@ -67,21 +67,22 @@ class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvide
     }
   }
 
-  def isConnected = socket.isDefined
-
-  def reconnect() = dispatcher {
-    debug("reconnecting")
-    future.cancel()
-    closeCurrentSocket()
-    future = connect()
-  }
-
   def close() = dispatcher {
     info("closing")
     closed = true
     future.cancel()
     closeCurrentSocket()
     connected ! false
+  }
+
+  def retryInDisconnected() = connected.head foreach {
+    case false if !closed =>
+      verbose(s"retrying")
+      retryCount = 0
+      future.cancel()
+      future = connect()
+    case _ =>
+      verbose("already connected")
   }
 
   private def closeCurrentSocket() = socket.foreach { s =>

@@ -22,11 +22,10 @@ import java.io.File
 import com.waz.api
 import com.waz.api.AssetFactory
 import com.waz.api.impl.AudioAssetForUpload
-import com.waz.service.ZMessaging
-import com.waz.service.assets.RecordAndPlayService._
+import com.waz.service.assets.GlobalRecordAndPlayService._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{MockInstance, MockUiModule}
+import com.waz.testutils.{MockUiModule, MockZMessaging}
 import com.waz.threading.Threading.Background
 import com.waz.utils._
 import org.robolectric.Robolectric
@@ -38,9 +37,17 @@ import org.threeten.bp.Instant.now
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
-class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with RobolectricTests {
+class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests {
 
   feature("Recording an audio message") {
+
+    scenario("init") {
+      ui.onResume()
+      soon {
+        ui.currentZms.currentValue.flatten shouldBe defined
+      }
+    }
+
     scenario("Cancel recording") {
       val spy = new RecordingHandler
       val controls = AssetFactory.recordAudioAsset(spy)
@@ -134,14 +141,8 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
     IoUtils.copy(getClass.getResourceAsStream("/assets/audio.m4a"), new File(shadowRecorder.getOutputPath))
   }
 
-  override def beforeAll: Unit = {
-    ZMessaging.currentInstance = instance
-    ZMessaging.currentGlobal = instance.global
-    ZMessaging.currentUi = MockUiModule(instance)
-  }
-
-  lazy val instance = new MockInstance()
-  lazy val service = instance.global.recordingAndPlayback
+  lazy val ui = new MockUiModule(new MockZMessaging())
+  lazy val service = ui.global.recordingAndPlayback
 }
 
 class RecordingHandler extends api.RecordingCallback {
@@ -150,6 +151,6 @@ class RecordingHandler extends api.RecordingCallback {
   val cancel = Promise[Unit]
 
   override def onStart(timestamp: Instant): Unit = start.success(timestamp)
-  override def onComplete(recording: api.AudioAssetForUpload, fileSizeLimitReached: Boolean): Unit = complete.success(recording)
+  override def onComplete(recording: api.AudioAssetForUpload, fileSizeLimitReached: Boolean, overview: api.AudioOverview): Unit = complete.success(recording)
   override def onCancel(): Unit = cancel.success(())
 }

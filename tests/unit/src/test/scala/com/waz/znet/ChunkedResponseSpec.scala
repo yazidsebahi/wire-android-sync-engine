@@ -19,7 +19,7 @@ package com.waz.znet
 
 import com.koushikdutta.async.http.server.{AsyncHttpServer, AsyncHttpServerRequest, AsyncHttpServerResponse, HttpServerRequestCallback}
 import com.waz.model.EmailAddress
-import com.waz.service.{Preference, BackendConfig}
+import com.waz.service.BackendConfig
 import com.waz.threading.Threading
 import org.scalatest.{BeforeAndAfter, FeatureSpecLike, Matchers, RobolectricTests}
 
@@ -58,7 +58,7 @@ class ChunkedResponseSpec extends FeatureSpecLike with Matchers with BeforeAndAf
 
   scenario("receive chunked response") {
     val client = new AsyncClient
-    val netClient = new ZNetClient(new BasicCredentials(EmailAddress("meep"), None), None, client = client, BackendConfig("http://localhost:9000"), loginClient = null, Preference.empty)
+    val netClient = new ZNetClient(new BasicCredentials(EmailAddress("meep"), None), client, BackendConfig("http://localhost:9000"), loginClient = null)
 
     val response = Await.result(Future.traverse(1 to 20) { _ =>
       netClient(Request.Get("/", requiresAuthentication = false))

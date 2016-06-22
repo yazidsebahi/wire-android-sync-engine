@@ -23,7 +23,6 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
-import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{ErrorStatus, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import com.waz.znet.{JsonArrayResponse, JsonObjectResponse, _}
@@ -67,18 +66,6 @@ class UsersClient(netClient: ZNetClient) {
     netClient.updateWithErrorHandling("updateSelf", Request.Put(SelfPath, info))
   }
 
-  def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]] = {
-    netClient(Request.Post(ActivateSendPath, JsonEncoder(_.put("email", email.str)), requiresAuthentication = false)) map {
-      case Response(SuccessHttpStatus(), resp, _) => Right(())
-      case Response(_, ErrorResponse(code, msg, label), _) =>
-        info(s"requestVerificationEmail failed with error: ($code, $msg, $label)")
-        Left(ErrorResponse(code, msg, label))
-      case resp =>
-        error(s"Unexpected response from resendVerificationEmail: $resp")
-        Left(ErrorResponse(400, resp.toString, "unknown"))
-    }
-  }
-
   def deleteAccount(password: Option[String] = None): ErrorOr[Unit] = netClient.withFutureErrorHandling("delete account", Request.Delete(SelfPath, data = Some(DeleteAccount(password)))) {
     case Response(SuccessHttpStatus(), resp, _) => Right(())
   }
@@ -90,7 +77,6 @@ object UsersClient {
   val UsersPath = "/users"
   val SelfPath = "/self"
   val ConnectionsPath = "/self/connections"
-  val ActivateSendPath = "/activate/send"
   val IdsCountThreshold = 45
 
   object UserResponseExtractor {

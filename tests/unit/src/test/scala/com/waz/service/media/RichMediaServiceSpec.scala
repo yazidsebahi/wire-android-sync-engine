@@ -18,8 +18,8 @@
 package com.waz.service.media
 
 import com.waz._
-import com.waz.api.{MediaProvider, Message}
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.{MediaProvider, Message}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
@@ -29,7 +29,6 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.znet.ZNetClient.ErrorOr
-import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
 
@@ -38,8 +37,6 @@ import scala.concurrent.{Await, Future}
 
 class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
-
-  def context = Robolectric.application
 
   var richMediaSyncRequest = Option.empty[MessageId]
   var videoSnippetResponse: Either[ErrorResponse, MediaWithImages[TrackData]] = Left(ErrorResponse(499, "test error", "internal-error"))
@@ -54,11 +51,9 @@ class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter
       }
     }
 
-    override lazy val youtubeClient = new YouTubeClient(znetClient) {
+    override lazy val youtubeClient = new YouTubeClient(zNetClient) {
       override def loadVideo(id: String): ErrorOr[MediaWithImages[TrackData]] = Future.successful(videoSnippetResponse)
     }
-
-    users.selfUserId := UserId()
 
     insertConv(ConversationData(convId, remoteId, None, UserId(), ConversationType.Group))
   }

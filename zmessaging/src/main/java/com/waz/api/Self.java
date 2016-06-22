@@ -51,8 +51,15 @@ public interface Self extends UiObservable {
      */
     CoreList<OtrClient> getIncomingOtrClients();
 
+    boolean accountActivated();
+
+    /**
+     * @deprecated - use accountActivated instead
+     */
+    @Deprecated
     boolean isEmailVerified();
     boolean isPhoneVerified();
+
     void resendVerificationEmail(String email);
 
     boolean isUpToDate();

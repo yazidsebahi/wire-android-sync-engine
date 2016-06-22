@@ -43,6 +43,7 @@ trait Asset extends UiObservable {
   def getDuration: Duration
   def getWidth: Int
   def getHeight: Int
+  def getAudioOverview: AudioOverview
 
   def getContentUri(callback: LoadCallback[Uri]): Unit
   def saveToDownloads(callback: LoadCallback[Uri]): Unit

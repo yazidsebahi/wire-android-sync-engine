@@ -29,9 +29,9 @@ import com.waz.utils.events.Signal
 class MembersList(convId: ConvId)(implicit ui: UiModule) extends BaseUsersList with com.waz.api.MembersList { list =>
 
   override def loadSignal(zms: ZMessaging): Signal[IndexedSeq[UserData]] =
-    Signal(zms.users.selfUserId.signal, zms.membersStorage.activeMembers(convId)) flatMap {
-      case (selfId, ids) =>
-        zms.usersStorage.listSignal(ids.filter(_ != selfId).toSeq) map { users =>
+    zms.membersStorage.activeMembers(convId) flatMap {
+      case ids =>
+        zms.usersStorage.listSignal(ids.filter(_ != zms.selfUserId).toSeq) map { users =>
           users.toIndexedSeq.sortBy(_.getDisplayName)(currentLocaleOrdering)
         }
     }
@@ -46,7 +46,7 @@ abstract class BaseUsersList(implicit ui: UiModule) extends com.waz.api.UsersLis
 
   var data = IndexedSeq[UserData]()
 
-  addLoader(loadSignal) { data =>
+  addLoader(loadSignal _) { data =>
     val shouldNotify = this.data.map(_.id) != data.map(_.id)
     this.data = data
     if (shouldNotify) notifyChanged()

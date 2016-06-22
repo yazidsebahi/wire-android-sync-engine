@@ -20,39 +20,54 @@ package com.waz.service
 import com.waz.ZLog._
 import com.waz.model.VersionBlacklist
 import com.waz.service.VersionBlacklistService._
-import com.waz.sync.SyncServiceHandle
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.sync.client.VersionBlacklistClient
+import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class VersionBlacklistService(metadata: MetaDataService, prefs: PreferenceService, sync: SyncServiceHandle) {
+class VersionBlacklistService(metadata: MetaDataService, prefs: PreferenceService, client: VersionBlacklistClient) {
 
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[VersionBlacklistService]
   private implicit val ec = EventContext.Global
   import metadata._
 
-  val upToDate = Signal[Boolean]()
+  val lastUpToDateSync = prefs.longPreference(LastUpToDateSyncPref)
+  val lastCheckedVersion = prefs.intPreference(LastCheckedVersionPref)
+  val upToDatePref = prefs.preferenceBooleanSignal(UpToDatePref, defaultValue = true)
 
-  prefs.withPreferences { p =>
-    val lastSyncTime = p.getLong(LastUpToDateSyncPref, 0L)
-    val lastVersion = p.getInt(LastCheckedVersionPref, -1)
-    val isUpToDate = p.getBoolean(UpToDatePref, true)
-
-    upToDate ! (lastVersion != metadata.appVersion || isUpToDate)
-    if (lastVersion != metadata.appVersion || (System.currentTimeMillis - lastSyncTime).millis > 1.day) sync.syncVersionBlacklist()
+  val upToDate = Signal(lastCheckedVersion.signal, upToDatePref.signal) map {
+    case (lastVersion, isUpToDate) => lastVersion != metadata.appVersion || isUpToDate
   }
 
-  def updateBlacklist(blacklist: VersionBlacklist): CancellableFuture[Unit] = {
+  // check if needs syncing, and try doing that immediately
+  shouldSync foreach {
+    case true => syncVersionBlackList()
+    case false => // no need
+  }
+
+  def shouldSync = for {
+    lastSyncTime <- lastUpToDateSync()
+    lastVersion <- lastCheckedVersion()
+    isUpToDate <- upToDatePref()
+  } yield {
+    lastVersion != metadata.appVersion || (System.currentTimeMillis - lastSyncTime).millis > 1.day
+  }
+
+  def syncVersionBlackList() = client.loadVersionBlacklist().future flatMap { blacklist =>
+    debug(s"Retrieved version blacklist: $blacklist")
+    updateBlacklist(blacklist.right.getOrElse(VersionBlacklist()))
+  }
+
+  def updateBlacklist(blacklist: VersionBlacklist): Future[Unit] = {
     verbose(s"app Version: $appVersion, blacklist: $blacklist")
-    val isUpToDate = appVersion >= blacklist.oldestAccepted && !blacklist.blacklisted.contains(appVersion)
-    upToDate ! isUpToDate
-    prefs.editPreferences { prefs =>
-      prefs.putBoolean(UpToDatePref, isUpToDate)
-      prefs.putLong(LastUpToDateSyncPref, System.currentTimeMillis)
-      prefs.putInt(LastCheckedVersionPref, appVersion)
-    } map { _ => Unit }
+    for {
+      _ <- upToDatePref := (appVersion >= blacklist.oldestAccepted && !blacklist.blacklisted.contains(appVersion))
+      _ <- lastUpToDateSync := System.currentTimeMillis
+      _ <- lastCheckedVersion := appVersion
+    } yield ()
   }
 }
 

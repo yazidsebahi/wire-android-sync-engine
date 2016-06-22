@@ -22,7 +22,7 @@ import java.util.Date
 import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
-import com.waz.content.GlobalStorage
+import com.waz.content.GlobalDatabase
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -38,7 +38,7 @@ import scala.concurrent.{Await, Future}
 
 class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricUnitTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
-  lazy val globalStorage = new GlobalStorage(Robolectric.application)
+  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 
   val timeout = 5.seconds
   
@@ -47,7 +47,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
   lazy val user2 = UserData("user 1")
   lazy val user3 = UserData("user 3")
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var convSync = None: Option[ConvId]
   var convNameSync = None: Option[ConvId]
@@ -56,7 +56,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
   var convMemberLeaveSync = None: Option[(ConvId, UserId)]
 
-  lazy val service = new MockZMessaging() {
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
     override lazy val sync = new EmptySyncService {
       override def postConversationName(id: ConvId, n: String) = {
         convNameSync = Some(id)
@@ -85,7 +85,6 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     insertUsers(Seq(selfUser, user1, user2, user3))
-    users.selfUserId := test.selfUser.id
   }
 
   before {

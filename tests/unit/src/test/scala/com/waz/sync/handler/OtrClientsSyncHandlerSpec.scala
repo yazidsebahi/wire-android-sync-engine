@@ -20,11 +20,11 @@ package com.waz.sync.handler
 import com.waz.RobolectricUtils
 import com.waz.api.Verification
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
-import com.waz.model.{UserData, UserId, ZUserId}
+import com.waz.model.{AccountId, UserData, UserId}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
+import com.waz.testutils.{DefaultPatienceConfig, MockUserModule, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.wire.cryptobox.PreKey
@@ -45,12 +45,12 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   var updatedKeys = Seq.empty[PreKey]
   var postClientRequest = Option.empty[(Client, PreKey, Seq[PreKey], Option[String])]
 
-  class TestService extends MockZMessaging() {
+  lazy val userModule = new MockUserModule(userId = selfUser.id) {
 
-    override lazy val otrClient: OtrClient = new OtrClient(znetClient) {
-      override def postClient(user: ZUserId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
+    override lazy val otrClient: OtrClient = new OtrClient(account.netClient) {
+      override def postClient(user: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
         postClientRequest = Some((client, lastKey, keys, password))
-        CancellableFuture.successful(Right(client.copy(clientId)))
+        CancellableFuture.successful(Right(client.copy(test.clientId)))
       }
 
       override def loadClients(): ErrorOrResponse[Seq[Client]] = {
@@ -74,11 +74,10 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
       } map (_.get))
     }
 
-    usersStorage.addOrOverwrite(selfUser).futureValue
-    (users.selfUserId := selfUser.id).futureValue
+    account.storage.usersStorage.addOrOverwrite(selfUser).futureValue
   }
 
-  lazy val service = new TestService
+  lazy val service = new MockZMessaging(userModule, clientId)
 
   before {
     loadSelfClientsRequested = false
@@ -88,25 +87,9 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     postClientRequest = None
   }
 
-  feature("Client registration") {
+  feature("Client sync") {
 
-    scenario("Register client on first start") {
-      service.otrClientsSync.syncSelfClients() should eventually(be(SyncResult.Success))
-      service.otrClientsService.getSelfClient should eventually(be('defined))
-
-      val client = service.otrClientsService.getSelfClient.futureValue.get
-      client.id shouldEqual clientId
-      client.signalingKey shouldBe 'defined
-      client.verified shouldEqual Verification.VERIFIED
-
-      postClientRequest should not be empty
-      postClientRequest.get._3 should have size 100
-      postClientRequest.get._3.last.id shouldEqual 99
-      updatedKeys shouldBe empty
-      service.otrService.lastPreKeyId().futureValue shouldEqual 99
-    }
-
-    scenario("Sync clients on restart") {
+    scenario("Sync clients on start") {
       remainingKeys = Seq.tabulate(100)(identity)
       clients = Seq(Client(clientId, "label", "model", None), Client(ClientId(), "label1", "model1", None))
 
@@ -114,29 +97,9 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
       service.otrClientsService.getSelfClient should eventually(be('defined))
 
       val client = service.otrClientsService.getSelfClient.futureValue.get
-      client.signalingKey shouldBe 'defined
       client.verified shouldEqual Verification.VERIFIED
 
       updatedKeys shouldBe empty
-    }
-
-    scenario("Register new client and sync previous on first start") {
-      remainingKeys = Seq.empty
-      clients = Seq(Client(ClientId("client1"), "label", "model", None), Client(ClientId("client2"), "label1", "model1", None))
-
-      val service1 = new TestService
-      service1.otrClientsSync.syncSelfClients() should eventually(be(SyncResult.Success))
-      service1.otrClientsService.getSelfClient.futureValue.map(_.id) shouldEqual Some(clientId)
-
-      val cs = service1.otrClientsStorage.signal(selfUser.id)
-      withDelay(cs.currentValue shouldBe 'defined)
-      cs.currentValue.map(_.clients).get should have size 3
-
-      postClientRequest should not be empty
-      postClientRequest.get._3 should have size 100
-      postClientRequest.get._3.last.id shouldEqual 99
-      updatedKeys shouldBe empty
-      service1.otrService.lastPreKeyId().futureValue shouldEqual 99
     }
   }
 
@@ -151,7 +114,7 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
       updatedKeys.map(_.id) should have size 67
       updatedKeys.head.id shouldEqual 100
       updatedKeys.last.id shouldEqual 166
-      service.otrService.lastPreKeyId().futureValue shouldEqual 166
+      service.cryptoBox.lastPreKeyId().futureValue shouldEqual 166
     }
   }
 

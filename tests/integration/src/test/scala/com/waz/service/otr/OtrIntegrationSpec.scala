@@ -41,7 +41,7 @@ import scala.util.Try
 class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ProcessActorSpec { test =>
 
   override val provisionFile = "/two_users_connected.json"
-  override val otrOnly = true
+  override val autoLogin = false
 
   lazy val convs = api.getConversations
   lazy val conv = {
@@ -62,14 +62,11 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
   @volatile var refreshInterval = 1.day
 
-  scenario("init remote process") {
-    auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
-    awaitUi(3.seconds)
-  }
-
   feature("Clients registry") {
 
     scenario("Register client on first start") {
+      awaitUi(3.seconds)
+      login()
       withDelay {
         zmessaging.otrClientsService.getSelfClient should eventually(be('defined))
       }
@@ -105,6 +102,11 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         client.get.getLabel shouldEqual "test label"
       }
     }
+  }
+
+  scenario("init remote process") {
+    auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
+    awaitUi(3.seconds)
   }
 
   feature("Message sending") {

@@ -25,7 +25,7 @@ import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.Invitations
 import com.waz.model.{AssetId, ConvId, UserId}
-import com.waz.service.{GlobalModule, GlobalNotificationService, InstanceService, ZMessaging}
+import com.waz.service._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events._
 
@@ -36,6 +36,12 @@ trait ZMessagingResolverComponent {
 }
 
 class ZMessagingResolver(ui: UiModule) {
+
+  def account(implicit ec: ExecutionContext = Threading.Background) = ui.currentAccount.head.collect { case Some(acc) => acc }
+
+  def withAccount[A](f: AccountService => A)(implicit ec: ExecutionContext = Threading.Background): Future[A] =
+    ui.currentAccount.head.collect { case Some(acc) => f(acc) }
+
   def apply[A](f: ZMessaging => A)(implicit ec: ExecutionContext = Threading.Background): CancellableFuture[A] =
     CancellableFuture.lift(ui.getCurrent.collect { case Some(zms) => f(zms) })
 
@@ -96,7 +102,7 @@ trait UiEventContext {
   }
 }
 
-class UiModule(val instance: InstanceService) extends UiEventContext with ZMessagingResolverComponent {
+class UiModule(val accounts: Accounts) extends UiEventContext with ZMessagingResolverComponent {
   import com.softwaremill.macwire._
   private implicit val logTag = logTagFor[UiModule]
 
@@ -105,7 +111,7 @@ class UiModule(val instance: InstanceService) extends UiEventContext with ZMessa
   val zms = new ZMessagingResolver(this)
   val uiCache = new UiCache[Uri, AnyRef](0)(this)
 
-  val global: GlobalModule = instance.global
+  val global: GlobalModule = accounts.global
   def context = global.context
   def cache = global.cache
   def prefs = global.prefs
@@ -113,10 +119,16 @@ class UiModule(val instance: InstanceService) extends UiEventContext with ZMessa
   def bitmapDecoder = global.bitmapDecoder
   def handlerFactory = global.handlerFactory
 
-  val current = instance.current
-  current.onChanged { _ => onReset ! true }
+  val currentAccount = accounts.current
+  val currentZms = accounts.currentZms
 
-  def getCurrent = current.currentValue.flatten.fold(instance.getCurrent)(zms => Future.successful(Some(zms)))
+  currentZms.onChanged { _ => onReset ! true }
+
+  def getAccount = currentAccount.head.collect { case Some(acc) => acc } (Threading.Background)
+  def getUserModule = getAccount.flatMap(_.userModule.head) (Threading.Background)
+  def getZms = currentZms.head.collect { case Some(zms) => zms } (Threading.Background)
+
+  def getCurrent = accounts.getCurrentZms
 
   lazy val images: Images = new Images(context, bitmapDecoder)
   lazy val messages: Messages = new Messages
@@ -127,6 +139,8 @@ class UiModule(val instance: InstanceService) extends UiEventContext with ZMessa
   lazy val contactDetails = wire[ContactDetailsCache]
   lazy val notifications = wire[GlobalNotificationService]
   lazy val assets = new UiCache[AssetId, Asset](10)(this)
+
+  lazy val globalImageLoader = global.imageLoader
 
   def getOtherParticipantForOneToOneConv(id: ConvId): User = users.getUser(UserId(id.str)) // one-to-one conversation has the same id as the other user, so we can access it directly
 

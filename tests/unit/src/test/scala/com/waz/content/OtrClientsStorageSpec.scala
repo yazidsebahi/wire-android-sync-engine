@@ -19,8 +19,8 @@ package com.waz.content
 
 import com.waz.RobolectricUtils
 import com.waz.api.{OtrClientType, Verification}
-import com.waz.model.otr._
-import com.waz.model.{AESKey, UserId, ZUserId}
+import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
+import com.waz.model.{AESKey, AccountId, UserId}
 import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -33,7 +33,7 @@ class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(50, Millis))
 
-  lazy val storage = new ZStorage(ZUserId(), Robolectric.application)
+  lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
   lazy val clients = new OtrClientsStorage(Robolectric.application, storage)
   lazy val user = UserId()
 

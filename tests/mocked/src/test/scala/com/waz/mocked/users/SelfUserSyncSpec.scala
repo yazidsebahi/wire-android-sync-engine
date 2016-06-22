@@ -42,12 +42,11 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
     soon {
       self.isLoggedIn shouldEqual true
       self.getEmail shouldEqual "email@test.com"
-      self.isEmailVerified shouldBe true
+      self.accountActivated shouldBe true
       self.getPhone shouldBe empty
-      self.isPhoneVerified shouldBe false
-      self.zuser.value.phone shouldEqual None
-      self.zuser.value.email should be (defined)
-      self.isEmailVerified shouldEqual true
+      self.data.value.phone shouldEqual None
+      self.data.value.email should be (defined)
+      self.accountActivated shouldEqual true
     }
 
     val selfId = self.getUser.getId
@@ -58,10 +57,9 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
       self.getName shouldEqual "name"
       self.getEmail shouldEqual "email@test.com"
       self.getPhone shouldEqual phone
-      self.isEmailVerified shouldBe true
-      self.isPhoneVerified shouldBe true
-      self.zuser.value.email shouldEqual Some(EmailAddress("email@test.com"))
-      self.zuser.value.phone shouldEqual Some(PhoneNumber(phone))
+      self.accountActivated shouldBe true
+      self.data.value.email shouldEqual Some(EmailAddress("email@test.com"))
+      self.data.value.phone shouldEqual Some(PhoneNumber(phone))
     }
 
     addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(selfId), email = Some(EmailAddress("email1@test.com")), phone = None)))
@@ -70,10 +68,9 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
       self.getName shouldEqual "name"
       self.getEmail shouldEqual "email1@test.com"
       self.getPhone shouldEqual phone
-      self.isEmailVerified shouldBe true
-      self.isPhoneVerified shouldBe true
-      self.zuser.value.email shouldEqual Some(EmailAddress("email1@test.com"))
-      self.zuser.value.phone shouldEqual Some(PhoneNumber(phone))
+      self.accountActivated shouldBe true
+      self.data.value.email shouldEqual Some(EmailAddress("email1@test.com"))
+      self.data.value.phone shouldEqual Some(PhoneNumber(phone))
     }
   }
 

@@ -22,9 +22,9 @@ import java.util.Date
 import com.waz._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.service.Timeouts
+import com.waz.service.{StorageModule, Timeouts, ZmsLifecycle}
+import com.waz.testutils.EmptySyncService
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.utils.events.EventContext
 import org.scalatest.matchers.Matcher
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -43,30 +43,30 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
 
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
 
-  lazy val zms = new MockZMessaging() {
-    override lazy val sync = new EmptySyncService {
-      override def postTypingState(id: ConvId, typing: Boolean) = {
-        test.syncWasTyping = typing
-        test.typingSync = Some(id)
-        super.postTypingState(id, typing)
-      }
-    }
-
-    override lazy val timeouts: Timeouts = new Timeouts {
-      override val typing: Typing = new Typing {
-        override val stopTimeout: Timeout = 2.seconds
-        override val refreshDelay: Timeout = 500.millis
-        override val receiverTimeout: Timeout = 2.seconds
-      }
-    }
-
-    insertUsers(selfUser +: test.users)
-    insertConv(conv)
-
-    users.selfUserId := selfUser.id
+  lazy val storage = new StorageModule(context, AccountId(), "") {
+    convsStorage.insert(conv)
   }
 
-  lazy val service = zms.typing
+  lazy val lifecycle = new ZmsLifecycle {
+    setLoggedIn(true)
+    acquireUi()
+  }
+
+  lazy val timeouts = new Timeouts {
+    override val typing: Typing = new Typing {
+      override val stopTimeout: Timeout = 2.seconds
+      override val refreshDelay: Timeout = 500.millis
+      override val receiverTimeout: Timeout = 2.seconds
+    }
+  }
+
+  lazy val service = new TypingService(storage.convsStorage, timeouts, lifecycle, new EmptySyncService {
+    override def postTypingState(id: ConvId, typing: Boolean) = {
+      test.syncWasTyping = typing
+      test.typingSync = Some(id)
+      super.postTypingState(id, typing)
+    }
+  })
 
   before {
     typingSync = None
@@ -118,7 +118,7 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
     scenario("Stop sending after stop timeout") {
       service.selfChangedInput(conv.id)
       withDelay(typingSync shouldEqual Some(conv.id))
-      awaitUi(zms.timeouts.typing.stopTimeout + 2.seconds)
+      awaitUi(timeouts.typing.stopTimeout + 2.seconds)
       typingSync = None
       awaitUi(1.second)
       typingSync shouldEqual None
@@ -128,7 +128,7 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
     scenario("Send stopped typing event after timeout") {
       service.selfChangedInput(conv.id)
       withDelay(typingSync shouldEqual Some(conv.id))
-      awaitUi(zms.timeouts.typing.stopTimeout + 2.seconds)
+      awaitUi(timeouts.typing.stopTimeout + 2.seconds)
       syncWasTyping shouldEqual false
     }
   }
@@ -168,7 +168,7 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
       startTyping(users(0))
       startTyping(users(1))
       withDelay { service should haveTypingUsers (users(0), users(1)) }
-      withDelay { service should haveNoTypingUsers } (zms.timeouts.typing.receiverTimeout + 2.seconds)
+      withDelay { service should haveNoTypingUsers } (timeouts.typing.receiverTimeout + 2.seconds)
     }
   }
 
@@ -179,8 +179,8 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
     val event = TypingEvent(Uid(), conv.remoteId, time, user.id, isTyping = isTyping)
     event.localTime = time
     var notified = false
-    val sub = zms.typing.onTypingChanged { _ => notified = true } (EventContext.Global)
-    zms.dispatch(event)
+    val sub = service.onTypingChanged { _ => notified = true } (EventContext.Global)
+    service.typingEventStage.apply(conv.remoteId, Seq(event))
     if (notify) withDelay { notified shouldEqual true }
     sub.destroy()
   }

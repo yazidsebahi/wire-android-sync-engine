@@ -32,7 +32,7 @@ import scala.concurrent.duration._
  *
  * Warning - this is not thread safe
  */
-class SyncStorage(storage: ZStorage, jobs: Seq[SyncJob]) {
+class SyncStorage(storage: ZmsDatabase, jobs: Seq[SyncJob]) {
   import SyncStorage._
   private implicit val logTag: LogTag = logTagFor[SyncStorage]
 

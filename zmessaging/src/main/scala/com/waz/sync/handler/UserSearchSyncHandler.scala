@@ -18,7 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
-import com.waz.content.ZStorage
+import com.waz.content.ZmsDatabase
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.UserId
 import com.waz.service.UserSearchService
@@ -32,7 +32,7 @@ object UserSearchSyncHandler {
   val DefaultLimit = 50
 }
 
-class UserSearchSyncHandler(storage: ZStorage, userSearchService: UserSearchService, client: UserSearchClient) {
+class UserSearchSyncHandler(storage: ZmsDatabase, userSearchService: UserSearchService, client: UserSearchClient) {
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[UserSearchSyncHandler]
 

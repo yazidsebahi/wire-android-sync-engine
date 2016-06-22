@@ -27,20 +27,21 @@ import com.waz.model._
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client._
 import com.waz.sync.handler.UsersSyncHandler
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
+import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockZMessaging}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Success, Try}
 
-class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
+class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
   private lazy implicit val dispatcher = Threading.Background
 
-  def storage = zms.storage
+  def storage = zms.storage.db
 
   lazy val users = Seq(UserData("other user 1"), UserData("other user 2"), UserData("some name"),
     UserData("related user 1"),
@@ -79,11 +80,11 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
         }
       }
 
-      override lazy val userSearchClient: UserSearchClient = new UserSearchClient(znetClient) {
+      override lazy val userSearchClient: UserSearchClient = new UserSearchClient(zNetClient) {
         override def graphSearch(query: SearchQuery.Query, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delay(delay) map { _ => response.get }
       }
 
-      keyValue.lastSlowSyncTimestamp = System.currentTimeMillis()
+      kvStorage.lastSlowSyncTimestamp = System.currentTimeMillis()
       override lazy val usersSync: UsersSyncHandler = new UsersSyncHandler(assetSync, users, usersStorage, assetsStorage, usersClient) {
         override def syncUsers(ids: UserId*) = {
           sync.syncUsers(ids: _*)
@@ -113,11 +114,13 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
     Then("sync should create new users for received data")
     withDelay {
-      UserDataDao.list.toSet map withoutDisplayName shouldEqual entries.map(UserData(_)).toSet
+      UserDataDao.list.filter(_.id != zms.selfUserId).toSet map withoutDisplayName shouldEqual entries.map(UserData(_)).toSet
     }
 
     And("newly cached query should reference all these new users")
-    SearchEntryDao.usersForQuery(cache) shouldEqual entries.map(_.id)
+    withDelay {
+      SearchEntryDao.usersForQuery(cache) shouldEqual entries.map(_.id)
+    }
   }
 
   scenario("Create new users from succsessful search result and preserve the order") {
@@ -140,7 +143,6 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   }
 
   scenario("Update users data from search result") {
-
     val entries = List(
         UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
         UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
@@ -148,7 +150,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     response = Success(Right(entries))
 
     Given("local db with some users")
-    UserDataDao.insertOrReplace(entries.map(UserData(_).copy(name = "test")))
+    zms.usersStorage.insert(entries.map(UserData(_).copy(name = "test")))
 
     When("executing sync returning these users")
     val cache = SearchQueryCacheDao.add(query)
@@ -156,7 +158,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
     Then("service updates existing users data")
     withDelay {
-      UserDataDao.list.toSet map withoutDisplayName shouldEqual entries.map(UserData(_)).toSet
+      zms.usersStorage.list().futureValue.filter(_.id != zms.selfUserId).toSet map withoutDisplayName shouldEqual entries.map(UserData(_)).toSet
     }
 
     And("newly cached query should reference all users")

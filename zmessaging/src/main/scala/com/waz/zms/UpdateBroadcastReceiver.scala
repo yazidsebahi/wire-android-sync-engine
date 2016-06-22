@@ -42,7 +42,7 @@ class UpdateService extends WakefulFutureService with ZMessagingService {
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
     debug(s"onIntent $intent")
-    ZMessaging.currentInstance.getCurrent flatMap {
+    ZMessaging.currentAccounts.getCurrentZms flatMap {
       case Some(zms) => zms.gcm.ensureGcmRegistered()
       case None =>
         debug(s"ZMessaging not available, not registering")

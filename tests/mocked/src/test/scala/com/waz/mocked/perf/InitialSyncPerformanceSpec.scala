@@ -53,7 +53,7 @@ class InitialSyncPerformanceSpec extends FeatureSpec with Matchers with BeforeAn
     val time = System.currentTimeMillis()
     withDelay {
       convs should have size 400
-      Await.result(zmessaging.syncContent.syncStorage(_.getJobs), 1.second) shouldBe empty
+      Await.result(zmessaging.syncRequests.content.syncStorage(_.getJobs), 1.second) shouldBe empty
     } (120.seconds)
 
     info(s"synced in: ${(System.currentTimeMillis() - time) / 1000} sek")

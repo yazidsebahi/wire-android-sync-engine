@@ -22,10 +22,9 @@ import com.waz.ZLog._
 import com.waz.model.otr.ClientId
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.utils.returning
 import com.waz.znet.{WebSocketClient, ZNetClient}
 
-class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, network: NetworkModeService, backend: BackendConfig, otrClientId: Signal[Option[ClientId]], timeouts: Timeouts) {
+class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts) {
   private implicit val tag: LogTag = logTagFor[WebSocketClientService]
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -34,18 +33,20 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, net
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  val activeClientId = otrClientId.zip(lifecycle.lifecycleState.map(s => s == UiActive || s == Active)) flatMap {
-    case (Some(clientId), true) => Signal const Option(clientId)
-    case (None, _)              => Signal const Option.empty[ClientId]
-    case (_, false)             => Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(Option.empty[ClientId]))
+  // true if websocket should be active,
+  // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+  private[service] val wsActive = lifecycle.lifecycleState.map(s => s == UiActive || s == Active) flatMap {
+    case true   => Signal const true
+    case false  => Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
   }
 
-  val client = activeClientId map {
-    case Some(clientId) =>
+  val client = wsActive map {
+    case true =>
       debug(s"Active, client: $clientId")
-      prevClient foreach (_.close())
-      returning(Some(createWebSocketClient(clientId))) { prevClient = _ }
-    case None =>
+      if (prevClient.isEmpty)
+        prevClient = Some(createWebSocketClient(clientId))
+      prevClient
+    case false =>
       debug(s"onInactive")
       prevClient foreach (_.close())
       prevClient = None
@@ -59,7 +60,7 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, net
 
   /**
     * Indicates if there is some network connection error on websocket.
-    * Signals `true` if we have a client, and it has been unconnected for over 3 seconds.
+    * Signals `true` if we have a client, and it has been unconnected for some time.
     */
   val connectionError = client flatMap {
     case None => Signal const false
@@ -67,14 +68,19 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, net
       c.connected flatMap {
         case true => Signal const false
         case false =>
-          // delay signaling for 3 seconds
-          Signal.future(CancellableFuture.delayed(timeouts.webSocket.connectionTimeout)(true))
+          // delay signaling for some time
+          Signal.future(CancellableFuture.delayed(timeouts.webSocket.connectionTimeout)(true)) orElse Signal.const(false)
       }
   }
 
-  network.networkMode { _ =>
+  network.networkMode { n =>
     // ping web socket on network changes, this should help us discover potential network outage
-    client.currentValue.foreach(_.foreach(_.socket.foreach(_.ping("ping"))))
+    client.head.foreach {
+      case Some(c) =>
+        verbose(s"network mode changed, will ping or reconnect, mode: $n")
+        c.retryInDisconnected()
+        c.socket.foreach(_.ping("ping"))
+    }
   }
 
   private def webSocketUri(clientId: ClientId) =

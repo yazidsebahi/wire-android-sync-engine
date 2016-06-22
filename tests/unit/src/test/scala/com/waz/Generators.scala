@@ -165,11 +165,11 @@ object Generators {
     size    <- posNum[Long]
     name    <- optGen(alphaNumStr)
     meta    <- arbitrary[Option[AssetMetaData]]
-    preview <- arbitrary[Option[ImageData]]
+    preview <- arbitrary[Option[AssetPreviewData]]
     source  <- optGen(arbitrary[Uri])
     status  <- arbitrary[AssetStatus]
     time    <- arbitrary[Instant]
-  } yield AnyAssetData(id, convId, mime, size, name, meta, preview.map(AssetPreviewData.Image), source, status, time))
+  } yield AnyAssetData(id, convId, mime, size, name, meta, preview, source, status, time))
 
   implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(frequency((2, oneOf[AssetStatus](AssetStatus.UploadNotStarted,
     AssetStatus.MetaDataSent, AssetStatus.PreviewSent, AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed)),
@@ -178,6 +178,8 @@ object Generators {
   implicit lazy val arbAssetKey: Arbitrary[AssetKey] = Arbitrary(resultOf(AssetKey))
   implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))
   implicit lazy val arbSha256: Arbitrary[Sha256] = Arbitrary(arbitrary[Array[Byte]].map(b => Sha256(sha2(b))))
+  implicit lazy val arbLoudness: Arbitrary[AssetPreviewData.Loudness] = Arbitrary(listOfN(100, Gen.chooseNum(0f, 1f)).map(l => AssetPreviewData.Loudness(l.toVector)))
+  implicit lazy val arbAssetPreview: Arbitrary[AssetPreviewData] = Arbitrary(oneOf(resultOf(AssetPreviewData.Image), arbLoudness.arbitrary))
 
   object MediaAssets {
     implicit lazy val arbArtistData: Arbitrary[ArtistData] = Arbitrary(resultOf(ArtistData))
@@ -229,7 +231,7 @@ object Generators {
       arbitrary[PostLiking],
       arbitrary[PostAssetStatus]))
 
-    lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncVersionBlacklist, SyncConnections, SyncConnectedUsers, RegisterGcmToken))
+    lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncConnections, SyncConnectedUsers, RegisterGcmToken))
 
     implicit lazy val arbUsersSyncRequest: Arbitrary[SyncUser] = Arbitrary(listOf(arbitrary[UserId]) map { u => SyncUser(u.toSet) })
     implicit lazy val arbConvsSyncRequest: Arbitrary[SyncConversation] = Arbitrary(listOf(arbitrary[ConvId]) map { c => SyncConversation(c.toSet) })
@@ -298,7 +300,7 @@ object Generators {
   implicit lazy val arbMetaData: Arbitrary[AssetMetaData] = Arbitrary(oneOf(arbImageMetaData.arbitrary, arbVideoMetaData.arbitrary, arbAudioMetaData.arbitrary))
   implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- optGen(oneOf(ImageData.Tag.Medium, ImageData.Tag.MediumPreview, ImageData.Tag.Preview, ImageData.Tag.SmallProfile))) yield AssetMetaData.Image(d, t))
   implicit lazy val arbVideoMetaData: Arbitrary[AssetMetaData.Video] = Arbitrary(resultOf(AssetMetaData.Video(_: Dim2, _: Duration)))
-  implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(resultOf(AssetMetaData.Audio(_: Duration, _: Seq[Float])))
+  implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(resultOf(AssetMetaData.Audio(_: Duration)))
   implicit lazy val arbDim2: Arbitrary[Dim2] = Arbitrary(for (w <- genDimension; h <- genDimension) yield Dim2(w, h))
   lazy val genDimension = chooseNum(0, 10000)
 

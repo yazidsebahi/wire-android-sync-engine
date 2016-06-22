@@ -28,9 +28,11 @@ import com.waz.api.impl.DoNothingAndProceed
 import com.waz.cache._
 import com.waz.content.Mime
 import com.waz.content.WireContentProvider.CacheUri
+import com.waz.model.otr.ClientId
 import com.waz.model.{AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
-import com.waz.service.ZMessaging
+import com.waz.service
+import com.waz.service.{UserModule, ZMessagingFactory}
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.Implicits._
@@ -168,7 +170,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   }
 
   after {
-    awaitUi(zmessaging.syncContent.listSyncJobs.await().isEmpty)
+    awaitUi(zmessaging.syncRequests.content.listSyncJobs.await().isEmpty)
   }
 
   lazy val conversations = api.getConversations
@@ -223,15 +225,20 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   @volatile private var postCancelled = false
   private val reusableLatch = new ReusableCountDownLatch
 
-  override lazy val zmessagingFactory: ZMessaging.Factory = new ZMessaging(_, _, _) {
-    override lazy val assetClient = new AssetClient(znetClient) {
-      override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
-        postStarted = true
-        postCancelled = false
-        reusableLatch.await(10.seconds)
-        returning(super.postOtrAsset(convId, metadata, data, ignoreMissing))(_.onCancelled(postCancelled = true)(Threading.Background))
+  override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
+
+    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
+      new ApiZMessaging(clientId, user) {
+
+        override lazy val assetClient = new AssetClient(zNetClient) {
+          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
+            postStarted = true
+            postCancelled = false
+            reusableLatch.await(10.seconds)
+            returning(super.postOtrAsset(convId, metadata, data, ignoreMissing))(_.onCancelled(postCancelled = true)(Threading.Background))
+          }
+        }
       }
-    }
   }
 }
 

@@ -22,7 +22,7 @@ import java.util.Date
 import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
-import com.waz.content.ZStorage
+import com.waz.content.ZmsDatabase
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserData.ConnectionStatus._
@@ -43,7 +43,7 @@ import scala.util.Random
 class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks { test =>
   implicit lazy val dispatcher = Threading.Background
 
-  def storage: ZStorage = service.storage
+  def storage: ZmsDatabase = service.db
   implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
 
   val timeout = 5.seconds
@@ -61,7 +61,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
     syncConnection = None
     syncRequestedUsers = Set()
 
-    service = new MockZMessaging() {
+    service = new MockZMessaging(selfUserId = selfUser.id) {
       override lazy val sync = new EmptySyncService {
         override def postConnection(user: UserId, name: String, message: String) = {
           syncConnection = Some(user)
@@ -73,8 +73,6 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
           super.syncUsers(ids: _*)
         }
       }
-
-      users.selfUserId := selfUser.id
     }
   }
 

@@ -63,7 +63,6 @@ object SyncRequest {
   case object SyncSelf extends BaseRequest(Cmd.SyncSelf)
   case object DeleteAccount extends BaseRequest(Cmd.DeleteAccount)
   case object SyncConversations extends BaseRequest(Cmd.SyncConversations)
-  case object SyncVersionBlacklist extends BaseRequest(Cmd.SyncVersionBlacklist)
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object RegisterGcmToken extends BaseRequest(Cmd.RegisterGcmToken)
@@ -288,7 +287,6 @@ object SyncRequest {
         case Cmd.SyncSelf              => SyncSelf
         case Cmd.DeleteAccount         => DeleteAccount
         case Cmd.SyncConversations     => SyncConversations
-        case Cmd.SyncVersionBlacklist  => SyncVersionBlacklist
         case Cmd.SyncConnectedUsers    => SyncConnectedUsers
         case Cmd.SyncConnections       => SyncConnections
         case Cmd.RegisterGcmToken      => RegisterGcmToken
@@ -371,7 +369,7 @@ object SyncRequest {
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncCommonConnections(_) | PostExcludePymk(_) => () // nothing to do
         case SyncCallState(_, _) => () // nothing to do
-        case SyncSelf | DeleteAccount | SyncConversations | SyncVersionBlacklist | SyncConnections | SyncConnectedUsers | RegisterGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | RegisterGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
       }
     }
   }

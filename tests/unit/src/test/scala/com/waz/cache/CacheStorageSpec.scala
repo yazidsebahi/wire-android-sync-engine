@@ -20,11 +20,10 @@ package com.waz.cache
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.GlobalStorage
+import com.waz.content.GlobalDatabase
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.utils.returning
-import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
@@ -34,10 +33,10 @@ class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
   implicit val timeout: FiniteDuration = 5.seconds
 
-  lazy val cacheDir = Robolectric.application.getCacheDir
+  lazy val cacheDir = context.getCacheDir
 
-  lazy val storage = new GlobalStorage(Robolectric.application)
-  lazy val cache = new CacheStorage(storage, Robolectric.application)
+  lazy val storage = new GlobalDatabase(context)
+  lazy val cache = new CacheStorage(storage, context)
 
   feature("Cache Storage Initialization") {
     scenario("Cache entries where files and data are missing are not loaded.") {

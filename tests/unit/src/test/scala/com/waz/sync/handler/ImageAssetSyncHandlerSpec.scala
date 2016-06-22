@@ -28,13 +28,12 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.cache._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.service._
+import com.waz.service.ZMessaging
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient
 import com.waz.testutils.MockZMessaging
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.IoUtils
-import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.scalatest._
 
@@ -45,7 +44,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   private lazy implicit val dispatcher = Threading.Background
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var postImageResponse: (ImageData, AssetId, RConvId) => Either[ErrorResponse, ImageData] = { (_, _, _) => Left(ErrorResponse.Cancelled) }
   var postImageRequest = None: Option[(ImageData, RConvId, LocalData)]
@@ -55,19 +54,17 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   lazy val selfUser = UserData("test")
   lazy val conv = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.Group)
 
-  lazy val service = new MockZMessaging() {
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
 
     convsStorage.insert(conv)
     usersStorage.insert(selfUser)
 
-    override lazy val assetClient: AssetClient = new AssetClient(znetClient) {
-      override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[ImageData] = {
+    override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {
+      override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean) = {
         postImageRequest = Some((image, convId, data))
         CancellableFuture.successful(postImageResponse(image, assetId, convId))
       }
     }
-
-    users.selfUserId := selfUser.id
   }
 
   def cache = service.cache

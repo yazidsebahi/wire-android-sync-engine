@@ -19,22 +19,18 @@ package com.waz.api.impl
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz._
-import com.waz.api.impl.SearchQuery.DbQuery
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.conversation.ConversationsUiService
 import com.waz.service.{SearchKey, UserSearchService}
 import com.waz.testutils.{MockUiModule, MockZMessaging}
 import com.waz.threading.CancellableFuture
-import org.robolectric.Robolectric
 import org.scalatest._
 
-import scala.concurrent.{Future, Await}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
 class SearchQuerySpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
-
-  def context = Robolectric.application
 
   var userSearchRequest: Option[(SearchQuery.DbQuery, Int)] = None
   var userSearchResult: List[UserId] = _
@@ -42,15 +38,13 @@ class SearchQuerySpec extends FeatureSpec with Matchers with BeforeAndAfter with
   var convSearchResult: List[ConversationData] = _
 
   lazy val zmessaging = new MockZMessaging() {
-    users.selfUserId := UserId()
-    
-    override lazy val usersearch: UserSearchService = new UserSearchService(context, storage, users, usersStorage, timeouts, sync) {
-      override def searchUsers(query: DbQuery, limit: Int) = {
+    override lazy val usersearch: UserSearchService = new UserSearchService(context, db, users, usersStorage, timeouts, sync) {
+      override def searchUsers(query: SearchQuery.DbQuery, limit: Int) = {
         userSearchRequest = Some((query, limit))
         CancellableFuture.successful(userSearchResult)
       }
     }
-    override lazy val convsUi: ConversationsUiService = new ConversationsUiService(assets, users, usersStorage, storage, messages, membersContent, assetsStorage, convsContent, convsStorage, network, conversations, voice, sync, lifecycle, trackingEvents, errors) {
+    override lazy val convsUi: ConversationsUiService = new ConversationsUiService(assets, users, usersStorage, db, messages, membersStorage, assetsStorage, convsContent, convsStorage, network, conversations, voice, sync, lifecycle, trackingEvents, errors) {
       override def findGroupConversations(query: SearchKey, limit: Int): Future[List[ConversationData]] = {
         convSearchRequest = Some((query.asciiRepresentation, limit))
         Future.successful(convSearchResult)
@@ -60,7 +54,7 @@ class SearchQuerySpec extends FeatureSpec with Matchers with BeforeAndAfter with
   
   implicit lazy val ui = new MockUiModule(zmessaging)
 
-  implicit def database: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
+  implicit def database: SQLiteDatabase = zmessaging.db.dbHelper.getWritableDatabase
 
   lazy val query = new SearchQuery
 
@@ -80,8 +74,8 @@ class SearchQuerySpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
   after {
     query.setQuery("", 0, Array.empty)
-    Await.result(zmessaging.storage { _ => }, 5.seconds)
-    context.deleteDatabase(zmessaging.storage.dbHelper.getDatabaseName)
+    Await.result(zmessaging.db { _ => }, 5.seconds)
+    context.deleteDatabase(zmessaging.db.dbHelper.getDatabaseName)
     ui.users.users.clear()
   }
 

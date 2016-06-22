@@ -22,7 +22,6 @@ import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model._
-import com.waz.service.messages.{LikingsService, MessageAndLikesNotifier}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
@@ -32,8 +31,8 @@ import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Future[UserId], users: UsersStorage,
-    convs: ConversationStorage, likings: LikingsService, notifier: MessageAndLikesNotifier, storage: ZStorage) {
+class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: UserId, users: UsersStorage,
+    convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase) {
 
   private implicit val tag: LogTag = s"ConvMessagesIndex_$conv"
 
@@ -45,7 +44,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Fu
   private var firstMessage = Option.empty[MessageData]
 
   private var lastEventId = EventId.Zero
-  private var selfUserId: UserId = UserId.Zero
 
   private object sources {
     val failedCount = Signal(0)
@@ -78,24 +76,21 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Fu
   private val init = convs.get(conv).flatMap { c =>
     c foreach updateLastRead
 
-    selfUser.flatMap { user =>
-      selfUserId = user
-      storage.read { implicit db =>
-        logTime(s"Initial load conversation entries for: $conv") {
+    storage.read { implicit db =>
+      logTime(s"Initial load conversation entries for: $conv") {
 
-          lastLocalMessageByType ++= MessageDataDao.listLocalMessages(conv).groupBy(m => m.msgType).map {
-            case (tpe, msgs) => tpe -> msgs.maxBy(_.time)
-          }
-          missedCall ! MessageDataDao.lastMissedCall(conv)
-          incomingKnock ! MessageDataDao.lastIncomingKnock(conv, selfUserId)
-          failedCount ! MessageDataDao.countFailed(conv).toInt
-          firstMessage = MessageDataDao.first(conv)
-          val last = MessageDataDao.last(conv)
-          lastMessage ! last
-          lastEventId = last.fold(EventId.Zero)(_.source)
-
-          lastSentMessage ! MessageDataDao.lastSent(conv)
+        lastLocalMessageByType ++= MessageDataDao.listLocalMessages(conv).groupBy(m => m.msgType).map {
+          case (tpe, msgs) => tpe -> msgs.maxBy(_.time)
         }
+        missedCall ! MessageDataDao.lastMissedCall(conv)
+        incomingKnock ! MessageDataDao.lastIncomingKnock(conv, selfUserId)
+        failedCount ! MessageDataDao.countFailed(conv).toInt
+        firstMessage = MessageDataDao.first(conv)
+        val last = MessageDataDao.last(conv)
+        lastMessage ! last
+        lastEventId = last.fold(EventId.Zero)(_.source)
+
+        lastSentMessage ! MessageDataDao.lastSent(conv)
       }
     }.map { _ =>
       Signal(signals.unreadCount, signals.failedCount, signals.lastMissedCall, signals.incomingKnock).throttle(500.millis) { case (unread, failed, missed, knock) =>
@@ -116,7 +111,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Fu
       verbose(s"index of $time = $readMessagesCount")
       (cursor, time, math.max(0, readMessagesCount - 1))
     } ("ConvMessageIndex_loadCursor") map { case (cursor, time, lastReadIndex) =>
-      new MessagesCursor(conv, cursor, lastReadIndex, time, likings, notifier)
+      new MessagesCursor(conv, cursor, lastReadIndex, time, msgAndLikes)
     }
   }
 
@@ -148,7 +143,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUser: => Fu
     firstMessage = firstMessage.filter(_.time.isAfter(upTo))
     incomingKnock.mutate(_.filter(_.time.isAfter(upTo)))
 
-    removeLast(_.time.isAfter(upTo))
+    removeLast(!_.time.isAfter(upTo))
 
     indexUpdated ! Instant.now
   }

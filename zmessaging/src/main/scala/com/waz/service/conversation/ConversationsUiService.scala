@@ -42,16 +42,15 @@ import scala.concurrent.Future
 import scala.language.higherKinds
 
 class ConversationsUiService(assets: AssetService, users: UserService, usersStorage: UsersStorage,
-    storage: ZStorage, messages: MessagesService, members: MembersContentUpdater, assetStorage: AssetsStorage,
-    convsContent: ConversationsContentUpdater, convStorage: ConversationStorage, network: NetworkModeService,
-    convs: ConversationsService, voice: VoiceChannelService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle,
-    tracking: TrackingEventsService, errors: ErrorsService) {
+                             storage: ZmsDatabase, messages: MessagesService, members: MembersStorage, assetStorage: AssetsStorage,
+                             convsContent: ConversationsContentUpdater, convStorage: ConversationStorage, network: NetworkModeService,
+                             convs: ConversationsService, voice: VoiceChannelService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle,
+                             tracking: TrackingEventsService, errors: ErrorsService) {
 
   import ConversationsUiService._
   import Threading.Implicits.Background
   import assets._
   import convsContent._
-  import members._
   import messages._
   import users._
 
@@ -106,7 +105,9 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
           case _ => None
         }
 
-      def showLargeFileWarning(size: Long, mime: Mime, net: NetworkMode, message: MessageData) =
+      def showLargeFileWarning(size: Long, mime: Mime, net: NetworkMode, message: MessageData) = {
+        Threading.assertUiThread()
+
         handler.noWifiAndFileIsLarge(size, net, new api.MessageContent.Asset.Answer {
           override def ok(): Unit = messages.retryMessageSending(convId, message.id)
           override def cancel(): Unit =
@@ -114,6 +115,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
               tracking.track(TrackingEvent.assetUploadCancelled(Some(size), mime.str))
             }
         })
+      }
 
       def checkSize(size: Option[Long], mime: Mime, message: MessageData) = size match {
         case None => Future successful true
@@ -129,10 +131,10 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
               // will mark message as failed and ask user if it should really be sent
               // marking as failed ensures that user has a way to retry even if he doesn't respond to this warning
               // this is possible if app is paused or killed in meantime, we don't want to be left with message in state PENDING without a sync request
-              updateMessageState(convId, message.id, Message.Status.FAILED) map { _ =>
+              updateMessageState(convId, message.id, Message.Status.FAILED) .map { _ =>
                 showLargeFileWarning(s, mime, net, message)
                 false
-              }
+              } (Threading.Ui)
             case _ =>
               Future successful true
           }
@@ -205,7 +207,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   def addConversationMembers(conv: ConvId, users: Seq[UserId]): Future[Seq[ConversationMemberData]] =
     withSelfUserFuture { selfUserId =>
       ifAbleToModifyMembers(conv, selfUserId, Seq.empty[ConversationMemberData]) {
-        addUsersToConversation(conv, users) flatMap { members =>
+        members.add(conv, users: _*) flatMap { members =>
           if (members.nonEmpty) {
             addMemberJoinMessage(conv, selfUserId, members.map(_.userId).toSet) map { _ =>
               sync.postConversationMemberJoin(conv, members.map(_.userId).toSeq)
@@ -219,7 +221,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   def removeConversationMember(conv: ConvId, user: UserId): Future[Option[SyncId]] =
     withSelfUserFuture { selfUserId =>
       ifAbleToModifyMembers(conv, selfUserId, Option.empty[SyncId]) {
-        removeUsersFromConversation(conv, Seq(user)) flatMap { members =>
+        members.remove(conv, user) flatMap { members =>
           if (members.isEmpty) Future.successful(None)
           else addMemberLeaveMessage(conv, selfUserId, members.head.userId) flatMap { _ =>
             sync.postConversationMemberLeave(conv, members.head.userId).map(Some(_))
@@ -241,7 +243,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
 
   def ifAbleToModifyMembers[A, M[_]](conv: ConvId, user: UserId, zero: M[A])(f: => Future[M[A]]): Future[M[A]] = {
     val isGroup = convById(conv).map(_.exists(_.convType == ConversationType.Group))
-    val isActiveMember = membersStorage.isActiveMember(conv, user)
+    val isActiveMember = members.isActiveMember(conv, user)
     for {
       p1  <- isGroup
       p2  <- isActiveMember

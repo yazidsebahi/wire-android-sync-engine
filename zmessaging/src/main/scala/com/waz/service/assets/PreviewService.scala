@@ -24,12 +24,14 @@ import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
+import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content.{AssetsStorage, Mime}
 import com.waz.model.{AnyAssetData, AssetId, AssetPreviewData}
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.service.images.ImageAssetGenerator._
 import com.waz.service.images.ImageLoader.Metadata
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.CancellableFuture
+import com.waz.utils.Serialized
 
 import scala.util.Try
 
@@ -40,7 +42,7 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
     getAssetPreview(id) flatMap { _ => CancellableFuture lift storage.getAsset(id) }
 
   def getAssetPreview(id: AssetId): CancellableFuture[Option[AssetPreviewData]] =
-    CancellableFuture lift storage.get(id) flatMap {
+    Serialized(('PreviewService, id))(CancellableFuture lift storage.get(id) flatMap {
       case Some(AnyAssetData(_, _, _, _, _, _, Some(preview), _, _, _)) => CancellableFuture successful Some(preview)
       case Some(a: AnyAssetData) =>
         for {
@@ -50,7 +52,7 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
           updated.flatMap(_.preview).orElse(p)
       case _ =>
         CancellableFuture successful None
-    }
+    })
 
   private def preview(a: AnyAssetData): CancellableFuture[Option[AssetPreviewData]] =
     assets.assetDataOrSource(a) flatMap {
@@ -61,14 +63,18 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
 
   def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetPreviewData]] = (mime, data) match {
     case (Mime.Video(), entry: CacheEntry) if entry.data.encKey.isEmpty =>
-      CancellableFuture { MetaDataRetriever(entry.cacheFile)(loadPreview) } (Threading.IO) flatMap { createVideoPreview(id, _) }
+      CancellableFuture lift MetaDataRetriever(entry.cacheFile)(loadPreview) flatMap { createVideoPreview(id, _) }
+    case (Mime.Audio(), entry: CacheEntry) =>
+      loadPreview(id, mime, CacheUri(entry.data, context))
     case _ =>
       CancellableFuture successful Some(AssetPreviewData.Empty)
   }
 
   def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetPreviewData]] = mime match {
     case Mime.Video() =>
-      CancellableFuture { MetaDataRetriever(context, uri)(loadPreview) } (Threading.BlockingIO) flatMap { createVideoPreview(id, _) }
+      CancellableFuture lift MetaDataRetriever(context, uri)(loadPreview) flatMap { createVideoPreview(id, _) }
+    case Mime.Audio() =>
+      AudioLevels(context).createAudioOverview(uri)
     case _ =>
       CancellableFuture successful Some(AssetPreviewData.Empty)
   }

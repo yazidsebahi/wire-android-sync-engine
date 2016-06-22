@@ -22,7 +22,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog._
 import com.waz.api.impl.SearchQuery
 import com.waz.api.impl.SearchQuery.{Named, RecommendedPeople, TopPeople}
-import com.waz.content.{UsersStorage, ZStorage}
+import com.waz.content.{UsersStorage, ZmsDatabase}
 import com.waz.model.CommonConnectionsData.CommonConnectionsDataDao
 import com.waz.model.SearchEntry.SearchEntryDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
@@ -43,7 +43,7 @@ import scala.concurrent.{Future, TimeoutException}
  * Schedules search sync from backend if needed (no cached result or stale cache).
  * If no cached result is found it waits a bit, and falls back to local search if the sync doesn't complete during wait.
  */
-class UserSearchService(context: Context, storage: ZStorage, userService: UserService, usersStorage: UsersStorage, timeouts: Timeouts, sync: SyncServiceHandle) {
+class UserSearchService(context: Context, storage: ZmsDatabase, userService: UserService, usersStorage: UsersStorage, timeouts: Timeouts, sync: SyncServiceHandle) {
   import com.waz.service.UserSearchService._
   import timeouts.userSearch._
   import userService._

@@ -25,7 +25,6 @@ import com.waz.api.impl.{ErrorResponse, VoiceChannel}
 import com.waz.api.{CallDirection, KindOfCall, VideoSendState}
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
 import com.waz.model._
-import com.waz.service.UserService
 import com.waz.service.call.VoiceChannelService._
 import com.waz.threading.Threading
 import com.waz.utils.{returning, JsonDecoder}
@@ -43,7 +42,7 @@ class Channels(implicit ui: UiModule) {
   def getVoiceChannel(id: ConvId): VoiceChannel = getVoiceChannel(VoiceChannelData(
     id, ChannelState.Idle, ConnectionState.Idle, lastSequenceNumber = None, caller = None,
     tracking = CallTrackingData(initiated = None, joined = None, established = None, duration = Duration.Zero, maxNumParticipants = 0, kindOfCall = KindOfCall.UNKNOWN, callDirection = CallDirection.INCOMING),
-    video = VideoCallData.Empty, selfId = UserService.SelfUserId, revision = Revision(0)))
+    video = VideoCallData.Empty, selfId = UserId(), revision = Revision(0)))
 
   def getVoiceChannel(data: VoiceChannelData): VoiceChannel = returning(getOrUpdate(channels)(data.id, new VoiceChannel(data.id, data))) { ch =>
     if (ch.data.revision < data.revision) {

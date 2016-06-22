@@ -24,7 +24,8 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
-class GcmService(user: ZUserId, gcmGlobalService: GcmGlobalService, sync: SyncServiceHandle, zuser: ZUserService) {
+
+class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) {
 
   implicit val dispatcher = gcmGlobalService.dispatcher
 
@@ -35,21 +36,22 @@ class GcmService(user: ZUserId, gcmGlobalService: GcmGlobalService, sync: SyncSe
 
   def ensureGcmRegistered(): Future[Any] =
     gcmGlobalService.getGcmRegistration.future map {
-      case r @ GcmRegistration(_, userId, _) if userId == user => verbose(s"ensureGcmRegistered() - already registered: $r")
+      case r @ GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.registerGcm()
     }
 
   ensureGcmRegistered()
 
-  zuser.onVerifiedLogin { _ foreach (_ => ensureGcmRegistered()) }
-
-  zuser.onLogout { _ =>
-    gcmGlobalService.getGcmRegistration map {
-      case GcmRegistration(token, userId, _) if userId == user =>
-        gcmGlobalService.clearGcmRegistrationUser(user)
-        sync.deleteGcmToken(GcmId(token))
-      case _ => // do nothing
-    }
+  lifecycle.lifecycleState.map(_ == LifecycleState.Stopped) {
+    case false => ensureGcmRegistered()
+    case true =>
+      // lifecycle got to Stopped, means that were logged out
+      gcmGlobalService.getGcmRegistration map {
+        case GcmRegistration(token, userId, _) if userId == accountId =>
+          gcmGlobalService.clearGcmRegistrationUser(accountId)
+          sync.deleteGcmToken(GcmId(token))
+        case _ => // do nothing
+      }
   }
 
   val eventProcessingStage = EventScheduler.Stage[GcmTokenRemoveEvent] { (convId, events) =>
@@ -61,9 +63,9 @@ class GcmService(user: ZUserId, gcmGlobalService: GcmGlobalService, sync: SyncSe
   }
 
   def register(post: GcmRegistration => Future[Boolean]): Future[Option[GcmRegistration]] =
-    gcmGlobalService.registerGcm(user).future flatMap {
+    gcmGlobalService.registerGcm(accountId).future flatMap {
       case Some(reg) => post(reg) flatMap {
-        case true => gcmGlobalService.updateRegisteredUser(reg.token, user).future map (Some(_))
+        case true => gcmGlobalService.updateRegisteredUser(reg.token, accountId).future map (Some(_))
         case false => Future.successful(Some(reg))
       }
       case None => Future.successful(None)

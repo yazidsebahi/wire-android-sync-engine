@@ -27,13 +27,14 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.Mime
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, MockUiModule, MockZMessaging}
+import com.waz.testutils.Implicits._
+import com.waz.testutils._
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.crypto.AESUtils
@@ -43,7 +44,6 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.threeten.bp.Instant
-import com.waz.testutils.Implicits._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -54,15 +54,13 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
   import com.waz.utils.events.EventContext.Implicits.global
   implicit val tag: LogTag = "MessagesServiceSpec"
 
-  def context = testContext
-
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var online = true
 
   lazy val selfUserId = UserId()
 
-  lazy val service = new MockZMessaging() {
+  lazy val service = new MockZMessaging(selfUserId = selfUserId) {
 
     override def network: NetworkModeService = new NetworkModeService(context) {
       override def isOnlineMode: Boolean = online
@@ -70,7 +68,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     }
 
     usersStorage.addOrOverwrite(UserData(selfUserId, "selfName"))
-    users.selfUserId := test.selfUserId
   }
 
   lazy val ui = new MockUiModule(service)
@@ -78,7 +75,9 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
   val timeout = 5.seconds
 
   import service._
-  
+
+  lazy val messages = service.messages
+
   def addGroup() = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
   
   before {
@@ -307,7 +306,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   feature("Knocks") {
 
-    lazy val selfId = Await.result(service.users.selfUserId.apply(), timeout)
+    lazy val selfId = selfUserId
 
     scenario("Update local knock message on event") {
       val conv = addGroup()

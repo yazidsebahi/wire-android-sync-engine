@@ -18,10 +18,10 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
-import com.waz.model.{GcmId, ZUserId}
+import com.waz.model.otr.ClientId
+import com.waz.model.{AccountId, GcmId}
 import com.waz.service.GcmGlobalService.{GcmNotAvailableException, GcmRegistration}
 import com.waz.service.GcmService
-import com.waz.service.otr.OtrContentService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.GcmClient
 import com.waz.sync.client.GcmClient.GcmToken
@@ -29,15 +29,14 @@ import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future
 
-class GcmSyncHandler(user: ZUserId, gcmService: GcmService, otr: OtrContentService, client: GcmClient) {
+class GcmSyncHandler(user: AccountId, gcmService: GcmService, clientId: ClientId, client: GcmClient) {
 
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[GcmSyncHandler]
 
   def registerGcm(): Future[SyncResult] = {
-    def post(token: String) = otr.currentClientId flatMap { clientId =>
+    def post(token: String) =
       client.postPushToken(GcmToken(token, gcmService.gcmSenderId, clientId))
-    }
 
     gcmService.register(r => post(r.token).map(_.isRight))
       .map {

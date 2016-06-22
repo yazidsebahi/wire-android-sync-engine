@@ -18,30 +18,31 @@
 package com.waz.service
 
 import com.waz.api.impl.{Credentials, EmailCredentials, ErrorResponse}
-import com.waz.model.{ZUserId, EmailAddress, ZUser}
-import com.waz.testutils.MockGlobalModule
+import com.waz.model._
+import com.waz.testutils.{DefaultPatienceConfig, MockAccounts, MockGlobalModule}
 import com.waz.threading.CancellableFuture
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ZUsersSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
   var loginRequest: Option[Credentials] = _
   var loginResponse: Either[ErrorResponse, (Token, Cookie)] = _
 
   lazy val global = new MockGlobalModule {
     override lazy val loginClient: LoginClient = new LoginClient(client, BackendConfig.EdgeBackend) {
-      override def login(userId: ZUserId, credentials: Credentials): CancellableFuture[Either[ErrorResponse, (Token, Cookie)]] = {
+      override def login(userId: AccountId, credentials: Credentials): CancellableFuture[Either[ErrorResponse, (Token, Cookie)]] = {
         loginRequest = Some(credentials)
         CancellableFuture.successful(loginResponse)
       }
     }
   }
-  def users = global.users
+  def accounts = new MockAccounts(global)
 
   before {
     loginRequest = None
@@ -50,12 +51,18 @@ class ZUsersSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
 
   feature("login") {
 
-    scenario("login with non-existing unverified user") {
+    scenario("login with unverified user") {
       loginResponse = Left(ErrorResponse(403, "message", "pending-activation"))
 
-      Await.result(users.login(EmailCredentials(EmailAddress("email"), Some("pass"))), 1.second) match {
-        case Right((ZUser(_, Some(EmailAddress("email")), _, None, false, false, None, Some("pass")), None)) => // expected
-        case res => fail(s"login returned: $res")
+      val creds = EmailCredentials(EmailAddress("email"), Some("pass"))
+      Await.result(accounts.login(creds), 2.seconds) match {
+        case Right(data) =>
+          data.email shouldEqual Some(EmailAddress("email"))
+          data.credentials shouldEqual creds
+          data.activated shouldEqual false
+          data.userId shouldBe empty
+        case res =>
+          fail(s"login returned: $res")
       }
     }
   }

@@ -47,12 +47,12 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
   lazy val user = UserData("user 1")
   lazy val selfUserId = UserId()
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var convNameSync = None: Option[ConvId]
   var convArchivedSync = None: Option[ConvId]
 
-  lazy val service = new MockZMessaging() {
+  lazy val service = new MockZMessaging(selfUserId = selfUserId) {
 
     override lazy val sync: SyncServiceHandle = new EmptySyncService {
       override def postConversationName(id: ConvId, n: String) = {
@@ -65,8 +65,6 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
         super.postConversationState(id, s)
       }
     }
-
-    users.selfUserId := test.selfUserId
   }
 
   before {

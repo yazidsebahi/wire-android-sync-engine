@@ -29,6 +29,10 @@ import scala.collection.Iterator.continually
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.util.control.NonFatal
 
+trait Resource[Res] {
+  def close(r: Res): Unit
+}
+
 object IoUtils {
   private val buffer = new ThreadLocal[Array[Byte]] {
     override def initialValue(): Array[Byte] = new Array[Byte](8096)
@@ -110,6 +114,7 @@ object IoUtils {
 
   def asString(in: InputStream) = new String(toByteArray(in), "utf8")
 
+  def withResource[I : Resource, O](in: I)(op: I => O): O = try op(in) finally implicitly[Resource[I]].close(in)
   def withResource[I <: Closeable, O](in: I)(op: I => O): O = try op(in) finally in.close()
 
   def counting[A](o: => OutputStream)(op: OutputStream => A): (Long, A) = {

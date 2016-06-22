@@ -41,19 +41,19 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
   @volatile var notified = false
 
   lazy val zms = new MockZMessaging() {
-    override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, znetClient, push, prefs, network) {
+    override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, push, prefs, network) {
       override lazy val flowManager = Some(new FlowManager(context, requestHandler) {
         override def networkChanged(): Unit = notified = true
       })
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, znetClient, network, backend, otrClientId, timeouts) {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, global.backend, clientId, timeouts) {
       override val connected = wsConnected
     }
   }
   lazy val service = zms.flowmanager
 
-  implicit def db: SQLiteDatabase = zms.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zms.db.dbHelper.getWritableDatabase
 
   @volatile var logData = Option.empty[AvsLogData]
 

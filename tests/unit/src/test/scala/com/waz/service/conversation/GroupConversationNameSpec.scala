@@ -21,7 +21,7 @@ import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
-import com.waz.content.GlobalStorage
+import com.waz.content.GlobalDatabase
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
@@ -35,18 +35,16 @@ import scala.concurrent.duration._
 
 class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
-  lazy val globalStorage = new GlobalStorage(Robolectric.application)
+  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("user 1")
 
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group, lastEvent = EventId(10), renameEvent = Some(EventId(10))).withFreshSearchKey
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
-  lazy val service = new MockZMessaging() {
-    users.selfUserId := selfUser.id
-  }
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

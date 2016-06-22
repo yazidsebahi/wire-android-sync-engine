@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.{AccentColors, ImageAsset}
 import com.waz.messages.BitmapSpy
-import com.waz.model.{EmailAddress, UserInfo, UserUpdateEvent}
+import com.waz.model.UserUpdateEvent
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Matchers._
 import org.scalatest.{FeatureSpec, Matchers}
@@ -80,31 +80,20 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
   }
 
   scenario("Update self user name and sync it to server") {
-    withPush {
-      case UserUpdateEvent(_, UserInfo(_, Some("test"), _, _, _, _, _, _)) => true
-    } {
-      otherClient ? UpdateProfileName("test") should eventually(be(Successful))
-    }
+    otherClient ? UpdateProfileName("test") should eventually(be(Successful))
     withDelay(self.getName shouldEqual "test")
     Option(self.getTrackingId) shouldEqual trackingId
   }
 
   scenario("Receive update from other user name change") {
-    withPush {
-      case UserUpdateEvent(_, UserInfo(_, Some("test2"), _, _, _, _, _, _)) => true
-    } {
-      auto2 ? UpdateProfileName("test2") should eventually(be(Successful))
-    }
+    auto2 ? UpdateProfileName("test2") should eventually(be(Successful))
+    withDelay(self.getName shouldEqual "test2")
   }
 
   scenario("Update self user color and sync it to server") {
     val other = AccentColors.getColors.last
 
-    withPush {
-      case UserUpdateEvent(_, UserInfo(_, _, Some(other.id), _, _, _, _, _)) => true
-    } {
-      otherClient ? UpdateProfileColor(other) should eventually(be(Successful))
-    }
+    otherClient ? UpdateProfileColor(other) should eventually(be(Successful))
     withDelay(self.getAccent shouldEqual other)
     Option(self.getTrackingId) shouldEqual trackingId
   }
@@ -122,7 +111,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
     withDelay {
       updated shouldEqual true
       self.getEmail shouldEqual provisionedEmail("auto1")
-      self.isEmailVerified shouldEqual true // the old email address is still verified...
+      self.accountActivated shouldEqual true // the old email address is still verified...
     }
 
     withDelay {
@@ -133,8 +122,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
 
     withDelay {
       self.getEmail shouldEqual email
-      self.isEmailVerified shouldEqual true
-      zmessaging.user.user.email shouldEqual Some(EmailAddress(email))
+      self.accountActivated shouldEqual true
     }
 
     login(email) shouldEqual true

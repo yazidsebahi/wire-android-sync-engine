@@ -15,67 +15,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.content
 
-import com.waz.ZLog._
-import com.waz.content.KeyValueStorage
-import com.waz.model.{KeyValueData, Id}
-import com.waz.service.Preference.PrefCodec
-import com.waz.threading.Threading
+import com.waz.model.Id
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.znet.AuthenticationManager.Token
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.concurrent.{ExecutionContext, Future}
-/**
- * General preference storage in user db.
- * This can be used similarly to PreferenceService, but it keeps separate data for each logged in user as opposed to PreferenceService which uses single global preferences file.
- */
-class KeyValueService(kvStorage: KeyValueStorage, reporting: ReportingService) {
-  import com.waz.service.KeyValueService._
-
-  private implicit val logTag: LogTag = logTagFor[KeyValueService]
-
-  import Threading.Implicits.Background
-
-  def getPref(key: String): Future[Option[String]] = kvStorage.get(key).map(_.map(_.value))
-  def setPref(key: String, value: String): Future[KeyValueData] = kvStorage.put(key, KeyValueData(key, value))
-  def delPref(key: String): Future[Unit] = kvStorage.remove(key)
-  def decodePref[A](key: String, dec: String => A): Future[Option[A]] = getPref(key).map(_.map(dec))
-
-  def lastSlowSyncTimestamp = decodePref(LastSlowSyncTimeKey, java.lang.Long.parseLong)
-  def lastSlowSyncTimestamp_=(time: Long): Unit = setPref(LastSlowSyncTimeKey, String.valueOf(time))
-
-  def keyValuePref[A: PrefCodec](key: String, default: A) = new KeyValuePref[A](this, key, default)
-
-  def accessTokenPref = keyValuePref[Option[Token]](AccessToken, None)(PrefCodec.TokenCodec)
-
-  reporting.addStateReporter { pw =>
-    Future {
-      pw.println(s"cached:")
-      kvStorage foreachCached {
-        case KeyValueData(k, v) => pw.println(s"$k: $v")
-      }
-    }
-  }
-}
-
-object KeyValueService {
-  val SelfUserIdKey = "self_user_id"
-  val LastSlowSyncTimeKey = "last_slow_sync_time"
-  val Verified = "verified"
-  val SelectedConvId = "selected_conv_id"
-  val SpotifyRefreshToken = "spotify_refresh_token"
-  val AccessToken = "access_token"
-
-  class KeyValuePref[A](service: KeyValueService, key: String, val default: A)(implicit val trans: PrefCodec[A], implicit val dispatcher: ExecutionContext) extends Preference[A] {
-    def apply(): Future[A] = service.decodePref(key, trans.decode).map(_.getOrElse(default))
-    def :=(value: A): Future[Unit] = {
-      service.setPref(key, trans.encode(value)) .map { _ => signal ! value }
-    }
-  }
-}
+import scala.concurrent.Future
 
 trait Preference[A] {
   def default: A
@@ -94,6 +43,21 @@ object Preference {
     def default = None
     def apply() = Future.successful(None)
     def :=(value: Option[A]) = Future.successful(())
+  }
+
+  def inMemory[A](defaultValue: A): Preference[A] = new Preference[A] {
+    private implicit val dispatcher = new SerialDispatchQueue()
+    private var value = defaultValue
+    override def default = defaultValue
+    override def :=(v: A) = Future { value = v; signal ! v }
+    override def apply() = Future { value }
+  }
+
+  def apply[A](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A] {
+    import Threading.Implicits.Background
+    override def default = defaultValue
+    override def :=(v: A) = save(v) map { _ => signal ! v }
+    override def apply() = load
   }
 
   trait PrefCodec[A] {

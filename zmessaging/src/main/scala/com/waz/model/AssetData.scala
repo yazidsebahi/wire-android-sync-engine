@@ -109,7 +109,7 @@ object ImageData {
   def apply(prev: Proto.Asset.Preview, id: Option[RAssetDataId]): ImageData = prev match {
     case Proto.Asset.Preview(mime, size, key, sha, None) =>
       ImageData(Tag.Preview, mime.str, 0, 0, 0, 0, size.toInt, id, None, sent = true, None, None, Some(key), Some(sha))
-    case Proto.Asset.Preview(mime, size, key, sha, Some(Proto.Asset.ImageMetaData(d, t))) =>
+    case Proto.Asset.Preview(mime, size, key, sha, Some(AssetMetaData.Image(d, t))) =>
       ImageData(t.getOrElse(Tag.Preview), mime.str, d.width, d.height, d.width, d.height, size.toInt, id, None, sent = true, None, None, Some(key), Some(sha))
   }
 
@@ -251,14 +251,13 @@ object AnyAssetData {
     new AnyAssetData(id, convId, mime, size, name, None, None, Some(source), AssetStatus.UploadNotStarted, time)
 
   def apply(id: AssetId, convId: RConvId, asset: Proto.Asset, dataId: Option[RAssetDataId], time: Instant): AnyAssetData = {
-    val (mime, size, name) = Option(asset.original) match {
-      case Some(Proto.Asset.Original(m, s, n, _)) => (m, s, n)
-      case _ => (Mime.Unknown, 0L, None)
+    val (mime, size, name, loudness) = Option(asset.original) match {
+      case Some(Proto.Asset.Original(m, s, n, _, p)) => (m, s, n, p)
+      case _ => (Mime.Unknown, 0L, None, None)
     }
-    val preview = Option(asset.preview) map { p => AssetPreviewData.Image(ImageData(p, dataId)) }
+    val preview = loudness.orElse(Option(asset.preview) map { p => AssetPreviewData.Image(ImageData(p, dataId)) })
     val status = Proto.Asset.Status(asset, dataId)
-    val metaData = Proto.Asset.
-      MetaData(asset)
+    val metaData = Proto.Asset.MetaData(asset)
     AnyAssetData(id, convId, mime, size, name, metaData, preview, None, status, time)
   }
 

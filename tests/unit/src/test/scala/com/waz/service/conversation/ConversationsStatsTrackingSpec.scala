@@ -35,16 +35,14 @@ import scala.concurrent.{Await, Future}
 
 class ConversationsStatsTrackingSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
-  lazy val globalStorage = new GlobalStorage(Robolectric.application)
+  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 
   lazy val selfUser = UserData("self user")
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
-  lazy val service = new MockZMessaging() {
-    users.selfUserId := test.selfUser.id
-
-    override lazy val messagesStorage = new MessagesStorage(context, storage, users.getSelfUserId.map(_.getOrElse(UserId.Zero)), convsStorage, usersStorage, likings, messageAndLikesNotifier) {
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
+    override lazy val messagesStorage = new MessagesStorage(context, db, selfUserId, convsStorage, usersStorage, msgAndLikes) {
       override def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] = Future.failed(new RuntimeException("for testing purposes, we do not want to update unread and failed count from real message count"))
     }
   }

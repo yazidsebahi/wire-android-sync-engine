@@ -22,7 +22,7 @@ import com.waz.CacheLike
 import com.waz.ZLog._
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
-import com.waz.utils.{ThrottledProcessingQueue}
+import com.waz.utils.ThrottledProcessingQueue
 import com.waz.utils.events.{EventContext, EventStream, Subscription}
 
 import scala.collection._
@@ -166,7 +166,7 @@ trait UiEventListener[A] {
     case _ => // ignore
   }
 
-  ui.current {
+  ui.currentZms {
     case Some(z) =>
       observer.foreach(_.destroy())
       observer = Some(publisher(z) { updateQueue ! _ })

@@ -54,7 +54,7 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
     withDelay {
       convs should have size 1
       convs.head.getType shouldEqual ConversationType.OneToOne
-      Await.result(zmessaging.syncContent.syncStorage(_.getJobs), 1.second) shouldBe empty
+      Await.result(zmessaging.syncRequests.content.syncStorage(_.getJobs), 1.second) shouldBe empty
       msgs.currentValue.map(_.size) shouldEqual Some(1)
     } (10.seconds)
   }
@@ -124,7 +124,7 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
         msgs foreach { case (c, ms) =>
           ms should have size msgCount(c.getType)
         }
-        Await.result(zmessaging.syncContent.syncStorage(_.getJobs), 1.second) shouldBe empty
+        Await.result(zmessaging.syncRequests.content.syncStorage(_.getJobs), 1.second) shouldBe empty
       } (10.seconds)
 
       info(s"Sync requests processed in: ${(System.currentTimeMillis() - time) / 1000} s")

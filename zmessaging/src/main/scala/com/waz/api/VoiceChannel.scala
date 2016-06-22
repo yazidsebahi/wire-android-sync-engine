@@ -20,9 +20,9 @@ package com.waz.api
 import java.util
 import java.util.Date
 
-import android.os.{Parcel, Parcelable}
 import android.os.Parcelable.Creator
-import com.waz.api.VoiceChannel.{VideoCaptureDevice, JoinCallback}
+import android.os.{Parcel, Parcelable}
+import com.waz.api.VoiceChannel.{JoinCallback, VideoCaptureDevice}
 import com.waz.service.ZMessaging
 import org.threeten.bp
 

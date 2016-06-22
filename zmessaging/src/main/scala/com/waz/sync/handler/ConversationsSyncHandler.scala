@@ -134,6 +134,7 @@ class ConversationsSyncHandler(assetSync: AssetSyncHandler, network: NetworkMode
           else Future.successful(SyncResult.Success)
         }
       case Left(resp@ErrorResponse(403, msg, "not-connected")) =>
+        warn(s"got error: $resp")
         errorsService.addErrorWhenActive(ErrorData(ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER, resp, convId)) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
       case Left(error) =>
         warn(s"unexpected error: $error")

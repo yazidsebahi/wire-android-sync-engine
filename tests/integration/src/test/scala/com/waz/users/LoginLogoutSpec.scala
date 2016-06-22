@@ -26,11 +26,11 @@ import com.waz.znet.{JsonObjectResponse, Request, Response}
 import org.scalatest.{FeatureSpec, GivenWhenThen, Matchers}
 
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with ProvisionedApiSpec { test =>
   implicit val timeout: Timeout = 30.seconds
+  import com.waz.threading.Threading.Implicits.Background
 
   override val provisionFile = "/two_users_connected.json"
   override val autoLogin: Boolean = false
@@ -93,18 +93,18 @@ class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with 
         override def updated(): Unit = logged ::= self.isLoggedIn
       })
 
-      val invalidateCookies = zmessaging.znetClient(Request.Get("/cookies")) flatMap {
+      val invalidateCookies = zmessaging.zNetClient(Request.Get("/cookies")) flatMap {
         case Response(SuccessHttpStatus(), JsonObjectResponse(js), _) =>
           val cs = js.getJSONArray("cookies")
-          zmessaging.znetClient(Request.Post("/cookies/remove", Json("email" -> email, "password" -> password, "ids" -> cs))) map {
+          zmessaging.zNetClient(Request.Post("/cookies/remove", Json("email" -> email, "password" -> password, "ids" -> cs))) map {
             case Response(SuccessHttpStatus(), _, _) => true
           }
       }
 
       Await.result(invalidateCookies, 10.seconds) shouldEqual true
 
-      zmessaging.user.user = zmessaging.user.user.copy(password = None)
-      zmessaging.znetClient.auth.invalidateToken()
+//      zmessaging.user.user = zmessaging.user.user.copy(password = None)
+      zmessaging.zNetClient.auth.invalidateToken()
 
       api.search().getUsers("test", 10)
 

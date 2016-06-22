@@ -26,11 +26,10 @@ import com.waz.api.impl._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.threading.CancellableFuture
 import com.waz.utils.{JsonDecoder, returning}
-import com.waz.znet.ZNetClient.ErrorOrResponse
 
 class Users(implicit ui: UiModule) {
+  import com.waz.threading.Threading.Implicits.Background
   import ui.{convs, images, zms}
 
   private implicit val tag: LogTag = logTagFor[Users]
@@ -63,21 +62,17 @@ class Users(implicit ui: UiModule) {
     zms(_.users.updateSelf(name = Some(name)))
   }
 
-  def setSelfEmail(email: EmailAddress, user: Option[User]): ErrorOrResponse[Unit] = zms flatMap (_.users.updateEmail(email))
+  def setSelfEmail(email: EmailAddress) = ui.getAccount flatMap (_.updateEmail(email))
 
-  def setSelfPhone(phone: PhoneNumber, user: Option[User]): ErrorOrResponse[Unit] = zms flatMap (_.users.updatePhone(phone))
+  def setSelfPhone(phone: PhoneNumber)= ui.getAccount flatMap (_.updatePhone(phone))
 
-  def updatePassword(newPassword: String, currentPassword: Option[String]): ErrorOrResponse[Unit] = zms flatMap { z =>
-    import com.waz.threading.Threading.Implicits.Background
-    z.users.updatePassword(newPassword, currentPassword) flatMap {
-      case Right(_) =>
-        z.user.update(z.user.user.copy(password = Some(newPassword)))
-        CancellableFuture.lift(z.otrClientsService.awaitClientRegistered() map (_ => Right(())))
-      case Left(err) => CancellableFuture successful Left(err)
-    }
+  def updatePassword(newPassword: String, currentPassword: Option[String]) =
+    ui.getAccount flatMap { _.updatePassword(newPassword, currentPassword) }
+
+  def setSelfPicture(image: com.waz.api.ImageAsset): Unit = {
+    verbose(s"setSelfPicture()")
+    zms(_.users.updateSelfPicture(image))
   }
-
-  def setSelfPicture(image: com.waz.api.ImageAsset): Unit = zms(_.users.updateSelfPicture(image))
 
   def clearSelfPicture(): Unit = zms(_.users.clearSelfPicture())
 
@@ -123,5 +118,5 @@ class Users(implicit ui: UiModule) {
     returning(convs.getConversation(ConversationData(ConvId(user.id.str), RConvId(), Some(user.getDisplayName), user.id, tpe, generatedName = user.getDisplayName)))(_.reload())
   }
 
-  def requestVerificationEmail(email: EmailAddress): Unit = zms(_.users.requestVerificationEmail(email))
+  def requestVerificationEmail(email: EmailAddress): Unit = ui.accounts.requestVerificationEmail(email)
 }

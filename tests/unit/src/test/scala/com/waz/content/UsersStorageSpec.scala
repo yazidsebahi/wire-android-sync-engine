@@ -21,7 +21,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.User.ConnectionStatus
 import com.waz.model.UserData.UserDataDao
-import com.waz.model.{UserData, UserId, ZUserId}
+import com.waz.model.{AccountId, UserData, UserId}
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext.Implicits.global
@@ -44,10 +44,10 @@ class UsersStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   val added: mutable.Map[UserId, Boolean] = mutable.Map().withDefaultValue(false)
 
   var users: UsersStorage = _
-  var storage: ZStorage = _
+  var storage: ZmsDatabase = _
 
   before {
-    storage = new ZStorage(ZUserId(), Robolectric.application)
+    storage = new ZmsDatabase(AccountId(), Robolectric.application)
     implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
 
     UserDataDao.deleteAll

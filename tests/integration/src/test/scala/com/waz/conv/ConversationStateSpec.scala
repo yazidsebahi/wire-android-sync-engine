@@ -56,7 +56,7 @@ class ConversationStateSpec extends FeatureSpec with Matchers with OptionValues 
     awaitUiFuture(remote.login(email, password))
 
     // post archived event
-    val res = remote.zmessaging.get.znetClient.apply(Request.Put(s"${ConversationsClient.ConversationsPath}/${conv2.data.remoteId}/self", JsonEncoder { _.put("archived", EventId(1).toString) })).future.futureValue
+    val res = remote.account.get.netClient.apply(Request.Put(s"${ConversationsClient.ConversationsPath}/${conv2.data.remoteId}/self", JsonEncoder { _.put("archived", EventId(1).toString) })).future.futureValue
     info(s"$res")
     res.status.isSuccess shouldEqual true
 
@@ -68,7 +68,7 @@ class ConversationStateSpec extends FeatureSpec with Matchers with OptionValues 
 
   scenario("mute on remote with legacy request") {
     // post muted event
-    val res = remote.zmessaging.get.znetClient.apply(Request.Put(s"${ConversationsClient.ConversationsPath}/${conv3.data.remoteId}/self", JsonEncoder { _.put("muted", true) })).future.futureValue
+    val res = remote.account.get.netClient.apply(Request.Put(s"${ConversationsClient.ConversationsPath}/${conv3.data.remoteId}/self", JsonEncoder { _.put("muted", true) })).future.futureValue
     info(s"$res")
     res.status.isSuccess shouldEqual true
 

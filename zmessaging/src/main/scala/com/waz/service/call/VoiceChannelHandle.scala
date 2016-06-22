@@ -367,7 +367,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
     debug(s"setting video send state to $state")
     val before = data.video.videoSendState
     updateParticipant(selfUserId, _.copy(sendsVideo = state == VideoSendState.SEND))
-    update(data => data.copy(video = data.video.copy(videoSendState = state)), notify = false)
+    update(data => data.copy(video = data.video.copy(videoSendState = state)), notify = true)
     service.voiceChannelSignal(id) ! data
     broadcastVideoSendState(before, state)
   } else Future.successful(())
@@ -400,11 +400,11 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
   private def update(updater: VoiceChannelData => VoiceChannelData, notify: Boolean): Unit = {
     val before = data
     data = updater(data).copy(revision = data.revision.incremented)
-    if (notify && data != before) notifyChanged()
+    if (data != before) notifyChanged()
   }
 
   private def notifyChanged() = {
-    debug(s"channelChanged($id, state: ${data.state}, deviceState: ${data.deviceState}), silenced: ${data.silenced}, unjoined: ${data.unjoined}, participants: ${data.participantsById}")
+    debug(s"channelChanged($id, state: ${data.state}, deviceState: ${data.deviceState}), silenced: ${data.silenced}, unjoined: ${data.unjoined}, participants: ${data.participantsById}, video: ${data.video}")
     service.convs.storage.update(id, _.copy(hasVoice = data.ongoing, voiceMuted = data.muted, unjoinedCall =  data.unjoined))
 
     service.voiceChannelSignal(id) ! data

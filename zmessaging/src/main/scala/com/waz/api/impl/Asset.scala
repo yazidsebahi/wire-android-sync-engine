@@ -79,9 +79,9 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
     }
     else callback.onLoadFailed()
 
-  private def durationSignal(zms: ZMessaging): Signal[Duration] = zms.assets.assetSignal(id).map {
-    case (AnyAssetData(_, _, _, _, _, Some(HasDuration(duration)), _, _, _, _), _) => duration
-    case other => Duration.ZERO
+  private def durationSignal(zms: ZMessaging): Signal[Duration] = zms.assetsStorage.signal(id) map {
+    case AnyAssetData(_, _, _, _, _, Some(HasDuration(duration)), _, _, _, _) => duration
+    case _ => Duration.ZERO
   }
 
   override def getDownloadProgress: api.ProgressIndicator = new DownloadProgress(id)
@@ -129,6 +129,7 @@ abstract class BaseAsset extends api.Asset with UiObservable {
   override def isAudio: Boolean = cond(asset.mimeType.orDefault) { case Mime.Audio() => true }
   override def getSizeInBytes: Long = asset.sizeInBytes
   override def getStatus: api.AssetStatus = asset.status.status
+  override def getAudioOverview: api.AudioOverview = AudioOverview(asset.preview.collect { case AssetPreviewData.Loudness(levels) => levels })
 }
 
 class PlaybackControls(id: AssetId, contentUri: Uri, durationSource: ZMessaging => Signal[Duration])(implicit ui: UiModule) extends api.PlaybackControls with UiObservable with SignalLoading {

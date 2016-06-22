@@ -21,12 +21,10 @@ import java.io._
 import java.security.SecureRandom
 import javax.crypto.Mac
 
-import android.content.Context
 import com.waz.HockeyApp
 import com.waz.ZLog._
-import com.waz.api.Verification
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.MembersStorage
+import com.waz.content.{MembersStorage, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
 import com.waz.model.GenericContent._
 import com.waz.model._
@@ -38,11 +36,10 @@ import com.waz.sync.client.OtrClient
 import com.waz.sync.client.OtrClient.EncryptedContent
 import com.waz.threading.Threading
 import com.waz.utils.crypto.AESUtils
-import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{LoggedTry, _}
-import com.wire.cryptobox.{CryptoBox, CryptoException, PreKey}
+import com.wire.cryptobox.CryptoException
 import org.json.JSONObject
-import org.threeten.bp.Instant
 
 import scala.annotation.tailrec
 import scala.concurrent.Future
@@ -51,54 +48,34 @@ import scala.concurrent.duration._
 import scala.util.{Success, Try}
 import scala.{PartialFunction => =/>}
 
-class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsService, val content: OtrContentService,
-    cryptoBox: CryptoBoxService, members: MembersStorage, keyValue: KeyValueService, users: UserService,
-    convs: ConversationsContentUpdater, sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService,
-    lifecycle: ZmsLifecycle) {
+class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushService,
+                 cryptoBox: CryptoBoxService, members: MembersStorage, convs: ConversationsContentUpdater,
+                 sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage) {
 
   import EventContext.Implicits.global
   import OtrService._
   import Threading.Implicits.Background
 
-  private[waz] val lastPreKeyId = keyValue.keyValuePref("otr_last_prekey_id", 0)
+  push.onSlowSyncNeeded { _ => sync.syncSelfClients() }
 
-  private lazy val clientLabel = if (metadata.localBluetoothName.isEmpty) metadata.deviceModel else metadata.localBluetoothName
-
-  lazy val sessions = returning(new CryptoSessionService(cryptoBox)) { sessions =>
+  lazy val sessions = returning(cryptoBox.sessions) { sessions =>
     // request self clients sync to update prekeys on backend
     // we've just created a session from message, this means that some user had to obtain our prekey from backend (so we can upload it)
     // using signal and sync interval parameter to limit requests to one an hour
     Signal.wrap(sessions.onCreateFromMessage).throttle(15.seconds) { _ => clients.requestSyncIfNeeded(1.hour) }
   }
 
-  lifecycle.uiActive {
-    case false => // ignore
-    case true =>
-      // ensure cryptobox is available
-      cryptoBox.cryptoBox.onSuccess {
-        case Some(_) => // loaded, great
-        case None =>
-          error(s"CryptoBox could not be loaded, removing current device")
-          clients.onCurrentClientRemoved()
+  def eventTransformer(events: Vector[Event]): Future[Vector[Event]] = {
+    @tailrec def transform(es: Vector[Event], accu: Vector[Future[Vector[Event]]]): Vector[Future[Vector[Event]]] =
+      if (es.isEmpty) accu
+      else {
+        val ph = isOtrEvent(es.head)
+        val (batch, remaining) = es.span(isOtrEvent(_) == ph)
+        val batched = if (ph) collectEvents(clientId, batch) else Future.successful(batch)
+        transform(remaining, accu :+ batched)
       }
+    sequence(transform(events, Vector.empty)).map(_.flatten) andThen checkForErrorsAndSendAutomaticResponseToRecoverCryptoSession
   }
-
-  def eventTransformer(events: Vector[Event]): Future[Vector[Event]] =
-    content.currentClientId flatMap {
-      case Some(clientId) =>
-        @tailrec def transform(es: Vector[Event], accu: Vector[Future[Vector[Event]]]): Vector[Future[Vector[Event]]] =
-          if (es.isEmpty) accu
-          else {
-            val ph = isOtrEvent(es.head)
-            val (batch, remaining) = es.span(isOtrEvent(_) == ph)
-            val batched = if (ph) collectEvents(clientId, batch) else Future.successful(batch)
-            transform(remaining, accu :+ batched)
-          }
-        sequence(transform(events.toVector, Vector.empty)).map(_.flatten) andThen checkForErrorsAndSendAutomaticResponseToRecoverCryptoSession
-      case None =>
-        error(s"Current client is not registered, will not process any otr events.")
-        Future.successful(events.iterator.filterNot(isOtrEvent).to[Vector])
-    }
 
   private lazy val isOtrEvent: Event => Boolean = PartialFunction.cond(_) { case _: OtrEvent => true }
 
@@ -168,7 +145,7 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
                 warn(s"Remote identity changed, will drop a session and try decrypting again", e)
                 for {
                   _ <- sessions.deleteSession(sessionId(ev.from, ev.sender))
-                  _ <- clients.updateVerified(ev.from, ev.sender, verified = false)
+                  _ <- clientsStorage.updateVerified(ev.from, ev.sender, verified = false)
                   res <- decryptOtrEvent(ev, retry + 1)
                 } yield res
               case _ =>
@@ -185,47 +162,13 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
     }
   }
 
-  def generatePreKeysIfNeeded(remainingKeys: Seq[Int]): Future[Seq[PreKey]] = {
-
-    val remaining = remainingKeys.toSeq.filter(_ <= CryptoBox.MAX_PREKEY_ID)
-
-    val maxId = if (remaining.isEmpty) None else Some(remaining.max)
-
-    // old version was not updating lastPreKeyId properly, we need to detect that and reset it to lastId on backend
-    def shouldResetLastIdPref(lastId: Int) = maxId.exists(max => max > lastId && max < LocalPreKeysLimit / 2)
-
-    if (remaining.size > LowPreKeysThreshold) Future.successful(Nil)
-    else lastPreKeyId() flatMap { lastId =>
-      val startId =
-        if (lastId > LocalPreKeysLimit) 0
-        else if (shouldResetLastIdPref(lastId)) maxId.fold(0)(_ + 1)
-        else lastId + 1
-
-      val count = PreKeysCount - remaining.size
-
-      cryptoBox { cb =>
-        val keys = cb.newPreKeys(startId, count).toSeq
-        (lastPreKeyId := keys.last.id) map (_ => keys)
-      } map { _ getOrElse Nil }
-    }
-  }
-
   def resetSession(conv: ConvId, user: UserId, client: ClientId) =
     for {
       _ <- sessions.deleteSession(sessionId(user, client))
-      _ <- clients.updateVerified(user, client, verified = false)
+      _ <- clientsStorage.updateVerified(user, client, verified = false)
       _ <- sync.syncPreKeys(user, Set(client))
       syncId <- sync.postSessionReset(conv, user, client)
     } yield syncId
-
-  def hasSession(user: UserId, client: ClientId) = sessions.getSession(sessionId(user, client)).map(_.isDefined)
-
-  def createClient() = cryptoBox { cb =>
-    val (lastKey, keys) = (cb.newLastPreKey(), cb.newPreKeys(0, PreKeysCount))
-    (lastPreKeyId := keys.last.id) map { _ =>
-      (Client(ClientId(), clientLabel, metadata.deviceModel, Some(Instant.now), signalingKey = Some(SignalingKey()), verified = Verification.VERIFIED, devType = metadata.deviceClass), lastKey, keys.toSeq)
-    }
-  }
 
   def decryptGcm(data: Array[Byte], mac: Array[Byte]) = clients.getSelfClient map {
     case Some(client @ Client(_, _, _, _, _, _, Some(key), _, _)) =>
@@ -272,7 +215,7 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
     * @param useFakeOnError - when true, we will return bomb emoji as msg content on encryption errors (for failing client)
     * @param partialResult - partial content encrypted in previous run, we will use that instead of encrypting again when available
     */
-  def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean = false, partialResult: EncryptedContent = EncryptedContent.Empty): Future[OtrClient.EncryptedContent] = users.withSelfUserFuture { selfUserId =>
+  def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean = false, partialResult: EncryptedContent = EncryptedContent.Empty): Future[OtrClient.EncryptedContent] = {
     val msgData = GenericMessage.toByteArray(msg)
 
     def previous(user: UserId, client: ClientId) =
@@ -294,25 +237,20 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
       }
     } map { ms => user -> ms.flatten.toMap }
 
-    content.currentClientId flatMap {
-      case Some(selfClientId) =>
-        members.getActiveUsers(convId) flatMap { users =>
-          verbose(s"active users: $users")
-          Future.traverse(users) { user =>
-            targetClients(user, selfUserId, selfClientId) flatMap { cs =>
-              verbose(s"user clients: $cs")
-              encrypt(user, cs.filter(_ != selfClientId))
-            }
-          } map (res => EncryptedContent(res.toMap.filter(_._2.nonEmpty)))
+    members.getActiveUsers(convId) flatMap { users =>
+      verbose(s"active users: $users")
+      Future.traverse(users) { user =>
+        clientsStorage.getClients(user) flatMap { cs =>
+          verbose(s"user clients: $cs")
+          encrypt(user, cs.filter(_ != clientId))
         }
-      case None =>
-        throw new Exception("Client is not registered")
+      } map (res => EncryptedContent(res.toMap.filter(_._2.nonEmpty)))
     }
   }
 
   // list of clients to which the message should be sent for given user
   private def targetClients(user: UserId, selfUserId: UserId, selfClientId: ClientId) =
-    clients.getClients(user) map { cs =>
+    clientsStorage.getClients(user) map { cs =>
       if (user == selfUserId) cs.filter(_.id != selfClientId)
       else cs
     }
@@ -342,17 +280,9 @@ class OtrService(context: Context, userId: ZUserId, val clients: OtrClientsServi
         }
     }
 
-  def fingerprintSignal(userId: UserId, clientId: ClientId): Signal[Option[Array[Byte]]] =
-    Signal(content.currentClientIdSignal, users.selfUserId.signal).flatMap {
-      case (None, _) => Signal.empty
-      case (Some(`clientId`), `userId`) => Signal.future(cryptoBox { cb => Future successful cb.getLocalFingerprint })
-      case _ =>
-        val sid = sessionId(userId, clientId)
-        def fingerprint = sessions.withSession(sid)(_.getRemoteFingerprint)
-        val stream = sessions.onCreate.filter(_ == sid).mapAsync(_ => fingerprint)
-
-        new AggregatingSignal[Option[Array[Byte]], Option[Array[Byte]]](stream, fingerprint, (prev, next) => next)
-    }
+  def fingerprintSignal(userId: UserId, cId: ClientId): Signal[Option[Array[Byte]]] =
+    if (userId == selfUserId && cId == clientId) Signal.future(cryptoBox { cb => Future successful cb.getLocalFingerprint })
+    else sessions.remoteFingerprint(sessionId(userId, clientId))
 }
 
 object OtrService {
@@ -360,9 +290,6 @@ object OtrService {
 
   val random = new SecureRandom
 
-  val PreKeysCount = 100
-  val LowPreKeysThreshold = 50
-  val LocalPreKeysLimit = 16 * 1024
   val EncryptionFailedMsg = "\uD83D\uDCA3".getBytes("utf8")
 
   def sessionId(user: UserId, client: ClientId) = s"${user}_$client"

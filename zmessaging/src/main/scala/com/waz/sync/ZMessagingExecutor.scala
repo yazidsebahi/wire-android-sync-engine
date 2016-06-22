@@ -19,9 +19,9 @@ package com.waz.sync
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.model.ZUserId
-import com.waz.service.{InstanceService, ZMessaging}
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.model.AccountId
+import com.waz.service.{AccountService, Accounts, ZMessaging}
+import com.waz.threading.Threading
 
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
@@ -31,13 +31,13 @@ trait ZmsExecutor {
 }
 
 trait ZMessagingExecutor extends ZmsExecutor {
-  private implicit val logTag: LogTag = logTagFor[ZMessagingExecutor]
   import Threading.Implicits.Background
+  private implicit val logTag: LogTag = logTagFor[ZMessagingExecutor]
 
   def context: Context
-  def instance: InstanceService
+  def accounts: Accounts
 
-  lazy val zms = instance.getCurrent
+  lazy val zms = accounts.getCurrentZms
 
   override def execute[A](body: ZMessaging => Future[A])(implicit logTag: LogTag = getClass.getName): Future[A] =
     zms.flatMap {
@@ -50,25 +50,27 @@ trait ZMessagingExecutor extends ZmsExecutor {
 
 object ZMessagingExecutor {
   case object NoZMessagingException extends Exception("ZMessaging instance not available") with NoStackTrace
+  case object NoAccountException extends Exception("AccountService instance not available") with NoStackTrace
 }
 
-trait ZUserExecutor extends ZMessagingExecutor {
+trait AccountExecutor {
   import Threading.Implicits.Background
 
-  val userId: ZUserId
+  val userId: AccountId
+  def context: Context
+  def accounts: Accounts
 
-  lazy val user = instance.global.users.getById(userId)
+  lazy val account = accounts.getInstance(userId)
 
-  override lazy val zms = user.future.flatMap {
-    case Some(u) => instance.getInstance(u) map (Some(_))
-    case _ => CancellableFuture.successful(None)
-  }
-
-  override def execute[A](body: (ZMessaging) => Future[A])(implicit logTag: LogTag): Future[A] = {
-    super.execute { zms =>
-      val future = Threading.Ui(zms.lifecycle.acquireSync(logTag)).future flatMap { _ => body(zms) }
-      future.onComplete(_ => zms.lifecycle.releaseSync(logTag))(Threading.Ui)
-      future
+  def execute[A](body: AccountService => Future[A])(implicit logTag: LogTag): Future[A] = {
+    account flatMap {
+      case None =>
+        error(s"zmessaging not available")
+        Future.failed(ZMessagingExecutor.NoAccountException)
+      case Some(acc) =>
+        val future = Threading.Ui(acc.lifecycle.acquireSync(logTag)).future flatMap { _ => body(acc) }
+        future.onComplete(_ => acc.lifecycle.releaseSync(logTag))(Threading.Ui)
+        future
     }
   }
 }

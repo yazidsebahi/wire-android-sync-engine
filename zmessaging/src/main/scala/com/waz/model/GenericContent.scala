@@ -38,25 +38,27 @@ object GenericContent {
 
     object Original {
 
-      def apply(mime: Mime, size: Long, name: Option[String], meta: Option[AssetMetaData] = None): Messages.Asset.Original =
+      def apply(mime: Mime, size: Long, name: Option[String], meta: Option[AssetMetaData] = None, audioPreview: Option[AssetPreviewData.Loudness] = None): Messages.Asset.Original =
         returning(new Messages.Asset.Original()) { orig =>
           orig.mimeType = mime.str
           orig.size = size
-          meta foreach {
-            case video: AssetMetaData.Video => orig.setVideo(VideoMetaData(video))
-            case image: AssetMetaData.Image => orig.setImage(ImageMetaData(image))
-            case audio: AssetMetaData.Audio => orig.setAudio(AudioMetaData(audio))
-            case AssetMetaData.Empty =>
+          meta match {
+            case Some(video: AssetMetaData.Video) => orig.setVideo(VideoMetaData(video))
+            case Some(image: AssetMetaData.Image) => orig.setImage(ImageMetaData(image))
+            case Some(audio: AssetMetaData.Audio) => orig.setAudio(AudioMetaData(Some(audio), audioPreview))
+            case Some(AssetMetaData.Empty)        =>
+            case None                             => orig.setAudio(AudioMetaData(None, audioPreview))
           }
           name foreach { orig.name = _ }
         }
 
-      def apply(asset: AnyAssetData): Messages.Asset.Original = apply(asset.mimeType, asset.sizeInBytes, asset.name, asset.metaData)
+      def apply(asset: AnyAssetData): Messages.Asset.Original = apply(asset.mimeType, asset.sizeInBytes, asset.name,
+        asset.metaData, asset.preview.collect { case l: AssetPreviewData.Loudness => l })
 
-      def unapply(proto: Messages.Asset.Original): Option[(Mime, Long, Option[String], Option[AssetMetaData])] = {
+      def unapply(proto: Messages.Asset.Original): Option[(Mime, Long, Option[String], Option[AssetMetaData], Option[AssetPreviewData.Loudness])] = {
         val name = Option(proto.name).filter(_.nonEmpty)
         val mime = Option(proto.mimeType).filter(_.nonEmpty).fold(name.map(Mime.fromFileName).getOrElse(Mime.Unknown))(Mime(_))
-        Some((mime, proto.size, name, MetaData(proto)))
+        Some((mime, proto.size, name, MetaData(proto), AudioMetaData.loudness(proto)))
       }
     }
 
@@ -85,18 +87,18 @@ object GenericContent {
         p.height = image.dimensions.height
       }
 
-      def apply(p: Messages.Asset.Preview): Option[Messages.Asset.ImageMetaData] = p.getMetaDataCase match {
-        case Messages.Asset.Preview.IMAGE_FIELD_NUMBER => Option(p.getImage)
+      def apply(p: Messages.Asset.Preview): Option[AssetMetaData.Image] = p.getMetaDataCase match {
+        case Messages.Asset.Preview.IMAGE_FIELD_NUMBER => unapply(p.getImage)
         case _ => None
       }
 
-      def apply(p: Messages.Asset.Original): Option[Messages.Asset.ImageMetaData] = p.getMetaDataCase match {
-        case Messages.Asset.Original.IMAGE_FIELD_NUMBER => Option(p.getImage)
+      def apply(p: Messages.Asset.Original): Option[AssetMetaData.Image] = p.getMetaDataCase match {
+        case Messages.Asset.Original.IMAGE_FIELD_NUMBER => unapply(p.getImage)
         case _ => None
       }
 
-      def unapply(proto: Messages.Asset.ImageMetaData): Option[(Dim2, Option[String])] =
-        Some((Dim2(proto.width, proto.height), Option(proto.tag).filter(_.nonEmpty)))
+      def unapply(proto: Messages.Asset.ImageMetaData): Option[AssetMetaData.Image] =
+        Some(AssetMetaData.Image(Dim2(proto.width, proto.height), Option(proto.tag).filter(_.nonEmpty)))
     }
 
     object VideoMetaData {
@@ -111,23 +113,35 @@ object GenericContent {
         case _ => None
       }
 
-      def unapply(proto: Messages.Asset.VideoMetaData): Option[(Dim2, Duration)] =
-        Some(Dim2(proto.width, proto.height), Duration.ofMillis(proto.durationInMillis))
+      def unapply(proto: Messages.Asset.VideoMetaData): Option[AssetMetaData.Video] =
+        Some(AssetMetaData.Video(Dim2(proto.width, proto.height), Duration.ofMillis(proto.durationInMillis)))
     }
 
     object AudioMetaData {
-      def apply(md: AssetMetaData.Audio) = returning(new Messages.Asset.AudioMetaData) { p =>
-        p.durationInMillis = md.duration.toMillis
-        p.normalizedLoudness = md.loudness.toArray
+      def apply(mmd: Option[AssetMetaData.Audio], ml: Option[AssetPreviewData.Loudness]) = returning(new Messages.Asset.AudioMetaData) { p =>
+        mmd.foreach(md => p.durationInMillis = md.duration.toMillis)
+        ml.foreach(l => p.normalizedLoudness = bytify(l.levels))
       }
 
-      def apply(p: Messages.Asset.Original): Option[Messages.Asset.AudioMetaData] = p.getMetaDataCase match {
-        case Messages.Asset.Original.AUDIO_FIELD_NUMBER => Option(p.getAudio)
+      def apply(p: Messages.Asset.Original): Option[AssetMetaData.Audio] = p.getMetaDataCase match {
+        case Messages.Asset.Original.AUDIO_FIELD_NUMBER => unapply(p.getAudio)
         case _ => None
       }
 
-      def unapply(p: Messages.Asset.AudioMetaData): Option[(Duration, Seq[Float])] =
-        Some((Duration.ofMillis(p.durationInMillis), Option(p.normalizedLoudness.toSeq).getOrElse(Seq.empty)))
+      def loudness(original: Messages.Asset.Original): Option[AssetPreviewData.Loudness] =
+        original.getMetaDataCase match {
+          case Messages.Asset.Original.AUDIO_FIELD_NUMBER =>
+            Option(original.getAudio.normalizedLoudness).filter(_.nonEmpty).map(arr => AssetPreviewData.Loudness(floatify(arr)))
+          case _ =>
+            None
+        }
+
+      def unapply(p: Messages.Asset.AudioMetaData): Option[AssetMetaData.Audio] =
+        if (p.durationInMillis <= 0) None
+        else Some(AssetMetaData.Audio(Duration.ofMillis(p.durationInMillis)))
+
+      def bytify(ls: Iterable[Float]): Array[Byte] = ls.map(l => (l * 255f).toByte)(breakOut)
+      def floatify(bs: Array[Byte]): Vector[Float] = bs.map(b => (b & 255) / 255f)(breakOut)
     }
 
     object MetaData {
@@ -137,16 +151,15 @@ object GenericContent {
       def apply(proto: Messages.Asset): Option[AssetMetaData] = Option(proto.original).flatMap(apply)
 
       def apply(original: Messages.Asset.Original): Option[AssetMetaData] =
-        condOpt(original.getMetaDataCase) {
+        original.getMetaDataCase match {
           case Messages.Asset.Original.IMAGE_FIELD_NUMBER =>
-            val ImageMetaData(d, t) = original.getImage
-            AssetMetaData.Image(d, t)
+            ImageMetaData.unapply(original.getImage)
           case Messages.Asset.Original.VIDEO_FIELD_NUMBER =>
-            val VideoMetaData(dim, dur) = original.getVideo
-            AssetMetaData.Video(dim, dur)
+            VideoMetaData.unapply(original.getVideo)
           case Messages.Asset.Original.AUDIO_FIELD_NUMBER =>
-            val AudioMetaData(duration, loudness) = original.getAudio
-            AssetMetaData.Audio(duration, loudness)
+            AudioMetaData.unapply(original.getAudio)
+          case _ =>
+            None
         }
     }
 
@@ -167,7 +180,7 @@ object GenericContent {
       def apply(image: ImageData, key: AESKey, sha: Sha256): Messages.Asset.Preview =
         apply(Mime(image.mime), image.size, key, sha, ImageMetaData(Some(image.tag), image.width, image.height))
 
-      def unapply(prev: Messages.Asset.Preview): Option[(Mime, Long, AESKey, Sha256, Option[Messages.Asset.ImageMetaData])] =
+      def unapply(prev: Messages.Asset.Preview): Option[(Mime, Long, AESKey, Sha256, Option[AssetMetaData.Image])] =
         Some((Mime(prev.mimeType), prev.size, AESKey(prev.remote.otrKey), Sha256(prev.remote.sha256), ImageMetaData(prev)))
     }
 

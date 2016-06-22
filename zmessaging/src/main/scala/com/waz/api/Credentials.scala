@@ -48,7 +48,7 @@ sealed trait Credentials
 
 package impl {
 
-sealed trait Credentials extends com.waz.api.Credentials {
+  sealed trait Credentials extends com.waz.api.Credentials {
     def canLogin: Boolean
     def autoLoginOnRegistration: Boolean
     def addToRegistrationJson(o: JSONObject): Unit
@@ -56,6 +56,19 @@ sealed trait Credentials extends com.waz.api.Credentials {
 
     def maybeEmail: Option[EmailAddress]
     def maybePhone: Option[PhoneNumber]
+    def maybePassword: Option[String]
+  }
+
+  object Credentials {
+    val Empty = new Credentials {
+      override def canLogin: Boolean = false
+      override def maybeEmail: Option[EmailAddress] = None
+      override def addToLoginJson(o: JSONObject): Unit = ()
+      override def maybePhone: Option[PhoneNumber] = None
+      override def maybePassword: Option[String] = None
+      override def autoLoginOnRegistration: Boolean = false
+      override def addToRegistrationJson(o: JSONObject): Unit = ()
+    }
   }
 
   case class EmailCredentials(email: EmailAddress, password: Option[String], invitation: Option[PersonalInvitationToken] = None) extends Credentials {
@@ -73,6 +86,7 @@ sealed trait Credentials extends com.waz.api.Credentials {
 
     override def maybeEmail: Option[EmailAddress] = Some(email)
     override def maybePhone: Option[PhoneNumber] = None
+    override def maybePassword: Option[String] = password
 
     override def toString: String = s"EmailBasedCredentials($email, ${password map (_.map(_ => '*'))})"
   }
@@ -93,6 +107,7 @@ sealed trait Credentials extends com.waz.api.Credentials {
 
     override def maybeEmail: Option[EmailAddress] = None
     override def maybePhone: Option[PhoneNumber] = Some(phone)
+    override def maybePassword: Option[String] = None
 
     override def toString: String = s"PhoneBasedCredentials($phone, ${code map (_.str.map(_ => '*'))})"
   }

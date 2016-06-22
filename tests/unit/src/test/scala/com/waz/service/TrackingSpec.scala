@@ -43,15 +43,13 @@ import scala.math.min
 class TrackingSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
   import Threading.Implicits.Background
 
-  implicit def db: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zmessaging.db.dbHelper.getWritableDatabase
 
   implicit val timeout: FiniteDuration = 2.seconds
 
   lazy val selfUser = UserData("self user")
 
-  lazy val zmessaging = new MockZMessaging() {
-    users.selfUserId := selfUser.id
-  }
+  lazy val zmessaging = new MockZMessaging(selfUserId = selfUser.id)
   lazy val ui = new MockUiModule(zmessaging)
 
   lazy val group = 0 until 3 map { i => ConversationData(ConvId(), RConvId(), Some(s"convName $i"), selfUser.id, ConversationType.Group) }

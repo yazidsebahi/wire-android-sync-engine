@@ -18,49 +18,18 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
-import com.waz.content.{MessageLoader, Likes, LikingsStorage}
+import com.waz.content.{Likes, LikingsStorage}
 import com.waz.model._
 import com.waz.service.UserService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
-import com.waz.utils.{RichOption, RichTraversableOnce, returning}
 import org.threeten.bp.Instant.now
 
 import scala.concurrent.Future
-import scala.collection.breakOut
-import scala.util.Failure
 
-class LikingsService(storage: LikingsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserService) extends MessageLoader {
+class LikingsService(storage: LikingsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserService) {
   import LikingsService._
   import Threading.Implicits.Background
-
-  override def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]] =
-    messages.messagesStorage.getMessages(ids: _*) flatMap { msgs => withLikes(msgs.flatten) }
-
-  def getMessageAndLikes(id: MessageId): Future[Option[MessageAndLikes]] =
-    messages.getMessage(id).flatMap(_.fold2(Future.successful(None), msg => combineWithLikes(msg).map(Some(_))))
-
-  def combineWithLikes(msg: MessageData): Future[MessageAndLikes] =
-    users.withSelfUserFuture(u => storage.getLikes(msg.id).map(l => combine(msg, l, u)))
-
-  def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]] = {
-    val ids: Set[MessageId] = msgs.map(_.id)(breakOut)
-    users.withSelfUserFuture { selfUserId =>
-      storage.loadAll(msgs.map(_.id)).map { likes =>
-        val likesById = likes.by[MessageId, Map](_.message)
-        returning(msgs.map(msg => combine(msg, likesById(msg.id), selfUserId))) { _ =>
-          verbose(s"combined ${ids.size} message(s) with ${likesById.size} liking(s)")
-        }
-      }
-    }.andThen { case Failure(t) => error("failed while adding likings to messages", t) }
-  }
-
-  def combine(msg: MessageData, likes: Likes, selfUserId: UserId): MessageAndLikes =
-    if (likes.likers.isEmpty) MessageAndLikes(msg, Vector(), false)
-    else sortedLikes(likes, selfUserId) match { case (likers, selfLikes) => MessageAndLikes(msg, likers, selfLikes) }
-
-  def sortedLikes(likes: Likes, selfUserId: UserId): (IndexedSeq[UserId], Boolean) =
-    (likes.likers.toVector.sortBy(_._2).map(_._1), likes.likers contains selfUserId)
 
   def like(conv: ConvId, msg: MessageId): Future[Likes] = addLiking(conv, msg, Liking.Action.Like)
 

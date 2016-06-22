@@ -44,7 +44,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   updateParts()
   reload() // always reload because data from constructor might always be outdated already
 
-  def reload() = context.zms.flatMapFuture(_.likings.getMessageAndLikes(id))(Threading.Background).map(_ foreach set)(Threading.Ui)
+  def reload() = context.zms.flatMapFuture(_.msgAndLikes.getMessageAndLikes(id))(Threading.Background).map(_ foreach set)(Threading.Ui)
 
   def set(msg: MessageAndLikes): Unit = if (msg.message != data || msg.likes != likes || msg.likedBySelf != likedBySelf) {
     data = msg.message

@@ -39,7 +39,6 @@ import scala.sys.process._
 import scala.util.Try
 
 trait RoboProcess extends RobolectricUtils with Informing {
-  lazy val context = Robolectric.application
 
   override protected def info: Informer = new Informer {
     override def apply(message: String, payload: Option[Any]): Unit = println(message)
@@ -93,7 +92,7 @@ class RoboProcessRunner(suiteClass: Class[_], providedConfig: Option[Config] = N
   val shadows: Seq[Class[_]] = Seq(classOf[ShadowApplication], classOf[ShadowIOBitmapFactory], classOf[ShadowIOBitmap],
     classOf[ShadowIOCanvas], classOf[ShadowAudioManager2], classOf[ShadowTelephonyManager2], classOf[ShadowMatrix],
     classOf[ShadowIOExifInterface], classOf[ShadowLooper2], classOf[ShadowSQLiteConnection2], classOf[ShadowGeocoder2],
-    classOf[ShadowFileProvider])
+    classOf[ShadowFileProvider], classOf[ShadowContentResolver2], classOf[ShadowMediaMetadataRetriever2])
 
   val configProperties: Properties =
     Option(suiteClass.getClassLoader.getResourceAsStream("org.robolectric.Config.properties")).map { resourceAsStream =>

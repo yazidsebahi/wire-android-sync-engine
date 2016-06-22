@@ -21,7 +21,7 @@ import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.api.Message
-import com.waz.content.GlobalStorage
+import com.waz.content.GlobalDatabase
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Knock
 import com.waz.model._
@@ -29,6 +29,7 @@ import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.utils._
+import com.waz.testutils.Matchers._
 import com.waz.{RobolectricUtils, testutils}
 import org.robolectric.Robolectric
 import org.scalatest.matchers.Matcher
@@ -40,38 +41,37 @@ import scala.concurrent.duration._
 
 class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
-  lazy val globalStorage = new GlobalStorage(Robolectric.application)
+  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("user 1")
 
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
-  var service: MockZMessaging = _
   var messageSync = None: Option[MessageId]
+
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
+    override lazy val sync = new EmptySyncService {
+      override def postMessage(id: MessageId, conv: ConvId) = {
+        messageSync = Some(id)
+        super.postMessage(id, conv)
+      }
+    }
+
+    insertUsers(Seq(selfUser, user1))
+    insertConv(conv)
+
+    lifecycle.acquireUi()
+  }
 
   before {
     messageSync = None
-
-    service = new MockZMessaging() {
-      override lazy val sync = new EmptySyncService {
-        override def postMessage(id: MessageId, conv: ConvId) = {
-          messageSync = Some(id)
-          super.postMessage(id, conv)
-        }
-      }
-
-      insertUsers(Seq(selfUser, user1))
-      insertConv(conv)
-      users.selfUserId := test.selfUser.id
-    }
   }
 
   after {
-    Await.result(service.storage.close(), 10.seconds)
-    Robolectric.application.getDatabasePath(service.storage.dbHelper.getDatabaseName).delete()
+    service.messagesStorage.deleteAll(conv.id).await()
   }
   
   def listMessages(conv: ConvId) = service.listMessages(conv)

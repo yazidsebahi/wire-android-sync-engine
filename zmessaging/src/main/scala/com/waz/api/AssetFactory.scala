@@ -17,17 +17,15 @@
  */
 package com.waz.api
 
-import java.lang.Float
-
 import android.net.Uri
-import com.waz.ZLog
+import com.waz.ZLog._
 import com.waz.api.impl.ProgressIndicator.ProgressData
-import com.waz.api.impl.{ContentUriAssetForUpload, TranscodedVideoAsset}
+import com.waz.api.impl.{ContentUriAssetForUpload, RecordingLevels, TranscodedVideoAsset}
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.content.Mime
 import com.waz.model.{AssetData, AssetId}
 import com.waz.service.ZMessaging
-import com.waz.service.assets.RecordAndPlayService.{RecordingCancelled, RecordingSuccessful}
+import com.waz.service.assets.GlobalRecordAndPlayService.{RecordingCancelled, RecordingSuccessful}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.SignalLoading
 import com.waz.utils.events.Signal
@@ -36,6 +34,7 @@ import org.threeten.bp.Instant
 import scala.util.{Failure, Success}
 
 object AssetFactory {
+  private implicit val logTag: LogTag = logTagFor(AssetFactory)
 
   trait LoadCallback {
     def onLoaded(asset: AssetForUpload): Unit
@@ -69,7 +68,7 @@ object AssetFactory {
     future .onComplete {
       case Success(asset) => callback.onLoaded(asset)
       case Failure(ex) =>
-        ZLog.warn(s"Video transcoding failed", ex)("AssetFactory")
+        warn(s"Video transcoding failed", ex)
         callback.onFailed()
     } (Threading.Ui)
 
@@ -84,12 +83,13 @@ object AssetFactory {
     val service = ZMessaging.currentGlobal.recordingAndPlayback
 
     val id = AssetId()
+    val levels = new RecordingLevels(service.recordingLevel(id))
     service.record(id, AssetData.MaxAllowedAssetSizeInBytes).onComplete {
       case Success((instantOfStart, futureAsset)) =>
         react.onStart(instantOfStart)
         futureAsset.onComplete {
           case Success(RecordingSuccessful(asset, fileSizeLimitReached)) =>
-            react.onComplete(asset, fileSizeLimitReached)
+            react.onComplete(asset, fileSizeLimitReached, levels.overview)
           case Success(RecordingCancelled) | Failure(_) =>
             react.onCancel()
         }(Threading.Ui)
@@ -100,7 +100,7 @@ object AssetFactory {
     new RecordingControls {
       override def stop(): Unit = service.stopRecording(id, false)
       override def cancel(): Unit = service.cancelRecording(id)
-      override def soundLevel(): UiSignal[java.lang.Float] = impl.UiSignal(_ => Signal.const(Float.valueOf(0f))) //TODO NYIMPL
+      override def soundLevels(windowSize: Int): UiSignal[Array[Float]] = impl.UiSignal(_ => levels.windowed(windowSize))
       override def finalize: Unit = cancel()
     }
   }
@@ -108,7 +108,7 @@ object AssetFactory {
 
 trait RecordingCallback {
   def onStart(timestamp: Instant): Unit
-  def onComplete(recording: AudioAssetForUpload, fileSizeLimitReached: Boolean): Unit
+  def onComplete(recording: AudioAssetForUpload, fileSizeLimitReached: Boolean, overview: AudioOverview): Unit
   def onCancel(): Unit
 }
 
@@ -116,5 +116,10 @@ trait RecordingControls {
   def stop(): Unit
   def cancel(): Unit
 
-  def soundLevel(): UiSignal[java.lang.Float] // 0f to 1f representing the loudness of the signal
+  def soundLevels(numberOfLevels: Int): UiSignal[Array[Float]] // single entry ∈ (0, 1) represents the peak "loudness" of the signal over a period of time
+}
+
+trait AudioOverview {
+  def getLevels(numberOfLevels: Int): Array[Float]
+  def isEmpty: Boolean
 }

@@ -76,7 +76,9 @@ class ConversationMemberLimitSpec extends FeatureSpec with Matchers with OptionV
     withDelay {
       zmessaging.membersStorage.getActiveUsers(conv.id).futureValue should have size 128
       count shouldEqual 128
-      userList should have size 127 // doesn't include self
+      withClue("self: " + api.getSelf.getUser.getId + " " + userList.map(_.getId).sorted.mkString(", ")) {
+        userList should have size 127 // doesn't include self
+      }
       errors shouldBe empty
     }
 

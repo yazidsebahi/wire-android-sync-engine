@@ -18,15 +18,29 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog._
+import com.waz.api.Verification
 import com.waz.model.UserId
-import com.waz.model.otr.UserClients
+import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.model.otr.UserClients.UserClientsDao
-import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
+import com.waz.utils.events.Signal
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
 
 class OtrClientsStorage(context: Context, storage: Database) extends CachedStorage[UserId, UserClients](new TrimmingLruCache(context, Fixed(2000)), storage)(UserClientsDao, "OtrClientsStorage") {
-  private implicit val tag: LogTag = logTagFor[OtrClientsStorage]
-  private implicit val dispatcher = new SerialDispatchQueue(name = "OtrClientStorage")
+  import com.waz.threading.Threading.Implicits.Background
+
+  def incomingClientsSignal(userId: UserId, clientId: ClientId): Signal[Seq[Client]] =
+    signal(userId) map { ucs =>
+      ucs.clients.get(clientId).flatMap(_.regTime).fold(Seq.empty[Client]) { current =>
+        ucs.clients.values.filter(c => c.verified == Verification.UNKNOWN && c.regTime.exists(_.isAfter(current))).toVector
+      }
+    }
+
+  def getClients(user: UserId) = get(user).map(_.fold(Seq.empty[Client])(_.clients.values.toVector))
+
+  def updateVerified(userId: UserId, clientId: ClientId, verified: Boolean) = update(userId, { uc =>
+    uc.clients.get(clientId) .fold (uc) { client =>
+      uc.copy(clients = uc.clients + (client.id -> client.copy(verified = if (verified) Verification.VERIFIED else Verification.UNVERIFIED)))
+    }
+  })
 }

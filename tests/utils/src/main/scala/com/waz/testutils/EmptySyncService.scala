@@ -41,7 +41,6 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncConnections(dependsOn: Option[SyncId] = None) = sid
   override def syncCommonConnections(id: UserId) = sid
   override def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal) = sid
-  override def syncVersionBlacklist() = sid
   override def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId] = sid
 
   override def postConnection(user: UserId, name: String, message: String) = sid
@@ -73,6 +72,6 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncClientsLocation(): Future[SyncId] = sid
   override def syncPreKeys(user: UserId, clients: Set[ClientId]): Future[SyncId] = sid
   override def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId] = sid
-  
+
   private def sid = Future.successful(SyncId())
 }

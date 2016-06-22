@@ -25,7 +25,7 @@ import com.waz.api.ImageAsset.BitmapCallback
 import com.waz.api.ImageAssetFactory
 import com.waz.model.AssetId
 import com.waz.service.ZMessaging
-import com.waz.testutils.{MockZMessaging, MockUiModule}
+import com.waz.testutils.{MockUiModule, MockZMessaging}
 import com.waz.utils.IoUtils
 import org.robolectric.Robolectric
 import org.scalatest._

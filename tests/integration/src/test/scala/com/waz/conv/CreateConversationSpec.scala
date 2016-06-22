@@ -49,14 +49,14 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
   lazy val Seq(auto2, auto4, auto5) = Seq("auto2", "auto4", "auto5").map { key =>
     val zms = createRemoteZms()
     awaitUiFuture(zms.login(provisionedEmail(key), s"${key}_pass"))(10.seconds)
-    zms.zmessaging.get
+    zms.account.get
   }
 
   lazy val allUserIds = Seq("auto1", "auto2", "auto3", "auto4", "auto5", "auto6") map provisionedUserId
 
   lazy val auto6 = new ConnectionsClient(new ZNetClient(provisionedEmail("auto6"), "auto6_pass", new AsyncClient(wrapper = TestClientWrapper)))
 
-  lazy val auto4Id = Await.result(auto4.users.getSelfUser, 15.seconds).get.id
+  lazy val auto4Id = Await.result(auto4.zmessaging.currentValue.flatten.get.users.getSelfUser, 15.seconds).get.id
 
   feature("Create conversation") {
 
@@ -90,7 +90,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
 
     scenario("Load auto4 user id") { // separate scenario to not clutter logs
       info(s"auto4 id: $auto4Id")
-      withDelay(auto4.convsStorage.conversations should not be empty)
+      withDelay(auto4.storage.convsStorage.conversations should not be empty)
     }
 
     scenario("Create conversation with new person - connect") {
@@ -112,14 +112,14 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
 
       withDelay {
         self.getUser should not be null
-        val conv = auto4.convsStorage.conversations.find(_.id.str == self.getUser.getId)
+        val conv = auto4.storage.convsStorage.conversations.find(_.id.str == self.getUser.getId)
         conv should be('defined)
         conv.get.convType shouldEqual ConversationType.Incoming
       }
     }
 
     scenario("Other person accepts the connection") {
-      auto4.connection.acceptConnection(UserId(self.getUser.getId))
+      auto4.zmessaging.currentValue.flatten.get.connection.acceptConnection(UserId(self.getUser.getId))
 
       withDelay {
         conversations.find(_.getType == ConversationType.WaitForConnection) shouldEqual None
@@ -142,7 +142,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
 
     scenario("Receive group conversation") {
       withDelay {
-        auto2.convsStorage.conversations should not be empty
+        auto2.zmessaging.currentValue.flatten.get.convsStorage.conversations should not be empty
         self.getUser should not be null
       }
 
@@ -150,7 +150,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
       val convIdsBefore = conversations.map(_.data.id)
 
       val users = Seq(allUserIds.head, allUserIds(2))
-      auto2.convsUi.createGroupConversation(ConvId(), users)
+      auto2.zmessaging.currentValue.flatten.get.convsUi.createGroupConversation(ConvId(), users)
 
       val auto1Members = Seq(allUserIds(1), allUserIds(2))
 
@@ -171,7 +171,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         msg.getMembers.map(_.data.id) should contain theSameElementsAs auto1Members
       }
 
-      api.zmessaging.value.push.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis)
+      api.zmessaging.futureValue.value.push.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis)
 
       awaitUi(1.second)
       withDelay {
@@ -181,11 +181,11 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
 
     scenario("Receive connection request") {
       withDelay {
-        auto5.convsStorage.conversations should not be empty
+        auto5.zmessaging.currentValue.flatten.get.convsStorage.conversations should not be empty
         self.getUser should not be null
       }
 
-      Await.result(auto5.connection.connectToUser(UserId(self.getUser.getId), "connect message", ""), 15.seconds)
+      Await.result(auto5.zmessaging.currentValue.flatten.get.connection.connectToUser(UserId(self.getUser.getId), "connect message", ""), 15.seconds)
 
       withDelay(incomingConvs should not be empty)
       val conv = incomingConvs.head

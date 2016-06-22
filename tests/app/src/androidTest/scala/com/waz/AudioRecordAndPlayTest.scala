@@ -7,7 +7,7 @@ import com.waz.api.impl.AudioAssetForUpload
 import com.waz.content.Mime
 import com.waz.model.AssetId
 import com.waz.service.ZMessaging
-import com.waz.service.assets.RecordAndPlayService._
+import com.waz.service.assets.GlobalRecordAndPlayService._
 import com.waz.testapp.EmptyTestActivity
 import com.waz.threading.Threading
 import org.junit.Assert._

@@ -23,4 +23,4 @@ import com.waz.model.{MessageId, MsgDeletion}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
 
-class MsgDeletionStorage(context: Context, storage: ZStorage) extends CachedStorage[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached")
+class MsgDeletionStorage(context: Context, storage: Database) extends CachedStorage[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached")

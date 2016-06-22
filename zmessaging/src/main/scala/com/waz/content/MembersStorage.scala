@@ -29,7 +29,7 @@ import com.waz.utils.{CachedStorage, TrimmingLruCache}
 import scala.collection._
 import scala.concurrent.Future
 
-class MembersStorage(context: Context, storage: ZStorage) extends CachedStorage[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") {
+class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") {
   private implicit val dispatcher = new SerialDispatchQueue(name = "MembersStorage")
 
   def get(conv: ConvId) = find(_.convId == conv, ConversationMemberDataDao.findForConv(conv)(_), identity)

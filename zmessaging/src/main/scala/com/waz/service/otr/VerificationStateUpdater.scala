@@ -23,11 +23,9 @@ import com.waz.content.{ConversationStorage, MembersStorage, OtrClientsStorage, 
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.model.otr.UserClients
-import com.waz.service.UserService
-import com.waz.service.messages.MessagesService
 import com.waz.utils.Serialized
 
-import scala.collection._
+import scala.collection.breakOut
 import scala.concurrent.Future
 
 /**
@@ -37,13 +35,15 @@ import scala.concurrent.Future
   * If conv gets unverified because new client was added, then it's state is changed to UNVERIFIED,
   * if device was manually unverified, then conv state goes to UNKNOWN
   */
-class VerificationStateUpdater(users: UserService, usersStorage: UsersStorage, clientsStorage: OtrClientsStorage, convs: ConversationStorage, membersStorage: MembersStorage, messages: MessagesService) {
+class VerificationStateUpdater(selfUserId: UserId, usersStorage: UsersStorage, clientsStorage: OtrClientsStorage, convs: ConversationStorage, membersStorage: MembersStorage) {
   import Verification._
   import VerificationStateUpdater._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private val SerializationKey = (this, "verification-state-update")
+  private val SerializationKey = serializationKey(selfUserId)
+
+  var updateProcessor: VerificationStateUpdate => Future[Unit] = { _ => Future.successful(()) } // FIXME: ideally this would just be an event stream, but we want to wait until everything is processed
 
   clientsStorage.onAdded { ucs =>
     onClientsChanged(ucs.map { uc => uc.user -> (uc, ClientAdded)} (breakOut))
@@ -60,10 +60,6 @@ class VerificationStateUpdater(users: UserService, usersStorage: UsersStorage, c
       updateConversations(members.map(_.convId).distinct, members.map { member => member.userId -> (if (member.active) MemberAdded else Other) } (breakOut))
     }
   }
-
-  // XXX: small hack to synchronize other operations with verification state updating,
-  // we sometimes need to make sure that this state is up to date before proceeding
-  def awaitUpdated() = Serialized.future(SerializationKey) { Future.successful(()) }
 
   private[service] def onClientsChanged(changes: Map[UserId, (UserClients, VerificationChange)]) = Serialized.future(SerializationKey) {
 
@@ -121,35 +117,21 @@ class VerificationStateUpdater(users: UserService, usersStorage: UsersStorage, c
       users     <- convUsers
       usersMap  =  users.filter(_._2.nonEmpty).toMap
       updates   <- convs.updateAll2(usersMap.keys.toSeq, { conv => update(conv, usersMap(conv.id)) })
-      _         <- addMessagesAfterUpdate(updates, usersMap, changes)
+      _         <- updateProcessor(VerificationStateUpdate(updates, usersMap, changes))
     } yield ()
   }
-
-  private def addMessagesAfterUpdate(updates: Seq[(ConversationData, ConversationData)], convUsers: Map[ConvId, Seq[UserData]], changes: Map[UserId, VerificationChange]) =
-    users.withSelfUserFuture { selfUserId =>
-      Future.traverse(updates) {
-        case (prev, up) if up.verified == VERIFIED =>
-          messages.addOtrVerifiedMessage(up.id)
-        case (prev, up) if prev.verified == VERIFIED =>
-          val convId = up.id
-          val changedUsers = convUsers(convId).filter(!_.isVerified).flatMap { u => changes.get(u.id).map(u.id -> _) }
-          val (users, change) =
-            if (changedUsers.forall(c => c._2 == ClientAdded || c._2 == MemberAdded)) (changedUsers map (_._1), ClientAdded)
-            else (changedUsers collect { case (user, ClientUnverified) => user }, ClientUnverified)
-
-          val (self, other) = users.partition(_ == selfUserId)
-          for {
-            _ <- if (self.nonEmpty) messages.addOtrUnverifiedMessage(convId, Seq(selfUserId), change) else Future.successful(())
-            _ <- if (other.nonEmpty) messages.addOtrUnverifiedMessage(convId, other, change) else Future.successful(())
-          } yield ()
-        case _ =>
-          Future.successful(())
-      }
-    }
 }
 
 object VerificationStateUpdater {
   private implicit val tag: LogTag = logTagFor[VerificationStateUpdater]
+
+  def serializationKey(userId: UserId) = (userId, "verification-state-update")
+
+  // XXX: small hack to synchronize other operations with verification state updating,
+  // we sometimes need to make sure that this state is up to date before proceeding
+  def awaitUpdated(userId: UserId) = Serialized.future(serializationKey(userId)) { Future.successful(()) }
+
+  case class VerificationStateUpdate(convUpdates: Seq[(ConversationData, ConversationData)], convUsers: Map[ConvId, Seq[UserData]], changes: Map[UserId, VerificationChange])
 
   sealed trait VerificationChange
   case object ClientUnverified extends VerificationChange

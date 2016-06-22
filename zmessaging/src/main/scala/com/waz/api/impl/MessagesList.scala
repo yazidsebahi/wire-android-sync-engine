@@ -56,13 +56,13 @@ class MessagesList(convId: ConvId)(implicit ui: UiModule) extends com.waz.api.Me
   addLoader(_.messagesStorage.unreadCount(convId)) { this.unreadCount = _ }
 
   addLoader { zms =>
-    zms.messagesStorage.lastMessage(convId).flatMap(m => Signal.future(m.mapFuture(zms.likings.combineWithLikes)(Threading.Background)))
+    zms.messagesStorage.lastMessage(convId).flatMap(m => Signal.future(m.mapFuture(zms.msgAndLikes.combineWithLikes)(Threading.Background)))
   } { m =>
     verbose(s"lastMessage changed: $m")
     this.lastMessage = m
   }
 
-  addLoader(signal) { case (cursor, lastReadTime) =>
+  addLoader(signal _) { case (cursor, lastReadTime) =>
     verbose(s"onLoaded($cursor, $lastReadTime")
 
     debug(s"changing last read from ${this.lastRead} to ${this.lastRead max lastReadTime}")

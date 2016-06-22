@@ -17,7 +17,6 @@
  */
 package com.waz.api.impl
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
@@ -30,7 +29,6 @@ import com.waz.threading.CancellableFuture
 import com.waz.utils.events.EventContext
 import org.json
 import org.json.JSONObject
-import org.robolectric.Robolectric
 import org.scalatest._
 
 import scala.concurrent.Await
@@ -38,10 +36,7 @@ import scala.concurrent.duration._
 
 class IncomingConnectionSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils {
 
-  lazy val context = Robolectric.application
-
   var zmessaging: MockZMessaging = _
-  implicit def db: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
 
   implicit val ec = EventContext.Global
   val timeout = 5.seconds
@@ -59,8 +54,7 @@ class IncomingConnectionSpec extends FeatureSpec with Matchers with BeforeAndAft
     createConnectionReturnValue = Left(ErrorResponse(400, "msg", "label"))
     syncUserFromServerCalled = None
 
-    zmessaging = new MockZMessaging() { self =>
-      users.selfUserId := selfUser.id
+    zmessaging = new MockZMessaging(selfUserId = selfUser.id) { self =>
 
       override lazy val sync: SyncServiceHandle = new EmptySyncService {
 
@@ -93,7 +87,7 @@ class IncomingConnectionSpec extends FeatureSpec with Matchers with BeforeAndAft
   }
 
   after {
-    Await.result(zmessaging.storage { _ => }, 5.seconds)
+    Await.result(zmessaging.storage.db { _ => }, 5.seconds)
   }
 
 

@@ -19,13 +19,16 @@ package com.waz.users
 
 import java.util.UUID
 
-import com.waz.api.ZMessagingApi.{RegistrationListener, PhoneNumberVerificationListener, PhoneConfirmationCodeRequestListener}
-import com.waz.api.impl.AccentColor
+import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
 import com.waz.api._
-import com.waz.model.{EmailAddress, ConfirmationCode, PhoneNumber, ZUserId}
+import com.waz.api.impl.AccentColor
+import com.waz.model._
 import com.waz.provision.InternalBackendClient
-import org.scalatest.{OptionValues, FeatureSpec}
+import com.waz.utils._
+import com.waz.testutils.Implicits._
+import org.scalatest.{FeatureSpec, OptionValues}
 
+import com.waz.testutils.Matchers._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
@@ -33,7 +36,7 @@ import scala.util.Random
 class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with ApiSpec { test =>
   override val autoLogin = false
 
-  lazy val userId = ZUserId()
+  lazy val userId = AccountId()
 
   lazy val phone = randomPhoneNumber
   override lazy val email = s"android.test+${UUID.randomUUID}@wearezeta.com"
@@ -111,7 +114,7 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
         self.value.getName shouldEqual "name"
         self.value.getPhone shouldEqual phone.str
         self.value.isLoggedIn shouldEqual true
-        self.value.isEmailVerified shouldEqual false
+        self.value.accountActivated shouldEqual true
         self.value.getEmail should be(empty)
       }
     }
@@ -134,7 +137,7 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
         credentialsUpdated shouldEqual true
         self.getEmail should be (empty)
         self.getPhone shouldEqual phone.str
-        self.isEmailVerified shouldEqual false
+        self.accountActivated shouldEqual true
       }
     }
 
@@ -143,7 +146,17 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
       val self = api.getSelf
       withDelay {
         self.getEmail shouldEqual email
-        self.isEmailVerified shouldEqual true
+      }
+    }
+
+    scenario("Add picture") {
+      val self = api.getSelf
+      self.setPicture(ImageAssetFactory.getImageAsset(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
+      withDelay {
+        self.getPicture.isEmpty shouldEqual false
+        zmessaging.assetsStorage.get(AssetId(self.getPicture.getId)) should eventually(beMatching({
+          case Some(ImageAssetData(_, _, Seq(_, ImageData(_, _, _, _, _, _, _, Some(_), _, true, _, _, _, _)))) => true
+        }))
       }
     }
 
@@ -166,14 +179,22 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
     }
 
     scenario("Login") {
+      loggedInSelf = None
       api.login(CredentialsFactory.phoneCredentials(phone.str, confirmationCode.value.str), loginListener)
+
+      lazy val self = loggedInSelf
+      lazy val user = self.get.getUser
+
       withDelay {
-        val self = loggedInSelf
+        loggedInSelf shouldBe defined
         self should be (defined)
         self.value.isLoggedIn shouldEqual true
         self.value.getPhone shouldEqual phone.str
         self.value.getEmail shouldEqual email
-        self.value.getUser.getEmail shouldEqual email
+        withClue(s"self data: ${self.value.asInstanceOf[com.waz.api.impl.Self].data}, user data: ${user.data}") {
+          user.getEmail shouldEqual email
+        }
+        user.getPicture should not be empty
       }
     }
 
@@ -181,6 +202,14 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
       api.logout()
       withDelay {
         api.getSelf.isLoggedIn shouldEqual false
+      }
+    }
+
+    scenario("Request login confirmation call") {
+      confirmationCodeSent = false
+      api.requestPhoneConfirmationCall(phone.str, KindOfAccess.LOGIN, confirmationCodeListener)
+      withDelay {
+        confirmationCodeSent shouldEqual true
       }
     }
   }

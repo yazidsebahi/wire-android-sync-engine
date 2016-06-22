@@ -19,7 +19,7 @@ package com.waz.sync.queue
 
 import com.waz.Generators.SyncRequests._
 import com.waz.testutils.Matchers._
-import com.waz.content.{SyncStorage, ZStorage}
+import com.waz.content.{SyncStorage, ZmsDatabase}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.sync.SyncRequest._
@@ -37,7 +37,7 @@ import scala.concurrent.Future
 
 class RequestMergerSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
 
-  lazy val storage = new ZStorage(ZUserId(), Robolectric.application)
+  lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
 
   feature("Merge keys") {
     scenario("Refs should not be set for requests without ref") {

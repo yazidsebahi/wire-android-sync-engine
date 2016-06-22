@@ -25,7 +25,7 @@ import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket}
 import com.waz.model.EmailAddress
 import com.waz.provision.ProvisionedSuite
-import com.waz.service.{BackendConfig, GlobalModule, Preference}
+import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.utils.Json
 import com.waz.utils.events.EventContext
 import com.waz.znet.Request._
@@ -88,7 +88,7 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
           println(s"Received unexpected websocket response $resp")
       }
 
-      val c = new ZNetClient(new BasicCredentials(EmailAddress(provisionedEmail("auto1")), Some("auto1_pass")), None, asyncClient, backend, loginClient, Preference.empty)
+      val c = new ZNetClient(new BasicCredentials(EmailAddress(provisionedEmail("auto1")), Some("auto1_pass")), asyncClient, backend, loginClient)
       Await.result(c(Put("/self", Json("name" -> "auto1_updated"))), 10.seconds) match {
         case Response(SuccessHttpStatus(), _, _) => //fine
         case resp => fail(s"Received unexpected response when trying to update the name: $resp")

@@ -17,7 +17,6 @@
  */
 package com.waz.service
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -41,17 +40,15 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   val timeout = 5.seconds
 
   var zms: MockZMessaging = _
-  def storage = zms.storage
+  def storage = zms.storage.db
   def service = zms.users
 
   var syncRequest = None: Option[UserId]
 
-  implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
-
   before {
     ZMessaging.context = Robolectric.application
 
-    zms = new MockZMessaging() {
+    zms = new MockZMessaging(selfUserId = users.head.id) {
       override lazy val sync = new EmptySyncService {
         override def syncUsers(id: UserId*) = {
           syncRequest = id.headOption
@@ -59,7 +56,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         }
       }
 
-      keyValue.lastSlowSyncTimestamp = System.currentTimeMillis()
+      kvStorage.lastSlowSyncTimestamp = System.currentTimeMillis()
     }
   }
 
@@ -73,7 +70,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     zms.insertUsers(users)
 
     users foreach { u =>
-      Await.result(service.getUser(u.id), timeout) shouldEqual Some(u)
+      Await.result(service.getUser(u.id), timeout).map(_.copy(displayName = u.displayName)) shouldEqual Some(u)
     }
 
     Await.result(service.getUser(UserId()), timeout) shouldEqual None
@@ -82,7 +79,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   scenario("update self user") {
     zms.insertUsers(users)
     val id = users.head.id
-    Await.result(service.updateSelf(UserInfo(id), emailVerified = true, phoneVerified = false), timeout)
+    Await.result(service.updateSyncedUsers(Seq(UserInfo(id))), timeout)
     Await.result(service.getSelfUser, timeout).map(_.connection) shouldEqual Some(ConnectionStatus.Self)
   }
 

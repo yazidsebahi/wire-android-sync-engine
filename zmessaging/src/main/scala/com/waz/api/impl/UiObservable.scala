@@ -19,7 +19,7 @@ package com.waz.api.impl
 
 import com.waz.ZLog._
 import com.waz.api.{Subscriber, Subscription, UpdateListener}
-import com.waz.service.ZMessaging
+import com.waz.service.{AccountService, ZMessaging}
 import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
@@ -45,16 +45,13 @@ class EmptyList[A] extends CoreList[A] {
   override def size(): Int = 0
 }
 
-class UiSignal[A, B](source: ZMessaging => Signal[B], createUiObject: B => A)(implicit ui: UiModule) extends com.waz.api.UiSignal[A] with UiObservable with SignalLoading {
+abstract class UiSignal[A]()(implicit ui: UiModule) extends com.waz.api.UiSignal[A] with UiObservable with SignalLoading {
 
   private var value = Option.empty[A]
 
   private var subscribers = Vector.empty[Subscriber[A]]
 
-  addLoader(source) { set }
-
-  private[api] def set(sourceValue: B) = {
-    val v = createUiObject(sourceValue)
+  protected[api] def set(v: A) = {
     if (!value.contains(v)) {
       value = Some(v)
       subscribers foreach (_.next(v))
@@ -78,6 +75,19 @@ class UiSignal[A, B](source: ZMessaging => Signal[B], createUiObject: B => A)(im
 }
 
 object UiSignal {
-  def apply[A](s: ZMessaging => Signal[A])(implicit ui: UiModule): UiSignal[A, A] = new UiSignal(s, identity)
-  def mapped[A, B](s: ZMessaging => Signal[B], f: B => A)(implicit ui: UiModule): UiSignal[A, B] = new UiSignal(s, f)
+  def apply[A](s: ZMessaging => Signal[A])(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
+    addLoader(s) { set }
+  }
+
+  def account[A](s: AccountService => Signal[A])(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
+    accountLoader(s) { set }
+  }
+
+  def mapped[A, B](s: ZMessaging => Signal[B], f: B => A)(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
+    addLoader(s) { v => set(f(v)) }
+  }
+
+  def accountMapped[A, B](s: AccountService => Signal[B], f: B => A)(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
+    accountLoader(s) { v => set(f(v)) }
+  }
 }

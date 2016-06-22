@@ -44,13 +44,17 @@ class Avs(implicit ui: UiModule) extends com.waz.api.Avs  with UiObservable with
   ui.zms { zms =>
     val fm = zms.flowmanager
 
-    fm.onCreateVideoPreview.on(Threading.Ui) { _ => videoListener foreach (l => fm.setVideoPreview(l.onPreviewRequested())) } (EventContext.Global)
-    fm.onCreateVideoView.on(Threading.Ui) { case (convId, partId) => videoListener foreach (l => fm.setVideoView(convId, partId, l.onViewRequested())) } (EventContext.Global)
+    fm.createVideoPreviewRequested.onChanged.on(Threading.Ui) {
+      case true => videoListener foreach (l => fm.setVideoPreview(l.onPreviewRequested()))
+      case false => videoListener foreach (_.onPreviewReleased())
+    } (EventContext.Global)
 
-    fm.onReleaseVideoPreview.on(Threading.Ui) { _ => videoListener foreach (_.onPreviewReleased()) } (EventContext.Global)
-    fm.onReleaseVideoView.on(Threading.Ui) { _ => videoListener foreach (_.onViewReleased()) } (EventContext.Global)
+    fm.createVideoViewRequested.onChanged.on(Threading.Ui) {
+      case Some((convId, partId)) => videoListener foreach (l => fm.setVideoView(convId, partId, l.onViewRequested()))
+      case _ => videoListener foreach (_.onViewReleased())
+    } (EventContext.Global)
 
-    fm.onStateOfReceivedVideoChanged.on(Threading.Ui) { s => videoListener foreach (_.onStateOfReceivedVideoChanged(s.state, s.reason)) } (EventContext.Global)
+    fm.stateOfReceivedVideo.on(Threading.Ui) { s => videoListener foreach (_.onStateOfReceivedVideoChanged(s.state, s.reason)) } (EventContext.Global)
   }
 
   override def setLoggingEnabled(enable: Boolean): Unit = withFlowManagerService { _.setLoggingEnabled(enable) }

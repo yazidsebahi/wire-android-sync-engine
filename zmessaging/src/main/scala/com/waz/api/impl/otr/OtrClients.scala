@@ -22,14 +22,15 @@ import java.util.Locale
 import android.os.Parcel
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.OtrClient.{ResetCallback, DeleteCallback}
+import com.waz.api.OtrClient.{DeleteCallback, ResetCallback}
 import com.waz.api.impl.{CoreList, ErrorResponse, UiObservable, UiSignal}
-import com.waz.api.{Location, OtrClient => ApiClient, OtrClientType, Verification}
-import com.waz.model.{ConvId, otr, UserId}
+import com.waz.api.{Location, OtrClientType, Verification, OtrClient => ApiClient}
 import com.waz.model.otr.{Client, ClientId}
-import com.waz.service.ZMessaging
+import com.waz.model.{AccountData, ConvId, UserId, otr}
+import com.waz.service.AccountService
+import com.waz.service.otr.OtrService
 import com.waz.sync.SyncResult
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -37,12 +38,13 @@ import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
+import scala.concurrent.Future
 
-class OtrClients(signal: ZMessaging => Signal[(UserId, Vector[Client])])(implicit ui: UiModule) extends CoreList[ApiClient] with SignalLoading {
+class OtrClients(signal: AccountService => Signal[(UserId, Vector[Client])])(implicit ui: UiModule) extends CoreList[ApiClient] with SignalLoading {
   import OtrClients._
   private var items = IndexedSeq.empty[OtrClient]
 
-  addLoader(signal) { case (user, clients) =>
+  accountLoader(signal) { case (user, clients) =>
     verbose(s"clients: $clients")
     val recycled: Map[ClientId, OtrClient] = items.map(c => c.clientId -> c) (breakOut)
     items = clients .map { c => recycled.getOrElse(c.id, new OtrClient(user, c.id, c)).update(c) } (breakOut)
@@ -55,6 +57,7 @@ class OtrClients(signal: ZMessaging => Signal[(UserId, Vector[Client])])(implici
 }
 
 object OtrClients {
+  import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[OtrClients]
 
   // ascending by model and desc by time
@@ -72,27 +75,40 @@ object OtrClients {
     override def size(): Int = 0
   }
 
-  def apply(user: UserId, skipSelf: Boolean = false)(implicit ui: UiModule): OtrClients = new OtrClients({ zms =>
+  def apply(user: UserId, skipSelf: Boolean = false)(implicit ui: UiModule): OtrClients = new OtrClients({ account =>
     // request refresh of clients list, this will be executed only when UI goes to devices list,
     // so should be safe to schedule sync every time
-    zms.sync.syncClients(user)
+    account.getZMessaging.flatMap {
+      case Some(zms) => zms.sync.syncClients(user)
+      case None => Future.successful(())
+    }
+
     for {
-      current <- zms.otrClientId
-      clients <- zms.otrClientsService.getClientsSignal(user)
-      cs = clients.clients.values.toVector.sorted(ClientOrdering)
-    } yield
-      (user, if (skipSelf) cs.filter(c => !current.contains(c.id)) else cs)
+      clients <- account.storage.otrClientsStorage.signal(user)
+      acc     <- account.accountData
+    } yield {
+      val cs = clients.clients.values.toVector.sorted(ClientOrdering)
+      (user, if (skipSelf) cs.filter(c => !acc.clientId.contains(c.id)) else cs)
+    }
   })
 
-  def incoming(implicit ui: UiModule): OtrClients = new OtrClients({ zms =>
-    zms.users.selfUserId.signal.zip(zms.otrClientsService.incomingClientsSignal.map(_.sorted(IncomingClientOrdering).toVector))
+  def incoming(implicit ui: UiModule): OtrClients = new OtrClients({ account =>
+
+    account.accountData flatMap {
+      case AccountData(_, _, _, _, _, _, _, _, Some(userId), Some(clientId), _) =>
+        account.storage.otrClientsStorage.incomingClientsSignal(userId, clientId).map { cs =>
+          (userId, cs.sorted(IncomingClientOrdering).toVector)
+        }
+      case _ => Signal.empty
+    }
   })
 }
 
 class OtrClient(val userId: UserId, val clientId: ClientId, var data: Client)(implicit ui: UiModule) extends api.OtrClient with UiObservable with SignalLoading {
   import OtrClient._
+  import Threading.Implicits.Background
 
-  addLoader(_.otrClientsService.getClientsSignal(userId).map(_.clients.get(clientId))) { _ foreach update }
+  addLoader(_.storage.otrClientsStorage.signal(userId).map(_.clients.get(clientId))) { _ foreach update }
 
   def update(data: Client) = {
     if (this.data != data) {
@@ -128,22 +144,27 @@ class OtrClient(val userId: UserId, val clientId: ClientId, var data: Client)(im
 
   override def getType: OtrClientType = data.devType
 
-  override def getFingerprint: api.UiSignal[Fingerprint] =
-    new UiSignal(zms => zms.otrService.fingerprintSignal(userId, clientId).collect { case Some(bytes) => bytes }, new Fingerprint(_: Array[Byte]))
+  override def getFingerprint: api.UiSignal[Fingerprint] = {
+    def signal(acc: AccountService) = acc.accountData flatMap { account =>
+      if (account.userId.contains(userId) && account.clientId.contains(clientId)) Signal.future(acc.cryptoBox { cb => Future successful cb.getLocalFingerprint })
+      else acc.cryptoBox.sessions.remoteFingerprint(OtrService.sessionId(userId, clientId))
+    }
+
+    UiSignal.accountMapped(signal(_: AccountService).collect { case Some(bytes) => bytes }, new Fingerprint(_: Array[Byte]))
+  }
 
   // was this client fingerprint verified (manually or by sync from trusted device)
   override def getVerified: Verification = data.verified
 
-  override def setVerified(trusted: Boolean): Unit = ui.zms(_.otrClientsService.updateVerified(userId, clientId, trusted))
+  override def setVerified(trusted: Boolean): Unit = ui.getAccount.flatMap(_.storage.otrClientsStorage.updateVerified(userId, clientId, trusted))
 
   override def delete(password: String, cb: DeleteCallback): Unit =
-    ui.zms.flatMap(zms => CancellableFuture.lift(zms.otrClientsService.deleteClient(clientId, password))) .map {
+    ui.getUserModule.flatMap(_.clientsService.deleteClient(clientId, password)) .map {
       case Right(_) => cb.onClientDeleted(this)
       case Left(ErrorResponse(_, msg, _)) => cb.onDeleteFailed(msg)
     } (Threading.Ui)
 
   override def resetSession(callback: ResetCallback): Unit = {
-    import Threading.Implicits.Background
     ui.zms.flatMapFuture { zms =>
       // reset session msg has to be sent in some conv, will try to do it in current conv and fallback to 1-1 with this user
       zms.convsStats.selectedConvIdPref() flatMap { conv =>

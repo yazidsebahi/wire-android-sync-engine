@@ -26,9 +26,9 @@ object AssetPreviewData {
     override def apply(data: AssetPreviewData): JSONObject = JsonEncoder { o =>
       o.put("type", data.jsonTypeTag.name)
       data match {
-        case Empty => // nothing to add
-        case Image(img) =>
-          o.put("img", JsonEncoder.encode(img))
+        case Empty            => // nothing to add
+        case Image(img)       => o.put("img", JsonEncoder.encode(img))
+        case Loudness(levels) => o.put("levels", JsonEncoder.arrNum(levels))
       }
     }
   }
@@ -37,14 +37,14 @@ object AssetPreviewData {
     import JsonDecoder._
 
     override def apply(implicit o: JSONObject): AssetPreviewData = decodeSymbol('type) match {
-      case 'empty => Empty
-      case 'image =>
-        Image(JsonDecoder[ImageData]('img))
-      case other =>
-        throw new IllegalArgumentException(s"unsupported meta data type: $other")
+      case 'empty    => Empty
+      case 'image    => Image(JsonDecoder[ImageData]('img))
+      case 'loudness => Loudness(JsonDecoder.array[Float]('levels)((arr, i) => arr.getDouble(i).toFloat))
+      case other     =>  throw new IllegalArgumentException(s"unsupported meta data type: $other")
     }
   }
 
+  case class Loudness(levels: Vector[Float]) extends AssetPreviewData('loudness)
   case class Image(img: ImageData) extends AssetPreviewData('image)
   case object Empty extends AssetPreviewData('empty)
 }

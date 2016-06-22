@@ -23,9 +23,9 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model._
-import com.waz.service.ContactsService.{CurrentAddressBookVersion, MayNotYetCheckAgainException, UserNotYetVerifiedException, zUserAndTimeOfLastCheck}
+import com.waz.service.ContactsService.{CurrentAddressBookVersion, MayNotYetCheckAgainException, zUserAndTimeOfLastCheck}
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{RoboPermissionProvider, EmptySyncService, MockZMessaging, prepareAddressBookEntries}
+import com.waz.testutils.{EmptySyncService, MockZMessaging, RoboPermissionProvider, prepareAddressBookEntries}
 import com.waz.threading.CancellableFuture.delay
 import com.waz.utils._
 import org.scalatest._
@@ -44,9 +44,7 @@ class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   @volatile var uploadedAddressBook = Option.empty[AddressBook]
 
-  def setUserVerified(v: Boolean) = zms.user.user = zms.user.user.copy(emailVerified = v)
-
-  lazy val zms = new MockZMessaging(zuser = ZUser(EmailAddress("meep@moop.me"), "passwd").copy(emailVerified = true)) {
+  lazy val zms = new MockZMessaging() {
     override lazy val sync = new EmptySyncService {
       override def postAddressBook(ab: AddressBook) = {
         uploadedAddressBook = Some(ab)
@@ -59,17 +57,25 @@ class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       }
     }
 
-    lifecycle.acquireUi("test")
+    permissions.setProvider(new RoboPermissionProvider)
   }
   
   lazy val service = zms.contacts
 
-  implicit def db: SQLiteDatabase = zms.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zms.db.dbHelper.getWritableDatabase
 
   before {
-    zms.permissions.setProvider(new RoboPermissionProvider)
     uploadedAddressBook = None
     setLastCheckTime(EPOCH)
+  }
+
+  scenario("init zms") {
+    zms.lifecycle.acquireUi("test")
+    service.initFuture.await()
+    withDelay {
+      zms.lifecycle.uiActive.currentValue shouldEqual Some(true)
+      uploadedAddressBook should be('defined)
+    }
   }
 
   scenario("hash contacts") {
@@ -132,8 +138,8 @@ class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("save and load address book") {
       val ab = AddressBook(Seq("self_hash1"), Seq(ContactHashes(ContactId("id1"), Set("id1_hash1", "id1_hash2")), ContactHashes(ContactId("id2"), Set("id2_hash1"))))
-      Await.result(zms.storage { AddressBook.save(ab)(_) }, 5.seconds)
-      val ab1 = Await.result(zms.storage { AddressBook.load(_) }, 1.second)
+      Await.result(zms.db { AddressBook.save(ab)(_) }, 5.seconds)
+      val ab1 = Await.result(zms.db { AddressBook.load(_) }, 1.second)
 
       ab1.contacts shouldEqual ab.contacts
 
@@ -203,16 +209,10 @@ class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       uploadedAddressBook.get.contacts.map(_.id).toSet shouldEqual oneTwoThree
     }
 
-    scenario("fail early if user is not yet verified") {
-      setUserVerified(false)
-      service.requestUploadIfNeeded() should failWith[UserNotYetVerifiedException.type]
-    }
-
     scenario("post only self / empty on start if sharing is disabled and version is up-to-date and max upload delay elapsed") {
-      setUserVerified(true)
       (service.addressBookVersionOfLastUpload := Some(CurrentAddressBookVersion)).await()
       (service.shareContactsPref := false).await()
-      (service.requestUploadIfNeeded()).await()
+      service.requestUploadIfNeeded().await()
       uploadedAddressBook should be('defined)
       uploadedAddressBook.get.self should not(be(empty))
       uploadedAddressBook.get.contacts should be(empty)
@@ -263,5 +263,5 @@ class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   lazy val oneTwoThree = Set("1", "2", "3") map sha2 map ContactId
   def randomDelay = delay((abs(nextDouble()) * zms.timeouts.contacts.uploadCheckInterval.toMillis / 2d).toLong.millis).future
-  def setLastCheckTime(instant: Instant) = zUserAndTimeOfLastCheck.set((zms.userId, instant))
+  def setLastCheckTime(instant: Instant) = zUserAndTimeOfLastCheck.set((zms.accountId, instant))
 }

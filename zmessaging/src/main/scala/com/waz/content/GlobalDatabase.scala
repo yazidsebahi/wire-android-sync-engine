@@ -15,17 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service.conversation
+package com.waz.content
 
+import com.waz.db.ZGlobalDB
 import android.content.Context
-import com.waz.content.MembersStorage
-import com.waz.model.{ConvId, UserId}
+import com.waz.threading.{Threading, SerialDispatchQueue}
 
-class MembersContentUpdater(context: Context, val membersStorage: MembersStorage) {
+class GlobalDatabase(context: Context, dbNameSuffix: String = "") extends Database {
 
-  private[service] def addUsersToConversation(conv: ConvId, users: Seq[UserId]) =
-    membersStorage.add(conv, users: _*)
-
-  private[service] def removeUsersFromConversation(conv: ConvId, users: Seq[UserId]) =
-    membersStorage.remove(conv, users: _*)
+  override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue(executor = Threading.IOThreadPool, name = "GlobalDatabase")
+  val dbHelper = new ZGlobalDB(context, dbNameSuffix)
 }

@@ -22,7 +22,7 @@ import java.util.Date
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.Message
-import com.waz.content.GlobalStorage
+import com.waz.content.GlobalDatabase
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -38,31 +38,30 @@ import scala.concurrent.duration._
 
 class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
-  lazy val globalStorage = new GlobalStorage(Robolectric.application)
+  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("user 1")
   lazy val user2 = UserData("user 1")
   lazy val user3 = UserData("user 3")
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   var service: MockZMessaging = _
   var convSync = None: Option[ConvId]
 
-  def storage = service.storage
+  def storage = service.db
 
   before {
     convSync = None
 
-    service = new MockZMessaging() {
+    service = new MockZMessaging(selfUserId = selfUser.id) {
       override lazy val sync = new EmptySyncService {
         override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String]) = {
           convSync = Some(id)
           super.postConversation(id, us, n)
         }
       }
-      users.selfUserId := test.selfUser.id
     }
 
     service.insertUsers(Seq(selfUser, user1, user2, user3))

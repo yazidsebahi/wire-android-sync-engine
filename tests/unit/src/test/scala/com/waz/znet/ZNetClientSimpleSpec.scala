@@ -23,7 +23,7 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.waz.model.EmailAddress
-import com.waz.service.{Preference, BackendConfig, ZMessaging}
+import com.waz.service.{BackendConfig, ZMessaging}
 import com.waz.znet.Response.HttpStatus
 import org.json.JSONObject
 import org.robolectric.Robolectric
@@ -52,10 +52,9 @@ class ZNetClientSimpleSpec extends FeatureSpecLike with Matchers with BeforeAndA
     configureFor("localhost", wireMockPort)
     client = new ZNetClient(
       new BasicCredentials(EmailAddress(email), Some(password)),
-      None, new AsyncClient,
+      new AsyncClient,
       BackendConfig("http://localhost:" + wireMockPort),
-      new LoginClient(new AsyncClient, BackendConfig("http://localhost:" + wireMockPort)),
-      Preference.empty)
+      new LoginClient(new AsyncClient, BackendConfig("http://localhost:" + wireMockPort)))
   }
 
   after {

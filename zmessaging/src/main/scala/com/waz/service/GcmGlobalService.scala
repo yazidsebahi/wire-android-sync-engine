@@ -56,27 +56,27 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
 
   def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
     if (reg.version == appVersion) reg
-    else GcmRegistration("", ZUserId(""), appVersion)
+    else GcmRegistration("", AccountId(""), appVersion)
   }
 
-  def setGcmRegistration(token: String, user: ZUserId): GcmRegistration = {
+  def setGcmRegistration(token: String, user: AccountId): GcmRegistration = {
     val reg = GcmRegistration(token, user, appVersion)
     verbose(s"setGcmRegistration: $reg")
     editPreferences(reg.save(_))
     reg
   }
 
-  def clearGcmRegistrationUser(user: ZUserId) = withPreferences { prefs =>
+  def clearGcmRegistrationUser(user: AccountId) = withPreferences { prefs =>
     val reg = GcmRegistration(prefs)
     verbose(s"clearGcmRegistrationUser($user): $reg")
     if (reg.user == user) {
       val edit = prefs.edit()
-      reg.copy(user = ZUserId("")).save(edit)
+      reg.copy(user = AccountId("")).save(edit)
       edit.commit()
     }
   }
 
-  def registerGcm(user: ZUserId): CancellableFuture[Option[GcmRegistration]] = getGcmRegistration flatMap {
+  def registerGcm(user: AccountId): CancellableFuture[Option[GcmRegistration]] = getGcmRegistration flatMap {
     case reg @ GcmRegistration(token, _, _) if token.nonEmpty =>
       debug(s"registerGcm, already registered: $reg, reusing token")
       CancellableFuture.successful(Some(reg))
@@ -89,10 +89,10 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
           val token = registerWithGoogle(gcmSenderId.str +: metadata.localyticsSenderId.toSeq)
           Localytics.setPushDisabled(false)
           Localytics.setPushRegistrationId(token)
-          CancellableFuture.successful(Some(setGcmRegistration(token, ZUserId(""))))
+          CancellableFuture.successful(Some(setGcmRegistration(token, AccountId(""))))
         } catch {
           case NonFatal(ex) =>
-            setGcmRegistration("", ZUserId(""))
+            setGcmRegistration("", AccountId(""))
             warn(s"registerGcm failed for sender: '$gcmSenderId'", ex)
             HockeyApp.saveException(ex, s"unable to register gcm for sender $gcmSenderId")
             CancellableFuture.successful(None)
@@ -100,7 +100,7 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
       }
   }
 
-  def updateRegisteredUser(token: String, user: ZUserId) = withPreferences { prefs =>
+  def updateRegisteredUser(token: String, user: AccountId) = withPreferences { prefs =>
     val reg = GcmRegistration(prefs)
     if (reg.token == token && reg.user != user) {
       val updated = reg.copy(user = user, version = appVersion)
@@ -134,7 +134,7 @@ object GcmGlobalService {
 
   class GcmNotAvailableException extends Exception("Google Play Services not available") with NoReporting
 
-  case class GcmRegistration(token: String = "", user: ZUserId = ZUserId(""), version: Int = 0) {
+  case class GcmRegistration(token: String = "", user: AccountId = AccountId(""), version: Int = 0) {
     def save(editor: SharedPreferences.Editor) = {
       editor.putString(RegistrationIdPref, token)
       editor.putString(RegistrationUserPref, user.str)
@@ -144,6 +144,6 @@ object GcmGlobalService {
 
   object GcmRegistration {
     def apply(prefs: SharedPreferences): GcmRegistration =
-      GcmRegistration(prefs.getString(RegistrationIdPref, ""), ZUserId(prefs.getString(RegistrationUserPref, "")), prefs.getInt(RegistrationVersionPref, 0))
+      GcmRegistration(prefs.getString(RegistrationIdPref, ""), AccountId(prefs.getString(RegistrationUserPref, "")), prefs.getInt(RegistrationVersionPref, 0))
   }
 }

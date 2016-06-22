@@ -17,14 +17,12 @@
  */
 package com.waz
 
-import android.content.{ContentProvider, ContentValues, Context}
-import android.database.{Cursor, MatrixCursor}
+import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.os.Parcel
 import android.provider.ContactsContract
 import android.provider.ContactsContract.DisplayNameSources
-import android.provider.OpenableColumns._
-import android.webkit.MimeTypeMap
 import com.google.protobuf.nano.MessageNano
 import com.waz.api.impl._
 import com.waz.api.{CoreList, IConversation}
@@ -36,10 +34,9 @@ import com.waz.service.ContactsService
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, FlatMapSignal, Signal, Subscription}
-import com.waz.utils.{CachedStorage, Cleanup, IoUtils, Managed, returning}
+import com.waz.utils.{CachedStorage, Cleanup, Managed, returning}
 import libcore.net.MimeUtils
-import org.robolectric.Robolectric._
-import org.robolectric.shadows.ShadowContentResolver
+import org.robolectric.shadows.ShadowContentResolver2
 import org.scalactic.Equality
 import org.scalatest.enablers.{Emptiness, Length}
 
@@ -47,7 +44,6 @@ import scala.collection.JavaConverters._
 import scala.collection.breakOut
 import scala.concurrent.duration._
 import scala.language.implicitConversions
-import scala.util.Try
 
 package object testutils {
 
@@ -59,6 +55,7 @@ package object testutils {
     implicit def apiuser_to_user(user: com.waz.api.User): User = user.asInstanceOf[User]
     implicit def apiml_to_ml(list: com.waz.api.MessagesList): MessagesList = list.asInstanceOf[MessagesList]
     implicit def apiim_to_im(im: com.waz.api.ImageAsset): ImageAsset = im.asInstanceOf[ImageAsset]
+    implicit def apiself_to_self(s: com.waz.api.Self): Self = s.asInstanceOf[Self]
 
     implicit lazy val CursorEmptiness: Emptiness[Cursor] = new Emptiness[Cursor] {
       override def isEmpty(thing: Cursor): Boolean = thing.getCount == 0
@@ -195,8 +192,8 @@ package object testutils {
   import ContactsService.Col
 
   def prepareAddressBookEntries(emailAddresses: Seq[(String, String)], phoneNumbers: Seq[(String, String)])(implicit context: Context): Unit = {
-    ShadowContentResolver.reset()
-    ShadowContentResolver.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
+    ShadowContentResolver2.reset()
+    ShadowContentResolver2.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
       override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = uri match {
         case ContactsService.Emails => cursor(Vector(Col.ContactId, Col.EmailAddress), emailAddresses map { case (a, b) => Seq(a, b) })
         case ContactsService.Phones => cursor(Vector(Col.ContactId, Col.PhoneNumber), phoneNumbers map { case (a, b) => Seq(a, b) })
@@ -207,11 +204,11 @@ package object testutils {
   }
 
   def prepareContacts(contacts: Contact*)(implicit context: Context): Unit = {
-    ShadowContentResolver.reset()
+    ShadowContentResolver2.reset()
     val emailAddresses = contacts flatMap (c => c.emailAddresses map (e => Seq(c.id.str, e.str)))
     val phoneNumbers = contacts flatMap (c => c.phoneNumbers map (p => Seq(c.id.str, p.str)))
 
-    ShadowContentResolver.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
+    ShadowContentResolver2.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
       override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = {
         def checking(cols: String*) = returning(cols.toVector)(_ => require(projection.toVector == cols, s"projections should match; expected ${cols.toVector.mkString(", ")} but received ${projection.toVector.mkString(", ")}"))
         uri match {
@@ -234,60 +231,6 @@ package object testutils {
 
   def withParcel[A](f: Parcel => A): A = Managed(Parcel.obtain).acquire(f)
   implicit lazy val ParcelCleanup: Cleanup[Parcel] = new Cleanup[Parcel] { def apply(a: Parcel): Unit = a.recycle() }
-
-  trait TestContentProvider extends ContentProvider {
-    override def getType(uri: Uri): String = ""
-    override def update(uri: Uri, contentValues: ContentValues, s: String, strings: Array[String]): Int = 0
-    override def insert(uri: Uri, contentValues: ContentValues): Uri = null
-    override def delete(uri: Uri, s: String, strings: Array[String]): Int = 0
-    override def onCreate(): Boolean = true
-
-    def cursor(columns: Vector[String], values: TraversableOnce[TraversableOnce[String]]): Cursor =
-      utils.returning(new MatrixCursor(columns.toArray)) { c =>
-        values foreach { row =>
-          val rowArr = row.toArray[AnyRef]
-          require(rowArr.length == columns.size, "number of columns did not match")
-          c.addRow(rowArr)
-        }
-      }
-  }
-
-  class TestResourceContentProvider(val authority: String = "com.waz.testresources") extends TestContentProvider {
-    val mimeMap = shadowOf(MimeTypeMap.getSingleton)
-    mimeMap.addExtensionMimeTypMapping("pdf", "application/pdf")
-    mimeMap.addExtensionMimeTypMapping("mp4", Mime.Video.MP4.str)
-    mimeMap.addExtensionMimeTypMapping("m4a", Mime.Audio.MP4.str)
-
-    case class Resource(uri: Uri, mime: Mime, size: Long) {
-      def inputStream = getClass.getResourceAsStream(uri.getPath)
-      def registerStream() = resolver.registerInputStream(uri, inputStream)
-      def isEmpty = uri.toString.isEmpty
-      def name = uri.getLastPathSegment
-    }
-
-    val Empty = Resource(Uri.parse(""), Mime.Unknown, 0)
-
-    def resourceUri(path: String) = Uri.parse(s"content://$authority$path")
-
-    lazy val resolver = shadowOf(getShadowApplication.getContentResolver)
-
-    val resources = new scala.collection.mutable.HashMap[Uri, Resource]
-
-    def getResource(uri: Uri) = resources.getOrElseUpdate(uri, {
-      Try {
-        val len = IoUtils.toByteArray(getClass.getResourceAsStream(uri.getPath)).length
-        Resource(uri, Mime.fromFileName(uri.getLastPathSegment), len)
-      } getOrElse Empty
-    })
-
-    override def getType(uri: Uri): String = getResource(uri).mime.str
-
-    override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor =
-      getResource(uri) match {
-        case `Empty` => null
-        case res => cursor(Vector(DISPLAY_NAME, SIZE), Vector(Vector(res.name, res.size.toString)))
-      }
-  }
 
   implicit object CacheEntryEquality extends Equality[CacheEntryData] {
     override def areEqual(a: CacheEntryData, b: Any): Boolean = {

@@ -22,14 +22,13 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.ZLog.LogTag
 import com.waz.cache.CachedStorageSpec.{Item, ItemDao}
-import com.waz.content.ZStorage
+import com.waz.content.ZmsDatabase
 import com.waz.db.Dao
-import com.waz.model.ZUserId
+import com.waz.model.AccountId
 import com.waz.testutils.Matchers._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.{RichFuture, CachedStorage, TrimmingLruCache}
-import org.robolectric.Robolectric
+import com.waz.utils.{CachedStorage, RichFuture, TrimmingLruCache}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables
@@ -49,8 +48,7 @@ class CachedStorageSpec extends FeatureSpec with Tables with Matchers with Befor
   implicit val timout: Timeout = 5.seconds
   implicit val tag: LogTag = "DbCacheSpec"
 
-  lazy val context = Robolectric.application
-  lazy val db = new ZStorage(ZUserId(), context)
+  lazy val db = new ZmsDatabase(AccountId(), context)
 
   val testItems = Seq(Item("meep", "meepValue"), Item("mewp", "mewpValue"), Item("foo", "fooValue"), Item("bar", "barValue"), Item("count", "0"))
   val testData = testItems .map { i => i.k -> i } .toMap

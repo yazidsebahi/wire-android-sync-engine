@@ -20,6 +20,7 @@ package com.waz.service
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.content.KeyValueStorage
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.PushService.SlowSyncRequest
@@ -30,14 +31,14 @@ import com.waz.utils.events._
 
 import scala.concurrent.{Future, Promise}
 
-class PushService(keyValueService: KeyValueService, client: EventsClient, zUser: ZUser, otrClientId: Signal[Option[ClientId]], pipeline: EventPipeline, websocket: WebSocketClientService) extends PushServiceSignals { self =>
+class PushService(keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushServiceSignals { self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val tag: LogTag = logTagFor[PushService]
   private implicit val ec = EventContext.Global
 
-  override val pushConnected = websocket.connected
+  override val pushConnected = webSocket.connected
 
-  val lastNotification = new LastNotificationIdService(keyValueService, this, client, clientId)
+  val lastNotification = new LastNotificationIdService(keyValue, this, client, clientId)
 
   var connectedPushPromise = Promise[PushService]()
 
@@ -54,7 +55,7 @@ class PushService(keyValueService: KeyValueService, client: EventsClient, zUser:
 
   private var subs = Seq.empty[Subscription]
 
-  websocket.client.on(dispatcher) {
+  webSocket.client.on(dispatcher) {
     case None =>
       subs.foreach(_.destroy())
       subs = Nil
@@ -63,7 +64,7 @@ class PushService(keyValueService: KeyValueService, client: EventsClient, zUser:
       subs.foreach(_.destroy())
       subs = Seq(
         ws.onMessage { content =>
-          verbose(s"got websocket message: $content, user: $zUser")
+          verbose(s"got websocket message: $content")
           content match {
             case NotificationsResponse(notifications @ _*) =>
               debug(s"got notifications from data: $content")
@@ -90,23 +91,19 @@ class PushService(keyValueService: KeyValueService, client: EventsClient, zUser:
       connectedPushPromise = Promise()
   }
 
-  private def clientId = otrClientId.collect { case Some(id) => id } .head
-
   def onPushNotification(notification: PushNotification): Unit = {
     debug(s"gotPushNotification: $notification")
 
     val localTime = new Date
     notification.events foreach { ev =>
       ev.localTime = localTime
-      verbose(s"event: $ev, user: $zUser")
+      verbose(s"event: $ev")
     }
-    otrClientId.head map { clientId =>
-      if (notification.hasEventForClient(clientId)) {
-        val f = pipeline(notification.events)
-        if (!notification.transient) lastNotification.updateLastIdOnNotification(notification.id, f)
-      } else {
-        verbose(s"received notification intended for other client: $notification")
-      }
+    if (notification.hasEventForClient(clientId)) {
+      val f = pipeline(notification.events)
+      if (!notification.transient) lastNotification.updateLastIdOnNotification(notification.id, f)
+    } else {
+      verbose(s"received notification intended for other client: $notification")
     }
   }
 
@@ -123,8 +120,8 @@ class PushService(keyValueService: KeyValueService, client: EventsClient, zUser:
         loadNotifications(Some(id))
     }
 
-  private def loadNotifications(lastId: Option[Uid]): Future[Unit] = clientId flatMap { cId =>
-    client.loadNotifications(lastId, cId, pageSize = EventsClient.PageSize) map {
+  private def loadNotifications(lastId: Option[Uid]): Future[Unit] =
+    client.loadNotifications(lastId, clientId, pageSize = EventsClient.PageSize) map {
       case Left(error) =>
         warn(s"/notifications failed with error: $error, will schedule slow sync")
         onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
@@ -135,7 +132,6 @@ class PushService(keyValueService: KeyValueService, client: EventsClient, zUser:
         // (the results themselves will be handled by the event stream)
         lastNotification.updateLastIdOnHistorySynced(updatedLastId.orElse(lastId))
     }
-  }
 
   private def processHistoryEvents(notifications: Seq[PushNotification], fetchTime: Date) = {
     val events = notifications.flatMap(_.events)
@@ -159,7 +155,7 @@ trait PushServiceSignals {
  * New notifications are ignored as long as historical events are not processed.
  * Last id is fetched from backend whenever slow sync is requested.
  */
-class LastNotificationIdService(keyValueService: KeyValueService, signals: PushServiceSignals, client: EventsClient, otrClientId: => Future[ClientId]) {
+class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
   import LastNotificationIdService.State._
   import LastNotificationIdService._
 
@@ -171,7 +167,7 @@ class LastNotificationIdService(keyValueService: KeyValueService, signals: PushS
   private var state: State = Disconnected
   private var freshNotificationId = Option.empty[Uid]
   private var fetchLast = CancellableFuture.successful(())
-  
+
   val lastNotificationIdPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
 
   def lastNotificationId() = Future(lastNotificationIdPref()).flatMap(identity) // future and flatten ensure that there is no race with onNotification
@@ -199,22 +195,20 @@ class LastNotificationIdService(keyValueService: KeyValueService, signals: PushS
     }
     freshNotificationId = None
 
-    fetchLast = CancellableFuture.lift(otrClientId) flatMap { clientId =>
-      client.loadLastNotification(clientId) map {
-        case Right(Some(notification)) =>
-          verbose(s"fetched last notification: $notification in state: $state")
-          if (state == Running && freshNotificationId.isEmpty) {
-            lastNotificationIdPref := Some(notification.id)
-            verbose(s"updated pref from backend on slow sync: ${notification.id}")
-          }
-        case Right(None) =>
-          verbose(s"no last notification available on backend, in state: $state")
-          if (state == Running && freshNotificationId.isEmpty) {
-            lastNotificationIdPref := Some(NoNotificationsId)
-          }
-        case Left(error) =>
-          warn(s"/notifications/last failed with error: $error")
-      }
+    fetchLast = client.loadLastNotification(clientId) map {
+      case Right(Some(notification)) =>
+        verbose(s"fetched last notification: $notification in state: $state")
+        if (state == Running && freshNotificationId.isEmpty) {
+          lastNotificationIdPref := Some(notification.id)
+          verbose(s"updated pref from backend on slow sync: ${notification.id}")
+        }
+      case Right(None) =>
+        verbose(s"no last notification available on backend, in state: $state")
+        if (state == Running && freshNotificationId.isEmpty) {
+          lastNotificationIdPref := Some(NoNotificationsId)
+        }
+      case Left(error) =>
+        warn(s"/notifications/last failed with error: $error")
     }
   }
 

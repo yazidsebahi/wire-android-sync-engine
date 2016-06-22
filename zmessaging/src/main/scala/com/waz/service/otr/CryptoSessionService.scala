@@ -20,7 +20,7 @@ package com.waz.service.otr
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.EventStream
+import com.waz.utils.events.{AggregatingSignal, EventStream}
 import com.waz.utils.{LoggedTry, returning}
 import com.wire.cryptobox.{CryptoBox, CryptoSession, PreKey}
 
@@ -86,6 +86,13 @@ class CryptoSessionService(cryptoBox: CryptoBoxService) {
         }
       session.save()
       plain
+  }
+
+  def remoteFingerprint(sid: String) = {
+    def fingerprint = withSession(sid)(_.getRemoteFingerprint)
+    val stream = onCreate.filter(_ == sid).mapAsync(_ => fingerprint)
+
+    new AggregatingSignal[Option[Array[Byte]], Option[Array[Byte]]](stream, fingerprint, (prev, next) => next)
   }
 }
 

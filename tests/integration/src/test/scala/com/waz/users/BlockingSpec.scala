@@ -37,7 +37,7 @@ class BlockingSpec extends FeatureSpec with Matchers with ProvisionedApiSpec wit
 
   override val provisionFile = "/two_users_connected.json"
 
-  implicit def zmsDb: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
+  implicit def zmsDb: SQLiteDatabase = zmessaging.db.dbHelper.getWritableDatabase
 
   val msgHex = Random.nextInt().toHexString
 

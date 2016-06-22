@@ -23,10 +23,9 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.EmailAddress
-import com.waz.service.{BackendConfig, GlobalModule, Preference}
+import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.ContentEncoder.RequestContent
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response._
@@ -45,15 +44,13 @@ import scala.util.{Failure, Success}
  * and it would be good to retry connections as soon as we are back online
  */
 class ZNetClient(credentials: CredentialsHandler,
-                 initToken: Option[Token],
                  val client: AsyncClient,
                  backend: BackendConfig,
-                 loginClient: LoginClient,
-                 tokenPref: Preference[Option[Token]]) {
+                 loginClient: LoginClient) {
 
-  def this(global: GlobalModule, email: String, passwd: String) = this(new BasicCredentials(EmailAddress(email), Some(passwd)), None, global.client, global.backend, global.loginClient, Preference.empty)
+  def this(global: GlobalModule, email: String, passwd: String) = this(new BasicCredentials(EmailAddress(email), Some(passwd)), global.client, global.backend, global.loginClient)
   def this(email: String, passwd: String, client: AsyncClient) =
-    this(new BasicCredentials(EmailAddress(email), Some(passwd)), None, client, BackendConfig.EdgeBackend, new LoginClient(client, BackendConfig.EdgeBackend), Preference.empty) // only used in tests!
+    this(new BasicCredentials(EmailAddress(email), Some(passwd)), client, BackendConfig.EdgeBackend, new LoginClient(client, BackendConfig.EdgeBackend)) // only used in tests!
 
   import ZNetClient._
   private implicit val logTag: LogTag = logTagFor[ZNetClient]
@@ -77,7 +74,7 @@ class ZNetClient(credentials: CredentialsHandler,
   def MaxConcurrentRequests = 4
   def LongRunning = 45.seconds
   val baseUri = Uri.parse(backend.baseUrl)
-  val auth = new AuthenticationManager(loginClient, credentials, initToken, tokenPref)
+  val auth = new AuthenticationManager(loginClient, credentials)
 
   def apply[A](r: Request[A]): CancellableFuture[Response] = {
     val handle = new RequestHandle(r)
@@ -226,12 +223,12 @@ object ZNetClient {
   private val handleId = new AtomicInteger(0)
   def nextId = handleId.incrementAndGet()
 
-  class EmptyAsyncClient extends AsyncClient() {
+  class EmptyAsyncClient(wrapper: ClientWrapper = ClientWrapper) extends AsyncClient(wrapper = wrapper) {
     override def apply(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
-  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), None, new EmptyAsyncClient, BackendConfig.EdgeBackend, new LoginClient(new EmptyAsyncClient, BackendConfig.EdgeBackend), Preference.empty) {
+  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClient, BackendConfig.EdgeBackend, new LoginClient(new EmptyAsyncClient, BackendConfig.EdgeBackend)) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
     override def close(): Future[Unit] = Future.successful({})
   }

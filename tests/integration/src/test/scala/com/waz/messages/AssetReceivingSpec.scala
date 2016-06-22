@@ -18,6 +18,8 @@
 package com.waz.messages
 
 import akka.pattern.ask
+import android.net.Uri
+import com.waz.api.Asset.LoadCallback
 import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.model.{AssetStatus => _, MessageContent => _, _}
@@ -140,7 +142,7 @@ class AssetReceivingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   }
 
   feature("Video messages") {
-    lazy val assetData = returning(Array.ofDim[Byte](100000))(Random.nextBytes)
+    lazy val assetData = IoUtils.toByteArray(getClass.getResourceAsStream("/assets/video_hd.mp4"))
 
     scenario("Receive video asset message") {
       val fromBefore = messages.size
@@ -156,11 +158,32 @@ class AssetReceivingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
         asset.getName shouldEqual "movie.mp4"
         asset.getMimeType shouldEqual "video/mp4"
         asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE
-        asset.getSizeInBytes shouldEqual 100000
-        msg.getImageWidth shouldEqual 320 // metadata is hardcoded in DeviceActor
-        msg.getImageHeight shouldEqual 480
-        asset.getDuration.getSeconds shouldEqual 300
+        asset.getSizeInBytes shouldEqual assetData.length
+        msg.getImageWidth shouldEqual 1080
+        msg.getImageHeight shouldEqual 1920
+        asset.getDuration.getSeconds shouldEqual 3
       }
+    }
+
+    scenario("Refresh metadata from downloaded data if received asset had none") {
+      val msg = messages.getLastMessage
+      val asset = msg.getAsset
+
+      zmessaging.assetsStorage.updateAsset(AssetId(asset.getId), _.copy(metaData = None)).await()
+
+      soon { asset.getWidth shouldEqual 0 }
+
+      asset.getContentUri(new LoadCallback[Uri] {
+        override def onLoaded(a: Uri): Unit = info(s"loaded $a")
+        override def onLoadFailed(): Unit = fail("load failed")
+      })
+
+      withDelay {
+        asset.getStatus shouldEqual AssetStatus.DOWNLOAD_DONE
+        asset.getWidth shouldEqual 1080
+        asset.getHeight shouldEqual 1920
+        asset.getDuration.getSeconds shouldEqual 3
+      } (15.seconds)
     }
   }
 
@@ -182,7 +205,8 @@ class AssetReceivingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
         asset.getMimeType shouldEqual "audio/x-m4a"
         asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE
         asset.getSizeInBytes shouldEqual assetData.length
-        asset.getDuration.getSeconds shouldEqual 300
+        asset.getDuration.getSeconds shouldEqual 4
+        asset.getAudioOverview.isEmpty shouldBe false
       }
     }
   }

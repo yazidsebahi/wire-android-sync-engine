@@ -23,78 +23,81 @@ import com.waz.api._
 import com.waz.api.impl.otr.OtrClients
 import com.waz.model._
 import com.waz.model.otr.Client
+import com.waz.service.AccountService
 import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
-import com.waz.znet.ZNetClient.ErrorOrResponse
 
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
-class Self(var zuser: Option[ZUser] = None, var user: Option[User] = None)(implicit ui: UiModule) extends com.waz.api.Self with UiObservable with SignalLoading {
+class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable with SignalLoading {
+
+  var data = Option.empty[AccountData]
 
   private implicit val logTag: LogTag = logTagFor[Self]
   private var upToDate = true
-  private var otrRegState = ClientRegistrationState.UNKNOWN
-  private var trackingId: Option[TrackingId] = None
 
   private def users = ui.users
 
-  val userUpdateListener = new UpdateListener {
-    override def updated(): Unit = notifyChanged()
-  }
+  private var user = Option.empty[User]
 
-  addLoader({ zms => Signal(zms.user.signal, zms.users.selfUser, zms.blacklist.upToDate, zms.otrContent.registrationStateSignal).map(Some(_)) }, Option.empty[(ZUser, UserData, Boolean, ClientRegistrationState)]) {
-    case Some((zuser, user, upToDate, otrRegState)) =>
-      debug(s"onLoaded: ${(zuser, user, upToDate, otrRegState)}")
-      val previousState = (this.user, this.zuser, this.upToDate, this.otrRegState)
-      this.zuser = Some(zuser)
-      this.upToDate = upToDate
-      update(user, otrRegState)
-      if (previousState != (this.user, this.zuser, this.upToDate, this.otrRegState)) notifyChanged()
-    case None =>
-      user foreach (_.removeUpdateListener(userUpdateListener))
-      val shouldNotify = user.isDefined || zuser.isDefined
-      user = None
-      zuser = None
-      if (shouldNotify) notifyChanged()
-  }
-
-  def updateUser(u: UserData, otrRegState: ClientRegistrationState): Unit = {
-    val previousState = (this.user, this.otrRegState)
-    update(u, otrRegState)
-    if (previousState != (this.user, this.otrRegState)) notifyChanged()
-  }
-
-  private def update(u: UserData, otrRegState: ClientRegistrationState): Unit = {
-    trackingId = u.trackingId
-    this.otrRegState = otrRegState
-    val user = users.getUser(u)
-    if (!this.user.contains(user)) {
-      this.user foreach (_.removeUpdateListener(userUpdateListener))
-      this.user = Some(user)
-      this.user foreach (_.addUpdateListener(userUpdateListener))
+  private val userUpdateListener = new UpdateListener {
+    override def updated(): Unit = {
+      verbose(s"self user changed: $user")
+      notifyChanged()
     }
   }
 
-  private[impl] def userId = user.map(_.data.id)
+  def signal(acc: Option[AccountService]): Signal[(Option[AccountData], Boolean)] = acc match {
+    case None    => ui.global.blacklist.upToDate map { (Option.empty[AccountData], _) }
+    case Some(a) => a.accountData.map(Option(_)).zip(a.global.blacklist.upToDate)
+  }
 
-  override def getClientRegistrationState = otrRegState
+  accountLoaderOpt(signal) { case (account, upToDate) =>
+    debug(s"onLoaded: ${(account, upToDate)}")
+    update(account)
+    if (this.upToDate != upToDate) {
+      this.upToDate = upToDate
+      notifyChanged()
+    }
+  }
 
-  override def getOtherOtrClients = user.fold[CoreList[OtrClient]](OtrClients.Empty) { u => OtrClients(UserId(u.getId), skipSelf = true) }
+  def update(acc: Option[AccountData]): Unit = {
+    verbose(s"update($acc)")
+    val previousState = (data, user)
+    this.data = acc
+    if (user.map(_.data.id) != userId) {
+      user.foreach(_.removeUpdateListener(userUpdateListener))
+      user = userId.map(users.getUser)
+      user.foreach(_.addUpdateListener(userUpdateListener))
+    }
+    if (previousState != (data, user)) notifyChanged()
+  }
+
+  def userId = data.flatMap(_.userId)
+
+  override def getClientRegistrationState = data.map(_.clientRegState).getOrElse(ClientRegistrationState.UNKNOWN)
+
+  override def getOtherOtrClients = userId.fold[CoreList[OtrClient]](OtrClients.Empty) { OtrClients(_, skipSelf = true) }
 
   override def getIncomingOtrClients = OtrClients.incoming
 
   override def getOtrClient: api.UiSignal[api.OtrClient] =
-    new UiSignal(
+    UiSignal.mapped(
       zms => Signal(zms.users.selfUser, zms.otrClientsService.selfClient),
       { p: (UserData, Client) => new otr.OtrClient(p._1.id, p._2.id, p._2) }
     )
 
-  override def isLoggedIn = zuser.isDefined
+  override def isLoggedIn = data.isDefined
 
-  override def isEmailVerified: Boolean = zuser.exists(_.emailVerified)
+  override def accountActivated: Boolean = data.forall(_.activated)
 
-  override def isPhoneVerified: Boolean = zuser.exists(_.phoneVerified)
+  @deprecated("use accountActivated instead", "73")
+  override def isEmailVerified: Boolean = data.forall(_.activated)
+
+  @deprecated("this method always returns true", "68")
+  override def isPhoneVerified: Boolean = true
 
   override def isUpToDate: Boolean = upToDate
 
@@ -104,17 +107,17 @@ class Self(var zuser: Option[ZUser] = None, var user: Option[User] = None)(impli
 
   override def getName: String = user.fold("")(_.getName)
 
-  override def getAccent: AccentColor = user.fold(AccentColor())(_.getAccent)
+  override def getAccent: AccentColor = user.fold(AccentColors.defaultColor)(_.getAccent)
 
-  override def getEmail: String = user.map(_.getEmail).orElse(zuser.flatMap(_.email map (_.str))).getOrElse("")
+  override def getEmail: String = data.flatMap(_.email).fold("")(_.str)
 
-  override def getPhone: String = user.map(_.getPhone).orElse(zuser.flatMap(_.phone map (_.str))).getOrElse("")
+  override def getPhone: String = data.flatMap(_.phone).fold("")(_.str)
 
   override def getPicture = user.fold[api.ImageAsset](ImageAsset.Empty)(_.getPicture)
 
   override def setAccent(color: api.AccentColor): Unit = users.setSelfColor(AccentColor(color), user)
 
-  override def getTrackingId: String = trackingId.map(_.str).orNull
+  override def getTrackingId: String = user.flatMap(_.data.trackingId.map(_.str)).orNull
 
   override def setName(name: String): Unit = users.setSelfName(name, user)
 
@@ -122,14 +125,14 @@ class Self(var zuser: Option[ZUser] = None, var user: Option[User] = None)(impli
 
   override def clearPicture(): Unit = users.clearSelfPicture()
 
-  override def setEmail(email: String, listener: CredentialsUpdateListener): Unit = handlingErrors(users.setSelfEmail(EmailAddress(email), user), listener)
-  override def setPhone(phone: String, listener: CredentialsUpdateListener): Unit = handlingErrors(users.setSelfPhone(PhoneNumber(phone), user), listener)
+  override def setEmail(email: String, listener: CredentialsUpdateListener): Unit = handlingErrors(users.setSelfEmail(EmailAddress(email)), listener)
+  override def setPhone(phone: String, listener: CredentialsUpdateListener): Unit = handlingErrors(users.setSelfPhone(PhoneNumber(phone)), listener)
   override def updatePassword(newPassword: String, currentPassword: String, listener: CredentialsUpdateListener): Unit = handlingErrors(users.updatePassword(newPassword, Option(currentPassword)), listener)
   override def setPassword(password: String, listener: CredentialsUpdateListener): Unit = handlingErrors(users.updatePassword(password, None), listener)
 
   override def deleteAccount(): Unit = ui.zms.flatMapFuture(_.users.deleteAccount())
 
-  private def handlingErrors[T](request: ErrorOrResponse[Unit], listener: CredentialsUpdateListener): Unit = request.onComplete {
+  private def handlingErrors[T](request: Future[Either[ErrorResponse, Unit]], listener: CredentialsUpdateListener): Unit = request.onComplete {
     case Success(Right(())) => listener.onUpdated()
     case Success(Left(ErrorResponse(code, message, label))) => listener.onUpdateFailed(code, message, label)
     case Failure(ex) => listener.onUpdateFailed(499, ex.getMessage, "")

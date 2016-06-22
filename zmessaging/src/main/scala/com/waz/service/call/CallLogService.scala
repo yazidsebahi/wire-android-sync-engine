@@ -18,7 +18,7 @@
 package com.waz.service.call
 
 import com.waz.api.KindOfCallingEvent
-import com.waz.content.ZStorage
+import com.waz.content.ZmsDatabase
 import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.{CallLogEntry, CallSessionId, ConvId}
 import com.waz.threading.Threading
@@ -30,7 +30,7 @@ import org.threeten.bp.Instant.now
 import scala.concurrent.Future
 import scala.util.Success
 
-class CallLogService(storage: ZStorage) {
+class CallLogService(storage: ZmsDatabase) {
   import Threading.Implicits.Background
 
   val callLogEntryAdded = EventStream[CallLogEntry]

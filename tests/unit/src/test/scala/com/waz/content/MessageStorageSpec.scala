@@ -32,7 +32,6 @@ class MessageStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group)
   lazy val zms = new MockZMessaging() {
-    users.selfUserId := UserId()
     convsContent.insertConversation(conv).futureValue
   }
 

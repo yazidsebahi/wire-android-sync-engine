@@ -26,12 +26,15 @@ import com.waz.service.ZMessaging
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestContentProvider
 import org.robolectric.Robolectric
-import org.robolectric.shadows.ShadowContentResolver
+import org.robolectric.shadows.{ShadowContentResolver2, ShadowLog}
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 class AssetForUploadSpec extends FeatureSpec with Matchers with RobolectricTests with BeforeAndAfter with TableDrivenPropertyChecks {
+
   scenario("Determining a MIME type") {
+    ShadowLog.stream = System.out
+
     forAll (Table(("URI", "expected MIME type"),
       (Uri.parse("content://my-provider/something/my-file.txt"), plainText),
       (Uri.parse("content://my-provider/something/my-file.pdf"), pdf),
@@ -55,8 +58,8 @@ class AssetForUploadSpec extends FeatureSpec with Matchers with RobolectricTests
 
   before {
     ZMessaging.context = Robolectric.application
-    ShadowContentResolver.reset()
-    ShadowContentResolver.registerProvider("my-provider", PdfProvider)
+    ShadowContentResolver2.reset()
+    ShadowContentResolver2.registerProvider("my-provider", PdfProvider)
     val mimes = Robolectric.shadowOf(MimeTypeMap.getSingleton)
     mimes.clearMappings()
     mimes.addExtensionMimeTypMapping("txt", plainText.str)
@@ -67,12 +70,12 @@ class AssetForUploadSpec extends FeatureSpec with Matchers with RobolectricTests
   val pdf = Mime("application/pdf")
 
   object PdfProvider extends TestContentProvider {
-    val Ext = ".*\\.(\\w+)$".r
-    override def getType(uri: Uri): String = uri.getLastPathSegment match {
-      case Ext("pdf") => pdf.str
-      case Ext("txt") => null
-      case _          => Mime.Default.str
-    }
+    override def getType(uri: Uri): String =
+      Mime.extensionOf(uri.getLastPathSegment) match {
+        case Some("pdf") => pdf.str
+        case Some("txt") => null
+        case _          => Mime.Default.str
+      }
 
     override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = null
   }

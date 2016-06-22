@@ -57,6 +57,9 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
     scenario("Random image assets") {
       forAll((_: ImageAssetData) should beUnchangedByEncodingAndDecoding[ImageAssetData])
     }
+    scenario("Random previews") {
+      forAll((x: AssetPreviewData) => {println(x);x should beUnchangedByEncodingAndDecoding[AssetPreviewData]})
+    }
     scenario("Random assets") {
       forAll((_: AnyAssetData) should beUnchangedByEncodingAndDecoding[AnyAssetData])
     }

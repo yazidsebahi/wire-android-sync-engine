@@ -20,16 +20,8 @@ package com.waz.api
 import java.io.File
 
 import com.waz.mocked.MockedClientSuite
-import com.waz.znet.AsyncClient
-import com.waz.znet.ZNetClient.EmptyAsyncClient
-import org.scalatest.{Informing, Alerting, Suite}
-
+import org.scalatest.{Alerting, Informing, Suite}
 
 trait MockedClientApiSpec extends ApiSpec with MockedClientSuite { suite: Suite with Alerting with Informing =>
-
   override protected lazy val logfileBaseDir: File = new File("target/logcat/mocked")
-
-  override lazy val testClient: AsyncClient = new EmptyAsyncClient
-
-  override lazy val zmessagingFactory = { new MockedZMessaging(_, _, _) }
 }

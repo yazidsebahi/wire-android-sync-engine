@@ -18,7 +18,7 @@
 package com.waz.api
 
 import android.os.{Parcel, Parcelable}
-import com.waz.api.OtrClient.{ResetCallback, DeleteCallback}
+import com.waz.api.OtrClient.{DeleteCallback, ResetCallback}
 import com.waz.service.ZMessaging
 import org.threeten.bp.Instant
 

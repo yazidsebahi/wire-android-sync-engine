@@ -20,7 +20,7 @@ package com.waz.service.invitations
 import java.util.Locale
 
 import com.waz.ZLog._
-import com.waz.content.ZStorage
+import com.waz.content.ZmsDatabase
 import com.waz.model.Contact.{EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model._
 import com.waz.service._
@@ -34,8 +34,8 @@ import org.threeten.bp.Instant
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
-class InvitationService(storage: ZStorage, users: UserService, connections: ConnectionService, contacts: ContactsService,
-    conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts) {
+class InvitationService(storage: ZmsDatabase, users: UserService, connections: ConnectionService, contacts: ContactsService,
+                        conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts) {
 
   import EventContext.Implicits.global
   import InvitationService._

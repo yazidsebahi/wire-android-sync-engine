@@ -19,10 +19,7 @@ package com.waz.api.impl
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
-import com.waz.{api, _}
 import com.waz.api.IncomingMessagesList.MessageListener
-import com.waz.content.ZStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Knock
 import com.waz.model._
@@ -31,6 +28,7 @@ import com.waz.testutils._
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.EventStream
+import com.waz.{api, _}
 import org.scalatest.{Matchers, _}
 import org.threeten.bp.Instant
 
@@ -39,15 +37,11 @@ import scala.concurrent.duration._
 
 class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
   import com.waz.utils.events.EventContext.Implicits.global
-  lazy val storage: ZStorage = service.storage
-  implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
 
   val timeout = 5.seconds
 
   lazy val selfUser = UserData("FromUser")
-  lazy val service = new MockZMessaging() {
-    users.selfUserId := selfUser.id
-  }
+  lazy val service = new MockZMessaging(selfUserId = selfUser.id)
   implicit lazy val messages: UiModule = new MockUiModule(service)
   
   lazy val conv = createConv(muted = false)

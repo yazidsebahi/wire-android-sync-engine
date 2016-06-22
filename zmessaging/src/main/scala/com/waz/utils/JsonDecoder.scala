@@ -80,16 +80,16 @@ object JsonDecoder {
     builder.result
   }
 
-  def array[T](arr: JSONArray, ex: (JSONArray, Int) => T): IndexedSeq[T] = Vector.tabulate(arr.length)(i => ex(arr, i))
+  def array[T](arr: JSONArray, ex: (JSONArray, Int) => T): Vector[T] = Vector.tabulate(arr.length)(i => ex(arr, i))
 
-  def array[A](s: Symbol)(ex: (JSONArray, Int) => A)(implicit js: JSONObject): IndexedSeq[A] =
-    if (!js.has(s.name) || js.isNull(s.name)) Vector()
+  def array[A](s: Symbol)(ex: (JSONArray, Int) => A)(implicit js: JSONObject): Vector[A] =
+    if (! js.has(s.name) || js.isNull(s.name)) Vector()
     else {
       val arr = js.getJSONArray(s.name)
-      for (i <- 0 until arr.length()) yield ex(arr, i)
+      Vector.tabulate(arr.length)(ex(arr, _))
     }
 
-  def intArray(arr: JSONArray): IndexedSeq[Int] = Vector.tabulate(arr.length)(i => arr.getInt(i))
+  def intArray(arr: JSONArray): Vector[Int] = Vector.tabulate(arr.length)(i => arr.getInt(i))
 
   def withDefault[A](s: Symbol, default: A, dec: JSONObject => A)(implicit js: JSONObject): A =
     if (!js.has(s.name) || js.isNull(s.name)) default else dec(js)

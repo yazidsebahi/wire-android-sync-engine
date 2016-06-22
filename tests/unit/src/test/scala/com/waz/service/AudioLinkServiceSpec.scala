@@ -20,14 +20,11 @@ package com.waz.service
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util.UUID
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
-import com.waz.model.{EmailAddress, UserId, ZUser}
-import com.waz.testutils.MockZMessaging
+import com.waz.model.UserId
 import com.waz.utils.events.{EventContext, Subscription}
 import org.scalatest._
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class AudioLinkServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
@@ -42,26 +39,26 @@ class AudioLinkServiceSpec extends FeatureSpec with Matchers with OptionValues w
   var nearby = Seq.empty[UserId]
   var subscription = Option.empty[Subscription]
 
-  lazy val service = new MockZMessaging(zuser =ZUser(EmailAddress("email"), "passwd").copy(emailVerified = true)) {
-    override lazy val audiolink = new AudioLinkService(context, metadata, users, lifecycle) {
-      override lazy val audioLink: AudioLink = new AudioLink {
-        initialized = true
-        override def startSending(msg: Array[Byte]): Unit = sending = Some(msg)
-        override def stopSending(): Unit = sending = None
-        override def startListening(): Unit = listening = true
-        override def stopListening(): Unit = listening = false
-      }
-    }
+  lazy val metadata = new MetaDataService(context) {
+    override lazy val audioLinkEnabled: Boolean = true
+  }
 
-    override def metadata: MetaDataService = new MetaDataService(context) {
-      override lazy val audioLinkEnabled: Boolean = true
+  lazy val lifecycle = new ZmsLifecycle {
+    setLoggedIn(true)
+  }
+
+  lazy val service = new AudioLinkService(context, metadata, selfUserId, lifecycle) {
+    override lazy val audioLink: AudioLink = new AudioLink {
+      initialized = true
+      override def startSending(msg: Array[Byte]): Unit = sending = Some(msg)
+      override def stopSending(): Unit = sending = None
+      override def startListening(): Unit = listening = true
+      override def stopListening(): Unit = listening = false
     }
   }
 
-  implicit def db: SQLiteDatabase = service.storage.dbHelper.getWritableDatabase
-
   def subscribe() = {
-    subscription = Some(service.audiolink.nearbyUsers { users => nearby = users })
+    subscription = Some(service.nearbyUsers { users => nearby = users })
   }
 
   feature("SoundLink initialization") {
@@ -82,7 +79,7 @@ class AudioLinkServiceSpec extends FeatureSpec with Matchers with OptionValues w
     scenario("Report received user Id") {
       val uid = UUID.randomUUID()
       val bytes = ByteBuffer.allocate(16).order(ByteOrder.BIG_ENDIAN).putLong(uid.getMostSignificantBits).putLong(uid.getLeastSignificantBits).array()
-      service.audiolink.messageReceived(bytes)
+      service.messageReceived(bytes)
       withDelay {
         nearby shouldEqual Seq(UserId(uid.toString))
       }
@@ -96,22 +93,8 @@ class AudioLinkServiceSpec extends FeatureSpec with Matchers with OptionValues w
 
   feature("Sending") {
 
-    scenario("Start sending only if self user id is set") {
-      Await.result(service.users.selfUserId(), 1.second) shouldEqual UserService.SelfUserId
-      service.lifecycle.acquireUi("test")
-      awaitUi(100.millis)
-      sending shouldEqual None
-      service.users.selfUserId := selfUserId
-      withDelay {
-        sending should not be empty
-        AudioLinkService.decode(sending.get) shouldEqual Some(selfUserId)
-      }
-      service.lifecycle.releaseUi("test")
-      withDelay(sending shouldEqual None)
-    }
-
     scenario("Start sending self user id when ui is activated") {
-      service.lifecycle.acquireUi("test")
+      lifecycle.acquireUi("test")
       withDelay {
         sending should not be empty
         AudioLinkService.decode(sending.get) shouldEqual Some(selfUserId)
@@ -119,7 +102,7 @@ class AudioLinkServiceSpec extends FeatureSpec with Matchers with OptionValues w
     }
 
     scenario("Stop sending when ui is paused") {
-      service.lifecycle.releaseUi("test")
+      lifecycle.releaseUi("test")
       withDelay {
         sending shouldEqual None
       }

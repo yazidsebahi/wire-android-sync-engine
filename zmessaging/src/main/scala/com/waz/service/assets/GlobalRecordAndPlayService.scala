@@ -32,11 +32,11 @@ import com.waz.api.impl.AudioAssetForUpload
 import com.waz.cache.{CacheEntry, CacheService}
 import com.waz.content.Mime
 import com.waz.model.{AssetId, ErrorData, Uid}
-import com.waz.service.ZMessaging
+import com.waz.service.assets.AudioLevels.peakLoudness
+import com.waz.service.{ErrorsService, ZmsLifecycle}
 import com.waz.threading.Threading
-import com.waz.ui.UiEventListener
 import com.waz.utils._
-import com.waz.utils.events.{ClockSignal, EventContext, Signal}
+import com.waz.utils.events.{ClockSignal, EventContext, EventStream, Signal}
 import org.threeten.bp
 import org.threeten.bp.Instant
 
@@ -45,8 +45,22 @@ import scala.concurrent.{Future, Promise}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
-class RecordAndPlayService(context: Context, cache: CacheService) {
-  import RecordAndPlayService._
+class RecordAndPlayService(globalService: GlobalRecordAndPlayService, errors: ErrorsService, lifecycle: ZmsLifecycle) {
+  import EventContext.Implicits.global
+  import Threading.Implicits.Background
+
+  globalService.onError { err =>
+    err.tpe.foreach { tpe => errors.addErrorWhenActive(ErrorData(Uid(), tpe, responseMessage = err.message)) }
+  }
+
+  lifecycle.uiActive.onChanged.on(Background) {
+    case false => globalService.AudioFocusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
+    case true =>
+  }(EventContext.Global)
+}
+
+class GlobalRecordAndPlayService(context: Context, cache: CacheService) {
+  import GlobalRecordAndPlayService._
   import Threading.Implicits.Background
 
   private lazy val stateSource = returning(Signal[State](Idle))(_.disableAutowiring())
@@ -55,12 +69,9 @@ class RecordAndPlayService(context: Context, cache: CacheService) {
   lazy val state: Signal[State] = stateSource
   lazy val audioManager = context.getSystemService(Context.AUDIO_SERVICE).asInstanceOf[AudioManager]
 
-  context.registerReceiver(interruptionBroadcastReceiver, interruptionIntentFilter)
+  val onError = EventStream[Error]()
 
-  ZMessaging.currentInstance.current.flatMap(_.fold2(Signal.const(false), _.lifecycle.uiActive)).onChanged.on(Background) {
-    case false => AudioFocusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
-    case true =>
-  }(EventContext.Global)
+  context.registerReceiver(interruptionBroadcastReceiver, interruptionIntentFilter)
 
   def play(id: AssetId, contentUri: Uri): Future[State] = {
     transition {
@@ -190,15 +201,29 @@ class RecordAndPlayService(context: Context, cache: CacheService) {
   }
 
   def playhead(id: AssetId): Signal[bp.Duration] = stateSource flatMap {
-    case Playing(player, `id`)             => Try(new ClockSignal(tickInterval).map(_ => player.getCurrentPosition.millis.asJava)).getOrElse(Signal.empty)
-    case Paused(player, `id`, playhead, _) => Signal.const(playhead)
-    case other                             => Signal.const(bp.Duration.ZERO)
+    case Playing(_, `id`) =>
+      new ClockSignal(tickInterval).flatMap { i =>
+        Signal.future(duringIdentityTransition { case Playing(player, `id`) => player.getCurrentPosition.millis.asJava })
+      }
+    case Paused(player, `id`, playhead, _) =>
+      Signal.const(playhead)
+    case other =>
+      Signal.const(bp.Duration.ZERO)
   }
 
   def isPlaying(id: AssetId): Signal[Boolean] = stateSource.map {
     case Playing(_, `id`) => true
     case other => false
   }
+
+  def recordingLevel(id: AssetId): EventStream[Float] =
+    stateSource.flatMap {
+      case Recording(_, `id`, _, _, _) =>
+        new ClockSignal(tickInterval).flatMap { i =>
+          Signal.future(duringIdentityTransition { case Recording(recorder, `id`, _, _, _) => (peakLoudness(recorder.getMaxAmplitude), i) })
+        }
+      case other => Signal.empty[(Float, Instant)]
+    }.onChanged.map { case (level, _) => level }
 
   def record(id: AssetId, maxAllowedAssetSizeInBytes: Long): Future[(Instant, Future[RecordingResult])] = {
     def record(): Future[Next] = withAudioFocus() {
@@ -349,7 +374,7 @@ class RecordAndPlayService(context: Context, cache: CacheService) {
     filter.addAction(Intent.ACTION_NEW_OUTGOING_CALL)
   }
 
-  private object AudioFocusListener extends AudioManager.OnAudioFocusChangeListener {
+  object AudioFocusListener extends AudioManager.OnAudioFocusChangeListener {
     override def onAudioFocusChange(focusChange: Int): Unit = focusChange match {
       case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT =>
         verbose("audio focus lost (transient)")
@@ -382,7 +407,18 @@ class RecordAndPlayService(context: Context, cache: CacheService) {
     transitionF(s => Future(f(s)))(errorMessage, errorType)
 
   private def transitionF(f: State => Future[Transition])(errorMessage: String, errorType: Option[ErrorType] = None): Future[State] =
-    Serialized.future(RecordAndPlayService)(keepStateOnFailure(stateSource.head.flatMap(f))(errorMessage, errorType).map(applyState))
+    Serialized.future(GlobalRecordAndPlayService)(keepStateOnFailure(stateSource.head.flatMap(f))(errorMessage, errorType).map(applyState))
+
+  private def duringIdentityTransition[A](pf: PartialFunction[State, A]): Future[A] = {
+    val p = Promise[A]
+    transition(state => returning(KeepCurrent()) { _ =>
+      if (pf.isDefinedAt(state)) Try(pf(state)) match {
+        case Success(a) => p.success(a)
+        case Failure(cause) => p.failure(cause)
+      }
+    }) ("identity transition failed")
+    p.future
+  }
 
   private def applyState: Transition => State = { t =>
     t.changedState.foreach { next =>
@@ -393,9 +429,7 @@ class RecordAndPlayService(context: Context, cache: CacheService) {
     }
     t.error.foreach { err =>
       err.cause.fold(error(err.message))(c => error(err.message, c))
-      err.tpe.foreach { tpe =>
-        ZMessaging.currentUi.zms(_.errors.addError(ErrorData(Uid(), tpe, responseMessage = err.message)))
-      }
+      onError ! err
     }
     t.changedState.orElse(stateSource.currentValue).getOrElse(Idle)
   }
@@ -405,8 +439,8 @@ class RecordAndPlayService(context: Context, cache: CacheService) {
   }
 }
 
-object RecordAndPlayService {
-  private implicit val logTag: LogTag = logTagFor[RecordAndPlayService]
+object GlobalRecordAndPlayService {
+  private implicit val logTag: LogTag = logTagFor[GlobalRecordAndPlayService]
 
   sealed trait State
   case object Idle extends State
@@ -423,16 +457,5 @@ object RecordAndPlayService {
   case class Next(state: State, override val error: Option[Error] = None) extends Transition(Some(state), error)
   case class Error(message: String, cause: Option[Throwable] = None, tpe: Option[ErrorType] = None)
 
-  val tickInterval: FiniteDuration = UiEventListener.UpdateThrottling * 0.9d match {
-    case x: FiniteDuration => x
-    case other             => UiEventListener.UpdateThrottling
-  }
-
-  trait OngoingRecording {
-    def instantOfStart: Instant
-    def stop: Unit
-    def cancel: Unit
-
-    def completion: Future[Option[api.AudioAssetForUpload]]
-  }
+  val tickInterval = 50.millis
 }

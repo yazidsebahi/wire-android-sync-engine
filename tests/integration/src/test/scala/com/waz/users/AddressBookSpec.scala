@@ -117,7 +117,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         failed shouldEqual false
         selfUser should not be null
         selfUser.isLoggedIn shouldEqual true
-        selfUser.isEmailVerified shouldEqual false
+        selfUser.accountActivated shouldEqual false
       }
 
       emailClient.verifyEmail(emails(0).str)(emails(0).str) shouldBe true

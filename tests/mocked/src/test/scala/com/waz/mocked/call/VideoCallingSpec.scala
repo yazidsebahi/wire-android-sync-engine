@@ -23,7 +23,7 @@ import com.waz.api._
 import com.waz.mocked.{MockBackend, MockedFlows}
 import com.waz.model.VoiceChannelData.ChannelState._
 import com.waz.model._
-import com.waz.service.call.FlowManagerService.StateOfReceivedVideo
+import com.waz.service.call.FlowManagerService.{StateAndReason, StateOfReceivedVideo}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestApplication._
@@ -374,14 +374,14 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
 
       awaitUi(50.millis)
       
-      val state = StateOfReceivedVideo(state = AvsVideoState.STOPPED, reason = AvsVideoReason.BAD_CONNECTION)
+      val state = StateAndReason(state = AvsVideoState.STOPPED, reason = AvsVideoReason.BAD_CONNECTION)
       changeStateOfReceivedVideo(state)
 
       withDelay { videoStateSpy.state.value shouldEqual state }
     }
 
     scenario("Received video goes back to normal") {
-      val state = StateOfReceivedVideo(state = AvsVideoState.STARTED, reason = AvsVideoReason.NORMAL)
+      val state = StateAndReason(state = AvsVideoState.STARTED, reason = AvsVideoReason.NORMAL)
       changeStateOfReceivedVideo(state)
 
       withDelay { videoStateSpy.state.value shouldEqual state }
@@ -496,6 +496,6 @@ class StateOfReceivedVideoSpy { spy =>
     override def onViewReleased(): Unit = ()
     override def onViewRequested(): View = throw new IllegalStateException("should not be callled")
     override def onPreviewReleased(): Unit = ()
-    override def onStateOfReceivedVideoChanged(state: AvsVideoState, reason: AvsVideoReason): Unit = spy.state = Some(StateOfReceivedVideo(state, reason))
+    override def onStateOfReceivedVideoChanged(state: AvsVideoState, reason: AvsVideoReason): Unit = spy.state = Some(StateAndReason(state, reason))
   }
 }

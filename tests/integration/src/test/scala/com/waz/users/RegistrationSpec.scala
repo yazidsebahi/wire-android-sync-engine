@@ -21,22 +21,23 @@ import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, EmailCredentials, LocalImageAsset}
 import com.waz.client.RegistrationClient
-import com.waz.model.ZUser.ZUserDao
+import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
 import com.waz.provision.EmailClientSuite
 import com.waz.service.{BackendConfig, ContactsService}
-import com.waz.testutils.prepareAddressBookEntries
+import com.waz.testutils.{DefaultPatienceConfig, prepareAddressBookEntries}
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import com.waz.utils.IoUtils
 import com.waz.znet.{AsyncClient, TestClientWrapper}
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, GivenWhenThen, Matchers}
 
-import scala.concurrent.{Promise, Await}
+import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.Random
 
-class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with ApiSpec with EmailClientSuite { test =>
+class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with ApiSpec with EmailClientSuite with ScalaFutures with DefaultPatienceConfig { test =>
 
   implicit lazy val dispatcher = Threading.Background
 
@@ -44,11 +45,11 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
   val hex = Random.nextInt().toHexString
   val hex1 = Random.nextInt().toHexString
-  override val email = s"android.test+$hex@wearezeta.com"
-  val email1 = s"android.test+$hex1@wearezeta.com"
-  val email2 = s"android.test+${Random.nextInt().toHexString}@wearezeta.com"
+  override val email = s"android.test+$hex@wire.com"
+  val email1 = s"android.test+$hex1@wire.com"
+  val email2 = s"android.test+${Random.nextInt().toHexString}@wire.com"
 
-  lazy val userId = ZUserId()
+  lazy val userId = AccountId()
 
   lazy val client = new RegistrationClient(new AsyncClient(wrapper = TestClientWrapper), BackendConfig.EdgeBackend)
 
@@ -78,7 +79,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
     }
 
     scenario("register a user with existing email") {
-      val future = client.register(ZUserId(), EmailCredentials(EmailAddress("zbigniew@wearezeta.com"), Some(password)), s"test $hex", None) map {
+      val future = client.register(AccountId(), EmailCredentials(EmailAddress("zbigniew@wearezeta.com"), Some(password)), s"test $hex", None) map {
         case Right((user, _)) => fail(s"created user: $user")
         case Left(error) => info(s"got error: $error")
       }
@@ -88,7 +89,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
     scenario("register with random email") {
       @volatile var regUser = None: Option[UserInfo]
-      client.register(ZUserId(), EmailCredentials(EmailAddress(email1), Some(password)), s"test $hex1", accentId = Some(3)) map {
+      client.register(AccountId(), EmailCredentials(EmailAddress(email1), Some(password)), s"test $hex1", accentId = Some(3)) map {
         case Right((user, _)) => regUser = Some(user)
         case Left(error) => fail(s"unexpected response: $error")
       }
@@ -122,39 +123,38 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
       val selfUser = promisedLogin.future.await()(patience(1.minute))
 
       selfUser.isLoggedIn shouldEqual true
-      selfUser.isEmailVerified shouldEqual false
+      selfUser.accountActivated shouldEqual false
       api.logout()
       awaitUi(1.second)
     }
 
     scenario("register using zmessaging api") {
       var selfUser: Self = null
-      var failed = true
+      var error = Option.empty[(Int, String, String)]
 
       api.register(CredentialsFactory.emailCredentials(email, password), s"test $hex", AccentColor(2), new RegistrationListener {
-        override def onRegistrationFailed(code: Int, message: String, label: String): Unit = failed = true
+        override def onRegistrationFailed(code: Int, message: String, label: String): Unit = error = Some((code, message, label))
         override def onRegistered(user: Self): Unit = {
-          failed = false
+          error = None
           selfUser = user
         }
       })
 
       withDelay {
-        failed shouldEqual false
+        error shouldBe empty
         selfUser should not be null
         selfUser.isLoggedIn shouldEqual true
-        selfUser.isEmailVerified shouldEqual false
-        selfUser.getAccent shouldEqual AccentColor(2)
-      }
+        selfUser.accountActivated shouldEqual false
+      } (15.seconds)
 
-      ZUserDao.list(globalModule.storage.dbHelper.getWritableDatabase).map(_.email).toSet shouldEqual Set(Some(EmailAddress(email)), Some(EmailAddress(email1)))
+      AccountDataDao.list(globalModule.storage.dbHelper.getWritableDatabase).map(_.email).toSet shouldEqual Set(Some(EmailAddress(email)), Some(EmailAddress(email1)))
     }
 
     scenario("fresh login should return unverified user") {
       pauseApi()
       api.onDestroy()
       awaitUi(1.second)
-      ZUserDao.deleteAll(globalModule.storage.dbHelper.getWritableDatabase)
+      AccountDataDao.deleteAll(globalModule.storage.dbHelper.getWritableDatabase)
 
       awaitUi(2.seconds)
 
@@ -170,7 +170,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
       val selfUser = promisedLogin.future.await()(patience(1.minute))
 
       selfUser.isLoggedIn shouldEqual true
-      selfUser.isEmailVerified shouldEqual false
+      selfUser.accountActivated shouldEqual false
       selfUser.getEmail shouldEqual email
     }
 
@@ -190,18 +190,24 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
     }
 
     scenario("login automatically once email is verified") {
-      api.getSelf.isLoggedIn shouldEqual true
+      val self = api.getSelf
+      self.isLoggedIn shouldEqual true
 
       emailClient.verifyEmail(email)(email) shouldBe true
 
+      lazy val otrClient = self.getOtrClient
+
       withDelay {
-        api.getSelf.isEmailVerified shouldEqual true
-        api.getSelf.getUser should not be null
+        self.accountActivated shouldEqual true
+        self.getUser should not be null
+        self.data.flatMap(_.clientId) shouldBe defined
+        otrClient should not be empty
+        otrClient.get.asInstanceOf[com.waz.api.impl.otr.OtrClient].data.signalingKey shouldBe defined
       } (1.minute)
     }
 
     scenario("retrieve contact search results") {
-      api.zmessaging.foreach (_.prefs.editUiPreferences { _.putBoolean(ContactsService.PrefKey, true) })
+      api.zmessaging.futureValue.foreach (_.prefs.editUiPreferences { _.putBoolean(ContactsService.PrefKey, true) })
       awaitUi(1.second)
       val users = search.getRecommendedPeople(20)
       withDelay { users.getAll should not be empty }(timeout = 20.seconds)
@@ -221,6 +227,49 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
       val users = search.getTopPeople(20)
       awaitUi(1.second)
       withDelay { users.getAll should be(empty) }(timeout = 20.seconds)
+    }
+
+    scenario("reset api") {
+      pauseApi()
+      api.onDestroy()
+      awaitUi(1.second)
+
+      api = new impl.ZMessagingApi()
+      api.onCreate(context)
+      initApi()
+    }
+
+    scenario("register new user and verify email without pausing the app") {
+      var selfUser: Self = null
+      var error = Option.empty[(Int, String, String)]
+
+      api.register(CredentialsFactory.emailCredentials(email2, password), s"test2 $hex", AccentColor(2), new RegistrationListener {
+        override def onRegistrationFailed(code: Int, message: String, label: String): Unit = error = Some((code, message, label))
+        override def onRegistered(user: Self): Unit = {
+          error = None
+          selfUser = user
+        }
+      })
+
+      withDelay {
+        error shouldBe empty
+        selfUser should not be null
+        selfUser.isLoggedIn shouldEqual true
+        selfUser.accountActivated shouldEqual false
+      } (15.seconds)
+
+      emailClient.verifyEmail(email2)(email2) shouldBe true
+
+      val self = api.getSelf
+      lazy val otrClient = api.getSelf.getOtrClient
+
+      withDelay {
+        self.accountActivated shouldEqual true
+        self.getUser should not be null
+        self.data.flatMap(_.clientId) shouldBe defined
+        otrClient should not be empty
+        otrClient.get.asInstanceOf[com.waz.api.impl.otr.OtrClient].data.signalingKey shouldBe defined
+      } (1.minute)
     }
   }
 }

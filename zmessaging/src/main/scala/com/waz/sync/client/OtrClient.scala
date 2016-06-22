@@ -23,7 +23,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.model.otr._
-import com.waz.model.{UserId, ZUserId}
+import com.waz.model.{AccountId, UserId}
 import com.waz.utils._
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -85,7 +85,7 @@ class OtrClient(netClient: ZNetClient) {
     }
   }
 
-  def postClient(userId: ZUserId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
+  def postClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
     val data = JsonEncoder { o =>
       o.put("lastkey", JsonEncoder.encode(lastKey)(PreKeyEncoder))
       client.signalingKey foreach { sk => o.put("sigkeys", JsonEncoder.encode(sk)) }

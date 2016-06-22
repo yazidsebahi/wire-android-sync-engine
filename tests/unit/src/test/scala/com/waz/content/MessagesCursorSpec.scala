@@ -23,9 +23,9 @@ import com.waz.RobolectricUtils
 import com.waz.api.Message
 import com.waz.content.MessagesCursor.Entry
 import com.waz.model._
-import com.waz.service.messages.{MessageAndLikes, MessageAndLikesNotifier}
+import com.waz.service.messages.MessageAndLikes
+import com.waz.testutils.MockZMessaging
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.EventStream
 import org.scalacheck.Gen._
 import org.scalacheck.{Arbitrary, _}
 import org.scalatest.concurrent.ScalaFutures
@@ -51,16 +51,14 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   lazy val convId = ConvId()
   lazy val items = Seq.tabulate(2000) { i => entry(i * 10) }
 
-  lazy val msgLoader = new MessageLoader {
+  lazy val zms = new MockZMessaging()
+
+  lazy val msgLoader = new MessageAndLikesStorage(UserId(), zms.messagesStorage, zms.likingsStorage) {
     override def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]] = withLikes(ids map { id =>
       val seq = id.str.toLong
       MessageData(id, convId, EventId(seq, "0"), Message.Type.TEXT, UserId(id.str), Seq(MessageContent(Message.Part.Type.TEXT, id.str)))
     })
     override def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]] = Future.successful(msgs.map { m => MessageAndLikes(m, IndexedSeq.empty, likedBySelf = false)})
-  }
-
-  lazy val notifier = new MessageAndLikesNotifier {
-    override val onUpdate = EventStream[MessageId]()
   }
 
   def window(index: Int) = {
@@ -157,7 +155,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   feature("MessagesCursor.apply") {
 
     scenario("load all messages sequentially") {
-      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader, notifier)
+      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader)
 
       items.zipWithIndex foreach { case (e, i) =>
         cursor(i).message.id shouldEqual e.id
@@ -165,7 +163,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     }
 
     scenario("get random items from cursor") {
-      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader, notifier)
+      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader)
 
       forAll(Gen.choose(0, items.size - 1)) { index: Int =>
         cursor.apply(index).message.id shouldEqual items(index).id
@@ -176,7 +174,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   feature("MessagesCursor.indexOf") {
 
     scenario("get index of entries") {
-      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader, notifier)
+      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader)
 
       items.zipWithIndex foreach { case (e, i) =>
         cursor.indexOf(e.time) shouldEqual i
@@ -184,7 +182,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     }
 
     scenario("get index of random entry") {
-      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader, notifier)
+      val cursor = new MessagesCursor(convId, createCursor(items), 0, Instant.EPOCH, msgLoader)
       cursor(0)
 
       forAll(Gen.choose(0, items.size - 1)) { index: Int =>

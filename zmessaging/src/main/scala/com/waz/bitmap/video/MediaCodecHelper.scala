@@ -38,7 +38,7 @@ class MediaCodecHelper(val codec: MediaCodec) extends MediaCodecIterator {
   private var eof = false
 
   def withInputBuffer[A](body: (MediaCodec, Int, ByteBuffer) => A): Option[A] =
-    codec.dequeueInputBuffer(TIMEOUT_USEC) match {
+    codec.dequeueInputBuffer(inputDequeueTimeoutMicros) match {
       case MediaCodec.INFO_TRY_AGAIN_LATER => None
       case index => Some(body(codec, index, inputBuffers(index)))
     }
@@ -46,7 +46,7 @@ class MediaCodecHelper(val codec: MediaCodec) extends MediaCodecIterator {
   override def hasNext: Boolean = !eof
 
   override def next(): CodecResponse =
-    codec.dequeueOutputBuffer(outputBufferInfo, TIMEOUT_USEC) match {
+    codec.dequeueOutputBuffer(outputBufferInfo, outputDequeueTimeoutMicros) match {
       case MediaCodec.INFO_TRY_AGAIN_LATER => TryAgain
       case MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED =>
         outputBuffers = codec.getOutputBuffers
@@ -67,7 +67,8 @@ class MediaCodecHelper(val codec: MediaCodec) extends MediaCodecIterator {
 }
 
 object MediaCodecHelper {
-  val TIMEOUT_USEC: Int = 15000
+  val inputDequeueTimeoutMicros: Int = 15000
+  val outputDequeueTimeoutMicros = 1500
 
 
   implicit object Cleanup extends Cleanup[MediaCodecHelper] {

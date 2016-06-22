@@ -23,8 +23,6 @@ import java.util.Date
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import akka.pattern.ask
-import android.media.MediaMetadataRetriever._
-import android.net.Uri
 import com.waz.api.AssetStatus._
 import com.waz.api.MessageContent.Asset.{Answer, ErrorHandler}
 import com.waz.api.MessageContent.Text
@@ -36,10 +34,10 @@ import com.waz.model
 import com.waz.model.AssetData.MaxAllowedAssetSizeInBytes
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed}
 import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.otr.ClientId
 import com.waz.model.{GenericContent, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
-import com.waz.service.ZMessaging
-import com.waz.service.assets.MetaDataService
+import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.service.conversation.ConversationsUiService.LargeAssetWarningThresholdInBytes
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
@@ -47,15 +45,14 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, FeigningAsyncClient, TestResourceContentProvider}
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.Threading
 import com.waz.utils.returning
 import com.waz.znet.ZNetClient._
 import org.robolectric.Robolectric.{getShadowApplication, shadowOf}
-import org.robolectric.shadows.{ShadowContentResolver, ShadowMediaMetadataRetriever}
+import org.robolectric.shadows.ShadowContentResolver2
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.Matcher
-import org.threeten.bp
 
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
@@ -66,7 +63,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
   lazy val errors = api.getErrors
 
   before {
-    ShadowContentResolver.reset()
+    ShadowContentResolver2.reset()
     testClient.simulateNetworkFailure = false
     zmessaging.network.networkMode ! NetworkMode.WIFI
     postStarted = false
@@ -123,12 +120,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
     scenario("Send audio asset from uri") {
       val fromBefore = messages.size
 
-      ShadowMediaMetadataRetriever.addMetadata(audio.uri.toString, METADATA_KEY_DURATION, "300")
-
       val upload = uriAssetForUpload(audio)
-      upload.name.await().value shouldEqual audio.name
-      upload.mimeType.await() shouldEqual audio.mime
-      upload.sizeInBytes.await().value shouldEqual audio.size
 
       conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
 
@@ -148,13 +140,50 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getMimeType shouldEqual audio.mime.str
         asset.getSizeInBytes shouldEqual audio.size
         asset.getStatus shouldEqual DOWNLOAD_DONE
-        asset.getDuration.getSeconds shouldEqual 300
+        asset.getDuration.getSeconds shouldEqual 4
         spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
         message.getMessageStatus shouldEqual Message.Status.SENT
       }
 
       message.data.protos should beMatching {
-        case Seq(GenericMessage(_, GenericContent.Asset(Some(Original(Mime.Audio.MP4, _, _, Some(AssetMetaData.Audio(_, _)))), None, UploadDone(_)))) => true
+        case Seq(GenericMessage(_, GenericContent.Asset(Some(Original(Mime.Audio.MP4, _, _, Some(AssetMetaData.Audio(d)), None)), None, UploadDone(_)))) if d.getSeconds == 4 => true
+      }
+
+      errors shouldBe empty
+    }
+
+    scenario("Send video asset from uri") {
+      val fromBefore = messages.size
+
+      val upload = uriAssetForUpload(video)
+
+      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+
+      (messages should have size (fromBefore + 1)).soon
+
+      val message = messages.getLastMessage
+      soon {
+        message.getMessageType shouldBe Message.Type.VIDEO_ASSET
+        message.getAsset should not be empty
+      }
+
+      val asset = message.getAsset
+      val spy = new AssetStatusSpy(asset)
+      soon {
+        asset.getId shouldEqual upload.getId
+        asset.getName shouldEqual video.name
+        asset.getMimeType shouldEqual video.mime.str
+        asset.getSizeInBytes shouldEqual video.size
+        asset.getStatus shouldEqual DOWNLOAD_DONE
+        asset.getDuration.getSeconds shouldEqual 3
+        asset.getWidth shouldEqual 1080
+        asset.getHeight shouldEqual 1920
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        message.getMessageStatus shouldEqual Message.Status.SENT
+      }
+
+      message.data.protos should beMatching {
+        case Seq(GenericMessage(_, GenericContent.Asset(Some(Original(Mime.Video.MP4, _, _, Some(AssetMetaData.Video(Dim2(1080, 1920), d)), None)), None, UploadDone(_)))) if d.getSeconds == 3 => true
       }
 
       errors shouldBe empty
@@ -469,7 +498,10 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(asset2, handler2))
 
       handler2.promisedWarning.future.await("warning should be reported") shouldEqual (LargeAssetWarningThresholdInBytes + 1L, NetworkMode._2G)
-      (messages should have size (fromBefore + 1)).soon
+      soon {
+        messages should have size (fromBefore + 1)
+        messages.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      }
       zmessaging.assetsStorage.get(asset2.id).await() shouldBe 'defined
 
       val asset3 = newAsset("asset 3", 1000L)
@@ -542,6 +574,9 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
   lazy val audioUri = provider.resourceUri("/assets/audio.m4a")
   lazy val audio = provider.getResource(audioUri)
 
+  lazy val videoUri = provider.resourceUri("/assets/video_hd.mp4")
+  lazy val video = provider.getResource(videoUri)
+
   lazy val auto2 = registerDevice("auto2")
 
   def uriAssetForUpload(res: provider.Resource, latch: Option[CountDownLatch] = None) = {
@@ -557,7 +592,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       }
     }
 
-    ShadowContentResolver.registerProvider(authority, provider)
+    ShadowContentResolver2.registerProvider(authority, provider)
     res.registerStream()
     AssetFactory.fromContentUri(res.uri).asInstanceOf[impl.AssetForUpload]
   }
@@ -611,33 +646,26 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
   override val provisionFile: String = "/two_users_connected.json"
 
-  override lazy val zmessagingFactory: ZMessaging.Factory = new ZMessaging(_, _, _) {
-    override lazy val assetClient = new AssetClient(znetClient) {
+  override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
 
-      override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
-        postStarted = true
-        postCancelled = false
-        beforePostAsset.foreach(_())
-        beforePostAsset = None
-        returning(super.postOtrAsset(convId, metadata, data, ignoreMissing))(_.onCancelled(postCancelled = true)(Threading.Background))
-      }
-    }
+    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
+      new ApiZMessaging(clientId, user) {
 
-    override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
-      override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
-        super.postOtrMessage(convId, remoteId, message).andThen { case Success(r) if r.isRight => otrMessageSyncs :+= (remoteId, message, r) }(Threading.Background)
-    }
-    override lazy val assetMetaData: MetaDataService = new MetaDataService(context, cache, assetsStorage, assets) {
-      override def loadMetaData(mime: Mime, data: LocalData): CancellableFuture[Option[AssetMetaData]] = mime match {
-        case Mime.Audio() => CancellableFuture successful Some(AssetMetaData.Audio(bp.Duration.ofSeconds(300), Seq.empty))
-        case _ => super.loadMetaData(mime, data)
-      }
+        override lazy val assetClient = new AssetClient(zNetClient) {
+          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
+            postStarted = true
+            postCancelled = false
+            beforePostAsset.foreach(_ ())
+            beforePostAsset = None
+            returning(super.postOtrAsset(convId, metadata, data, ignoreMissing))(_.onCancelled(postCancelled = true)(Threading.Background))
+          }
+        }
 
-      override def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = mime match {
-        case Mime.Audio() => CancellableFuture successful Some(AssetMetaData.Audio(bp.Duration.ofSeconds(300), Seq.empty))
-        case _ => super.loadMetaData(mime, uri)
+        override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
+          override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
+            super.postOtrMessage(convId, remoteId, message).andThen { case Success(r) if r.isRight => otrMessageSyncs :+=(remoteId, message, r) }(Threading.Background)
+        }
       }
-    }
   }
 
   override lazy val testClient = new FeigningAsyncClient

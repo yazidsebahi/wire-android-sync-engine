@@ -22,8 +22,7 @@ import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.provision.ActorMessage.{Login, Successful}
 import com.waz.provision.ProvisionedSuite.{Conversation, User}
-import com.waz.service.ZMessaging.Factory
-import com.waz.service.{RemoteZmsSpec, ZMessaging}
+import com.waz.service.RemoteZmsSpec
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
@@ -32,7 +31,6 @@ import org.scalatest._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Random
 
 class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with RemoteZmsSpec with ThreadActorSpec { test =>
 
@@ -44,8 +42,6 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
   override lazy val provisionUsers: IndexedSeq[User] = (0 to count).map { i => User(s"auto$i", s"auto${i}_pass", s"auto$i user", connected = true) }
   override lazy val provisionConvs: Seq[Conversation] =
     (1 to count) .map (i => Conversation(None, Seq("auto0", s"auto$i"), Nil)) :+ Conversation(Some("group"), provisionUsers.map(_.email), Nil)
-
-  override lazy val zmessagingFactory: Factory = new ZMessaging(_, _, _, Random.nextInt().toHexString)
 
   lazy val convs = api.getConversations
   lazy val groupConv = {

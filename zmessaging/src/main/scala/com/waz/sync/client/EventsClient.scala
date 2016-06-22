@@ -78,10 +78,9 @@ case class PushNotification(id: Uid, events: Seq[Event], transient: Boolean = fa
     * Check if notification contains events intended for current client. In some (rare) cases it may happen that
     * BE sends us notifications intended for different device, we can verify that by checking recipient field.
     * Unencrypted events are always considered to belong to us.
-    * If current clientId is not specified then any otr events are considered not for us.
     */
-  def hasEventForClient(clientId: Option[ClientId]) = events.exists {
-    case ev: OtrEvent => clientId.contains(ev.recipient)
+  def hasEventForClient(clientId: ClientId) = events.exists {
+    case ev: OtrEvent => clientId == ev.recipient
     case _ => true
   }
 }

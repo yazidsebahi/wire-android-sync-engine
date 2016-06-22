@@ -46,7 +46,6 @@ public enum SyncCommand {
     PostConnection("post-connection"),
     DeleteGcmToken("delete-gcm-token"),
     SyncRichMedia("sync-rich-media"),
-    SyncVersionBlacklist("sync-blacklist"),
     SyncConnectedUsers("sync-connected"),
     RegisterGcmToken("register-gcm-token"),
     PostSelf("post-self"),

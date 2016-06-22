@@ -24,15 +24,15 @@ import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
 import android.net.Uri
-import com.waz.ZLog.LogTag
+import com.waz.ZLog._
 import com.waz.service.assets.MetaDataRetriever
-import com.waz.utils.{JsonDecoder, JsonEncoder}
+import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp
 import org.threeten.bp.Duration
 
+import scala.concurrent.Future
 import scala.util.Try
-import com.waz.utils._
 
 sealed abstract class AssetMetaData(val jsonTypeTag: Symbol)
 object AssetMetaData {
@@ -45,9 +45,8 @@ object AssetMetaData {
         case Video(dimensions, duration) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
           o.put("duration", duration.toMillis)
-        case Audio(duration, loudness) =>
+        case Audio(duration) =>
           o.put("duration", duration.toMillis)
-          o.put("loudness", JsonEncoder.arrNum(loudness))
         case Image(dimensions, tag) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
           tag.foreach(o.put("tag", _))
@@ -63,7 +62,7 @@ object AssetMetaData {
       case 'video =>
         Video(opt[Dim2]('dimensions).getOrElse(Dim2(0, 0)), Duration.ofMillis('duration))
       case 'audio =>
-        Audio(Duration.ofMillis('duration), decodeFloatSeq('loudness))
+        Audio(Duration.ofMillis('duration))
       case 'image =>
         Image(JsonDecoder[Dim2]('dimensions), decodeOptString('tag))
       case other =>
@@ -87,14 +86,15 @@ object AssetMetaData {
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
   case class Image(dimensions: Dim2, tag: Option[String]) extends AssetMetaData('image) with HasDimensions
-  case class Audio(duration: Duration, loudness: Seq[Float]) extends AssetMetaData('audio) with HasDuration
+  case class Audio(duration: Duration) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
 
   object Video {
+    private implicit val Tag: LogTag = "AssetMetaData.Video"
 
-    def apply(file: File): Either[String, Video] = MetaDataRetriever(file)(apply(_))
+    def apply(file: File): Future[Either[String, Video]] = MetaDataRetriever(file)(apply(_))
 
-    def apply(context: Context, uri: Uri): Either[String, Video] = MetaDataRetriever(context, uri)(apply(_))
+    def apply(context: Context, uri: Uri): Future[Either[String, Video]] = MetaDataRetriever(context, uri)(apply(_))
 
     def apply(retriever: MediaMetadataRetriever): Either[String, Video] = {
       def retrieve[A](k: Int, tag: String, convert: String => A) =
@@ -107,21 +107,24 @@ object AssetMetaData {
         rotation <- retrieve(METADATA_KEY_VIDEO_ROTATION, "video rotation", _.toInt)
         dim       = if (rotation / 90 % 2 == 0) Dim2(width, height) else Dim2(height, width)
         duration <- retrieve(METADATA_KEY_DURATION, "duration", s => bp.Duration.ofMillis(s.toLong))
-      } yield AssetMetaData.Video(dim, duration)
+      } yield {
+        verbose(s"width: $width, height: $height, rotation: $rotation, dim: $dim, duration: $duration")
+        AssetMetaData.Video(dim, duration)
+      }
     }
   }
 
   object Audio {
     private implicit val Tag: LogTag = "AssetMetaData.Audio"
 
-    def apply(file: File): Option[Audio] = MetaDataRetriever(file)(apply(_))
+    def apply(file: File): Future[Option[Audio]] = MetaDataRetriever(file)(apply(_))
 
-    def apply(context: Context, uri: Uri): Option[Audio] = MetaDataRetriever(context, uri)(apply(_))
+    def apply(context: Context, uri: Uri): Future[Option[Audio]] = MetaDataRetriever(context, uri)(apply(_))
 
     def apply(retriever: MediaMetadataRetriever): Option[Audio] = for {
       duration <- Option(retriever.extractMetadata(METADATA_KEY_DURATION))
       millis <- LoggedTry(bp.Duration.ofMillis(duration.toLong)).toOption
-    } yield Audio(millis, Seq.empty) // TODO: extract loudness info
+    } yield Audio(millis)
   }
 
   object Image {

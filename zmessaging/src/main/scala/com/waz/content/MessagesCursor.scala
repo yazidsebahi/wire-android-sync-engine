@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.content.MessagesCursor.Entry
 import com.waz.db.{Reader, ReverseCursorIterator}
 import com.waz.model._
-import com.waz.service.messages.{MessageAndLikes, MessageAndLikesNotifier}
+import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import org.threeten.bp.Instant
@@ -41,12 +41,7 @@ trait MsgCursor {
   def close(): Unit
 }
 
-trait MessageLoader {
-  def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]]
-  def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]]
-}
-
-class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageLoader, notifier: MessageAndLikesNotifier) extends MsgCursor { self =>
+class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage) extends MsgCursor { self =>
   import MessagesCursor._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -60,7 +55,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
   override def size = cursor.getCount
 
   private val subs = Seq (
-    notifier.onUpdate { m =>
+    loader.onUpdate { m =>
       if (messages.get(m) != null) loader(Seq(m)).foreach(_.foreach(messages.put(m, _)))
     }
   )

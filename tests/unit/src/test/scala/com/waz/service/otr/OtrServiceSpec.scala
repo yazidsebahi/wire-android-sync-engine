@@ -32,6 +32,7 @@ import com.waz.testutils.Implicits._
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
 import com.waz.utils.crypto.AESUtils
+import com.waz.utils.events.Signal
 import com.wire.cryptobox.CryptoBox
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
@@ -109,15 +110,15 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
     var syncCheckRequests = Seq.empty[FiniteDuration]
 
     lazy val zms = new MockZMessaging() {
-      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(context, users, user, keyValue, cryptoBox, otrClientsStorage, otrContent, push, sync, usersStorage, otrClient, errors, membersStorage, convsStorage, messages, syncRequests, otrClientsSync, timeouts) {
+      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(selfUserId, Signal.const(Some(clientId)), otrClient, kvStorage, otrClientsStorage, sync, lifecycle, verificationUpdater) {
         override def requestSyncIfNeeded(retryInterval: Timeout): Future[Unit] =
           Future successful { syncCheckRequests = syncCheckRequests :+ retryInterval }
       }
     }
 
     scenario("init zms") {
-      zms
-      awaitUi(100.millis)
+      zms.lifecycle.acquireUi()
+      withDelay(zms.lifecycle.uiActive.currentValue shouldEqual Some(true))
     }
 
     scenario("Request self clients sync when session is created from message") {
@@ -139,25 +140,11 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
     }
   }
 
-  feature("Generating new prekeys") {
-
-    lazy val zms = new MockZMessaging()
-    lazy val service = zms.otrService
-
-    scenario("generate new prekeys when lastId pref is broken") {
-      (service.lastPreKeyId := 5).futureValue
-
-      val prekeys = service.generatePreKeysIfNeeded((50 to 99).toSeq :+ 0xFFFF).futureValue
-      prekeys.map(_.id) shouldEqual (100 to 149).toSeq
-      service.lastPreKeyId().futureValue shouldEqual 149
-    }
-  }
-
   feature("Integration") {
 
-    class TestClient(val self: UserData, remote: UserData) extends MockZMessaging() {
+    class TestClient(val self: UserData, remote: UserData) extends MockZMessaging(selfUserId = self.id) {
 
-      lazy val (selfClient, _, prekeys) = otrService.createClient().futureValue.get
+      lazy val (selfClient, _, prekeys) = cryptoBox.createClient(clientId).futureValue.get
       val conv = ConversationData(ConvId(remote.id.str), RConvId(remote.id.str), None, remote.id, ConversationType.OneToOne)
 
       usersStorage.addOrOverwrite(self)
@@ -165,8 +152,6 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
 
       convsStorage.insert(conv)
       membersStorage.add(conv.id, self.id, remote.id)
-
-      users.selfUserId := self.id
     }
 
     lazy val user1 = UserData("user1")
@@ -206,9 +191,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
         client1.otrClientsService.updateUserClients(user2.id, Seq(c2)),
         client2.otrClientsService.updateUserClients(user1.id, Seq(c1)),
         client1.otrService.sessions.getOrCreateSession(OtrService.sessionId(user2.id, c2.id), pre2.head),
-        client2.otrService.sessions.getOrCreateSession(OtrService.sessionId(user1.id, c1.id), pre1.head),
-        client1.otrContent.clientIdPref := Some(c1.id),
-        client2.otrContent.clientIdPref := Some(c2.id)
+        client2.otrService.sessions.getOrCreateSession(OtrService.sessionId(user1.id, c1.id), pre1.head)
       )), 5.seconds)
 
       client1.otrClientsService.getSelfClient.futureValue shouldBe 'defined

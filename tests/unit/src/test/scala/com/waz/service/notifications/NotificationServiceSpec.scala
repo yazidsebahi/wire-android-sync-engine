@@ -34,7 +34,6 @@ import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.EventContext
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
-import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.prop.PropertyChecks
 import org.threeten.bp.Instant
@@ -44,23 +43,19 @@ import scala.concurrent.duration._
 
 class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
 
-  lazy val context = Robolectric.application
-
   @volatile var currentNotifications = Nil: Seq[GcmNotification]
 
   lazy val selfUserId = UserId()
   lazy val oneToOneConv = ConversationData(ConvId(), RConvId(), None, selfUserId, ConversationType.OneToOne)
   lazy val groupConv = ConversationData(ConvId(), RConvId(), Some("group conv"), selfUserId, ConversationType.Group)
 
-  lazy val zms = new MockZMessaging() { self =>
-    users.selfUserId := test.selfUserId
-
+  lazy val zms = new MockZMessaging(selfUserId = selfUserId) { self =>
     notifications.getNotifications(Duration.Zero) { currentNotifications = _ } (EventContext.Global)
   }
 
   lazy val service = zms.notifications
 
-  implicit def db: SQLiteDatabase = zms.storage.dbHelper.getWritableDatabase
+  implicit def db: SQLiteDatabase = zms.db.dbHelper.getWritableDatabase
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

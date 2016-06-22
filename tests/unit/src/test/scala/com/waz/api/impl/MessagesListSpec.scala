@@ -19,7 +19,6 @@ package com.waz.api.impl
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.Message.{Status, Type}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.LastRead
@@ -39,16 +38,13 @@ import scala.concurrent.{Await, Future}
 class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
   var lastReadSync = None: Option[EventId]
 
-  implicit def db: SQLiteDatabase = zmessaging.storage.dbHelper.getWritableDatabase
   private implicit lazy val dispatcher = Threading.Background
 
   lazy val convId = ConvId()
   lazy val convData = ConversationData(convId, RConvId(convId.str), None, UserId(), ConversationType.Group, lastEvent = EventId(1000), lastRead = timeForEvent(990))
   lazy val selfUserId = UserId()
 
-  lazy val zmessaging = new MockZMessaging() {
-    users.selfUserId := test.selfUserId
-
+  lazy val zmessaging = new MockZMessaging(selfUserId = this.selfUserId) {
     insertConv(new ConversationData(ConvId(selfUserId.str), RConvId(selfUserId.str), None, selfUserId, ConversationType.Self))
   }
 

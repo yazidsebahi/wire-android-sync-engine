@@ -31,7 +31,7 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class TypingService(push: PushService, conversations: ConversationStorage, timeouts: Timeouts, lifecycle: ZmsLifecycle, sync: SyncServiceHandle) {
+class TypingService(conversations: ConversationStorage, timeouts: Timeouts, lifecycle: ZmsLifecycle, sync: SyncServiceHandle) {
   import timeouts.typing._
 
   private implicit val ev = EventContext.Global

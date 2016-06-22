@@ -18,11 +18,11 @@
 package com.waz.service
 
 import com.waz.ZLog._
-import com.waz.content.{MessagesStorage, UsersStorage}
+import com.waz.content.{MembersStorage, MessagesStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.conversation.{ConversationsContentUpdater, MembersContentUpdater}
+import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -32,9 +32,9 @@ import com.waz.utils.events.EventContext
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class ConnectionService(push: PushService, convs: ConversationsContentUpdater, members: MembersContentUpdater,
-    messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
-    sync: SyncServiceHandle, scheduler: => EventScheduler) {
+class ConnectionService(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
+                        messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
+                        sync: SyncServiceHandle, scheduler: => EventScheduler) {
 
   private implicit val logTag: LogTag = logTagFor[ConnectionService]
   import Threading.Implicits.Background
@@ -94,7 +94,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     }
     val hidden = user.connection == ConnectionStatus.Ignored || user.connection == ConnectionStatus.Blocked || user.connection == ConnectionStatus.Cancelled
     getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
-      members.addUsersToConversation(conv.id, Seq(selfUserId, user.id)) flatMap { members =>
+      members.add(conv.id, Seq(selfUserId, user.id): _*) flatMap { members =>
         convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden)) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
             case None if convType == ConversationType.Incoming =>

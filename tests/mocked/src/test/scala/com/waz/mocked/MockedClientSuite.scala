@@ -17,14 +17,15 @@
  */
 package com.waz.mocked
 
+import android.content.Context
 import android.net.Uri
-import com.koushikdutta.async.http.WebSocket
 import com.waz.ZLog._
 import com.waz.api.impl.SearchQuery.Query
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
 import com.waz.client.RegistrationClient
+import com.waz.content.KeyValueStorage
 import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
@@ -51,7 +52,7 @@ import com.wire.cryptobox.PreKey
 import org.scalatest.{Alerting, Informing, Suite}
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
+import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
   private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
@@ -59,22 +60,27 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   @volatile private var pushService = Option.empty[PushService]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
-  class MockedZMessaging(instance: InstanceService, initUser: ZUser, initToken: Option[Token]) extends ZMessaging(instance, initUser, initToken) {
-    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, znetClient, push, prefs, network)
+  class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "") extends StorageModule(context, accountId, prefix) {
+    override lazy val kvStorage: KeyValueStorage = new KeyValueStorage(context, db) {
+      override def getPref(key: String) = keyValueStoreOverrides.get(key).fold(super.getPref(key))(Future.successful)
+    }
+  }
+
+  class MockedUserModule(userId: UserId, account: AccountService) extends UserModule(userId, account) {
+    override lazy val otrClient: OtrClient = new MockedOtrClient(account.netClient)
+  }
+
+  class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends ZMessaging(clientId, userModule) {
+
+    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, push, prefs, network)
     override lazy val mediamanager: MediaManagerService = new MockedMediaManagerService(context, prefs)
 
-    override lazy val znetClient = new EmptyClient()
-
-    override lazy val assetClient        = new AssetClient(znetClient) {
+    override lazy val assetClient        = new AssetClient(zNetClient) {
       override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[ImageData] = suite.postImageAssetData(image, assetId, convId, data, nativePush)
     }
 
-    override lazy val usersClient        = new UsersClient(znetClient) {
-      override def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = suite.loadUsers(ids)
-      override def loadSelf(): ErrorOrResponse[UserInfo] = suite.loadSelf()
-      override def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = suite.updateSelf(info)
-    }
-    override lazy val convClient         = new ConversationsClient(znetClient) {
+    override lazy val usersClient        = new MockedUsersClient(zNetClient)
+    override lazy val convClient         = new ConversationsClient(zNetClient) {
       override def loadConversations(start: Option[RConvId], limit: Int): ErrorOrResponse[ConversationsResult] = suite.loadConversations(start, limit)
       override def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = suite.loadConversations(ids)
       override def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = suite.postMemberJoin(conv, members)
@@ -83,95 +89,122 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def postConversationState(convId: RConvId, state: ConversationState): ErrorOrResponse[Boolean] = suite.postConversationState(convId, state)
       override def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = suite.postName(convId, name)
     }
-    override lazy val messagesClient     = new MessagesClient(znetClient) {
+    override lazy val messagesClient     = new MessagesClient(zNetClient) {
       override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
     }
-    override lazy val eventsClient       = new EventsClient(znetClient) {
+    override lazy val eventsClient       = new EventsClient(zNetClient) {
       override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOr[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
       override def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] = suite.loadLastNotification()
     }
-    override lazy val voiceClient        = new VoiceChannelClient(znetClient) {
+    override lazy val voiceClient        = new VoiceChannelClient(zNetClient) {
       override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = suite.loadCallState(id)
       override def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent = CauseForCallStateEvent.REQUESTED): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = suite.updateSelfCallState(id, deviceState, cause)
     }
-    override lazy val abClient           = new AddressBookClient(znetClient) {
+    override lazy val abClient           = new AddressBookClient(zNetClient) {
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
     }
-    override lazy val gcmClient          = new GcmClient(znetClient) {}
-    override lazy val typingClient       = new TypingClient(znetClient) {}
-    override lazy val invitationClient       = new InvitationClient(znetClient) {
+    override lazy val gcmClient          = new GcmClient(zNetClient) {}
+    override lazy val typingClient       = new TypingClient(zNetClient) {}
+    override lazy val invitationClient       = new InvitationClient(zNetClient) {
       override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] = suite.postInvitation(i)
     }
-    override lazy val giphyClient        = new GiphyClient(znetClient) {}
-    override lazy val userSearchClient   = new UserSearchClient(znetClient) {
+    override lazy val giphyClient        = new GiphyClient(zNetClient) {}
+    override lazy val userSearchClient   = new UserSearchClient(zNetClient) {
       override def graphSearch(query: Query, limit: Int) = suite.graphSearch(query, limit)
       override def postExcludePymk(user: UserId): CancellableFuture[Option[ErrorResponse]] = suite.postExcludePymk(user)
       override def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] = suite.loadCommonConnections(id)
     }
-    override lazy val connectionsClient  = new ConnectionsClient(znetClient) {
+    override lazy val connectionsClient  = new ConnectionsClient(zNetClient) {
       override def loadConnections(start: Option[UserId], pageSize: Int): ErrorOrResponse[Seq[UserConnectionEvent]] = suite.loadConnections(start, pageSize)
       override def loadConnection(other: UserId): ErrorOrResponse[UserConnectionEvent] = suite.loadConnection(other)
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
-    override lazy val blacklistClient    = new VersionBlacklistClient(znetClient, testBackend) {
-      override def loadVersionBlacklist(): ErrorOrResponse[VersionBlacklist] = suite.loadVersionBlacklist()
-    }
-    override lazy val credentialsClient  = new CredentialsUpdateClient(znetClient) {
-      override def updatePassword(newPassword: String, currentPassword: Option[String]): ErrorOrResponse[Unit] = suite.updatePassword(newPassword, currentPassword)
-      override def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] = suite.updateEmail(email)
-      override def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] = suite.updatePhone(phone)
-    }
-    override lazy val otrClient: OtrClient = new OtrClient(znetClient) {
-      override def loadClients(): ErrorOrResponse[Seq[Client]] = suite.loadOtrClients()
-      override def postClient(userId: ZUserId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = suite.postOtrClient(userId, client, lastKey, keys, password)
-      override def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = suite.loadPreKeys(users)
-      override def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = suite.loadRemainingPreKeys(id)
-      override def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
-    }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, znetClient, network, global.backend, otrClientId, timeouts) {
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(znetClient.client, Uri.parse(backend.pushUrl), znetClient.auth) {
-        override def close(): CancellableFuture[Unit] = {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, global.backend, clientId, timeouts) {
+      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
+        override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None
-          successful(())
         }
-        override protected def connect(): CancellableFuture[WebSocket] = {
+        override protected def connect() = dispatcher {
           suite.pushService = Some(push)
           connected ! true
-          successful(null)
+          null
         }
-        override def isConnected: Boolean = suite.pushService.isDefined
       }
     }
 
-    override lazy val timeouts = new Timeouts {
-      override val userSearch = new UserSearch {
-        override val dismissedPeopleRefreshThrottling = 0.seconds
-      }
-    }
-
-    override lazy val keyValue: KeyValueService = new KeyValueService(kvStorage, reporting) {
-      override def getPref(key: String) = keyValueStoreOverrides.get(key).fold(super.getPref(key))(Future.successful)
-    }
+    override lazy val timeouts = suite.timeouts
   }
 
-  override def push(n: PushNotification): Boolean = pushService.map(_.onPushNotification(n)).isDefined
-  override def pushGcm(notification: PushNotification, userId: UserId) = Option(ZMessaging.currentInstance).foreach(_ => new GcmHandlerService().handleNotification(notification, Some(userId)))
+  class MockedUsersClient(client: ZNetClient) extends UsersClient(client) {
+    override def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = suite.loadUsers(ids)
+    override def loadSelf(): ErrorOrResponse[UserInfo] = suite.loadSelf()
+    override def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = suite.updateSelf(info)
+  }
 
-  override lazy val globalModule = new GlobalModule(context, testBackend) {
-    override lazy val client: AsyncClient = new EmptyAsyncClient
+  class MockedCredentialsUpdateClient(client: ZNetClient) extends CredentialsUpdateClient(client) {
+    override def updatePassword(newPassword: String, currentPassword: Option[String]): ErrorOrResponse[Unit] = suite.updatePassword(newPassword, currentPassword)
+    override def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] = suite.updateEmail(email)
+    override def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] = suite.updatePhone(phone)
+  }
+
+  class MockedOtrClient(client: ZNetClient) extends OtrClient(client) {
+    override def loadClients(): ErrorOrResponse[Seq[Client]] = suite.loadOtrClients()
+    override def postClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = suite.postOtrClient(userId, client, lastKey, keys, password)
+    override def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = suite.loadPreKeys(users)
+    override def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = suite.loadRemainingPreKeys(id)
+    override def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
+  }
+
+  class MockedZMessagingFactory(global: GlobalModule) extends ZMessagingFactory(global) {
+
+    override def client(credentials: CredentialsHandler): ZNetClient = new EmptyClient
+
+    override def usersClient(client: ZNetClient): UsersClient = new MockedUsersClient(client)
+
+    override def credentialsClient(netClient: ZNetClient): CredentialsUpdateClient = new MockedCredentialsUpdateClient(netClient)
+
+    override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(global.context, accountId, Random.nextInt.toHexString)
+
+    override def userModule(userId: UserId, account: AccountService) = new MockedUserModule(userId, account)
+
+    override def zmessaging(clientId: ClientId, userModule: UserModule): ZMessaging = new MockedZMessaging(clientId, userModule)
+
+  }
+
+  override def push(n: PushNotification): Boolean = pushService match {
+    case Some(service) => service.onPushNotification(n); true
+    case None =>
+      verbose(s"push ignored, web socket not connected")
+      false
+  }
+  override def pushGcm(notification: PushNotification, userId: UserId) = Option(ZMessaging.currentAccounts).foreach(_ => new GcmHandlerService().handleNotification(notification, Some(userId)))
+
+  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClient) extends GlobalModule(context, testBackend) {
+    override lazy val client: AsyncClient = testClient
     override lazy val clientWrapper: ClientWrapper = TestClientWrapper
     override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
-      override def login(user: ZUserId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
+      override def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
       override def access(cookie: Option[String], token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
+
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
-      override def register(user: ZUserId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = suite.register(user, credentials, name, accentId)
+      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = suite.register(user, credentials, name, accentId)
       override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
       override def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = suite.verifyPhoneNumber(credentials, kindOfVerification)
     }
+    override lazy val blacklistClient    = new VersionBlacklistClient(globalClient, testBackend) {
+      override def loadVersionBlacklist(): ErrorOrResponse[VersionBlacklist] = suite.loadVersionBlacklist()
+    }
+    override lazy val factory: ZMessagingFactory = new MockedZMessagingFactory(this)
   }
+
+  override lazy val testClient: AsyncClient = new EmptyAsyncClient
+
+  override lazy val globalModule = new MockedGlobalModule(context, testBackend, testClient)
+
+
 }
 
 trait MockedFlows { test: ApiSpec =>
@@ -184,7 +217,7 @@ trait MockedFlows { test: ApiSpec =>
   def setCanSendVideo(conv: RConvId, canSend: Boolean): Unit = if (canSend) mocked.convsThatCanSendVideo += conv else mocked.convsThatCanSendVideo -= conv
   def hasConvVideoSendState(conv: RConvId, state: VideoSendState): Boolean = mocked.convsThatSendVideo.get(conv).contains(state)
   def currentVideoCaptureDeviceId(conv: RConvId): Option[String] = mocked.videoCaptureDeviceId.get(conv)
-  def changeStateOfReceivedVideo(state: StateOfReceivedVideo): Unit = zmessaging.flowmanager.onStateOfReceivedVideoChanged ! state
+  def changeStateOfReceivedVideo(state: StateOfReceivedVideo): Unit = zmessaging.flowmanager.stateOfReceivedVideo ! state
 
   def resetVideoCalls(): Unit = {
     mocked.convsThatSendVideo = Map.empty
@@ -208,9 +241,9 @@ trait MockedGcm {
 
 trait MockedClient { test: ApiSpec =>
 
-  def login(user: ZUserId, credentials: Credentials): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some("cookie"))))
+  def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some("cookie"))))
   def access(cookie: Option[String], token: Option[Token]): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some("cookie"))))
-  def register(user: ZUserId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] =
+  def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] =
     successful(Right((UserInfo(UserId(), Some(name), accentId, credentials.maybeEmail, credentials.maybePhone, None), Some("cookie"))))
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] = successful(Right(()))
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = successful(Right(()))
@@ -245,7 +278,7 @@ trait MockedClient { test: ApiSpec =>
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = successful(Right(()))
   def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadOtrClients(): ErrorOrResponse[Seq[Client]] = successful(Right(Seq.empty))
-  def postOtrClient(userId: ZUserId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = successful(Right(client))
+  def postOtrClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = successful(Right(client))
   def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = successful(Right(Map.empty))
   def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = successful(Right(Nil))
   def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))

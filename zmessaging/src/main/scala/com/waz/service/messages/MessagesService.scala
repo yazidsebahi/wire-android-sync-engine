@@ -20,7 +20,7 @@ package com.waz.service.messages
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.Status
-import com.waz.api.{ErrorResponse, Message}
+import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{LikingsStorage, Mime}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
@@ -30,7 +30,8 @@ import com.waz.model.{MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
-import com.waz.service.otr.VerificationStateUpdater.{ClientUnverified, VerificationChange}
+import com.waz.service.otr.VerificationStateUpdater
+import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.RichFuture.traverseSequential
@@ -44,8 +45,8 @@ import scala.concurrent.Future
 import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
-class MessagesService(val content: MessagesContentUpdater, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
-    likings: LikingsStorage, network: NetworkModeService, sync: SyncServiceHandle) {
+class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdater, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
+    likings: LikingsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater) {
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[MessagesService]
   private implicit val ec = EventContext.Global
@@ -61,6 +62,10 @@ class MessagesService(val content: MessagesContentUpdater, assets: AssetService,
       verbose(s"processing events for conv: $conv, events: $events")
       processEvents(conv, events)
     }
+  }
+
+  verificationUpdater.updateProcessor = { update =>
+    addMessagesAfterVerificationUpdate(update.convUpdates, update.convUsers, update.changes) map { _ => Unit }
   }
 
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
@@ -140,9 +145,9 @@ class MessagesService(val content: MessagesContentUpdater, assets: AssetService,
             MessageData(id, conv.id, EventId.Zero, Message.Type.KNOCK, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
           case action: Liking.Action => MessageData.Empty
           case Asset(_, _, UploadCancelled) => MessageData.Empty
-          case Asset(Some(Original(Mime.Video(), _, _, _)), _, _) =>
+          case Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
             MessageData(id, convId, EventId.Zero, Message.Type.VIDEO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case Asset(Some(Original(Mime.Audio(), _, _, _)), _, _) =>
+          case Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
             MessageData(id, convId, EventId.Zero, Message.Type.AUDIO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
           case Asset(_, _, _) =>
             MessageData(id, convId, EventId.Zero, Message.Type.ANY_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
@@ -156,9 +161,9 @@ class MessagesService(val content: MessagesContentUpdater, assets: AssetService,
         }
       case GenericAssetEvent(_, _, time, from, msg, dataId, data) =>
         msg match {
-          case GenericMessage(assetId, asset @ Asset(Some(Original(Mime.Video(), _, _, _)), _, _)) =>
+          case GenericMessage(assetId, asset @ Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _)) =>
             MessageData(MessageId(assetId.str), convId, EventId.Zero, Message.Type.VIDEO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
-          case GenericMessage(assetId, asset @ Asset(Some(Original(Mime.Audio(), _, _, _)), _, _)) =>
+          case GenericMessage(assetId, asset @ Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _)) =>
             MessageData(MessageId(assetId.str), convId, EventId.Zero, Message.Type.AUDIO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
           case GenericMessage(assetId, asset: Asset) =>
             MessageData(MessageId(assetId.str), convId, EventId.Zero, Message.Type.ANY_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
@@ -250,6 +255,25 @@ class MessagesService(val content: MessagesContentUpdater, assets: AssetService,
     })
 
   private def isGroupOrOneToOne(conv: ConversationData) = conv.convType == ConversationType.Group || conv.convType == ConversationType.OneToOne
+
+  def addMessagesAfterVerificationUpdate(updates: Seq[(ConversationData, ConversationData)], convUsers: Map[ConvId, Seq[UserData]], changes: Map[UserId, VerificationChange]) =
+    Future.traverse(updates) {
+      case (prev, up) if up.verified == Verification.VERIFIED => addOtrVerifiedMessage(up.id)
+      case (prev, up) if prev.verified == Verification.VERIFIED =>
+        val convId = up.id
+        val changedUsers = convUsers(convId).filter(!_.isVerified).flatMap { u => changes.get(u.id).map(u.id -> _) }
+        val (users, change) =
+          if (changedUsers.forall(c => c._2 == ClientAdded || c._2 == MemberAdded)) (changedUsers map (_._1), ClientAdded)
+          else (changedUsers collect { case (user, ClientUnverified) => user }, ClientUnverified)
+
+        val (self, other) = users.partition(_ == selfUserId)
+        for {
+          _ <- if (self.nonEmpty) addOtrUnverifiedMessage(convId, Seq(selfUserId), change) else Future.successful(())
+          _ <- if (other.nonEmpty) addOtrUnverifiedMessage(convId, other, change) else Future.successful(())
+        } yield ()
+      case _ =>
+        Future.successful(())
+    }
 
   def addHistoryLostMessages(cs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]] = {
     // TODO: those messages should include information about what was actually changed

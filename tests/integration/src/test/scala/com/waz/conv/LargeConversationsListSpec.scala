@@ -25,9 +25,8 @@ import com.waz.api._
 import com.waz.api.impl.EmailCredentials
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{EmailAddress, ZUserId}
+import com.waz.model.{AccountId, EmailAddress}
 import com.waz.provision.{EmailClientSuite, UserProvisioner}
-import com.waz.sync.client.UsersClient
 import com.waz.testutils.Implicits._
 import com.waz.threading.Threading
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
@@ -57,10 +56,10 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
 
   override val email = emails.head
 
-  lazy val userId = ZUserId()
+  lazy val userId = AccountId()
 
   lazy val regClient = globalModule.regClient
-  lazy val client = new UsersClient(znetClientFor("meep", ""))
+  lazy val client = globalModule.loginClient
 
   lazy val convs = api.getConversations
 
@@ -123,7 +122,7 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
     }
 
     scenario("logout, clear conversations and log back in again") {
-      ConversationDataDao.deleteAll(zmessaging.storage.dbHelper.getWritableDatabase)
+      ConversationDataDao.deleteAll(zmessaging.db.dbHelper.getWritableDatabase)
       pauseApi()
       api.logout()
       api.onDestroy()
@@ -169,7 +168,7 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
   // call this in beforeAll() after a user wipe
   private def registerSpecificUsers(): Unit = {
     emails.zip(names) foreach { case (em, name) =>
-      Await.result(regClient.register(ZUserId(), EmailCredentials(EmailAddress(em), Some(password)), name, None), 15.seconds) match {
+      Await.result(regClient.register(AccountId(), EmailCredentials(EmailAddress(em), Some(password)), name, None), 15.seconds) match {
         case Right((user, _)) => println(s"created user: $user")
         case Left(err) =>
           println(s"got error: $err")

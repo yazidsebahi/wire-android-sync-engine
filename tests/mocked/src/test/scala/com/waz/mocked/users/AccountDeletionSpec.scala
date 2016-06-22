@@ -55,12 +55,12 @@ class AccountDeletionSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
     scenario("Delete own account") {
       api.getSelf.isLoggedIn shouldEqual true
-      api.zmessaging.value.user.cookie should be (defined)
-      val userService = api.zmessaging.value.user
+      val account = api.account.value
+      account.accountData.head.await().cookie should be (defined)
       userDeleteEvent(selfId)
       soon {
         api.getSelf.isLoggedIn shouldEqual false
-        userService.cookie shouldEqual None
+        account.accountData.currentValue shouldEqual None
       }
     }
   }

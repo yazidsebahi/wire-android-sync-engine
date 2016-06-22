@@ -32,7 +32,7 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
     scenario("Update an existing email address") {
       {
         self.getEmail shouldEqual "email@test.com"
-        self.isEmailVerified shouldEqual true
+        self.accountActivated shouldEqual true
       }.soon
 
       val spy = new UpdateSpy
@@ -41,14 +41,14 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
       {
         spy.updated shouldEqual true
         self.getEmail shouldEqual "email@test.com"  // not updated until verified
-        self.isEmailVerified shouldEqual true       // still has a valid verified email address (the old one)
+        self.accountActivated shouldEqual true       // still has a valid verified email address (the old one)
       }.soon
 
       addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = None)))
 
       {
         self.getEmail shouldEqual "updated@test.com"
-        self.isEmailVerified shouldEqual true
+        self.accountActivated shouldEqual true
       }.soon
     }
   }
@@ -57,7 +57,6 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
     scenario("Add a phone number to the account") {
       {
         self.getPhone shouldEqual ""
-        self.isPhoneVerified shouldEqual false
       }.soon
 
       val spy = new UpdateSpy
@@ -66,14 +65,12 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
       {
         spy.updated shouldEqual true
         self.getPhone shouldEqual ""           // no phone number yet
-        self.isPhoneVerified shouldEqual false // no phone number, not verified yet
       }.soon
 
       addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = Some(PhoneNumber("12345678")))))
 
       {
         self.getPhone shouldEqual "12345678"
-        self.isPhoneVerified shouldEqual true
       }.soon
     }
 
@@ -84,14 +81,12 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
       {
         spy.updated shouldEqual true
         self.getPhone shouldEqual "12345678"  // not updated until verified
-        self.isPhoneVerified shouldEqual true // still has a valid verified phone number (the old one)
       }.soon
 
       addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = Some(PhoneNumber("87654321")))))
 
       {
         self.getPhone shouldEqual "87654321"
-        self.isPhoneVerified shouldEqual true
       }.soon
 
     }

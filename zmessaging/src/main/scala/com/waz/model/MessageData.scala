@@ -26,7 +26,6 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
-import com.waz.model.GenericContent.Asset.ImageMetaData
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
@@ -74,7 +73,7 @@ case class MessageData(id: MessageId,
   lazy val imageDimensions: Option[Dim2] = msgType match {
     case Message.Type.ASSET =>
       protos.collectFirst {
-        case GenericMessage(_, Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)))), _, _)) => d
+        case GenericMessage(_, Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _)) => d
         case GenericMessage(_, ImageAsset(_, _, _, w, h, _, _, _, _)) => Dim2(w, h)
       } orElse {
         content.headOption.collect {
@@ -83,8 +82,8 @@ case class MessageData(id: MessageId,
       }
     case _ =>
       protos.reverseIterator.collectFirst {
-        case GenericMessage(_, Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)))), _, _)) => d
-        case GenericMessage(_, Asset(_, Some(Asset.Preview(_, _, _, _, Some(ImageMetaData(d, _)))), _)) => d
+        case GenericMessage(_, Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _)) => d
+        case GenericMessage(_, Asset(_, Some(Asset.Preview(_, _, _, _, Some(HasDimensions(d)))), _)) => d
       }
   }
 

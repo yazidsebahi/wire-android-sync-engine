@@ -21,7 +21,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
-import com.waz.model.{ZUserId, PersonalInvitationToken, PhoneNumber, UserInfo}
+import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.UsersClient.UserResponseExtractor
 import com.waz.threading.{CancellableFuture, Threading}
@@ -33,6 +33,7 @@ import com.waz.znet.Response.Status._
 import com.waz.znet.Response.{HttpStatus, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
+import org.json.JSONObject
 
 import scala.concurrent.duration._
 
@@ -41,7 +42,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   import com.waz.client.RegistrationClient._
   private implicit val tag: LogTag = logTagFor[RegistrationClient]
 
-  def register(userId: ZUserId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = {
+  def register(userId: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = {
     val json = JsonEncoder { o =>
       o.put("name", name)
       o.put("label", userId.str)
@@ -63,16 +64,31 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
     }
   }
 
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] = {
-    val params = JsonContentEncoder(JsonEncoder { o =>
-      o.put("phone", phone.str)
-      if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
-    })
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] =
+    postActivateSend(kindOfAccess) {
+      JsonEncoder { o =>
+        o.put("phone", phone.str)
+        if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
+      }
+    }
+
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] =
+    postActivateSend(kindOfAccess) {
+      JsonEncoder { o =>
+        o.put("phone", phone.str)
+        o.put("voice_call", true)
+        if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
+      }
+    }
+
+  private def postActivateSend(kindOfAccess: KindOfAccess)(params: JSONObject) = {
+
     val uri = absoluteUri(kindOfAccess match {
       case KindOfAccess.REGISTRATION => ActivateSendPath
-      case KindOfAccess.LOGIN        => LoginSendPath
+      case KindOfAccess.LOGIN => LoginSendPath
     })
-    client(uri, Request.PostMethod, params, timeout = timeout) flatMap {
+
+    client(uri, Request.PostMethod, JsonContentEncoder(params), timeout = timeout) flatMap {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"confirmation code requested: $resp")
         CancellableFuture.successful(Right(()))

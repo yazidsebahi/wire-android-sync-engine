@@ -55,13 +55,11 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
     }
 
-    override def otrClientId: Signal[Option[ClientId]] = Signal(Some(ClientId()))
-
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, znetClient, network, backend, otrClientId, timeouts) {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, global.backend, clientId, timeouts) {
       override val connected = wsConnected
     }
 
-    override lazy val eventsClient: EventsClient = new EventsClient(znetClient) {
+    override lazy val eventsClient: EventsClient = new EventsClient(zNetClient) {
       override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = false) = {
         requestedSince = since
         CancellableFuture.delayed(clientDelay)(test.notifications.right map (_ .map { n =>

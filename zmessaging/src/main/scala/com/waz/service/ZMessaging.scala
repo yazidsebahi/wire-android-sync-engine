@@ -19,135 +19,131 @@ package com.waz.service
 
 import android.content.Context
 import com.softwaremill.macwire._
-import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
-import com.waz.api.impl.{LogLevel, _}
-import com.waz.api.{TrackingEvent, _}
-import com.waz.bitmap.BitmapDecoder
-import com.waz.cache.CacheService
-import com.waz.client.RegistrationClient
-import com.waz.content._
+import com.waz.api._
+import com.waz.api.impl.LogLevel
+import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.assets._
+import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
+import com.waz.service.assets.{AssetLoader, AssetService, RecordAndPlayService}
 import com.waz.service.call._
 import com.waz.service.conversation._
-import com.waz.service.downloads.{AssetDownloader, DownloaderService, InputStreamAssetLoader, VideoAssetLoader}
+import com.waz.service.downloads.AssetDownloader
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
 import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
-import com.waz.service.otr.{CryptoBoxService, OtrClientsService, OtrContentService, OtrService}
+import com.waz.service.otr._
 import com.waz.service.tracking.{TrackingEventsService, TrackingService}
-import com.waz.sync._
 import com.waz.sync.client._
 import com.waz.sync.handler._
-import com.waz.sync.otr.{OtrClientsSyncHandler, OtrSyncHandler}
+import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{SerialDispatchQueue, Threading}
-import com.waz.ui.{MemoryImageCache, UiModule}
+import com.waz.ui.UiModule
 import com.waz.utils.Locales
-import com.waz.utils.events.{EventContext, Publisher, Signal}
-import com.waz.znet.AuthenticationManager._
-import com.waz.znet._
+import com.waz.utils.events.EventContext
+import com.waz.znet.{CredentialsHandler, _}
 import net.hockeyapp.android.Constants
 
-class GlobalModule(val context: Context, val backend: BackendConfig) {
-  lazy val storage: Database = new GlobalStorage(context)
-  lazy val prefs = wire[PreferenceService]
-  lazy val metadata: MetaDataService = wire[MetaDataService]
-  lazy val cache: CacheService = new CacheService(context, storage)
-  lazy val gcmGlobal = wire[GcmGlobalService]
-  lazy val bitmapDecoder: BitmapDecoder = wire[BitmapDecoder]
-  lazy val imageCache: MemoryImageCache = wire[MemoryImageCache]
-  lazy val network = wire[NetworkModeService]
-  lazy val phoneNumbers: PhoneNumberService = wire[PhoneNumberService]
-  lazy val timeouts = wire[Timeouts]
-  lazy val permissions: PermissionsService = wire[PermissionsService]
-  lazy val reporting = wire[GlobalReportingService]
-  lazy val handlerFactory = ZMessaging.notificationsHandlerFactory(context)
-  lazy val recordingAndPlayback = wire[RecordAndPlayService]
+import scala.concurrent.Future
 
-  lazy val streamLoader: InputStreamAssetLoader = wire[InputStreamAssetLoader]
-  lazy val videoLoader: VideoAssetLoader = wire[VideoAssetLoader]
+class ZMessagingFactory(global: GlobalModule) {
 
-  lazy val globalImageLoader = {
-    val client = new AssetClient(new ZNetClient(this, "", ""))
-    val loader: AssetLoader = new AssetLoader(context, downloader, new AssetDownloader(client, cache), streamLoader, videoLoader, cache)
-    new ImageLoader(context, cache, imageCache, bitmapDecoder, permissions, loader) { override def tag = "Global" }
-  }
+  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "")
 
-  lazy val decoder = Response.CacheResponseBodyDecoder(cache)
-  lazy val loginClient = wire[LoginClient]
-  lazy val regClient: RegistrationClient = wire[RegistrationClient]
-  lazy val downloader: DownloaderService = wire[DownloaderService]
-  lazy val cacheCleanup = wire[CacheCleaningService]
+  def client(credentials: CredentialsHandler) = new ZNetClient(credentials, global.client, global.backend, global.loginClient)
 
-  lazy val users: ZUsers = wire[ZUsers]
+  def usersClient(client: ZNetClient) = new UsersClient(client)
 
-  lazy val clientWrapper: ClientWrapper = ClientWrapper
-  lazy val client: AsyncClient = new AsyncClient(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
+  def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
+
+  def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.kvStorage)
+
+  def userModule(userId: UserId, account: AccountService) = wire[UserModule]
+
+  def zmessaging(clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
 }
 
 
-class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Option[Token] = None, val dbPrefix: String = "") {
+class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
+  lazy val db                 = new ZmsDatabase(accountId, context, dbPrefix)
+  lazy val kvStorage          = wire[KeyValueStorage]
+  lazy val usersStorage       = wire[UsersStorage]
+  lazy val otrClientsStorage  = wire[OtrClientsStorage]
+  lazy val membersStorage     = wire[MembersStorage]
+  lazy val assetsStorage      = wire[AssetsStorage]
+  lazy val voiceStorage       = wire[VoiceChannelStorage]
+  lazy val likingsStorage     = wire[LikingsStorage]
+  lazy val notifStorage       = wire[NotificationStorage]
+  lazy val convsStorage       = wire[ConversationStorage]
+  lazy val msgDeletions       = wire[MsgDeletionStorage]
+}
+
+
+class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
+
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
   private implicit val ev = EventContext.Global
 
-  def global = instance.global
-  def context: Context = global.context
-  def client = global.client
-  def prefs = global.prefs
-  def metadata = global.metadata
-  def cache: CacheService = global.cache
-  def cacheCleanup: CacheCleaningService = global.cacheCleanup
-  def gcmGlobal = global.gcmGlobal
-  def imageCache = global.imageCache
-  def network = global.network
-  def phoneNumbers = global.phoneNumbers
-  def timeouts = global.timeouts
-  def loginClient = global.loginClient
-  def regClient = global.regClient
-  def downloader = global.downloader
-  def zusers = global.users
-  def bitmapDecoder = global.bitmapDecoder
-  def userId = initUser.id
-  def backend = global.backend
-  def permissions = global.permissions
-  def handlerFactory = global.handlerFactory
-  def streamLoader = global.streamLoader
-  def videoLoader = global.videoLoader
-  def recordingAndPlayback = global.recordingAndPlayback
+  val account           = userModule.account
+  val global            = account.global
 
-  def otrClientId: Signal[Option[ClientId]] = otrContent.currentClientIdSignal
+  val selfUserId        = userModule.userId
+  val accountId         = account.id
 
-  lazy val user: ZUserService = new ZUserService(initUser, zusers, keyValue, instance)
+  val zNetClient        = account.netClient
+  val storage           = account.storage
+  val lifecycle         = account.lifecycle
 
-  // storages
-  lazy val storage: ZStorage = new ZStorage(initUser.id, context, dbPrefix)
-  lazy val usersStorage: UsersStorage = wire[UsersStorage]
-  lazy val deletions: MsgDeletionStorage = wire[MsgDeletionStorage]
-  lazy val likingsStorage: LikingsStorage = wire[LikingsStorage]
-  lazy val membersStorage   = wire[MembersStorage]
-  lazy val kvStorage        = wire[KeyValueStorage]
-  lazy val assetsStorage    = wire[AssetsStorage]
-  lazy val voiceStorage     = wire[VoiceChannelStorage]
-  lazy val membersContent   = wire[MembersContentUpdater]
-  lazy val messagesStorage  = new MessagesStorage(context, storage, users.getSelfUserId.map(_.getOrElse(UserId.Zero)), convsStorage, usersStorage, likings, messageAndLikesNotifier)
-  lazy val voiceContent     = wire[VoiceChannelContent]
-  lazy val notifStorage     = wire[NotificationStorage]
-  lazy val otrClientsStorage = wire[OtrClientsStorage]
+  lazy val cryptoBox            = account.cryptoBox
+  lazy val sync                 = userModule.sync
+  lazy val syncHandler          = userModule.syncHandler
+  lazy val otrClientsService    = userModule.clientsService
+  lazy val syncRequests         = userModule.syncRequests
+  lazy val otrClientsSync       = userModule.clientsSync
+  lazy val verificationUpdater  = userModule.verificationUpdater
 
-  lazy val convsStorage: ConversationStorage = wire[ConversationStorage]
-  lazy val convsContent: ConversationsContentUpdater = wire[ConversationsContentUpdater]
-  lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
+  def context           = global.context
+  def imageCache        = global.imageCache
+  def permissions       = global.permissions
+  def phoneNumbers      = global.phoneNumbers
+  def prefs             = global.prefs
+  def downloader        = global.downloader
+  def bitmapDecoder     = global.bitmapDecoder
+  def gcmGlobal         = global.gcmGlobal
+  def timeouts          = global.timeouts
+  def cache             = global.cache
+  def mediamanager      = global.mediaManager
+  def globalRecAndPlay  = global.recordingAndPlayback
+  def metadata          = global.metadata
+  def network           = global.network
+  def handlerFactory    = global.handlerFactory
+  def blacklist         = global.blacklist
+  def backend           = global.backend
+  def accountsStorage   = global.accountsStorage
+  def streamLoader      = global.streamLoader
+  def videoLoader       = global.videoLoader
 
-  lazy val znetClient = new ZNetClient(user, initToken, global.client, backend, loginClient, keyValue.accessTokenPref)
+  def db                = storage.db
+  def kvStorage         = storage.kvStorage
+  def usersStorage      = storage.usersStorage
+  def otrClientsStorage = storage.otrClientsStorage
+  def membersStorage    = storage.membersStorage
+  def assetsStorage     = storage.assetsStorage
+  def voiceStorage      = storage.voiceStorage
+  def likingsStorage    = storage.likingsStorage
+  def notifStorage      = storage.notifStorage
+  def convsStorage      = storage.convsStorage
+  def msgDeletions      = storage.msgDeletions
 
-  lazy val spotifyClientId      = metadata.spotifyClientId
+  lazy val messagesStorage: MessagesStorage = wire[MessagesStorage]
+  lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
 
-  // clients
+  lazy val spotifyClientId  = metadata.spotifyClientId
+
   lazy val youtubeClient      = wire[YouTubeClient]
   lazy val soundCloudClient   = wire[SoundCloudClient]
   lazy val spotifyClient      = wire[SpotifyClient]
@@ -163,23 +159,21 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
   lazy val giphyClient        = wire[GiphyClient]
   lazy val userSearchClient   = wire[UserSearchClient]
   lazy val connectionsClient  = wire[ConnectionsClient]
-  lazy val blacklistClient    = wire[VersionBlacklistClient]
-  lazy val credentialsClient  = wire[CredentialsUpdateClient]
   lazy val messagesClient     = wire[MessagesClient]
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
 
-  // services
-  lazy val keyValue: KeyValueService  = wire[KeyValueService]
+
+  lazy val convsContent: ConversationsContentUpdater = wire[ConversationsContentUpdater]
+  lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
+
   lazy val assetDownloader            = wire[AssetDownloader]
   lazy val assetLoader                = wire[AssetLoader]
   lazy val imageLoader                = wire[ImageLoader]
 
-  lazy val push: PushService = wire[PushService]
-  lazy val gcm: GcmService = wire[GcmService]
+  lazy val push: PushService  = wire[PushService]
+  lazy val gcm: GcmService    = wire[GcmService]
   lazy val errors         = wire[ErrorsService]
-  lazy val reporting      = new ZmsReportingService(userId, global.reporting)
-  lazy val mediamanager   = wire[MediaManagerService]
-  lazy val lifecycle      = wire[ZmsLifecycle]
+  lazy val reporting      = new ZmsReportingService(accountId, global.reporting)
   lazy val websocket: WebSocketClientService = wire[WebSocketClientService]
   lazy val usersearch     = wire[UserSearchService]
   lazy val assetGenerator = wire[ImageAssetGenerator]
@@ -193,13 +187,12 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
   lazy val convsUi        = wire[ConversationsUiService]
   lazy val convsStats     = wire[ConversationsListStateService]
   lazy val messages: MessagesService = wire[MessagesService]
-  lazy val messageAndLikesNotifier: MessageAndLikesNotifier = wire[MessageAndLikesNotifierImpl]
   lazy val connection: ConnectionService = wire[ConnectionService]
   lazy val flowmanager: FlowManagerService = wire[FlowManagerService]
+  lazy val voiceContent       = wire[VoiceChannelContent]
   lazy val voice: VoiceChannelService = wire[VoiceChannelService]
   lazy val contacts: ContactsService = wire[ContactsService]
   lazy val typing: TypingService = wire[TypingService]
-  lazy val blacklist      = wire[VersionBlacklistService]
   lazy val invitations    = wire[InvitationService]
   lazy val richmedia      = wire[RichMediaService]
   lazy val audiolink      = wire[AudioLinkService]
@@ -210,20 +203,13 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
   lazy val soundCloudMedia = wire[SoundCloudMediaService]
   lazy val spotifyMedia   = wire[SpotifyMediaService]
   lazy val googleMapsMedia = wire[GoogleMapsMediaService]
-  lazy val otrContent: OtrContentService = wire[OtrContentService]
-  lazy val otrClientsService: OtrClientsService = wire[OtrClientsService]
-  lazy val cryptoBox      = wire[CryptoBoxService]
   lazy val otrService: OtrService = wire[OtrService]
   lazy val genericMsgs: GenericMessageService = wire[GenericMessageService]
   lazy val likings: LikingsService = wire[LikingsService]
   lazy val notifications: NotificationService = wire[NotificationService]
   lazy val callLog = wire[CallLogService]
+  lazy val recordAndPlay = wire[RecordAndPlayService]
 
-  // sync
-  lazy val sync: SyncServiceHandle  = wire[AndroidSyncServiceHandle]
-  lazy val syncHandler: SyncHandler   = wire[ZMessagingSyncHandler]
-  lazy val syncRequests: SyncRequestService = new SyncRequestService(context, userId, storage, network, user, syncHandler, reporting)
-  def syncContent = syncRequests.content
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -236,10 +222,8 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
   lazy val typingSync       = wire[TypingSyncHandler]
   lazy val richmediaSync    = wire[RichMediaSyncHandler]
   lazy val invitationSync   = wire[InvitationSyncHandler]
-  lazy val blacklistSync    = wire[VersionBlacklistSyncHandler]
   lazy val messagesSync     = wire[MessagesSyncHandler]
   lazy val otrSync          = wire[OtrSyncHandler]
-  lazy val otrClientsSync   = wire[OtrClientsSyncHandler]
   lazy val likingsSync      = wire[LikingsSyncHandler]
   lazy val lastReadSync     = wire[LastReadSyncHandler]
   lazy val clearedSync      = wire[ClearedSyncHandler]
@@ -247,7 +231,6 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
   lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 
   lazy val eventScheduler = {
-    import EventScheduler._
 
     new EventScheduler(
       Stage(Sequential)(
@@ -281,6 +264,7 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
   {
     conversations
     users
+
     websocket // connect on start
 
     // services listening on lifecycle verified login events
@@ -289,62 +273,17 @@ class ZMessaging(val instance: InstanceService, initUser: ZUser, initToken: Opti
 
     // services listening for storage updates
     richmedia
+
+    recordAndPlay
+
+    reporting.addStateReporter { pw =>
+      Future {
+        kvStorage foreachCached {
+          case KeyValueData(k, v) => pw.println(s"$k: $v")
+        }
+      }
+    }
   }
-}
-
-
-class ZUserService(@volatile var user: ZUser, zusers: ZUsers, keyValueService: KeyValueService, instanceService: InstanceService) extends CredentialsHandler {
-  private implicit val tag = logTagFor[ZUserService]
-
-  val signal = Signal(user)
-
-  val onLogout = new Publisher[Unit]
-  val onVerifiedLogin = Signal(Option.empty[ZUserId])
-  onLogout { _ => onVerifiedLogin ! None } (EventContext.Global)
-
-  override def userId: ZUserId = user.id
-
-  override def credentials = user.email.map(EmailCredentials(_, user.password)) orElse user.phone.map(PhoneCredentials(_, None)) getOrElse {
-    error(s"ZUser $user without any credentials found")
-    EmailCredentials(EmailAddress(""), None)
-  }
-
-  override def cookie = user.cookie
-
-  override def updateCookie(cookie: Cookie) = {
-    debug(s"updateCookie: $cookie, for user: $user")
-    val userWasVerified = user.emailVerified
-    user = user.copy(cookie = cookie, emailVerified = user.emailVerified || cookie.isDefined)
-    signal ! user
-    zusers.updateCookie(user, cookie)
-    if (!userWasVerified && cookie.isDefined) notifyVerified()
-  }
-
-  override def onInvalidCredentials(id: ZUserId): Unit = {
-    warn(s"onInvalidCredentials($id) called, current user: ${user.id}, verified: ${user.emailVerified}")
-    if (user.emailVerified) instanceService.logout(id)
-  }
-
-  def update(u: ZUser): Unit = {
-    debug(s"update($u), current: $user")
-    require(u.id == user.id)
-    val wasVerified = u.emailVerified
-
-    user = u.copy(password = u.password.orElse(user.password), email = u.email, phone = u.phone, emailVerified = u.emailVerified, phoneVerified = u.phoneVerified)
-    signal ! user
-
-    if (!wasVerified && user.emailVerified) notifyVerified()
-  }
-
-  def logout() = instanceService.logout(user.id)
-
-  private def notifyVerified() = onVerifiedLogin ! Some(user.id)
-}
-
-
-trait UserDataCallbacks {
-  def updateZUserEmail(user: ZUser, email: EmailAddress, verified: Boolean): Unit
-  def updateZUserPhone(user: ZUser, phone: PhoneNumber, verified: Boolean): Unit
 }
 
 object ZMessaging { self =>
@@ -364,13 +303,13 @@ object ZMessaging { self =>
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
   private lazy val global: GlobalModule = new GlobalModule(context, backend)
-  private lazy val instance: InstanceService = new InstanceService(context, global, new ZMessaging(_, _, _))
-  private lazy val ui: UiModule = new UiModule(instance)
+  private lazy val accounts: Accounts = new Accounts(global)
+  private lazy val ui: UiModule = new UiModule(accounts)
 
   // mutable for testing FIXME: get rid of that
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModule = _
-  private [waz] var currentInstance: InstanceService = _
+  private [waz] var currentAccounts: Accounts = _
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()
@@ -380,13 +319,10 @@ object ZMessaging { self =>
       Constants.loadFromContext(context)
       currentUi = ui
       currentGlobal = global
-      currentInstance = instance
+      currentAccounts = accounts
       Threading.Background { Locales.preloadTransliterator() } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
   }
-
-  type Factory = (InstanceService, ZUser, Option[Token]) => ZMessaging
-
 
   def notificationsHandlerFactory(context: Context) = context.getApplicationContext match { // TODO: use some registration mechanism instead of expecting the app to implement this interface
     case app: NotificationsHandlerFactory => app

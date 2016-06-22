@@ -25,15 +25,12 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.service.ZMessaging
 import com.waz.testutils.{DefaultPatienceConfig, MockGlobalModule}
 import com.waz.utils.{IoUtils, returning}
-import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.util.Random
 
 class WireContentProviderSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
-
-  lazy val context = Robolectric.application
 
   lazy val global = new MockGlobalModule()
 

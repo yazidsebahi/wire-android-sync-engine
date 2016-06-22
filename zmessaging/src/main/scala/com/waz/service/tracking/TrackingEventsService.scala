@@ -19,12 +19,12 @@ package com.waz.service.tracking
 
 import com.waz.ZLog._
 import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
-import com.waz.api.{TrackingEvent, impl}
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.TrackingEvent._
-import com.waz.content.{AssetsStorage, ConversationStorage, MessagesStorage}
-import com.waz.model.{AnyAssetData, AssetStatus, MessageId}
-import com.waz.service.call.{AvsMetrics, FlowManagerService}
+import com.waz.api.{TrackingEvent, impl}
+import com.waz.content.{AssetsStorage, MessagesStorage}
+import com.waz.model.{AnyAssetData, AssetStatus}
+import com.waz.service.call.AvsMetrics
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.AnyAssetRequest
 import com.waz.threading.Threading

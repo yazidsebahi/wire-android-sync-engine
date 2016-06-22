@@ -25,8 +25,8 @@ import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
-import com.waz.model.{ConvId, SyncId, ZUserId}
-import com.waz.service.{NetworkModeService, ZUserService}
+import com.waz.model.{AccountId, ConvId, SyncId}
+import com.waz.service.{LifecycleState, NetworkModeService, ZmsLifecycle}
 import com.waz.sync.{SyncHandler, SyncRequestService, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -39,7 +39,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
-class SyncScheduler(context: Context, userId: ZUserId, val content: SyncContentUpdater, val network: NetworkModeService, zuser: ZUserService, service: SyncRequestService, handler: => SyncHandler) {
+class SyncScheduler(context: Context, userId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestService, handler: => SyncHandler, lifecycle: ZmsLifecycle) {
 
   import EventContext.Implicits.global
   import content._
@@ -86,8 +86,9 @@ class SyncScheduler(context: Context, userId: ZUserId, val content: SyncContentU
       }
   }
 
-  zuser.onVerifiedLogin.on(dispatcher) { user =>
-    if (user.contains(userId)) waitEntries.foreach(_._2.onVerifiedLogin())
+  lifecycle.lifecycleState.map(_ != LifecycleState.Stopped).on(dispatcher) {
+    case true => waitEntries.foreach(_._2.onRestart())
+    case false =>
   }
 
   network.networkMode.on(dispatcher) {
@@ -176,7 +177,7 @@ class SyncScheduler(context: Context, userId: ZUserId, val content: SyncContentU
     }
 
     def isCompleted = promise.isCompleted
-    def onVerifiedLogin() = delayFuture.cancel()
+    def onRestart() = delayFuture.cancel()
     def onOnline() = if (job.offline) delayFuture.cancel()
     def onUpdated(updated: SyncJob): Unit = {
       job = updated

@@ -19,71 +19,82 @@ package com.waz.service
 
 import com.waz._
 import com.waz.model._
-import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.VersionBlacklistClient
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
+import com.waz.testutils.{DefaultPatienceConfig, MockGlobalModule}
 import com.waz.threading.CancellableFuture
-import com.waz.utils.events.EventStream
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class VersionBlacklistSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
-  implicit val timeout: FiniteDuration = 1.second
-  import com.waz.utils.events.EventContext.Implicits.global
+class VersionBlacklistSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+  implicit val timeout: FiniteDuration = 2.seconds
 
   var blacklist = VersionBlacklist()
 
-  var zms: MockZMessaging = _
-  def service = zms.blacklist
+  @volatile var loaded = false
 
-  before {
-    zms = new MockZMessaging() {
-      override lazy val sync: SyncServiceHandle = new EmptySyncService {
-        override def syncVersionBlacklist() = {
-          service.updateBlacklist(test.blacklist)
-          CancellableFuture.successful(SyncId())
-        }
+  lazy val global = new MockGlobalModule() {
+    override lazy val metadata: MetaDataService = new MetaDataService(context) {
+      override lazy val appVersion: Int = 123
+    }
+    override lazy val blacklistClient: VersionBlacklistClient = new VersionBlacklistClient(globalClient, backend) {
+      override def loadVersionBlacklist() = {
+        loaded = true
+        CancellableFuture successful Right(test.blacklist)
       }
     }
+  }
+
+  def createService = new VersionBlacklistService(global.metadata, global.prefs, global.blacklistClient) {
+    upToDate.disableAutowiring()
+  }
+
+  before {
+    loaded = false
     resetLastSyncTime()
   }
 
   feature("Evaluate blacklist") {
     scenario("If the current app version is blacklisted, we're not up-to-date") {
-      blacklist = VersionBlacklist(0, Seq(0, 1, 2, zms.metadata.appVersion, Integer.MAX_VALUE))
-      initializeService()
-      isUpToDate should eventually(be(false))
+      blacklist = VersionBlacklist(0, Seq(0, 1, 2, global.metadata.appVersion, Integer.MAX_VALUE))
+      val service = createService
+      withDelay {
+        loaded shouldEqual true
+        service.upToDate.head.futureValue shouldEqual false
+      }
     }
 
     scenario("If the current app version is older than the oldest supported one, we're not up-to-date") {
-      blacklist = VersionBlacklist(zms.metadata.appVersion + 1, Seq())
-      initializeService()
-      isUpToDate should eventually(be(false))
+      blacklist = VersionBlacklist(global.metadata.appVersion + 1, Seq())
+      val service = createService
+      withDelay {
+        loaded shouldEqual true
+        service.upToDate.head.futureValue shouldEqual false
+      }
     }
 
     scenario("If the current app version is exactly the oldest supported one, we're up-to-date") {
-      blacklist = VersionBlacklist(zms.metadata.appVersion, Seq())
-      initializeService()
-      isUpToDate should eventually(be(true))
+      blacklist = VersionBlacklist(global.metadata.appVersion, Seq())
+      val service = createService
+      withDelay {
+        loaded shouldEqual true
+        service.upToDate.head.futureValue shouldEqual true
+      }
     }
 
     scenario("If recently synced, return the up-to-date state from the preferences") {
       resetLastSyncTime(System.currentTimeMillis)
-      Await.ready(zms.prefs.editPreferences { _.putBoolean(VersionBlacklistService.UpToDatePref, false) }, 1.second)
-      blacklist = VersionBlacklist(zms.metadata.appVersion, Seq())
-      initializeService()
-      isUpToDate should eventually(be(false))
+      Await.ready(global.prefs.editPreferences { _.putBoolean(VersionBlacklistService.UpToDatePref, false) }, 1.second)
+      blacklist = VersionBlacklist(global.metadata.appVersion, Seq())
+      val service = createService
+      service.upToDate.head should eventually(be(false))
+      awaitUi(100.millis)
+      withDelay(loaded shouldEqual false)
     }
   }
 
-  def initializeService(): Unit =
-    withDelay {
-      service.upToDate.currentValue shouldBe 'defined
-    }
-
-  def isUpToDate: CancellableFuture[Boolean] = service.upToDate.currentValue.fold(EventStream.wrap(service.upToDate).next)(CancellableFuture.successful)
-
-  def resetLastSyncTime(to: Long = 0L): Unit = Await.ready(zms.prefs.editPreferences { _.putLong(VersionBlacklistService.LastUpToDateSyncPref, to) }, 1.second)
+  def resetLastSyncTime(to: Long = 0L): Unit = Await.ready(global.prefs.editPreferences { _.putLong(VersionBlacklistService.LastUpToDateSyncPref, to) }, 1.second)
 }

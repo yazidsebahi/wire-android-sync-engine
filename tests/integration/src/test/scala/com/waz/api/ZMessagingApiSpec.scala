@@ -18,7 +18,7 @@
 package com.waz.api
 
 import com.waz.api.impl.EmailCredentials
-import com.waz.model.{EmailAddress, ZUser}
+import com.waz.model.{AccountData, EmailAddress}
 import com.waz.service.ZMessaging
 import org.scalatest._
 
@@ -59,10 +59,10 @@ class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with
       api.onDestroy()
 
       // make sure current user data is saved in db (just to check that Robolectric is behaving correctly)
-      Await.result(ZMessaging.currentGlobal.users.find(EmailCredentials(EmailAddress(email), Some(password))), timeout) match {
-        case Some(ZUser(id, e, hash, _, _, _, _, _)) =>
+      Await.result(globalModule.accountsStorage.find(EmailCredentials(EmailAddress(email), Some(password))), timeout) match {
+        case Some(AccountData(id, e, hash, _, _, _, _, _, _, _, _)) =>
           e shouldEqual Some(EmailAddress(email))
-          hash shouldEqual ZUser.computeHash(id, password)
+          hash shouldEqual AccountData.computeHash(id, password)
         case res => fail(s"did not find current user $res")
       }
 
@@ -90,6 +90,8 @@ class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with
       val self = api.getSelf
       self.isLoggedIn shouldEqual true
 
+      awaitUi(5.seconds)
+
       api.logout()
 
       withDelay { self.isLoggedIn shouldEqual false }
@@ -101,6 +103,8 @@ class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with
       api.getSelf.isLoggedIn shouldEqual true
 
       api.logout()
+      withDelay(api.getSelf.isLoggedIn shouldEqual false)
+
       login() shouldEqual true
       api.getSelf.isLoggedIn shouldEqual true
     }

@@ -19,16 +19,17 @@ package com.waz.mocked.users
 
 import com.waz.api.User.ConnectionStatus
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.{Contacts, _}
 import com.waz.api._
-import com.waz.content.{GlobalStorage, ZStorage}
+import com.waz.content.{GlobalDatabase, ZmsDatabase}
 import com.waz.mocked.PushBehaviour.NoPush
-import com.waz.mocked.{PushBehaviour, MockBackend, SystemTimeline}
+import com.waz.mocked.{MockBackend, PushBehaviour, SystemTimeline}
 import com.waz.model.Contact
-import com.waz.model.ZUser.ZUserDao
+import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
 import com.waz.service.ContactsService.PrefKey
 import com.waz.service.PreferenceService.uiPreferencesFrom
-import com.waz.service.SearchKey
+import com.waz.service.{SearchKey, Timeouts, ZMessaging}
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.testutils.HasId._
@@ -476,6 +477,13 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
     super.beforeEach()
   }
 
+  override lazy val timeouts: Timeouts = new Timeouts {
+    override val contacts: Contacts = new Contacts {
+      override def uploadCheckInterval: Timeout = 0.seconds
+      override def userMatchingInterval: Timeout = 0.seconds
+    }
+  }
+
   override lazy val selfUserId = UserId("u/ME")
   val self = UserInfo(selfUserId, Some("Altered Scale"), email = Some(EmailAddress("altered@sca.les")))
   val uI   = UserInfo(UserId("u/I"), Some("Ionian"), email = Some(EmailAddress("ionian@sca.les")))
@@ -501,6 +509,7 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
 
   override protected def afterEach(): Unit = {
     super.afterEach()
+    ZMessaging.currentAccounts = null
     resetMockedBackend()
     prepareContacts()
     keepUser = false
@@ -520,10 +529,10 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
   }
 
   def givenAPreviousInvitationAt(i: Instant): Unit = {
-    val zuser = ZUser(EmailAddress(email), password).copy(emailVerified = true)
-    val globalDB = new GlobalStorage(context)
-    try Await.result(globalDB(ZUserDao.insertOrReplace(zuser)(_)), 10.seconds) finally globalDB.close
-    val userDB = new ZStorage(zuser.id, context)
+    val zuser = AccountData(EmailAddress(email), password).copy(activated = true)
+    val globalDB = new GlobalDatabase(context)
+    try Await.result(globalDB(AccountDataDao.insertOrReplace(zuser)(_)), 10.seconds) finally globalDB.close
+    val userDB = new ZmsDatabase(zuser.id, context)
     try Await.result(userDB(InvitedContacts.invited(Seq(hash(cVII.id)), i)(_)), 10.seconds) finally userDB.close
   }
 

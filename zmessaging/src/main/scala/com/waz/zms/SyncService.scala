@@ -19,9 +19,9 @@ package com.waz.zms
 
 import android.content.{Context, Intent}
 import com.waz.ZLog._
-import com.waz.model.ZUserId
-import com.waz.service.{InstanceService, ZMessaging}
-import com.waz.sync.ZUserExecutor
+import com.waz.model.AccountId
+import com.waz.service.{Accounts, ZMessaging}
+import com.waz.sync.AccountExecutor
 import com.waz.threading.SerialDispatchQueue
 
 import scala.collection.mutable
@@ -32,15 +32,15 @@ class SyncService extends WakefulFutureService with ZMessagingService {
   implicit val dispatcher = new SerialDispatchQueue(name = "SyncService")
   private implicit val logTag: LogTag = logTagFor[SyncService]
 
-  val executors = new mutable.HashMap[ZUserId, SyncService.Executor]
+  val executors = new mutable.HashMap[AccountId, SyncService.Executor]
 
-  def instance = ZMessaging.currentInstance
-  
+  def accounts = ZMessaging.currentAccounts
+
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
     debug(s"onIntent $intent")
     if (intent != null && intent.hasExtra(SyncService.ZUserIdExtra)) {
-      val userId = ZUserId(intent.getStringExtra(SyncService.ZUserIdExtra))
-      executors.getOrElseUpdate(userId, new SyncService.Executor(getApplicationContext, userId, instance)).sync(id)
+      val userId = AccountId(intent.getStringExtra(SyncService.ZUserIdExtra))
+      executors.getOrElseUpdate(userId, new SyncService.Executor(getApplicationContext, userId, accounts)).sync(id)
     } else {
       error("intent has no ZUserId extra")
       Future.successful(())
@@ -52,13 +52,17 @@ object SyncService {
 
   val ZUserIdExtra = "user_id"
 
-  def intent(context: Context, user: ZUserId) = {
+  def intent(context: Context, user: AccountId) = {
     val intent = new Intent(context, classOf[SyncService])
     intent.putExtra(ZUserIdExtra, user.str)
     intent
   }
 
-  class Executor(val context: Context, val userId: ZUserId, val instance: InstanceService) extends ZUserExecutor {
-    def sync(id: Int) = execute(_.syncRequests.scheduler.awaitRunning)(s"SyncService.Executor $id")
+  class Executor(val context: Context, val userId: AccountId, val accounts: Accounts) extends AccountExecutor {
+    import com.waz.threading.Threading.Implicits.Background
+
+    def sync(id: Int) = execute { acc =>
+      acc.userModule.head flatMap { _.syncRequests.scheduler.awaitRunning }
+    } (s"SyncService.Executor $id")
   }
 }

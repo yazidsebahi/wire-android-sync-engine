@@ -30,19 +30,19 @@ import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model._
-import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService
 import AssetService.BitmapRequest._
 import AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
 import AssetService.{BitmapRequest, BitmapResult}
+import com.waz.service.ZMessaging
 import com.waz.service.images.{BitmapSignal, ImageLoader}
 import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
 
@@ -131,10 +131,10 @@ class LocalImageAsset(img: ImageAssetData)(implicit ui: UiModule) extends ImageA
   override def addLoader[A, B <: A](signal: (ZMessaging) => Signal[B], defaultValue: A)(onLoaded: (A) => Unit)(implicit ui: UiModule) = null
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
-    new BitmapLoadHandle(_ => BitmapSignal(data, req, ui.global.globalImageLoader, ui.imageCache), callback)
+    new BitmapLoadHandle(_ => BitmapSignal(data, req, ui.globalImageLoader, ui.imageCache), callback)
 
   override def saveImageToGallery(callback: SaveCallback): Unit =
-    ui.global.globalImageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
+    ui.globalImageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
 
   override def writeToParcel(p: Parcel, flags: Int): Unit = {
     p.writeInt(Parcelable.FlagLocal)
@@ -177,12 +177,12 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     verbose(s"get bitmap")
-    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.global.globalImageLoader, ui.imageCache) }, callback)
+    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.globalImageLoader, ui.imageCache) }, callback)
   }
 
   override def saveImageToGallery(callback: SaveCallback): Unit =
     imageData.map { _ =>
-      ui.global.globalImageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
+      ui.globalImageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
     } .recoverWithLog()
 
   override def writeToParcel(p: Parcel, flags: Int): Unit = {

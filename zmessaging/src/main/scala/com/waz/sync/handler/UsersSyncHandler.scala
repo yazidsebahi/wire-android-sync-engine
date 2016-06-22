@@ -44,7 +44,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
 
   def syncSelfUser(): Future[SyncResult] = usersClient.loadSelf().future flatMap {
     case Right(user) =>
-      userService.updateSelf(user, emailVerified = user.email.isDefined, user.phone.isDefined) map { _ => SyncResult.Success }
+      userService.updateSyncedUsers(IndexedSeq(user)) map { _ => SyncResult.Success }
     case Left(error) =>
       warn(s"load self request failed")
       Future.successful(SyncResult(error))

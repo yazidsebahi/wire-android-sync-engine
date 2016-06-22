@@ -53,6 +53,6 @@ class Timeouts {
 
   class WebSocket {
     def inactivityTimeout = 3.seconds
-    def connectionTimeout = 3.seconds
+    def connectionTimeout = 8.seconds
   }
 }

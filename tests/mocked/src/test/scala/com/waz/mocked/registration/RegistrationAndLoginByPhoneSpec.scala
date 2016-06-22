@@ -108,7 +108,6 @@ class RegistrationAndLoginByPhoneSpec extends FeatureSpec with MockedClientApiSp
         self.getName shouldEqual "name"
         self.getUser.getPhone shouldEqual "+491234567890"
         self.getUser.getEmail shouldEqual ""
-        self.isPhoneVerified shouldEqual true
       }
     }
 
@@ -139,7 +138,6 @@ class RegistrationAndLoginByPhoneSpec extends FeatureSpec with MockedClientApiSp
       withDelay {
         loggedIn shouldEqual true
         self.isLoggedIn shouldEqual true
-        self.isPhoneVerified shouldEqual true
       }
     }
 
@@ -163,13 +161,13 @@ class RegistrationAndLoginByPhoneSpec extends FeatureSpec with MockedClientApiSp
       withDelay {
         updated shouldEqual true
         self.getEmail shouldEqual ""
-        self.isEmailVerified shouldEqual false
+        self.accountActivated shouldEqual true
       }
 
       addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("meep@moop.org")), phone = None)))
       withDelay {
         self.getEmail shouldEqual "meep@moop.org"
-        self.isEmailVerified shouldEqual true
+        self.accountActivated shouldEqual true
       }
     }
   }

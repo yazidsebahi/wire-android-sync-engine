@@ -21,22 +21,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.api.Message
+import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.api.{ErrorResponse, Message}
-import com.waz.api.Message.Status
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
 import com.waz.service.conversation.ConversationsService
-import com.waz.service.messages.{LikingsService, MessageAndLikesNotifier}
+import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
 import com.waz.utils.events.{EventStream, Signal, SourceSignal}
 import org.threeten.bp.Instant
 
-import scala.collection.{Set, SortedMap}
+import scala.collection._
 import scala.concurrent.Future
+import scala.util.Failure
 
-class MessagesStorage(context: Context, storage: ZStorage, selfUser: => Future[UserId], convs: ConversationStorage, users: => UsersStorage, likings: => LikingsService, notifier: => MessageAndLikesNotifier) extends
+class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorage, users: UsersStorage, msgAndLikes: => MessageAndLikesStorage) extends
     CachedStorage[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(MessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") {
 
   import com.waz.utils.events.EventContext.Implicits.global
@@ -54,17 +56,15 @@ class MessagesStorage(context: Context, storage: ZStorage, selfUser: => Future[U
 
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
 
-  lazy val incomingMessages = selfUser flatMap { selfUser =>
-    storage {
-      MessageDataDao.listIncomingMessages(selfUser, IncomingMessages.sinceTime)(_)
-    } map { new IncomingMessages(selfUser, _) }
-  }
+  lazy val incomingMessages = storage {
+    MessageDataDao.listIncomingMessages(userId, IncomingMessages.sinceTime)(_)
+  } map { new IncomingMessages(userId, _) }
 
   def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] =
     Option(indexes.get(conv)).fold {
       Future {
         Option(indexes.get(conv)).getOrElse {
-          returning(new ConvMessagesIndex(conv, this, selfUser, users, convs, likings, notifier, storage))(indexes.put(conv, _))
+          returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage))(indexes.put(conv, _))
         }
       }
     } {
@@ -287,4 +287,44 @@ object IncomingMessages {
   val Timeout = ConversationsService.KnockTimeout
 
   def sinceTime = System.currentTimeMillis - Timeout.toMillis
+}
+
+
+class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: LikingsStorage) {
+  import com.waz.utils.events.EventContext.Implicits.global
+  import com.waz.threading.Threading.Implicits.Background
+
+  private implicit val tag: LogTag = logTagFor[MessageAndLikesStorage]
+
+  val onUpdate = EventStream[MessageId]() // TODO: use batching, maybe report new message data instead of just id
+
+  messages.messageChanged { ms => ms foreach { m => onUpdate ! m.id }}
+  likings.onChanged { _ foreach { l => onUpdate ! l.message } }
+
+  def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]] =
+    messages.getMessages(ids: _*) flatMap { msgs => withLikes(msgs.flatten) }
+
+  def getMessageAndLikes(id: MessageId): Future[Option[MessageAndLikes]] =
+    messages.getMessage(id).flatMap(_.fold2(Future.successful(None), msg => combineWithLikes(msg).map(Some(_))))
+
+  def combineWithLikes(msg: MessageData): Future[MessageAndLikes] =
+    likings.getLikes(msg.id).map(l => combine(msg, l, selfUserId))
+
+  def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]] = {
+    val ids: Set[MessageId] = msgs.map(_.id)(breakOut)
+      likings.loadAll(msgs.map(_.id)).map { likes =>
+      val likesById = likes.by[MessageId, Map](_.message)
+      returning(msgs.map(msg => combine(msg, likesById(msg.id), selfUserId))) { _ =>
+        verbose(s"combined ${ids.size} message(s) with ${likesById.size} liking(s)")
+      }
+    }.andThen { case Failure(t) => error("failed while adding likings to messages", t) }
+  }
+
+  def combine(msg: MessageData, likes: Likes, selfUserId: UserId): MessageAndLikes =
+    if (likes.likers.isEmpty) MessageAndLikes(msg, Vector(), false)
+    else sortedLikes(likes, selfUserId) match { case (likers, selfLikes) => MessageAndLikes(msg, likers, selfLikes) }
+
+
+  def sortedLikes(likes: Likes, selfUserId: UserId): (IndexedSeq[UserId], Boolean) =
+    (likes.likers.toVector.sortBy(_._2).map(_._1), likes.likers contains selfUserId)
 }

@@ -17,54 +17,110 @@
  */
 package com.waz.testutils
 
+import android.net.Uri
+import com.koushikdutta.async.http.WebSocket
 import com.waz.api.Message
+import com.waz.api.impl.Credentials
+import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.MessageData.MessageDataDao
-import com.waz.model.ZUser.ZUserDao
+import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.model.otr.Client
+import com.waz.model.otr.{Client, ClientId}
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.UiModule
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
-import com.waz.znet.{AsyncClient, ClientWrapper, TestClientWrapper}
 import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.ZNetClient.{EmptyAsyncClient, ErrorOrResponse}
+import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import net.hockeyapp.android.Constants
 import org.robolectric.Robolectric
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.util.Random
 
-class MockGlobalModule extends GlobalModule(Robolectric.application, BackendConfig.EdgeBackend) {
-  override lazy val client: AsyncClient = new EmptyAsyncClient
+class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModule(Robolectric.application, BackendConfig.EdgeBackend) { global =>
+  override lazy val client: AsyncClient = new EmptyAsyncClient(TestClientWrapper)
   override lazy val clientWrapper: ClientWrapper = TestClientWrapper
+  override lazy val storage: Database = new GlobalDatabase(context, dbSuffix)
+
   ZMessaging.context = context
+  if (ZMessaging.currentGlobal == null) ZMessaging.currentGlobal = this
   Constants.loadFromContext(context)
+  override lazy val factory = new MockZMessagingFactory(this)
+
+  override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
+    override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(""))))
+    override def access(cookie: Option[String], token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(""))))
+  }
+
+  override lazy val mediaManager = new MediaManagerService(context, prefs) {
+    override lazy val mediaManager = None
+  }
 }
 
-class MockInstance(global: GlobalModule = new MockGlobalModule, factory: ZMessaging.Factory = new MockZMessaging(_, _, _)) extends InstanceService(Robolectric.application, global, factory)
+class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(global) {
+  override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(clientId, user)
+}
 
-class MockZMessaging(instance: InstanceService = new MockInstance, zuser: ZUser = ZUser(EmailAddress("email"), "passwd"), token: Option[Token] = None) extends ZMessaging(instance, zuser, token) {
+class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts(global) {
+
+  if (ZMessaging.currentAccounts == null) ZMessaging.currentAccounts = this
+
+  override private[waz] implicit val ec: EventContext = new EventContext {
+    onContextStart()
+  }
+}
+
+class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, "", None), accounts.global, accounts) {
+  accounts.accountMap.put(id, this)
+
+  val _zmessaging = Signal[Option[ZMessaging]]()
+
+  override val zmessaging: Signal[Option[ZMessaging]] = _zmessaging
+
+  def set(zms: MockZMessaging) = {
+    _zmessaging ! Some(zms)
+    accounts.currentAccountPref := id.str
+  }
+}
+
+class MockUserModule(val mockAccount: MockAccountService = new MockAccountService(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
+
+class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), clientId: ClientId = ClientId()) extends ZMessaging(clientId, mockUser) {
+  def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), ClientId())
+  def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), clientId)
+  def this(account: MockAccountService, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), ClientId())
+
   override lazy val sync: SyncServiceHandle = new EmptySyncService
   import Threading.Implicits.Background
 
   var timeout = 5.seconds
 
-  override lazy val mediamanager: MediaManagerService = new MediaManagerService(instance.global.context, prefs) {
-    override lazy val mediaManager = None
+  storage.usersStorage.put(selfUserId, UserData(selfUserId, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self))
+  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, true, Some("cookie"), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+    mockUser.mockAccount.set(this)
   }
 
-  override lazy val otrClient: OtrClient = new OtrClient(znetClient) {
+  override lazy val otrClient: OtrClient = new OtrClient(zNetClient) {
     var client = Option.empty[Client]
 
     override def loadClients(): ErrorOrResponse[Seq[Client]] = CancellableFuture.successful(Right(client.toSeq))
 
-    override def postClient(userId: ZUserId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
+    override def postClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
       this.client = Some(client)
       CancellableFuture.successful(Right(client))
+    }
+  }
+
+  override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, backend, clientId, timeouts) {
+    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(zNetClient.client, Uri.parse("http://"), zNetClient.auth) {
+      override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
   }
 
@@ -100,33 +156,30 @@ class MockZMessaging(instance: InstanceService = new MockInstance, zuser: ZUser 
   def delMessages(conv: ConvId) = Await.result(messagesStorage.deleteAll(conv), timeout)
   def listMessages(conv: ConvId) = {
     Thread.sleep(100)
-    Await.result(storage { db => MessageDataDao.list(MessageDataDao.findMessages(conv)(db)).sortBy(_.time) }, timeout)
+    Await.result(storage.db { db => MessageDataDao.list(MessageDataDao.findMessages(conv)(db)).sortBy(_.time) }, timeout)
   }
   def lastMessage(conv: ConvId) = Await.result(messagesStorage.getLastMessage(conv), timeout)
   def lastLocalMessage(conv: ConvId, tpe: Message.Type) = Await.result(messagesStorage.lastLocalMessage(conv, tpe), timeout)
 }
 
-class MockUiModule(zmessaging: ZMessaging) extends UiModule(zmessaging.instance) {
-  import Threading.Implicits.Background
+class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockUser.mockAccount.accounts) {
   ZMessaging.currentUi = this
   setCurrent(Some(zmessaging))
 
   def setCurrent(zms: Option[ZMessaging]) = zms match {
-    case Some(z) =>
-      instance.instanceMap(z.userId) = z
-      global.storage { ZUserDao.insertOrReplace(z.user.user)(_) } map { _ =>
-        instance.currentUserPref := z.userId.str
-      }
-    case None =>
-      instance.currentUserPref := ""
+    case Some(z: MockZMessaging) =>
+      accounts.accountMap(z.accountId) = z.account
+      accounts.currentAccountPref := z.accountId.str
+    case _ =>
+      accounts.currentAccountPref := ""
   }
 }
 
 object MockUiModule {
 
-  def apply(instance: InstanceService): UiModule = returning(new UiModule(instance)) { ui =>
+  def apply(accounts: Accounts): UiModule = returning(new UiModule(accounts)) { ui =>
     ZMessaging.currentUi = ui
   }
 
-  def apply(zmessaging: ZMessaging): UiModule = new MockUiModule(zmessaging)
+  def apply(zmessaging: MockZMessaging): UiModule = new MockUiModule(zmessaging)
 }

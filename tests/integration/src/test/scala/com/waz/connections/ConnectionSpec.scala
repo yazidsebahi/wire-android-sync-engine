@@ -68,7 +68,7 @@ class ConnectionSpec extends FeatureSpec with Matchers with ProvisionedApiSpec w
 
     scenario("restart api") {
 
-      zmessaging.storage.withTransaction { implicit db =>
+      zmessaging.db.withTransaction { implicit db =>
         ConversationDataDao.deleteAll
         UserDataDao.deleteAll
       }
