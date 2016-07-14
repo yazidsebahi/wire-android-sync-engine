@@ -137,6 +137,7 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
   def zip[B](s: Signal[B]): Signal[(A, B)] = new Zip2Signal[A, B](this, s)
   def map[B](f: A => B): Signal[B] = new MapSignal[A, B](this, f)
   def filter(f: A => Boolean): Signal[A] = new FilterSignal(this, f)
+  def withFilter(f: A => Boolean): Signal[A] = new FilterSignal(this, f)
   def collect[B](pf: PartialFunction[A, B]): Signal[B] = new ProxySignal[B](this) {
     override protected def computeValue(current: Option[B]): Option[B] = self.value flatMap { v =>
       pf.andThen(Some(_)).applyOrElse(v, { _: A => None })

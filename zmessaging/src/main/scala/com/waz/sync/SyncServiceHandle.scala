@@ -69,6 +69,7 @@ trait SyncServiceHandle {
   def postInvitation(i: Invitation): Future[SyncId]
   def postTypingState(id: ConvId, typing: Boolean): Future[SyncId]
   def postExcludePymk(id: UserId): Future[SyncId]
+  def postOpenGraphData(conv: ConvId, msg: MessageId): Future[SyncId]
 
   def registerGcm(): Future[SyncId]
   def deleteGcmToken(token: GcmId): Future[SyncId]
@@ -123,8 +124,9 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postConversationMemberLeave(id: ConvId, member: UserId) = addRequest(PostConvLeave(id, member))
   def postConversation(id: ConvId, users: Seq[UserId], name: Option[String]) = addRequest(PostConv(id, users, name))
   def postLiking(id: ConvId, liking: Liking): Future[SyncId]          = addRequest(PostLiking(id, liking))
-  def postLastRead(id: ConvId, time: Instant)       = addRequest(PostLastRead(id, time), priority = Priority.Low, delay = 5.seconds)
-  def postCleared(id: ConvId, time: Instant)        = addRequest(PostCleared(id, time))
+  def postLastRead(id: ConvId, time: Instant)         = addRequest(PostLastRead(id, time), priority = Priority.Low, delay = timeouts.messages.lastReadPostDelay)
+  def postCleared(id: ConvId, time: Instant)          = addRequest(PostCleared(id, time))
+  def postOpenGraphData(conv: ConvId, msg: MessageId) = addRequest(PostOpenGraphMeta(conv, msg), priority = Priority.Low)
 
   def registerGcm()                                 = addRequest(RegisterGcmToken, priority = Priority.Low, forceRetry = true)
   def deleteGcmToken(token: GcmId)                  = addRequest(DeleteGcmToken(token), priority = Priority.Low)
@@ -151,64 +153,67 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
 
   private def withZms(body: ZMessaging => Future[SyncResult]): Future[SyncResult] = zms.head flatMap body
 
-  override def apply(req: SyncRequest): Future[SyncResult] = req match {
-    case SyncConversation(convs)  => withZms { _.conversationSync.syncConversations(convs.toSeq) }
-    case SyncUser(u)              => withZms { _.usersSync.syncUsers(u.toSeq: _*) }
-    case SyncSearchQuery(key)     => withZms { _.usersearchSync.syncSearchQuery(key) }
-    case SyncRichMedia(messageId) => withZms { _.richmediaSync.syncRichMedia(messageId) }
-    case DeleteGcmToken(token)    => withZms { _.gcmSync.deleteGcmToken(token) }
-
-    case PostConnection(userId, name, message)  => withZms { _.connectionsSync.postConnection(userId, name, message) }
-    case PostConnectionStatus(userId, status)   => withZms { _.connectionsSync.postConnectionStatus(userId, status) }
-
-    case SyncCommonConnections(userId)  => withZms { _.usersearchSync.syncCommonConnections(userId) }
-    case PostExcludePymk(userId)        => withZms { _.usersearchSync.postExcludePymk(userId) }
-
-    case SyncCallState(convId, fresh) => withZms { _.voicechannelSync.syncCallState(convId, fresh) }
-
-    case SyncConversations    => withZms { _.conversationSync.syncConversations() }
-    case SyncConnectedUsers   => withZms { _.usersSync.syncConnectedUsers() }
-    case SyncConnections      => withZms { _.connectionsSync.syncConnections() }
-    case SyncSelf             => withZms { _.usersSync.syncSelfUser() }
-    case DeleteAccount        => withZms { _.usersSync.deleteAccount() }
-    case PostSelf(info)       => withZms { _.usersSync.postSelfUser(info) }
-    case PostSelfPicture(_)   => withZms { _.usersSync.postSelfPicture() }
-    case PostAddressBook(ab)  => withZms { _.addressbookSync.postAddressBook(ab) }
-    case PostInvitation(i)    => withZms { _.invitationSync.postInvitation(i) }
-    case RegisterGcmToken     => withZms { _.gcmSync.registerGcm() }
-    case PostLiking(convId, liking) => withZms { _.likingsSync.postLiking(convId, liking) }
-    case PostLastRead(convId, time) => withZms { _.lastReadSync.postLastRead(convId, time) }
-    case PostDeleted(convId, msgId) => withZms { _.messagesSync.postDeleted(convId, msgId) }
-
-    case SyncSelfClients => otrClients.syncSelfClients()
-    case SyncClients(user) => otrClients.syncClients(user)
-    case SyncClientsLocation => otrClients.syncClientsLocation()
+  val accountHandler: PartialFunction[SyncRequest, Future[SyncResult]] = {
+    case SyncSelfClients            => otrClients.syncSelfClients()
+    case SyncClients(user)          => otrClients.syncClients(user)
+    case SyncClientsLocation        => otrClients.syncClientsLocation()
     case SyncPreKeys(user, clients) => otrClients.syncPreKeys(Map(user -> clients.toSeq))
     case PostClientLabel(id, label) => otrClients.postLabel(id, label)
 
-    case PostSessionReset(conv, user, client) => withZms { _.otrSync.postSessionReset(conv, user, client) }
-
     case Unknown => Future successful SyncResult.Success
-
-    case _: SerialExecutionWithinConversation => throw new IllegalArgumentException(s"trying to run $req without conv lock")
+    case req: SerialExecutionWithinConversation => throw new IllegalArgumentException(s"trying to run $req without conv lock")
   }
 
-  override def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult] = {
+  def zmsHandler(zms: ZMessaging): PartialFunction[SyncRequest, Future[SyncResult]] = {
+    case SyncConversation(convs)  => zms.conversationSync.syncConversations(convs.toSeq)
+    case SyncUser(u)              => zms.usersSync.syncUsers(u.toSeq: _*)
+    case SyncSearchQuery(key)     => zms.usersearchSync.syncSearchQuery(key)
+    case SyncRichMedia(messageId) => zms.richmediaSync.syncRichMedia(messageId)
+    case DeleteGcmToken(token)    => zms.gcmSync.deleteGcmToken(token)
+
+    case PostConnection(userId, name, message)  => zms.connectionsSync.postConnection(userId, name, message)
+    case PostConnectionStatus(userId, status)   => zms.connectionsSync.postConnectionStatus(userId, status)
+
+    case SyncCommonConnections(userId)  => zms.usersearchSync.syncCommonConnections(userId)
+    case PostExcludePymk(userId)        => zms.usersearchSync.postExcludePymk(userId)
+
+    case SyncCallState(convId, fresh)   => zms.voicechannelSync.syncCallState(convId, fresh)
+    case SyncConversations              => zms.conversationSync.syncConversations()
+    case SyncConnectedUsers             => zms.usersSync.syncConnectedUsers()
+    case SyncConnections                => zms.connectionsSync.syncConnections()
+    case SyncSelf                       => zms.usersSync.syncSelfUser()
+    case DeleteAccount                  => zms.usersSync.deleteAccount()
+    case PostSelf(info)                 => zms.usersSync.postSelfUser(info)
+    case PostSelfPicture(_)             => zms.usersSync.postSelfPicture()
+    case PostAddressBook(ab)            => zms.addressbookSync.postAddressBook(ab)
+    case PostInvitation(i)              => zms.invitationSync.postInvitation(i)
+    case RegisterGcmToken               => zms.gcmSync.registerGcm()
+    case PostLiking(convId, liking)     => zms.likingsSync.postLiking(convId, liking)
+    case PostDeleted(convId, msgId)     => zms.messagesSync.postDeleted(convId, msgId)
+    case PostLastRead(convId, time)     => zms.lastReadSync.postLastRead(convId, time)
+    case PostOpenGraphMeta(conv, msg)   => zms.openGraphSync.postMessageMeta(conv, msg)
+    case PostSessionReset(conv, user, client) => zms.otrSync.postSessionReset(conv, user, client)
+  }
+
+  override def apply(req: SyncRequest): Future[SyncResult] =
+    accountHandler.applyOrElse(req, { _: SyncRequest => withZms(zmsHandler(_).apply(req)) })
+
+  override def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult] = withZms { zms =>
     implicit val convLock = lock
 
     req match {
-      case PostMessage(convId, messageId)     => withZms { _.messagesSync.postMessage(convId, messageId) }
-      case PostAssetStatus(cid, mid, status)  => withZms { _.messagesSync.postAssetStatus(cid, mid, status) }
+      case PostMessage(convId, messageId)     => zms.messagesSync.postMessage(convId, messageId)
+      case PostAssetStatus(cid, mid, status)  => zms.messagesSync.postAssetStatus(cid, mid, status)
 
-      case PostConvJoin(convId, u)            => withZms { _.conversationSync.postConversationMemberJoin(convId, u.toSeq) }
-      case PostConvLeave(convId, u)           => withZms { _.conversationSync.postConversationMemberLeave(convId, u) }
+      case PostConvJoin(convId, u)            => zms.conversationSync.postConversationMemberJoin(convId, u.toSeq)
+      case PostConvLeave(convId, u)           => zms.conversationSync.postConversationMemberLeave(convId, u)
 
-      case PostConv(convId, u, name)          => withZms { _.conversationSync.postConversation(convId, u, name) }
-      case PostConvName(convId, name)         => withZms { _.conversationSync.postConversationName(convId, name) }
-      case PostConvState(convId, state)       => withZms { _.conversationSync.postConversationState(convId, state) }
-      case PostTypingState(convId, ts)        => withZms { _.typingSync.postTypingState(convId, ts) }
+      case PostConv(convId, u, name)          => zms.conversationSync.postConversation(convId, u, name)
+      case PostConvName(convId, name)         => zms.conversationSync.postConversationName(convId, name)
+      case PostConvState(convId, state)       => zms.conversationSync.postConversationState(convId, state)
+      case PostTypingState(convId, ts)        => zms.typingSync.postTypingState(convId, ts)
 
-      case PostCleared(convId, time)          => withZms { _.clearedSync.postCleared(convId, time) }
+      case PostCleared(convId, time)          => zms.clearedSync.postCleared(convId, time)
     }
   }
 }

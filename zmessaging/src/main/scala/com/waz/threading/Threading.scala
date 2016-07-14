@@ -19,13 +19,13 @@ package com.waz.threading
 
 import java.util.Timer
 
-import android.os.Looper
-import java.util.concurrent._
+import android.os.{Handler, HandlerThread, Looper}
+import java.util.concurrent.{Executor, ExecutorService, Executors}
 
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 
-import scala.concurrent.{blocking, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future, Promise, blocking}
 
 object Threading {
 
@@ -33,6 +33,7 @@ object Threading {
     implicit val Background: DispatchQueue = Threading.ThreadPool
     implicit val Ui: DispatchQueue = Threading.Ui
     implicit val Image: DispatchQueue = Threading.ImageDispatcher
+    implicit val BlockingIO: ExecutionContext = Threading.BlockingIO
   }
 
   var AssertsEnabled = ZmsVersion.DEBUG
@@ -76,6 +77,15 @@ object Threading {
    * Image decoding/encoding dispatch queue. This operations are quite cpu intensive, we don't want them to use all cores (leaving one spare core for other tasks).
    */
   val ImageDispatcher = new LimitedDispatchQueue(Cpus - 1, ThreadPool, "ImageDispatcher")
+
+  lazy val BackgroundHandler: Future[Handler] = {
+    val looper = Promise[Looper]
+    val looperThread = new HandlerThread("BackgroundHandlerThread") {
+      override def onLooperPrepared(): Unit = looper.success(getLooper)
+    }
+    looperThread.start()
+    looper.future.map(new Handler(_))(Background)
+  }
 
   def assertUiThread(): Unit = if (AssertsEnabled && (Thread.currentThread ne Looper.getMainLooper.getThread)) throw new AssertionError(s"Should be run on Ui thread, but is using: ${Thread.currentThread().getName}")
   def assertNotUiThread(): Unit = if (AssertsEnabled && (Thread.currentThread eq Looper.getMainLooper.getThread)) throw new AssertionError(s"Should be run on background thread, but is using: ${Thread.currentThread().getName}")

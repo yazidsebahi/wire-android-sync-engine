@@ -70,6 +70,8 @@ case class ConversationData(id: ConvId,
 
   def withCleared(time: Instant) = copy(cleared = cleared max time)
 
+  def isOtto = convType == ConversationType.OneToOne && id.str == UserId.ofOtto.str
+
   def updated(d: ConversationData): Option[ConversationData] = {
     val ct = if (ConversationType.isOneToOne(convType) && d.convType != ConversationType.OneToOne) convType else d.convType
     val st = if (d.statusTime.isAfter(statusTime)) d.status else status

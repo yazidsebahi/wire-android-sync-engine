@@ -25,11 +25,14 @@ import android.content.Context
 import android.media.{MediaCodec, MediaExtractor, MediaFormat}
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.api.impl.AssetForUpload
 import com.waz.bitmap.video.{MediaCodecHelper, TrackDecoder}
+import com.waz.content.Mime
 import com.waz.model.AssetPreviewData
 import com.waz.threading.CancellableFuture.{CancelException, DefaultCancelException}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{Cleanup, Managed, returning}
+import com.waz.utils.{Cleanup, Managed, returning, RichFuture}
+import libcore.io.SizeOf
 
 import scala.concurrent.duration._
 import scala.math._
@@ -39,7 +42,43 @@ case class AudioLevels(context: Context) {
   import AudioLevels._
   import Threading.Implicits.Background
 
-  def createAudioOverview(content: Uri, numBars: Int = 100): CancellableFuture[Option[AssetPreviewData.Loudness]] = {
+  def createAudioOverview(content: Uri, mime: Mime, numBars: Int = 100): CancellableFuture[Option[AssetPreviewData.Loudness]] =
+    if (mime == Mime.Audio.PCM) createPCMAudioOverview(content, numBars)
+    else createOtherAudioOverview(content, numBars)
+
+  private def createPCMAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[AssetPreviewData.Loudness]] =
+    AssetForUpload.queryContentUriInfo(context, content).map(_._3).lift.flatMap {
+      case None =>
+        warn(s"cannot generate preview: no length available for $content")
+        CancellableFuture.successful(None)
+      case Some(length) =>
+        val samples = length / SizeOf.SHORT
+        val cancelRequested = new AtomicBoolean
+        returning(CancellableFuture {
+          val overview = Managed(context.getContentResolver.openInputStream(content)) map { stream =>
+            val estimatedBucketSize = round(samples / numBars.toDouble)
+            val buffer = ByteBuffer.wrap(Array.ofDim[Byte](8 << 10))
+
+            // will contain at least 1 RMS value per buffer, but more if needed (up to numBars in case there is only 1 buffer)
+            val rmsOfBuffers = Iterator.continually(stream.read(buffer.array)).takeWhile(_ >= 0).flatMap { bytesRead =>
+              if (cancelRequested.get) throw DefaultCancelException
+              buffer.position(0).limit(bytesRead)
+              AudioLevels.rms(buffer, estimatedBucketSize, ByteOrder.LITTLE_ENDIAN)
+            }.toArray
+
+            loudnessOverview(numBars, rmsOfBuffers) // select RMS peaks and convert to an intuitive scale
+          }
+
+          overview.acquire(levels => Some(AssetPreviewData.Loudness(levels)))
+        }(Threading.BlockingIO).recover {
+          case c: CancelException => throw c
+          case NonFatal(cause) =>
+            error("PCM overview generation failed", cause)
+            None
+        })(_.onCancelled(cancelRequested.set(true)))
+    }
+
+  private def createOtherAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[AssetPreviewData.Loudness]] = {
     val cancelRequested = new AtomicBoolean
     returning(CancellableFuture {
       val overview = for {
@@ -54,7 +93,7 @@ case class AudioLevels(context: Context) {
         // will contain at least 1 RMS value per buffer, but more if needed (up to numBars in case there is only 1 buffer)
         val rmsOfBuffers = decoder.flatten.flatMap { buf =>
           if (cancelRequested.get) throw DefaultCancelException
-          returning(AudioLevels.rms(buf.buffer, estimatedBucketSize))(_ => buf.release())
+          returning(AudioLevels.rms(buf.buffer, estimatedBucketSize, ByteOrder.nativeOrder))(_ => buf.release())
         }.toArray
 
         loudnessOverview(numBars, rmsOfBuffers) // select RMS peaks and convert to an intuitive scale
@@ -85,9 +124,12 @@ case class AudioLevels(context: Context) {
     val Some((trackNum, format, mime)) = audioTrack
 
     extractor.selectTrack(trackNum)
-    val samplingRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-    val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-    val duration = format.getLong(MediaFormat.KEY_DURATION)
+
+    def get[A](k: String, f: MediaFormat => String => A) = if (format.containsKey(k)) f(format)(k) else throw new NoSuchElementException(s"media format does not contain information about '$k'; mime = '$mime'; URI = $content")
+
+    val samplingRate = get(MediaFormat.KEY_SAMPLE_RATE, _.getInteger)
+    val channels = get(MediaFormat.KEY_CHANNEL_COUNT, _.getInteger)
+    val duration = get(MediaFormat.KEY_DURATION, _.getLong)
     val samples = duration.toDouble * 1E-6d * samplingRate.toDouble
 
     returning(TrackInfo(trackNum, format, mime, samplingRate, channels, duration.micros, samples))(ti => debug(s"audio track: $ti"))
@@ -111,10 +153,10 @@ object AudioLevels {
   def peakRmsLoudness(window: Array[Double]): Float = loudness(dbfsSine(window.max)).toFloat
   def peakLoudness(peak: Int): Float = loudness(dbfsSquare(intAsDouble(peak))).toFloat
 
-  final def rms(bytes: ByteBuffer, estimatedBucketSize: Double): Array[Double] =
+  final def rms(bytes: ByteBuffer, estimatedBucketSize: Double, order: ByteOrder = ByteOrder.nativeOrder): Array[Double] =
     if (! bytes.hasRemaining) Array.empty[Double]
     else {
-      val ns = bytes.order(ByteOrder.nativeOrder).asShortBuffer
+      val ns = bytes.order(order).asShortBuffer
       val len = ns.remaining
 
       val buckets = ceil(len.toDouble / estimatedBucketSize.toDouble)

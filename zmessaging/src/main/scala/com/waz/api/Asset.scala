@@ -54,8 +54,8 @@ trait Asset extends UiObservable {
 }
 
 trait PlaybackControls extends UiObservable {
-  def play: Unit
-  def stop: Unit
+  def play(): Unit
+  def stop(): Unit
 
   def isPlaying: Boolean
   def getDuration: Duration

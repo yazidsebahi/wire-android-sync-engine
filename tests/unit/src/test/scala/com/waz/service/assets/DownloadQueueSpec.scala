@@ -18,7 +18,7 @@
 package com.waz.service.assets
 
 import com.waz.content.Mime
-import com.waz.model.{RAssetDataId, RConvId}
+import com.waz.model._
 import com.waz.service.downloads.DownloadQueue
 import com.waz.service.downloads.DownloadQueue.Entry
 import com.waz.service.downloads.DownloadRequest.ImageAssetRequest
@@ -31,7 +31,7 @@ import scala.util.Random
 class DownloadQueueSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   scenario("Sort entries according to waiting flag and timestamp") {
-    def key = ImageAssetRequest("", RConvId(), RAssetDataId(), None, None, Mime.Unknown)
+    def key = ImageAssetRequest("", RConvId(), AssetKey(Left(RAssetDataId()), None, AESKey.Empty, Sha256.Empty), Mime.Unknown)
 
     val entries = Seq(
       Entry(key, true, 10),

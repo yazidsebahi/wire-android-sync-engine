@@ -20,10 +20,11 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.MessageContent.Asset.ErrorHandler
-import com.waz.api.impl.{AssetForUpload, ErrorResponse, TrackingEvent}
-import com.waz.api.{Message, NetworkMode}
+import com.waz.api.impl._
+import com.waz.api.{ImageAssetFactory, Message, NetworkMode}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Location
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service._
@@ -35,7 +36,6 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils._
-import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
@@ -54,7 +54,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   import messages._
   import users._
 
-  def sendMessage[A](convId: ConvId, content: api.MessageContent[A]): Future[Option[MessageData]] = {
+  def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = {
 
     def mentionsMap(us: Array[api.User]): Future[Map[UserId, String]] =
       users.getUsers(us.map { u => UserId(u.getId) }) map { uss =>
@@ -64,6 +64,13 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     def sendTextMessage(m: String, mentions: Map[UserId, String] = Map.empty) =
       for {
         msg <- addTextMessage(convId, m, mentions)
+        _   <- updateLastRead(msg)
+        _   <- sync.postMessage(msg.id, convId)
+      } yield Some(msg)
+
+    def sendLocationMessage(loc: Location) =
+      for {
+        msg <- addLocationMessage(convId, loc)
         _   <- updateLastRead(msg)
         _   <- sync.postMessage(msg.id, convId)
       } yield Some(msg)
@@ -145,7 +152,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         message     <- addAssetMessage(convId, in.id, mime)
         asset       <- addAsset(in, conv.remoteId)
         size        <- in.sizeInBytes
-        _           <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType))
+        _           <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, conv.isOtto))
         shouldSend  <- checkSize(size, mime, message)
         _ <- if (shouldSend) sync.postMessage(message.id, convId) else Future.successful(())
       } yield Some(message)
@@ -156,6 +163,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         debug(s"send text message ${m.getContent}")
         if (m.getMentions.isEmpty) sendTextMessage(m.getContent)
         else mentionsMap(m.getMentions) flatMap { ms => sendTextMessage(m.getContent, ms) }
+      case m: api.MessageContent.Location =>
+        sendLocationMessage(Location(m.getLongitude, m.getLatitude, m.getName, m.getZoom))
       case m: api.MessageContent.Image =>
         convById(convId) flatMap {
           case Some(conv) => sendImageMessage(m.getContent, conv)
@@ -166,7 +175,15 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
           case Some(conv) =>
             debug(s"send asset message ${m.getContent}")
             m.getContent match {
-              case a: AssetForUpload => sendAssetMessage(a, conv, m.getErrorHandler)
+              case a @ ContentUriAssetForUpload(_, uri) =>
+                a.mimeType .flatMap {
+                  case m @ Mime.Image() =>
+                    a.sizeInBytes.flatMap { size => tracking.track(TrackingEvent.imageUploadAsAsset(size, m.str, conv.convType, conv.isOtto)) }
+                    sendImageMessage(ImageAssetFactory.getImageAsset(uri), conv) // XXX: this has to run on UI thread
+                  case _ =>
+                    sendAssetMessage(a, conv, m.getErrorHandler)
+                } (Threading.Ui)
+              case a: AssetForUpload  => sendAssetMessage(a, conv, m.getErrorHandler)
             }
           case None       =>
             Future.failed(new IllegalArgumentException(s"No conversation found for $convId"))
@@ -328,8 +345,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     }
   }
 
-  def setLastRead(convId: ConvId, time: Instant, lastRead: EventId): Future[Option[ConversationData]] = {
-    updateConversationLastRead(convId, time) map {
+  def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]] = {
+    updateConversationLastRead(convId, msg.time) map {
       case Some((_, conv)) =>
         sync.postLastRead(convId, conv.lastRead)
         Some(conv)

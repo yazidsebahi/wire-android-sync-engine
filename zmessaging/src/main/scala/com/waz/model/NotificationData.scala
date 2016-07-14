@@ -89,6 +89,7 @@ object NotificationData {
     case GcmNotification.Type.KNOCK => "Knock"
     case GcmNotification.Type.MISSED_CALL => "MissedCall"
     case GcmNotification.Type.LIKE => "Like"
+    case GcmNotification.Type.LOCATION => "Location"
     case GcmNotification.Type.MESSAGE_SENDING_FAILED => "MessageSendingFailed"
   }
 }

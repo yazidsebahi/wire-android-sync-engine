@@ -20,6 +20,7 @@ package com.waz.service
 import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
+import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
@@ -78,7 +79,7 @@ class Accounts(val global: GlobalModule) {
     case None       => Future successful None
   }
 
-  private def getInstance(account: AccountData) = Future {
+  private[service] def getInstance(account: AccountData) = Future {
     accountMap.getOrElseUpdate(account.id, new AccountService(account, global, this))
   }
 
@@ -117,50 +118,55 @@ class Accounts(val global: GlobalModule) {
       _          <- setAccount(account.map(_.id))
       service    <- account.fold(Future successful Option.empty[AccountService]) { a => getInstance(a).map(Some(_)) }
     } yield
-      (service, normalized)
+      (normalized, matching, service)
   }
 
 
-  def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] = {
+  def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] =
+    switchAccount(credentials) flatMap {
+      case (normalized, _, Some(service)) => service.login(normalized)
+      case (normalized, Some(account), None) => // found matching account, but is not authorized (wrong password)
+        verbose(s"found matching account: $account, trying to authorize with backend")
+        login(account, normalized)
+      case (normalized, None, None) =>
+        verbose(s"matching account not found, creating new account")
+        login(new AccountData(AccountId(), None, "", None), normalized)
+    }
 
-    def loginOnBackend(id: AccountId, creds: Credentials) =
-      loginClient.login(id, creds).future map {
+  private def login(account: AccountData, normalized: Credentials) = {
+    def loginOnBackend() =
+      loginClient.login(account.id, normalized).future map {
         case Right((token, c)) =>
-          Right(AccountData(id, credentials).copy(cookie = c, activated = true, accessToken = Some(token)))
+          Right(account.updated(normalized).copy(cookie = c, activated = true, accessToken = Some(token)))
         case Left(error @ ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-          verbose(s"account pending activation: $creds, $error")
-          Right(AccountData(id, credentials))
+          verbose(s"account pending activation: $normalized, $error")
+          Right(account.updated(normalized).copy(activated = false, cookie = None, accessToken = None))
         case Left(error) =>
           verbose(s"login failed: $error")
           Left(error)
       }
 
-    switchAccount(credentials) flatMap {
-      case (Some(service), normalized) => service.login(normalized)
-      case (None, normalized) =>
-        val id = AccountId()
-        loginOnBackend(id, normalized) flatMap {
-            case Right(account) =>
-              for {
-                acc     <- storage.insert(account)
-                service <- getInstance(acc)
-                _       <- setAccount(Some(id))
-                res     <- service.login(normalized)
-              } yield res
-            case Left(err) =>
-              Future successful Left(err)
-          }
-        }
+    loginOnBackend() flatMap {
+      case Right(a) =>
+        for {
+          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, activated = true, accessToken = a.accessToken), a)
+          service <- getInstance(acc)
+          _       <- setAccount(Some(acc.id))
+          res     <- service.login(normalized)
+        } yield res
+      case Left(err) =>
+        Future successful Left(err)
+    }
   }
 
   def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
 
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] =
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
     CancellableFuture.lift(phoneNumbers.normalize(phone)) flatMap { normalizedPhone =>
       regClient.requestPhoneConfirmationCode(normalizedPhone.getOrElse(phone), kindOfAccess)
     }
 
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] =
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
     CancellableFuture.lift(phoneNumbers.normalize(phone)) flatMap { normalizedPhone =>
       regClient.requestPhoneConfirmationCall(normalizedPhone.getOrElse(phone), kindOfAccess)
     }
@@ -179,26 +185,37 @@ class Accounts(val global: GlobalModule) {
 
   def register(credentials: Credentials, name: String, accent: AccentColor): Future[Either[ErrorResponse, AccountData]] = {
     debug(s"register($credentials, $name, $accent")
+
+    def register(accountId: AccountId, normalized: Credentials) =
+      regClient.register(accountId, normalized, name, Some(accent.id)).future flatMap {
+        case Right((userInfo, cookie)) =>
+          verbose(s"register($credentials) done, id: $accountId, user: $userInfo, cookie: $cookie")
+          for {
+            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), activated = normalized.autoLoginOnRegistration))
+            _       = verbose(s"created account: $acc")
+            service <- getInstance(acc)
+            _       <- setAccount(Some(accountId))
+            res     <- service.login(normalized)
+          } yield res
+        case Left(error) =>
+          info(s"register($credentials, $name) failed: $error")
+          Future successful Left(error)
+      }
+
     switchAccount(credentials) flatMap {
-      case (Some(service), normalized) =>
+      case (normalized, _, Some(service)) =>
         verbose(s"register($credentials), found matching account: $service, will just sign in")
         service.login(normalized)
-      case (None, normalized) =>
-        val accountId = AccountId()
-        regClient.register(accountId, normalized, name, Some(accent.id)).future flatMap {
-          case Right((userInfo, cookie)) =>
-            verbose(s"register($credentials) done, id: $accountId, user: $userInfo, cookie: $cookie")
-            for {
-              acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), activated = normalized.autoLoginOnRegistration))
-              _       = verbose(s"created account: $acc")
-              service <- getInstance(acc)
-              _       <- setAccount(Some(accountId))
-              res     <- service.login(normalized)
-            } yield res
-          case Left(error) =>
-            info(s"register($credentials, $name) failed: $error")
-            Future successful Left(error)
+      case (normalized, Some(account), None) =>
+        verbose(s"register($credentials), found matching account: $account, will try signing in")
+        login(account, normalized) flatMap {
+          case Right(acc) => Future successful Right(acc)
+          case Left(_) =>
+            // login failed, maybe this account has been removed on backend, let's try registering
+            register(account.id, normalized)
         }
+      case (normalized, None, None) =>
+        register(AccountId(), normalized)
     }
   }
 }

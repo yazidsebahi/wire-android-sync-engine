@@ -25,6 +25,7 @@ import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
 import com.waz.client.RegistrationClient
+import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.KeyValueStorage
 import com.waz.model.UserData._
 import com.waz.model._
@@ -191,7 +192,9 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
       override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = suite.register(user, credentials, name, accentId)
-      override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
+      override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
+      override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCall(phone, kindOfAccess)
+
       override def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = suite.verifyPhoneNumber(credentials, kindOfVerification)
     }
     override lazy val blacklistClient    = new VersionBlacklistClient(globalClient, testBackend) {
@@ -245,7 +248,8 @@ trait MockedClient { test: ApiSpec =>
   def access(cookie: Option[String], token: Option[Token]): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some("cookie"))))
   def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] =
     successful(Right((UserInfo(UserId(), Some(name), accentId, credentials.maybeEmail, credentials.maybePhone, None), Some("cookie"))))
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] = successful(Right(()))
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = successful(Right(()))
 
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] = successful(Right(()))

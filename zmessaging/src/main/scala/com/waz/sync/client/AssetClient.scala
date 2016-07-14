@@ -24,18 +24,20 @@ import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
+import com.waz.content.Mime
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.sync.client.OtrClient._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder.{apply => _, _}
-import com.waz.utils.{IoUtils, JsonEncoder, LoggedTry}
+import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, LoggedTry}
 import com.waz.znet.ContentEncoder._
 import com.waz.znet.Response._
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{BinaryResponse, FileResponse, JsonObjectResponse, _}
 import com.wire.messages.nano.Otr
 import org.json.JSONObject
+import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
@@ -79,11 +81,48 @@ class AssetClient(netClient: ZNetClient) {
     case Response(SuccessHttpStatus(), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Success(mismatch))
     case Response(HttpStatus(Status.PreconditionFailed, _), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Failure(mismatch))
   }
+
+  def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
+    val meta = JsonEncoder { o =>
+      o.put("public", public)
+      o.put("retention", retention.value)
+    }
+    val content = new MultipartRequestContent(Seq(new JsonPart(meta), new AssetDataPart(data, mime.str)), "multipart/mixed")
+
+    netClient.withErrorHandling("uploadAsset", Request.Post(AssetsV3Path, content)) {
+      case Response(SuccessHttpStatus(), UploadResponseExtractor(asset), _) =>
+        debug(s"uploadAsset completed with resp: $asset")
+        asset
+    }
+  }
 }
 
 object AssetClient {
   private implicit val logTag: LogTag = logTagFor[AssetClient]
   implicit val DefaultExpiryTime: Expiration = 1.hour
+
+  val AssetsV3Path = "/assets/v3"
+
+  sealed abstract class Retention(val value: String)
+  object Retention {
+    case object Eternal extends Retention("eternal")
+    case object Persistent extends Retention("persistent")
+    case object Volatile extends Retention("volatile")
+  }
+
+  case class UploadResponse(key: RemoteKey, expires: Option[Instant], token: Option[AssetToken])
+
+  case object UploadResponse {
+
+    implicit object Decoder extends JsonDecoder[UploadResponse] {
+      import JsonDecoder._
+      override def apply(implicit js: JSONObject): UploadResponse = UploadResponse(RemoteKey('key), decodeOptISOInstant('expires), decodeOptString('token).map(AssetToken))
+    }
+  }
+
+  object UploadResponseExtractor {
+    def unapply(content: JsonObjectResponse): Option[UploadResponse] = LoggedTry.local(UploadResponse.Decoder(content.value)).toOption
+  }
 
   def postAssetPath(conv: RConvId) = s"/conversations/$conv/assets"
   def postOtrAssetPath(conv: RConvId, ignoreMissing: Boolean) =
@@ -94,6 +133,13 @@ object AssetClient {
     if (ignoreMissing) s"/conversations/$conv/otr/assets/$asset?ignore_missing=true"
     else s"/conversations/$conv/otr/assets/$asset"
 
+  def getAssetPath(conv: RConvId, asset: AssetKey): String = (asset.remoteId, asset.otrKey) match {
+    case (Left(id), AESKey.Empty) => getAssetPath(conv, id)
+    case (Left(id), _)            => getOtrAssetPath(conv, id)
+    case (Right(key), _)          => getAssetPathV3(key)
+  }
+
+  def getAssetPathV3(asset: RemoteKey) = s"$AssetsV3Path/${asset.str}"
   def getAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/$conv/assets/$asset"
   def getOtrAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/$conv/otr/assets/$asset"
 

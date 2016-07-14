@@ -67,7 +67,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
     super.beforeAll()
 
     prepareAddressBookEntries(
-      Seq("1" -> "zbigniew@wearezeta.com", "3" -> "zbigniew+zbsz1@wearezeta.com", "4" -> "zbigniew+zbsz2@wearezeta.com", "5" -> "daniel@wearezeta.com"),
+      Seq("1" -> "zbigniew@wire.com", "3" -> "zbigniew+zbsz1@wire.com", "4" -> "zbigniew+zbsz2@wire.com", "5" -> "daniel@wire.com"),
       Seq("1" -> "+123456789012", "2" -> "+4915324568954")
     )
   }
@@ -79,7 +79,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
     }
 
     scenario("register a user with existing email") {
-      val future = client.register(AccountId(), EmailCredentials(EmailAddress("zbigniew@wearezeta.com"), Some(password)), s"test $hex", None) map {
+      val future = client.register(AccountId(), EmailCredentials(EmailAddress("zbigniew@wire.com"), Some(password)), s"test $hex", None) map {
         case Right((user, _)) => fail(s"created user: $user")
         case Left(error) => info(s"got error: $error")
       }

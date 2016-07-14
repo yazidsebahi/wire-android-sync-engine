@@ -26,7 +26,7 @@ import com.waz.content._
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, Text}
+import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, Location, Text}
 import com.waz.model.Liking.Action.Like
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -67,10 +67,11 @@ class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, st
         case MemberLeaveEvent(_, convId, eventId, time, userId, _) => NotificationData(s"$MEMBER_LEAVE-$convId-$eventId", "", convId, userId, MEMBER_LEAVE, time.instant)
         case RenameConversationEvent(_, convId, eventId, time, userId, name) => NotificationData(s"$RENAME-$convId-$eventId", "", convId, userId, RENAME, time.instant)
         case MissedCallEvent(_, convId, eventId, time, userId) => NotificationData(s"$MISSED_CALL-$convId-$eventId", "", convId, userId, MISSED_CALL, time.instant)
-        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Text(msg, mentions))) => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
+        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Text(msg, mentions, _))) => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
         case MessageAddEvent(id, convId, eventId, time, userId, msg)                                     => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Knock(hot))) => NotificationData(s"$KNOCK-$convId-$id-$hot", "", convId, userId, KNOCK, time.instant, hotKnock = hot)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Like)) => NotificationData(s"$LIKE-$convId-$id-$userId", "", convId, userId, LIKE, time.instant, referencedMessage = Some(MessageId(id.str)))
+        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Location(_, _, _, _))) => NotificationData(s"$LOCATION-$convId-$id", "", convId, userId, LOCATION, time.instant)
         case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(Some(Original(Mime.Video(), _, _, _, _)), _, UploadDone(_))), _, _) => NotificationData(s"$VIDEO_ASSET-$id", "", convId, userId, VIDEO_ASSET, time.instant)
         case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, UploadDone(_))), _, _) => NotificationData(s"$AUDIO_ASSET-$id", "", convId, userId, AUDIO_ASSET, time.instant)
         case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(_, _, UploadDone(_))), _, _) => NotificationData(s"$ANY_ASSET-$id", "", convId, userId, ANY_ASSET, time.instant)

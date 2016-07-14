@@ -45,9 +45,9 @@ public interface Message extends UiObservable, Parcelable {
     }
 
     enum Type {
-        TEXT, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, MEMBER_JOIN, MEMBER_LEAVE, CONNECT_REQUEST,
-        CONNECT_ACCEPTED, RENAME, MISSED_CALL, INCOMING_CALL, RICH_MEDIA, OTR_ERROR, OTR_VERIFIED, OTR_UNVERIFIED,
-        OTR_DEVICE_ADDED, STARTED_USING_DEVICE, HISTORY_LOST, UNKNOWN
+        TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, MEMBER_JOIN, MEMBER_LEAVE, CONNECT_REQUEST,
+        CONNECT_ACCEPTED, RENAME, MISSED_CALL, INCOMING_CALL, RICH_MEDIA, OTR_ERROR, OTR_IDENTITY_CHANGED, OTR_VERIFIED, OTR_UNVERIFIED,
+        OTR_DEVICE_ADDED, STARTED_USING_DEVICE, HISTORY_LOST, LOCATION, UNKNOWN
     }
 
     /**
@@ -57,12 +57,20 @@ public interface Message extends UiObservable, Parcelable {
 
     interface Part {
         enum Type {
-            TEXT, ASSET, ANY_ASSET, YOUTUBE, SOUNDCLOUD, TWITTER, SPOTIFY, WEB_LINK, GOOGLE_MAPS
+            TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, YOUTUBE, SOUNDCLOUD, TWITTER, SPOTIFY, WEB_LINK, GOOGLE_MAPS
         }
 
         Part.Type getPartType();
 
         String getBody();
+
+        /**
+         * Returns OpenGraph title if available.
+         * @return empty string when no metadata is available.
+         */
+        String getTitle();
+        String getDescription();
+
         ImageAsset getImage();
         int getImageWidth();
         int getImageHeight();
@@ -77,14 +85,21 @@ public interface Message extends UiObservable, Parcelable {
     Type getMessageType();
     Status getMessageStatus();
     User getUser();
-    ImageAsset getImage();
     Asset getAsset();
     String getBody();
     Instant getTime();
     boolean isDeleted();
     boolean isEmpty();
-
     boolean isHotKnock();
+
+    ImageAsset getImage();
+
+    /**
+     * Returns image asset with specified max dimensions.
+     * Given dimensions are only a suggestion, it will be used only in special cases (like location map),
+     * the goal is to request specific aspect ratio, so we don't fetch too much if UI is going to crop it anyway.
+     */
+    ImageAsset getImage(int width, int height);
 
     /**
      * Returns true for first member join message in conversation.
@@ -145,6 +160,12 @@ public interface Message extends UiObservable, Parcelable {
      * This value should only be used with knocks to check if knock has just been received - for sounds and animations.
      */
     Instant getLocalTime();
+
+    /**
+     * Returns shared location.
+     * @return location or null if message doesn't contain location info
+     */
+    MessageContent.Location getLocation();
 
     /**
      * For message type {@link Type.RENAME} which notifies that a conversation has been renamed.

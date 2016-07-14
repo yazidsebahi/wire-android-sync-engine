@@ -264,12 +264,12 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
   def remove(key: K): Future[Unit] = Future {
     cache.put(key, None)
     returning(db { delete(Seq(key))(_) } .future) { _ => onDeleted ! Seq(key) }
-  } .flatMap(identity)
+  } .flatten
 
   def remove(keys: Seq[K]): Future[Unit] = Future {
     keys foreach { key => cache.put(key, None) }
     returning(db { delete(keys)(_) } .future) { _ => onDeleted ! keys }
-  } .flatMap(identity)
+  } .flatten
 
   def cacheIfNotPresent(key: K, value: V) = cachedOrElse(key, Future {
     Option(cache.get(key)).getOrElse { returning(Some(value))(cache.put(key, _)) }

@@ -34,7 +34,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
 import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
-import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, GzippedRequestContent, RequestContent}
+import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
 import com.waz.znet.Request._
 import com.waz.znet.Response.{Headers, HttpStatus, ResponseBodyDecoder}
 import com.waz.znet._

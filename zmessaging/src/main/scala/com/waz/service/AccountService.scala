@@ -136,7 +136,10 @@ class AccountService(var account: AccountData, val global: GlobalModule, account
     }
     var hasClient = false
     otrClient.map(_.isDefined) { exists =>
-      if (hasClient && !exists) logoutAndResetClient()
+      if (hasClient && !exists) {
+        info(s"client has been removed on backend, logging out")
+        logoutAndResetClient()
+      }
       hasClient = exists
     }
   }
@@ -155,7 +158,7 @@ class AccountService(var account: AccountData, val global: GlobalModule, account
   }
 
   @volatile
-  private var credentials = Credentials.Empty
+  private[waz] var credentials = Credentials.Empty
 
   lazy val credentialsHandler = new CredentialsHandler {
     override val userId: AccountId = id
@@ -189,16 +192,24 @@ class AccountService(var account: AccountData, val global: GlobalModule, account
       }
   }
 
+  val isLoggedIn = accounts.currentAccountPref.signal.map(_ == id.str)
+
   accountData { acc =>
     account = acc
     if (acc.cookie.isDefined) {
       if (credentials == Credentials.Empty) credentials = acc.credentials
     }
-    if (acc.activated && (acc.userId.isEmpty || acc.clientId.isEmpty))
-      Serialized.future(self) { ensureFullyRegistered() }
   } (EventContext.Global)
 
-  accounts.currentAccountPref.signal.map(_ == id.str).on(Threading.Ui) { lifecycle.setLoggedIn }
+  accountData.zip(isLoggedIn) {
+    case (acc, loggedIn) =>
+      if (loggedIn && acc.activated && (acc.userId.isEmpty || acc.clientId.isEmpty)) {
+        verbose(s"account data needs registration: $acc")
+        Serialized.future(self) { ensureFullyRegistered() }
+      }
+  }
+
+  isLoggedIn.on(Threading.Ui) { lifecycle.setLoggedIn }
 
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 
@@ -258,7 +269,7 @@ class AccountService(var account: AccountData, val global: GlobalModule, account
         }
     }
 
-  private def ensureFullyRegistered() = {
+  private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
 
     def loadSelfUser(account: AccountData): Future[Either[ErrorResponse, AccountData]] =
@@ -312,7 +323,7 @@ class AccountService(var account: AccountData, val global: GlobalModule, account
                 }
               case Right(acc1) => Future successful Right(acc1)
               case Left(err) => Future successful Left(err)
-            }
+          }
         }
     }
   }

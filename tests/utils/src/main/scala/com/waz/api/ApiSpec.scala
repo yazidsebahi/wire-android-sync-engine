@@ -204,11 +204,14 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     }
   }
 
-  def login(email: String = this.email, password: String = this.password)(implicit timeout: Timeout = 10.seconds) = {
+  def login(email: String = this.email, password: String = this.password)(implicit timeout: Timeout = 10.seconds): Boolean =
+    login(CredentialsFactory.emailCredentials(email, password))
+
+  def login(credentials: Credentials)(implicit timeout: Timeout): Boolean = {
     @volatile var selfUser: Option[Self] = None
     @volatile var error: Option[ErrorResponse] = None
 
-    api.login(CredentialsFactory.emailCredentials(email, password), new LoginListener {
+    api.login(credentials, new LoginListener {
       override def onFailed(code: Int, message: String, label: String): Unit = {
         error = Some(impl.ErrorResponse(code, message, label))
       }

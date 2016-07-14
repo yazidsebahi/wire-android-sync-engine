@@ -42,7 +42,7 @@ trait RegistrationUtils { self: ApiSpec =>
   }
 
   def fetchPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess) = {
-    val result = Promise[ConfirmationCode]()
+    val result = Promise[Option[ConfirmationCode]]()
     api.requestPhoneConfirmationCode(phone.str, kindOfAccess, new PhoneConfirmationCodeRequestListener {
       override def onConfirmationCodeSendingFailed(kindOfAccess: KindOfAccess, code: Int, message: String, label: String): Unit =
         result.failure(new Exception(s"request failed: $code, $message, $label"))
@@ -52,10 +52,12 @@ trait RegistrationUtils { self: ApiSpec =>
           if (kindOfAccess == KindOfAccess.REGISTRATION) internalBackendClient.getPhoneActivationCode(phone)
           else internalBackendClient.getPhoneLoginCode(phone)
         } onComplete {
-          case Success(Right(code)) => result.success(code)
+          case Success(Right(code)) => result.success(Some(code))
           case Success(Left(error)) => result.failure(new Exception(s"Could not fetch confirmation code: $error"))
           case Failure(ex) => result.failure(ex)
         }
+
+      override def onPasswordExists(kindOfAccess: KindOfAccess): Unit = result.success(None)
     })
     result.future
   }

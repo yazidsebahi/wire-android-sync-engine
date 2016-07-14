@@ -28,14 +28,17 @@ import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads.{Downloader, DownloaderService}
 import com.waz.threading.CancellableFuture
 
-class AssetLoader(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest], streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset], cache: CacheService) {
+class AssetLoader(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
+    streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],
+    unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService) {
+
   import AssetLoader._
   import com.waz.threading.Threading.Implicits.Background
 
   def getAssetData(asset: AssetRequest): CancellableFuture[Option[LocalData]] =
     CancellableFuture.lift(cache.getEntry(asset.cacheKey)) flatMap {
-      case Some(entry)  => CancellableFuture successful Some(entry)
-      case None         => downloadAssetData(asset)
+      case Some(entry) => CancellableFuture successful Some(entry)
+      case None        => downloadAssetData(asset)
     }
 
   def downloadAssetData(asset: AssetRequest): CancellableFuture[Option[LocalData]] =
@@ -43,9 +46,11 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
       case CachedAssetRequest(_, _, _) => CancellableFuture successful None
       case LocalAssetRequest(cacheKey, uri, mime @ Mime.Video(), name) =>
         downloader.download(VideoAsset(cacheKey, uri, mime, name))(videoDownloader)
+      case LocalAssetRequest(cacheKey, uri, mime @ Mime.Audio.PCM, name) =>
+        downloader.download(UnencodedAudioAsset(cacheKey, uri, name))(unencodedAudioDownloader)
       case LocalAssetRequest(cacheKey, uri, mime, name) =>
         downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), mime, name))(streamDownloader)
-      case External(cacheKey, uri) if !uri.getScheme.startsWith("http") =>
+      case External(cacheKey, uri) if Option(uri.getScheme).forall(! _.startsWith("http")) =>
         downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), Mime.Unknown, None))(streamDownloader)
       case _ =>
         downloader.download(asset)(assetDownloader)

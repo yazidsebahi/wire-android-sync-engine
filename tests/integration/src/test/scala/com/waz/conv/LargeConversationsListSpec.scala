@@ -44,7 +44,7 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
   override val autoLogin: Boolean = false
 
   def idFor(id: Int) = f"$id%04d"
-  def emailFor(id: Int) = s"android.test+many_conversations_${idFor(id)}@wearezeta.com"
+  def emailFor(id: Int) = s"android.test+many_conversations_${idFor(id)}@wire.com"
 
   val indices = 1 to 320
   val emails = indices map emailFor

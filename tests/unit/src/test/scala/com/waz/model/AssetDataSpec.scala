@@ -104,32 +104,32 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
     lazy val asset = AnyAssetData(id, conv, Asset(orig, UploadInProgress), None, Instant.ofEpochMilli(100))
 
     scenario("Create from Asset") {
-      asset shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, AssetStatus.UploadInProgress, Instant.ofEpochMilli(100))
+      asset shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadInProgress, Instant.ofEpochMilli(100))
     }
 
     scenario("Add preview") {
       val preview = Preview(Mime("image/jpeg"), 50L, AESKey(), Sha256("sha"))
       val dataId = RAssetDataId()
       val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, preview), Some(dataId), Instant.ofEpochMilli(101)))
-      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, Some(Image(ImageData("preview", "image/jpeg", 0, 0, 0, 0, 50, Some(dataId), None, true, None, None, Some(AESKey(preview.remote.otrKey)), Some(Sha256(preview.remote.sha256))))), None, AssetStatus.UploadInProgress, Instant.ofEpochMilli(101))
+      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, Some(Image(ImageData("preview", "image/jpeg", 0, 0, 0, 0, 50, Some(dataId), None, true, None, None, Some(AESKey(preview.remote.otrKey)), Some(Sha256(preview.remote.sha256))))), None, None, AssetStatus.UploadInProgress, Instant.ofEpochMilli(101))
     }
 
     scenario("Asset is uploaded") {
       val dataId = RAssetDataId()
       val key = AESKey()
       val sha = Sha256(AESUtils.randomKey128().bytes)
-      val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(RAssetDataId(), key, sha))), Some(dataId), Instant.ofEpochMilli(101)))
-      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, AssetStatus.UploadDone(AssetKey(dataId, key, sha)), Instant.ofEpochMilli(101))
+      val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha))), Some(dataId), Instant.ofEpochMilli(101)))
+      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), Instant.ofEpochMilli(101))
     }
 
     scenario("Upload is cancelled") {
       val updated = asset.updated(AnyAssetData(id, conv, Asset(UploadCancelled), None, Instant.ofEpochMilli(101)))
-      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, AssetStatus.UploadCancelled, Instant.ofEpochMilli(101))
+      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadCancelled, Instant.ofEpochMilli(101))
     }
 
     scenario("Upload failed") {
       val updated = asset.updated(AnyAssetData(id, conv, Asset(UploadFailed), None, Instant.ofEpochMilli(101)))
-      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, AssetStatus.UploadFailed, Instant.ofEpochMilli(101))
+      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadFailed, Instant.ofEpochMilli(101))
     }
 
     scenario("Previously failed asset is re-uploaded") {
@@ -137,8 +137,8 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
       val dataId = RAssetDataId()
       val key = AESKey()
       val sha = Sha256(AESUtils.randomKey128().bytes)
-      val updated = failed.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(RAssetDataId(), key, sha))), Some(dataId), Instant.ofEpochMilli(102)))
-      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, AssetStatus.UploadDone(AssetKey(dataId, key, sha)), Instant.ofEpochMilli(102))
+      val updated = failed.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha))), Some(dataId), Instant.ofEpochMilli(102)))
+      updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), Instant.ofEpochMilli(102))
     }
   }
 }

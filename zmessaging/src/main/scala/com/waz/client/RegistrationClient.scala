@@ -30,7 +30,7 @@ import com.waz.utils.Locales._
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.Status._
-import com.waz.znet.Response.{HttpStatus, SuccessHttpStatus}
+import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
 import org.json.JSONObject
@@ -64,40 +64,43 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
     }
   }
 
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] =
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
     postActivateSend(kindOfAccess) {
       JsonEncoder { o =>
         o.put("phone", phone.str)
+        if (kindOfAccess == KindOfAccess.LOGIN_IF_NO_PASSWD) o.put("force", false)
         if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
       }
     }
 
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): ErrorOrResponse[Unit] =
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
     postActivateSend(kindOfAccess) {
       JsonEncoder { o =>
         o.put("phone", phone.str)
         o.put("voice_call", true)
+        if (kindOfAccess == KindOfAccess.LOGIN_IF_NO_PASSWD) o.put("force", false)
         if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
       }
     }
 
-  private def postActivateSend(kindOfAccess: KindOfAccess)(params: JSONObject) = {
-
+  private def postActivateSend(kindOfAccess: KindOfAccess)(params: JSONObject): CancellableFuture[ActivateResult] = {
     val uri = absoluteUri(kindOfAccess match {
+      case KindOfAccess.LOGIN_IF_NO_PASSWD | KindOfAccess.LOGIN => LoginSendPath
       case KindOfAccess.REGISTRATION => ActivateSendPath
-      case KindOfAccess.LOGIN => LoginSendPath
     })
 
-    client(uri, Request.PostMethod, JsonContentEncoder(params), timeout = timeout) flatMap {
+    client(uri, Request.PostMethod, JsonContentEncoder(params), timeout = timeout) map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"confirmation code requested: $resp")
-        CancellableFuture.successful(Right(()))
+        ActivateResult.Success
+      case Response(_, ErrorResponse(Status.Forbidden, _, "password-exists"), headers) =>
+        ActivateResult.PasswordExists
       case Response(_, ErrorResponse(code, msg, label), headers) =>
         warn(s"requestPhoneNumberConfirmation($kindOfAccess) failed with error: ($code, $msg, $label), headers: $headers")
-        CancellableFuture.successful(Left(ErrorResponse(code, msg, label)))
+        ActivateResult.Failure(ErrorResponse(code, msg, label))
       case other =>
         error(s"Unexpected response from requestPhoneNumberConfirmation($kindOfAccess): $other")
-        CancellableFuture.successful(Left(ErrorResponse(other.status.status, other.toString, "unknown")))
+        ActivateResult.Failure(ErrorResponse(other.status.status, other.toString, "unknown"))
     }
   }
 
@@ -141,6 +144,13 @@ object RegistrationClient {
   val LoginSendPath = "/login/send"
 
   val timeout = 15.seconds
+
+  sealed trait ActivateResult
+  object ActivateResult {
+    case object Success extends ActivateResult
+    case object PasswordExists extends ActivateResult
+    case class Failure(err: ErrorResponse) extends ActivateResult
+  }
 
 
   def activateRequestBody(credentials: PhoneCredentials, kindOfVerification: KindOfVerification) = JsonContentEncoder(JsonEncoder { o =>

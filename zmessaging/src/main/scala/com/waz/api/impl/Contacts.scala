@@ -35,6 +35,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.Contacts with CoreList[api.Contact] with SignalLoading {
+  import Contacts._
+
   private implicit val logTag: LogTag = logTagFor[Contacts] + "@" + Integer.toHexString(hashCode)
 
   private val search = Signal(filtering.initial)
@@ -108,16 +110,21 @@ class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.
     returning(ui.contactDetails.getOrElseUpdate(c, new ContactDetails(unified.contacts(c), invitedContacts(c))(ui)))(_.setCurrent(unified.contacts(c)))
 }
 
-class OnWire(ui: => User) extends api.Contact {
-  override def getUser = ui
-  override def getDetails = null
-  override def toString = s"OnWire(${ui.toString})"
-}
+object Contacts {
+  case class Content(unifiedContacts: UnifiedContacts, accessors: Vector[api.Contact], filter: ContactsFilter, filtered: Filtered)
+  case class Filtered(sorted: IndexedSeq[Int], byInitial: SeqMap[String, IndexedSeq[Int]])
 
-class NotOnWire(ui: => ContactDetails) extends api.Contact {
-  override def getUser = null
-  override def getDetails = ui
-  override def toString = s"NotOnWire(${ui.toString})"
+  class OnWire(ui: => User) extends api.Contact {
+    override def getUser = ui
+    override def getDetails = null
+    override def toString = s"OnWire(${ui.toString})"
+  }
+
+  class NotOnWire(ui: => ContactDetails) extends api.Contact {
+    override def getUser = null
+    override def getDetails = ui
+    override def toString = s"NotOnWire(${ui.toString})"
+  }
 }
 
 class ContactDetails(private var current: model.Contact, private var invited: Boolean)(ui: UiModule) extends api.ContactDetails with UiObservable {
@@ -149,9 +156,6 @@ class ContactMethod(contact: model.Contact, method: Either[EmailAddress, PhoneNu
   override def invite(message: String, locale: Locale): Unit = service(_.invitations.invite(contact.id, method, contact.name, message, Option(locale)))
   override def toString = s"ContactMethod(${contact.id}, $getStringRepresentation)"
 }
-
-case class Content(unifiedContacts: UnifiedContacts, accessors: Vector[api.Contact], filter: ContactsFilter, filtered: Filtered)
-case class Filtered(sorted: IndexedSeq[Int], byInitial: SeqMap[String, IndexedSeq[Int]])
 
 trait ContactsFiltering {
   def initial: ContactsFilter

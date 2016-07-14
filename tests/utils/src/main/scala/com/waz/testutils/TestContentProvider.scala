@@ -50,6 +50,8 @@ trait TestContentProvider extends ContentProvider {
 class TestResourceContentProvider(val authority: String = "com.waz.testresources") extends TestContentProvider {
   val mimeMap = shadowOf(MimeTypeMap.getSingleton)
   mimeMap.addExtensionMimeTypMapping("pdf", "application/pdf")
+  mimeMap.addExtensionMimeTypMapping("png", "image/png")
+  mimeMap.addExtensionMimeTypMapping("jpg", "image/jpg")
   mimeMap.addExtensionMimeTypMapping("mp4", Mime.Video.MP4.str)
   mimeMap.addExtensionMimeTypMapping("m4a", Mime.Audio.MP4.str)
 

@@ -103,11 +103,13 @@ class BaseConversation(implicit ui: UiModule) extends IConversation with UiObser
 
   override def isMe: Boolean = data.convType == SELF
 
+  override def isOtto: Boolean = data.isOtto
+
   override def setArchived(archived: Boolean): Unit = conversations.setArchived(id, archived)
 
   override def setMuted(muted: Boolean): Unit = conversations.setMuted(id, muted)
 
-  override def sendMessage[T](msg: MessageContent[T]): Unit = {
+  override def sendMessage(msg: MessageContent): Unit = {
     debug(s"sendMessage $msg")
     conversations.sendMessage(id, msg)
   }

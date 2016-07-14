@@ -32,7 +32,7 @@ import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
 
-class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService, googleMaps: GoogleMapsMediaService) {
+class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService) {
   import com.waz.api.Message.Part.Type._
   private implicit val logTag: LogTag = logTagFor[RichMediaService]
   import Threading.Implicits.Background
@@ -94,7 +94,6 @@ class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, s
 
   private def updateRichMediaContent(msg: MessageData, content: MessageContent): Future[Either[ErrorResponse, MessageContent]] = content.tpe match {
     case YOUTUBE     => youTube.updateMedia(msg, content)
-    case GOOGLE_MAPS => googleMaps.updateMedia(msg, content)
     case SOUNDCLOUD  => soundCloud.updateMedia(msg, content)
     case SPOTIFY     => spotify.updateMedia(msg, content)
     case _           => Future.successful(Right(content))

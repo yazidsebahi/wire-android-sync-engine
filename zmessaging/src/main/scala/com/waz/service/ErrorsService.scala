@@ -81,7 +81,7 @@ class ErrorsService(context: Context, storage: ZmsDatabase, lifecycle: ZmsLifecy
 
   private def dismissed(error: ErrorData) = Future {
     dismissHandler.applyOrElse(error, { (e: ErrorData) => Future.successful(e) })
-  }.flatMap(identity)
+  }.flatten
 
   private def delete(errors: ErrorData*) = {
     verbose(s"delete: $errors")

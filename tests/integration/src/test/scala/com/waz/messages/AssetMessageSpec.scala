@@ -189,6 +189,22 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       errors shouldBe empty
     }
 
+    scenario("Send image asset from uri - should be sent as regular image message") {
+      val fromBefore = messages.size
+
+      val upload = uriAssetForUpload(image)
+
+      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+
+      (messages should have size (fromBefore + 1)).soon
+
+      val message = messages.getLastMessage
+      soon {
+        message.getMessageType shouldBe Message.Type.ASSET
+        message.getImage should not be empty
+      }
+    }
+
     scenario("Asset loading from stream takes long time") {
       val env = LatchedUpload()
 
@@ -576,6 +592,9 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
   lazy val videoUri = provider.resourceUri("/assets/video_hd.mp4")
   lazy val video = provider.getResource(videoUri)
+
+  lazy val imageUri = provider.resourceUri("/images/penguin.png")
+  lazy val image = provider.getResource(imageUri)
 
   lazy val auto2 = registerDevice("auto2")
 

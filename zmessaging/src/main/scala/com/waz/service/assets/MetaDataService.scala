@@ -38,7 +38,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
 
   def getAssetMetadata(id: AssetId): CancellableFuture[Option[AssetMetaData]] =
     CancellableFuture lift storage.get(id) flatMap {
-      case Some(AnyAssetData(_, _, _, _, _, Some(metaData), _, _, _, _)) => CancellableFuture successful Some(metaData)
+      case Some(AnyAssetData(_, _, _, _, _, Some(metaData), _, _, _, _, _)) => CancellableFuture successful Some(metaData)
       case Some(a: AnyAssetData) =>
         for {
           meta <- metaData(a)

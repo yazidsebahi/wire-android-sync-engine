@@ -19,6 +19,7 @@ package com.waz.bitmap.gif
 
 import android.content.Context
 import android.graphics.{Bitmap, Color}
+import android.os.Build
 import com.waz.ZLog._
 import com.waz.bitmap.gif.AnimGifDecoder.JavaImageDecoder
 import com.waz.bitmap.gif.Gif.{Disposal, Frame}
@@ -44,7 +45,7 @@ class AnimGifDecoder(context: Context, gif: Gif) {
 
   var currentImage: Bitmap = _
 
-  val decoder = {
+  val decoder = if (AnimGifDecoder.useRS) {
     try {
       new RsLzwDecoder(context, gif)
     } catch {
@@ -52,7 +53,8 @@ class AnimGifDecoder(context: Context, gif: Gif) {
         error("Could not create RSLzwDecoder, falling back to java implementation", e)
         new JavaImageDecoder(gif)
     }
-  }
+  } else
+    new JavaImageDecoder(gif)
 
   /**
    * Returns a delay to wait before displaying next frame.
@@ -103,6 +105,16 @@ class AnimGifDecoder(context: Context, gif: Gif) {
 }
 
 object AnimGifDecoder {
+
+  val SamsungS7 = """SM-G93[05].*""".r
+
+  lazy val useRS = Build.MODEL.toUpperCase match {
+    case SamsungS7() =>
+      // disable Renderscript on Exynos based S7 and S7 edge,
+      // there are issues with GPU on those devices, RS blocks gpu rendering for long time
+      false
+    case _ => true
+  }
 
   trait ImageDecoder {
     def clear(): Unit

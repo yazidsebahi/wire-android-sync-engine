@@ -31,6 +31,7 @@ object ZMessagingApi {
 
   trait PhoneConfirmationCodeRequestListener {
     def onConfirmationCodeSent(kindOfAccess: KindOfAccess): Unit
+    def onPasswordExists(kindOfAccess: KindOfAccess): Unit
     def onConfirmationCodeSendingFailed(kindOfAccess: KindOfAccess, code: Int, message: String, label: String): Unit
   }
 

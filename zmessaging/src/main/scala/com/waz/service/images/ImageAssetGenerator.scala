@@ -44,7 +44,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
   def generateWireAsset(assetId: AssetId, input: ImageData, convId: RConvId, profilePicture: Boolean): CancellableFuture[ImageAssetData] =
     loader.loadRawImageData(input, convId) flatMap {
       case Some(data) =>
-        loader.getImageMetadata(input, data) flatMap { meta =>
+        loader.getImageMetadata(data) flatMap { meta =>
           generateAssets(assetId, data, meta, convId, if (profilePicture) SelfOptions else ImageOptions)
         }
       case _ =>

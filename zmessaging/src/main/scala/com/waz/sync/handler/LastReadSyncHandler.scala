@@ -22,28 +22,28 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.ConversationStorage
 import com.waz.model.GenericContent.LastRead
 import com.waz.model._
-import com.waz.service.{MetaDataService, UserService}
+import com.waz.service.MetaDataService
 import com.waz.sync.SyncResult
 import com.waz.sync.otr.OtrSyncHandler
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class LastReadSyncHandler(convs: ConversationStorage, users: UserService, metadata: MetaDataService, convSync: ConversationsSyncHandler, msgsSync: MessagesSyncHandler, otrSync: OtrSyncHandler) {
+class LastReadSyncHandler(selfUserId: UserId, convs: ConversationStorage, metadata: MetaDataService, convSync: ConversationsSyncHandler, msgsSync: MessagesSyncHandler, otrSync: OtrSyncHandler) {
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[LastReadSyncHandler]
 
   def postLastRead(convId: ConvId, time: Instant): Future[SyncResult] = {
     verbose(s"postLastRead($convId, $time)")
 
-    users.withSelfUserFuture { selfUserId =>
-      convs.get(convId) flatMap {
-        case Some(conv) =>
-          val msg = GenericMessage(Uid(), LastRead(conv.remoteId, time))
-          otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) map (_.fold(SyncResult(_), { _ => SyncResult.Success }))
-        case None =>
-          Future successful SyncResult(ErrorResponse.internalError(s"No conversation found for id: $convId"))
-      }
+    convs.get(convId) flatMap {
+      case Some(conv) if conv.lastRead.isAfter(time) => // no need to send this msg as lastRead was already advanced
+        Future successful SyncResult.Success
+      case Some(conv) =>
+        val msg = GenericMessage(Uid(), LastRead(conv.remoteId, time))
+        otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) map (_.fold(SyncResult(_), { _ => SyncResult.Success }))
+      case None =>
+        Future successful SyncResult(ErrorResponse.internalError(s"No conversation found for id: $convId"))
     }
   }
 }

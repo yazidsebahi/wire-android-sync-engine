@@ -20,19 +20,20 @@ package com.waz.service.assets
 import java.io.{File, FileNotFoundException}
 
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
-import android.media.MediaPlayer.OnSeekCompleteListener
-import android.media.{AudioManager, MediaPlayer, MediaRecorder}
+import android.media.AudioManager
 import android.net.Uri
 import android.telephony.TelephonyManager
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.ErrorType
+import com.waz.api.{AudioEffect, ErrorType}
 import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
-import com.waz.cache.{CacheEntry, CacheService}
+import com.waz.audioeffect.{AudioEffect => AVSEffect}
+import com.waz.cache.{CacheEntry, CacheService, Expiration}
 import com.waz.content.Mime
 import com.waz.model.{AssetId, ErrorData, Uid}
 import com.waz.service.assets.AudioLevels.peakLoudness
+import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.service.{ErrorsService, ZmsLifecycle}
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -40,10 +41,11 @@ import com.waz.utils.events.{ClockSignal, EventContext, EventStream, Signal}
 import org.threeten.bp
 import org.threeten.bp.Instant
 
+import scala.concurrent.Future.{failed, successful}
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
-import scala.util.control.NonFatal
-import scala.util.{Failure, Success, Try}
+import scala.util.Failure
+import scala.util.control.{NoStackTrace, NonFatal}
 
 class RecordAndPlayService(globalService: GlobalRecordAndPlayService, errors: ErrorsService, lifecycle: ZmsLifecycle) {
   import EventContext.Implicits.global
@@ -59,12 +61,14 @@ class RecordAndPlayService(globalService: GlobalRecordAndPlayService, errors: Er
   }(EventContext.Global)
 }
 
-class GlobalRecordAndPlayService(context: Context, cache: CacheService) {
+// invariant: only do side effects and/or access player/recorder during a transition
+class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
   import GlobalRecordAndPlayService._
   import Threading.Implicits.Background
 
   private lazy val stateSource = returning(Signal[State](Idle))(_.disableAutowiring())
   private lazy val saveDir = AssetService.assetDir(context)
+  private implicit def implicitContext: Context = context
 
   lazy val state: Signal[State] = stateSource
   lazy val audioManager = context.getSystemService(Context.AUDIO_SERVICE).asInstanceOf[AudioManager]
@@ -73,279 +77,240 @@ class GlobalRecordAndPlayService(context: Context, cache: CacheService) {
 
   context.registerReceiver(interruptionBroadcastReceiver, interruptionIntentFilter)
 
-  def play(id: AssetId, contentUri: Uri): Future[State] = {
-    transition {
-      case Idle =>
-        withAudioFocus()(playOrResumeTransition(id, Left(contentUri)))
-      case Playing(player, `id`) =>
-        KeepCurrent()
-      case Playing(player, ongoing) =>
-        Try(player.release())
-        Try(withAudioFocus()(playOrResumeTransition(id, Left(contentUri)))).recover {
-          case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start playback $id ($contentUri) after releasing playing $ongoing", Some(cause), Some(PLAYBACK_FAILURE))))
-        }.get
-      case Paused(player, `id`, playhead, _) =>
-        Try(withAudioFocus()(playOrResumeTransition(id, Right(player)))).recover {  // TODO if this fails, try reset, seek to playhead and then start
-          case NonFatal(cause) =>
-            Try(player.release())
-            Next(Idle, Some(Error(s"cannot resume playback $id ($contentUri)", Some(cause), Some(PLAYBACK_FAILURE))))
-        }.get
-      case Paused(player, ongoing, _, _) =>
-        Try(player.release())
-        Try(withAudioFocus()(playOrResumeTransition(id, Left(contentUri)))).recover {
-          case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start playback $id ($contentUri) after releasing paused $ongoing", Some(cause), Some(PLAYBACK_FAILURE))))
-        }.get
-      case rec @ Recording(_, ongoing, _, _, _) =>
-        Try(cancelOngoing(rec))
-        Try(withAudioFocus()(playOrResumeTransition(id, Left(contentUri)))).recover {
-          case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start playback $id ($contentUri) after canceling recording $ongoing", Some(cause), Some(PLAYBACK_FAILURE))))
-        }.get
-    } (s"error while starting playback $id ($contentUri)", Some(PLAYBACK_FAILURE))
-  }
-
-  private def playOrResumeTransition(id: AssetId, uriOrPlayer: Either[Uri, MediaPlayer]): Transition = {
-    val player = uriOrPlayer.fold(contentUri => createPlayer(id, contentUri), identity)
-    withCleanupOnFailure {
-      player.start()
-      Next(Playing(player, id))
-    } { cause =>
-      Try(player.release())
-      abandonAudioFocus()
-    }
-  }
-
-  private def createPlayer(id: AssetId, content: Uri) = returning(MediaPlayer.create(context, content)) { player =>
-    player.setOnCompletionListener(new CompletionHandler(id))
-    player.setOnErrorListener(new PlaybackErrorHandler(id))
-  }
-
-  private class CompletionHandler(id: AssetId) extends MediaPlayer.OnCompletionListener {
-    override def onCompletion(mp: MediaPlayer): Unit = transition {
-      case Playing(player, `id`) =>
-        Try(player.release())
-        Next(Idle)
-      case Paused(player, `id`, _, _) =>
-        Try(player.release())
-        Next(Idle)
-      case other =>
-        KeepCurrent(Some(Error(s"MediaPlayer signaled end of playback $id but state = $other")))
-    } (s"error while ending playback $id", Some(PLAYBACK_FAILURE))
-  }
-
-  private class PlaybackErrorHandler(id: AssetId) extends MediaPlayer.OnErrorListener {
-    override def onError(mp: MediaPlayer, what: Int, extra: Int): Boolean = {
-      transition { any =>
-        Try(mp.release())
-        Next(Idle, Some(Error(s"playback $id failed; what: $what, extra: $extra, state = $any", None, Some(PLAYBACK_FAILURE))))
-      } (s"error during playback $id", Some(PLAYBACK_FAILURE))
-      true
-    }
-  }
-
-  def pause(id: AssetId): Future[State] = transition {
+  def play(key: MediaKey, content: Content): Future[State] = transitionF {
     case Idle =>
-      KeepCurrent()
-    case Playing(player, `id`) =>
-      pauseTransition(id, player, false)
-    case Paused(_, `id`, _, _) =>
-      KeepCurrent()
-    case other =>
-      throw new IllegalStateException(s"state = $other")
-  } (s"error while pausing playback $id", Some(PLAYBACK_FAILURE))
+      withAudioFocus()(playOrResumeTransition(key, Left(content)))
+    case Playing(player, `key`) =>
+      successful(KeepCurrent())
+    case Playing(player, ongoing) =>
+      player.release().recoverWithLog().flatMap(_ => withAudioFocus()(playOrResumeTransition(key, Left(content)))).recover {
+        case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start playback $key ($content) after releasing playing $ongoing", Some(cause), Some(PLAYBACK_FAILURE))))
+      }
+    case Paused(player, `key`, playhead, _) =>
+      withAudioFocus()(playOrResumeTransition(key, Right(player))).recoverWith {  // TODO if this fails, try reset, seek to playhead and then start
+        case NonFatal(cause) =>
+          player.release().recoverWithLog().map(_ => Next(Idle, Some(Error(s"cannot resume playback $key ($content)", Some(cause), Some(PLAYBACK_FAILURE)))))
+      }
+    case Paused(player, ongoing, _, _) =>
+      player.release().recoverWithLog().flatMap(_ => withAudioFocus()(playOrResumeTransition(key, Left(content)))).recover {
+        case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start playback $key ($content) after releasing paused $ongoing", Some(cause), Some(PLAYBACK_FAILURE))))
+      }
+    case rec @ Recording(_, ongoing, _, _, _) =>
+      cancelOngoingRecording(rec).flatMap { _ =>
+        withAudioFocus()(playOrResumeTransition(key, Left(content))).recover {
+          case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start playback $key ($content) after canceling recording $ongoing", Some(cause), Some(PLAYBACK_FAILURE))))
+        }
+      }
+  } (s"error while starting playback $key ($content)", Some(PLAYBACK_FAILURE))
 
-  private def pauseTransition(id: AssetId, player: MediaPlayer, transient: Boolean): Transition = Try {
-    player.pause()
-    abandonAudioFocus()
-    Next(Paused(player, id, bp.Duration.ofMillis(player.getCurrentPosition), transient))
-  } getOrElse {
-    player.release()
-    abandonAudioFocus()
-    Next(Idle)
+  private def playOrResumeTransition(key: MediaKey, contentOrPlayer: Either[Content, Player]): Future[Transition] =
+    Future(contentOrPlayer).flatMap(_.fold(content => Player(content, Observe(key)), successful)).flatMap { p =>
+      contentOrPlayer.fold(_ => p.start(), _ => p.resume()).map(_ => Next(Playing(p, key))).andThenFuture {
+        case Failure(cause) => p.release()
+      }
+    }.andThen { case Failure(cause) => abandonAudioFocus() }
+
+  case class Observe(key: MediaKey) extends Player.Observer {
+    override def onCompletion(): Unit = transitionF {
+      case Playing(player, `key`) =>
+        player.release().recoverWithLog().map(_ => Next(Idle))
+      case Paused(player, `key`, _, _) =>
+        player.release().recoverWithLog().map(_ => Next(Idle))
+      case other =>
+        successful(KeepCurrent(Some(Error(s"Player signaled end of playback $key but state = $other"))))
+    } (s"error while ending playback $key")
+
+    override def onError(msg: String): Unit = transitionF {
+      case Playing(player, `key`) =>
+        player.release().recoverWithLog().map(_ => Next(Idle, Some(Error(s"error during playback $key: $msg", None, Some(PLAYBACK_FAILURE)))))
+      case other =>
+        warn(s"Received playback error signal (key = $key, msg: $msg) but state = $other")
+        successful(KeepCurrent())
+    } (s"error during playback $key", Some(PLAYBACK_FAILURE))
   }
 
-  def setPlayhead(id: AssetId, contentUri: Uri, playhead: bp.Duration): Future[State] = {
-    def seek(maybePlayer: Option[MediaPlayer] = None) = {
-      val player = maybePlayer.getOrElse(createPlayer(id, contentUri))
-      withCleanupOnFailure {
-        val promisedSeek = Promise[MediaPlayer]
-        player.setOnSeekCompleteListener(new OnSeekCompleteListener {
-          override def onSeekComplete(mp: MediaPlayer): Unit = {
-            player.setOnSeekCompleteListener(null)
-            promisedSeek.success(mp)
-          }
-        })
-        player.seekTo(playhead.toMillis.toInt)
-        promisedSeek.future
-      } { cause =>
-        if (maybePlayer.isEmpty) Try(player.release())
+  def pause(key: MediaKey): Future[State] = transitionF {
+    case Idle =>
+      successful(KeepCurrent())
+    case Playing(player, `key`) =>
+      pauseTransition(key, player, false)
+    case Paused(_, `key`, _, _) =>
+      successful(KeepCurrent())
+    case other =>
+      failed(new IllegalStateException(s"state = $other"))
+  } (s"error while pausing playback $key", Some(PLAYBACK_FAILURE))
+
+  private def pauseTransition(key: MediaKey, player: Player, transient: Boolean): Future[Transition] =
+    player.pause() map { media =>
+      abandonAudioFocus()
+      Next(Paused(player, key, media, transient))
+    } recoverWith {
+      case NonFatal(cause) => player.release().map { _ =>
+        abandonAudioFocus()
+        Next(Idle)
       }
     }
 
-    def releaseOngoingAndSeek(res: Either[Recording, MediaPlayer], ongoing: AssetId) = Future {
-      verbose(s"releasing $ongoing to seek $id to $playhead")
-      res.fold(cancelOngoing, _.release())
-    }.flatMap(_ => seek().map(p => Next(Paused(p, id, playhead)))).recover {
-      case NonFatal(cause) => Next(Idle, Some(Error(s"cannot seek $id to $playhead after stopping $ongoing", Some(cause))))
+  def setPlayhead(key: MediaKey, content: Content, playhead: bp.Duration): Future[State] = {
+    def seek(maybePlayer: Option[Player] = None) =
+      maybePlayer.fold2(Player(content, Observe(key)), successful).flatMap { player =>
+        player.repositionPlayhead(playhead).map(_ => returning(player)(_ => verbose(s"repositioned playhead: $playhead"))).andThenFuture {
+          case Failure(cause) => if (maybePlayer.isEmpty) player.release() else successful(())
+       }
+      }
+
+    def releaseOngoingAndSeek(res: Either[Recording, Player], ongoing: MediaKey) = {
+      verbose(s"releasing $ongoing to seek $key to $playhead")
+      res.fold(rec => cancelOngoingRecording(rec), _.release())
+    }.flatMap(_ => seek().map(p => Next(Paused(p, key, MediaPointer(content, playhead))))).recover {
+      case NonFatal(cause) => Next(Idle, Some(Error(s"cannot seek $key to $playhead after stopping $ongoing", Some(cause))))
     }.andThen {
       case _ => abandonAudioFocus()
     }
 
     transitionF {
-      case Idle                                 => seek().map(p => Next(Paused(p, id, playhead)))
-      case Playing(player, `id`)                => seek(Some(player)).map(_ => KeepCurrent())
-      case Paused(player, `id`, _, _)           => seek(Some(player)).map(p => Next(Paused(p, id, playhead)))
+      case Idle                                 => seek().map(p => Next(Paused(p, key, MediaPointer(content, playhead))))
+      case Playing(player, `key`)               => seek(Some(player)).map(_ => KeepCurrent())
+      case Paused(player, `key`, _, _)          => seek(Some(player)).map(p => Next(Paused(p, key, MediaPointer(content, playhead))))
       case Playing(player, ongoing)             => releaseOngoingAndSeek(Right(player), ongoing)
       case Paused(player, ongoing, _, _)        => releaseOngoingAndSeek(Right(player), ongoing)
       case rec @ Recording(_, ongoing, _, _, _) => releaseOngoingAndSeek(Left(rec), ongoing)
     }(s"error while setting playhead")
   }
 
-  def playhead(id: AssetId): Signal[bp.Duration] = stateSource flatMap {
-    case Playing(_, `id`) =>
+  def playhead(key: MediaKey): Signal[bp.Duration] = stateSource flatMap {
+    case Playing(_, `key`) =>
       new ClockSignal(tickInterval).flatMap { i =>
-        Signal.future(duringIdentityTransition { case Playing(player, `id`) => player.getCurrentPosition.millis.asJava })
+        Signal.future(duringIdentityTransition { case Playing(player, `key`) => player.playhead })
       }
-    case Paused(player, `id`, playhead, _) =>
-      Signal.const(playhead)
+    case Paused(player, `key`, media, _) =>
+      Signal.const(media.playhead)
     case other =>
       Signal.const(bp.Duration.ZERO)
   }
 
-  def isPlaying(id: AssetId): Signal[Boolean] = stateSource.map {
-    case Playing(_, `id`) => true
+  def isPlaying(key: MediaKey): Signal[Boolean] = stateSource.map {
+    case Playing(_, `key`) => true
     case other => false
   }
 
-  def recordingLevel(id: AssetId): EventStream[Float] =
+  def recordingLevel(key: AssetMediaKey): EventStream[Float] =
     stateSource.flatMap {
-      case Recording(_, `id`, _, _, _) =>
+      case Recording(_, `key`, _, _, _) =>
         new ClockSignal(tickInterval).flatMap { i =>
-          Signal.future(duringIdentityTransition { case Recording(recorder, `id`, _, _, _) => (peakLoudness(recorder.getMaxAmplitude), i) })
+          Signal.future(duringIdentityTransition { case Recording(recorder, `key`, _, _, _) => successful((peakLoudness(recorder.maxAmplitudeSinceLastCall), i)) })
         }
       case other => Signal.empty[(Float, Instant)]
     }.onChanged.map { case (level, _) => level }
 
-  def record(id: AssetId, maxAllowedAssetSizeInBytes: Long): Future[(Instant, Future[RecordingResult])] = {
+  def record(key: AssetMediaKey, maxAllowedDuration: FiniteDuration): Future[(Instant, Future[RecordingResult])] = {
     def record(): Future[Next] = withAudioFocus() {
-      cache.createForFile(id.str, Mime.Audio.MP4, cacheLocation = Some(saveDir)) map { entry =>
+      cache.createForFile(unencodedCacheKey(key.id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
         val promisedAsset = Promise[RecordingResult]
-        val recorder = new MediaRecorder()
         withCleanupOnFailure {
-          prepareRecorder(recorder, entry.cacheFile, maxAllowedAssetSizeInBytes)
-          val handler = new RecordingErrorHandler(id)
-          recorder.setOnErrorListener(handler)
-          recorder.setOnInfoListener(handler)
-          recorder.start()
           val start = Instant.now
-          Next(Recording(recorder, id, start, entry, promisedAsset))
+          val recorder = startRecording(entry.cacheFile, maxAllowedDuration)
+
+          recorder.onLengthLimitReached {
+            verbose(s"recording $key reached the file size limit")
+            stopRecording(key)
+          }
+
+          recorder.onError { cause =>
+            transition {
+              case Recording(recorder, `key`, _, _, promisedAsset) =>
+                error(s"recording $key failed", cause)
+                promisedAsset.tryFailure(cause)
+                abandonAudioFocus()
+                Next(Idle)
+              case other =>
+                KeepCurrent()
+            } ("onError failed")
+          }
+
+          Next(Recording(recorder, key, start, entry, promisedAsset))
         } { cause =>
           entry.delete()
-          Try(recorder.release())
         }
       }
     } andThen {
       case Failure(cause) => abandonAudioFocus()
     }
 
-    def releaseOngoingAndRecord(res: Either[Recording, MediaPlayer], ongoing: AssetId) = Future {
-      verbose(s"releasing $ongoing to start recording $id")
-      res.fold(cancelOngoing, _.release())
+    def releaseOngoingAndRecord(res: Either[Recording, Player], ongoing: MediaKey) = {
+      verbose(s"releasing $ongoing to start recording $key")
+      res.fold(rec => cancelOngoingRecording(rec), _.release())
     }.flatMap(_ => record()).recover {
-      case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start recording $id after stopping $ongoing", Some(cause), Some(RECORDING_FAILURE))))
+      case NonFatal(cause) => Next(Idle, Some(Error(s"cannot start recording $key after stopping $ongoing", Some(cause), Some(RECORDING_FAILURE))))
     }
 
     transitionF {
-      case Idle                                        => record()
-      case Playing(player, ongoing)                    => releaseOngoingAndRecord(Right(player), ongoing)
-      case Paused(player, ongoing, _, _)               => releaseOngoingAndRecord(Right(player), ongoing)
-      case rec @ Recording(recorder, ongoing, _, _, _) => releaseOngoingAndRecord(Left(rec), ongoing)
-    }(s"error while starting audio recording $id", Some(RECORDING_FAILURE)).map {
-      case Recording(_, `id`, start, _, promisedAsset) => (start, promisedAsset.future)
-      case other                                       => throw new IllegalStateException(s"recording not started; state = $other")
+      case Idle                                         => record()
+      case Playing(player, ongoing)                     => releaseOngoingAndRecord(Right(player), ongoing)
+      case Paused(player, ongoing, _, _)                => releaseOngoingAndRecord(Right(player), ongoing)
+      case rec @ Recording(recorder, ongoing, _, _, _)  => releaseOngoingAndRecord(Left(rec), ongoing)
+    }(s"error while starting audio recording $key", Some(RECORDING_FAILURE)).map {
+      case Recording(_, `key`, start, _, promisedAsset) => (start, promisedAsset.future)
+      case other                                        => throw new IllegalStateException(s"recording not started; state = $other")
     }
   }
 
-  private class RecordingErrorHandler(id: AssetId) extends MediaRecorder.OnErrorListener with MediaRecorder.OnInfoListener {
-    @volatile var limitReached = false
+  protected def startRecording(destination: File, lengthLimit: FiniteDuration): PCMRecorder = PCMRecorder.startRecording(destination, lengthLimit)
 
-    override def onInfo(mr: MediaRecorder, what: Int, extra: Int): Unit =
-      if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED) {
-        verbose(s"recording $id reached the file size limit")
-        limitReached = true
-        stopRecording(id, true)
+  def stopRecording(key: AssetMediaKey): Future[State] = transitionF {
+    case rec @ Recording(recorder, `key`, start, entry, promisedAsset) =>
+      recorder.stopRecording() map { cause =>
+        if (entry.cacheFile.exists) promisedAsset.trySuccess(RecordingSuccessful(AudioAssetForUpload(key.id, entry, PCM.durationFromByteCount(entry.length), applyAudioEffect _), cause == PCMRecorder.LengthLimitReached))
+        else promisedAsset.tryFailure(new FileNotFoundException(s"audio file does not exist after recording: ${entry}"))
+        Next(Idle)
+      } andThen {
+        case _ => abandonAudioFocus()
       }
+    case other =>
+      failed(new IllegalStateException(s"state = $other"))
+  } (s"error while stopping audio recording $key", Some(RECORDING_FAILURE))
 
-    override def onError(mr: MediaRecorder, what: Int, extra: Int): Unit = if (! limitReached) transition {
-      case Recording(recorder, `id`, _, _, promisedAsset) =>
-        error(s"recording $id failed; what: $what, extra: $extra")
-        promisedAsset.tryFailure(new RuntimeException(s"recording $id failed; what: $what, extra: $extra"))
-        Try(mr.release())
+  def cancelRecording(key: AssetMediaKey): Future[State] = transitionF {
+    case rec @ Recording(_, `key`, _, _, _) =>
+      cancelOngoingRecording(rec).map { _ =>
         abandonAudioFocus()
         Next(Idle)
-      case other =>
-        KeepCurrent()
-    } ("onError failed")
-  }
-
-  def stopRecording(id: AssetId, fileSizeLimitReached: Boolean): Future[State] = transition {
-    case rec @ Recording(recorder, `id`, start, entry, promisedAsset) =>
-      try Try(recorder.stop) match {
-        case Success(()) =>
-          if (entry.cacheFile.exists) promisedAsset.trySuccess(RecordingSuccessful(AudioAssetForUpload(id, entry, bp.Duration.between(start, Instant.now)), fileSizeLimitReached))
-          else promisedAsset.tryFailure(new FileNotFoundException(s"audio file does not exist after recording: ${entry}"))
-          Next(Idle)
-        case Failure(exc: IllegalStateException) => throw exc
-        case Failure(exc: RuntimeException) => cancelOngoing(rec); Next(Idle) // recording was stopped so soon that nothing was recorded and there probably is an invalid file
-        case Failure(other) => throw other
-      } finally {
-        recorder.release()
-        abandonAudioFocus()
       }
     case other =>
-      throw new IllegalStateException(s"state = $other")
-  } (s"error while stopping audio recording $id", Some(RECORDING_FAILURE))
+      successful(KeepCurrent())
+  } (s"error while cancelling audio recording $key", Some(RECORDING_FAILURE))
 
-  def cancelRecording(id: AssetId): Future[State] = transition {
-    case rec @ Recording(_, `id`, _, _, _) =>
-      cancelOngoing(rec)
-      abandonAudioFocus()
-      Next(Idle)
-    case other =>
-      KeepCurrent()
-  } (s"error while cancelling audio recording $id", Some(RECORDING_FAILURE))
-
-  private def prepareRecorder(recorder: MediaRecorder, destination: File, maxAllowedAssetSizeInBytes: Long) = {
-    recorder.setAudioSource(recorder.AudioSource.MIC)
-    recorder.setOutputFormat(recorder.OutputFormat.MPEG_4)
-    recorder.setOutputFile(destination.getAbsolutePath)
-    recorder.setAudioEncoder(recorder.AudioEncoder.AAC)
-    recorder.setAudioChannels(1)
-    recorder.setAudioSamplingRate(44100)
-    recorder.setAudioEncodingBitRate(1 << 16)
-    recorder.setMaxFileSize(maxAllowedAssetSizeInBytes)
-    recorder.prepare() // may throw IOException
-  }
-
-  private def cancelOngoing(rec: Recording): Unit = {
-    Try(rec.recorder.release())
+  private def cancelOngoingRecording(rec: Recording): Future[Unit] = rec.recorder.cancelRecording().recoverWithLog().map { _ =>
     rec.entry.delete()
     rec.promisedAsset.trySuccess(RecordingCancelled)
   }
 
-  def releaseAnyOngoing(ids: Set[AssetId]): Future[State] = transition {
-    case Playing(player, id) if ids(id) =>
-      Try(player.release())
-      abandonAudioFocus()
-      Next(Idle)
-    case Paused(player, id, _, _) if ids(id) =>
-      Try(player.release())
-      Next(Idle)
-    case rec @ Recording(_, id, _, _, _) if ids(id) =>
-      cancelOngoing(rec)
-      abandonAudioFocus()
-      Next(Idle)
-    case other => KeepCurrent()
-  }(s"error cancelling any ongoing $ids")
+  def releaseAnyOngoing(keys: Set[MediaKey]): Future[State] = transitionF {
+    case Playing(player, key) if keys(key) =>
+      player.release().recoverWithLog().map(_ => Next(Idle)).andThen { case _ => abandonAudioFocus() }
+    case Paused(player, key, _, _) if keys(key) =>
+      player.release().recoverWithLog().map(_ => Next(Idle))
+    case rec @ Recording(_, key, _, _, _) if keys(key) =>
+      cancelOngoingRecording(rec).map { _ =>
+        abandonAudioFocus()
+        Next(Idle)
+      }
+    case other => successful(KeepCurrent())
+  }(s"error cancelling any ongoing $keys")
+
+  def applyAudioEffect(effect: AudioEffect, pcmFile: File): Future[AudioAssetForUpload] = {
+    val id = AssetId()
+    cache.createForFile(unencodedCacheKey(id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
+      withCleanupOnFailure {
+        val fx = new AVSEffect
+        try {
+          val result = fx.applyEffectPCM(pcmFile.getAbsolutePath, entry.cacheFile.getAbsolutePath, PCM.sampleRate, effect.avsOrdinal, true)
+          if (result < 0) throw new RuntimeException(s"applyEffectPCM returned error code: $result")
+          AudioAssetForUpload(id, entry, PCM.durationFromByteCount(entry.length), applyAudioEffect _)
+        } finally fx.destroy
+      }(_ => entry.delete)
+    }(Threading.BlockingIO)
+  }
 
   private def abandonAudioFocus(): Unit = audioManager.abandonAudioFocus(AudioFocusListener)
 
@@ -378,24 +343,24 @@ class GlobalRecordAndPlayService(context: Context, cache: CacheService) {
     override def onAudioFocusChange(focusChange: Int): Unit = focusChange match {
       case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT =>
         verbose("audio focus lost (transient)")
-        transition {
-          case Playing(player, id)             => pauseTransition(id, player, true)
-          case rec @ Recording(_, id, _, _, _) => cancelOngoing(rec); Next(Idle)
-          case other                           => KeepCurrent()
+        transitionF {
+          case Playing(player, key)             => pauseTransition(key, player, true)
+          case rec @ Recording(_, key, _, _, _) => cancelOngoingRecording(rec).map(_ => Next(Idle))
+          case other                            => successful(KeepCurrent())
         }(s"error while handling transient audio focus loss")
       case AudioManager.AUDIOFOCUS_GAIN =>
         verbose("audio focus gained")
-        transition {
-          case Paused(player, id, _, true) => playOrResumeTransition(id, Right(player))
-          case other                       => KeepCurrent()
+        transitionF {
+          case Paused(player, key, _, true) => playOrResumeTransition(key, Right(player))
+          case other                        => successful(KeepCurrent())
         }(s"error while handling audio focus gain")
       case AudioManager.AUDIOFOCUS_LOSS =>
         verbose("audio focus lost")
         abandonAudioFocus()
-        transition {
-          case Playing(player, id)             => pauseTransition(id, player, false)
-          case rec @ Recording(_, id, _, _, _) => cancelOngoing(rec); Next(Idle)
-          case other                           => KeepCurrent()
+        transitionF {
+          case Playing(player, key)             => pauseTransition(key, player, false)
+          case rec @ Recording(_, key, _, _, _) => cancelOngoingRecording(rec).map(_ => Next(Idle))
+          case other                            => successful(KeepCurrent())
         }(s"error while handling transient audio focus loss")
       case other =>
         warn(s"unknown audio focus change: $other")
@@ -409,14 +374,24 @@ class GlobalRecordAndPlayService(context: Context, cache: CacheService) {
   private def transitionF(f: State => Future[Transition])(errorMessage: String, errorType: Option[ErrorType] = None): Future[State] =
     Serialized.future(GlobalRecordAndPlayService)(keepStateOnFailure(stateSource.head.flatMap(f))(errorMessage, errorType).map(applyState))
 
-  private def duringIdentityTransition[A](pf: PartialFunction[State, A]): Future[A] = {
+  private def duringIdentityTransition[A](pf: PartialFunction[State, Future[A]]): Future[A] = {
     val p = Promise[A]
-    transition(state => returning(KeepCurrent()) { _ =>
-      if (pf.isDefinedAt(state)) Try(pf(state)) match {
-        case Success(a) => p.success(a)
-        case Failure(cause) => p.failure(cause)
+
+    transitionF { state =>
+      if (pf.isDefinedAt(state))
+        try pf(state).map { a =>
+          p.success(a)
+          KeepCurrent()
+        } catch {
+          case cause: Throwable =>
+            p.failure(cause)
+            failed(cause)
+      } else {
+        p.failure(new NoSuchElementException(s"partial function not defined at $state") with NoStackTrace)
+        successful(KeepCurrent())
       }
-    }) ("identity transition failed")
+    } ("identity transition failed")
+
     p.future
   }
 
@@ -444,18 +419,32 @@ object GlobalRecordAndPlayService {
 
   sealed trait State
   case object Idle extends State
-  case class Playing(player: MediaPlayer, id: AssetId) extends State
-  case class Paused(player: MediaPlayer, id: AssetId, playhead: bp.Duration, transient: Boolean = false) extends State
-  case class Recording(recorder: MediaRecorder, id: AssetId, start: Instant, entry: CacheEntry, promisedAsset: Promise[RecordingResult]) extends State
+  case class Playing(player: Player, key: MediaKey) extends State
+  case class Paused(player: Player, key: MediaKey, playhead: MediaPointer, transient: Boolean = false) extends State
+  case class Recording(recorder: PCMRecorder, key: MediaKey, start: Instant, entry: CacheEntry, promisedAsset: Promise[RecordingResult]) extends State
 
   sealed trait RecordingResult
   case object RecordingCancelled extends RecordingResult
-  case class RecordingSuccessful(asset: api.AudioAssetForUpload, fileSizeLimitReached: Boolean) extends RecordingResult
+  case class RecordingSuccessful(asset: api.AudioAssetForUpload, lengthLimitReached: Boolean) extends RecordingResult
 
   sealed abstract class Transition(val changedState: Option[State], val error: Option[Error])
   case class KeepCurrent(override val error: Option[Error] = None) extends Transition(None, error)
   case class Next(state: State, override val error: Option[Error] = None) extends Transition(Some(state), error)
   case class Error(message: String, cause: Option[Throwable] = None, tpe: Option[ErrorType] = None)
 
-  val tickInterval = 50.millis
+  sealed trait MediaKey
+  case class AssetMediaKey(id: AssetId) extends MediaKey
+  case class UriMediaKey(uri: Uri) extends MediaKey
+
+  sealed trait Content
+  case class UnauthenticatedContent(uri: Uri) extends Content
+  case class PCMContent(file: File) extends Content
+  case class SpotifyContent(uri: Uri, auth: () => Future[Authentication]) extends Content
+
+  case class MediaPointer(content: Content, playhead: bp.Duration)
+
+  val tickInterval = 30.millis
+  val recordingExpiration = Expiration in 7.days
+
+  def unencodedCacheKey(id: AssetId) = s"${id.str}-unencoded"
 }

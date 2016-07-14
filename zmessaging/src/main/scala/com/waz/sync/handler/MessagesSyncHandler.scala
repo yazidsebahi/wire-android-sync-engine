@@ -131,11 +131,23 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
 
 
     def post: ErrorOr[Instant] = msg.msgType match {
-      case Message.Type.ASSET => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
-      case MessageData.IsAsset() => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
-      case Message.Type.KNOCK => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
-      case Message.Type.TEXT | Message.Type.RICH_MEDIA => otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)).map(_.map(_.instant))
-      case tpe => successful(Left(internalError(s"Unsupported message type in postOtrMessage: $tpe")))
+      case Message.Type.ASSET       => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
+      case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
+      case Message.Type.KNOCK       => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
+      case Message.Type.TEXT        => otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)).map(_.map(_.instant))
+      case Message.Type.RICH_MEDIA  =>
+        otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)) flatMap {
+          case Right(time) => sync.postOpenGraphData(conv.id, msg.id) map { _ => Right(time.instant) }
+          case Left(err) => Future successful Left(err)
+        }
+      case tpe =>
+        msg.protos.headOption match {
+          case Some(proto) =>
+            verbose(s"sending generic message: $proto")
+            otrSync.postOtrMessage(conv, proto).map(_.map(_.instant))
+          case None =>
+            successful(Left(internalError(s"Unsupported message type in postOtrMessage: $tpe")))
+        }
     }
 
     post flatMap {
@@ -186,7 +198,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
 
     def postPreview(): CancellableFuture[Option[Instant]] =
       assetPreview.getAssetWithPreview(msg.assetId) flatMap {
-        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Image(img @ ImageData(tag, mime, w, h, _, _, size, _, _, _, _, _, _, _))), _, AssetStatus.MetaDataSent, _)) =>
+        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Image(img @ ImageData(tag, mime, w, h, _, _, size, _, _, _, _, _, _, _))), _, _, AssetStatus.MetaDataSent, _)) =>
           CancellableFuture lift cache.getEntry(img.cacheKey) flatMap {
             case None =>
               error(s"No cache entry found for asset preview: $img")
@@ -199,7 +211,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                 case Left(err) =>
                   warn(s"postAssetData failed: $err for msg: $msg")
                   CancellableFuture successful None
-                case Right((AssetKey(id, _, sha), time)) =>
+                case Right((AssetKey(Left(id), _, _, sha), time)) =>
                   val preview = img.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha))
                   CancellableFuture lift {
                     for {
@@ -208,9 +220,12 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                      _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
                     } yield Some(time.instant)
                   }
+                case Right((k, _)) =>
+                  error(s"postAssetData unexpected result $k")
+                  CancellableFuture successful None
               }
           }
-        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Loudness(levels)), _, AssetStatus.MetaDataSent, _)) =>
+        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Loudness(levels)), _, _, AssetStatus.MetaDataSent, _)) =>
           postAssetOriginal(asset, AssetStatus.PreviewSent).map(_.toOption(resp => error(s"sending audio overview failed: $resp")))
         case _ =>
           verbose(s"No preview found for asset, ignoring")
@@ -227,9 +242,9 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
           def proto(sha: Sha256) = {
             val as = asset.preview match {
               case Some(AssetPreviewData.Image(img @ ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
-                Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(AssetKey(RAssetDataId(), key, sha)))
+                Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
               case _ =>
-                Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(RAssetDataId(), key, sha)))
+                Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
             }
             GenericMessage(msg.id, as)
           }
@@ -238,7 +253,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             case Left(err) =>
               warn(s"postAssetData failed: $err for msg: $msg")
               CancellableFuture successful Left(err)
-            case Right((ak @ AssetKey(id, k, sha), time)) =>
+            case Right((ak @ AssetKey(Left(id), _, k, sha), time)) =>
               CancellableFuture lift {
                 for {
                   Some(updated) <- assets.storage.updateAsset(asset.id, a => a.copy(status = UploadDone(ak), lastUpdate = time.instant))
@@ -246,6 +261,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                   _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
                 } yield Right(time.instant)
               }
+            case Right((k, _)) =>
+              CancellableFuture successful Left(ErrorResponse.internalError(s"postAssetData - unexpected result: $k"))
           }
         case asset =>
           verbose(s"No asset data found in postAssetData, got: $asset")
@@ -269,20 +286,18 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
   }
 
-  private def updateLocalTimes(conv: ConvId, prevTime: Instant, time: Instant) =
-    msgContent.updateLocalMessageTimes(conv, prevTime, time) flatMap { updated =>
-      val prevLastTime = updated.lastOption.fold(prevTime)(_._1.time)
-      val lastTime = updated.lastOption.fold(time)(_._2.time)
-      convs.storage.update(conv,
-        c => if (!c.lastRead.isAfter(prevLastTime)) c.copy(lastRead = lastTime) else c
-      ) flatMap {
-        case Some((_, c)) => sync.postLastRead(c.id, c.lastRead)
-        case None => successful(())
-      }
-    }
-
   private[waz] def messageSent(convId: ConvId, msg: MessageData, time: Instant) = {
     debug(s"otrMessageSent($convId. $msg, $time)")
+
+    def updateLocalTimes(conv: ConvId, prevTime: Instant, time: Instant) =
+      msgContent.updateLocalMessageTimes(conv, prevTime, time) flatMap { updated =>
+        val prevLastTime = updated.lastOption.fold(prevTime)(_._1.time)
+        val lastTime = updated.lastOption.fold(time)(_._2.time)
+        // update conv lastRead time if there is no unread message after the message that was just sent
+        convs.storage.update(conv,
+          c => if (!c.lastRead.isAfter(prevLastTime)) c.copy(lastRead = lastTime) else c
+        )
+      }
 
     for {
       _ <- updateLocalTimes(convId, msg.time, time)

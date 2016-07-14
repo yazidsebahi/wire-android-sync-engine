@@ -19,6 +19,7 @@ package com.waz
 
 import java.security.MessageDigest
 import java.util.Date
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 
 import android.net.Uri
@@ -38,8 +39,8 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
 import scala.math.{Ordering, abs}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import scala.{PartialFunction => =/>}
 
 package object utils {
   def updateListener(body: => Unit) = new UpdateListener {
@@ -59,7 +60,7 @@ package object utils {
     def apply(s: String): String
   }
 
-  def withCleanupOnFailure[A](f: => A)(pf: Throwable => Unit): A = try f catch { case NonFatal(cause) => pf(cause); throw cause }
+  def withCleanupOnFailure[A](f: => A)(pf: Throwable => Unit): A = try f catch { case cause: Throwable => pf(cause); throw cause }
 
   def force[A](s: Seq[A]) = s match {
     case _: Stream[_] => s.toVector
@@ -185,9 +186,19 @@ package object utils {
     def zip[B](f: Future[B])(implicit executor: ExecutionContext) = RichFuture.zip(a, f)
     def recoverWithLog(reportHockey: Boolean = false)(implicit tag: LogTag): Future[Unit] = RichFuture.recoverWithLog(a, reportHockey)
     def lift: CancellableFuture[A] = CancellableFuture.lift(a)
+    def andThenFuture[B](pf: Try[A] =/> Future[B])(implicit ec: ExecutionContext): Future[A] = {
+      val p = Promise[A]
+      a.onComplete(t => if (pf isDefinedAt t) try pf(t).andThen { case _ => p.complete(t) } catch { case _: Throwable => p.complete(t) } else p.complete(t))
+      p.future
+    }
 
     def logFailure(reportHockey: Boolean = false)(implicit tag: LogTag): Future[A] =
       a.andThen { case Failure(cause) => LoggedTry.errorHandler(reportHockey)(implicitly)(cause) }(Threading.Background)
+
+    def withTimeout(t: FiniteDuration): Future[A] =
+      Future.firstCompletedOf(
+        Seq(a, CancellableFuture.delay(t).future.flatMap(_ => Future.failed(new TimeoutException(s"operation timed out after $t")))(Threading.Background))
+      )(Threading.Background)
   }
 
   implicit class RichFutureOpt[A](val a: Future[Option[A]]) extends AnyVal {

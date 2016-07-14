@@ -21,11 +21,11 @@ import android.content.Context
 import android.location.Geocoder
 import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState._
-import com.waz.api.{ClientRegistrationState, Verification, ZmsVersion}
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.{ClientRegistrationState, ZmsVersion}
 import com.waz.content.{KeyValueStorage, OtrClientsStorage}
-import com.waz.model.{AccountId, UserId}
 import com.waz.model.otr.{Client, ClientId, Location, UserClients}
+import com.waz.model.{AccountId, UserId}
 import com.waz.service.otr._
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient
@@ -34,8 +34,8 @@ import com.waz.utils.events.Signal
 import com.waz.utils.{Locales, LoggedTry, Serialized}
 import com.waz.znet.Response.Status
 
-import scala.concurrent.Future
 import scala.collection.breakOut
+import scala.concurrent.Future
 
 class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, otrClients: OtrClientsService, storage: OtrClientsStorage, cryptoBox: CryptoBoxService, kvStorage: KeyValueStorage) {
   import OtrClientsSyncHandler._

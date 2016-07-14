@@ -26,6 +26,7 @@ import com.waz.cache.CacheService
 import com.waz.client.RegistrationClient
 import com.waz.content.{AccountsStorage, Database, GlobalDatabase}
 import com.waz.service.assets.{AssetLoader, GlobalRecordAndPlayService}
+import com.waz.service.downloads.DownloadRequest.{AssetFromInputStream, UnencodedAudioAsset, VideoAsset}
 import com.waz.service.downloads._
 import com.waz.service.images.ImageLoader
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
@@ -52,14 +53,16 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val loginClient = wire[LoginClient]
   lazy val regClient: RegistrationClient = wire[RegistrationClient]
   lazy val downloader: DownloaderService = wire[DownloaderService]
-  lazy val streamLoader = new InputStreamAssetLoader(cache)
-  lazy val videoLoader = new VideoAssetLoader(context, cache)
+  lazy val streamLoader: Downloader[AssetFromInputStream] = wire[InputStreamAssetLoader]
+  lazy val videoLoader: Downloader[VideoAsset] = wire[VideoAssetLoader]
+  lazy val pcmAudioLoader: Downloader[UnencodedAudioAsset] = wire[UnencodedAudioAssetLoader]
 
   lazy val cacheCleanup = wire[CacheCleaningService]
 
   lazy val accountsStorage = wire[AccountsStorage]
   lazy val mediaManager = wire[MediaManagerService]
   lazy val recordingAndPlayback = wire[GlobalRecordAndPlayService]
+  lazy val tempFiles: TempFileService = wire[TempFileService]
 
   lazy val clientWrapper: ClientWrapper = ClientWrapper
   lazy val client: AsyncClient = new AsyncClient(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
@@ -67,7 +70,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val globalClient = new ZNetClient(global, "", "")
   lazy val imageLoader = {
     val client = new AssetClient(new ZNetClient(this, "", ""))
-    val loader: AssetLoader = new AssetLoader(context, downloader, new AssetDownloader(client, cache), streamLoader, videoLoader, cache)
+    val loader: AssetLoader = new AssetLoader(context, downloader, new AssetDownloader(client, cache), streamLoader, videoLoader, pcmAudioLoader, cache)
     new ImageLoader(context, cache, imageCache, bitmapDecoder, permissions, loader) { override def tag = "Global" }
   }
 

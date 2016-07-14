@@ -27,8 +27,7 @@
 
         <receiver android:name="com.waz.zms.UpdateBroadcastReceiver">
             <intent-filter>
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:path="com.waz.zms" android:scheme="package" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

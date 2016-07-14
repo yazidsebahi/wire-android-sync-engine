@@ -27,7 +27,6 @@ object GoogleMapsClient {
   def getStaticMapPath(location: GoogleMapsLocation, width: Int, height: Int): String = {
     val center = URLEncoder.encode(s"${location.x},${location.y}", "utf8")
     val zoom = URLEncoder.encode(location.zoom, "utf8")
-    val markers = URLEncoder.encode(s"color:red|${location.x},${location.y}", "utf8")
-    s"$StaticMapsPathBase?center=$center&zoom=$zoom&size=${width}x$height&markers=$markers"
+    s"$StaticMapsPathBase?center=$center&zoom=$zoom&size=${width}x$height"
   }
 }

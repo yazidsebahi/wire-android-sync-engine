@@ -119,7 +119,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         c.voice.getCallSessionId shouldEqual "meep-1-session-id"
         activeChannels.hasIncomingCall shouldEqual true
         activeChannels.getIncomingCall shouldEqual c.voice
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -151,7 +151,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         idsOfAll(c.voice.getParticipants: _*) should contain theSameElementsAs onlyMeep
         c.voice.getCallSessionId shouldEqual "meep-1-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -176,7 +176,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         foo.voice.getKindOfCall shouldEqual KindOfCall.ONE_TO_ONE
         activeChannels.hasIncomingCall shouldEqual true
         activeChannels.getIncomingCall shouldEqual foo.voice
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -203,7 +203,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         foo.voice.getCallSessionId shouldEqual "foo-1-session-id"
 
         activeChannels.hasIncomingCall shouldEqual false
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -224,7 +224,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
         activeChannels.hasIncomingCall shouldEqual true
         activeChannels.getIncomingCall shouldEqual c.voice
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -250,7 +250,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         foo.voice.getKindOfCall shouldEqual KindOfCall.ONE_TO_ONE
         idsOfAll(foo.voice.getParticipants: _*) should contain theSameElementsAs onlyFoo
         foo.voice.getCallSessionId shouldEqual "foo-2-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -271,7 +271,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasOngoingCall shouldEqual false
         activeChannels.hasIncomingCall shouldEqual true
         activeChannels.getIncomingCall shouldEqual foo.voice
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -287,7 +287,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasOngoingCall shouldEqual false
         activeChannels.hasIncomingCall shouldEqual false
         foo.voice.getCallSessionId shouldEqual "foo-2-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
   }
@@ -362,7 +362,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(c.voice).initiated should be ('defined)
         tracking(c.voice).joined shouldEqual None
         tracking(c.voice).established shouldEqual None
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
 
       callParticipants += c.event.convId -> participants(selfId -> true, UserId(c.id) -> true)
@@ -404,7 +404,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(c.voice).initiated should be ('defined)
         tracking(c.voice).joined should be ('defined)
         tracking(c.voice).established should be ('defined)
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -422,7 +422,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         c.voice.isDropped shouldEqual false
         idsOfAll(c.voice.getParticipants: _*) should contain theSameElementsAs meep
         c.voice.getCallSessionId shouldEqual "meep-3-session-id"
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -435,7 +435,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         Option(c.voice.getCaller).value.getId shouldEqual "meep"
         idsOfAll(c.voice.getParticipants: _*) should contain theSameElementsAs meep
         c.voice.getCallSessionId shouldEqual "meep-3-session-id"
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -479,7 +479,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         c.voice.getMillisDurationOfMostRecentCall shouldEqual (callEnd - callStart +- 25L)
         idsOfAll(c.voice.getParticipants: _*) should contain theSameElementsAs meep
         c.voice.getCallSessionId shouldEqual "meep-3-session-id"
-        callingEventsSpy.latestEvent.value should beMatching { case CallTransferred(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, CauseForCallEnd.TRANSFERRED, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallTransferred(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, CauseForCallEnd.TRANSFERRED, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -507,7 +507,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         c.voice.getCallStart.getTime shouldEqual (callStart +- 25L)
         idsOfAll(c.voice.getParticipants: _*) should contain theSameElementsAs meep
         c.voice.getCallSessionId shouldEqual "meep-3-session-id"
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -529,7 +529,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         c.voice.getCallStart.getTime shouldEqual (callStart +- 25L)
         idsOfAll(c.voice.getParticipants: _*) shouldBe empty
         c.voice.getCallSessionId shouldEqual "meep-3-session-id"
-        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, CauseForCallEnd.OTHER, 2, _) => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, CauseForCallEnd.OTHER, 2, _, false) => () }
       }
     }
   }
@@ -560,7 +560,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(c.voice).initiated should be ('defined)
         tracking(c.voice).joined shouldEqual None
         tracking(c.voice).established shouldEqual None
-        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
         spy.callJoinResult.value shouldEqual VCSCallJoined
       }
     }
@@ -583,7 +583,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         idsOfAll(c.voice.getParticipants: _*) should be(empty)
         c.voice.getCallSessionId shouldEqual "meep-4-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -605,7 +605,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         idsOfAll(c.voice.getParticipants: _*) should be(empty)
         c.voice.getCallSessionId shouldEqual "meep-4-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -628,7 +628,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         idsOfAll(c.voice.getParticipants: _*) shouldBe empty
         c.voice.getCallSessionId shouldEqual "meep-4-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
   }
@@ -663,7 +663,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasOngoingCall shouldEqual true
         activeChannels.hasIncomingCall shouldEqual false
         groupVoice.getCallSessionId shouldEqual "group-1-session-id"
-        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.GROUP, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.GROUP, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined shouldEqual None
         tracking(groupVoice).established shouldEqual None
@@ -688,8 +688,8 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined should be ('defined)
         tracking(groupVoice).established shouldEqual None
-        callingEventsSpy.events.tail.head shouldEqual RingingEnded(KindOfCall.GROUP, CallDirection.OUTGOING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode._4G)
-        callingEventsSpy.latestEvent.value should beMatching { case CallJoined(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode._4G, 2, 3, d) if !d.isZero => () }
+        callingEventsSpy.events.tail.head shouldEqual RingingEnded(KindOfCall.GROUP, CallDirection.OUTGOING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode._4G, false)
+        callingEventsSpy.latestEvent.value should beMatching { case CallJoined(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode._4G, 2, 3, d, false) if !d.isZero => () }
       }
 
       zmessaging.network.networkMode ! NetworkMode.WIFI
@@ -707,7 +707,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined should be ('defined)
         tracking(groupVoice).established should be ('defined)
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 2, 3, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 2, 3, d, false) if !d.isZero => () }
       }
     }
 
@@ -727,7 +727,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined should be ('defined)
         tracking(groupVoice).established should be ('defined)
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 2, 3, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 2, 3, d, false) if !d.isZero => () }
       }
     }
 
@@ -746,7 +746,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         groupVoice.getCallSessionId shouldEqual "group-1-session-id"
         groupVoice.isSilenced shouldEqual false
-        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 3, CauseForCallEnd.SELF, 3, _) => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 3, CauseForCallEnd.SELF, 3, _, false) => () }
       }
     }
 
@@ -764,7 +764,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         groupVoice.getCallSessionId shouldEqual "group-1-session-id"
         groupVoice.isSilenced shouldEqual false
-        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 3, CauseForCallEnd.SELF, 3, _) => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.GROUP, CallDirection.OUTGOING, false, true, NetworkMode.WIFI, 3, CauseForCallEnd.SELF, 3, _, false) => () }
       }
     }
 
@@ -786,7 +786,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined shouldEqual None
         tracking(groupVoice).established shouldEqual None
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.GROUP, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.GROUP, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -802,7 +802,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual true
         groupVoice.getCallSessionId shouldEqual "group-2-session-id"
         groupVoice.isSilenced shouldEqual false
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.GROUP, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.GROUP, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -823,7 +823,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined should be ('defined)
         tracking(groupVoice).established shouldEqual None
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.GROUP, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.GROUP, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
         spy.callJoinResult.value shouldEqual VCSCallJoined
       }
 
@@ -838,7 +838,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasOngoingCall shouldEqual true
         activeChannels.hasIncomingCall shouldEqual false
         groupVoice.getCallSessionId shouldEqual "group-2-session-id"
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 3, 3, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 3, 3, d, false) if !d.isZero => () }
       }
     }
 
@@ -858,7 +858,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         tracking(groupVoice).initiated should be ('defined)
         tracking(groupVoice).joined should be ('defined)
         tracking(groupVoice).established should be ('defined)
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 3, 3, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.GROUP, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 3, 3, d, false) if !d.isZero => () }
       }
     }
 
@@ -875,7 +875,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual false
         groupVoice.getCallSessionId shouldEqual "group-2-session-id"
         groupVoice.isSilenced shouldEqual false
-        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.GROUP, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 3, CauseForCallEnd.OTHER, 3, _) => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.GROUP, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 3, CauseForCallEnd.OTHER, 3, _, false) => () }
       }
     }
   }
@@ -983,7 +983,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         meep.voice.getState shouldEqual DeviceConnected
         activeChannels.hasIncomingCall shouldEqual false
         activeChannels.hasOngoingCall shouldEqual true
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, false, true, NetworkMode.WIFI, 2, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -1000,7 +1000,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         notificationsSpy.incomingCall.value.getConversationId shouldEqual "foo"
         notificationsSpy.incomingCall.value.getState shouldEqual OtherCalling
 
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = true, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = true, isConversationMuted = false, false)
       }
     }
 
@@ -1011,7 +1011,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         foo.voice.getState shouldEqual OtherCalling
         foo.voice.isSilenced shouldEqual true
         activeChannels.hasIncomingCall shouldEqual false
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -1020,7 +1020,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       withDelay {
         foo.voice.getState shouldEqual Idle
         foo.voice.isSilenced shouldEqual false
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -1038,7 +1038,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       incomingCall(meep, "incoming-2")
       withDelay {
         meep.voice.getState shouldEqual OtherCalling
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = false, false)
       }
     }
 
@@ -1046,7 +1046,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       meep.voice.silence()
       withDelay {
         meep.voice.getState shouldEqual OtherCalling
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -1054,7 +1054,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       cancelCall(meep)
       withDelay {
         meep.voice.getState shouldEqual Idle
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -1066,7 +1066,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       withDelay {
         meep.voice.getState shouldEqual OtherCalling
         meep.voice.isSilenced shouldEqual false
-        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = true)
+        callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = false, isConversationMuted = true, false)
       }
     }
 
@@ -1074,7 +1074,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       cancelCall(meep)
       withDelay {
         meep.voice.getState shouldEqual Idle
-        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
   }

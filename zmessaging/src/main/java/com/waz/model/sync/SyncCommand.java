@@ -59,6 +59,7 @@ public enum SyncCommand {
     PostLiking("post-liking"),
     PostSessionReset("post-session-reset"),
     PostAssetStatus("post-asset-status"),
+    PostOpenGraphMeta("post-og-meta"),
     Unknown("unknown");
 
     public final String name;

@@ -102,7 +102,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
                 Some(GenericMessageEvent(id, conv, time, from, extMsg).withLocalTime(ev.localTime))
             }
           case Right(GenericMessage(mId, SessionReset)) if metadata.internalBuild => // display session reset notifications in internal build
-             Some(GenericMessageEvent(id, conv, time, from, GenericMessage(mId, Text("System msg: session reset", Map.empty))))
+             Some(GenericMessageEvent(id, conv, time, from, GenericMessage(mId, Text("System msg: session reset", Map.empty, Nil))))
           case Right(GenericMessage(mId, SessionReset)) => None // ignore session reset notifications
           case Right(msg) =>
             Some(GenericMessageEvent(id, conv, time, from, msg).withLocalTime(ev.localTime))
@@ -129,7 +129,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
       msg  <- LoggedTry(GenericMessage(plain)).toOption
     } yield msg
 
-  private[otr] def decryptOtrEvent(ev: OtrEvent, retry: Int = 0): Future[Either[OtrError, GenericMessage]] =
+  private[otr] def decryptOtrEvent(ev: OtrEvent): Future[Either[OtrError, GenericMessage]] =
     clients.getOrCreateClient(ev.from, ev.sender) flatMap { _ =>
       decryptMessage(ev.from, ev.sender, ev.ciphertext)
         .map(Right(_))
@@ -140,14 +140,9 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
               case DUPLICATE_MESSAGE | OUTDATED_MESSAGE =>
                 verbose(s"detected duplicate message for event: $ev")
                 Future successful Left(Duplicate)
-              case REMOTE_IDENTITY_CHANGED if retry < 3 =>
+              case REMOTE_IDENTITY_CHANGED =>
                 reportOtrError(e, ev)
-                warn(s"Remote identity changed, will drop a session and try decrypting again", e)
-                for {
-                  _ <- sessions.deleteSession(sessionId(ev.from, ev.sender))
-                  _ <- clientsStorage.updateVerified(ev.from, ev.sender, verified = false)
-                  res <- decryptOtrEvent(ev, retry + 1)
-                } yield res
+                Future successful Left(IdentityChangedError(ev.from, ev.sender))
               case _ =>
                 reportOtrError(e, ev)
                 Future successful Left(DecryptionError(e.getMessage, ev.from, ev.sender))

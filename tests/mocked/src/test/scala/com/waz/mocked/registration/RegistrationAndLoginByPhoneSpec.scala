@@ -39,6 +39,7 @@ class RegistrationAndLoginByPhoneSpec extends FeatureSpec with MockedClientApiSp
     var confirmationSent = Option.empty[KindOfAccess]
     override def onConfirmationCodeSendingFailed(kindOfAccess: KindOfAccess, code: Int, message: String, label: String): Unit = ()
     override def onConfirmationCodeSent(kindOfAccess: KindOfAccess): Unit = confirmationSent = Some(kindOfAccess)
+    override def onPasswordExists(kindOfAccess: KindOfAccess): Unit = ()
   }
 
   override def requestPhoneConfirmationCode(phone : PhoneNumber, kindOfAccess : KindOfAccess) = {
@@ -58,13 +59,11 @@ class RegistrationAndLoginByPhoneSpec extends FeatureSpec with MockedClientApiSp
     }
 
     scenario("Normalize phone number when sending confirmation code") {
-      @volatile var confirmationSent = Option.empty[KindOfAccess]
       api.requestPhoneConfirmationCode("+4901234567890", KindOfAccess.REGISTRATION, PhoneVerificationSpy)
       withDelay { requestPhoneNumber shouldEqual Some(PhoneNumber("+491234567890"))}
     }
 
     scenario("Sending confirmation code falls back to non-normalized phone when normalization fails") {
-      @volatile var confirmationSent = Option.empty[KindOfAccess]
       api.requestPhoneConfirmationCode("+01234567890", KindOfAccess.REGISTRATION, PhoneVerificationSpy)
       withDelay { requestPhoneNumber shouldEqual Some(PhoneNumber("+01234567890"))}
     }

@@ -17,10 +17,11 @@
  */
 package com.waz.model.messages.media
 
-import com.waz.api.{Message, KindOfMedia, MediaProvider}
+import com.waz.api.{KindOfMedia, MediaProvider, Message}
 import com.waz.bitmap.BitmapUtils
-import com.waz.model.{ImageData, RConvId, ImageAssetData, AssetId}
-import org.threeten.bp.{Instant, Duration}
+import com.waz.model._
+import org.threeten.bp.{Duration, Instant}
+
 import scala.concurrent.duration._
 
 sealed trait MediaAssetData {

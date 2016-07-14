@@ -30,11 +30,12 @@ import com.waz.bitmap.video.VideoTranscoder
 import com.waz.cache.{CacheEntry, CacheService}
 import com.waz.content.Mime
 import com.waz.model._
-import com.waz.service.assets.AssetLoader
+import com.waz.service.TempFileService
+import com.waz.service.assets.{AssetLoader, AudioTranscoder}
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.sync.client.AssetClient
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.CancellableStream
+import com.waz.utils._
 import com.waz.utils.events.EventStream
 import com.waz.znet.Response.ResponseBodyDecoder
 import com.waz.znet.ResponseConsumer.FileConsumer
@@ -64,8 +65,10 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
 
   private def httpRequest(asset: AssetRequest, callback: Callback): Option[Request[Unit]] = asset match {
     case wa: WireAssetRequest =>
-      val path = wa.key.fold(AssetClient.getAssetPath(wa.convId, wa.remoteId)) { _ => AssetClient.getOtrAssetPath(wa.convId, wa.remoteId) }
-      Some(new Request[Unit](Request.GetMethod, Some(path), downloadCallback = Some(callback), decoder = Some(new AssetBodyDecoder(cache, wa.key, wa.sha))))
+      val path = AssetClient.getAssetPath(wa.convId, wa.key)
+      val headers = wa.key.token.fold(Map.empty[String, String])(t => Map("Asset-Token" -> t.str))
+      val decoder = new AssetBodyDecoder(cache, Option(wa.key.otrKey).filter(_ != AESKey.Empty), Option(wa.key.sha256).filter(_ != Sha256.Empty))
+      Some(new Request[Unit](Request.GetMethod, Some(path), downloadCallback = Some(callback), decoder = Some(decoder), headers = headers))
     case req: ExternalAssetRequest =>
       Some(req.request.copy(downloadCallback = Some(callback), decoder = Some(new AssetBodyDecoder(cache))))
     case LocalAssetRequest(_, _, _, _) => None
@@ -159,6 +162,25 @@ class VideoAssetLoader(context: Context, cache: => CacheService) extends Downloa
         HockeyApp.saveException(ex, s"video transcoding failed for uri: ${request.uri}")
         InputStreamAssetLoader.addStreamToCache(cache, request.cacheKey, AssetLoader.openStream(context, request.uri), request.mime, request.name)
     }
+  }
+}
+
+class UnencodedAudioAssetLoader(context: Context, cache: => CacheService, tempFiles: TempFileService) extends Downloader[UnencodedAudioAsset] {
+  import Threading.Implicits.Background
+
+  private implicit def tag: LogTag = logTagFor[UnencodedAudioAssetLoader]
+  private val transcode = new AudioTranscoder(tempFiles, context)
+
+  override def load(request: UnencodedAudioAsset, callback: Callback): CancellableFuture[Option[CacheEntry]] = {
+    val entry = cache.createManagedFile()
+
+    returning(transcode(request.uri, entry.cacheFile, callback).flatMap { _ =>
+      verbose(s"loaded audio from $request, resulting file size: ${entry.length}")
+      cache.move(request.cacheKey, entry, Mime.Audio.MP4, request.name, cacheLocation = Some(cache.cacheDir)).map(Some(_)).lift
+    })(_.onFailure {
+      case cause: CancellableFuture.CancelException => verbose(s"audio encoding cancelled: ${request.uri}")
+      case cause: Throwable => HockeyApp.saveException(cause, s"audio encoding failed for URI: ${request.uri}")
+    })
   }
 }
 

@@ -22,22 +22,29 @@ import java.io._
 import android.util.Base64
 import com.waz.api.ProvisionedApiSpec
 import com.waz.cache.LocalData
+import com.waz.content.Mime
+import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.otr.ClientId
-import com.waz.model.{AssetId, ConvId, ImageData, RAssetDataId}
-import com.waz.sync.client.AssetClient.OtrAssetMetadata
+import com.waz.model._
+import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}
+import com.waz.service.downloads.DownloadRequest.ImageAssetRequest
+import com.waz.service.images.BitmapSignal
+import com.waz.sync.client.AssetClient.{OtrAssetMetadata, Retention, UploadResponse}
 import com.waz.sync.client.OtrClient.EncryptedContent
+import com.waz.testutils.DefaultPatienceConfig
 import com.waz.threading.Threading
 import com.waz.utils.{IoUtils, returning}
-import org.robolectric.annotation.Config
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
+import com.waz.testutils.Matchers._
+import com.waz.utils.events.EventContext
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-@Config(manifest = "tests/OtrAndroidManifest.xml")
-class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ScalaFutures {
+class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ScalaFutures with DefaultPatienceConfig {
 
   val provisionFile = "/one_conversation.json"
 
@@ -67,7 +74,7 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
       info(s"got response: $res")
       res should be('right)
       val Right(img) = res
-      img shouldEqual data
+      img shouldEqual data.copy(data64 = None, sent = true, remoteId = img.remoteId)
     }
 
     scenario("post image asset") {
@@ -128,5 +135,43 @@ class ImageAssetClientSpec extends FeatureSpec with Matchers with ProvisionedApi
     }
 
     def randomArray(size: Int) = returning(new Array[Byte](size))(Random.nextBytes)
+  }
+
+  feature("assets v3 api") {
+    lazy val image = IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))
+
+    var asset: UploadResponse = null
+
+    scenario("Upload an asset") {
+      val resp = client.uploadAsset(LocalData(image), Mime.Image.PNG, retention = Retention.Volatile).future.futureValue
+      resp shouldBe 'right
+      asset = resp.right.get
+      asset.token shouldBe 'defined
+    }
+
+    scenario("Download the asset") {
+      asset should not be null
+
+      val res = zmessaging.assetLoader.getAssetData(new ImageAssetRequest(asset.key.str, RConvId(), AssetKey(Right(asset.key), asset.token, AESKey.Empty, Sha256.Empty), Mime.Image.PNG)).future.futureValue
+      res shouldBe defined
+      IoUtils.toByteArray(res.get.inputStream).toSeq shouldEqual image.toSeq
+    }
+
+    scenario("Load asset using ProtoBitmapSignal") {
+      val proto = GenericContent.Asset(Original(Mime.Image.PNG, image.length, None, Some(AssetMetaData.Image(Dim2(480, 492), None))), UploadDone(AssetKey(Right(asset.key), asset.token, AESKey.Empty, Sha256.Empty)))
+
+      val signal = BitmapSignal(proto, BitmapRequest.Regular(600), zmessaging.imageLoader, zmessaging.imageCache)
+      var results = Seq.empty[BitmapResult]
+      signal { res =>
+        results = results :+ res
+      } (EventContext.Global)
+
+      withDelay {
+        results should not be empty
+        results.last should beMatching({
+          case BitmapResult.BitmapLoaded(bmp, false, _) if bmp.getWidth == 480 => true
+        })
+      }
+    }
   }
 }

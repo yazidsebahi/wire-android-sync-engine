@@ -315,6 +315,11 @@ class DeviceActor(val deviceName: String,
         }, DoNothingAndProceed)).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
       }
 
+    case SendLocation(remoteId, lon, lat, name, zoom) =>
+      getConv(remoteId) flatMap  { conv =>
+        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Location(lon, lat, name, zoom)).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
+      }
+
     case CancelAssetUpload(messageId) =>
       zmessaging.messagesStorage.getMessage(messageId).mapSome(_.assetId).flatMapSome { assetId =>
         zmessaging.assets.cancelUpload(assetId, messageId)

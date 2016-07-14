@@ -18,6 +18,7 @@
 package com.waz.api
 
 import android.net.Uri
+import com.waz.api.Asset.LoadCallback
 import org.threeten.bp.Duration
 
 object MediaAsset {
@@ -49,4 +50,6 @@ trait MediaAsset {
   def prepareStreaming(cb: StreamingCallback): Unit // retrieve the current streaming uris
 
   def isEmpty: Boolean // whether it's a placeholder (retrieval of real data in progress)
+
+  def getPlaybackControls(callback: LoadCallback[PlaybackControls]): Unit
 }

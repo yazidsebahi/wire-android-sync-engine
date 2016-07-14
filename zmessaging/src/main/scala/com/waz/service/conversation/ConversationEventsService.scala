@@ -43,11 +43,8 @@ class ConversationEventsService(push: PushService, convs: ConversationsContentUp
       },
 
       convs.convByRemoteId(event.convId) flatMap {
-        case Some(conv) if conv.unreadCount == 0 =>
-          convs.updateConversationLastRead(conv.id, event.time.instant) flatMap {
-            case Some((_, c)) => sync.postLastRead(c.id, c.lastRead)
-            case _ => Future.successful(())
-          }
+        case Some(conv) =>
+          convs.updateConversationLastRead(conv.id, event.time.instant) map { _ => Future.successful(()) }
         case _ => Future.successful(())
       }
     )) map { _ => () }

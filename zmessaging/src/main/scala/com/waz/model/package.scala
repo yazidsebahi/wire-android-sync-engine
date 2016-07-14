@@ -64,19 +64,22 @@ package object model {
         case GM.LASTREAD_FIELD_NUMBER     => msg.getLastRead
         case GM.LIKING_FIELD_NUMBER       => LikingAction(msg.getLiking)
         case GM.TEXT_FIELD_NUMBER         => msg.getText
+        case GM.LOCATION_FIELD_NUMBER     => msg.getLocation
         case _                            => Unknown
       }
     }
 
     object TextMessage {
 
-      def apply(text: String, mentions: Map[UserId, String]): GenericMessage = GenericMessage(Uid(), Text(text, mentions))(Text)
+      def apply(text: String, mentions: Map[UserId, String]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, Nil))(Text)
 
-      def apply(msg: MessageData): GenericMessage = GenericMessage(Uid(msg.id.str), Text(msg.contentString, msg.content.flatMap(_.mentions).toMap))(Text)
+      def apply(text: String, mentions: Map[UserId, String], links: Seq[LinkPreview]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, links))(Text)
 
-      def unapply(msg: GenericMessage): Option[(String, Map[UserId, String])] = msg match {
-        case GenericMessage(_, Text(content, mentions)) =>
-          Some((content, mentions))
+      def apply(msg: MessageData): GenericMessage = GenericMessage(Uid(msg.id.str), Text(msg.contentString, msg.content.flatMap(_.mentions).toMap, Nil))(Text)
+
+      def unapply(msg: GenericMessage): Option[(String, Map[UserId, String], Seq[LinkPreview])] = msg match {
+        case GenericMessage(_, Text(content, mentions, links)) =>
+          Some((content, mentions, links))
         case _ =>
           None
       }

@@ -18,12 +18,14 @@
 package com.waz.service.media
 
 import com.waz.api.Message.Part.Type._
-import com.waz.model.{MessageData, MessageContent}
-import com.waz.service.media.RichMediaContentParser.GoogleMapsLocation
-import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.{OptionValues, FeatureSpec, Matchers}
+import com.waz.model.MessageContent
+import org.scalacheck.Gen
+import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
+import org.scalatest.{FeatureSpec, Matchers, OptionValues}
 
-class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks {
+import scala.io.Source
+
+class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks {
   lazy val parser = new RichMediaContentParser
 
   feature("match links") {
@@ -66,26 +68,8 @@ class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionVa
     }
 
     scenario("match weblinks") {
-      if (RichMediaContentParser.WebLinkEnabled) {
-        val link = "https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA"
-        parser.findMatches(link).toList shouldEqual List((0, link.length, WEB_LINK))
-      }
-    }
-
-    scenario("match google maps links") {
-      forAll(Table(
-        ("URL", "Location"),
-        ("https://www.google.com.au/maps/preview/@12.0,-0.12345,13%2Bz", Some(GoogleMapsLocation("12.0", "-0.12345", "13+"))),
-        ("https://www.google.com.au/maps/preview/@5,.3,5z", Some(GoogleMapsLocation("5", ".3", "5"))),
-        ("http://www.google.com.au/maps/preview/@12.0,-0.12345,13%2Bz", None)
-      )) { (url: String, result: Option[GoogleMapsLocation]) =>
-        val msg = MessageData.messageContent(url)
-        if (result.isDefined) msg._1 shouldEqual com.waz.api.Message.Type.RICH_MEDIA
-        val returned = parser.findMatches(url).toList
-        returned.isEmpty shouldEqual result.isEmpty
-        result foreach { _ => returned shouldEqual List((0, url.length, GOOGLE_MAPS)) }
-        RichMediaContentParser.googleMapsLocation(url) shouldEqual result
-      }
+      val link = "https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA"
+      parser.findMatches(link, weblinkEnabled = true).toList shouldEqual List((0, link.length, WEB_LINK))
     }
   }
 
@@ -124,7 +108,8 @@ class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionVa
     }
 
     scenario("don't extract embeded url") {
-      parser.splitContent("https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA") shouldEqual List(MessageContent(if (RichMediaContentParser.WebLinkEnabled) WEB_LINK else TEXT, "https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA"))
+      parser.splitContent("https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA", weblinkEnabled = true) shouldEqual
+        List(MessageContent(WEB_LINK, "https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA"))
     }
 
     scenario("text interleaved with multiple youtube links") {
@@ -135,6 +120,75 @@ class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionVa
         MessageContent(YOUTUBE, "https://www.youtube.com/watch?v=c0KYU2j0TM4"),
         MessageContent(TEXT, "and even more")
       )
+    }
+  }
+
+  //See this page for where the ranges were fetched from:
+  //http://apps.timwhitlock.info/emoji/tables/unicode
+  //TODO there are still some emojis missing - but there are no clean lists for the ranges of unicode characters
+  feature("Emoji") {
+
+    lazy val emojis = Source.fromInputStream(getClass.getResourceAsStream("/emojis.txt")).getLines().toSeq.filterNot(_.startsWith("#"))
+
+    lazy val whitespaces = " \t\n\r".toCharArray.map(_.toString).toSeq
+
+    scenario("Regular text") {
+      parser.splitContent("Hello") shouldEqual List(MessageContent(TEXT, "Hello"))
+    }
+
+    scenario("Regular text containing an emoji") {
+      parser.splitContent("Hello \uD83D\uDE01") shouldEqual List(MessageContent(TEXT, "Hello \uD83D\uDE01"))
+    }
+
+    scenario("single emoji within the range Emoticons (1F600 - 1F64F)") {
+      parser.splitContent("\uD83D\uDE00") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDE00"))
+      parser.splitContent("\uD83D\uDE4F") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDE4F"))
+    }
+
+    scenario("single emoji within the range Transport and map symbols ( 1F680 - 1F6C0 )") {
+      parser.splitContent("\uD83D\uDE80") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDE80"))
+      parser.splitContent("\uD83D\uDEC0") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDEC0"))
+    }
+
+    scenario("single emoji within the range Uncategorized ( 1F300 - 1F5FF )") {
+      parser.splitContent("\uD83C\uDF00") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83C\uDF00"))
+      parser.splitContent("\uD83D\uDDFF") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDDFF"))
+    }
+
+    scenario("multiple emojis without any whitespace") {
+      parser.splitContent("\uD83D\uDE4F\uD83D\uDE00") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDE4F\uD83D\uDE00"))
+    }
+
+    scenario("flag emoji (norwegian)") {
+      parser.splitContent("\uD83C\uDDF3\uD83C\uDDF4") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83C\uDDF3\uD83C\uDDF4"))
+    }
+
+    scenario("multiple emojis with whitespace") { //TODO, check how we should preserve this whitespace
+      parser.splitContent("\uD83D\uDE4F    \uD83D\uDE00  \uD83D\uDE05") shouldEqual List(MessageContent(TEXT_EMOJI_ONLY, "\uD83D\uDE4F    \uD83D\uDE00  \uD83D\uDE05"))
+    }
+
+    scenario("check all known emojis") {
+      val (_, failed) = emojis.partition(RichMediaContentParser.containsOnlyEmojis)
+      failed foreach { str =>
+        info(str.map(_.toInt.toHexString).mkString(", "))
+      }
+      failed.toVector shouldBe empty
+    }
+
+    scenario("random emoji with whitespace") {
+
+      case class EmojiStr(str: String) {
+        override def toString: String = str.map(_.toInt.toHexString).mkString(", ")
+      }
+
+      val gen = for {
+        list <- Gen.listOf(Gen.frequency((2, Gen.oneOf(emojis)), (1, Gen.oneOf(whitespaces))))
+      } yield EmojiStr(list.mkString("").trim)
+
+      forAll(gen) { str =>
+        if (str.str.nonEmpty)
+          parser.splitContent(str.str) shouldEqual Seq(MessageContent(TEXT_EMOJI_ONLY, str.str))
+      }
     }
   }
 }

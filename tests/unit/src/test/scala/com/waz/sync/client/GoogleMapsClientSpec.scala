@@ -27,8 +27,8 @@ class GoogleMapsClientSpec extends FeatureSpec with Matchers with TableDrivenPro
     scenario("to do ") {
       forAll(Table(
         ("x", "y", "zoom", "width", "height", "uri"),
-        ("wow-x", "wow-y", "meep", 800, 600, "/proxy/googlemaps/api/staticmap?center=wow-x%2Cwow-y&zoom=meep&size=800x600&markers=color%3Ared%7Cwow-x%2Cwow-y"),
-        ("other-x", "other-y", "foo", 80, 60, "/proxy/googlemaps/api/staticmap?center=other-x%2Cother-y&zoom=foo&size=80x60&markers=color%3Ared%7Cother-x%2Cother-y")
+        ("wow-x", "wow-y", "meep", 800, 600, "/proxy/googlemaps/api/staticmap?center=wow-x%2Cwow-y&zoom=meep&size=800x600"),
+        ("other-x", "other-y", "foo", 80, 60, "/proxy/googlemaps/api/staticmap?center=other-x%2Cother-y&zoom=foo&size=80x60")
       )) { (x: String, y: String, zoom: String, width: Int, height: Int, path: String) =>
 
         GoogleMapsClient.getStaticMapPath(GoogleMapsLocation(x, y, zoom), width, height) shouldEqual path

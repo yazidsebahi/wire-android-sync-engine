@@ -76,9 +76,10 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, net
   network.networkMode { n =>
     // ping web socket on network changes, this should help us discover potential network outage
     client.head.foreach {
+      case None =>
       case Some(c) =>
         verbose(s"network mode changed, will ping or reconnect, mode: $n")
-        c.retryInDisconnected()
+        c.retryIfDisconnected()
         c.socket.foreach(_.ping("ping"))
     }
   }

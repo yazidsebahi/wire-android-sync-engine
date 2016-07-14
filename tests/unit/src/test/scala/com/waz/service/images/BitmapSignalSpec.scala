@@ -79,7 +79,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   class SignalListener(asset: ImageAssetData, req: BitmapRequest) {
     var results = Seq.empty[BitmapResult]
-    val signal = new BitmapSignal(asset, req, loader, imageCache)
+    val signal = new AssetBitmapSignal(asset, req, loader, imageCache)
     val obs = signal { result => results = results :+ result }
     
     def preview = results.collectFirst { case BitmapLoaded(b, true, _) => b }

@@ -51,7 +51,7 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
 
   def getConversation(p: Parcel): IConversation = getConversation(JsonDecoder.decode[ConversationData](p.readString()))
 
-  def sendMessage[A](id: ConvId, content: MessageContent[A]): Unit = zms(_.convsUi.sendMessage(id, content))
+  def sendMessage(id: ConvId, content: MessageContent): Unit = zms(_.convsUi.sendMessage(id, content))
 
   def setName(id: ConvId, name: String): Unit = zms(_.convsUi.setConversationName(id, name))
   

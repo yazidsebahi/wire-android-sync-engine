@@ -2,12 +2,12 @@
   "users":[
     {
         "name": "Auto1",
-        "email": "auto1@wearezeta.com",
+        "email": "auto1@wire.com",
         "password" : "auto1_pass"
      },
     {
         "name" : "Auto2",
-        "email" : "auto2@wearezeta.com",
+        "email" : "auto2@wire.com",
         "password" : "auto2_pass"
      }
   ],
@@ -15,13 +15,13 @@
   "conversations":[
       {
         "name" : "testconv",
-        "participants" : ["auto1@wearezeta.com","auto2@wearezeta.com"],
+        "participants" : ["auto1@wire.com","auto2@wire.com"],
         "messages" : [
            {
-             "from": "auto1@wearezeta.com",
+             "from": "auto1@wire.com",
              "text": "Hello, World!"
            }, {
-             "from": "auto1@wearezeta.com",
+             "from": "auto1@wire.com",
              "text": "Hello, World! 2"
            }
         ]

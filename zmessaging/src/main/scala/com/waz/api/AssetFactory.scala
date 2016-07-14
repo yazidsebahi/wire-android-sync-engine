@@ -25,12 +25,13 @@ import com.waz.bitmap.video.VideoTranscoder
 import com.waz.content.Mime
 import com.waz.model.{AssetData, AssetId}
 import com.waz.service.ZMessaging
-import com.waz.service.assets.GlobalRecordAndPlayService.{RecordingCancelled, RecordingSuccessful}
+import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, RecordingCancelled, RecordingSuccessful}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.SignalLoading
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
+import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 object AssetFactory {
@@ -82,14 +83,14 @@ object AssetFactory {
     implicit val ui = ZMessaging.currentUi
     val service = ZMessaging.currentGlobal.recordingAndPlayback
 
-    val id = AssetId()
-    val levels = new RecordingLevels(service.recordingLevel(id))
-    service.record(id, AssetData.MaxAllowedAssetSizeInBytes).onComplete {
+    val key = AssetMediaKey(AssetId())
+    val levels = new RecordingLevels(service.recordingLevel(key))
+    service.record(key, 25.minutes).onComplete {
       case Success((instantOfStart, futureAsset)) =>
         react.onStart(instantOfStart)
         futureAsset.onComplete {
-          case Success(RecordingSuccessful(asset, fileSizeLimitReached)) =>
-            react.onComplete(asset, fileSizeLimitReached, levels.overview)
+          case Success(RecordingSuccessful(asset, lengthLimitReached)) =>
+            react.onComplete(asset, lengthLimitReached, levels.overview)
           case Success(RecordingCancelled) | Failure(_) =>
             react.onCancel()
         }(Threading.Ui)
@@ -98,8 +99,8 @@ object AssetFactory {
     }(Threading.Ui)
 
     new RecordingControls {
-      override def stop(): Unit = service.stopRecording(id, false)
-      override def cancel(): Unit = service.cancelRecording(id)
+      override def stop(): Unit = service.stopRecording(key)
+      override def cancel(): Unit = service.cancelRecording(key)
       override def soundLevels(windowSize: Int): UiSignal[Array[Float]] = impl.UiSignal(_ => levels.windowed(windowSize))
       override def finalize: Unit = cancel()
     }

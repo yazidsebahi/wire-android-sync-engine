@@ -140,7 +140,7 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
     prepareContacts(contact)
   }
 
-  lazy val contact = Contact(ContactId(), "Android Test", NameSource.StructuredName, "Android Test", SearchKey("Android Test"), Set(), Set(EmailAddress(s"android.test+$randomUUID@wearezeta.com")))
+  lazy val contact = Contact(ContactId(), "Android Test", NameSource.StructuredName, "Android Test", SearchKey("Android Test"), Set(), Set(EmailAddress(s"android.test+$randomUUID@wire.com")))
 
   @volatile var invitation = Option.empty[ConfirmedInvitation]
   @volatile var inviter = Option.empty[UserId]

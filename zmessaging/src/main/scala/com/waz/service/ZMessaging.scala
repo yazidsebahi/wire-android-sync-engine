@@ -118,6 +118,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def cache             = global.cache
   def mediamanager      = global.mediaManager
   def globalRecAndPlay  = global.recordingAndPlayback
+  def tempFiles         = global.tempFiles
   def metadata          = global.metadata
   def network           = global.network
   def handlerFactory    = global.handlerFactory
@@ -126,6 +127,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def accountsStorage   = global.accountsStorage
   def streamLoader      = global.streamLoader
   def videoLoader       = global.videoLoader
+  def pcmAudioLoader    = global.pcmAudioLoader
 
   def db                = storage.db
   def kvStorage         = storage.kvStorage
@@ -160,6 +162,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val userSearchClient   = wire[UserSearchClient]
   lazy val connectionsClient  = wire[ConnectionsClient]
   lazy val messagesClient     = wire[MessagesClient]
+  lazy val openGraphClient    = wire[OpenGraphClient]
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
 
 
@@ -202,7 +205,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val youtubeMedia   = wire[YouTubeMediaService]
   lazy val soundCloudMedia = wire[SoundCloudMediaService]
   lazy val spotifyMedia   = wire[SpotifyMediaService]
-  lazy val googleMapsMedia = wire[GoogleMapsMediaService]
   lazy val otrService: OtrService = wire[OtrService]
   lazy val genericMsgs: GenericMessageService = wire[GenericMessageService]
   lazy val likings: LikingsService = wire[LikingsService]
@@ -227,6 +229,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val likingsSync      = wire[LikingsSyncHandler]
   lazy val lastReadSync     = wire[LastReadSyncHandler]
   lazy val clearedSync      = wire[ClearedSyncHandler]
+  lazy val openGraphSync    = wire[OpenGraphSyncHandler]
 
   lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 
@@ -274,6 +277,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
     // services listening for storage updates
     richmedia
 
+    tempFiles
     recordAndPlay
 
     reporting.addStateReporter { pw =>

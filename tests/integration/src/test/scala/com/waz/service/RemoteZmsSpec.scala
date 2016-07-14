@@ -69,7 +69,7 @@ class RemoteZms(ui: UiModule) extends ZMessagingApi()(ui) {
     p.future
   }
 
-  def postMessage[A](conv: RConvId, msg: MessageContent[A]) = findConv(conv).map { _.sendMessage(msg) }
+  def postMessage(conv: RConvId, msg: MessageContent) = findConv(conv).map { _.sendMessage(msg) }
 }
 
 trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Suite with ApiSpec =>

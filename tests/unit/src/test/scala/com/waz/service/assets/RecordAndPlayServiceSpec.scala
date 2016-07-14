@@ -23,19 +23,20 @@ import com.waz.api
 import com.waz.api.AssetFactory
 import com.waz.api.impl.AudioAssetForUpload
 import com.waz.service.assets.GlobalRecordAndPlayService._
+import com.waz.service.assets.PCMRecorder.{Cancelled, CompletionCause, StoppedByUser}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{MockUiModule, MockZMessaging}
+import com.waz.testutils.{MockAccountService, MockAccounts, MockGlobalModule, MockUiModule, MockUserModule, MockZMessaging}
+import com.waz.threading.Threading
 import com.waz.threading.Threading.Background
 import com.waz.utils._
-import org.robolectric.Robolectric
 import org.scalatest._
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
 
-import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scala.concurrent.{Future, Promise}
 
 class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests {
 
@@ -66,10 +67,9 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
       start should be > beforeStart
       soon(service.state.currentValue.value should beMatching { case Recording(_, _, _, _, _) => })
       val Recording(recorder, _, _, _, _) = service.state.currentValue.value
-      provideRecordingFile()
       val beforeStop = now
       controls.stop()
-      val AudioAssetForUpload(id, entry, duration) = spy.complete.await()
+      val AudioAssetForUpload(id, entry, duration, _) = spy.complete.await()
       entry.cacheFile.exists shouldBe true
       duration should be > bp.Duration.between(start, beforeStop)
       soon(service.state.currentValue.value should beMatching { case Idle => })
@@ -88,7 +88,6 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
       soon(service.state.currentValue.value should beMatching { case Recording(_, _, _, _, _) => })
       val Recording(_, idOfSecondRecording, _, _, _) = service.state.currentValue.value
       idOfSecondRecording should not equal idOfFirstRecording
-      provideRecordingFile()
       controls2.stop()
       spy2.complete.await()
       soon(service.state.currentValue.value should beMatching { case Idle => })
@@ -107,6 +106,7 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
     })
 
     scenario("File is missing after recording") {
+      shouldProvideFile = false
       val spy = new RecordingHandler
       val controls = AssetFactory.recordAudioAsset(spy)
       spy.start.await()
@@ -122,12 +122,10 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
       val spy, spy2 = new RecordingHandler
       val controls = AssetFactory.recordAudioAsset(spy)
       spy.start.await()
-      provideRecordingFile()
       controls.stop()
 
       val controls2 = spy.complete.future.map(_ => AssetFactory.recordAudioAsset(spy2))(Background).await()
       spy2.start.await()
-      provideRecordingFile()
       controls2.stop()
       spy2.complete.await()
 
@@ -135,13 +133,28 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
     }
   }
 
-  def provideRecordingFile(): Unit = {
-    val Recording(recorder, _, _, _, _) = service.state.currentValue.value
-    val shadowRecorder = Robolectric.shadowOf(recorder)
-    IoUtils.copy(getClass.getResourceAsStream("/assets/audio.m4a"), new File(shadowRecorder.getOutputPath))
+  before {
+    shouldProvideFile = true
   }
 
-  lazy val ui = new MockUiModule(new MockZMessaging())
+  @volatile private var shouldProvideFile = true
+
+  class MockGlobal extends MockGlobalModule {
+    override lazy val recordingAndPlayback = new GlobalRecordAndPlayService(cache, context) {
+      override protected def startRecording(destination: File, lengthLimit: FiniteDuration): PCMRecorder = new PCMRecorder {
+        override def stopRecording(): Future[CompletionCause] = Future {
+          if (shouldProvideFile) IoUtils.copy(getClass.getResourceAsStream("/assets/audio.m4a"), destination)
+          StoppedByUser
+        }(Threading.Background)
+        override def cancelRecording(): Future[CompletionCause] = Future.successful(Cancelled)
+        override def onError(f: (Throwable) => Unit): Unit = ()
+        override def maxAmplitudeSinceLastCall: Short = 0
+        override def onLengthLimitReached(f: => Unit): Unit = ()
+      }
+    }
+  }
+
+  lazy val ui = MockUiModule(new MockZMessaging(new MockUserModule(new MockAccountService(new MockAccounts(new MockGlobal)))))
   lazy val service = ui.global.recordingAndPlayback
 }
 

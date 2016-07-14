@@ -139,7 +139,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   implicit lazy val dispatcher = Threading.Background
   override val autoLogin: Boolean = false
   val uuids = (1 to 8) map (_ => randomUUID())
-  val emails = uuids map (id => EmailAddress(s"android.test+$id@wearezeta.com"))
+  val emails = uuids map (id => EmailAddress(s"android.test+$id@wire.com"))
 
   def newClient = new RegistrationClient(new AsyncClient(wrapper = TestClientWrapper), testBackend)
 }

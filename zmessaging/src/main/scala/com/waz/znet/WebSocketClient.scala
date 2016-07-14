@@ -75,7 +75,7 @@ class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvide
     connected ! false
   }
 
-  def retryInDisconnected() = connected.head foreach {
+  def retryIfDisconnected() = connected.head foreach {
     case false if !closed =>
       verbose(s"retrying")
       retryCount = 0

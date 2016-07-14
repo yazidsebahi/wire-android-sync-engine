@@ -132,7 +132,8 @@ class ZNetClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter w
 
   def verifyLoginRequested() =
     verify(postRequestedFor(urlEqualTo("/login?persist=true"))
-      .withRequestBody(matching(s""".*"email":"$email".*"password":"$password".*"""))
+      .withRequestBody(matching(s""".*"email":"$email".*"""))
+      .withRequestBody(matching(s""".*"password":"$password".*"""))
       .withHeader("Content-Type", equalTo("application/json")))
 
   feature("Authentication") {
@@ -232,7 +233,7 @@ class ZNetClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter w
     }
   }
 
-  ignore("Random requests") {
+  scenario("Random requests") {
     stubFor(get(urlEqualTo("/short")).willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json").withBody("""{"result":"ok"}""")))
     stubFor(get(urlEqualTo("/long")).willReturn(aResponse().withFixedDelay(800).withStatus(200).withHeader("Content-Type", "application/json").withBody("""{"result":"ok"}""")))
     stubFor(get(urlEqualTo("/flaky")).willReturn(aResponse().withFault(Fault.RANDOM_DATA_THEN_CLOSE)))

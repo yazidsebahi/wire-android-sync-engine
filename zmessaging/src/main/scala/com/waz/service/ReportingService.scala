@@ -78,7 +78,11 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
       @SuppressWarnings(Array("deprecation"))
       lazy val writer = new PrintWriter(new OutputStreamWriter(entry.outputStream))
 
-      RichFuture.processSequential(VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter) { reporter =>
+      val rs = if (metadata.internalBuild)
+        VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter
+      else Seq(VersionReporter, LogCatReporter)
+
+      RichFuture.processSequential(rs) { reporter =>
         reporter.apply(writer)
       } map { _ => CacheUri(entry.data, context) } andThen {
         case _ => writer.close()

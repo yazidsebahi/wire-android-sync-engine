@@ -126,7 +126,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     val key = asset.otrKey.getOrElse(AESKey())
     def message(sha: Sha256) = GenericMessage(Uid(assetId.str), Proto.ImageAsset(asset.tag, asset.width, asset.height, asset.origWidth, asset.origHeight, asset.mime, asset.size, Some(key), Some(sha)))
     postAssetData(conv, assetId, key, message, data, nativePush).future flatMap {
-      case Right((AssetKey(id, _, sha), time)) =>
+      case Right((AssetKey(Left(id), _, _, sha), time)) =>
         val updated = asset.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
         cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
           assets.updateImageAsset(assetId, conv.remoteId, updated) .map { data =>
@@ -134,6 +134,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
             Right(time)
           }
         }
+      case Right((k, _)) => Future successful Left(ErrorResponse.internalError(s"Unexpected asset key: $k")) // FIXME
       case Left(err) => Future successful Left(err)
     }
   }
@@ -162,7 +163,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                 assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry)) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
-                    assetKey = Some(AssetKey(id, key, sha))
+                    assetKey = Some(AssetKey(Left(id), None, key, sha))
                     Right(msgResponse)
                   case Left(err) =>
                     Left(err)

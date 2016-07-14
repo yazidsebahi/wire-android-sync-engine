@@ -17,6 +17,7 @@
  */
 package com.waz.api
 
+import com.waz.api.Asset.LoadCallback
 import org.threeten.bp.Duration
 
 trait AssetForUpload {
@@ -26,4 +27,6 @@ trait AssetForUpload {
 trait AudioAssetForUpload extends AssetForUpload {
   def getPlaybackControls: PlaybackControls
   def getDuration: Duration
+  def delete(): Unit
+  def applyEffect(effect: AudioEffect, callback: LoadCallback[AudioAssetForUpload]): Unit
 }

@@ -18,14 +18,16 @@
 package com.waz.users
 
 import com.waz.api._
+import com.waz.api.impl.EmailCredentials
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.EmailAddress
 import com.waz.testutils.Implicits._
+import com.waz.testutils.Matchers._
 import com.waz.utils._
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.{JsonObjectResponse, Request, Response}
 import org.scalatest.{FeatureSpec, GivenWhenThen, Matchers}
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with ProvisionedApiSpec { test =>
@@ -101,9 +103,10 @@ class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with 
           }
       }
 
-      Await.result(invalidateCookies, 10.seconds) shouldEqual true
+      invalidateCookies.await() shouldEqual true
 
-//      zmessaging.user.user = zmessaging.user.user.copy(password = None)
+      accounts.storage.update(zmessaging.accountId, _.copy(password = None)).await()
+      zmessaging.account.credentials = EmailCredentials(EmailAddress(email), None)
       zmessaging.zNetClient.auth.invalidateToken()
 
       api.search().getUsers("test", 10)

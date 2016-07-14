@@ -21,6 +21,7 @@ import java.io._
 
 import com.koushikdutta.async.ByteBufferList
 import com.waz.cache.{CacheEntry, CacheService}
+import com.waz.znet.ResponseConsumer.ConsumerState
 import org.json.{JSONArray, JSONObject}
 
 import scala.concurrent.duration._
@@ -39,11 +40,17 @@ case class BinaryResponse(value: Array[Byte], mime: String) extends ResponseCont
 case class FileResponse(value: CacheEntry, mime: String) extends ResponseContent
 
 trait ResponseConsumer[T <: ResponseContent] {
-  def consume(bb: ByteBufferList): Unit
+  def consume(bb: ByteBufferList): ConsumerState
   def result: Try[T]
 }
 
 object ResponseConsumer {
+
+  sealed trait ConsumerState
+  object ConsumerState {
+    case object Default extends ConsumerState
+    case object Done extends ConsumerState // returned when consumer received all required data and further processing can be stopped
+  }
 
   private def copyToStream(bb: ByteBufferList, out: OutputStream): Long = {
     var count = 0L
@@ -58,14 +65,20 @@ object ResponseConsumer {
 
   object EmptyResponseConsumer extends ResponseConsumer[ResponseContent] {
     override def result = Success(EmptyResponse)
-    override def consume(bb: ByteBufferList): Unit = bb.recycle()
+    override def consume(bb: ByteBufferList): ConsumerState = {
+      bb.recycle()
+      ConsumerState.Done
+    }
   }
 
   trait InMemoryConsumer[T <: ResponseContent] extends ResponseConsumer[T] {
     val length: Long
     val data = if (length > 0) new ByteArrayOutputStream(length.toInt) else new ByteArrayOutputStream()
 
-    override def consume(bb: ByteBufferList): Unit = copyToStream(bb, data)
+    override def consume(bb: ByteBufferList): ConsumerState = {
+      copyToStream(bb, data)
+      ConsumerState.Default
+    }
   }
 
   class ByteArrayConsumer(val length: Long, mime: String) extends InMemoryConsumer[BinaryResponse] {
@@ -90,7 +103,7 @@ object ResponseConsumer {
 
     var ex = None: Option[Throwable]
 
-    override def consume(bb: ByteBufferList): Unit =
+    override def consume(bb: ByteBufferList): ConsumerState = {
       try {
         copyToStream(bb, out)
       } catch {
@@ -98,6 +111,8 @@ object ResponseConsumer {
           bb.recycle()
           ex = ex.orElse(Some(e))
       }
+      ConsumerState.Default
+    }
 
     override def result: Try[FileResponse] =
       try {

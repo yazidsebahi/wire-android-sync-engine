@@ -37,6 +37,7 @@ import com.waz.model.sync.SyncRequest._
 import com.waz.model.sync.{SyncJob, SyncRequest}
 import com.waz.service.SearchKey
 import com.waz.service.messages.MessageAndLikes
+import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
 import com.waz.utils.sha2
@@ -129,10 +130,11 @@ object Generators {
 
   implicit lazy val arbVoiceParticipantData: Arbitrary[VoiceParticipantData] = Arbitrary(resultOf(VoiceParticipantData))
 
+  implicit lazy val arbOpenGraphData: Arbitrary[OpenGraphData] = Arbitrary(resultOf(OpenGraphData))
   implicit lazy val arbMessageContent: Arbitrary[MessageContent] = Arbitrary(resultOf(MessageContent))
   implicit lazy val arbGenericMessage: Arbitrary[GenericMessage] = Arbitrary(for {
     id <- arbitrary[MessageId]
-    content = Text("test", Map.empty) // TODO: implement actual generator
+    content = Text("test", Map.empty, Nil) // TODO: implement actual generator
   } yield GenericMessage(id, content))
 
   implicit lazy val arbMessageData: Arbitrary[MessageData] = Arbitrary(resultOf(MessageData))
@@ -167,14 +169,17 @@ object Generators {
     meta    <- arbitrary[Option[AssetMetaData]]
     preview <- arbitrary[Option[AssetPreviewData]]
     source  <- optGen(arbitrary[Uri])
+    oMime   <- optGen(oneOf(knownMimeTypes))
     status  <- arbitrary[AssetStatus]
     time    <- arbitrary[Instant]
-  } yield AnyAssetData(id, convId, mime, size, name, meta, preview, source, status, time))
+  } yield AnyAssetData(id, convId, mime, size, name, meta, preview, source, oMime, status, time))
 
   implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(frequency((2, oneOf[AssetStatus](AssetStatus.UploadNotStarted,
     AssetStatus.MetaDataSent, AssetStatus.PreviewSent, AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed)),
     (1, oneOf[AssetStatus](resultOf(AssetStatus.UploadDone), resultOf(AssetStatus.DownloadFailed)))))
   implicit lazy val arbSyncableAssetStatus: Arbitrary[AssetStatus.Syncable] = Arbitrary(oneOf(AssetStatus.UploadCancelled, AssetStatus.UploadFailed))
+  implicit lazy val arbRemoteKey: Arbitrary[RemoteKey] = Arbitrary(resultOf(RemoteKey))
+  implicit lazy val arbAssetToken: Arbitrary[AssetToken] = Arbitrary(resultOf(AssetToken))
   implicit lazy val arbAssetKey: Arbitrary[AssetKey] = Arbitrary(resultOf(AssetKey))
   implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))
   implicit lazy val arbSha256: Arbitrary[Sha256] = Arbitrary(arbitrary[Array[Byte]].map(b => Sha256(sha2(b))))

@@ -24,6 +24,7 @@ import com.waz.api
 import com.waz.api.PermissionProvider
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
 import com.waz.api.impl.search.Search
+import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.Uris
 import com.waz.media.manager.MediaManager
 import com.waz.model._
@@ -33,7 +34,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi {
 
@@ -158,19 +159,18 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     case _ => error("Use the Credentials factory to create credentials")
   }
 
+  private def activateResultHandler(kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Try[ActivateResult] => Unit = {
+    case Success(ActivateResult.Success) => listener.onConfirmationCodeSent(kindOfAccess)
+    case Success(ActivateResult.PasswordExists) => listener.onPasswordExists(kindOfAccess)
+    case Success(ActivateResult.Failure(ErrorResponse(status, msg, label))) => listener.onConfirmationCodeSendingFailed(kindOfAccess, status, msg, label)
+    case Failure(ex) => listener.onConfirmationCodeSendingFailed(kindOfAccess, 499, ex.getMessage, "")
+  }
+
   override def requestPhoneConfirmationCode(phoneNumber: String, kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit =
-    accounts.requestPhoneConfirmationCode(PhoneNumber(phoneNumber), kindOfAccess) onComplete {
-      case Success(Right(())) => listener.onConfirmationCodeSent(kindOfAccess)
-      case Success(Left(ErrorResponse(status, msg, label))) => listener.onConfirmationCodeSendingFailed(kindOfAccess, status, msg, label)
-      case Failure(ex) => listener.onConfirmationCodeSendingFailed(kindOfAccess, 499, ex.getMessage, "")
-    }
+    accounts.requestPhoneConfirmationCode(PhoneNumber(phoneNumber), kindOfAccess) onComplete activateResultHandler(kindOfAccess, listener)
 
   override def requestPhoneConfirmationCall(phoneNumber: String, kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit =
-    accounts.requestPhoneConfirmationCall(PhoneNumber(phoneNumber), kindOfAccess) onComplete {
-      case Success(Right(())) => listener.onConfirmationCodeSent(kindOfAccess)
-      case Success(Left(ErrorResponse(status, msg, label))) => listener.onConfirmationCodeSendingFailed(kindOfAccess, status, msg, label)
-      case Failure(ex) => listener.onConfirmationCodeSendingFailed(kindOfAccess, 499, ex.getMessage, "")
-    }
+    accounts.requestPhoneConfirmationCall(PhoneNumber(phoneNumber), kindOfAccess) onComplete activateResultHandler(kindOfAccess, listener)
 
   override def verifyPhoneNumber(phoneNumber: String, confirmationCode: String, kindOfVerification: api.KindOfVerification, listener: PhoneNumberVerificationListener): Unit =
     accounts.verifyPhoneNumber(PhoneCredentials(PhoneNumber(phoneNumber), Option(confirmationCode) map ConfirmationCode), kindOfVerification) onComplete {

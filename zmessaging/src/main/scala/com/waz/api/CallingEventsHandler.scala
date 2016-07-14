@@ -32,6 +32,7 @@ sealed trait CallingEvent {
   def isVideoCall: Boolean
   def isUiActive: Boolean
   def networkMode: NetworkMode
+  def isOtto: Boolean
 }
 
 sealed trait RingingEvent extends CallingEvent {
@@ -42,15 +43,15 @@ trait RingingStarted extends RingingEvent {
   override val kind = KindOfCallingEvent.RINGING_STARTED
 }
 
-case class IncomingRingingStarted(kindOfCall: KindOfCall, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, inOngoingCall: Boolean, isConversationMuted: Boolean) extends RingingStarted {
+case class IncomingRingingStarted(kindOfCall: KindOfCall, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, inOngoingCall: Boolean, isConversationMuted: Boolean, isOtto: Boolean) extends RingingStarted {
   override val direction = CallDirection.INCOMING
 }
 
-case class OutgoingRingingStarted(kindOfCall: KindOfCall, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode) extends RingingStarted {
+case class OutgoingRingingStarted(kindOfCall: KindOfCall, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, isOtto: Boolean) extends RingingStarted {
   override val direction = CallDirection.OUTGOING
 }
 
-case class RingingEnded(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode) extends RingingEvent {
+case class RingingEnded(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, isOtto: Boolean) extends RingingEvent {
   override val kind = KindOfCallingEvent.RINGING_STOPPED
 }
 
@@ -66,11 +67,11 @@ sealed trait CallStarted extends OngoingCallEvent {
   override val hasCallEnded = false
 }
 
-case class CallJoined(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numParticipants: Int, numConvMembers: Int, durationUntilJoin: Duration) extends CallStarted {
+case class CallJoined(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numParticipants: Int, numConvMembers: Int, durationUntilJoin: Duration, isOtto: Boolean) extends CallStarted {
   override val kind = KindOfCallingEvent.CALL_JOINED
 }
 
-case class CallEstablished(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numParticipants: Int, numConvMembers: Int, callSetupTime: Duration) extends CallStarted {
+case class CallEstablished(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numParticipants: Int, numConvMembers: Int, callSetupTime: Duration, isOtto: Boolean) extends CallStarted {
   override val kind = KindOfCallingEvent.CALL_ESTABLISHED
 }
 
@@ -82,14 +83,14 @@ sealed trait CallEnded extends OngoingCallEvent {
   def duration: Duration
 }
 
-case class CallEndedNormally(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numConvMembers: Int, cause: CauseForCallEnd, maxNumParticipants: Int, duration: Duration) extends CallEnded {
+case class CallEndedNormally(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numConvMembers: Int, cause: CauseForCallEnd, maxNumParticipants: Int, duration: Duration, isOtto: Boolean) extends CallEnded {
   override val kind = KindOfCallingEvent.CALL_ENDED
 }
 
-case class CallTransferred(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numConvMembers: Int, cause: CauseForCallEnd, maxNumParticipants: Int, duration: Duration) extends CallEnded {
+case class CallTransferred(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numConvMembers: Int, cause: CauseForCallEnd, maxNumParticipants: Int, duration: Duration, isOtto: Boolean) extends CallEnded {
   override val kind = KindOfCallingEvent.CALL_TRANSFERRED
 }
 
-case class CallDropped(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numConvMembers: Int, cause: CauseForCallEnd, maxNumParticipants: Int, duration: Duration, dropCause: CauseForCallStateEvent) extends CallEnded {
+case class CallDropped(kindOfCall: KindOfCall, direction: CallDirection, isVideoCall: Boolean, isUiActive: Boolean, networkMode: NetworkMode, numConvMembers: Int, cause: CauseForCallEnd, maxNumParticipants: Int, duration: Duration, dropCause: CauseForCallStateEvent, isOtto: Boolean) extends CallEnded {
   override val kind = KindOfCallingEvent.CALL_DROPPED
 }

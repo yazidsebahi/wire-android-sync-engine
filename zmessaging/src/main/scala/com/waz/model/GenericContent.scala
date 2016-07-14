@@ -18,10 +18,15 @@
 package com.waz.model
 
 
+import android.net.Uri
+import android.util.Base64
+import com.google.protobuf.nano.MessageNano
 import com.waz.content.Mime
+import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.nano.Messages
-import com.waz.utils.returning
+import com.waz.utils._
+import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
 import scala.PartialFunction.condOpt
@@ -67,7 +72,8 @@ object GenericContent {
 
       def apply(a: Asset, id: Option[RAssetDataId]): AssetStatus =
         (a.getStatusCase, a.getUploaded, a.getNotUploaded, id) match {
-          case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(key, sha), _, Some(id)) => UploadDone(AssetKey(id, key, sha))
+          case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(_, token, aes, sha), _, Some(id)) => UploadDone(AssetKey(Left(id), token, aes, sha))
+          case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(Some(key), token, aes, sha), _, None) => UploadDone(AssetKey(Right(key), token, aes, sha))
           case (NOT_UPLOADED_FIELD_NUMBER, _, CANCELLED, _) => UploadCancelled
           case (NOT_UPLOADED_FIELD_NUMBER, _, FAILED, _) => UploadFailed
           case _ => UploadInProgress
@@ -185,12 +191,20 @@ object GenericContent {
     }
 
     object Uploaded {
-      def unapply(u: Messages.Asset.RemoteData): Option[(AESKey, Sha256)] =
+      def unapply(u: Messages.Asset.RemoteData): Option[(Option[RemoteKey], Option[AssetToken], AESKey, Sha256)] =
         if (u.otrKey == null || u.sha256 == null) None
-        else Some((AESKey(u.otrKey), Sha256(u.sha256)))
+        else Some((Option(u.assetId).map(RemoteKey(_)), Option(u.assetToken).filter(_.nonEmpty).map(AssetToken(_)), AESKey(u.otrKey), Sha256(u.sha256)))
 
       def apply(key: AESKey, sha: Sha256) =
         returning(new Messages.Asset.RemoteData) { s =>
+          s.otrKey = key.bytes
+          s.sha256 = sha.bytes
+        }
+
+      def apply(id: RemoteKey, token: Option[AssetToken], key: AESKey, sha: Sha256) =
+        returning(new Messages.Asset.RemoteData) { s =>
+          s.assetId = id.str
+          token foreach { t => s.assetToken = t.str }
           s.otrKey = key.bytes
           s.sha256 = sha.bytes
         }
@@ -204,7 +218,7 @@ object GenericContent {
     }
 
     def apply(mime: Mime, size: Long, name: Option[String], key: AESKey, sha: Sha256): Asset =
-      apply(Original(mime, size, name), UploadDone(AssetKey(RAssetDataId(), key, sha)))
+      apply(Original(mime, size, name), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
 
     def apply(orig: Messages.Asset.Original): Asset = returning(new Messages.Asset) { a =>
       a.original = orig
@@ -225,21 +239,27 @@ object GenericContent {
     def apply(status: AssetStatus): Asset =
       returning(new Messages.Asset) { setStatus(_, status) }
 
+    def apply(bytes: Array[Byte]): Asset = Messages.Asset.parseFrom(bytes)
+
     private def setStatus(a: Asset, status: AssetStatus) =
       status match {
         case UploadCancelled => a.setNotUploaded(Messages.Asset.CANCELLED)
         case UploadFailed    => a.setNotUploaded(Messages.Asset.FAILED)
         case _ =>
           status.key foreach {
-            case AssetKey(_, key, sha) => a.setUploaded(Uploaded(key, sha))
+            case AssetKey(Left(_), _, key, sha) => a.setUploaded(Uploaded(key, sha))
+            case AssetKey(Right(id), token, key, sha) => a.setUploaded(Uploaded(id, token, key, sha))
           }
       }
 
     def unapply(a: Asset): Option[(Option[Messages.Asset.Original], Option[Preview], AssetStatus)] = {
       val status = a.getStatusCase match {
         case Messages.Asset.UPLOADED_FIELD_NUMBER =>
-          val u = a.getUploaded
-          UploadDone(AssetKey(RAssetDataId.Empty, AESKey(u.otrKey), Sha256(u.sha256))) // XXX: we don't have access to remote asset id in here, so will use empty, need to remember not to use this one
+          a.getUploaded match {
+            case Uploaded(id, token, aesKey, sha) =>
+              UploadDone(AssetKey(id.fold2(Left(RAssetDataId.Empty), Right(_)), token, aesKey, sha)) // XXX: we may not have access to remote asset id in here, so will use empty, need to remember not to use this one
+            case _ => UploadFailed // this will happen if sender didn't include aes key or sha
+          }
         case Messages.Asset.NOT_UPLOADED_FIELD_NUMBER =>
           a.getNotUploaded match {
             case Messages.Asset.CANCELLED => UploadCancelled
@@ -250,6 +270,13 @@ object GenericContent {
       }
 
       Some((Option(a.original), Option(a.preview), status))
+    }
+
+    object WithDimensions {
+      def unapply(asset: Asset): Option[Dim2] = asset match {
+        case Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _) => Some(d)
+        case _ => None
+      }
     }
   }
 
@@ -283,6 +310,54 @@ object GenericContent {
     }
   }
 
+  type LinkPreview = Messages.LinkPreview
+  object LinkPreview {
+
+    def apply(uri: Uri, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
+      p.url = uri.toString
+      p.urlOffset = offset
+    }
+
+    def apply(uri: Uri, offset: Int, article: Article): LinkPreview = returning(new Messages.LinkPreview) { p =>
+      p.url = uri.toString
+      p.urlOffset = offset
+      p.setArticle(article)
+    }
+
+    type Article = Messages.Article
+    object Article {
+
+      def apply(title: String, summary: String, image: Option[Asset], uri: Option[Uri]): Article = returning(new Messages.Article) { p =>
+        p.title = title
+        p.summary = summary
+        uri foreach { u => p.permanentUrl = u.toString }
+        image foreach { p.image = _ }
+      }
+
+      def unapply(a: Article): Option[(Uri, String, String, Option[Asset])] =
+        Some((Uri.parse(a.permanentUrl), a.title, a.summary, Option(a.image)))
+    }
+
+
+    implicit object JsDecoder extends JsonDecoder[LinkPreview] {
+      override def apply(implicit js: JSONObject): LinkPreview = Messages.LinkPreview.parseFrom(Base64.decode(js.getString("proto"), Base64.DEFAULT))
+    }
+
+    implicit object JsEncoder extends JsonEncoder[LinkPreview] {
+      override def apply(v: LinkPreview): JSONObject = JsonEncoder { o =>
+        o.put("proto", Base64.encodeToString(MessageNano.toByteArray(v), Base64.NO_WRAP))
+      }
+    }
+
+    object WithAsset {
+      def unapply(lp: LinkPreview): Option[Asset] = if (lp.hasArticle) Option(lp.getArticle.image) else None
+    }
+
+    object WithDescription {
+      def unapply(lp: LinkPreview): Option[(String, String)] = if (lp.hasArticle) Option(lp.getArticle.title, lp.getArticle.summary) else None
+    }
+  }
+
   type LikingAction = Liking.Action
   implicit object LikingAction extends GenericContent[Liking.Action] {
 
@@ -310,13 +385,18 @@ object GenericContent {
   implicit object Text extends GenericContent[Text] {
     override def set(msg: GenericMessage) = msg.setText
 
-    def apply(content: String, mentions: Map[UserId, String]): Text = returning(new Messages.Text()) { t =>
+    def apply(content: String): Text = apply(content, Map.empty, Nil)
+
+    def apply(content: String, links: Seq[LinkPreview]): Text = apply(content, Map.empty, links)
+
+    def apply(content: String, mentions: Map[UserId, String], links: Seq[LinkPreview]): Text = returning(new Messages.Text()) { t =>
       t.content = content
       t.mention = mentions.map { case (user, name) => Mention(user, name) }(breakOut)
+      t.linkPreview = links.toArray
     }
 
-    def unapply(proto: Text): Option[(String, Map[UserId, String])] =
-      Some((proto.content, proto.mention.map(m => UserId(m.userId) -> m.userName).toMap))
+    def unapply(proto: Text): Option[(String, Map[UserId, String], Seq[LinkPreview])] =
+      Some((proto.content, proto.mention.map(m => UserId(m.userId) -> m.userName).toMap, proto.linkPreview.toSeq))
   }
 
   type Cleared = Messages.Cleared
@@ -359,6 +439,21 @@ object GenericContent {
 
     def unapply(proto: MsgDeleted): Option[(RConvId, MessageId)] =
       Some((RConvId(proto.conversationId), MessageId(proto.messageId)))
+  }
+
+  type Location = Messages.Location
+  implicit object Location extends GenericContent[Location] {
+    override def set(msg: GenericMessage): (Location) => GenericMessage = msg.setLocation
+
+    def apply(lon: Float, lat: Float, name: String, zoom: Int) = returning(new Messages.Location) { p =>
+      p.longitude = lon
+      p.latitude = lat
+      p.name = name
+      p.zoom = zoom
+    }
+
+    def unapply(l: Location): Option[(Float, Float, Option[String], Option[Int])] =
+      Some((l.longitude, l.latitude, Option(l.name).filter(_.nonEmpty), Option(l.zoom).filter(_ != 0)))
   }
 
   type External = Messages.External

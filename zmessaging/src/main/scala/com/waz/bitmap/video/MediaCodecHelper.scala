@@ -77,5 +77,4 @@ object MediaCodecHelper {
       a.codec.release()
     }
   }
-
 }

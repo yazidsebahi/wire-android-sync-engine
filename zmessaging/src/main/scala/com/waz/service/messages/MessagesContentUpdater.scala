@@ -173,9 +173,8 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
         msg.copy(id = m.id, source = mergeSource(msg.source, m.source), localTime = m.localTime)
 
       def mergeMatching(prev: MessageData, msg: MessageData) = {
-        val u = prev.copy(source = mergeSource(msg.source, prev.source), time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos)
+        val u = prev.copy(msgType = msg.msgType, source = mergeSource(msg.source, prev.source), time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
         prev.msgType match {
-          case Message.Type.UNKNOWN => msg
           case Message.Type.KNOCK => u.copy(localTime = if (msg.hotKnock && !prev.hotKnock) msg.localTime else prev.localTime)
           case _ => u
         }

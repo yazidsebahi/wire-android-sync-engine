@@ -80,14 +80,14 @@ class MessagesList(convId: ConvId)(implicit ui: UiModule) extends com.waz.api.Me
   override def get(index: Int): api.Message = {
     val data = msgs(index)
     lastAccessed = Some(data.message.id)
-    updateLastRead(data.message.time, data.message.source)
+    updateLastRead(data.message)
     ui.messages.cachedOrUpdated(data, userAction = true)
   }
 
-  private[waz] def updateLastRead(time: Instant, event: EventId) = if (lastRead.isBefore(time)) {
-    debug(s"updateLastRead from $lastRead to $time, $event")
-    lastRead = time
-    ui.messages.updateLastRead(convId, time, event)
+  private[waz] def updateLastRead(msg: MessageData) = if (lastRead.isBefore(msg.time)) {
+    debug(s"updateLastRead from $lastRead to $msg")
+    lastRead = msg.time
+    ui.messages.updateLastRead(convId, msg)
   }
 
   override def getUnreadCount: Int = unreadCount

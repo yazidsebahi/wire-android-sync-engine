@@ -27,6 +27,7 @@ import com.waz.service.PushService.SlowSyncRequest
 import com.waz.sync.client.EventsClient.NotificationsResponse
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.utils._
 import com.waz.utils.events._
 
 import scala.concurrent.{Future, Promise}
@@ -170,7 +171,7 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
 
   val lastNotificationIdPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
 
-  def lastNotificationId() = Future(lastNotificationIdPref()).flatMap(identity) // future and flatten ensure that there is no race with onNotification
+  def lastNotificationId() = Future(lastNotificationIdPref()).flatten // future and flatten ensure that there is no race with onNotification
 
   private[service] def currentState = Future { state }
 

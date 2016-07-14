@@ -224,7 +224,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       content.keys should have size 1
     }
 
-    scenario(s"retry decoding with new session on REMOTE_IDENTITY_CHANGED error") {
+    scenario(s"report specific error on REMOTE_IDENTITY_CHANGED") {
       val file = new File(new File("target/cryptobox-jni/temp"), Random.nextInt.toHexString)
       file.mkdirs() shouldEqual true
       val box = CryptoBox.open(file.getAbsolutePath)
@@ -233,7 +233,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       val msg = TextMessage("test5", Map.empty)
       val event = OtrMessageEvent(Uid(), client2.conv.remoteId, new Date, client1.self.id, client1.selfClient.id, client2.selfClient.id, session.encrypt(GenericMessage.toByteArray(msg)))
 
-      Await.result(client2.otrService.decryptOtrEvent(event), 5.seconds).right.get shouldEqual msg
+      Await.result(client2.otrService.decryptOtrEvent(event), 5.seconds) shouldEqual Left(IdentityChangedError(client1.self.id, client1.selfClient.id))
     }
   }
 }

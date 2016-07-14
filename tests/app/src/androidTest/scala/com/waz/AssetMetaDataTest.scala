@@ -1,26 +1,33 @@
 package com.waz
 
+import android.content.Context
 import android.net.Uri
-import android.test._
+import android.support.test.InstrumentationRegistry
+import android.support.test.runner.AndroidJUnit4
 import com.waz.model.AssetMetaData
 import com.waz.service.ZMessaging
-import com.waz.testapp.EmptyTestActivity
 import com.waz.threading.Threading
-import org.junit.Assert
+import com.waz.utils._
+import org.junit.runner.RunWith
+import org.junit.{Assert, Before, Test}
 
-class AssetMetaDataTest extends ActivityInstrumentationTestCase2[EmptyTestActivity](classOf[EmptyTestActivity]) {
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
-  def context = getActivity.getApplication
+@RunWith(classOf[AndroidJUnit4])
+class AssetMetaDataTest {
 
-  override def setUp(): Unit = {
-    super.setUp()
+  @Before def setUp(): Unit = {
     Threading.AssertsEnabled = false
-    ZMessaging.onCreate(getActivity.getApplication)
+    ZMessaging.onCreate(context)
   }
 
-  def testAudioDurationLoadingFromUri() = {
-    val meta = AssetMetaData.Audio(context, Uri.parse("content://com.waz.test/32kbps.m4a"))
+  @Test def testAudioDurationLoadingFromUri(): Unit = {
+    val meta = Await.result(AssetMetaData.Audio(context, Uri.parse("content://com.waz.test/32kbps.m4a")), 5.seconds)
 
-    Assert.assertEquals(309L, meta.map(_.duration.getSeconds).getOrElse(0L))
+    Assert.assertEquals(309L, meta.fold2(0L, _.duration.getSeconds))
   }
+
+  def context: Context = instr.getTargetContext
+  def instr = InstrumentationRegistry.getInstrumentation
 }

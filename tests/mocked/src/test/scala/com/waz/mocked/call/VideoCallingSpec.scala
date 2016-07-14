@@ -86,7 +86,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
         voice.isMuted shouldEqual false
         voice.getVideoCaptureDevices should have size 2
         hasConvVideoSendState(remoteId, VideoSendState.PREVIEW) shouldEqual true
-        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = true, isUiActive = true, networkMode = NetworkMode.WIFI)
+        callingEventsSpy.latestEvent.value shouldEqual OutgoingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = true, isUiActive = true, networkMode = NetworkMode.WIFI, false)
       }
     }
 
@@ -127,8 +127,8 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
         voice.isMuted shouldEqual true
         otherParticipant.value.isSendingVideo shouldEqual true
         callingEventsSpy.events.take(2) should beMatching { case List(
-          CallJoined(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, true, true, NetworkMode.WIFI, 2, 2, d),
-          RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, true, true, NetworkMode.WIFI)
+          CallJoined(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, true, true, NetworkMode.WIFI, 2, 2, d, false),
+          RingingEnded(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, true, true, NetworkMode.WIFI, false)
         ) if !d.isZero => () }
       }
     }
@@ -146,7 +146,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
         voice.getCurrentVideoCaptureDevice shouldEqual voice.getVideoCaptureDevices.get(0)
         otherParticipant.value.isSendingVideo shouldEqual true
         currentVideoCaptureDeviceId(remoteId) shouldEqual Some("front")
-        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, true, true, NetworkMode.WIFI, 2, 2, d) if !d.isZero => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEstablished(KindOfCall.ONE_TO_ONE, CallDirection.OUTGOING, true, true, NetworkMode.WIFI, 2, 2, d, false) if !d.isZero => () }
       }
     }
 
@@ -398,7 +398,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
         voice.getState shouldEqual Idle
         voice.isVideoCall shouldEqual true
         voice.getVideoSendState shouldEqual VideoSendState.DONT_SEND
-        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, true, true, NetworkMode.WIFI, 2, CauseForCallEnd.OTHER, 2, _) => () }
+        callingEventsSpy.latestEvent.value should beMatching { case CallEndedNormally(KindOfCall.ONE_TO_ONE, CallDirection.INCOMING, true, true, NetworkMode.WIFI, 2, CauseForCallEnd.OTHER, 2, _, false) => () }
       }
     }
   }

@@ -25,13 +25,13 @@ import com.waz.api.impl.AccentColor
 import com.waz.model._
 import com.waz.provision.InternalBackendClient
 import com.waz.utils._
+import com.waz.testutils.randomPhoneNumber
 import com.waz.testutils.Implicits._
 import org.scalatest.{FeatureSpec, OptionValues}
 
 import com.waz.testutils.Matchers._
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.util.Random
 
 class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with ApiSpec { test =>
   override val autoLogin = false
@@ -39,16 +39,16 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
   lazy val userId = AccountId()
 
   lazy val phone = randomPhoneNumber
-  override lazy val email = s"android.test+${UUID.randomUUID}@wearezeta.com"
+  override lazy val email = s"android.test+${UUID.randomUUID}@wire.com"
 
   lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
 
-  def randomPhoneNumber: PhoneNumber = PhoneNumber("+0" + Array.fill(14)(Random.nextInt(10)).mkString)
-
   var confirmationCodeSent: Boolean = false
+  var passwordExists = false
   var confirmationCode = Option.empty[ConfirmationCode]
 
   lazy val confirmationCodeListener = new PhoneConfirmationCodeRequestListener {
+    override def onPasswordExists(kindOfAccess: KindOfAccess): Unit = passwordExists = true
     override def onConfirmationCodeSent(kindOfAccess: KindOfAccess): Unit = confirmationCodeSent = true
     override def onConfirmationCodeSendingFailed(kindOfAccess: KindOfAccess, code: Int, message: String, label: String): Unit = {
       info(s"unable to request confirmation code: $kindOfAccess, $code, $message, $label")
@@ -169,6 +169,16 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
   }
 
   feature("Sign in by phone") {
+    scenario("Request login confirmation code if no password") {
+      confirmationCodeSent = false
+      passwordExists = false
+      api.requestPhoneConfirmationCode(phone.str, KindOfAccess.LOGIN_IF_NO_PASSWD, confirmationCodeListener)
+      withDelay {
+        passwordExists shouldEqual true
+        confirmationCodeSent shouldEqual false
+      }
+    }
+
     scenario("Request login confirmation code") {
       confirmationCodeSent = false
       api.requestPhoneConfirmationCode(phone.str, KindOfAccess.LOGIN, confirmationCodeListener)
@@ -210,6 +220,16 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
       api.requestPhoneConfirmationCall(phone.str, KindOfAccess.LOGIN, confirmationCodeListener)
       withDelay {
         confirmationCodeSent shouldEqual true
+      }
+    }
+
+    scenario("Request login confirmation call if no password") {
+      confirmationCodeSent = false
+      passwordExists = false
+      api.requestPhoneConfirmationCall(phone.str, KindOfAccess.LOGIN_IF_NO_PASSWD, confirmationCodeListener)
+      withDelay {
+        passwordExists shouldEqual true
+        confirmationCodeSent shouldEqual false
       }
     }
   }

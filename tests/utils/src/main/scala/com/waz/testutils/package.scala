@@ -29,7 +29,7 @@ import com.waz.api.{CoreList, IConversation}
 import com.waz.cache.CacheEntryData
 import com.waz.content.{Mime, MsgCursor}
 import com.waz.model.nano.Messages.GenericMessage
-import com.waz.model.{Contact, MessageData, NameSource}
+import com.waz.model.{Contact, MessageData, NameSource, PhoneNumber}
 import com.waz.service.ContactsService
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
@@ -44,6 +44,7 @@ import scala.collection.JavaConverters._
 import scala.collection.breakOut
 import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.util.Random
 
 package object testutils {
 
@@ -56,6 +57,7 @@ package object testutils {
     implicit def apiml_to_ml(list: com.waz.api.MessagesList): MessagesList = list.asInstanceOf[MessagesList]
     implicit def apiim_to_im(im: com.waz.api.ImageAsset): ImageAsset = im.asInstanceOf[ImageAsset]
     implicit def apiself_to_self(s: com.waz.api.Self): Self = s.asInstanceOf[Self]
+    implicit def apiclient_to_client(s: com.waz.api.OtrClient): otr.OtrClient = s.asInstanceOf[otr.OtrClient]
 
     implicit lazy val CursorEmptiness: Emptiness[Cursor] = new Emptiness[Cursor] {
       override def isEmpty(thing: Cursor): Boolean = thing.getCount == 0
@@ -256,4 +258,6 @@ package object testutils {
       storage.remove(vs.map(storage.dao.idExtractor))
     }
   }
+
+  def randomPhoneNumber = PhoneNumber("+0" + (Random.nextInt(9) + 1).toString + Array.fill(13)(Random.nextInt(10)).mkString)
 }

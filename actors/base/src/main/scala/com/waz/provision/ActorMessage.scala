@@ -188,6 +188,8 @@ object ActorMessage {
 
   case class SendFile(remoteId: RConvId, filePath: String, mime: String) extends ActorMessage
 
+  case class SendLocation(remoteId: RConvId, lon: Float, lat: Float, name: String, zoom: Int) extends ActorMessage
+
   /**
    * Send a connection request to another user
    * @param userId The user ID of the target user. Note on UserIds: They are just a simple class wrapping the

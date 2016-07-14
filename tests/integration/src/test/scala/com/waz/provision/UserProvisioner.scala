@@ -18,11 +18,12 @@
 package com.waz.provision
 
 import com.waz.ZLog._
-import com.waz.api.impl.{EmailCredentials, ErrorResponse}
+import com.waz.api.KindOfVerification
+import com.waz.api.impl.{EmailCredentials, ErrorResponse, PhoneCredentials}
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{AccountId, EmailAddress, UserId, UserInfo}
+import com.waz.model._
 import com.waz.service.GlobalModule
-import com.waz.sync.client.{ConnectionsClient, ConversationsClient, UsersClient}
+import com.waz.sync.client.{ConnectionsClient, ConversationsClient, CredentialsUpdateClient, UsersClient}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -61,6 +62,17 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
   lazy val userClient = new UsersClient(client)
   lazy val connClient = new ConnectionsClient(client)
   lazy val convClient = new ConversationsClient(client)
+  lazy val credentialsClient = new CredentialsUpdateClient(client)
+
+  def addPhone(phone: PhoneNumber) =
+    credentialsClient.updatePhone(phone) flatMap { _ =>
+      internalBackend.getPhoneActivationCode(phone) flatMap {
+        case Left(error) =>
+          CancellableFuture successful Left(error)
+        case Right(code) =>
+          regClient.verifyPhoneNumber(PhoneCredentials(phone, Some(code)), KindOfVerification.VERIFY_ON_UPDATE)
+      }
+    }
 
   def connect(user: UserId, name: String, msg: String) = connClient.createConnection(user, name, msg)
 

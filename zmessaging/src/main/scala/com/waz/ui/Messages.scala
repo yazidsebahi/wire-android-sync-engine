@@ -29,7 +29,6 @@ import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
 import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, RichFuture}
-import org.threeten.bp.Instant
 
 import scala.collection.Seq
 import scala.concurrent.Future
@@ -72,7 +71,7 @@ class Messages(implicit module: UiModule) {
 
   private[this] val syncNeeded = (_: MessageContent).syncNeeded
 
-  def updateLastRead(conv: ConvId, time: Instant, event: EventId) = module.zms.flatMapFuture(_.convsUi.setLastRead(conv, time, event)).recoverWithLog(reportHockey = true)
+  def updateLastRead(conv: ConvId, msg: MessageData) = module.zms.flatMapFuture(_.convsUi.setLastRead(conv, msg)).recoverWithLog(reportHockey = true)
 
   def retry(conv: ConvId, msg: MessageId): Unit = module.zms(_.messages.retryMessageSending(conv, msg)).future.recoverWithLog(reportHockey = true)
 }

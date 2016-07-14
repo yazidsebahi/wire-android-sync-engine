@@ -136,6 +136,7 @@ case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserI
 sealed trait OtrError
 case object Duplicate extends OtrError
 case class DecryptionError(msg: String, from: UserId, sender: ClientId) extends OtrError
+case class IdentityChangedError(from: UserId, sender: ClientId) extends OtrError
 
 case class OtrErrorEvent(id: Uid, convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent with UnarchivingEvent {
   override val eventId: EventId = EventId.Zero

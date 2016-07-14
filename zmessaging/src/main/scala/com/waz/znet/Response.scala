@@ -57,6 +57,12 @@ object Response {
       case _ => false
     }
   }
+  object ClientErrorStatus {
+    def unapply(status: Status) = status match {
+      case HttpStatus(s, _) => s / 100 == 4
+      case _ => false
+    }
+  }
   object SuccessStatus {
     def unapply(status: Status) = status.isSuccess
   }

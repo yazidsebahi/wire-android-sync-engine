@@ -138,6 +138,10 @@ object SyncRequest {
     override val mergeKey = (cmd, convId, messageId)
   }
 
+  case class PostOpenGraphMeta(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostOpenGraphMeta) {
+    override val mergeKey = (cmd, convId, messageId)
+  }
+
   case class PostDeleted(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostDeleted) {
     override val mergeKey = (cmd, convId, messageId)
   }
@@ -300,6 +304,7 @@ object SyncRequest {
         case Cmd.PostClientLabel       => PostClientLabel(decodeId[ClientId]('client), 'label)
         case Cmd.PostLiking            => PostLiking(convId, JsonDecoder[Liking]('liking))
         case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
+        case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId)
         case Cmd.Unknown               => Unknown
       }
     }
@@ -331,6 +336,7 @@ object SyncRequest {
         case PostConnectionStatus(_, status)  => status foreach { status => o.put("status", status.code) }
         case PostConvJoin(_, users)           => o.put("users", arrString(users.toSeq map (_.str)))
         case PostConvLeave(_, user)           => putId("user", user)
+        case PostOpenGraphMeta(_, messageId)  => putId("message", messageId)
 
         case PostConnection(_, name, message) =>
           o.put("name", name)

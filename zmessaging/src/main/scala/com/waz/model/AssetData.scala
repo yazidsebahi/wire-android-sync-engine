@@ -93,9 +93,9 @@ case class ImageData(tag: String,
 
   lazy val uri = url map Uri.parse
 
-  def fileExtension = mime.substring(mime.indexOf('/') + 1)
+  def fileExtension = Mime(mime).extension
 
-  def cacheKey = ImageData.cacheKey(remoteId, url)
+  def cacheKey = proxyPath.fold(ImageData.cacheKey(remoteId, url))(path => s"image-data://$path")
 
   override def toString: LogTag = s"ImageData($tag, $mime, $width, $height, $origWidth, $origHeight, $size, $remoteId, data: ${data64.map(_.take(10))}, $proxyPath, otrKey: $otrKey, $sent, $url)"
 }
@@ -188,6 +188,8 @@ object ImageAssetData {
   import JsonDecoder._
   val Empty = ImageAssetData(AssetId("empty"), RConvId(), Nil)
 
+  def apply(uri: Uri): ImageAssetData = ImageAssetData(AssetId(uri.toString), RConvId(), Seq(ImageData("full", "image/*", 0, 0, 0, 0, 0, url = Some(uri.toString))))
+
   implicit lazy val ImageAssetDataDecoder: JsonDecoder[ImageAssetData] = new JsonDecoder[ImageAssetData] {
     override def apply(implicit js: JSONObject): ImageAssetData = ImageAssetData(decodeId[AssetId]('id), decodeId[RConvId]('convId), decodeSeq[ImageData]('versions))
   }
@@ -201,27 +203,46 @@ object ImageAssetData {
   }
 }
 
-case class AssetKey(remoteId: RAssetDataId, otrKey: AESKey, sha256: Sha256)
+case class RemoteKey(str: String) extends AnyVal
 
-object AssetKey extends ((RAssetDataId, AESKey, Sha256) => AssetKey) {
+case class AssetToken(str: String) extends AnyVal
+
+object AssetToken extends (String => AssetToken)
+
+case class AssetKey(remoteId: Either[RAssetDataId, RemoteKey], token: Option[AssetToken], otrKey: AESKey, sha256: Sha256) {
+  def cacheKey = remoteId.fold(_.str, _.str)
+  def assetId = AssetId(remoteId.fold(_.str, _.str))
+}
+
+object AssetKey extends ((Either[RAssetDataId, RemoteKey], Option[AssetToken], AESKey, Sha256) => AssetKey) {
   import JsonDecoder._
 
-  implicit lazy val AnyAssetContentDecoder: JsonDecoder[AssetKey] = new JsonDecoder[AssetKey] {
-    override def apply(implicit js: JSONObject): AssetKey = AssetKey(decodeRAssetDataId('remoteId), AESKey(decodeString('otrKey)), Sha256(decodeString('sha256)))
+  implicit lazy val AssetKeyDecoder: JsonDecoder[AssetKey] = new JsonDecoder[AssetKey] {
+    override def apply(implicit js: JSONObject): AssetKey = {
+      val remoteId = if (js.has("remoteId")) Left(decodeRAssetDataId('remoteId)) else Right(RemoteKey('remoteKey))
+      AssetKey(remoteId, decodeOptString('token).map(AssetToken(_)), AESKey(decodeString('otrKey)), Sha256(decodeString('sha256)))
+    }
   }
 
-  implicit lazy val AnyAssetContentEncoder: JsonEncoder[AssetKey] = new JsonEncoder[AssetKey] {
+  implicit lazy val AssetKeyEncoder: JsonEncoder[AssetKey] = new JsonEncoder[AssetKey] {
     override def apply(data: AssetKey): JSONObject = JsonEncoder { o =>
-      o.put("remoteId", data.remoteId.str)
+      data.remoteId match {
+        case Left(id) => o.put("remoteId", id.str)
+        case Right(key) => o.put("remoteKey", key.str)
+      }
+      data.token foreach { t => o.put("token", t.str) }
       o.put("otrKey", data.otrKey.str)
       o.put("sha256", data.sha256.str)
     }
   }
 }
 
-case class AnyAssetData(id: AssetId, convId: RConvId, mimeType: Mime, sizeInBytes: Long, name: Option[String], metaData: Option[AssetMetaData], preview: Option[AssetPreviewData], source: Option[Uri], status: AssetStatus, lastUpdate: Instant) extends AssetData {
+case class AnyAssetData(id: AssetId, convId: RConvId, mimeType: Mime, sizeInBytes: Long, name: Option[String],
+    metaData: Option[AssetMetaData], preview: Option[AssetPreviewData], source: Option[Uri],
+    originalMimeType: Option[Mime], status: AssetStatus, lastUpdate: Instant) extends AssetData {
+
   override def assetType: AssetType = AssetType.Any
-  def cacheKey = status.key.fold2(id.str, _.remoteId.str)
+  def cacheKey = status.key.fold2(id.str, _.remoteId.fold(_.str, _.str))
   val messageId = MessageId(id.str)
   val uid = Uid(id.str)
 
@@ -229,12 +250,13 @@ case class AnyAssetData(id: AssetId, convId: RConvId, mimeType: Mime, sizeInByte
     val mime = if (mimeType.isEmpty) asset.mimeType else mimeType
     val st = if (asset.status == AssetStatus.UploadInProgress || lastUpdate.isAfter(asset.lastUpdate)) status else asset.status
     val size = math.max(sizeInBytes, asset.sizeInBytes)
-    AnyAssetData(id, convId, mime, size, name.orElse(asset.name), metaData.orElse(asset.metaData), preview.orElse(asset.preview), source orElse asset.source, st, lastUpdate max asset.lastUpdate)
+    AnyAssetData(id, convId, mime, size, name.orElse(asset.name), metaData.orElse(asset.metaData),
+      preview.orElse(asset.preview), source orElse asset.source, asset.originalMimeType, st, lastUpdate max asset.lastUpdate)
   }
 
   def loadRequest = status match {
-    case AssetStatus(_, Some(AssetKey(remoteId, key, sha))) =>
-      AnyAssetRequest(cacheKey, id, convId, remoteId, Some(key), Some(sha), mimeType, name)
+    case AssetStatus(_, Some(key)) =>
+      AnyAssetRequest(cacheKey, id, convId, key, mimeType, name)
     case _ =>
       CachedAssetRequest(cacheKey, mimeType, name)
   }
@@ -245,10 +267,10 @@ case class AnyAssetData(id: AssetId, convId: RConvId, mimeType: Mime, sizeInByte
 }
 
 object AnyAssetData {
-  val Empty = AnyAssetData(AssetId("empty"), RConvId(), Mime.Default, 0, None, None, None, None, AssetStatus.UploadNotStarted, Instant.EPOCH)
+  val Empty = AnyAssetData(AssetId("empty"), RConvId(), Mime.Default, 0, None, None, None, None, None, AssetStatus.UploadNotStarted, Instant.EPOCH)
 
-  def apply(id: AssetId, convId: RConvId, mime: Mime, size: Long, name: Option[String], source: Uri, time: Instant = Instant.EPOCH): AnyAssetData =
-    new AnyAssetData(id, convId, mime, size, name, None, None, Some(source), AssetStatus.UploadNotStarted, time)
+  def apply(id: AssetId, convId: RConvId, mime: Mime, size: Long, name: Option[String], source: Uri, time: Instant = Instant.EPOCH, originalMimeType: Option[Mime] = None, metaData: Option[AssetMetaData] = None): AnyAssetData =
+    new AnyAssetData(id, convId, mime, size, name, metaData, None, Some(source), originalMimeType, AssetStatus.UploadNotStarted, time)
 
   def apply(id: AssetId, convId: RConvId, asset: Proto.Asset, dataId: Option[RAssetDataId], time: Instant): AnyAssetData = {
     val (mime, size, name, loudness) = Option(asset.original) match {
@@ -258,14 +280,16 @@ object AnyAssetData {
     val preview = loudness.orElse(Option(asset.preview) map { p => AssetPreviewData.Image(ImageData(p, dataId)) })
     val status = Proto.Asset.Status(asset, dataId)
     val metaData = Proto.Asset.MetaData(asset)
-    AnyAssetData(id, convId, mime, size, name, metaData, preview, None, status, time)
+    AnyAssetData(id, convId, mime, size, name, metaData, preview, None, None, status, time)
   }
 
   import JsonDecoder._
 
   implicit lazy val AnyAssetDataDecoder: JsonDecoder[AnyAssetData] = new JsonDecoder[AnyAssetData] {
     override def apply(implicit js: JSONObject): AnyAssetData = AnyAssetData(decodeId[AssetId]('id),
-      decodeId[RConvId]('convId), Mime('mimeType), 'sizeInBytes, 'name, opt[AssetMetaData]('metaData), opt[AssetPreviewData]('preview), decodeOptString('source).map(Uri.parse), JsonDecoder[AssetStatus]('status), 'lastUpdate)
+      decodeId[RConvId]('convId), Mime('mimeType), 'sizeInBytes, 'name, opt[AssetMetaData]('metaData),
+      opt[AssetPreviewData]('preview), decodeOptString('source).map(Uri.parse), decodeOptString('originalMimeType).map(Mime(_)),
+      JsonDecoder[AssetStatus]('status), 'lastUpdate)
   }
 
   implicit lazy val AnyAssetDataEncoder: JsonEncoder[AnyAssetData] = new JsonEncoder[AnyAssetData] {
@@ -278,6 +302,7 @@ object AnyAssetData {
       data.metaData.foreach(md => o.put("metaData", JsonEncoder.encode(md)))
       data.preview.foreach(p => o.put("preview", JsonEncoder.encode(p)))
       data.source.foreach(u => o.put("source", u.toString))
+      data.originalMimeType.foreach(m => o.put("originalMimeType", m.str))
       o.put("status", JsonEncoder.encode(data.status))
       o.put("lastUpdate", JsonEncoder.encodeInstant(data.lastUpdate))
     }

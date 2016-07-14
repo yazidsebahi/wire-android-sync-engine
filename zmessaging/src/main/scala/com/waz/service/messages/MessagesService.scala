@@ -19,14 +19,14 @@ package com.waz.service.messages
 
 import android.util.Base64
 import com.waz.ZLog._
-import com.waz.api.Message.Status
+import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{LikingsStorage, Mime}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent._
-import com.waz.model.{MessageId, _}
+import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
@@ -76,6 +76,7 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
       msgs  = filtered map { createMessage(conv, _) } filter (_ != MessageData.Empty)
       _     = verbose(s"messages from events: $msgs")
       res   <- content.addMessages(conv.id, msgs)
+      _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
     } yield res
   }
@@ -102,9 +103,12 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
       updateImageAsset(AssetId(assetId.str), convId, img)
   })
 
+  private def updateLastReadFromOwnMessages(convId: ConvId, msgs: Seq[MessageData]) =
+    msgs.reverseIterator.find(_.userId == selfUserId).fold2(Future.successful(None), msg => updateConversationLastRead(convId, msg.time))
+
   private def deleteCancelled(as: Seq[AssetData]) = {
     val toRemove = as collect {
-      case AnyAssetData(id, _, _, _, _, _, _, _, UploadCancelled, _) => id
+      case AnyAssetData(id, _, _, _, _, _, _, _, _, UploadCancelled, _) => id
     }
     if (toRemove.isEmpty) Future.successful(())
     else for {
@@ -133,13 +137,15 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
         MessageData(id, convId, eventId, Message.Type.MISSED_CALL, from, time = time.instant, localTime = event.localTime.instant)
       case _: VoiceChannelDeactivateEvent =>
         MessageData.Empty // don't add any message, interesting case is handled with MissedCallEvent extractor
-      case OtrErrorEvent(_, _, time, from, _) =>
-        MessageData(id, conv.id, EventId.Zero, Message.Type.OTR_ERROR, from, time = time.instant, localTime = event.localTime.instant)
+      case OtrErrorEvent(_, _, time, from, IdentityChangedError(_, _)) =>
+        MessageData (id, conv.id, EventId.Zero, Message.Type.OTR_IDENTITY_CHANGED, from, time = time.instant, localTime = event.localTime.instant)
+      case OtrErrorEvent(_, _, time, from, otrError) =>
+        MessageData (id, conv.id, EventId.Zero, Message.Type.OTR_ERROR, from, time = time.instant, localTime = event.localTime.instant)
       case GenericMessageEvent(_, _, time, from, proto @ GenericMessage(uid, msgContent)) =>
         val id = MessageId(uid.str)
         msgContent match {
-          case Text(text, mentions) =>
-            val (tpe, content) = MessageData.messageContent(text, mentions)
+          case Text(text, mentions, links) =>
+            val (tpe, content) = MessageData.messageContent(text, mentions, links)
             MessageData(id, conv.id, EventId.Zero, tpe, from, content, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
           case Knock(hotKnock) =>
             MessageData(id, conv.id, EventId.Zero, Message.Type.KNOCK, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
@@ -151,6 +157,8 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
             MessageData(id, convId, EventId.Zero, Message.Type.AUDIO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
           case Asset(_, _, _) =>
             MessageData(id, convId, EventId.Zero, Message.Type.ANY_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
+          case Location(_, _, _, _) =>
+            MessageData(id, convId, EventId.Zero, Message.Type.LOCATION, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
           case LastRead(remoteId, timestamp) => MessageData.Empty
           case Cleared(remoteId, timestamp) => MessageData.Empty
           case MsgDeleted(_, _) => MessageData.Empty
@@ -207,14 +215,21 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
     }
   }
 
-  def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData] = withSelfUserFuture { selfUserId =>
+  def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData] = {
     verbose(s"addTextMessage($convId, $content, $mentions)")
-    val (tpe, ct) = MessageData.messageContent(content, mentions)
+    val (tpe, ct) = MessageData.messageContent(content, mentions, weblinkEnabled = true)
     verbose(s"parsed content: $ct")
-    addLocalMessage(MessageData(MessageId(), convId, EventId.Zero, tpe, selfUserId, ct))
+    val id = MessageId()
+    addLocalMessage(MessageData(id, convId, EventId.Zero, tpe, selfUserId, ct, protos = Seq(GenericMessage(id, Text(content, mentions, Nil))))) // FIXME: links
   }
 
-  def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = withSelfUserFuture { selfUserId =>
+  def addLocationMessage(convId: ConvId, content: Location): Future[MessageData] = {
+    verbose(s"addLocationMessage($convId, $content)")
+    val id = MessageId()
+    addLocalMessage(MessageData(id, convId, EventId.Zero, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id, content))))
+  }
+
+  def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = {
     val id = MessageId(assetId.str)
     addLocalMessage(MessageData(id, convId, EventId.Zero, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
   }

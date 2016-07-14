@@ -23,18 +23,19 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
+import com.google.protobuf.nano.MessageNano
 import com.waz.ZLog._
 import com.waz.api.ImageAsset.{BitmapCallback, SaveCallback}
 import com.waz.api.LoadHandle
 import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.BitmapUtils.Mime
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
-import com.waz.service.assets.AssetService
-import AssetService.BitmapRequest._
-import AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import AssetService.{BitmapRequest, BitmapResult}
 import com.waz.service.ZMessaging
+import com.waz.service.assets.AssetService.BitmapRequest._
+import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
+import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}
 import com.waz.service.images.{BitmapSignal, ImageLoader}
 import com.waz.threading.Threading
 import com.waz.ui._
@@ -46,7 +47,7 @@ import scala.concurrent.{Await, Future}
 import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
 
-class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with UiObservable with SignalLoading {
+class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with SavingToGallery with UiObservable with SignalLoading {
   private implicit val tag: LogTag = logTagFor[ImageAsset]
 
   var data = ImageAssetData.Empty
@@ -54,7 +55,7 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
   protected def signal(zms: ZMessaging) =
     zms.assetsStorage.signal(id) map {
       case im: ImageAssetData => im
-      case AnyAssetData(_, conv, _, _, _, _, Some(AssetPreviewData.Image(preview)), _, _, _) => ImageAssetData(id, conv, Seq(preview))
+      case AnyAssetData(_, conv, _, _, _, _, Some(AssetPreviewData.Image(preview)), _, _, _, _) => ImageAssetData(id, conv, Seq(preview))
       case _ => ImageAssetData.Empty
     }
 
@@ -74,36 +75,9 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
   protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
     BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.imageCache) }, callback)
 
-  override def getBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Regular(width, mirror = this.mirrored), callback) // TODO: should we handle greyscale flag?
-
-  override def getStaticBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Static(width, mirror = this.mirrored), callback) // TODO: should we handle greyscale flag?
-
-  override def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Single(width), callback)
-
-  override def getBlurredBitmap(width: Int, blurRadius: Float, callback: BitmapCallback): LoadHandle = getSingleBitmap(width, callback) // we don't use blurring anywhere currently, so this just returns the unblurred bitmap
-
-  override def getRoundBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Round(width), callback)
-
-  override def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle = getBitmap(Round(width, borderWidth, borderColor), callback)
-
   override def isEmpty: Boolean = false
 
   override def getMimeType: String = data.versions.lastOption.fold(Mime.Jpg)(_.mime)
-
-  override def saveImageToGallery(): Unit = saveImageToGallery(new SaveCallback {
-    override def imageSavingFailed(ex: Exception): Unit = ()
-    override def imageSaved(uri: Uri): Unit = ()
-  })
-
-  protected def imageSaveHandler(callback: SaveCallback): (Try[Option[Uri]] => Unit) = {
-    case Success(Some(uri)) => callback.imageSaved(uri)
-    case Success(None) =>
-      info(s"saveImageToGallery($data) failed")
-      callback.imageSavingFailed(new Exception("internal error"))
-    case Failure(ex) =>
-      warn(s"saveImageToGallery($data) failed", ex)
-      callback.imageSavingFailed(new Exception(ex))
-  }
 
   override def saveImageToGallery(callback: SaveCallback): Unit = ui.zms { zms =>
     zms.imageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
@@ -127,14 +101,24 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 class LocalImageAsset(img: ImageAssetData)(implicit ui: UiModule) extends ImageAsset(img.id) with DisableSignalLoading {
   data = img
 
-
   override def addLoader[A, B <: A](signal: (ZMessaging) => Signal[B], defaultValue: A)(onLoaded: (A) => Unit)(implicit ui: UiModule) = null
 
-  override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
-    new BitmapLoadHandle(_ => BitmapSignal(data, req, ui.globalImageLoader, ui.imageCache), callback)
+  override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
+    new BitmapLoadHandle( {
+      case None => BitmapSignal(data, req, ui.globalImageLoader, ui.imageCache)
+      case Some(zms) => BitmapSignal(data, req, zms.imageLoader, ui.imageCache)
+    }, callback)
+  }
 
-  override def saveImageToGallery(callback: SaveCallback): Unit =
-    ui.globalImageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
+  override def saveImageToGallery(callback: SaveCallback): Unit = {
+    import Threading.Implicits.Background
+
+    val loadFuture = ui.getCurrent flatMap {
+      case Some(zms) => zms.imageLoader.saveImageToGallery(data)
+      case None => ui.globalImageLoader.saveImageToGallery(data)
+    }
+    loadFuture.onComplete(imageSaveHandler(callback))(Threading.Ui)
+  }
 
   override def writeToParcel(p: Parcel, flags: Int): Unit = {
     p.writeInt(Parcelable.FlagLocal)
@@ -198,6 +182,7 @@ object ImageAsset {
     val FlagEmpty = 0
     val FlagLocal = 1
     val FlagWire = 2
+    val FlagProto = 3
   }
 
   object Empty extends com.waz.api.ImageAsset with UiFlags with UiObservable {
@@ -213,7 +198,6 @@ object ImageAsset {
     override def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
     override def saveImageToGallery(): Unit = ()
     override def saveImageToGallery(callback: SaveCallback): Unit = { callback.imageSavingFailed(new Exception("Empty ImageAsset - can not be saved.")) }
-    override def getBlurredBitmap(width: Int, blurLevel: Float, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
 
     override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeInt(Parcelable.FlagEmpty)
   }
@@ -228,7 +212,7 @@ object ImageAsset {
 
     private var loader = Option(addLoaderOpt(signal) {
       case res @ BitmapLoaded(bitmap, preview, etag) =>
-        if (prev.forall(p => p._1.get.forall(_ != bitmap) || p._2 != preview || p._3 != etag)) { // make sure that callback is not called twice with the same image, UI doesn't like that
+        if (prev.forall(p => !p._1.get.contains(bitmap) || p._2 != preview || p._3 != etag)) { // make sure that callback is not called twice with the same image, UI doesn't like that
           prev = Some((new WeakReference(bitmap), preview, etag))
           callback.onBitmapLoaded(bitmap, preview)
         }
@@ -254,14 +238,80 @@ object ImageAsset {
 
   object BitmapLoadHandle {
     def apply(signal: ZMessaging => Signal[BitmapResult], callback: BitmapCallback)(implicit ui: UiModule) =
-      new BitmapLoadHandle(_.fold[Signal[BitmapResult]](Signal(BitmapResult.Empty))(signal), callback)
+      new BitmapLoadHandle(_.fold2(Signal.const(BitmapResult.Empty), signal), callback)
   }
 }
 
 trait UiFlags {
   var mirrored = false
-  var greyscale = false
 
   def setMirrored(mirrored: Boolean): Unit = this.mirrored = mirrored
-  def setGreyscale(greyscale: Boolean): Unit = this.greyscale = greyscale
+}
+
+trait BitmapLoading { self: com.waz.api.ImageAsset with UiFlags =>
+
+  protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle
+
+  override def getBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Regular(width, mirror = this.mirrored), callback)
+
+  override def getStaticBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Static(width, mirror = this.mirrored), callback)
+
+  override def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Single(width), callback)
+
+  override def getRoundBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Round(width), callback)
+
+  override def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle = getBitmap(Round(width, borderWidth, borderColor), callback)
+}
+
+trait SavingToGallery { self: com.waz.api.ImageAsset =>
+  private implicit val tag: LogTag = logTagFor[ImageAsset]
+
+  override def saveImageToGallery(): Unit = saveImageToGallery(new SaveCallback {
+    override def imageSavingFailed(ex: Exception): Unit = ()
+    override def imageSaved(uri: Uri): Unit = ()
+  })
+
+  protected def imageSaveHandler(callback: SaveCallback): (Try[Option[Uri]] => Unit) = {
+    case Success(Some(uri)) => callback.imageSaved(uri)
+    case Success(None) =>
+      info(s"saveImageToGallery($this) failed")
+      callback.imageSavingFailed(new Exception("internal error"))
+    case Failure(ex) =>
+      warn(s"saveImageToGallery($this) failed", ex)
+      callback.imageSavingFailed(new Exception(ex))
+  }
+}
+
+class ProtoImageAsset(data: GenericContent.Asset)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with SavingToGallery with UiObservable {
+
+  override def getId = data match {
+    case GenericContent.Asset(_, _, UploadDone(key)) => key.assetId.str
+    case _ => data.hashCode().toHexString
+  }
+
+  lazy val dimens = data match {
+    case GenericContent.Asset.WithDimensions(d) => d
+    case _ => Dim2.Empty
+  }
+
+  override def getWidth = dimens.width
+
+  override def getHeight = dimens.height
+
+  override def isEmpty = false
+
+  override def getMimeType = Option(data.original).fold("")(_.mimeType)
+
+  override def writeToParcel(dest: Parcel, flags: Int) = {
+    dest.writeInt(Parcelable.FlagProto)
+    val arr = MessageNano.toByteArray(data)
+    dest.writeInt(arr.length)
+    dest.writeByteArray(arr)
+  }
+
+  override protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
+    BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.imageCache) }, callback)
+
+  override def saveImageToGallery(callback: SaveCallback) =
+    ui.zms { _.imageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui) }
 }

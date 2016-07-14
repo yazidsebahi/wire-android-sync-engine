@@ -20,38 +20,33 @@ package com.waz.service.media
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model._
-import com.waz.service.assets.AssetService
+import com.waz.service.media.RichMediaContentParser.GoogleMapsLocation
 import com.waz.sync.client.GoogleMapsClient
-import com.waz.threading.Threading
-import com.waz.znet.ZNetClient.ErrorOr
 
-import scala.concurrent.Future
-
-class GoogleMapsMediaService(assets: AssetService) {
-  import Threading.Implicits.Background
-
+object GoogleMapsMediaService {
   private implicit val logTag: LogTag = logTagFor[YouTubeMediaService]
 
-  val (mapWidth, mapHeight) = (800, 600)
-  val (previewWidth, previewHeight) = (80, 60)
+  val MaxImageWidth = 640 // free maps api limitation
+  val ImageDimensions = Dim2(MaxImageWidth, MaxImageWidth * 3 / 4)
+  val PreviewWidth = 64
 
-  def updateMedia(msg: MessageData, content: MessageContent): ErrorOr[MessageContent] = {
-    RichMediaContentParser.googleMapsLocation(content.content) match {
-      case Some(location) =>
-        val Seq(previewPath, mediumPath) = Seq((previewWidth, previewHeight), (mapWidth, mapHeight)) map { case (w, h) =>
-          GoogleMapsClient.getStaticMapPath(location, w, h)
-        }
+  def mapImageAsset(id: AssetId, loc: com.waz.api.MessageContent.Location, dimensions: Dim2 = ImageDimensions): ImageAssetData =
+    mapImageAsset(id, GoogleMapsLocation(loc.getLatitude.toString, loc.getLongitude.toString, loc.getZoom.toString), dimensions)
 
-        val preview = ImageData(ImageData.Tag.Preview, Mime.Png, previewWidth, previewHeight, mapWidth, mapHeight, sent = true, proxyPath = Some(previewPath))
-        val medium  = ImageData(ImageData.Tag.Medium,  Mime.Png, mapWidth,     mapHeight,     mapWidth, mapHeight, sent = true, proxyPath = Some(mediumPath))
+  def mapImageAsset(id: AssetId, location: GoogleMapsLocation, dimensions: Dim2): ImageAssetData = {
 
-        assets.updateImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(preview, medium))) map (_.id) map { assetId =>
-          Right(content.copy(asset = Some(assetId), width = mapWidth, height = mapHeight))
-        }
+    val mapWidth = math.min(MaxImageWidth, dimensions.width)
+    val mapHeight = mapWidth * dimensions.height / dimensions.width
+    val previewWidth = PreviewWidth
+    val previewHeight = previewWidth * mapHeight / mapWidth
 
-      case None =>
-        warn(s"no valid google maps location found in message: $content")
-        Future.successful(Right(content))
+    val Seq(previewPath, mediumPath) = Seq((previewWidth, previewHeight), (mapWidth, mapHeight)) map { case (w, h) =>
+      GoogleMapsClient.getStaticMapPath(location, w, h)
     }
+
+    val preview = ImageData(ImageData.Tag.Preview, Mime.Png, previewWidth, previewHeight, mapWidth, mapHeight, sent = true, proxyPath = Some(previewPath))
+    val medium  = ImageData(ImageData.Tag.Medium,  Mime.Png, mapWidth,     mapHeight,     mapWidth, mapHeight, sent = true, proxyPath = Some(mediumPath))
+
+    ImageAssetData(AssetId(), RConvId(), Seq(preview, medium))
   }
 }

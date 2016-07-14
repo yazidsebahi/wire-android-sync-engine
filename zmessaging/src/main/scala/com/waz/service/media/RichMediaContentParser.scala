@@ -23,6 +23,7 @@ import android.net.Uri
 import android.util.Patterns
 import com.waz.ZLog._
 import com.waz.api.Message.Part
+import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
 
 import scala.collection.JavaConverters._
@@ -34,15 +35,14 @@ class RichMediaContentParser {
 
   private implicit val logTag: LogTag = logTagFor[RichMediaContentParser]
 
-  def findMatches(content: String) = {
+  def findMatches(content: String, weblinkEnabled: Boolean = false) = {
 
     val knownDomains = Map(
       "youtu.be" -> YOUTUBE,
       "youtube.com" -> YOUTUBE,
-      "twitter.com" -> TWITTER,
+//      "twitter.com" -> TWITTER,
       "soundcloud.com" -> SOUNDCLOUD,
-      "open.spotify.com" -> SPOTIFY,
-      "www.google.com.au" -> GOOGLE_MAPS // XXX only accept exactly this for now
+      "open.spotify.com" -> SPOTIFY
     )
 
     def validate(uri: Uri, tpe: Part.Type): Boolean = tpe match {
@@ -50,8 +50,7 @@ class RichMediaContentParser {
       case SOUNDCLOUD  => Option(uri.getPath).exists(_.nonEmpty)
       case TWITTER     => uri.toString.matches(TwitterRegex.regex)
       case SPOTIFY     => SpotifyPathRegex.unapplySeq(uri.getPath).isDefined
-      case GOOGLE_MAPS => GoogleMapsRegex.unapplySeq(uri.toString).isDefined
-      case WEB_LINK    => WebLinkEnabled // accept any link here if weblink is enabled
+      case WEB_LINK    => weblinkEnabled
       case _           => false
     }
 
@@ -75,19 +74,19 @@ class RichMediaContentParser {
     }.flatten
   }
 
-  def splitContent(content: String) = {
-    def prepend(str: String, acc: List[MessageContent]) = if (str.nonEmpty) MessageContent(TEXT, str) :: acc else acc
-
+  def splitContent(content: String, weblinkEnabled: Boolean = false) = {
     try {
-      findMatches(content).foldRight(Seq(MessageContent(TEXT, content))) {
-        case ((start, end, tpe), MessageContent(TEXT, ct, _, _, _, _, _, _) :: tail) =>
-          val prefix = ct.substring(0, start).trim
-          val suffix = ct.substring(end).trim
-          val link = MessageContent(tpe, ct.substring(start, end))
+      val res = new MessageContentBuilder
 
-          prepend(prefix, link :: prepend(suffix, tail))
-        case (_, ct) => ct // this should actually never happen
+      val end = findMatches(content, weblinkEnabled).foldLeft(0) { case (start, (matchStart, matchEnd, tpe)) =>
+        if (start < matchStart) res += content.substring(start, matchStart)
+        res += (tpe, content.substring(matchStart, matchEnd))
+        matchEnd
       }
+
+      if (end < content.length) res += content.substring(end)
+
+      res.result()
     } catch {
       case e: Throwable =>
         error("got error while parsing message content", e)
@@ -101,11 +100,8 @@ class RichMediaContentParser {
 object RichMediaContentParser {
   case class GoogleMapsLocation(x: String, y: String, zoom: String)
 
-  val WebLinkEnabled = false
-
   val SpotifyPathRegex = "(?i)/(artist|album|track|playlist)/[0-9A-Za-z-_]+/?".r
   val TwitterRegex = """(?i)(https?://)?(www\.)?twitter\.com/[0-9A-Za-z-_]+/status/\d*/?""".r
-  val GoogleMapsRegex = """https://www\.google\.com\.au/maps/preview/@([0-9\.\-]+),([0-9\.\-]+),([0-9]+\+?)z""".r // XXX only accept exactly this for now
 
   def youtubeVideoId(youtubeUrl: String): Option[String] = decode(youtubeUrl)(youtubeVideoId)
   private def youtubeVideoId(uri: Uri): Option[String] = try {
@@ -116,11 +112,60 @@ object RichMediaContentParser {
     case NonFatal(e) => None
   }
 
-  def googleMapsLocation(mapsUrl: String): Option[GoogleMapsLocation] = decode(mapsUrl)(googleMapsLocation)
-  private def googleMapsLocation(uri: Uri): Option[GoogleMapsLocation] = uri.toString match {
-    case GoogleMapsRegex(x, y, zoom) => Some(GoogleMapsLocation(x, y, zoom))
-    case _ => None
+  private def decode[T](url: String)(op: Uri => Option[T]): Option[T] = op(Uri.parse(URLDecoder.decode(url, "UTF-8")))
+
+  def textMessageContent(part: String) = MessageContent(if (containsOnlyEmojis(part)) TEXT_EMOJI_ONLY else TEXT, part)
+
+  def containsOnlyEmojis(part: String): Boolean = {
+
+    val iter = part.iterator
+
+    def emoji(hs: Char) = hs match {
+      case 0xa9 | 0xae | 0x303d | 0x3030 | 0x2b55 | 0x2b1c | 0x2b1b | 0x2b50 | 0x203c | 0x2049 => true
+      case _ if 0x2100 <= hs && hs <= 0x27ff => true
+      case _ if 0x2B05 <= hs && hs <= 0x2b07 => true
+      case _ if 0x2934 <= hs && hs <= 0x2935 => true
+      case _ if 0x3297 <= hs && hs <= 0x3299 => true
+      case _ if 0xd800 <= hs && hs <= 0xdbff => // surrogate pair
+        iter.hasNext && {
+          val ls = iter.next()
+          val uc = ((hs - 0xd800) * 0x400) + (ls - 0xdc00) + 0x10000
+          0x1d000 <= uc && uc <= 0x1f9c0
+        }
+      case _ =>
+        iter.hasNext && {
+          iter.next() match {
+            case 0x20e3 | 0xfe0f | 0xd83c => true
+            case _ => false
+          }
+        }
+    }
+
+    while (iter.hasNext) {
+      val hs = iter.next()
+      if (!Character.isWhitespace(hs) && !emoji(hs)) return false
+    }
+
+    true
+  }
+}
+
+class MessageContentBuilder {
+  val res = Seq.newBuilder[MessageContent]
+
+  def +=(part: String) = {
+    val trimmed = part.trim
+    if (trimmed.nonEmpty) res += RichMediaContentParser.textMessageContent(trimmed)
   }
 
-  private def decode[T](url: String)(op: Uri => Option[T]): Option[T] = op(Uri.parse(URLDecoder.decode(url, "UTF-8")))
+  def +=(tpe: Part.Type, part: String) = {
+    val trimmed = part.trim
+    if (trimmed.nonEmpty) res += MessageContent(tpe, trimmed)
+  }
+
+  def +=(content: MessageContent) = res += content
+
+  def ++=(ct: Seq[MessageContent]) = res ++= ct
+
+  def result() = res.result()
 }

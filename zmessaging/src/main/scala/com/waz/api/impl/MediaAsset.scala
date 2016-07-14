@@ -21,13 +21,18 @@ import java.util
 
 import android.net.Uri
 import com.waz.api
+import com.waz.api.Asset.LoadCallback
 import com.waz.api.MediaAsset.StreamingCallback
 import com.waz.api.{KindOfMedia, MediaProvider}
-import com.waz.model.messages.media.{EmptyMediaAssetData, PlaylistData, TrackData, MediaAssetData}
+import com.waz.model.messages.media.{EmptyMediaAssetData, MediaAssetData, PlaylistData, TrackData}
+import com.waz.service.assets.GlobalRecordAndPlayService.{Content, SpotifyContent, UnauthenticatedContent, UriMediaKey}
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
+import com.waz.utils.events.Signal
 import org.threeten.bp.Duration
+
 import scala.collection.JavaConverters._
+import scala.util.Success
 
 abstract class BaseMediaAsset(protected val data: MediaAssetData) extends api.MediaAsset {
   override def getKind: KindOfMedia = data.kind
@@ -44,17 +49,33 @@ abstract class BaseMediaAsset(protected val data: MediaAssetData) extends api.Me
   override def isEmpty: Boolean = data.kind == KindOfMedia.UNKNOWN
 }
 
-class MediaAsset(mad: MediaAssetData)(implicit context: UiModule) extends BaseMediaAsset(mad) {
-  override def getArtwork: api.ImageAsset = data.artwork.map(context.images.getImageAsset).getOrElse(ImageAsset.Empty)
-  override def getArtistAvatar: api.ImageAsset = data.artist.flatMap(_.avatar).map(context.images.getImageAsset).getOrElse(ImageAsset.Empty)
+class MediaAsset(mad: MediaAssetData)(implicit ui: UiModule) extends BaseMediaAsset(mad) {
+  import MediaAsset._
+
+  override def getArtwork: api.ImageAsset = data.artwork.map(ui.images.getImageAsset).getOrElse(ImageAsset.Empty)
+  override def getArtistAvatar: api.ImageAsset = data.artist.flatMap(_.avatar).map(ui.images.getImageAsset).getOrElse(ImageAsset.Empty)
   override def getTracks: java.util.List[api.MediaAsset] = data.tracks.map(new MediaAsset(_): api.MediaAsset).asJava
 
   override def prepareStreaming(cb: StreamingCallback): Unit = {
-    context.zms.flatMapFuture(_.richmedia.prepareStreaming(data)).map {
+    ui.zms.flatMapFuture(_.richmedia.prepareStreaming(data)).map {
       case Right(uris) => cb.onSuccess(uris.asJava)
       case Left(ErrorResponse(code, msg, label)) => cb.onFailure(code, msg, label)
     } (Threading.Ui)
   }
+
+  override def getPlaybackControls(callback: LoadCallback[api.PlaybackControls]): Unit =
+    ui.zms.flatMapFuture(zms => zms.richmedia.prepareStreaming(data)).onComplete {
+      case Success(Right(uris)) if uris.nonEmpty && playbackSupportedFrom(data.provider) =>
+        val content: Content =
+          if (data.provider == MediaProvider.SPOTIFY) SpotifyContent(uris.head, () => ui.zms.flatMapFuture(_.spotifyMedia.authentication.head))
+          else UnauthenticatedContent(uris.head)
+        callback.onLoaded(new PlaybackControls(UriMediaKey(uris.head), content, _ => Signal.const(mad.duration.getOrElse(Duration.ZERO))))
+      case _ => callback.onLoadFailed()
+    } (Threading.Ui)
+}
+
+object MediaAsset {
+  val playbackSupportedFrom = Set(MediaProvider.SOUNDCLOUD, MediaProvider.SPOTIFY)
 }
 
 object EmptyMediaAsset extends BaseMediaAsset(EmptyMediaAssetData(MediaProvider.YOUTUBE)) {
@@ -62,4 +83,5 @@ object EmptyMediaAsset extends BaseMediaAsset(EmptyMediaAssetData(MediaProvider.
   override def getArtistAvatar: api.ImageAsset = ImageAsset.Empty
   override def getTracks: util.List[api.MediaAsset] = util.Collections.emptyList()
   override def prepareStreaming(cb: StreamingCallback): Unit = cb.onSuccess(util.Collections.emptyList())
+  override def getPlaybackControls(callback: LoadCallback[api.PlaybackControls]): Unit = callback.onLoadFailed()
 }

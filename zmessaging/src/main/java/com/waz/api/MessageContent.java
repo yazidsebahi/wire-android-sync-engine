@@ -17,14 +17,11 @@
  */
 package com.waz.api;
 
-public interface MessageContent<T> {
+public interface MessageContent {
 
-    User[] EmptyMentions = new User[0];
+    class Text implements MessageContent {
+        private static final User[] EmptyMentions = new User[0];
 
-    T getContent();
-    User[] getMentions();
-
-    class Text implements MessageContent<String> {
         private final String content;
         private final User[] mentions;
 
@@ -42,36 +39,28 @@ public interface MessageContent<T> {
             this(content, EmptyMentions);
         }
 
-        @Override
         public String getContent() {
             return content;
         }
 
-        @Override
         public User[] getMentions() {
             return mentions;
         }
     }
 
-    class Image implements MessageContent<ImageAsset> {
+    class Image implements MessageContent {
         private final ImageAsset content;
 
         public Image(ImageAsset file) {
             this.content = file;
         }
 
-        @Override
         public ImageAsset getContent() {
             return content;
         }
-
-        @Override
-        public User[] getMentions() {
-            return EmptyMentions;
-        }
     }
 
-    class Asset implements MessageContent<AssetForUpload> {
+    class Asset implements MessageContent {
         private final AssetForUpload content;
         private final ErrorHandler handler;
 
@@ -80,8 +69,7 @@ public interface MessageContent<T> {
             this.handler = eh;
         }
 
-        @Override public AssetForUpload getContent() { return content; }
-        @Override public User[] getMentions() { return EmptyMentions; }
+        public AssetForUpload getContent() { return content; }
         public ErrorHandler getErrorHandler() { return handler; }
 
         public interface ErrorHandler {
@@ -91,6 +79,59 @@ public interface MessageContent<T> {
         public interface Answer {
             void ok();
             void cancel();
+        }
+    }
+
+    class Location implements MessageContent {
+
+        private final float longitude;
+        private final float latitude;
+        private final String name;
+        private final int zoom;
+
+        public Location(float longitude, float latitude, String name, int zoom) {
+            this.longitude = longitude;
+            this.latitude = latitude;
+            this.name = name;
+            this.zoom = zoom;
+        }
+
+        public float getLongitude() {
+            return longitude;
+        }
+
+        public float getLatitude() {
+            return latitude;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public int getZoom() {
+            return zoom;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Location location = (Location) o;
+
+            if (Float.compare(location.longitude, longitude) != 0) return false;
+            if (Float.compare(location.latitude, latitude) != 0) return false;
+            if (zoom != location.zoom) return false;
+            return name != null ? name.equals(location.name) : location.name == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = (longitude != +0.0f ? Float.floatToIntBits(longitude) : 0);
+            result = 31 * result + (latitude != +0.0f ? Float.floatToIntBits(latitude) : 0);
+            result = 31 * result + (name != null ? name.hashCode() : 0);
+            result = 31 * result + zoom;
+            return result;
         }
     }
 }

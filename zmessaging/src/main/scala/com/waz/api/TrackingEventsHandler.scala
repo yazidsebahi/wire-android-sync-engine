@@ -31,5 +31,6 @@ trait TrackingEvent {
   def getAssetMimeType: Opt[String]
   def getDuration: Opt[Duration]
   def getConversationType: Opt[IConversation.Type]
+  def isInConversationWithOtto: Opt[Boolean]
   def getErrorResponse: Opt[ErrorResponse]
 }

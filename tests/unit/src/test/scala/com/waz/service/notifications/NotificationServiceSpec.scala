@@ -107,7 +107,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
       val userId = UserId(oneToOneConv.id.str)
       val convId = oneToOneConv.remoteId
       Await.ready(zms.dispatch(GenericMessageEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadCancelled)))), 5.seconds) // this should not generate a notification
-      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadDone(AssetKey(RAssetDataId(), AESKey(), Sha256("sha"))))), RAssetDataId(), None)), 5.seconds)
+      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadDone(AssetKey(Left(RAssetDataId()), None, AESKey(), Sha256("sha"))))), RAssetDataId(), None)), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {

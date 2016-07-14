@@ -48,5 +48,5 @@ object Serialized {
       case _ => if (locks.get(key).contains(future)) locks -= key
     }
     future
-  }.flatMap(identity)
+  }.flatten
 }

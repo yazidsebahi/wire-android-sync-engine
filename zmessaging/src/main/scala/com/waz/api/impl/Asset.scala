@@ -25,6 +25,7 @@ import com.waz.content.Mime
 import com.waz.model.AssetMetaData.{HasDimensions, HasDuration}
 import com.waz.model._
 import com.waz.service.ZMessaging
+import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, Content, MediaKey, UnauthenticatedContent}
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
 import org.threeten.bp.Duration
@@ -74,13 +75,13 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
 
   override def getPlaybackControls(callback: LoadCallback[api.PlaybackControls]): Unit =
     if (isAudio) ui.zms.flatMap(_.assets.getAssetUri(id)).onComplete {
-      case Success(Some(uri)) => callback.onLoaded(new PlaybackControls(id, uri, durationSignal))
+      case Success(Some(uri)) => callback.onLoaded(new PlaybackControls(AssetMediaKey(id), UnauthenticatedContent(uri), durationSignal))
       case _ => callback.onLoadFailed()
     }
     else callback.onLoadFailed()
 
   private def durationSignal(zms: ZMessaging): Signal[Duration] = zms.assetsStorage.signal(id) map {
-    case AnyAssetData(_, _, _, _, _, Some(HasDuration(duration)), _, _, _, _) => duration
+    case AnyAssetData(_, _, _, _, _, Some(HasDuration(duration)), _, _, _, _, _) => duration
     case _ => Duration.ZERO
   }
 
@@ -132,27 +133,29 @@ abstract class BaseAsset extends api.Asset with UiObservable {
   override def getAudioOverview: api.AudioOverview = AudioOverview(asset.preview.collect { case AssetPreviewData.Loudness(levels) => levels })
 }
 
-class PlaybackControls(id: AssetId, contentUri: Uri, durationSource: ZMessaging => Signal[Duration])(implicit ui: UiModule) extends api.PlaybackControls with UiObservable with SignalLoading {
+class PlaybackControls(key: MediaKey, content: Content, durationSource: ZMessaging => Signal[Duration])(implicit ui: UiModule) extends api.PlaybackControls with UiObservable with SignalLoading {
   private var playing = false
   private var playhead = Duration.ZERO
   private var duration = Duration.ZERO
 
-  addLoader(zms => Signal(zms.global.recordingAndPlayback.isPlaying(id), zms.global.recordingAndPlayback.playhead(id), durationSource(zms))) {
+  addLoader(zms => Signal(zms.global.recordingAndPlayback.isPlaying(key), zms.global.recordingAndPlayback.playhead(key), durationSource(zms))) {
     case (nextPlaying, nextPlayhead, nextDuration) =>
       if (nextPlaying != playing || nextPlayhead != playhead || nextDuration != duration) {
         playing = nextPlaying
-        playhead = nextPlayhead
+        playhead = implicitly[Ordering[Duration]].min(nextPlayhead, nextDuration)
         duration = nextDuration
         notifyChanged()
       }
   }
 
-  override def play: Unit = ui.global.recordingAndPlayback.play(id, contentUri)
-  override def stop: Unit = ui.global.recordingAndPlayback.pause(id)
+  override def play: Unit = ui.global.recordingAndPlayback.play(key, content)
+  override def stop: Unit = ui.global.recordingAndPlayback.pause(key)
 
   override def isPlaying: Boolean = playing
   override def getDuration: Duration = duration
 
   override def getPlayhead: Duration = playhead
-  override def setPlayhead(ph: Duration): Unit = ui.global.recordingAndPlayback.setPlayhead(id, contentUri, ph)
+  override def setPlayhead(ph: Duration): Unit = ui.global.recordingAndPlayback.setPlayhead(key, content, ph)
+
+  override def toString: String = s"PlaybackControls($key, $content, playing = $playing, $playhead of $duration)"
 }

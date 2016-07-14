@@ -44,6 +44,7 @@ public interface NotificationsHandler {
             KNOCK,
             MISSED_CALL,
             LIKE,
+            LOCATION,
             MESSAGE_SENDING_FAILED;
         }
 

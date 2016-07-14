@@ -81,6 +81,8 @@ public interface IConversation extends UiObservable, Parcelable {
     */
     boolean isMe();
 
+    boolean isOtto();
+
     /*
         Is this user also a member in this conversation, so far I know
         that the user doesn't have an option to mute the conversation
@@ -138,7 +140,7 @@ public interface IConversation extends UiObservable, Parcelable {
      */
     ImageAsset getBackground();
 
-    <T> void sendMessage(MessageContent<T> msg);
+    void sendMessage(MessageContent msg);
 
     /*
         Set conversation name

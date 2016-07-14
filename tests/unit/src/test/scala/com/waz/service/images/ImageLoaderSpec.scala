@@ -58,7 +58,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       override def download[A <: DownloadRequest](req: A, force: Boolean)(implicit loader: downloads.Downloader[A], expires: Expiration): CancellableFuture[Option[CacheEntry]] = {
         downloadRequest = downloadRequest :+ req
         req match {
-          case ImageAssetRequest(_, _, id, _, _, _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
+          case ImageAssetRequest(_, _, AssetKey(Left(id), _, _, _), _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
           case _ => CancellableFuture.successful(None)
         }
       }
@@ -108,7 +108,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       image should not be null
       image.getWidth shouldEqual 240
       downloadRequest should beMatching({
-        case Seq(ImageAssetRequest(_, `convId`, `mediumId`, _, _, _)) => true
+        case Seq(ImageAssetRequest(_, `convId`, AssetKey(Left(`mediumId`), _, _, _), _)) => true
       })
     }
 
@@ -129,7 +129,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         image.getWidth shouldEqual 240
       }
       downloadRequest should beMatching({
-        case Seq(ImageAssetRequest(_, `convId`, `mediumId`, _, _, _)) => true
+        case Seq(ImageAssetRequest(_, `convId`, AssetKey(Left(`mediumId`), _, _, _), _)) => true
       })
     }
   }
@@ -148,7 +148,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
     class SignalListener(req: BitmapRequest) {
       var results = Seq.empty[BitmapResult]
-      val signal = new BitmapSignal(assetData, req, service, service.imageCache)
+      val signal = new AssetBitmapSignal(assetData, req, service, service.imageCache)
       val obs = signal { result => results = results :+ result }
     }
 
@@ -174,7 +174,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       assertResults(BitmapRequest.Regular(300)) { results =>
         results should have size 2
         downloadRequest should beMatching({
-          case Seq(ImageAssetRequest(_, `convId`, `fullId`, _, _, _)) => true
+          case Seq(ImageAssetRequest(_, `convId`, AssetKey(Left(`fullId`), _, _, _), _)) => true
         })
       }
     }
@@ -199,7 +199,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         }
       }
       downloadRequest should beMatching({
-        case Seq(ImageAssetRequest(_, `convId`, `fullId`, _, _, _)) => true
+        case Seq(ImageAssetRequest(_, `convId`, AssetKey(Left(`fullId`), _, _, _), _)) => true
       })
     }
 
@@ -221,7 +221,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       prepareDownload()
 
       var results = Seq.empty[BitmapResult]
-      val signal = new BitmapSignal(assetData, BitmapRequest.Regular(300), service, service.imageCache)
+      val signal = new AssetBitmapSignal(assetData, BitmapRequest.Regular(300), service, service.imageCache)
       val obs = signal { result => results = results :+ result }
       withDelay(results.count(_ != BitmapResult.Empty) shouldEqual 1)
       obs.destroy()

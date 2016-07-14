@@ -21,11 +21,16 @@ import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.Message.{Part, Status}
-import com.waz.api.{IConversation, UpdateListener}
+import com.waz.api.Message.{Part, Status, Type}
+import com.waz.api.MessageContent.Location
+import com.waz.api.{IConversation, ImageAssetFactory, UpdateListener}
+import com.waz.model.GenericContent.LinkPreview
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
+import com.waz.service.media.GoogleMapsMediaService
 import com.waz.service.messages.MessageAndLikes
+import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils._
@@ -33,7 +38,7 @@ import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 
-class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[UserId], var likedBySelf: Boolean)(context: UiModule) extends api.Message with UiObservable {
+class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[UserId], var likedBySelf: Boolean)(implicit context: UiModule) extends api.Message with UiObservable {
 
   private implicit val logTag: LogTag = logTagFor[Message]
   private var parts = Array.empty[Part]
@@ -54,20 +59,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
     notifyChanged()
   }
 
-  private def updateParts(): Unit = parts = data.content.map { c =>
-    new Part {
-      override val getPartType: Part.Type = c.tpe
-      override val getBody: String = c.content
-      override val getImageWidth: Int = c.width
-      override val getImageHeight: Int = c.height
-      override val getImage: api.ImageAsset = c.asset.filter(_ => c.tpe == api.Message.Part.Type.ASSET).fold2(ImageAsset.Empty, context.images.getImageAsset)
-
-      override val getMediaAsset: api.MediaAsset = c.richMedia .map { media =>
-        if (media.hasExpired) context.zms(_.sync.syncRichMedia(id, Priority.High))
-        new MediaAsset(media)(context)
-      } .orNull
-    }
-  } (breakOut)
+  private def updateParts(): Unit = parts = data.content.zipWithIndex.map { case (c, index) => new MessagePart(c, data, index) } (breakOut)
 
   private def content = if (data.content.isEmpty) MessageContent.Empty else data.content.head
 
@@ -85,9 +77,25 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getTime: Instant = data.time
 
-  override def getBody: String = if (data.msgType == api.Message.Type.RICH_MEDIA) data.contentString else content.content
+  override def getBody: String = data.protos.lastOption match {
+    case Some(TextMessage(content, _, _)) => content
+    case _ if data.msgType == api.Message.Type.RICH_MEDIA => data.contentString
+    case _ => content.content
+  }
 
-  override def getImage = context.images.getImageAsset(data.assetId)
+  override def getLocation: Location = data.location.orNull
+
+  override def getImage = getImage(0, 0)
+
+  override def getImage(w: Int, h: Int) = data.msgType match {
+    case Type.LOCATION =>
+      data.location.fold2(ImageAsset.Empty, { loc =>
+        val id = AssetId(s"${data.assetId.str}_${w}_$h") // use dimensions in id, to avoid caching images with different sizes
+        context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(id, loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
+      })
+    case _ =>
+      context.images.getImageAsset(data.assetId)
+  }
 
   override def getAsset =
     if (data.isAssetMessage) getOrUpdate(context.assets)(data.assetId, new Asset(data.assetId, id)(context))
@@ -154,6 +162,50 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def isEmpty: Boolean = getBody.isEmpty
 }
 
+class MessagePart(content: MessageContent, message: MessageData, index: Int)(implicit ui: UiModule) extends Part {
+  lazy val linkIndex = message.content.take(index).count(_.tpe == Part.Type.WEB_LINK)
+  lazy val linkPreview = message.protos.lastOption flatMap {
+    case TextMessage(_, _, previews) if previews.size > linkIndex => Some(previews(linkIndex))
+    case _ => None
+  }
+
+  lazy val image = (content.tpe, content.asset, content.openGraph, linkPreview) match {
+    case (Part.Type.ASSET, Some(assetId), _, _) => ui.images.getImageAsset(assetId)
+    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset)
+    case (Part.Type.WEB_LINK, _, Some(OpenGraphData(_, _, Some(uri), _, _)), None) => ImageAssetFactory.getImageAsset(uri)
+    case _ => ImageAsset.Empty
+  }
+
+  lazy val dimensions = linkPreview match {
+    case Some(LinkPreview.WithAsset(GenericContent.Asset.WithDimensions(d))) => d
+    case _ => Dim2(content.width, content.height)
+  }
+
+  lazy val openGraph = (linkPreview, content.openGraph) match {
+    case (Some(LinkPreview.WithDescription(title, summary)), _) => OpenGraphData(title, summary, None, "", None)
+    case (_, Some(data)) => data
+    case _ => OpenGraphData.Empty
+  }
+
+  override def getPartType = content.tpe match {
+    case Part.Type.WEB_LINK if openGraph == OpenGraphData.Empty => Part.Type.TEXT
+    case _ => content.tpe
+  }
+
+  override def getBody = content.content
+  override def getImageWidth = dimensions.width
+  override def getImageHeight = dimensions.height
+  override def getImage: api.ImageAsset = image
+
+  override def getTitle = openGraph.title
+  override def getDescription = openGraph.description
+
+  override lazy val getMediaAsset: api.MediaAsset = content.richMedia .map { media =>
+    if (media.hasExpired) ui.zms(_.sync.syncRichMedia(message.id, Priority.High))
+    new MediaAsset(media)(ui)
+  } .orNull
+}
+
 object EmptyMessage extends com.waz.api.Message {
   override def getId: String = Uid(0, 0).str
   override val getMentionedUsers: Array[api.User] = Array.empty
@@ -165,6 +217,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isOtr: Boolean = false
   override def retry(): Unit = ()
   override def getImage: api.ImageAsset = ImageAsset.Empty
+  override def getImage(w: Int, h: Int): api.ImageAsset = ImageAsset.Empty
   override def getAsset = Asset.Empty
   override val getMembers: Array[api.User] = Array.empty
   override def getUser: api.User = EmptyUser
@@ -186,6 +239,7 @@ object EmptyMessage extends com.waz.api.Message {
     dest.writeInt(if (isLikedByThisUser) 1 else 0)
     dest.writeInt(0)
   }
+  override def getLocation: Location = null
   override def describeContents(): Int = 0
   override val getLikes: Array[api.User] = Array.empty
   override def unlike(): Unit = ()

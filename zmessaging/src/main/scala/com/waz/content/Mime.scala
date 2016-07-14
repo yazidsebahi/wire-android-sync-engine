@@ -54,6 +54,8 @@ object Mime {
   }
 
   object Image {
+    val PNG = Mime("image/png")
+
     def unapply(mime: Mime): Boolean = mime.str.startsWith("image/")
   }
 
@@ -67,6 +69,7 @@ object Mime {
     val Ogg = Mime("audio/ogg")
     val FLAC = Mime("audio/flac")
     val WAV = Mime("audio/wav")
+    val PCM = Mime("audio/pcm-s16le;rate=44100;channels=1")
 
     def unapply(mime: Mime): Boolean = supported(mime)
 

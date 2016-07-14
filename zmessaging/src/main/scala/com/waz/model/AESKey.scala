@@ -26,6 +26,8 @@ case class AESKey(str: String) {
 }
 
 object AESKey {
+  val Empty = AESKey("")
+
   def apply(): AESKey = AESUtils.randomKey()
   def apply(bytes: Array[Byte]): AESKey = new AESKey(AESUtils.base64(bytes))
 }
@@ -36,5 +38,7 @@ case class Sha256(str: String) {
   def matches(bytes: Array[Byte]) = str == com.waz.utils.sha2(bytes)
 }
 object Sha256 {
+  val Empty = Sha256("")
+
   def apply(bytes: Array[Byte]) = new Sha256(AESUtils.base64(bytes))
 }

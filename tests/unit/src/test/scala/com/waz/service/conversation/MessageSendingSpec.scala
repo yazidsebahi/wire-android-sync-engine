@@ -97,7 +97,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   def getMessage(id: MessageId) = Await.result(service.messagesStorage.getMessage(id), 1.second)
   
-  def sendMessage[A](content: MessageContent[A]): MessageData = {
+  def sendMessage(content: MessageContent): MessageData = {
     val count = listMessages.size
     val msg = Await.result(service.convsUi.sendMessage(conv.id, content), 1.second)
     listMessages should have size (count + 1)
@@ -238,25 +238,6 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
         service.convEvents.handlePostConversationEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, eventId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
-    }
-
-    scenario("Mark posted message read once it's synced and unreadCount = 0") {
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), selfUser.id, "test 1"))
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(2), new Date(), selfUser.id, "test 2"))
-      awaitUi(100.millis)
-
-      val msg = sendMessage(new MessageContent.Text("test"))
-      awaitUi(1.second)
-      Await.result(service.convsStorage.update(conv.id, _.copy(unreadCount = 0)), 1.second)
-
-      val eventId = EventId(msg.source.sequence + 10, "800122000a5b8a02")
-      val time = new Date
-      withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, eventId, time, selfUser.id, "test"))
-      }
-      getMessage(msg.id).get.state shouldEqual Message.Status.SENT
-      Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(time.instant)
-      lastReadSync shouldEqual Some((conv.id, time.instant))
     }
 
     scenario("Change last read even when unreadCount > 0") {

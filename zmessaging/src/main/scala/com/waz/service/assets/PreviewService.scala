@@ -43,7 +43,7 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
 
   def getAssetPreview(id: AssetId): CancellableFuture[Option[AssetPreviewData]] =
     Serialized(('PreviewService, id))(CancellableFuture lift storage.get(id) flatMap {
-      case Some(AnyAssetData(_, _, _, _, _, _, Some(preview), _, _, _)) => CancellableFuture successful Some(preview)
+      case Some(AnyAssetData(_, _, _, _, _, _, Some(preview), _, _, _, _)) => CancellableFuture successful Some(preview)
       case Some(a: AnyAssetData) =>
         for {
           p       <- preview(a)
@@ -56,8 +56,8 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
 
   private def preview(a: AnyAssetData): CancellableFuture[Option[AssetPreviewData]] =
     assets.assetDataOrSource(a) flatMap {
-      case Some(Left(entry)) => loadPreview(a.id, a.mimeType, entry)
-      case Some(Right(uri)) => loadPreview(a.id, a.mimeType, uri)
+      case Some(Left(entry)) => loadPreview(a.id, a.originalMimeType.getOrElse(a.mimeType), entry)
+      case Some(Right(uri)) => loadPreview(a.id, a.originalMimeType.getOrElse(a.mimeType), uri)
       case _ => CancellableFuture successful None
     }
 
@@ -73,8 +73,8 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
   def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetPreviewData]] = mime match {
     case Mime.Video() =>
       CancellableFuture lift MetaDataRetriever(context, uri)(loadPreview) flatMap { createVideoPreview(id, _) }
-    case Mime.Audio() =>
-      AudioLevels(context).createAudioOverview(uri)
+    case Mime.Audio() | Mime.Audio.PCM =>
+      AudioLevels(context).createAudioOverview(uri, mime)
     case _ =>
       CancellableFuture successful Some(AssetPreviewData.Empty)
   }

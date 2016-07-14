@@ -19,23 +19,23 @@ package com.waz.messages
 
 import java.util
 
+import akka.pattern.ask
 import android.graphics.Bitmap
 import android.net.Uri
 import com.waz.api.ImageAsset.BitmapCallback
 import com.waz.api.MediaAsset.StreamingCallback
+import com.waz.api.Message.Part
 import com.waz.api.MessageContent.Text
 import com.waz.api._
-import com.waz.service.RemoteZmsSpec
+import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
 import com.waz.testutils.Implicits._
+import com.waz.testutils.Matchers._
 import com.waz.utils.returning
 import org.scalatest.{BeforeAndAfter, EitherValues, FeatureSpec, Matchers}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 
-class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with BeforeAndAfter with ProvisionedApiSpec with RemoteZmsSpec { test =>
-  implicit val timeout: Timeout = 10.seconds
-  import com.waz.threading.Threading.Implicits.Ui
+class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with BeforeAndAfter with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   override val provisionFile = "/two_users_connected.json"
 
@@ -49,38 +49,163 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
   lazy val msgs = conv.getMessages
 
-  lazy val auto2 = createRemoteZms()
+  lazy val auto2 = registerDevice("auto2")
   lazy val auto2Id = provisionedUserId("auto2")
 
-  scenario("init clients") {
-    awaitUiFuture(auto2.login(provisionedEmail("auto2"), "auto2_pass"))
+  scenario("init local") {
+    withDelay {
+      conversations should not be empty
+      msgs should not be empty
+      zmessaging.syncRequests.content.syncJobs.currentValue.map(_.isEmpty) shouldEqual Some(true)
+    }
   }
 
-  feature("Maps") {
+  scenario("init clients") {
+    auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
+    auto2 ? AwaitSyncCompleted should eventually(be(Successful))
+  }
 
-    scenario("Receive message with google maps link") {
-      val link = "https://www.google.com.au/maps/preview/@12.0,-0.12345,13%2Bz"
+  feature("OpenGraph link") {
 
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.sendMessage(new Text(link))))
+    scenario("Send message with single web link") {
+      val count = msgs.size
 
-      lazy val msg = returning(msgs.getLastMessage) { m => m.getBody shouldEqual link }
+      conv.sendMessage(new Text("http://www.wire.com"))
+
+      withDelay {
+        msgs should have size (count + 1)
+        val lastMsg = msgs.getLastMessage
+        lastMsg.getMessageStatus shouldEqual Message.Status.SENT
+        lastMsg.getMessageType shouldEqual Message.Type.RICH_MEDIA
+        lastMsg.getParts should have size 1
+        val part = lastMsg.getParts.head
+        part.getPartType shouldEqual Message.Part.Type.WEB_LINK
+        part.getTitle should not be empty
+        part.getDescription should not be empty
+        part.getImage should not be empty
+      }
+
+      val image = msgs.getLastMessage.getParts.head.getImage
+      val imageSpy = new BitmapSpy(image)
+
+      withDelay {
+        imageSpy.failed shouldEqual false
+        imageSpy.result shouldBe defined
+      }
+    }
+
+    scenario("Send message with facebook link") {
+      val count = msgs.size
+
+      conv.sendMessage(new Text("Http://Facebook.com"))
+
+      withDelay {
+        msgs should have size (count + 1)
+        val lastMsg = msgs.getLastMessage
+        lastMsg.getMessageStatus shouldEqual Message.Status.SENT
+        lastMsg.getMessageType shouldEqual Message.Type.RICH_MEDIA
+        lastMsg.getParts should have size 1
+        val part = lastMsg.getParts.head
+        part.getPartType shouldEqual Message.Part.Type.WEB_LINK
+        part.getTitle should not be empty
+        part.getImage should not be empty
+      }
+
+      val image = msgs.getLastMessage.getParts.head.getImage
+      val imageSpy = new BitmapSpy(image)
+
+      withDelay {
+        imageSpy.failed shouldEqual false
+        imageSpy.result shouldBe defined
+      }
+    }
+
+    scenario("Send message with text and link") {
+      val count = msgs.size
+
+      conv.sendMessage(new Text("test http://www.github.com"))
+
+      withDelay {
+        msgs should have size (count + 1)
+        val lastMsg = msgs.getLastMessage
+        lastMsg.getMessageStatus shouldEqual Message.Status.SENT
+        lastMsg.getMessageType shouldEqual Message.Type.RICH_MEDIA
+        lastMsg.getParts.map(_.getPartType).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
+      }
+    }
+
+    scenario("Receive message with link preview") {
+      val count = msgs.size
+      val link = "https://wire.com"
+
+      auto2 ? SendText(conv.data.remoteId, link) should eventually(be(Successful))
+
+      lazy val msg = returning(msgs.getLastMessage) { m =>
+        m.getBody shouldEqual link
+        m.getMessageType shouldEqual Message.Type.RICH_MEDIA
+      }
       lazy val img = returning(msg.getParts.head.getImage) { _ should not be empty }
 
       withDelay {
-        msgs should not be empty
+        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
+          msgs should have size (count + 1)
+        }
         msg.getBody shouldEqual link
         msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
         msg.getParts should not be empty
-        msg.getParts.head.getPartType shouldEqual Message.Part.Type.GOOGLE_MAPS
-        
+        msg.getParts.head.getPartType shouldEqual Message.Part.Type.WEB_LINK
+        msg.getParts.head.getTitle should not be empty
+        msg.getParts.head.getDescription should not be empty
+
         img should not be empty
       }
 
-      info(s"got image: ${img.data}")
       val bitmap = new BitmapSpy(img)
 
       withDelay {
         bitmap.result shouldBe 'defined
+      }
+    }
+
+    scenario("Receive message with multiple link previews") {
+      val count = msgs.size
+      val text = "Test message https://wire.com and then http://github.com"
+
+      auto2 ? SendText(conv.data.remoteId, text) should eventually(be(Successful))
+
+      lazy val msg = returning(msgs.getLastMessage) { m =>
+        m.getBody shouldEqual text
+        m.getMessageType shouldEqual Message.Type.RICH_MEDIA
+      }
+
+      withDelay {
+        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
+          msgs should have size (count + 1)
+        }
+        msg.getBody shouldEqual text
+        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
+        msg.getParts.map(_.getPartType).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT, Part.Type.WEB_LINK)
+      }
+    }
+
+    scenario("Receive message with web and youtube link") {
+      val count = msgs.size
+      val text = "Test message https://wire.com https://www.youtube.com/watch?v=mTWfqi3-3qU"
+
+      auto2 ? SendText(conv.data.remoteId, text) should eventually(be(Successful))
+
+      lazy val msg = returning(msgs.getLastMessage) { m =>
+        m.getBody shouldEqual text
+        m.getMessageType shouldEqual Message.Type.RICH_MEDIA
+      }
+
+      withDelay {
+        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
+          msgs should have size (count + 1)
+        }
+        msg.getBody shouldEqual text
+        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
+        msg.getParts.map(_.getPartType).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.YOUTUBE)
       }
     }
   }
@@ -89,7 +214,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
     scenario("Receive message with youtube link") {
       val link = "https://www.youtube.com/watch?v=mTWfqi3-3qU"
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.sendMessage(new Text(link))))
+      auto2 ? SendText(conv.data.remoteId, link) should eventually(be(Successful))
 
       lazy val msg = returning(msgs.getLastMessage) { m => m.getBody shouldEqual link }
       lazy val img = returning(msg.getParts.head.getMediaAsset.getArtwork) { _ should not be empty }
@@ -116,14 +241,14 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
   feature("SoundCloud") {
 
     scenario("Receive message with soundcloud link") {
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.sendMessage(new Text("https://soundcloud.com/lifeofdesiigner/desiigner-panda"))))
+      auto2 ? SendText(conv.data.remoteId, "https://soundcloud.com/only1dram/broccoli") should eventually(be(Successful))
 
       var media: MediaAsset = null
 
       withDelay {
         msgs should not be empty
         val msg = msgs.getLastMessage
-        msg.getBody shouldEqual "https://soundcloud.com/lifeofdesiigner/desiigner-panda"
+        msg.getBody shouldEqual "https://soundcloud.com/only1dram/broccoli"
         msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
         msg.getParts should not be empty
 
@@ -161,7 +286,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
   feature("Spotify") {
 
     scenario("Receive message with spotify link") {
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.sendMessage(new Text("https://open.spotify.com/track/0sUyqewVzwv0e5tK3hS6vJ"))))
+      auto2 ? SendText(conv.data.remoteId, "https://open.spotify.com/track/0sUyqewVzwv0e5tK3hS6vJ") should eventually(be(Successful))
 
       var media: MediaAsset = null
 

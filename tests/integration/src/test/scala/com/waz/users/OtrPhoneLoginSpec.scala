@@ -20,12 +20,14 @@ package com.waz.users
 import java.util.UUID
 
 import akka.pattern.ask
+import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
 import com.waz.login.RegistrationUtils
 import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
-import com.waz.provision.ActorMessage.{DeleteAllOtherDevices, RegisterPhone, Successful}
+import com.waz.provision.ActorMessage.{DeleteAllOtherDevices, Login, RegisterPhone, Successful}
 import com.waz.provision.EmailClientSuite
+import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.robolectric.annotation.Config
 import org.scalatest.{FeatureSpec, OptionValues}
@@ -43,6 +45,7 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
   override lazy val email = s"android.test+${UUID.randomUUID}@wire.com"
 
   lazy val remote = registerDevice("second_device_remote")
+  lazy val remote2 = registerDevice("email_remote")
 
   override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
 
@@ -51,7 +54,7 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
     var prevClientId: ClientId = null
 
     scenario("Register on remote device") {
-      val code = awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.REGISTRATION)).toOption
+      val code = awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.REGISTRATION)).toOption.flatten
       code should not be empty
 
       awaitUiFuture(verifyPhoneNumber(phone, code.value, KindOfVerification.PREVERIFY_ON_REGISTRATION)) shouldEqual Success(true)
@@ -62,7 +65,7 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
     }
 
     scenario("Sign in on second device") {
-      val code = awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.LOGIN)).toOption
+      val code = awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.LOGIN_IF_NO_PASSWD)).toOption.flatten
       code should not be empty
 
       val self = awaitUiFuture(login(CredentialsFactory.phoneCredentials(phone.str, code.value.str))).toOption.value
@@ -107,8 +110,12 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
       prevClientId = zmessaging.clientId
     }
 
+    scenario("Requesting activation code returns password exists") {
+      awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.LOGIN_IF_NO_PASSWD)).toOption shouldEqual Some(None)
+    }
+
     scenario("Legacy activation code request is successfull") {
-      awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.LOGIN)).toOption shouldBe defined
+      awaitUiFuture(fetchPhoneConfirmationCode(phone, KindOfAccess.LOGIN)).toOption.flatten shouldBe defined
     }
 
     scenario("Remove current device on backend") {
@@ -130,6 +137,49 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
       val clientId = zmessaging.clientId
       clientId should not be prevClientId
       api.account.get.account.clientId shouldEqual Some(clientId)
+    }
+
+    scenario("Remove device on backend again") {
+      val self = api.getSelf
+      (remote ? DeleteAllOtherDevices(password)).await() shouldEqual Successful
+
+      withDelay {
+        self.isLoggedIn shouldEqual false
+      }
+    }
+
+    scenario("Remove remote device") {
+      val self = awaitUiFuture(login(CredentialsFactory.emailCredentials(email, password))).toOption.value
+
+      withDelay {
+        self.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
+        self.isLoggedIn shouldEqual true
+      }
+
+      (remote2 ? Login(email, password)).await()(patience(15.seconds))
+
+      val clients = self.getOtherOtrClients
+      withDelay { clients should have size 2 }
+
+      clients.toVector foreach { client =>
+        var deleted = Option.empty[OtrClient]
+        client.delete(password, new DeleteCallback {
+          override def onClientDeleted(client: OtrClient): Unit = deleted = Some(client)
+          override def onDeleteFailed(error: String): Unit = {
+            deleted = Some(null)
+            fail(error)
+          }
+        })
+
+        soon {
+          deleted shouldBe defined
+        }
+      }
+
+      awaitUi(15.seconds)
+      withClue(clients.map(_.data).mkString) {
+        clients shouldBe empty
+      }
     }
   }
 }

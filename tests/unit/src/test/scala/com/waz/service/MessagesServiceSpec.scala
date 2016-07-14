@@ -247,7 +247,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       messages.processEvents(conv, Seq(event)).futureValue
       listMessages(convId) should have size 1
       listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, event.eventId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
-      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, AssetStatus.UploadInProgress, event.time.instant))
+      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, None, AssetStatus.UploadInProgress, event.time.instant))
     }
 
     scenario("Receive full file asset event") {
@@ -255,13 +255,13 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val dataId = RAssetDataId()
       val key = AESKey()
       val sha = Sha256(AESUtils.randomKey().bytes)
-      val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadDone(AssetKey(dataId, key, sha))))
+      val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadDone(AssetKey(Left(dataId), None, key, sha))))
       val event = GenericAssetEvent(Uid(), conv.remoteId, new Date(), user2.id, msg, dataId, None)
 
       messages.processEvents(conv, Seq(event)).futureValue
       listMessages(convId) should have size 1
       listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, event.eventId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
-      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, AssetStatus.UploadDone(AssetKey(dataId, key, sha)), event.time.instant))
+      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), event.time.instant))
     }
   }
 
@@ -486,7 +486,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         val ms = listMessages(conv.id)
         ms should have size 1
-        ms.head.content shouldEqual Seq(MessageContent(Message.Part.Type.TEXT, "message @selfName", None, None, 0, 0, syncNeeded = false, Map(selfUserId -> "selfName")))
+        ms.head.content shouldEqual Seq(MessageContent(Message.Part.Type.TEXT, "message @selfName", None, None, None, 0, 0, syncNeeded = false, Map(selfUserId -> "selfName")))
       }
     }
 
@@ -496,7 +496,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         val ms = listMessages(conv.id)
         ms should have size 2
-        ms(1).content shouldEqual Seq(MessageContent(Message.Part.Type.TEXT, "message @selfName 2", None, None, 0, 0, syncNeeded = false, Map(selfUserId -> "selfName")))
+        ms(1).content shouldEqual Seq(MessageContent(Message.Part.Type.TEXT, "message @selfName 2", None, None, None, 0, 0, syncNeeded = false, Map(selfUserId -> "selfName")))
       }
     }
 
@@ -506,7 +506,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         val ms = listMessages(conv.id)
         ms should have size 3
-        ms(2).content shouldEqual Seq(MessageContent(Message.Part.Type.TEXT, "message @selfName 3", None, None, 0, 0, syncNeeded = false, Map(selfUserId -> "selfName")))
+        ms(2).content shouldEqual Seq(MessageContent(Message.Part.Type.TEXT, "message @selfName 3", None, None, None, 0, 0, syncNeeded = false, Map(selfUserId -> "selfName")))
       }
     }
   }
@@ -682,13 +682,13 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val unreadCount = messagesStorage.unreadCount(convId)
       unreadCount.disableAutowiring()
 
-      convsUi.setLastRead(convId, Instant.EPOCH, EventId.Zero)
+      convsUi.setLastRead(convId, MessageData(MessageId(), convId, EventId.Zero, Message.Type.TEXT, UserId(), time = Instant.EPOCH))
       withDelay(unreadCount.currentValue shouldEqual Some(59))
-      convsUi.setLastRead(convId, messages(40).time, messages(40).source)
+      convsUi.setLastRead(convId, messages(40))
       withDelay(unreadCount.currentValue shouldEqual Some(18))
-      convsUi.setLastRead(convId, Instant.EPOCH, EventId.Zero) // has no effect
+      convsUi.setLastRead(convId, MessageData(MessageId(), convId, EventId.Zero, Message.Type.TEXT, UserId(), time = Instant.EPOCH)) // has no effect
       withDelay(unreadCount.currentValue shouldEqual Some(18))
-      convsUi.setLastRead(convId, Instant.now(), EventId.MaxValue)
+      convsUi.setLastRead(convId, MessageData(MessageId(), convId, EventId.MaxValue, Message.Type.TEXT, UserId(), time = Instant.now()))
       withDelay(unreadCount.currentValue shouldEqual Some(0))
     }
   }

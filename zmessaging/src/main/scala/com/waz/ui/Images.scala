@@ -45,6 +45,8 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
 
+  def getImageAsset(asset: GenericContent.Asset) = new ProtoImageAsset(asset)
+
   def getFilePreview(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
 
   def getImageAsset(p: Parcel): api.ImageAsset = {
@@ -52,6 +54,10 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       case Parcelable.FlagEmpty => ImageAsset.Empty
       case Parcelable.FlagWire => getImageAsset(AssetId(p.readString()))
       case Parcelable.FlagLocal => getLocalImageAsset(JsonDecoder.decode[ImageAssetData](p.readString()))
+      case Parcelable.FlagProto =>
+        val arr = Array.ofDim[Byte](p.readInt())
+        p.readByteArray(arr)
+        getImageAsset(GenericContent.Asset(arr))
     }
   }
 
@@ -60,7 +66,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      getLocalImageAsset(ImageAssetData(AssetId(uri.toString), RConvId(), Seq(ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, url = Some(uri.toString)))))
+      getLocalImageAsset(ImageAssetData(uri))
     }
   }
 

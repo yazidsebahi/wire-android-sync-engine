@@ -75,7 +75,7 @@ class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter
       val msg = addMsg()
       withDelay { richMediaSyncRequest shouldEqual Some(msg.id) }
       loadContent(msg) should eventually(beMatching({
-        case Some(Seq(MessageContent(Message.Part.Type.YOUTUBE, `link`, _, None, 0, 0, true, _))) => true
+        case Some(Seq(MessageContent(Message.Part.Type.YOUTUBE, `link`, _, None, None, 0, 0, true, _))) => true
       }))
     }
 
@@ -97,7 +97,7 @@ class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter
       videoSnippetResponse = Right(MediaWithImages(track, Set()))
       service.richmedia.updateRichMedia(msg.id) should eventually(be(Nil))
       loadContent(msg) should eventually(beMatching({
-        case Some(Seq(MessageContent(Message.Part.Type.YOUTUBE, `link`, Some(`track`), None, 0, 0, false, _))) => true
+        case Some(Seq(MessageContent(Message.Part.Type.YOUTUBE, `link`, Some(`track`), None, None, 0, 0, false, _))) => true
       }))
     }
 
@@ -108,7 +108,7 @@ class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter
       videoSnippetResponse = Left(err)
       service.richmedia.updateRichMedia(msg.id) should eventually(be(Nil))
       loadContent(msg) should eventually(beMatching({
-        case Some(Seq(MessageContent(Message.Part.Type.TEXT, `link`, None, None, 0, 0, false, _))) => true
+        case Some(Seq(MessageContent(Message.Part.Type.TEXT, `link`, None, None, None, 0, 0, false, _))) => true
       }))
     }
 
@@ -120,7 +120,7 @@ class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter
       service.richmedia.updateRichMedia(msg.id) should eventually(be(Seq(err)))
       val emptyMedia = MediaAssetData.empty(Message.Part.Type.YOUTUBE)
       loadContent(msg) should eventually(beMatching({
-        case Some(Seq(MessageContent(Message.Part.Type.YOUTUBE, `link`, Some(`emptyMedia`), None, 0, 0, false, _))) => true
+        case Some(Seq(MessageContent(Message.Part.Type.YOUTUBE, `link`, Some(`emptyMedia`), None, None, 0, 0, false, _))) => true
       }))
     }
   }

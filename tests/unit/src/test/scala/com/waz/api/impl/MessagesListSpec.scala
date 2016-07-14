@@ -51,9 +51,9 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
   implicit lazy val ui: MockUiModule = new MockUiModule(zmessaging) {
     override lazy val messages: com.waz.ui.Messages = new com.waz.ui.Messages()(this) {
 
-      override def updateLastRead(conv: ConvId, time: Instant, event: EventId) = {
-        lastReadSync = Some(event)
-        super.updateLastRead(conv, time, event)
+      override def updateLastRead(conv: ConvId, msg: MessageData) = {
+        lastReadSync = Some(msg.source)
+        super.updateLastRead(conv, msg)
       }
     }
   }

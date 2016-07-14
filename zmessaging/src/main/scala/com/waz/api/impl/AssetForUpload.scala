@@ -17,18 +17,21 @@
  */
 package com.waz.api.impl
 
-import java.io.InputStream
+import java.io.{File, InputStream}
 
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns._
 import com.waz.ZLog._
 import com.waz.api
+import com.waz.api.Asset.LoadCallback
+import com.waz.api.AudioEffect
 import com.waz.cache.CacheEntry
 import com.waz.content.Mime
-import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.AssetId
 import com.waz.service.ZMessaging
+import com.waz.service.assets.AudioTranscoder
+import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, PCMContent}
 import com.waz.threading.Threading
 import com.waz.utils.LoggedTry
 import com.waz.utils.events.Signal
@@ -36,7 +39,7 @@ import org.threeten.bp
 
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 abstract class AssetForUpload(val id: AssetId) extends api.AssetForUpload {
   def getId = id.str
@@ -93,14 +96,25 @@ case class ContentUriAssetForUpload(override val id: AssetId, uri: Uri) extends 
   override def openDataStream(context: Context): InputStream = context.getContentResolver.openInputStream(uri)
 }
 
-case class AudioAssetForUpload(override val id: AssetId, data: CacheEntry, duration: bp.Duration) extends AssetForUpload(id) with api.AudioAssetForUpload {
+case class AudioAssetForUpload(override val id: AssetId, data: CacheEntry, duration: bp.Duration, fx: (AudioEffect, File) => Future[AudioAssetForUpload]) extends AssetForUpload(id) with api.AudioAssetForUpload {
   override def name         = successful(Some("recording.m4a"))
-  override def sizeInBytes  = successful(Some(data.length))
-  override def mimeType     = successful(data.data.mimeType)
+  override def sizeInBytes  = successful(Some(AudioTranscoder.estimatedSizeBasedOnBitrate(data.length)))
+  override def mimeType     = successful(Mime.Audio.MP4)
   override def openDataStream(context: Context) = data.inputStream
 
-  override def getPlaybackControls: api.PlaybackControls = new PlaybackControls(id, CacheUri(data.data, ZMessaging.context), _ => Signal.const(duration))(ZMessaging.currentUi)
+  override def getPlaybackControls: api.PlaybackControls = new PlaybackControls(AssetMediaKey(id), PCMContent(data.cacheFile), _ => Signal.const(duration))(ZMessaging.currentUi)
   override def getDuration: bp.Duration = duration
+
+  override def delete(): Unit = data.delete()
+
+  override def applyEffect(effect: api.AudioEffect, callback: LoadCallback[api.AudioAssetForUpload]): Unit =
+    fx(effect, data.cacheFile).onComplete {
+      case Success(asset) =>
+        callback.onLoaded(asset)
+      case Failure(cause) =>
+        error("effect application failed", cause)(logTagFor[AudioAssetForUpload])
+        callback.onLoadFailed()
+    }(Threading.Ui)
 }
 
 object DoNothingAndProceed extends api.MessageContent.Asset.ErrorHandler {

@@ -8,7 +8,8 @@
             }
         },
         "bodyPatterns": [
-            { "matches" : ".*\"email\":\"test@mail.com\".*\"password\":\"password\".*" }
+            { "matches" : ".*\"email\":\"test@mail.com\".*" },
+            { "matches" : ".*\"password\":\"password\".*" }
         ]
     },
     "response": {

@@ -27,9 +27,14 @@ class Timeouts {
   val typing = new Typing
   val calling = new Calling
   val webSocket = new WebSocket
+  val messages = new Messages
+
+  class Messages {
+    def lastReadPostDelay = 15.seconds
+  }
 
   class Contacts {
-    def uploadMaxDelay = 30.days // time after which the contacts are uploaded again even if it did not change
+    def uploadMaxDelay = 7.days // time after which the contacts are uploaded again even if it did not change
     def uploadMinDelay = 1.day // contacts will never be uploaded more often than once per this time frame
     def uploadCheckInterval = 1.hour // for uploads, contacts will be checked for changes and other timeouts at most once per this time frame
     def userMatchingInterval = 1.second // the results from matching users to contacts will be processed at most once per this time frame

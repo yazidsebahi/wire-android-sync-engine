@@ -66,19 +66,13 @@ trait ImageAsset extends UiObservable with Parcelable {
 
   def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle
 
-  def getBlurredBitmap(width: Int, blurRadius: Float, callback: BitmapCallback): LoadHandle
-
   def saveImageToGallery(): Unit
 
   def saveImageToGallery(callback: SaveCallback): Unit
 
   def mirrored: Boolean
 
-  def greyscale: Boolean
-
   def setMirrored(mirrored: Boolean): Unit
-
-  def setGreyscale(greyscale: Boolean): Unit
 
   override def describeContents(): Int = 0
 }

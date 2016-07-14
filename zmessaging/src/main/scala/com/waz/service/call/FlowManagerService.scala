@@ -205,6 +205,10 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
     override def changeAudioState(state: Int): Unit = {
       //TODO
     }
+
+    override def cameraFailed(): Unit = ()
+
+    override def changeVideoSize(i: Int, i1: Int): Unit = ()
   }
 
   def acquireFlows(convId: RConvId, selfId: UserId, participantIds: Set[UserId], sessionId: Option[CallSessionId]): Future[Unit] = Future {

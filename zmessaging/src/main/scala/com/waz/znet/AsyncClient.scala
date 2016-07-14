@@ -38,6 +38,7 @@ import com.waz.utils.returning
 import com.waz.znet.ContentEncoder._
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, Headers, HttpStatus, ResponseBodyDecoder}
+import com.waz.znet.ResponseConsumer.ConsumerState.Done
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -107,11 +108,11 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
   def close(): Unit = client foreach { _.getServer.stop() }
 
   private def buildHttpRequest(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration): AsyncHttpRequest = {
-    val r = new AsyncHttpRequest(uri, method)
+    val r = new AsyncHttpRequest(uri.normalizeScheme(), method)
     r.setTimeout(timeout.toMillis.toInt)
     r.setFollowRedirect(followRedirect)
-    headers.foreach(p => r.addHeader(p._1, p._2))
-    r.setHeader("User-Agent", userAgent)
+    r.getHeaders.set(UserAgentHeader, userAgent)
+    headers.foreach(p => r.getHeaders.set(p._1, p._2.trim))
     body(r)
   }
 
@@ -119,7 +120,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
   private def processResponse(uri: Uri, response: AsyncHttpResponse, decoder: ResponseBodyDecoder = bodyDecoder, progressCallback: Option[ProgressCallback], networkActivityCallback: () => Unit): CancellableFuture[Response] = {
     val httpStatus = HttpStatus(response.code(), response.message())
     val contentLength = HttpUtil.contentLength(response.headers())
-    val contentType = Option(response.headers().get("Content-Type")).getOrElse("")
+    val contentType = Option(response.headers().get(ContentTypeHeader)).getOrElse("")
 
     debug(s"got connection response for request: $uri, status: '$httpStatus', length: '$contentLength', type: '$contentType'")
 
@@ -133,36 +134,51 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       val p = Promise[Response]()
       val consumer = decoder(contentType, contentLength)
 
+      def onComplete(ex: Exception) = {
+        response.setDataCallback(new NullDataCallback)
+        response.setEndCallback(new NullCompletedCallback)
+        p.tryComplete(
+          if (ex != null) Failure(ex)
+          else consumer.result match {
+            case Success(body) =>
+              progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(contentLength, contentLength, api.ProgressIndicator.State.COMPLETED))) }
+              Success(Response(httpStatus, body, new Headers(response.headers())))
+
+            case Failure(t) =>
+              progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(0, contentLength, api.ProgressIndicator.State.FAILED))) }
+              Success(Response(Response.InternalError(s"Response body consumer failed for request: $uri", Some(t), Some(httpStatus))))
+          }
+        )
+      }
+
       response.setDataCallback(new DataCallback {
         val bytesSent = new AtomicLong(0L)
 
         override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit = {
           debug(s"data received for $uri, length: ${bb.remaining}")
           val numConsumed = bb.remaining
-          consumer.consume(bb)
+          val state = consumer.consume(bb)
+
           networkActivityCallback()
           progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(bytesSent.addAndGet(numConsumed), contentLength, api.ProgressIndicator.State.RUNNING))) }
+
+          state match {
+            case Done =>
+              // consumer doesn't need any more data, we can stop receiving and report success
+              debug(s"consumer [$consumer] returned Done, finishing response processing for: $uri")
+              onComplete(null)
+              response.close()
+            case _ => // ignore
+          }
         }
       })
 
       response.setEndCallback(new CompletedCallback {
         override def onCompleted(ex: Exception): Unit = {
           debug(s"response for $uri ENDED, ex: $ex, p.isCompleted: ${p.isCompleted}")
-          if (ex != null) ex.printStackTrace(Console.err)
-          response.setDataCallback(new NullDataCallback)
+          Option(ex) foreach { error(s"response for $uri failed", _) }
           networkActivityCallback()
-          p.tryComplete(
-            if (ex != null) Failure(ex)
-            else consumer.result match {
-              case Success(body) =>
-                progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(contentLength, contentLength, api.ProgressIndicator.State.COMPLETED))) }
-                Success(Response(httpStatus, body, new Headers(response.headers())))
-
-              case Failure(t) =>
-                progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(0, contentLength, api.ProgressIndicator.State.FAILED))) }
-                Success(Response(Response.InternalError(s"Response body consumer failed for request: $uri", Some(t), Some(httpStatus))))
-            }
-          )
+          onComplete(ex)
         }
       })
 
@@ -184,6 +200,9 @@ object AsyncClient {
   private implicit val logTag: LogTag = logTagFor[AsyncClient]
   val DefaultTimeout = 30.seconds
   val EmptyHeaders = Map[String, String]()
+
+  val UserAgentHeader = "User-Agent"
+  val ContentTypeHeader = "Content-Type"
 
   def userAgent(appVersion: String = "*", zmsVersion: String = "*") = {
     import android.os.Build._

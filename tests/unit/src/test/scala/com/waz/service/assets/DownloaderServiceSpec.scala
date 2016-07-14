@@ -22,7 +22,7 @@ import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.CacheEntry
 import com.waz.content.Mime
-import com.waz.model.{RAssetDataId, RConvId}
+import com.waz.model._
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.{AssetRequest, ImageAssetRequest}
 import com.waz.testutils.Matchers._
@@ -58,7 +58,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
   }
 
   def uri(id: RAssetDataId = RAssetDataId()): Uri =  Uri.parse(s"content://$id")
-  def fakeDownload(id: RAssetDataId = RAssetDataId(), conv: RConvId = RConvId()) = new Download(ImageAssetRequest(id.str, conv, id, None, None, Mime.Unknown), 100)
+  def fakeDownload(id: RAssetDataId = RAssetDataId(), conv: RConvId = RConvId()) = new Download(ImageAssetRequest(id.str, conv, AssetKey(Left(id), None, AESKey.Empty, Sha256.Empty), Mime.Unknown), 100)
   
   feature("Throttling") {
 

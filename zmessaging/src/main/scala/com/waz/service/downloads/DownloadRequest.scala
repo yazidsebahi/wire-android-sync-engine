@@ -48,20 +48,20 @@ object DownloadRequest {
 
   sealed trait WireAssetRequest extends AssetRequest {
     val convId: RConvId
-    val remoteId: RAssetDataId
-    val key: Option[AESKey]
-    val sha: Option[Sha256]
+    val key: AssetKey
   }
 
-  case class ImageAssetRequest(cacheKey: String, convId: RConvId, remoteId: RAssetDataId, key: Option[AESKey], sha: Option[Sha256], mime: Mime) extends WireAssetRequest {
+  case class ImageAssetRequest(cacheKey: String, convId: RConvId, key: AssetKey, mime: Mime) extends WireAssetRequest {
     override val name: Option[String] = None
   }
 
-  case class AnyAssetRequest(cacheKey: String, assetId: AssetId, convId: RConvId, remoteId: RAssetDataId, key: Option[AESKey], sha: Option[Sha256], mime: Mime, name: Option[String]) extends WireAssetRequest
+  case class AnyAssetRequest(cacheKey: String, assetId: AssetId, convId: RConvId, key: AssetKey, mime: Mime, name: Option[String]) extends WireAssetRequest
 
   case class AssetFromInputStream(cacheKey: String, stream: () => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 
   case class VideoAsset(cacheKey: String, uri: Uri, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
+
+  case class UnencodedAudioAsset(cacheKey: String, uri: Uri, name: Option[String]) extends DownloadRequest
 
   case class External(cacheKey: String, uri: Uri) extends ExternalAssetRequest {
     override def request: Request[Unit] = Request[Unit](absoluteUri = Some(uri), requiresAuthentication = false)

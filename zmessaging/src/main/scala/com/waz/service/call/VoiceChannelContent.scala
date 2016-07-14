@@ -110,38 +110,38 @@ class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, ha
 
     val (previous, current) = (channel map (_.state) getOrElse Idle, updated.state)
     if (previous != current) {
-      if (previous == DeviceCalling) channel foreach { ch => handler.onCallingEvent(RingingEnded(ch.tracking.kindOfCall, ch.tracking.callDirection, ch.video.isVideoCall, uiActive, mode)) }
+      if (previous == DeviceCalling) channel foreach { ch => handler.onCallingEvent(RingingEnded(ch.tracking.kindOfCall, ch.tracking.callDirection, ch.video.isVideoCall, uiActive, mode, updated.isOtto)) }
 
       stopOutgoingRinging.cancel()
       if (!updated.silenced) {
         (previous, current) match {
           case (_, DeviceCalling) =>
             logEvent(KindOfCallingEvent.RINGING_STARTED, updated)
-            handler.onCallingEvent(OutgoingRingingStarted(updated.tracking.kindOfCall, updated.video.isVideoCall, uiActive, mode))
+            handler.onCallingEvent(OutgoingRingingStarted(updated.tracking.kindOfCall, updated.video.isVideoCall, uiActive, mode, updated.isOtto))
             stopOutgoingRinging =
               if (updated.tracking.kindOfCall == KindOfCall.GROUP) CancellableFuture.delayed(OutgoingGroupCallTimeout) {
                 logEvent(KindOfCallingEvent.RINGING_STOPPED, updated)
-                handler.onCallingEvent(RingingEnded(updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode))
+                handler.onCallingEvent(RingingEnded(updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode, updated.isOtto))
               } (Threading.Background)
               else CancellableFuture.successful(())
 
           case (DeviceJoining, UserConnected) | (DeviceConnected, UserConnected) =>
             logEvent(KindOfCallingEvent.CALL_TRANSFERRED, updated)
-            handler.onCallingEvent(CallTransferred(updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode, updated.participantsById.size, CauseForCallEnd.TRANSFERRED, updated.tracking.maxNumParticipants, updated.tracking.duration))
+            handler.onCallingEvent(CallTransferred(updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode, updated.participantsById.size, CauseForCallEnd.TRANSFERRED, updated.tracking.maxNumParticipants, updated.tracking.duration, updated.isOtto))
 
           case (_, DeviceJoining) =>
             logEvent(KindOfCallingEvent.CALL_JOINED, updated)
             handler.onCallingEvent(CallJoined(
               updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode,
               updated.participantsById.values count (p => p.state == ConnectionState.Connected || p.state == ConnectionState.Connecting),
-              updated.participantsById.size, computeDurationBetween(updated.tracking.initiated, updated.tracking.joined)))
+              updated.participantsById.size, computeDurationBetween(updated.tracking.initiated, updated.tracking.joined), updated.isOtto))
 
           case (_, DeviceConnected) =>
             logEvent(KindOfCallingEvent.CALL_ESTABLISHED, updated)
             handler.onCallingEvent(CallEstablished(
               updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode,
               updated.participantsById.values count (p => p.state == ConnectionState.Connected || p.state == ConnectionState.Connecting),
-              updated.participantsById.size, computeDurationBetween(updated.tracking.joined, updated.tracking.established)))
+              updated.participantsById.size, computeDurationBetween(updated.tracking.joined, updated.tracking.established), updated.isOtto))
 
           case (_, Idle) | (_, OthersConnected) if (previous == DeviceConnected || previous == DeviceJoining) && updated.tracking.cause != CauseForCallStateEvent.REQUESTED =>
             logEvent(KindOfCallingEvent.CALL_DROPPED, updated)
@@ -149,7 +149,7 @@ class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, ha
             handler.onCallingEvent(CallDropped(
               updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode, updated.participantsById.size,
               if (updated.tracking.requestedLocally) CauseForCallEnd.SELF else CauseForCallEnd.OTHER,
-              updated.tracking.maxNumParticipants, updated.tracking.duration, updated.tracking.cause))
+              updated.tracking.maxNumParticipants, updated.tracking.duration, updated.tracking.cause, updated.isOtto))
 
 
           case (_, Idle) | (_, OthersConnected) if previous == DeviceConnected || previous == DeviceJoining =>
@@ -157,7 +157,7 @@ class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, ha
             handler.onCallingEvent(CallEndedNormally(
               updated.tracking.kindOfCall, updated.tracking.callDirection, updated.video.isVideoCall, uiActive, mode, updated.participantsById.size,
               if (updated.tracking.requestedLocally) CauseForCallEnd.SELF else CauseForCallEnd.OTHER,
-              updated.tracking.maxNumParticipants, updated.tracking.duration))
+              updated.tracking.maxNumParticipants, updated.tracking.duration, updated.isOtto))
 
           case _ =>
         }
@@ -178,11 +178,11 @@ class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, ha
     (before, after) match {
       case (None, Some(incoming)) =>
         convs.get(incoming.id) .foreach { conv =>
-          handler.onCallingEvent(IncomingRingingStarted(incoming.tracking.kindOfCall, incoming.video.isVideoCall, uiActive, mode, ongoing, conv exists (_.muted)))
+          handler.onCallingEvent(IncomingRingingStarted(incoming.tracking.kindOfCall, incoming.video.isVideoCall, uiActive, mode, ongoing, conv exists (_.muted), incoming.isOtto))
         } (Threading.Ui)
 
       case (Some(incoming), None) =>
-        handler.onCallingEvent(RingingEnded(incoming.tracking.kindOfCall, incoming.tracking.callDirection, incoming.video.isVideoCall, uiActive, mode))
+        handler.onCallingEvent(RingingEnded(incoming.tracking.kindOfCall, incoming.tracking.callDirection, incoming.video.isVideoCall, uiActive, mode, incoming.isOtto))
 
       case _ => // nothing to do
     }
