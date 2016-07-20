@@ -220,7 +220,6 @@ trait MockedFlows { test: ApiSpec =>
   def setCanSendVideo(conv: RConvId, canSend: Boolean): Unit = if (canSend) mocked.convsThatCanSendVideo += conv else mocked.convsThatCanSendVideo -= conv
   def hasConvVideoSendState(conv: RConvId, state: VideoSendState): Boolean = mocked.convsThatSendVideo.get(conv).contains(state)
   def currentVideoCaptureDeviceId(conv: RConvId): Option[String] = mocked.videoCaptureDeviceId.get(conv)
-  def changeStateOfReceivedVideo(state: StateOfReceivedVideo): Unit = zmessaging.flowmanager.stateOfReceivedVideo ! state
 
   def resetVideoCalls(): Unit = {
     mocked.convsThatSendVideo = Map.empty

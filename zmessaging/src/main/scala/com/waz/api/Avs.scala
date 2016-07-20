@@ -17,9 +17,6 @@
  */
 package com.waz.api
 
-import android.view.View
-import com.waz.api.Avs.VideoCallbacks
-
 trait Avs {
   def setLoggingEnabled(enable: Boolean): Unit
 
@@ -28,17 +25,4 @@ trait Avs {
 
   def setLogLevel(logLevel: AvsLogLevel): Unit
   def getLogLevel: AvsLogLevel
-
-  def setVideoListener(listener: VideoCallbacks): Unit
-  def unsetVideoListener(): Unit
-}
-
-object Avs {
-  trait VideoCallbacks {
-    def onPreviewRequested(): View
-    def onPreviewReleased(): Unit
-    def onViewRequested(): View
-    def onViewReleased(): Unit
-    def onStateOfReceivedVideoChanged(state: AvsVideoState, reason: AvsVideoReason): Unit
-  }
 }

@@ -19,7 +19,7 @@ package com.waz.service.assets
 
 import java.io.{File, FileOutputStream}
 import java.nio.ByteBuffer
-import java.nio.ByteOrder.{LITTLE_ENDIAN, nativeOrder}
+import java.nio.ByteOrder.{BIG_ENDIAN, LITTLE_ENDIAN, nativeOrder}
 
 import android.content.Context
 import android.media.MediaCodec.{BUFFER_FLAG_CODEC_CONFIG, BUFFER_FLAG_END_OF_STREAM, CONFIGURE_FLAG_ENCODE, INFO_OUTPUT_BUFFERS_CHANGED}
@@ -31,8 +31,8 @@ import com.googlecode.mp4parser.authoring.Movie
 import com.googlecode.mp4parser.authoring.builder.DefaultMp4Builder
 import com.googlecode.mp4parser.authoring.tracks.AACTrackImpl
 import com.waz.api.ProgressIndicator.State
+import com.waz.api.impl.ProgressIndicator
 import com.waz.api.impl.ProgressIndicator.{ProgressData, ProgressReporter}
-import com.waz.api.impl.{AssetForUpload, ProgressIndicator}
 import com.waz.bitmap.video.MediaCodecHelper.{inputDequeueTimeoutMicros, outputDequeueTimeoutMicros}
 import com.waz.service.TempFileService
 import com.waz.threading.{CancellableFuture, Threading}
@@ -46,9 +46,8 @@ class AudioTranscoder(tempFiles: TempFileService, context: Context) {
   import AudioTranscoder._
   import Threading.Implicits.Background
 
-  //TODO remove dependency on AssetForUpload
   def apply(uri: Uri, mp4File: File, callback: ProgressIndicator.Callback): CancellableFuture[File] =
-    AssetForUpload.queryContentUriInfo(context, uri).map(_._3.getOrElse(0L)).lift.flatMap { size =>
+    ContentURIs.queryContentUriMetaData(context, uri).map(_.size.getOrElse(0L)).lift.flatMap { size =>
       val promisedFile = Promise[File]
 
       promisedFile.tryComplete(Try {
@@ -139,22 +138,6 @@ class AudioTranscoder(tempFiles: TempFileService, context: Context) {
       encoder.stop()
     }
 
-  private def adtsHeader(dataLength: Int): ByteBuffer = { // see https://wiki.multimedia.cx/index.php?title=ADTS
-    val packetLength = dataLength + 7
-    val profile = MediaCodecInfo.CodecProfileLevel.AACObjectLC
-    val samplingFrequencyIndex = 4 //44.1KHz
-    val channelConfiguration = 1
-
-    ByteBuffer.wrap(Array[Byte](
-      0xFF.toByte,
-      0xF9.toByte,
-      (((profile - 1) << 6) + (samplingFrequencyIndex << 2) + (channelConfiguration >> 2)).toByte,
-      (((channelConfiguration & 3) << 6) + (packetLength >> 11)).toByte,
-      ((packetLength & 0x7FF) >> 3).toByte,
-      (((packetLength & 7) << 5) + 0x1F).toByte,
-      0xFC.toByte))
-  }
-
   private def audioEncoder: MediaCodec = returning(MediaCodec.createEncoderByType("audio/mp4a-latm")) { mc =>
     mc.configure(aacFormat, null, null, CONFIGURE_FLAG_ENCODE)
   }
@@ -174,4 +157,20 @@ object AudioTranscoder {
 
   def estimatedSizeBasedOnBitrate(byteCount: Long): Long =
     math.round(((byteCount / SizeOf.SHORT).toDouble / sampleRate.toDouble) * (bitRate.toDouble / 8d)).toLong
+
+  def adtsHeader(aacFrameLength: Int): ByteBuffer = { // see https://wiki.multimedia.cx/index.php?title=ADTS
+    val profile = MediaCodecInfo.CodecProfileLevel.AACObjectLC
+    val samplingFrequencyIndex = 4 // 44.1kHz
+    val channelConfiguration = 1
+
+    returning(ByteBuffer.allocate(8).order(BIG_ENDIAN).putLong(
+      0L ++ (12, 0xFFF) ++ (1, 1) ++ (2, 0) ++ (1, 1)
+         ++ (2, profile - 1) ++ (4, samplingFrequencyIndex) ++ (1, 0) ++ (3, channelConfiguration)
+         ++ (4, 0) ++ (13, aacFrameLength + 7) ++ (11, 0xFFF) ++ (2, 0)
+    ))(_.position(1))
+  }
+
+  private implicit class BitAppender(val l: Long) extends AnyVal {
+    def ++ (bits: Int, value: Int) = (l << bits) + (((1 << bits) - 1) & value)
+  }
 }

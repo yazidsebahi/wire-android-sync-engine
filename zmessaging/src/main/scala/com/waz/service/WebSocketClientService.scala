@@ -19,12 +19,13 @@ package com.waz.service
 
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.znet.{WebSocketClient, ZNetClient}
 
-class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts) {
+class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts) {
   private implicit val tag: LogTag = logTagFor[WebSocketClientService]
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -62,16 +63,25 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, net
     * Indicates if there is some network connection error on websocket.
     * Signals `true` if we have a client, and it has been unconnected for some time.
     */
-  val connectionError = client flatMap {
-    case None => Signal const false
-    case Some(c) =>
+  val connectionError = client.zip(network.networkMode) flatMap {
+    case (None, _) => Signal const false
+    case (Some(c), nm) =>
       c.connected flatMap {
-        case true => Signal const false
-        case false =>
-          // delay signaling for some time
-          Signal.future(CancellableFuture.delayed(timeouts.webSocket.connectionTimeout)(true)) orElse Signal.const(false)
-      }
+      case true => Signal const false
+      case false =>
+        // delay signaling for some time
+        Signal.future(CancellableFuture.delayed(getErrorTimeout(nm))(true)) orElse Signal.const(false)
+    }
   }
+
+  /**
+    * Increase the timeout for poorer networks before showing a connection error
+    */
+  private def getErrorTimeout(networkMode: NetworkMode) = timeouts.webSocket.connectionTimeout.*(networkMode match {
+    case NetworkMode._2G => 3
+    case NetworkMode._3G => 2
+    case _ => 1
+  })
 
   network.networkMode { n =>
     // ping web socket on network changes, this should help us discover potential network outage

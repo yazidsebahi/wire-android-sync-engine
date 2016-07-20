@@ -65,6 +65,6 @@ class LocalesSpec extends FeatureSpec with Matchers with Inspectors with OptionV
     }
   }
 
-  def availableLocale = Locale.getAvailableLocales.toSeq
+  def availableLocale = Locale.getAvailableLocales.toSeq.filter(_.getDisplayName != "")
   lazy val indexing = Locales.indexing(Locale.UK)
 }

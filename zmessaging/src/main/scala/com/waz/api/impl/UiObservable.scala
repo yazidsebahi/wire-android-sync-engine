@@ -72,6 +72,8 @@ abstract class UiSignal[A]()(implicit ui: UiModule) extends com.waz.api.UiSignal
       override def cancel(): Unit = subscribers = subscribers.filter(_ ne sub)
     }
   }
+
+  override def toString: String = value.toString
 }
 
 object UiSignal {

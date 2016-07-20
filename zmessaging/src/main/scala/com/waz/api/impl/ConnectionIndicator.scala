@@ -17,20 +17,26 @@
  */
 package com.waz.api.impl
 
+import com.waz.api.NetworkMode
 import com.waz.ui.{SignalLoading, UiModule}
+import com.waz.utils.events.Signal
 
 class ConnectionIndicator(implicit ui: UiModule) extends com.waz.api.ConnectionIndicator with UiObservable with SignalLoading {
 
   private var webSocketConnected = false
   private var connectionError = false
+  private var networkMode = NetworkMode.OFFLINE
 
-  addLoader { zms => zms.websocket.connected.zip(zms.websocket.connectionError) } { case (connected, error) =>
+  addLoader { zms => Signal(zms.websocket.connected, zms.websocket.connectionError, zms.websocket.network.networkMode) } { case (connected, error, mode) =>
     webSocketConnected = connected
     connectionError = error
+    networkMode = mode
     notifyChanged()
   }
 
   override def isConnectionError = connectionError
 
   override def isWebSocketConnected = webSocketConnected
+
+  override def getNetworkMode = networkMode
 }

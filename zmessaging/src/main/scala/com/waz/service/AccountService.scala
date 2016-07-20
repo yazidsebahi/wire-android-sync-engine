@@ -86,12 +86,11 @@ class UserModule(val userId: UserId, val account: AccountService) {
     }
 }
 
-class AccountService(var account: AccountData, val global: GlobalModule, accounts: Accounts)(implicit ec: EventContext) { self =>
+class AccountService(@volatile var account: AccountData, val global: GlobalModule, accounts: Accounts)(implicit ec: EventContext) { self =>
   import AccountService._
   private implicit val dispatcher = new SerialDispatchQueue()
 
   val id = account.id
-
 
   import global._
 

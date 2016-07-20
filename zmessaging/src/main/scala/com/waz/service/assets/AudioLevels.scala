@@ -25,13 +25,12 @@ import android.content.Context
 import android.media.{MediaCodec, MediaExtractor, MediaFormat}
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.api.impl.AssetForUpload
 import com.waz.bitmap.video.{MediaCodecHelper, TrackDecoder}
 import com.waz.content.Mime
 import com.waz.model.AssetPreviewData
 import com.waz.threading.CancellableFuture.{CancelException, DefaultCancelException}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{Cleanup, Managed, returning, RichFuture}
+import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, returning}
 import libcore.io.SizeOf
 
 import scala.concurrent.duration._
@@ -47,7 +46,7 @@ case class AudioLevels(context: Context) {
     else createOtherAudioOverview(content, numBars)
 
   private def createPCMAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[AssetPreviewData.Loudness]] =
-    AssetForUpload.queryContentUriInfo(context, content).map(_._3).lift.flatMap {
+    ContentURIs.queryContentUriMetaData(context, content).map(_.size).lift.flatMap {
       case None =>
         warn(s"cannot generate preview: no length available for $content")
         CancellableFuture.successful(None)

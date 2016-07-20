@@ -69,10 +69,8 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
   val onFlowEvent = new Publisher[UnknownCallEvent]
   val onAvsMetricsReceived = EventStream[AvsMetrics]()
 
-  val createVideoViewRequested = Signal[Option[(RConvId, Option[UserId])]]
-  val createVideoPreviewRequested = Signal[Boolean]
-
   val stateOfReceivedVideo = Signal[StateOfReceivedVideo](UnknownState)
+  val cameraFailedSig = Signal[Boolean]
 
   val avsLogDataSignal = metricsEnabledPref.signal.zip(loggingEnabledPref.signal).zip(logLevelPref.signal) map { case ((metricsEnabled, loggingEnabled), logLevel) =>
       AvsLogData(metricsEnabled = metricsEnabled, loggingEnabled = loggingEnabled, AvsLogLevel.fromPriority(logLevel))
@@ -180,33 +178,26 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
     override def changeVideoState(state: Int, reason: Int): Unit =
       stateOfReceivedVideo ! returning(StateAndReason(AvsVideoState fromState state, reason = AvsVideoReason fromReason reason)) { s => debug(s"avs changeVideoState($s)") }
 
-    override def createVideoPreview(): Unit = {
-      debug("avs createVideoPreview() callback called")
-      createVideoPreviewRequested ! true
-    }
+    //TODO coordinate removal with avs - not used anymore
+    override def createVideoPreview(): Unit = ()
 
-    override def releaseVideoPreview(): Unit = {
-      debug("avs releaseVideoPreview() callback called")
-      createVideoPreviewRequested ! false
-    }
+    //TODO coordinate removal with avs - not used anymore
+    override def releaseVideoPreview(): Unit = ()
 
-    // partId is the user id of the participant (for group calls)
-    override def createVideoView(convId: String, partId: String): Unit = {
-      debug(s"avs createVideoView($convId, $partId) callback called")
-      createVideoViewRequested ! Option((RConvId(convId), Option(partId).map(UserId)))
-    }
+    //TODO coordinate removal with avs - not used anymore
+    override def createVideoView(convId: String, partId: String): Unit = ()
 
-    // partId is the user id of the participant (for group calls)
-    override def releaseVideoView(convId: String, partId: String): Unit = {
-      debug(s"avs releaseVideoView($convId, $partId) callback called")
-      createVideoViewRequested ! None
-    }
+    //TODO coordinate removal with avs - not used anymore
+    override def releaseVideoView(convId: String, partId: String): Unit = ()
 
     override def changeAudioState(state: Int): Unit = {
       //TODO
     }
 
-    override def cameraFailed(): Unit = ()
+    override def cameraFailed(): Unit = {
+      debug(s"cameraFailed")
+      cameraFailedSig ! true
+    }
 
     override def changeVideoSize(i: Int, i1: Int): Unit = ()
   }
@@ -287,6 +278,7 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
   // Call this from the callback telling us to.
   def setVideoPreview(view: View): Future[Unit] = schedule { fm =>
     debug(s"setVideoPreview($view)")
+    cameraFailedSig ! false //reset this signal since we are trying to start the capture again
     fm.setVideoPreview(null, view)
   }
 

@@ -28,6 +28,7 @@ import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, RecordingCancelled, RecordingSuccessful}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.SignalLoading
+import com.waz.utils.ContentURIs
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
@@ -59,7 +60,7 @@ object AssetFactory {
     val context = ZMessaging.context
     val cache = ZMessaging.currentGlobal.cache
     val future = for {
-      (mime, name, _) <- CancellableFuture lift impl.AssetForUpload.queryContentUriInfo(context, uri)
+      ContentURIs.MetaData(mime, name, _) <- CancellableFuture lift ContentURIs.queryContentUriMetaData(context, uri)
       entry <- CancellableFuture lift cache.createForFile(mime = Mime.Video.MP4, name = name)
       _ <- VideoTranscoder(context).apply(uri, entry.cacheFile, progress ! _)
     } yield {

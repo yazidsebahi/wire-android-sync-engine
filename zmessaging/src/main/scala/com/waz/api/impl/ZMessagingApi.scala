@@ -213,8 +213,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getAvs: Avs = ui.cached(Uris.AvsUri, new Avs)
 
-  override def getAudioLink: AudioLink = ui.cached(Uris.AudioLinkUri, new AudioLink)
-
   override def getContacts: Contacts = ui.cached(Uris.ContactsUri, new Contacts(SearchKeyFiltering()))
 
   override def getGiphy: Giphy = new Giphy

@@ -26,4 +26,6 @@ trait ConnectionIndicator extends UiObservable {
   def isConnectionError: Boolean
 
   def isWebSocketConnected: Boolean
+
+  def getNetworkMode: NetworkMode
 }

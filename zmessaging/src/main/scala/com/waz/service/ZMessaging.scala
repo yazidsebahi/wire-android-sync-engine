@@ -198,7 +198,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val typing: TypingService = wire[TypingService]
   lazy val invitations    = wire[InvitationService]
   lazy val richmedia      = wire[RichMediaService]
-  lazy val audiolink      = wire[AudioLinkService]
   lazy val tracking       = wire[TrackingService]
   lazy val trackingEvents = wire[TrackingEventsService]
   lazy val giphy          = wire[GiphyService]

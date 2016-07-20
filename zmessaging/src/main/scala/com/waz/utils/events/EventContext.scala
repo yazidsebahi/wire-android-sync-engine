@@ -22,29 +22,27 @@ import android.view.View
 import com.waz.ZLog
 import com.waz.ZLog._
 
-import scala.collection.mutable
-
 trait EventContext {
   private implicit val logTag: LogTag = logTagFor[EventContext]
 
   private object lock
 
-  private var started = false
-  private var destroyed = false
-  private val observers = new mutable.HashSet[Subscription]
+  private[this] var started = false
+  private[this] var destroyed = false
+  private[this] var observers = Set.empty[Subscription]
 
   protected implicit def eventContext: EventContext = this
 
   override protected def finalize(): Unit = {
-    lock.synchronized { if (!destroyed) onContextDestroy() }
+    lock.synchronized { if (! destroyed) onContextDestroy() }
     super.finalize()
   }
 
   def onContextStart(): Unit = {
     lock.synchronized {
-      if (!started) {
+      if (! started) {
         started = true
-        observers foreach (_.subscribe())
+        observers foreach (_.subscribe()) // XXX during this, subscribe may call Observable#onWire with in turn may call register which will change observers
       }
     }
   }
@@ -61,9 +59,9 @@ trait EventContext {
   def onContextDestroy(): Unit = {
     lock.synchronized {
       destroyed = true
-      val os = observers.toVector
-      observers.clear()
-      os foreach (_.destroy())
+      val observersToDestroy = observers
+      observers = Set.empty
+      observersToDestroy foreach (_.destroy())
     }
   }
 
@@ -71,7 +69,7 @@ trait EventContext {
     lock.synchronized {
       assert(!destroyed, "context already destroyed")
 
-      if (!observers.contains(observer)) {
+      if (! observers.contains(observer)) {
         observers += observer
         if (started) observer.subscribe()
       }
@@ -84,7 +82,7 @@ trait EventContext {
     ZLog.verbose(s"removed, new count: ${observers.size}")
   }
 
-  def isContextStarted: Boolean = lock.synchronized(started && !destroyed)
+  def isContextStarted: Boolean = lock.synchronized(started && ! destroyed)
 }
 
 object EventContext {

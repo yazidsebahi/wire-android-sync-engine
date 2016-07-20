@@ -114,8 +114,6 @@ trait ZMessagingApi {
    */
   def getAvs: Avs
 
-  def getAudioLink: AudioLink
-
   def getGiphy: Giphy
 
   def getSpotify: Spotify

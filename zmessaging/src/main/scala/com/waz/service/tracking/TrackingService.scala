@@ -17,8 +17,6 @@
  */
 package com.waz.service.tracking
 
-import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
-
 import com.waz.ZLog._
 import com.waz.api.KindOfCallingEvent.CALL_ESTABLISHED
 import com.waz.api.Message.Type.{ASSET, KNOCK, RICH_MEDIA, TEXT}

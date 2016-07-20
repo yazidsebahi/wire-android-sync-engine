@@ -22,7 +22,7 @@ import android.database.DatabaseUtils.queryNumEntries
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.waz.api
-import com.waz.api.Message
+import com.waz.api.{Message, ZmsVersion}
 import com.waz.api.Message.Type._
 import com.waz.db.Col._
 import com.waz.db.Dao
@@ -110,6 +110,10 @@ case class MessageData(id: MessageId,
   def hasSameContentType(m: MessageData) = {
     msgType == m.msgType && content.zip(m.content).forall { case (c, c1) => c.tpe == c1.tpe && c.openGraph.isDefined == c1.openGraph.isDefined } // openGraph may affect message type
   }
+
+  override def toString: String =
+    if (ZmsVersion.DEBUG) super.toString
+    else s"MessageData($id, $convId, $source, $msgType, $userId, $content, protos len: ${protos.length}, $state, $time)"
 }
 
 case class MessageContent(

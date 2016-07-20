@@ -58,18 +58,45 @@ class NetworkModeService(context: Context) {
 object NetworkModeService {
   private implicit val logTag: LogTag = logTagFor(NetworkModeService)
 
+  /*
+   * This part (the mapping of mobile data network types to the networkMode enum) of the Wire software
+   * uses source coded posted on the StackOverflow site.
+   * (http://stackoverflow.com/a/18583089/1751834)
+   *
+   * That work is licensed under a Creative Commons Attribution-ShareAlike 2.5 Generic License.
+   * (http://creativecommons.org/licenses/by-sa/2.5)
+   *
+   * Contributors on StackOverflow:
+   *  - Anonsage (http://stackoverflow.com/users/887894/anonsage)
+   */
   def computeMode(ni: NetworkInfo, tm: => TelephonyManager): NetworkMode = {
     if (ni.isConnected) {
       ni.getType match {
         case ConnectivityManager.TYPE_WIFI | ConnectivityManager.TYPE_ETHERNET => NetworkMode.WIFI
         case _ =>
-          val nt = tm.getNetworkType
-          if (nt == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-            info("Unknown network type, defaulting to Wifi")
-            NetworkMode.WIFI
-          } else if (nt >= TelephonyManager.NETWORK_TYPE_LTE) NetworkMode._4G
-          else if (nt >= TelephonyManager.NETWORK_TYPE_HSDPA) NetworkMode._3G
-          else NetworkMode._2G
+          tm.getNetworkType match {
+            case TelephonyManager.NETWORK_TYPE_GPRS |
+                 TelephonyManager.NETWORK_TYPE_1xRTT |
+                 TelephonyManager.NETWORK_TYPE_EDGE |
+                 TelephonyManager.NETWORK_TYPE_IDEN |
+                 TelephonyManager.NETWORK_TYPE_CDMA =>
+              NetworkMode._2G
+            case TelephonyManager.NETWORK_TYPE_EVDO_0 |
+                 TelephonyManager.NETWORK_TYPE_EVDO_A |
+                 TelephonyManager.NETWORK_TYPE_HSDPA |
+                 TelephonyManager.NETWORK_TYPE_HSPA |
+                 TelephonyManager.NETWORK_TYPE_HSUPA |
+                 TelephonyManager.NETWORK_TYPE_UMTS |
+                 TelephonyManager.NETWORK_TYPE_EHRPD |
+                 TelephonyManager.NETWORK_TYPE_EVDO_B |
+                 TelephonyManager.NETWORK_TYPE_HSPAP =>
+              NetworkMode._3G
+            case TelephonyManager.NETWORK_TYPE_LTE =>
+              NetworkMode._4G
+            case _ =>
+              info("Unknown network type, defaulting to Wifi")
+              NetworkMode.WIFI
+          }
       }
     } else NetworkMode.OFFLINE
   }

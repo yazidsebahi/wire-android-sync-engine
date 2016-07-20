@@ -1,0 +1,29 @@
+language: android
+android:
+  components:
+      - android-23
+      - extra-android-support
+      - extra-android-m2repository
+      - extra-google-m2repository
+      - extra-google-google_play_services
+
+jdk:
+  - oraclejdk8
+
+sudo: false
+
+cache:
+  directories:
+    - $HOME/.ivy2/cache
+    - $HOME/.sbt/boot
+
+before_cache:
+  - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
+  - find $HOME/.sbt -name "*.lock" -delete
+
+before_install:
+  - wget https://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/0.13.12/sbt-launch.jar
+  - export SBT_OPTS="-Xms512M -Xmx1536M -Xss1M -XX:+CMSClassUnloadingEnabled"
+
+script:
+  - java $SBT_OPTS -jar sbt-launch.jar test:compile
