@@ -341,6 +341,7 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
 
 lazy val macrosupport = project
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+  .settings(publishSettings: _*)
   .settings(
     version := "2.0",
     crossPaths := false,
