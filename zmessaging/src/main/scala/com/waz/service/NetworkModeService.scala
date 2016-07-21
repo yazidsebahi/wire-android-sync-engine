@@ -77,10 +77,11 @@ object NetworkModeService {
           tm.getNetworkType match {
             case TelephonyManager.NETWORK_TYPE_GPRS |
                  TelephonyManager.NETWORK_TYPE_1xRTT |
-                 TelephonyManager.NETWORK_TYPE_EDGE |
                  TelephonyManager.NETWORK_TYPE_IDEN |
                  TelephonyManager.NETWORK_TYPE_CDMA =>
               NetworkMode._2G
+            case TelephonyManager.NETWORK_TYPE_EDGE =>
+              NetworkMode.EDGE
             case TelephonyManager.NETWORK_TYPE_EVDO_0 |
                  TelephonyManager.NETWORK_TYPE_EVDO_A |
                  TelephonyManager.NETWORK_TYPE_HSDPA |
