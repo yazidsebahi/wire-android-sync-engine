@@ -18,5 +18,10 @@
 package com.waz.api;
 
 public enum NetworkMode {
-    _2G, _3G, _4G, WIFI, OFFLINE
+    _2G,
+    EDGE, //A.K.A 2.5G
+    _3G,
+    _4G,
+    WIFI,
+    OFFLINE
 }
