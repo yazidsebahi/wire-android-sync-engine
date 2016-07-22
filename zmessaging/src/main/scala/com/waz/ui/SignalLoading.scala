@@ -30,6 +30,9 @@ trait SignalLoading {
   // it relies on LoaderHandle being regular class (equals should compare identity)
   private[ui] var loaderHandles = Set.empty[LoaderHandle[_]]
 
+  def signalLoader[A](signal: Signal[A])(onLoaded: A => Unit)(implicit ui: UiModule): LoaderSubscription =
+    addLoaderOpt({ _ => signal })(onLoaded)
+
   def addLoader[A, B <: A](signal: ZMessaging => Signal[B], defaultValue: A)(onLoaded: A => Unit)(implicit ui: UiModule): LoaderSubscription = {
     addLoaderOpt({
       case Some(zms) => signal(zms).map(_.asInstanceOf[A])

@@ -27,10 +27,16 @@ class ConnectionIndicator(implicit ui: UiModule) extends com.waz.api.ConnectionI
   private var connectionError = false
   private var networkMode = NetworkMode.OFFLINE
 
-  addLoader { zms => Signal(zms.websocket.connected, zms.websocket.connectionError, zms.websocket.network.networkMode) } { case (connected, error, mode) =>
+  signalLoader(ui.global.network.networkMode) { mode =>
+    if (networkMode != mode) {
+      networkMode = mode
+      notifyChanged()
+    }
+  }
+
+  addLoader { zms => Signal(zms.websocket.connected, zms.websocket.connectionError) } { case (connected, error) =>
     webSocketConnected = connected
     connectionError = error
-    networkMode = mode
     notifyChanged()
   }
 
