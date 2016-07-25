@@ -167,7 +167,7 @@ object CancellableFuture {
 
   class CancelException(msg: String) extends Exception(msg) with NoStackTrace
 
-  val DefaultCancelException = new CancelException("Operation cancelled") with NoReporting
+  case object DefaultCancelException extends CancelException("Operation cancelled") with NoReporting
 
   class PromiseCompletingRunnable[T](body: => T) extends Runnable {
     val promise = Promise[T]()

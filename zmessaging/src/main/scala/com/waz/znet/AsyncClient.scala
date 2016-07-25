@@ -35,7 +35,7 @@ import com.waz.api.impl.ProgressIndicator
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.returning
-import com.waz.znet.ContentEncoder._
+import com.waz.znet.ContentEncoder.{MultipartRequestContent, _}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, Headers, HttpStatus, ResponseBodyDecoder}
 import com.waz.znet.ResponseConsumer.ConsumerState.Done
@@ -55,15 +55,23 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
   def apply(uri: Uri, method: String = "GET", body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
     debug(s"Starting request[$method]($uri) with body: '${if (body.toString.contains("password")) "<body>" else body}', headers: '$headers'")
 
+    val requestTimeout = if (method != "POST") timeout else body match {
+      case _: MultipartRequestContent => MultipartPostTimeout
+      case _ => timeout
+    }
+
     CancellableFuture.lift(client) flatMap { client =>
       val p = Promise[Response]()
       @volatile var cancelled = false
       @volatile var processFuture = None: Option[CancellableFuture[_]]
       @volatile var lastNetworkActivity: Long = System.currentTimeMillis
+      @volatile var timeoutForPhase = requestTimeout
+      val interval = 5.seconds min timeout
 
-      val httpFuture = client.execute(buildHttpRequest(uri, method, body, headers, followRedirect, timeout), new HttpConnectCallback {
+      val httpFuture = client.execute(buildHttpRequest(uri, method, body, headers, followRedirect, timeoutForPhase), new HttpConnectCallback {
         override def onConnectCompleted(ex: Exception, response: AsyncHttpResponse): Unit = {
           debug(s"Connect completed for uri: '$uri', ex: '$ex', cancelled: $cancelled")
+          timeoutForPhase = timeout
 
           if (ex != null) p.tryFailure(ex)
           else {
@@ -92,14 +100,15 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       }.recover(exceptionStatus)) { cancellable =>
         def cancelOnInactivity: CancellableFuture[Unit] = {
           val timeSinceLastNetworkActivity = System.currentTimeMillis - lastNetworkActivity
-          if (timeSinceLastNetworkActivity > timeout.toMillis) CancellableFuture.successful {
+          val t = timeoutForPhase
+          if (timeSinceLastNetworkActivity > t.toMillis) CancellableFuture.successful {
             debug(s"cancelling due to inactivity: $timeSinceLastNetworkActivity")
             cancellable.fail(new TimeoutException("[AsyncClient] timedOut") with NoReporting)
-          }
-          else CancellableFuture.delay(timeout - timeSinceLastNetworkActivity.millis) flatMap { _ => cancelOnInactivity }
+            cancellable.cancel()("[AsyncClient] timedOut cancel")
+          } else CancellableFuture.delay(interval min (t - timeSinceLastNetworkActivity.millis)) flatMap { _ => cancelOnInactivity }
         }
 
-        val cancelOnTimeout = CancellableFuture.delay(timeout) flatMap { _ => cancelOnInactivity }
+        val cancelOnTimeout = CancellableFuture.delay(interval) flatMap { _ => cancelOnInactivity }
         cancellable.onComplete { _ => cancelOnTimeout.cancel() }
       }
     }
@@ -198,6 +207,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
 object AsyncClient {
   private implicit val logTag: LogTag = logTagFor[AsyncClient]
+  val MultipartPostTimeout = 15.minutes
   val DefaultTimeout = 30.seconds
   val EmptyHeaders = Map[String, String]()
 
