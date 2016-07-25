@@ -22,7 +22,7 @@ import com.waz.api.ProvisionedApiSpec
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
-import com.waz.znet.Response.SuccessStatus
+import com.waz.znet.Response.{HttpStatus, Status, SuccessStatus}
 import com.waz.znet._
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
@@ -58,6 +58,14 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with ProvisionedApiS
 
   scenario("Load open graph data from twitter") {
     val resp = client.loadMetadata(Uri.parse("https://twitter.com/SoundCloud/status/750403925585432576")).await()
+    resp shouldBe 'right
+    resp.right.get shouldBe defined
+    val data = resp.right.get.get
+    info(s"loaded data: $data")
+  }
+
+  scenario("Load open graph data from nytimes") {
+    val resp = client.loadMetadata(Uri.parse("http://nytimes.com/2016/07/11/business/front-page-editorials-aim-to-soothe-the-grief-stricken.html")).await()
     resp shouldBe 'right
     resp.right.get shouldBe defined
     val data = resp.right.get.get

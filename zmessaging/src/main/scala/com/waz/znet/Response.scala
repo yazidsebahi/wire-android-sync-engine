@@ -34,6 +34,7 @@ object Response {
     val Success = 200
     val Created = 201
     val NoResponse = 204
+    val MovedPermanently = 301
     val MovedTemporarily = 302
     val SeeOther = 303
     val BadRequest = 400
