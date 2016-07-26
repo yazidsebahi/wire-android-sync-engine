@@ -36,7 +36,7 @@ import org.scalatest._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricUnitTests with RobolectricUtils { test =>
+class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
   lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 

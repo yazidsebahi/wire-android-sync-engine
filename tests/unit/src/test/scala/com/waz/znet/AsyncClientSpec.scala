@@ -17,7 +17,7 @@
  */
 package com.waz.znet
 
-import java.io.{PipedInputStream, PipedOutputStream}
+import java.io.{File, PipedInputStream, PipedOutputStream}
 
 import android.net.Uri
 import android.os.Build._
@@ -31,6 +31,7 @@ import com.koushikdutta.async.future.{Future, SimpleFuture}
 import com.koushikdutta.async.http.callback.HttpConnectCallback
 import com.koushikdutta.async.http.{AsyncHttpClient, AsyncHttpRequest, AsyncHttpResponse, Headers}
 import com.koushikdutta.async.{AsyncServer, AsyncSocket, ByteBufferList}
+import com.waz.RobolectricUnitTests
 import com.waz.ZLog.LogTag
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
@@ -39,7 +40,7 @@ import com.waz.testutils.Slow
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.{IoUtils, Json}
-import com.waz.znet.ContentEncoder.{EmptyRequestContent, GzippedRequestContent, JsonContentEncoder, StreamRequestContent}
+import com.waz.znet.ContentEncoder.{EmptyRequestContent, GzippedRequestContent, JsonContentEncoder, MultipartRequestContent, StreamRequestContent}
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, HttpStatus, SuccessHttpStatus}
 import org.json.JSONObject
 import org.scalatest._
@@ -49,7 +50,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, TimeoutException}
 import scala.util.Random
 
-class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
+class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricUnitTests {
   implicit val tag: LogTag = "AsyncClientSpec"
   
   val wireMockPort = 9000 + Random.nextInt(3000)
@@ -81,7 +82,8 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       progress = currentProgress
   })), 500.millis)
 
-  def doPost[A: ContentEncoder](path: String, data: A, auth: Boolean = false) = Await.result(client(Uri.parse(s"http://localhost:$wireMockPort$path"), "POST", implicitly[ContentEncoder[A]].apply(data), timeout = AsyncClient.DefaultTimeout), 500.millis)
+  def doPost[A: ContentEncoder](path: String, data: A, auth: Boolean = false, timeout: FiniteDuration = AsyncClient.DefaultTimeout, waitTime: FiniteDuration = 500.millis) =
+    Await.result(client(Uri.parse(s"http://localhost:$wireMockPort$path"), "POST", implicitly[ContentEncoder[A]].apply(data), timeout = timeout), waitTime)
 
   feature("GET request") {
 
@@ -197,7 +199,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
 
     scenario("Cancel randomly", Slow) {
       val c = client
-      (0 to 100) foreach { _ =>
+      (0 to 255) foreach { _ =>
         val future = c(Uri.parse(s"http://localhost:$wireMockPort/get/json200"), "GET", EmptyRequestContent, timeout = AsyncClient.DefaultTimeout)
         Thread.sleep(Random.nextInt(50))
         future.cancel()
@@ -215,7 +217,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
     scenario("Cancel randomly on post", Slow) {
       val c = client
       val data = JsonContentEncoder(new JSONObject("""{ "key": "value"}"""))
-      (0 to 100) foreach { _ =>
+      (0 to 255) foreach { _ =>
         val future = c(Uri.parse(s"http://localhost:$wireMockPort/post/json_json200"), "POST", data, timeout = AsyncClient.DefaultTimeout)
         Thread.sleep(Random.nextInt(50))
         future.cancel()
@@ -337,14 +339,14 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       a[TimeoutException] should be thrownBy Await.result(resp, 2.seconds)
     }
 
-    scenario("connect completes, no data gets send") {
+    scenario("connect completes, no response is sent") {
       val resp = mockedClient(Uri.parse("http://meep.me"), timeout = 1.second)
       Thread.sleep(100L)
       mockedClient.onConnect.foreach { _.onConnectCompleted(null, mockedResponse) }
       a[TimeoutException] should be thrownBy Await.result(resp, 2.seconds)
     }
 
-    scenario("connect completes, data gets send, but no completion") {
+    scenario("connect completes, response is sent, but no completion") {
       val resp = mockedClient(Uri.parse("http://meep.me"), timeout = 1.second)
       Thread.sleep(100L)
       mockedClient.onConnect.foreach { _.onConnectCompleted(null, mockedResponse) }
@@ -353,7 +355,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       a[TimeoutException] should be thrownBy Await.result(resp, 2.seconds)
     }
 
-    scenario("connect completes, data gets send, in time completion") {
+    scenario("connect completes, response is sent, in time completion") {
       val resp = mockedClient(Uri.parse("http://meep.me"), timeout = 1.second)
       Thread.sleep(100L)
       mockedClient.onConnect.foreach { _.onConnectCompleted(null, mockedResponse) }
@@ -364,7 +366,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       Await.result(resp, 2.seconds).status.status shouldEqual 200
     }
 
-    scenario("connect completes, data gets send slowly, in time completion") {
+    scenario("connect completes, response is sent slowly, in time completion") {
       val resp = mockedClient(Uri.parse("http://meep.me"), timeout = 1.second)
       Thread.sleep(100L)
       mockedClient.onConnect.foreach { _.onConnectCompleted(null, mockedResponse) }
@@ -377,7 +379,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       Await.result(resp, 2.seconds).status.status shouldEqual 200
     }
 
-    scenario("connect completes, data gets send slowly, then takes too long") {
+    scenario("connect completes, response is sent slowly, then takes too long") {
       val resp = mockedClient(Uri.parse("http://meep.me"), timeout = 1.second)
       Thread.sleep(100L)
       mockedClient.onConnect.foreach { _.onConnectCompleted(null, mockedResponse) }
@@ -390,6 +392,19 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       Thread.sleep(100L)
       mockedResponse.endCallback.onCompleted(null)
       a[TimeoutException] should be thrownBy Await.result(resp, 2.seconds)
+    }
+
+    scenario("multipart POST, connect (incl. sending of request) is very slow") {
+      wireMockServer.addRequestProcessingDelay(3000)
+      doPost("/post/multi_empty200", MultipartRequestContent(Seq("meep" -> new File(getClass.getResource("/emojis.txt").getPath))), false, 2.seconds, 10.seconds) match {
+        case Response(HttpStatus(200, _), _, _) => // expected
+        case resp => fail(s"got: $resp when expected Response(HttpStatus(200))")
+      }
+    }
+
+    scenario("JSON POST, connect (incl. sending of request) is very slow") {
+      wireMockServer.addRequestProcessingDelay(3000)
+      a[TimeoutException] should be thrownBy doPost("/post/json_json200", new JSONObject("""{ "key": "value"}"""), false, 2.seconds, 10.seconds)
     }
   }
 }
