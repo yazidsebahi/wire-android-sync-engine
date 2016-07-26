@@ -199,7 +199,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
 
     scenario("Cancel randomly", Slow) {
       val c = client
-      (0 to 100) foreach { _ =>
+      (0 to 255) foreach { _ =>
         val future = c(Uri.parse(s"http://localhost:$wireMockPort/get/json200"), "GET", EmptyRequestContent, timeout = AsyncClient.DefaultTimeout)
         Thread.sleep(Random.nextInt(50))
         future.cancel()
@@ -217,7 +217,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
     scenario("Cancel randomly on post", Slow) {
       val c = client
       val data = JsonContentEncoder(new JSONObject("""{ "key": "value"}"""))
-      (0 to 100) foreach { _ =>
+      (0 to 255) foreach { _ =>
         val future = c(Uri.parse(s"http://localhost:$wireMockPort/post/json_json200"), "POST", data, timeout = AsyncClient.DefaultTimeout)
         Thread.sleep(Random.nextInt(50))
         future.cancel()
@@ -394,7 +394,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       a[TimeoutException] should be thrownBy Await.result(resp, 2.seconds)
     }
 
-    scenario("multipart POST, connect (incl. sending of request) is very slow", org.scalatest.Tag("MEEP")) {
+    scenario("multipart POST, connect (incl. sending of request) is very slow") {
       wireMockServer.addRequestProcessingDelay(3000)
       doPost("/post/multi_empty200", MultipartRequestContent(Seq("meep" -> new File(getClass.getResource("/emojis.txt").getPath))), false, 2.seconds, 10.seconds) match {
         case Response(HttpStatus(200, _), _, _) => // expected
@@ -402,7 +402,7 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       }
     }
 
-    scenario("JSON POST, connect (incl. sending of request) is very slow", org.scalatest.Tag("MEEP")) {
+    scenario("JSON POST, connect (incl. sending of request) is very slow") {
       wireMockServer.addRequestProcessingDelay(3000)
       a[TimeoutException] should be thrownBy doPost("/post/json_json200", new JSONObject("""{ "key": "value"}"""), false, 2.seconds, 10.seconds)
     }

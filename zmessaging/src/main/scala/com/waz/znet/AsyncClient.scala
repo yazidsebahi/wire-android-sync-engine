@@ -52,10 +52,10 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
   val client = wrapper(new AsyncHttpClient(new AsyncServer))
 
-  def apply(uri: Uri, method: String = "GET", body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
+  def apply(uri: Uri, method: String = Request.GetMethod, body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
     debug(s"Starting request[$method]($uri) with body: '${if (body.toString.contains("password")) "<body>" else body}', headers: '$headers'")
 
-    val requestTimeout = if (method != "POST") timeout else body match {
+    val requestTimeout = if (method != Request.PostMethod) timeout else body match {
       case _: MultipartRequestContent => MultipartPostTimeout
       case _ => timeout
     }
@@ -73,11 +73,12 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
           debug(s"Connect completed for uri: '$uri', ex: '$ex', cancelled: $cancelled")
           timeoutForPhase = timeout
 
-          if (ex != null) p.tryFailure(ex)
-          else {
+          if (ex != null) {
+            p.tryFailure(if (cancelled) CancellableFuture.DefaultCancelException else ex)
+          } else {
             val networkActivityCallback = () => lastNetworkActivity = System.currentTimeMillis
             val future = processResponse(uri, response, decoder.getOrElse(bodyDecoder), downloadProgressCallback, networkActivityCallback)
-            future.onComplete(p.tryComplete)
+            p.tryCompleteWith(future)
 
             // XXX: order is important here, we first set processFuture and then check cancelled to avoid race condition in cancel callback
             processFuture = Some(future)
@@ -218,7 +219,7 @@ object AsyncClient {
     import android.os.Build._
     s"Wire/$appVersion (zms $zmsVersion; Android ${VERSION.RELEASE}; $MANUFACTURER $MODEL)"
   }
-  
+
   private def exceptionStatus: PartialFunction[Throwable, Response] = {
     case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
     case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))
