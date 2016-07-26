@@ -24,7 +24,7 @@ import org.threeten.bp.Duration
 object PCM {
   val sampleRate = 44100 // samples per second
   val inputChannelConfig = CHANNEL_IN_MONO
-  val outputChannelConfig = CHANNEL_CONFIGURATION_MONO
+  val outputChannelConfig = CHANNEL_OUT_MONO
   val sampleFormat = ENCODING_PCM_16BIT
 
   def durationFromByteCount(byteCount: Long): Duration = durationFromSampleCount(byteCount / SizeOf.SHORT)

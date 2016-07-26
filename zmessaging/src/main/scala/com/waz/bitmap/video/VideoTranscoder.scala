@@ -31,6 +31,7 @@ import com.waz.bitmap.video.VideoTranscoder.CodecResponse._
 import com.waz.bitmap.video.VideoTranscoder.{CodecResponse, MediaCodecIterator}
 import com.waz.model.{AssetMetaData, Dim2}
 import com.waz.threading.CancellableFuture
+import com.waz.utils.Deprecated.{codecInfoAtIndex, numberOfCodecs}
 import com.waz.utils.{Cleanup, Managed, returning}
 
 import scala.concurrent.Promise
@@ -271,7 +272,7 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
 
   private def getMimeTypeFor(format: MediaFormat) = format.getString(MediaFormat.KEY_MIME)
 
-  private lazy val infos = Seq.tabulate(MediaCodecList.getCodecCount)(MediaCodecList.getCodecInfoAt)
+  private lazy val infos = Vector.tabulate(numberOfCodecs)(codecInfoAtIndex)
 
   def encoderByMime(mime: String): Option[MediaCodecInfo] =
     infos.find(i => i.isEncoder && i.getSupportedTypes.exists(_.equalsIgnoreCase(mime)))

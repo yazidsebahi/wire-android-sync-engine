@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder.{BIG_ENDIAN, LITTLE_ENDIAN, nativeOrder}
 
 import android.content.Context
-import android.media.MediaCodec.{BUFFER_FLAG_CODEC_CONFIG, BUFFER_FLAG_END_OF_STREAM, CONFIGURE_FLAG_ENCODE, INFO_OUTPUT_BUFFERS_CHANGED}
+import android.media.MediaCodec.{BUFFER_FLAG_CODEC_CONFIG, BUFFER_FLAG_END_OF_STREAM, CONFIGURE_FLAG_ENCODE}
 import android.media.MediaFormat._
 import android.media.{MediaCodec, MediaCodecInfo, MediaFormat}
 import android.net.Uri
@@ -37,6 +37,7 @@ import com.waz.bitmap.video.MediaCodecHelper.{inputDequeueTimeoutMicros, outputD
 import com.waz.service.TempFileService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
+import com.waz.utils.Deprecated.{INFO_OUTPUT_BUFFERS_CHANGED, inputBuffersOf, outputBuffersOf}
 import libcore.io.SizeOf
 
 import scala.concurrent.Promise
@@ -85,10 +86,10 @@ class AudioTranscoder(tempFiles: TempFileService, context: Context) {
     } {
       encoder.start()
 
-      val inputBuffers = encoder.getInputBuffers
+      val inputBuffers = inputBuffersOf(encoder)
       val outputBufferInfo = new MediaCodec.BufferInfo
 
-      var outputBuffers = encoder.getOutputBuffers
+      var outputBuffers = outputBuffersOf(encoder)
       var samplesSoFar = 0L
       var endOfInput = false
       var endOfOutput = false
@@ -131,7 +132,7 @@ class AudioTranscoder(tempFiles: TempFileService, context: Context) {
           if (outputBufferInfo.presentationTimeUs > 0L) reporter.foreach(_.running(samplesSoFar * SizeOf.SHORT))
           endOfOutput = (outputBufferInfo.flags & BUFFER_FLAG_END_OF_STREAM) != 0
         } else if (outputBufferIndex == INFO_OUTPUT_BUFFERS_CHANGED) {
-          outputBuffers = encoder.getOutputBuffers
+          outputBuffers = outputBuffersOf(encoder)
         }
       }
 
