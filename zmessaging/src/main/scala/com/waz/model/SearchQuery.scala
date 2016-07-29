@@ -15,20 +15,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.model
 
-trait Search {
-  def getTopPeople(limit: Int, filter: Array[String]): UserSearchResult
-  def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): UserSearchResult
-  def getGroupConversations(query: String, limit: Int): ConversationSearchResult
-  def getContacts(query: String): Contacts
-  def getConnections(query: String, filter: Array[String], order: SearchResultOrdering): UserSearchResult
+sealed trait SearchQuery {
+  def cacheKey: String
 }
 
-trait UserSearchResult extends CoreList[User] {
-  def getAll: Array[User]
-}
+object SearchQuery {
+  def fromCacheKey(key: String): SearchQuery =
+    if (key == TopPeople.cacheKey) TopPeople
+    else if (key startsWith Recommended.prefix) Recommended(key substring Recommended.prefix.length)
+    else throw new IllegalArgumentException(s"not a valid cacheKey: $key")
 
-trait ConversationSearchResult extends CoreList[IConversation] {
-  def getAll: Array[IConversation]
+  case object TopPeople extends SearchQuery {
+    val cacheKey = "##top##"
+  }
+
+  case class Recommended(searchTerm: String) extends SearchQuery {
+    val cacheKey = s"${Recommended.prefix}$searchTerm"
+  }
+  object Recommended extends (String => Recommended) {
+    val prefix = "##recommended##"
+  }
 }

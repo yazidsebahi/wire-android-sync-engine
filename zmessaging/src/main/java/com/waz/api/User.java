@@ -86,7 +86,5 @@ public interface User extends UiObservable, Parcelable {
 
     void block();
 
-    void excludeFromPeopleYouMayKnow();
-
     IConversation unblock();
 }

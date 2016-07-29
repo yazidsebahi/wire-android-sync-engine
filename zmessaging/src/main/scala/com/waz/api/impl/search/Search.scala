@@ -18,34 +18,25 @@
 package com.waz.api.impl.search
 
 import com.waz.api
-import com.waz.api.impl.SearchQuery.{DbQuery, RecommendedPeople, TopPeople}
-import com.waz.api.impl.{ConnectionsSearch, Contacts, OnlyContactsBySearchKeyFiltering, SyncIndicator}
-import com.waz.content.Uris
-import com.waz.content.Uris.SyncIndicatorUri
-import com.waz.model.sync.SyncCommand
+import com.waz.api.SearchResultOrdering
+import com.waz.api.impl.{ConnectionsSearch, Contacts, OnlyContactsBySearchKeyFiltering}
+import com.waz.model.SearchQuery
 import com.waz.service.SearchKey
 import com.waz.ui.UiModule
 
 class Search(implicit ui: UiModule) extends api.Search {
+  override def getTopPeople(limit: Int, filter: Array[String]): api.UserSearchResult =
+    new UserSearchResult(SearchQuery.TopPeople, limit, filter.toSet)
 
-  override def getUsers(query: String, limit: Int, filter: Array[String]) =
-    new UsersSearch(DbQuery(query.trim), limit, filter.toSet)
+  override def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): api.UserSearchResult =
+    new UserSearchResult(SearchQuery.Recommended(query), limit, filter.toSet)
 
-  override def getTopPeople(limit: Int, filter: Array[String]) =
-    new UsersSearch(TopPeople, limit, filter.toSet)
-
-  override def getRecommendedPeople(limit: Int, filter: Array[String]) =
-    new UsersSearch(RecommendedPeople, limit, filter.toSet)
-
-  override def getGroupConversations(query: String, limit: Int) =
-    new ConversationsSearch(query.trim, limit)
+  override def getGroupConversations(query: String, limit: Int): api.ConversationSearchResult =
+    new ConversationSearchResult(query.trim, limit)
 
   override def getContacts(query: String): api.Contacts =
     new Contacts(OnlyContactsBySearchKeyFiltering(SearchKey(query)))
 
-  override def getConnections(query: String, filter: Array[String]) =
-    new ConnectionsSearch(SearchKey(query), filter)
-
-  override def getSyncIndicator: api.SyncIndicator =
-    ui.cached(SyncIndicatorUri(Uris.UserSearchUri), new SyncIndicator(SyncCommand.SyncSearchQuery))
+  override def getConnections(query: String, filter: Array[String], order: SearchResultOrdering): api.UserSearchResult =
+    new ConnectionsSearch(SearchKey(query), filter, order)
 }

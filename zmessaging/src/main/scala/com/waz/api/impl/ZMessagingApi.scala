@@ -188,9 +188,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getConversations = ui.convs.convsList
 
-  @deprecated("user ZMessagingApi.search() instead", "21.0")
-  override def searchQuery() = new SearchQuery
-
   override def search() = new Search
 
   override def getCache: ZCache = cache

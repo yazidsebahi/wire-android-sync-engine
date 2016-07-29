@@ -22,6 +22,7 @@ import java.io.{ByteArrayInputStream, FileInputStream}
 import android.provider.OpenableColumns
 import com.waz.RobolectricUtils
 import com.waz.content.WireContentProvider.CacheUri
+import com.waz.model.Mime
 import com.waz.service.ZMessaging
 import com.waz.testutils.{DefaultPatienceConfig, MockGlobalModule}
 import com.waz.utils.{IoUtils, returning}

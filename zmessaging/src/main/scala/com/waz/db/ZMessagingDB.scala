@@ -30,26 +30,24 @@ import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
 import com.waz.model.EditHistory.EditHistoryDao
 import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.InvitedContacts.InvitedContactsDao
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model.Liking.LikingDao
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
-import com.waz.model.SearchEntry.SearchEntryDao
+import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.VoiceParticipantData.VoiceParticipantDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
-import org.json.JSONObject
 
 class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getApplicationContext, dbName, null, ZMessagingDB.DbVersion) {
 
   implicit val logTag = logTagFor[ZMessagingDB]
 
   val daos = Seq (
-    UserDataDao, SearchQueryCacheDao, SearchEntryDao, AssetDataDao, ConversationDataDao,
+    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
@@ -61,32 +59,17 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     Migration(61, 62) { _.execSQL("ALTER TABLE Errors ADD COLUMN messages TEXT") },
     Migration(62, 63) { _.execSQL("ALTER TABLE VoiceParticipants ADD COLUMN sends_video INTEGER DEFAULT 0") },
     Migration(63, 64)(ConversationDataMigration.v64),
-    Migration(64, 65) { _.execSQL(s"ALTER TABLE GcmData ADD COLUMN clear_time INTEGER") },
+    Migration(64, 65) { _.execSQL("ALTER TABLE GcmData ADD COLUMN clear_time INTEGER") },
     Migration(65, 66)(CallLogMigration.v66),
     Migration(66, 67)(LikingsMigration.v67),
-    Migration(67, 68) { implicit db =>
-      db.execSQL(s"DROP TABLE IF EXISTS MsgDeletion")
-      db.execSQL(s"CREATE TABLE MsgDeletion (message_id TEXT PRIMARY KEY, timestamp INTEGER)")
+    Migration(67, 68) { db =>
+      db.execSQL("DROP TABLE IF EXISTS MsgDeletion")
+      db.execSQL("CREATE TABLE MsgDeletion (message_id TEXT PRIMARY KEY, timestamp INTEGER)")
     },
     Migration(68, 69)(MessageDataMigration.v69),
-    Migration(69, 70) { implicit db =>
-      // migrate AnyAssetData preview field
-      withStatement("UPDATE Assets SET data = ? WHERE _id = ?") { stmt =>
-        forEachRow(db.query("Assets", Array("_id", "data"), "asset_type = 'Any'", null, null, null, null)) { c =>
-          val asset = new JSONObject(c.getString(1))
-          if (asset.has("preview")) {
-            val preview = new JSONObject()
-            preview.put("type", "image")
-            preview.put("img", asset.getJSONObject("preview"))
-            asset.put("preview", preview)
-
-            stmt.clearBindings()
-            stmt.bindString(1, preview.toString)
-            stmt.bindString(2, c.getString(0)) // id
-            stmt.execute()
-          }
-        }
-      }
+    Migration(69, 70)(AssetDataMigration.v70),
+    Migration(70, 71) { db =>
+      db.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
     },
     Migration(70, 71) { implicit db =>
       db.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
@@ -102,7 +85,8 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     Migration(73, 74) { implicit db =>
       db.execSQL("DROP TABLE IF EXISTS GcmData") // just dropping all data, not worth the trouble to migrate that
       db.execSQL("CREATE TABLE NotificationData (_id TEXT PRIMARY KEY, data TEXT)")
-    }
+    },
+    Migration(74, 75)(SearchQueryCacheMigration.v75)
   )
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
@@ -114,5 +98,5 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 74
+  val DbVersion = 75
 }

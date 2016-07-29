@@ -15,20 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.content
 
-trait Search {
-  def getTopPeople(limit: Int, filter: Array[String]): UserSearchResult
-  def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): UserSearchResult
-  def getGroupConversations(query: String, limit: Int): ConversationSearchResult
-  def getContacts(query: String): Contacts
-  def getConnections(query: String, filter: Array[String], order: SearchResultOrdering): UserSearchResult
-}
+import android.content.Context
+import com.waz.model.{SearchQuery, SearchQueryCache}
+import com.waz.model.SearchQueryCache.SearchQueryCacheDao
+import com.waz.utils.TrimmingLruCache.Fixed
+import com.waz.utils.{CachedStorage, TrimmingLruCache}
 
-trait UserSearchResult extends CoreList[User] {
-  def getAll: Array[User]
-}
-
-trait ConversationSearchResult extends CoreList[IConversation] {
-  def getAll: Array[IConversation]
-}
+class SearchQueryCacheStorage(context: Context, storage: Database) extends CachedStorage[SearchQuery, SearchQueryCache](new TrimmingLruCache(context, Fixed(20)), storage)(SearchQueryCacheDao, "SearchQueryCacheStorage")

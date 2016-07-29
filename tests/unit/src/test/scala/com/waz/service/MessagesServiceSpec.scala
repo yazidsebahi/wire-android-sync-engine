@@ -24,7 +24,6 @@ import com.waz.ZLog.LogTag
 import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.api.impl.ErrorResponse.internalError
-import com.waz.content.Mime
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
@@ -32,7 +31,7 @@ import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.UserDataDao
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.Implicits._
 import com.waz.testutils._
@@ -132,7 +131,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         listMessages(convId) should have size 1
         listMessages(convId).head shouldEqual MessageData(
-          MessageId(event.id), convId, Message.Type.TEXT, event.from, MessageData.textContent("message"),
+          MessageId.fromUid(event.id), convId, Message.Type.TEXT, event.from, MessageData.textContent("message"),
           time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT, firstMessage = true,
           protos = Seq(event.asInstanceOf[GenericMessageEvent].content)
         )

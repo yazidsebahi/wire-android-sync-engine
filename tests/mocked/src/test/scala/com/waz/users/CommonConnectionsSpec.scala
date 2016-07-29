@@ -21,7 +21,7 @@ import com.waz.api.MockedClientApiSpec
 import com.waz.api.impl.SearchQuery.Query
 import com.waz.mocked.MockBackend
 import com.waz.model.{Relation, UserId}
-import com.waz.service.UserSearchService
+import com.waz.service.GraphSearchService$
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.testutils.Implicits._
 import com.waz.threading.CancellableFuture
@@ -41,7 +41,7 @@ class CommonConnectionsSpec extends FeatureSpec with Matchers with MockBackend w
 
   var requestedCommon = Option.empty[UserId]
   val recommended = UserId()
-  lazy val topCommonConnections = connections.keys.take(UserSearchService.MinCommonConnections).toSeq
+  lazy val topCommonConnections = connections.keys.take(GraphSearchService.MinCommonConnections).toSeq
 
 
   override protected def beforeAll(): Unit = {
@@ -76,7 +76,7 @@ class CommonConnectionsSpec extends FeatureSpec with Matchers with MockBackend w
       withDelay {
         common.getTotalCount shouldEqual 10
       }
-      common.getTopConnections should have size UserSearchService.MinCommonConnections
+      common.getTopConnections should have size GraphSearchService.MinCommonConnections
       common.getTopConnections.map(_.id).toSeq shouldEqual topCommonConnections
 
       awaitUi(250.millis)

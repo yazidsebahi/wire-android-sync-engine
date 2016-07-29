@@ -19,12 +19,12 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.impl.SearchQuery._
-import com.waz.model.{EmailAddress, PhoneNumber, Relation, UserId}
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.model.SearchQuery.{Recommended, TopPeople}
+import com.waz.model._
+import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
 import com.waz.znet.Response.Status.NotFound
-import com.waz.znet.Response.{ErrorStatus, Status, SuccessHttpStatus}
+import com.waz.znet.Response.{Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{JsonObjectResponse, _}
 import org.json.JSONObject
@@ -36,13 +36,11 @@ class UserSearchClient(netClient: ZNetClient) {
   import UserSearchClient._
   private implicit val tag: LogTag = logTagFor[UserSearchClient]
 
-  def graphSearch(query: Query, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = {
+  def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = {
     debug(s"graphSearch('$query', $limit)")
     query match {
-      case TopPeople         => extractUsers("TopPeople", Request.Get(Request.query(TopUserPath, "size" -> limit)))
-      case RecommendedPeople => extractUsers("RecommendedPeople", Request.Get(Request.query(RecommendedUserPath, "size" -> limit)))
-      case Named(name)       => extractUsers(s"Named($name)", Request.Get(graphSearchQuery(name, limit, Relation.Third.id, useDirectory = true)))
-      case AddressBook       => CancellableFuture.failed(new IllegalStateException("invalid state: there is no graph search for address book contacts"))
+      case TopPeople           => extractUsers("TopPeople", Request.Get(Request.query(TopUserPath, "size" -> limit)))
+      case Recommended(prefix) => extractUsers(s"Recommended($prefix)", Request.Get(graphSearchQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
     }
   }
 
@@ -51,18 +49,6 @@ class UserSearchClient(netClient: ZNetClient) {
 
   def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] =
     extractUsers("loadCommonConnections", Request.Get(CommonConnectionsPath + "/" + id))
-
-  // exclude user form People You May Know / Recommended People search results
-  def postExcludePymk(user: UserId): CancellableFuture[Option[ErrorResponse]] =
-    netClient(Request.Put(excludePymkPath(user), ())) map {
-      case Response(SuccessHttpStatus(), _, _) => None
-      case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
-        warn(s"Error response to postIgnoreSuggestion: ${ErrorResponse(code, msg, label)}")
-        Some(ErrorResponse(code, msg, label))
-      case resp @ Response(status, _, _) =>
-        error(s"Unexpected response to postIgnoreSuggestion: $resp")
-        Some(ErrorResponse(status.status, "unexpected", "internal-error"))
-    }
 
   private def extractUsers(name: String, req: Request[Unit]): ErrorOrResponse[Seq[UserSearchEntry]] = {
     val handling404s: PartialFunction[Response, Either[ErrorResponse, Seq[UserSearchEntry]]] = {
@@ -82,9 +68,6 @@ object UserSearchClient {
   val GraphSearchPath = "/search/contacts"
   val CommonConnectionsPath = "/search/common"
   val TopUserPath = "/search/top"
-  val RecommendedUserPath = "/search/suggestions"
-
-  def excludePymkPath(user: UserId) = s"/search/suggestions/$user/ignore"
 
   case class UserSearchEntry(id: UserId, name: String, email: Option[EmailAddress], phone: Option[PhoneNumber], colorId: Int, connected: Option[Boolean], blocked: Boolean, level: Relation, commonCount: Option[Int] = None, common: Seq[UserId] = Nil)
 

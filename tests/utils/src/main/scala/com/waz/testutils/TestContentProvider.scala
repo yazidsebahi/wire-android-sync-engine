@@ -22,7 +22,7 @@ import android.database.{Cursor, MatrixCursor}
 import android.net.Uri
 import android.provider.OpenableColumns._
 import android.webkit.MimeTypeMap
-import com.waz.content.Mime
+import com.waz.model.Mime
 import com.waz.utils
 import com.waz.utils.IoUtils
 import org.robolectric.Robolectric._

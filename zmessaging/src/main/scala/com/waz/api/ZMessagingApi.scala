@@ -77,9 +77,6 @@ trait ZMessagingApi {
    */
   def verifyPhoneNumber(phoneNumber: String, confirmationCode: String, kindOfVerification: KindOfVerification, listener: ZMessagingApi.PhoneNumberVerificationListener): Unit
 
-  @deprecated("Use Search instead", "21.0")
-  def searchQuery(): SearchQuery
-
   def search(): Search
 
   def getSelf: Self

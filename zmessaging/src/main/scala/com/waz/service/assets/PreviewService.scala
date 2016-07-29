@@ -25,8 +25,8 @@ import android.net.Uri
 import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.content.{AssetsStorage, Mime}
-import com.waz.model.{AnyAssetData, AssetId, AssetPreviewData}
+import com.waz.content.AssetsStorage
+import com.waz.model.{AnyAssetData, AssetId, AssetPreviewData, Mime}
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.service.images.ImageAssetGenerator._
 import com.waz.service.images.ImageLoader.Metadata

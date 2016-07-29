@@ -44,7 +44,7 @@ class InitialConnectionStatusSpec extends FeatureSpec with Matchers with BeforeA
 
     withDelay {
       users.getAll should have size 30
-      users.getContacts should have size 30
+      users.getConnected should have size 30
       users.getUnconnected should be (empty)
       all (users.getAll) shouldBe 'connected
     } (30.seconds)

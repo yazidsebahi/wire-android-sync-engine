@@ -15,20 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.api;
 
-trait Search {
-  def getTopPeople(limit: Int, filter: Array[String]): UserSearchResult
-  def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): UserSearchResult
-  def getGroupConversations(query: String, limit: Int): ConversationSearchResult
-  def getContacts(query: String): Contacts
-  def getConnections(query: String, filter: Array[String], order: SearchResultOrdering): UserSearchResult
-}
-
-trait UserSearchResult extends CoreList[User] {
-  def getAll: Array[User]
-}
-
-trait ConversationSearchResult extends CoreList[IConversation] {
-  def getAll: Array[IConversation]
+public enum SearchResultOrdering {
+    BY_NAME,
+    BY_LAST_EVENT_TIME
 }

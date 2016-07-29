@@ -21,8 +21,7 @@ import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.CacheEntry
-import com.waz.content.Mime
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.{AssetRequest, ImageAssetRequest}
 import com.waz.testutils.Matchers._

@@ -24,8 +24,8 @@ import android.content.Context
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.{Database, Mime}
-import com.waz.model.{AESKey, Uid}
+import com.waz.content.Database
+import com.waz.model.{AESKey, Mime, Uid}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.crypto.AESUtils

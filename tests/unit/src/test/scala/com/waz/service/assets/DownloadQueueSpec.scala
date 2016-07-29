@@ -17,8 +17,7 @@
  */
 package com.waz.service.assets
 
-import com.waz.content.Mime
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service.downloads.DownloadQueue
 import com.waz.service.downloads.DownloadQueue.Entry
 import com.waz.service.downloads.DownloadRequest.ImageAssetRequest

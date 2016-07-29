@@ -217,7 +217,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
         conns should have size 4
         val all = conns.getAll
         all map (_.getName) shouldEqual Array("Bugs Bunny", "Carrot", "Elmer Fudd", "Road Runner")
-        all shouldEqual conns.getContacts
+        all shouldEqual conns.getConnected
         conns.getUnconnected should be(empty)
       }
     }

@@ -31,8 +31,7 @@ import com.waz.ZLog._
 import com.waz.api.ImageAsset.BitmapCallback
 import com.waz.api._
 import com.waz.bitmap.video.VideoTranscoder
-import com.waz.content.Mime
-import com.waz.model.AssetMetaData
+import com.waz.model.{AssetMetaData, Mime}
 import com.waz.service.ZMessaging
 import com.waz.utils._
 import com.waz.utils.events.ActivityEventContext

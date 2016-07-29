@@ -25,6 +25,9 @@ import org.robolectric.Robolectric
 import SearchQueryCache.SearchQueryCacheDao
 import SearchEntry.SearchEntryDao
 import com.waz.service.SearchKey
+import com.waz.utils._
+
+import scala.concurrent.duration._
 
 class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAndAfter with Matchers with RobolectricTests {
 
@@ -56,19 +59,14 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
   }
 
   feature("SearchQueryCache") {
-    scenario("add query with queryLimit to cache and read it") {
-      val entry = SearchQueryCacheDao.add(foo, Some(22))
-      SearchQueryCacheDao.get(foo, Some(22)) should be(Some(entry))
+    scenario("add query to cache and read it") {
+      val entry = SearchQueryCacheDao.add(foo)
+      SearchQueryCacheDao.get(foo) should be(Some(entry))
     }
 
-    scenario("add query without queryLimit to cache and read it") {
-      val entry = SearchQueryCacheDao.add(SearchQuery.Named("bar"))
-      SearchQueryCacheDao.get(SearchQuery.Named("bar")) should be(Some(entry))
-    }
-
-    scenario("multiple queries in cache get query without queryLimit") {
-      SearchQueryCacheDao.add(foo, Some(11))
-      SearchQueryCacheDao.add(foo, Some(15))
+    scenario("multiple queries in cache get query") {
+      SearchQueryCacheDao.add(foo)
+      SearchQueryCacheDao.add(foo)
 
       val entry = SearchQueryCacheDao.add(foo)
       SearchQueryCacheDao.get(foo) should be(Some(entry))
@@ -77,16 +75,16 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
     scenario("multiple queries in cache get query with queryLimit"){
 
       Given("some entries with different queryLimit and timestamp")
-      val entry_01 = SearchQueryCache(1, foo, Some(15), 1000)
-      val entry_02 = SearchQueryCache(2, foo, Some(30), 2000)
-      val entry_03 = SearchQueryCache(3, foo, Some(10), 3000)
+      val entry_01 = SearchQueryCache(1, foo, 1000.millis.fromEpoch)
+      val entry_02 = SearchQueryCache(2, foo, 2000.millis.fromEpoch)
+      val entry_03 = SearchQueryCache(3, foo, 3000.millis.fromEpoch)
 
       SearchQueryCacheDao.insertOrReplace(entry_01)
       SearchQueryCacheDao.insertOrReplace(entry_02)
       SearchQueryCacheDao.insertOrReplace(entry_03)
 
       When("get entry with queryLimit")
-      val result = SearchQueryCacheDao.get(foo, Some(11))
+      val result = SearchQueryCacheDao.get(foo)
 
       Then("the result should be the newest entry witch has a fitting queryLimit")
       result should be(Some(entry_02))
@@ -97,7 +95,7 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
     scenario("get entries for searchQuery") {
 
       Given("a SearchQueryCache and some entries")
-      val queryCache = SearchQueryCacheDao.add(foo, Some(22))
+      val queryCache = SearchQueryCacheDao.add(foo)
 
       val searchEntries_1 = searchEntriesForId(queryCache.id)
       val searchEntries_2 = searchEntriesForId(120)
@@ -115,7 +113,7 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
     scenario("get entries for searchQuery with queryLimit") {
 
       Given("a SearchQueryCache and some entries")
-      val queryCache = SearchQueryCacheDao.add(foo, Some(22))
+      val queryCache = SearchQueryCacheDao.add(foo)
 
       val searchEntries_1 = searchEntriesForId(queryCache.id)
       val searchEntries_2 = searchEntriesForId(120)
@@ -134,7 +132,7 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
     scenario("delete entries for searchQuery") {
 
       Given("a SearchQueryCache and some entries")
-      val queryCache = SearchQueryCacheDao.add(foo, Some(22))
+      val queryCache = SearchQueryCacheDao.add(foo)
       SearchEntryDao.insertOrReplace(searchEntriesForId(queryCache.id))
 
       When("deleteEntries for SearchQueryCache")
@@ -147,7 +145,7 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
     scenario("get Users for searchQuery") {
 
       Given("a searchQueryCache and some entries")
-      val queryCache = SearchQueryCacheDao.add(foo, Some(22))
+      val queryCache = SearchQueryCacheDao.add(foo)
       val searchEntries  = searchEntriesForId(queryCache.id)
       SearchEntryDao.insertOrReplace(searchEntries)
 
@@ -162,7 +160,7 @@ class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAnd
     scenario("get Users for searchQuery with queryLimit") {
 
       Given("a searchQueryCache and some entries")
-      val queryCache = SearchQueryCacheDao.add(foo, Some(22))
+      val queryCache = SearchQueryCacheDao.add(foo)
       val searchEntries  = searchEntriesForId(queryCache.id)
       SearchEntryDao.insertOrReplace(searchEntries)
 

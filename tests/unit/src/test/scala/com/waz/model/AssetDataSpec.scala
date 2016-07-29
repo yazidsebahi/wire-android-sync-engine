@@ -19,7 +19,6 @@ package com.waz.model
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.Generators._
-import com.waz.content.Mime
 import com.waz.db.ZMessagingDB
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetPreviewData.Image

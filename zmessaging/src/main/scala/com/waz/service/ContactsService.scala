@@ -31,7 +31,6 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.api.Permission.READ_CONTACTS
-import com.waz.api.impl.SearchQuery
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
@@ -53,10 +52,10 @@ import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 import scala.util.{Success, Try}
 
-class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorage, lifecycle: ZmsLifecycle, keyValue: KeyValueStorage,
-                      prefs: PreferenceService, users: UserService, userSearchService: UserSearchService,
-                      usersStorage: UsersStorage, timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase,
-                      sync: SyncServiceHandle, convs: ConversationStorage, permissions: PermissionsService) {
+class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorage, lifecycle: ZmsLifecycle,
+    keyValue: KeyValueStorage, prefs: PreferenceService, users: UserService, usersStorage: UsersStorage,
+    timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
+    convs: ConversationStorage, permissions: PermissionsService) {
 
   import ContactsService._
   import EventContext.Implicits.global
@@ -418,12 +417,11 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
     for {
       _ <- storage(AddressBook.save(ab)(_)).future
       _ <- storage(ContactsOnWireDao.insertOrIgnore(onWire)(_)).future
-      _ <- userSearchService.setCachedResults(SearchQuery.AddressBook, pymk.zipWithIndex.map { case (id, i) => SearchEntry(0, id, Relation.Other.id, i + 1) }).future
       _ <- users.syncNotExistingOrExpired(pymk)
       _ <- Future(contactsOnWire.mutate(_ ++ onWire))
       _ <- lastUploadTime := Some(now)
       _ <- addressBookVersionOfLastUpload := Some(CurrentAddressBookVersion)
-    } yield userSearchService.onSearchResultChanged ! SearchQuery.RecommendedPeople
+    } yield ()
   }
 }
 

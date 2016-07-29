@@ -21,7 +21,6 @@ import android.database.Cursor
 import android.net.Uri
 import android.util.Base64
 import com.waz.ZLog._
-import com.waz.content.Mime
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetStatus.{DownloadFailed, UploadDone}

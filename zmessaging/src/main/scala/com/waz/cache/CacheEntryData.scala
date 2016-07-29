@@ -23,11 +23,10 @@ import java.lang.System.currentTimeMillis
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import com.waz.content.Mime
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.db.DbTranslator.FileTranslator
-import com.waz.model.{AESKey, Uid}
+import com.waz.model.{AESKey, Mime, Uid}
 import com.waz.utils.returning
 
 case class CacheEntryData(

@@ -30,8 +30,7 @@ import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
 import com.waz.audioeffect.{AudioEffect => AVSEffect}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
-import com.waz.content.Mime
-import com.waz.model.{AssetId, ErrorData, Uid}
+import com.waz.model.{AssetId, ErrorData, Mime, Uid}
 import com.waz.service.assets.AudioLevels.peakLoudness
 import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.service.{ErrorsService, ZmsLifecycle}

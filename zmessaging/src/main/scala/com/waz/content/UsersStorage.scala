@@ -27,7 +27,7 @@ import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
 import com.waz.utils.events._
 
-import scala.collection.mutable
+import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
 class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") {
@@ -70,11 +70,11 @@ class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage
 
   def getOrElseUpdate(id: UserId, default: => UserData) = getOrCreate(id, default)
 
-  def listAll(ids: Traversable[UserId]): Future[Seq[UserData]] = getAll(ids).map(_.flatten)
+  def listAll(ids: Traversable[UserId]): Future[Vector[UserData]] = getAll(ids).map(_.collect { case Some(x) => x }(breakOut))
 
-  def listSignal(ids: Traversable[UserId]): Signal[Seq[UserData]] = {
+  def listSignal(ids: Traversable[UserId]): Signal[Vector[UserData]] = {
     val idSet = ids.toSet
-    new RefreshingSignal(CancellableFuture.lift(getAll(ids).map(_.flatten)), onChanged.map(_.filter(u => idSet(u.id))).filter(_.nonEmpty))
+    new RefreshingSignal(listAll(ids).lift, onChanged.map(_.filter(u => idSet(u.id))).filter(_.nonEmpty))
   }
 
   def listAcceptedUsers: Future[Map[UserId, UserData]] =

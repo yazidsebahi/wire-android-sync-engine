@@ -24,7 +24,7 @@ import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.CacheService
-import com.waz.content.{MessagesStorage, Mime}
+import com.waz.content.MessagesStorage
 import com.waz.model.AssetData.UploadKey
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.GenericContent.Asset.ImageMetaData
@@ -71,7 +71,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   def postRecalled(convId: ConvId, msgId: MessageId, recalled: MessageId): Future[SyncResult] =
     convs.convById(convId) flatMap {
       case Some(conv) =>
-        val msg = GenericMessage(msgId, Proto.MsgRecall(recalled))
+        val msg = GenericMessage(msgId.uid, Proto.MsgRecall(recalled))
         otrSync.postOtrMessage(conv.id, conv.remoteId, msg) flatMap {
           case Left(e) => Future successful SyncResult(e)
           case Right(time) =>
@@ -213,7 +213,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
 
     def postAssetOriginal(asset: AnyAssetData, newStatus: AssetStatus) = {
       verbose(s"postOriginal($asset)")
-      val proto = GenericMessage(msg.id, Proto.Asset(Proto.Asset.Original(asset), UploadInProgress))
+      val proto = GenericMessage(msg.id.uid, Proto.Asset(Proto.Asset.Original(asset), UploadInProgress))
 
       CancellableFuture lift {
         otrSync.postOtrMessage(conv, proto) flatMap {
@@ -238,7 +238,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
               CancellableFuture successful None
             case Some(data) =>
               val key = img.otrKey.getOrElse(AESKey())
-              def proto(sha: Sha256) = GenericMessage(msg.id, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadInProgress))
+              def proto(sha: Sha256) = GenericMessage(msg.id.uid, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadInProgress))
 
               otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = false) flatMap {
                 case Left(err) =>
@@ -279,7 +279,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
               case _ =>
                 Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
             }
-            GenericMessage(msg.id, as)
+            GenericMessage(msg.id.uid, as)
           }
 
           otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = true) flatMap {
@@ -343,9 +343,9 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       if (asset.status != status) successful(Left(internalError(s"asset $asset should have status $status")))
       else status match {
         case UploadCancelled =>
-          otrSync.postOtrMessage(cid, rcid, GenericMessage(mid, Proto.Asset(Proto.Asset.Original(asset), UploadCancelled))).flatMapRight(_ => storage.remove(mid))
+          otrSync.postOtrMessage(cid, rcid, GenericMessage(mid.uid, Proto.Asset(Proto.Asset.Original(asset), UploadCancelled))).flatMapRight(_ => storage.remove(mid))
         case UploadFailed =>
-          otrSync.postOtrMessage(cid, rcid, GenericMessage(mid, Proto.Asset(Proto.Asset.Original(asset), UploadFailed))).mapRight(_ => ())
+          otrSync.postOtrMessage(cid, rcid, GenericMessage(mid.uid, Proto.Asset(Proto.Asset.Original(asset), UploadFailed))).mapRight(_ => ())
       }
 
     for {

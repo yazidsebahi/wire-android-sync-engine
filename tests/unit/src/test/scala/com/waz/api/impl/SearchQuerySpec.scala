@@ -22,7 +22,7 @@ import com.waz._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.conversation.ConversationsUiService
-import com.waz.service.{SearchKey, UserSearchService}
+import com.waz.service.{SearchKey, GraphSearchService$}
 import com.waz.testutils.{MockUiModule, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import org.scalatest._
@@ -38,7 +38,7 @@ class SearchQuerySpec extends FeatureSpec with Matchers with BeforeAndAfter with
   var convSearchResult: List[ConversationData] = _
 
   lazy val zmessaging = new MockZMessaging() {
-    override lazy val usersearch: UserSearchService = new UserSearchService(context, db, users, usersStorage, timeouts, sync) {
+    override lazy val userSearch: GraphSearchService = new GraphSearchService(context, db, users, usersStorage, timeouts, sync) {
       override def searchUsers(query: SearchQuery.DbQuery, limit: Int) = {
         userSearchRequest = Some((query, limit))
         CancellableFuture.successful(userSearchResult)

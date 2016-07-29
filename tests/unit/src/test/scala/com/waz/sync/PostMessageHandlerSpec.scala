@@ -23,12 +23,11 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.Mime
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service._
 import com.waz.service.conversation.ConversationsService.SendingTimeout
 import com.waz.sync.client.MessagesClient.OtrMessage

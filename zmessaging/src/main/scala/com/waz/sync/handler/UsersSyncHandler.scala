@@ -53,7 +53,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
   def postSelfUser(info: UserInfo): Future[SyncResult] = updatedSelfToSyncResult(usersClient.updateSelf(info))
 
   def postSelfPicture(): Future[SyncResult] = userService.getSelfUser flatMap {
-    case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _, _)) =>
+    case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _)) =>
       assetSync.postSelfImageAsset(RConvId(id.str), assetId) flatMap {
         case SyncResult.Success =>
           assets.getImageAsset(assetId) flatMap { asset =>
@@ -63,7 +63,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
           error(s"self picture post asset $assetId failed: $failure")
           Future.successful(failure)
       }
-    case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _, _)) =>
+    case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _)) =>
       updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Some(ImageAssetData.Empty))))
     case _ => Future.successful(SyncResult.failed())
   }

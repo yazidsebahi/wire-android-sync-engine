@@ -212,7 +212,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     }) flatMap {
       case Some((prev, user)) if prev != user =>
         sync.postConnectionStatus(userId, ConnectionStatus.Cancelled)
-        hideConversation(userId) map { _ => Some(user) }
+        hideConversationOfUser(userId) map { _ => Some(user) }
       case None => Future successful None
     }
   }

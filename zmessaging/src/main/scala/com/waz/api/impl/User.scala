@@ -118,8 +118,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def cancelConnection(): Unit = ui.users.cancelConnection(this)
 
-  override def excludeFromPeopleYouMayKnow(): Unit = ui.users.excludeFromPymk(this)
-
   override def getCommonConnections = ui.cached(Uris.CommonConnectionsUri(id), new CommonConnections(id)(ui))
 
   override def equals(other: Any): Boolean = other match {
@@ -162,7 +160,6 @@ object EmptyUser extends com.waz.api.User {
   override def getCommonConnections = null
   override def removeUpdateListener(listener: UpdateListener): Unit = ()
   override def addUpdateListener(listener: UpdateListener): Unit = ()
-  override def excludeFromPeopleYouMayKnow(): Unit = ()
   override def writeToParcel(dest: Parcel, flags: Int): Unit = ()
   override def describeContents(): Int = 0
   override def cancelConnection(): Unit = ()

@@ -30,7 +30,7 @@ import com.google.protobuf.nano.MessageNano
 import com.waz.api.impl._
 import com.waz.api.{CoreList, IConversation}
 import com.waz.cache.CacheEntryData
-import com.waz.content.{Mime, MsgCursor}
+import com.waz.content.MsgCursor
 import com.waz.model.GenericContent.Text
 import com.waz.model.{otr => _, _}
 import com.waz.service.ContactsService

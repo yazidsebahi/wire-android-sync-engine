@@ -26,8 +26,7 @@ import android.media.{MediaCodec, MediaExtractor, MediaFormat}
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.bitmap.video.{MediaCodecHelper, TrackDecoder}
-import com.waz.content.Mime
-import com.waz.model.AssetPreviewData
+import com.waz.model.{AssetPreviewData, Mime}
 import com.waz.threading.CancellableFuture.{CancelException, DefaultCancelException}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, returning}

@@ -29,7 +29,7 @@ class CommonConnections(userId: UserId)(implicit ui: UiModule) extends com.waz.a
 
   lazy val fullList = new CommonConnectionsList(userId, data.connections)
 
-  addLoader(_.usersearch.commonConnections(userId, fullList = false)) { data =>
+  addLoader(_.userSearch.commonConnections(userId, fullList = false)) { data =>
     this.data = data.getOrElse(this.data)
     notifyChanged()
   }
@@ -44,7 +44,7 @@ class CommonConnections(userId: UserId)(implicit ui: UiModule) extends com.waz.a
 
 class CommonConnectionsList(userId: UserId, var data: Seq[UserId] = Nil)(implicit ui: UiModule) extends UsersList with CoreList[com.waz.api.User] with SignalLoading {
 
-  addLoader(_.usersearch.commonConnections(userId, fullList = true)) { data =>
+  addLoader(_.userSearch.commonConnections(userId, fullList = true)) { data =>
     this.data = data.fold(Seq.empty[UserId])(_.connections)
     notifyChanged()
   }
