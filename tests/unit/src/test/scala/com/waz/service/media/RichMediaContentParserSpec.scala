@@ -21,11 +21,11 @@ import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
-import org.scalatest.{FeatureSpec, Matchers, OptionValues}
+import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
 
 import scala.io.Source
 
-class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks {
+class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
   lazy val parser = new RichMediaContentParser
 
   feature("match links") {
@@ -41,7 +41,8 @@ class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionVa
         "http://youtube.com/watch?v=c0KYU2j0TM4&wadsworth=1#t=100",
         "http://m.youtube.com/watch%3Fv%3D84zY33QZO5o",
         "https://www.youtube.com/watch?v=HuvLUhuo52w&feature=youtu.be",
-        "http://youtu.be/c0KYU2j0TM4#t=100"
+        "http://youtu.be/c0KYU2j0TM4#t=100",
+        "youtu.be/c0KYU2j0TM4#t=100"
       )
 
       links foreach { link =>
@@ -70,6 +71,21 @@ class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionVa
     scenario("match weblinks") {
       val link = "https://www.google.de/url?sa=t&source=web&rct=j&ei=s-EzVMzyEoLT7Qb7loC4CQ&url=http://m.youtube.com/watch%3Fv%3D84zY33QZO5o&ved=0CB0QtwIwAA&usg=AFQjCNEgZ6mQSXLbKY1HAhVOEiAwHtTIvA"
       parser.findMatches(link, weblinkEnabled = true).toList shouldEqual List((0, link.length, WEB_LINK))
+    }
+
+    scenario("match weblinks with HTTP") {
+      val link = "HTTP://Wire.com"
+      parser.findMatches(link, weblinkEnabled = true).toList shouldEqual List((0, link.length, WEB_LINK))
+    }
+
+    scenario("match weblinks without http") {
+      val link = "wire.com"
+      parser.findMatches(link, weblinkEnabled = true).toList shouldEqual List((0, link.length, WEB_LINK))
+    }
+
+    scenario("ignore blacklisted weblinks") {
+      val link = "giphy.com"
+      parser.findMatches(link, weblinkEnabled = true).toList shouldBe empty
     }
   }
 

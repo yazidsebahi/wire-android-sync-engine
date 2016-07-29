@@ -80,7 +80,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
 
     def updateOpenGraphData(part: MessageContent) =
       if (part.openGraph.isDefined || part.tpe != Part.Type.WEB_LINK) Future successful Right(part)
-      else client.loadMetadata(Uri.parse(part.content)).future map {
+      else client.loadMetadata(part.contentAsUri).future map {
         case Right(None) => Right(part.copy(tpe = Part.Type.TEXT)) // no open graph data is available
         case Right(Some(data)) => Right(part.copy(openGraph = Some(data)))
         case Left(err) => Left(err)
