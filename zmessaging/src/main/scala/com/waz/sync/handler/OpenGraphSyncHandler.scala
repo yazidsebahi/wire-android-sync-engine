@@ -26,7 +26,6 @@ import com.waz.api.impl.ErrorResponse._
 import com.waz.content.{ConversationStorage, MessagesStorage, Mime}
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.LinkPreview.Article
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
@@ -175,7 +174,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       uploadImage map {
         case Left(error) => Left(error)
         case Right(image) =>
-          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, Article(meta.title, meta.description, image, meta.permanentUrl)))
+          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, image, meta.permanentUrl))
       }
   }
 }
