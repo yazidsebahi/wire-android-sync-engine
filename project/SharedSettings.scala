@@ -11,7 +11,7 @@ import sbt.Keys._
 import scala.util.Random
 import scala.util.matching.Regex
 
-object ZMessagingBuild extends Build {
+object SharedSettings {
 
   case class EmailTestUser(email: String, password: String)
   case class InternalBackendPasswords(edge: String, staging: String)
@@ -45,8 +45,8 @@ object ZMessagingBuild extends Build {
   lazy val actorsResources = taskKey[File]("Creates resources zip for remote actor")
   lazy val nativeLibs = taskKey[Classpath]("directories containing native libs for osx and linux build")
   lazy val timespanScaleFactor = settingKey[Double]("scale (some) timespans in tests")
-  lazy val emailTestUser = SettingKey[EmailTestUser]("email address and password for our registration/login test user")
-  lazy val internalBackend = SettingKey[InternalBackendPasswords]("passwords for the internal backend interfaces")
+  lazy val emailTestUser = settingKey[EmailTestUser]("email address and password for our registration/login test user")
+  lazy val internalBackend = settingKey[InternalBackendPasswords]("passwords for the internal backend interfaces")
 
   def path(files: Seq[File]) = files.mkString(File.pathSeparator)
   def libraryPathOption(files: Classpath*) = s"-Djava.library.path=${path(files.flatMap(_.map(_.data)).distinct)}"
@@ -120,7 +120,7 @@ object ZMessagingBuild extends Build {
           |  def backend(backend: BackendConfig) = if (backend == BackendConfig.DevBackend) ("wire-staging", %s) else ("wire-edge", %s)
           |  def email = ("%s", "%s")
           |}
-        """.stripMargin.format("\"\"\"" + internalBackend.value.staging + "\"\"\"", "\"\"\"" + internalBackend.value.edge + "\"\"\"", emailTestUser.value.email, emailTestUser.value.password)
+        """.stripMargin.format("\"\"\"" + (internalBackend in Test).value.staging + "\"\"\"", "\"\"\"" + (internalBackend in Test).value.edge + "\"\"\"", (emailTestUser in Test).value.email, (emailTestUser in Test).value.password)
       IO.write(file, content)
       Seq(file)
     }

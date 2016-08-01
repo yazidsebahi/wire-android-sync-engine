@@ -10,4 +10,4 @@ addSbtPlugin("me.lessis" % "bintray-sbt" % "0.3.0")
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.3")
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "1.5.1")
 
-scalacOptions ++= Seq("-feature", "-encoding", "UTF-8")
+scalacOptions ++= Seq("-feature", "-encoding", "UTF-8", "-deprecation")

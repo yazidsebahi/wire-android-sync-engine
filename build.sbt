@@ -5,7 +5,7 @@ import com.android.tools.lint.checks.ApiDetector
 import sbt.Keys._
 import sbt._
 import sbtassembly.MappingSet
-import AddSettings._
+import SharedSettings._
 
 val MajorVersion = "75"
 
@@ -42,7 +42,7 @@ resolvers in ThisBuild ++= Seq(
   "Localytics" at "http://maven.localytics.com/public"
 )
 
-lazy val licenseHeaders = HeaderPlugin.autoImport.headers := Set("scala", "java", "rs") .map { _ -> ZMessagingBuild.GPLv3("2016", "Wire Swiss GmbH") } (collection.breakOut)
+lazy val licenseHeaders = HeaderPlugin.autoImport.headers := Set("scala", "java", "rs") .map { _ -> GPLv3("2016", "Wire Swiss GmbH") } (collection.breakOut)
 
 lazy val root = Project("zmessaging-android", file("."))
   .aggregate(macrosupport, zmessaging, actors, testutils, unit, mocked, integration, actors, actors_android, actors_app, testapp)
@@ -129,7 +129,6 @@ lazy val integration = project.in(file("tests") / "integration")
   .androidBuildWith(zmessaging)
   .dependsOn(testutils % Test)
   .configs(RegressionTest)
-  .settingSets(autoPlugins, buildScalaFiles, sbtFiles(file("../../env-credentials.txt")), userSettings, defaultSbtFiles)
   .settings(testSettings: _*)
   .settings(integrationCredentials: _*)
   .settings(
@@ -142,7 +141,6 @@ lazy val mocked = project.in(file("tests") / "mocked")
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
   .androidBuildWith(zmessaging)
   .dependsOn(testutils % Test)
-  .settingSets(autoPlugins, buildScalaFiles, sbtFiles(file("../../env-credentials.txt")), userSettings, defaultSbtFiles)
   .settings(testSettings: _*)
   .settings(integrationCredentials: _*)
   .settings(
