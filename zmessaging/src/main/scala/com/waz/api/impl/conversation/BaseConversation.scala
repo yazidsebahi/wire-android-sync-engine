@@ -31,7 +31,7 @@ import com.waz.utils.JsonEncoder
 import scala.collection.JavaConverters._
 import scala.util.Try
 
-class BaseConversation(implicit ui: UiModule) extends IConversation with UiObservable with SignalLoading {
+abstract class BaseConversation(implicit ui: UiModule) extends IConversation with UiObservable with SignalLoading {
   import BaseConversation._
   import IConversation.Type._
 
@@ -102,8 +102,6 @@ class BaseConversation(implicit ui: UiModule) extends IConversation with UiObser
   override def getFailedCount: Int = data.failedCount
 
   override def isMe: Boolean = data.convType == SELF
-
-  override def isOtto: Boolean = data.isOtto
 
   override def setArchived(archived: Boolean): Unit = conversations.setArchived(id, archived)
 

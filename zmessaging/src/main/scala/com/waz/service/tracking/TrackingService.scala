@@ -52,8 +52,8 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
     statsSignal.combine(botStatsSignal)(_ + _)
   }
 
-  private def botConvChanges: EventStream[RConvId] = usersStorage.onChanged.map(_.find(isBot).flatMap(_.conversation)).collect { case Some(id) => id }
-  private def loadBotConv: Future[Option[RConvId]] = usersStorage.find(isBot, findWelcomeBot(_), _.conversation).map(_.headOption.flatten).logFailure(true)
+  private def botConvChanges: EventStream[RConvId] = usersStorage.onChanged.map(_.find(_.isOtto).flatMap(_.conversation)).collect { case Some(id) => id }
+  private def loadBotConv: Future[Option[RConvId]] = usersStorage.find(_.isOtto, findWelcomeBot(_), _.conversation).map(_.headOption.flatten).logFailure(true)
 
   private def statsChanges(self: UserId): EventStream[Op] =
     EventStream.union[Op](
@@ -103,8 +103,7 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
 
   private def userDiff(u: UserData) = TrackingStats(0, 0, 0, 0, 0, isAutoConnect(u)?, 0, 0, 0, 0, 0)
 
-  private def isBot(u: UserData) = u.id == UserId.ofOtto
-  private def isAutoConnect(u: UserData) = u.isAutoConnect && ! isBot(u)
+  private def isAutoConnect(u: UserData) = u.isAutoConnect && ! u.isOtto
   private def isMsgFrom(self: UserId)(m: MessageEntry) = m.user == self && interactive(m.tpe)
   private def isBotInteraction(self: UserId, bot: Option[ConvId], m: MessageData) = m.userId == self && interactive(m.msgType) && bot.exists(_ == m.convId)
   private val interactive = Set(ASSET, KNOCK, TEXT, RICH_MEDIA, ASSET)

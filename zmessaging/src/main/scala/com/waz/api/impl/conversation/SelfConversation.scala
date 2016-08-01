@@ -32,4 +32,6 @@ class SelfConversation(implicit ui: UiModule) extends BaseConversation with Sign
   data = data.copy(convType = ConversationType.Self)
 
   addLoader(_.convsNotifier.selfConversationSignal, None) { _.foreach(set) }
+
+  override def isOtto: Boolean = false
 }

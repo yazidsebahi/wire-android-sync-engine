@@ -18,6 +18,7 @@
 package com.waz.model
 
 import java.util.Date
+import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
@@ -58,6 +59,7 @@ case class UserData(
   def isAcceptedOrPending = connection == ConnectionStatus.Accepted || connection == ConnectionStatus.PendingFromOther || connection == ConnectionStatus.PendingFromUser
   def isVerified = verified == Verification.VERIFIED
   def isAutoConnect = isConnected && ! isSelf && connectionMessage.isEmpty
+  lazy val isOtto = email.exists(e => UserData.botEmail.matcher(e.str).matches)
 
   def getDisplayName = if (displayName.isEmpty) name else displayName
 
@@ -110,6 +112,7 @@ case class UserData(
 object UserData {
 
   val Empty = UserData(UserId("EMPTY"), "")
+  val botEmail = compile("welcome(\\+\\d+)?@wire\\.com", CASE_INSENSITIVE)
 
   type ConnectionStatus = com.waz.api.User.ConnectionStatus
   object ConnectionStatus {

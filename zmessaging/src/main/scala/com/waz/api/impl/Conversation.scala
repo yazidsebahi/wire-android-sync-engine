@@ -20,12 +20,17 @@ package com.waz.api.impl
 import com.waz.ZLog._
 import com.waz.api.impl.conversation.BaseConversation
 import com.waz.model.{ConvId, ConversationData}
+import com.waz.service.tracking.TrackingEventsService
 import com.waz.threading.Threading
 import com.waz.ui._
+import com.waz.utils.RichFutureOpt
 
 class Conversation(override val id: ConvId, val initData: ConversationData = ConversationData.Empty)(implicit ui: UiModule) extends BaseConversation {
+  import Threading.Implicits.Background
+
   def this(data: ConversationData)(implicit ui: UiModule) = this(data.id, data)
   private implicit val logTag: LogTag = logTagFor[Conversation]
+  private var convIsOtto = false
 
   set(initData)
   reload()
@@ -33,8 +38,14 @@ class Conversation(override val id: ConvId, val initData: ConversationData = Con
   def reload() = {
     verbose(s"load $id")
     ui.zms
-      .flatMapFuture(_.convsContent.convById(id))(Threading.Background)
-      .map(_ foreach set)(Threading.Ui)
+      .flatMapFuture { zms =>
+        zms.convsContent.convById(id).flatMapSome { conv =>
+          TrackingEventsService.isOtto(conv, zms.usersStorage).map(isOtto => (conv, isOtto))
+        }
+      }.mapSome { case (conv, otto) =>
+        set(conv)
+        convIsOtto = otto
+      }(Threading.Ui)
   }
 
   if (initData.displayName == "") {
@@ -42,6 +53,8 @@ class Conversation(override val id: ConvId, val initData: ConversationData = Con
     // XXX: this is a hack for some random errors, sometimes conv has empty name which is never updated
     ui.zms { _.conversations.forceNameUpdate(id) }
   }
+
+  override def isOtto: Boolean = convIsOtto
 }
 
 object Conversation {

@@ -56,7 +56,6 @@ case class VoiceChannelData(id: ConvId,
   def ongoing = ChannelState.isOngoing(state) && !silenced
   def deviceActive = ConnectionState.isDeviceActive(deviceState)
   lazy val participants = participantsById.values.to[Vector].sortBy(_.idx)
-  def isOtto = id.str == UserId.ofOtto.str
 
   override def toString: String = {
     s"id: $id, state: $state, deviceState: $deviceState, muted: $muted, silenced: $silenced, participantsById: $participantsById, establishedFlows: $establishedFlows, sessionId: $sessionId, lastSequenceNumber: $lastSequenceNumber, caller: $caller, tracking: $tracking, video: $video, selfId: $selfId, revision: $revision"
