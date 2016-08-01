@@ -343,10 +343,11 @@ lazy val macrosupport = project
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
   .settings(publishSettings: _*)
   .settings(
-    version := "2.0",
+    version := "3.0",
     crossPaths := false,
     exportJars := true,
     name := "zmessaging-android-macrosupport",
+    bintrayRepository := "releases",
     libraryDependencies ++= Seq(
       "org.scala-lang" % "scala-reflect" % (scalaVersion in ThisBuild).value % Provided,
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
