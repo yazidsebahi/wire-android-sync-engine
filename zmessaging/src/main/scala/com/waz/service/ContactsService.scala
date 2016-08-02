@@ -135,7 +135,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
     }
   }
 
-  private[service] lazy val lastUploadTime = keyValuePref[Option[Instant]]("address_book_last_upload_time", None)
+  private[waz] lazy val lastUploadTime = keyValuePref[Option[Instant]]("address_book_last_upload_time", None)
   private[service] lazy val addressBookVersionOfLastUpload = keyValuePref[Option[Int]]("address_book_version_of_last_upload", None)
   private lazy val shareContactsPrefKey = Try(context.getString(R.string.pref_share_contacts_key)).getOrElse(PrefKey) // fallback for testing
   private[service] lazy val shareContactsPref = prefs.uiPreferenceBooleanSignal(shareContactsPrefKey, defaultValue = true)
@@ -256,7 +256,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
   def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit] = storage(ContactsOnWireDao.insertOrIgnore(rels)(_)).future.map(_ => contactsOnWire.mutate(_ ++ rels))
 
-  private[service] def requestUploadIfNeeded() =
+  private[waz] def requestUploadIfNeeded() =
     atMostOncePer(accountId, uploadCheckInterval) {
       verbose(s"requestUploadIfNeeded()")
 
@@ -265,10 +265,10 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
         lastVersion      <- addressBookVersionOfLastUpload()
       } yield (lastVersion forall (_ < CurrentAddressBookVersion)) || (timeOfLastUpload exists uploadMaxDelay.elapsedSince)
 
-      def atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn[A](current: AddressBook)(asyncEffect: => Future[A]) = for {
+      def atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn[A](current: AddressBook) = for {
         timeOfLastUpload <- lastUploadTime()                if timeOfLastUpload exists uploadMinDelay.elapsedSince
         prev             <- previouslyUploadedAddressBook() if (current - prev).nonEmpty
-        _                <- asyncEffect
+        _                <- sync postAddressBook current
       } yield ()
 
       for {
@@ -276,7 +276,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
         sharingEnabled  <- shareContactsPref() if sharingEnabled || priorityUpload
         hashes          <- addressBook // will be empty & only contain self hashes if sharing is disabled
         _               <- if (priorityUpload) sync postAddressBook hashes
-                           else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)(sync postAddressBook hashes)
+                           else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
       } yield ()
     }
 

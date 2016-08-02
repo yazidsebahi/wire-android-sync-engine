@@ -357,4 +357,6 @@ object ActorMessage {
   case class ConvMessages(msgs: Array[MessageInfo]) extends ActorMessage
 
   case class GetMessages(remoteId: RConvId) extends ActorMessage
+
+  case object ForceAddressBookUpload extends ActorMessage
 }
