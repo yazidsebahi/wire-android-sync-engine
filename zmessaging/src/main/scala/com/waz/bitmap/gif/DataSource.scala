@@ -58,6 +58,17 @@ trait DataSource {
     }
   }
 
+  def readFully(buffer: ByteBuffer, count: Int): Unit = {
+    val arr = Array.ofDim[Byte](4096)
+    var total = 0
+    while (total < count) {
+      val c = read(arr, 0, math.min(arr.length, count - total))
+      if (c < 0) throw new IOException("No more data available")
+      buffer.put(arr, 0, c)
+      total += c
+    }
+  }
+
   /**
    * Skips up to 'count' bytes from input.
    * @return number of bytes skipped

@@ -51,11 +51,17 @@ lazy val root = Project("zmessaging-android", file("."))
     aggregate in clean := true,
     aggregate in (Compile, compile) := true,
 
-    test := { (test in unit in Test).value },
+    test := {
+      (ndkBuild in zmessaging).value
+      (test in unit in Test).value
+    },
     addCommandAlias("testQuick", ";unit/testQuick"),
     addCommandAlias("testOnly", ";unit/testOnly"),
 
-    test in IntegrationTest := { (test in integration in Test).value },
+    test in IntegrationTest := {
+      (ndkBuild in zmessaging).value
+      (test in integration in Test).value
+    },
     testQuick in IntegrationTest := { println("use integration/testQuick") },
     testOnly in IntegrationTest := { println("use integration/testOnly") },
 
@@ -87,12 +93,16 @@ lazy val zmessaging = project
     typedResources := false,
     sourceGenerators in Compile += generateZmsVersion.taskValue,
     ndkAbiFilter := Seq("armeabi-v7a", "x86"),
-    managedSources in Compile := {
-      // HACK: add generated renderscript sources - it's needed due to a bug in android plugin
-      ((managedSources in Compile).value ++ ((sourceManaged in Compile).value ** "*_decode.java").get).distinct
-    },
-    unmanagedSources in (Compile, createHeaders) ++= ((sourceDirectory in Compile).value / "rs" ** "*.rs").get,
+    ndkBuild := {
+      val jni = ndkBuild.value
+      val jniSrc = sourceDirectory.value / "main" / "jni"
+      val osx = jni.head / "osx"
+      osx.mkdirs()
 
+      s"sh ${jniSrc.getAbsolutePath}/build_osx.sh".!
+
+      jni
+    },
     libraryDependencies ++= Seq(
       Deps.supportV4 % Provided,
       "com.koushikdutta.async" % "androidasync" % "2.1.8",
@@ -201,8 +211,6 @@ lazy val testapp = project.in(file("tests") / "app")
     proguardScala := useProguard.value,
     debugIncludesTests := false,
     instrumentTestRunner := "android.support.test.runner.AndroidJUnitRunner",
-    rsSupportMode := true,
-    rsTargetApi := "17",
     ndkAbiFilter := Seq("armeabi-v7a", "x86"),
     packagingOptions := {
       val p = packagingOptions.value

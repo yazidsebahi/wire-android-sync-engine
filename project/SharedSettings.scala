@@ -66,7 +66,10 @@ object SharedSettings {
       }
       target.listFiles().filter(_.isFile).foreach(_.delete())
       IO.move((target ** "lib*.*").pair(f => Some(target / f.getName)))
-      Seq(target).classpath
+
+      val jni = collectJni.value.flatMap(d => Seq(d / "x86", d / "osx"))
+
+      (target +: jni).classpath
     }
   )
 

@@ -34,6 +34,8 @@ case class Gif(
 
   require(frames.length > 0)
 
+  lazy val gctRGBA = gct map { c => (c << 8) | 0xff }
+
   override def toString: String = {
     s"Gif(w: $width, h: $height, {${frames.length}}${frames.toSeq.take(5)}, lop: $loop, gct: ${gct.nonEmpty}, bg: $bgIndex, pa: $pixelAspect)"
   }
@@ -91,7 +93,10 @@ object Gif {
                    delay: FiniteDuration = Duration.Zero, // Delay to next frame
                    bufferFrameStart: Int = 0, // file/data buffer position
                    imageDataSize: Int = 0, // file/data buffer size
-                   lct: Array[Int] = Array.empty)
+                   lct: Array[Int] = Array.empty) {
+
+    lazy val lctRGBA = lct map { c => (c << 8) | 0xff }
+  }
 
   trait FrameDataSource extends (Frame => DataSource) {
     def close(): Unit = {}

@@ -15,52 +15,46 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-#pragma version(1)
-#pragma rs_fp_inprecise
-#pragma rs java_package_name(com.waz.bitmap.gif)
 
-rs_allocation image;
-rs_allocation pixels;  // pixels array for whole image
-rs_allocation colors;  // current color table
+#include "LzwDecoder.h"
 
-uint32_t width;
-uint32_t height;
-uint32_t inputSize;
+#ifdef __ANDROID__
+#include <android/log.h>
+#define LOG(...) __android_log_print(ANDROID_LOG_VERBOSE,"LzwDecoder_native",__VA_ARGS__)
+#endif
 
-uint32_t fx, fy, fw, fh; // current frame dimensions
-uint8_t transIndex; // transparent color index
-uchar4 bgColor;
-int32_t interlace;
-int32_t transparency;
+#ifndef __ANDROID__
+#include <stdio.h>
+#define LOG(...) printf(__VA_ARGS__)
+#endif
 
-typedef uint8_t byte;
-
-static const uint32_t MAX_STACK_SIZE = 4096;
-static const uint32_t PIXEL_STACK_SIZE = 8192;
+static const uint MAX_STACK_SIZE = 4096;
+static const uint PIXEL_STACK_SIZE = 8192;
 static const int NULL_CODE = -1;
 
-void __attribute__((kernel)) clear(uint32_t line) { // clear a line (but only in current frame)
-    if (line >= fy && line < fy + fh) {
-        int end = fx + fw;
-        for (int i = fx; i < end; ++i) {
-            rsSetElementAt_uchar4(pixels, bgColor, i, line);
+
+void LzwDecoder::clear(int x, int y, int w, int h, uint color) {
+    uint* dst = pixels + (x + y * width);
+    for (int l = 0; l < h; ++l) {
+        for (int i = 0; i < w; ++i) {
+            (*dst++) = color;
         }
+        dst += width - w - x;
     }
 }
 
-void __attribute__((kernel)) decode(uint32_t in) {
-    int idx = 0;
-    int npix = fw * fh;
-    int available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
-    uchar4 color = 0;
+void LzwDecoder::decode(int fx, int fy, int fw, int fh, uint inputSize, int transIndex, uint bgColor, bool interlace, bool transparency) {
+    uint idx = 0;
+    uint npix = fw * fh;
+    uint available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
 
-    short prefix[MAX_STACK_SIZE];
-    uint8_t suffix[MAX_STACK_SIZE];
-    uint8_t pixelStack[PIXEL_STACK_SIZE];
-    uint8_t block[256];
+    unsigned short prefix[MAX_STACK_SIZE];
+    byte suffix[MAX_STACK_SIZE];
+    byte pixelStack[PIXEL_STACK_SIZE];
+    byte block[256];
 
     // Initialize GIF data stream decoder.
-    data_size = rsGetElementAt_uchar(image, idx++);
+    data_size = image[idx++];
     clear = 1 << data_size;
     end_of_information = clear + 1;
     available = clear + 2;
@@ -90,10 +84,10 @@ void __attribute__((kernel)) decode(uint32_t in) {
             if (count == 0) {
                 // Read a new data block.
                 if (idx >= inputSize) break; //bounds check
-                count = rsGetElementAt_uchar(image, idx++);
+                count = image[idx++];
                 if (idx + count > inputSize) break; // bounds check
                 for (int k = 0; k < count; ++k) {
-                    block[k] = rsGetElementAt_uchar(image, idx++);
+                    block[k] = image[idx++];
                 }
 
                 if (count <= 0) {
@@ -111,7 +105,9 @@ void __attribute__((kernel)) decode(uint32_t in) {
         code = datum & code_mask;
         datum >>= code_size;
         bits -= code_size;
-        if (code >= MAX_STACK_SIZE) return;
+        if (code >= MAX_STACK_SIZE) {
+            return;
+        }
         // Interpret the code
         if (code == end_of_information) {
             break;
@@ -136,7 +132,9 @@ void __attribute__((kernel)) decode(uint32_t in) {
             code = old_code;
         }
         while (code > clear) {
-            if (top >= PIXEL_STACK_SIZE) return;
+            if (top >= PIXEL_STACK_SIZE) {
+                return;
+            }
             pixelStack[top++] = suffix[code];
             code = prefix[code];
         }
@@ -186,11 +184,12 @@ void __attribute__((kernel)) decode(uint32_t in) {
             ++i;
             if (line < end && x < endX) {
                 if (!transparency || pixelStack[top] != transIndex) {
-                    color = rsGetElementAt_uchar4(colors, pixelStack[top]).bgra;
-                    rsSetElementAt_uchar4(pixels, color, x, line);
+                    pixels[x + line * width] = colors[pixelStack[top]];
                 }
                 ++x;
             }
         }
     }
 }
+
+
