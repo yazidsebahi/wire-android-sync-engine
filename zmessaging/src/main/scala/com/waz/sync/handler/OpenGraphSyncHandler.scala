@@ -26,7 +26,6 @@ import com.waz.api.impl.ErrorResponse._
 import com.waz.content.{ConversationStorage, MessagesStorage, Mime}
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.LinkPreview.Article
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
@@ -80,7 +79,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
 
     def updateOpenGraphData(part: MessageContent) =
       if (part.openGraph.isDefined || part.tpe != Part.Type.WEB_LINK) Future successful Right(part)
-      else client.loadMetadata(Uri.parse(part.content)).future map {
+      else client.loadMetadata(part.contentAsUri).future map {
         case Right(None) => Right(part.copy(tpe = Part.Type.TEXT)) // no open graph data is available
         case Right(Some(data)) => Right(part.copy(openGraph = Some(data)))
         case Left(err) => Left(err)
@@ -175,7 +174,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       uploadImage map {
         case Left(error) => Left(error)
         case Right(image) =>
-          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, Article(meta.title, meta.description, image, meta.permanentUrl)))
+          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, image, meta.permanentUrl))
       }
   }
 }

@@ -126,7 +126,10 @@ case class MessageContent(
                            height: Int,
                            syncNeeded: Boolean,
                            mentions: Map[UserId, String]
-                         )
+                         ) {
+
+  def contentAsUri: Uri = RichMediaContentParser.parseUriWithScheme(content)
+}
 
 object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData], Option[OpenGraphData], Option[AssetId], Int, Int, Boolean, Map[UserId, String]) => MessageContent) {
   import MediaAssetDataProtocol._

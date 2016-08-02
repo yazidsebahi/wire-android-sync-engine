@@ -50,6 +50,7 @@ import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
 import com.waz.znet.ClientWrapper
 import com.waz.znet.ZNetClient._
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future.successful
 import scala.concurrent.duration._
@@ -509,6 +510,12 @@ class DeviceActor(val deviceName: String,
       successful({
               QueueStats(DispatchQueueStats.report(10).toArray)
             })
+
+    case ForceAddressBookUpload =>
+      for {
+        _ <- zmessaging.contacts.lastUploadTime := Some(Instant.EPOCH)
+        _ <- zmessaging.contacts.requestUploadIfNeeded()
+      } yield Successful
   }
 
   def whenConversationsLoaded(task: ConversationsList => ActorMessage): Unit = {

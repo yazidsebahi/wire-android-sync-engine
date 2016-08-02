@@ -19,8 +19,9 @@ package com.waz
 
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
-
 import android.util.Log
+
+import scala.annotation.tailrec
 
 object ZLog {
   type LogTag = String
@@ -29,6 +30,10 @@ object ZLog {
 
   def logTagFor[A <: Singleton](a: A): String = macro ZLogMacros.logTagForSingleton[A]
   def logTagFor[A]: String = macro ZLogMacros.logTagFor[A]
+
+  object ImplicitTag {
+    implicit def implicitLogTag: LogTag = macro ZLogMacros.enclosingLogTag
+  }
 
   def error(message: String, cause: Throwable)(implicit tag: LogTag): Unit = macro ZLogMacros.errorWithCause
   def error(message: String)(implicit tag: LogTag): Unit = macro ZLogMacros.error
@@ -95,6 +100,22 @@ private object ZLogMacros {
   def logTagFor[A](c: Context)(implicit tag: c.WeakTypeTag[A]) = {
     import c.universe._
     val name = tag.tpe.typeSymbol.fullName.split('.').lastOption.getOrElse("UNKNOWN")
+    q"$name"
+  }
+
+  def enclosingLogTag(c: Context) = {
+    import c.universe._
+
+    def nameOf(s: c.Symbol): String = if (s.name.toString == "package") nameOf(s.owner) else s.name.toString
+
+    @tailrec def owningClasses(s: c.Symbol, accu: List[c.Symbol] = Nil): List[c.Symbol] =
+      if (s == NoSymbol || s.isPackage) accu
+      else if (s.isClass && ! nameOf(s).startsWith("$")) owningClasses(s.owner, s :: accu)
+      else owningClasses(s.owner, accu)
+
+    val parents = owningClasses(c.internal.enclosingOwner)
+    val name = if (parents.isEmpty) "UNKNOWN" else parents.map(nameOf).mkString(".")
+
     q"$name"
   }
 }

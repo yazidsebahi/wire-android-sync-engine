@@ -40,17 +40,16 @@ class RichMediaContentParser {
     val knownDomains = Map(
       "youtu.be" -> YOUTUBE,
       "youtube.com" -> YOUTUBE,
-//      "twitter.com" -> TWITTER,
       "soundcloud.com" -> SOUNDCLOUD,
       "open.spotify.com" -> SPOTIFY
     )
 
-    def validate(uri: Uri, tpe: Part.Type): Boolean = tpe match {
+    def validate(content: String, uri: Uri, tpe: Part.Type): Boolean = tpe match {
       case YOUTUBE     => youtubeVideoId(uri).isDefined
       case SOUNDCLOUD  => Option(uri.getPath).exists(_.nonEmpty)
       case TWITTER     => uri.toString.matches(TwitterRegex.regex)
       case SPOTIFY     => SpotifyPathRegex.unapplySeq(uri.getPath).isDefined
-      case WEB_LINK    => weblinkEnabled
+      case WEB_LINK    => weblinkEnabled && ! WebLinkBlackList(content)
       case _           => false
     }
 
@@ -60,16 +59,21 @@ class RichMediaContentParser {
       else WEB_LINK
     })
 
-    val m = Patterns.WEB_URL.matcher(content)
+    def uriAndType(content: String): Option[Part.Type] = {
+      val uri = parseUriWithScheme(content)
+
+      Option(uri.getHost) map(_.toLowerCase) map matchDomain flatMap { tpe =>
+        if (validate(content, uri, tpe)) Some(tpe)
+        else None
+      }
+    }
+
+    val m = Patterns.WEB_URL.matcher(content.replace("HTTP://", "http://")) // XXX: upper case HTTP is not matched by WEB_URL pattern
     Iterator.continually(m.find()).takeWhile(identity).map { _ =>
       val start = m.start
       val end = m.end
       if (start == 0 || content(start - 1) != '@') {
-        val uri = Uri.parse(URLDecoder.decode(m.group(), "UTF-8"))
-        Option(uri.getHost) map(_.toLowerCase) map matchDomain flatMap { tpe =>
-          if (validate(uri, tpe)) Some((start, end, tpe))
-          else None
-        }
+        uriAndType(m.group()) map { tpe => (start, end, tpe) }
       } else None
     }.flatten
   }
@@ -99,6 +103,11 @@ class RichMediaContentParser {
 
 object RichMediaContentParser {
   case class GoogleMapsLocation(x: String, y: String, zoom: String)
+
+  // XXX: this is to block some messages from being treated as weblinks, one case where we need it is giphy,
+  // UI generates 'sytem' text message: '... via giphy.com`, eventually we should stop using those fake messages,
+  // for now having a blacklist should do
+  val WebLinkBlackList = Set("giphy.com")
 
   val SpotifyPathRegex = "(?i)/(artist|album|track|playlist)/[0-9A-Za-z-_]+/?".r
   val TwitterRegex = """(?i)(https?://)?(www\.)?twitter\.com/[0-9A-Za-z-_]+/status/\d*/?""".r
@@ -147,6 +156,13 @@ object RichMediaContentParser {
     }
 
     true
+  }
+
+  def parseUriWithScheme(content: String, defaultScheme: String = "http") = {
+    val decoded = URLDecoder.decode(content, "utf-8")
+    val u = Uri.parse(decoded)
+    if (u.getScheme != null) u.normalizeScheme()
+    else Uri.parse(s"$defaultScheme://$content")
   }
 }
 

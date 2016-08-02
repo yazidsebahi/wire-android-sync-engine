@@ -313,31 +313,48 @@ object GenericContent {
   type LinkPreview = Messages.LinkPreview
   object LinkPreview {
 
+    trait PreviewMeta[A] {
+      def apply(preview: LinkPreview, meta: A): LinkPreview
+    }
+
+    implicit object TweetMeta extends PreviewMeta[Tweet] {
+      override def apply(preview: LinkPreview, meta: Tweet): LinkPreview = returning(preview) { _.setTweet(meta) }
+    }
+
     def apply(uri: Uri, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
       p.url = uri.toString
       p.urlOffset = offset
     }
 
-    def apply(uri: Uri, offset: Int, article: Article): LinkPreview = returning(new Messages.LinkPreview) { p =>
-      p.url = uri.toString
-      p.urlOffset = offset
-      p.setArticle(article)
-    }
-
-    type Article = Messages.Article
-    object Article {
-
-      def apply(title: String, summary: String, image: Option[Asset], uri: Option[Uri]): Article = returning(new Messages.Article) { p =>
+    def apply(uri: Uri, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[Uri]): LinkPreview =
+      returning(new Messages.LinkPreview) { p =>
+        p.url = uri.toString
+        p.urlOffset = offset
         p.title = title
         p.summary = summary
-        uri foreach { u => p.permanentUrl = u.toString }
+        permanentUrl foreach { u => p.permanentUrl = u.toString }
         image foreach { p.image = _ }
+
+        // set article for backward compatibility, we will stop sending it once all platforms switch to using LinkPreview properties
+        p.setArticle(article(title, summary, image, permanentUrl))
       }
 
-      def unapply(a: Article): Option[(Uri, String, String, Option[Asset])] =
-        Some((Uri.parse(a.permanentUrl), a.title, a.summary, Option(a.image)))
+    def apply[Meta: PreviewMeta](uri: Uri, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[Uri], meta: Meta): LinkPreview =
+      returning(apply(uri, offset, title, summary, image, permanentUrl)) { p =>
+        implicitly[PreviewMeta[Meta]].apply(p, meta)
+      }
+
+    type Tweet = Messages.Tweet
+    object Tweet {
+
     }
 
+    private def article(title: String, summary: String, image: Option[Asset], uri: Option[Uri]) = returning(new Messages.Article) { p =>
+      p.title = title
+      p.summary = summary
+      uri foreach { u => p.permanentUrl = u.toString }
+      image foreach { p.image = _ }
+    }
 
     implicit object JsDecoder extends JsonDecoder[LinkPreview] {
       override def apply(implicit js: JSONObject): LinkPreview = Messages.LinkPreview.parseFrom(Base64.decode(js.getString("proto"), Base64.DEFAULT))
@@ -350,11 +367,13 @@ object GenericContent {
     }
 
     object WithAsset {
-      def unapply(lp: LinkPreview): Option[Asset] = if (lp.hasArticle) Option(lp.getArticle.image) else None
+      def unapply(lp: LinkPreview): Option[Asset] = Option(lp.image) orElse { if (lp.hasArticle) Option(lp.getArticle.image) else None }
     }
 
     object WithDescription {
-      def unapply(lp: LinkPreview): Option[(String, String)] = if (lp.hasArticle) Option(lp.getArticle.title, lp.getArticle.summary) else None
+      def unapply(lp: LinkPreview): Option[(String, String)] =
+        if (lp.hasArticle) Some((lp.getArticle.title, lp.getArticle.summary))
+        else Some((lp.title, lp.summary))
     }
   }
 

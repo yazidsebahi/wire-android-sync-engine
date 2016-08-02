@@ -22,8 +22,9 @@ import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.TrackingEvent._
 import com.waz.api.{TrackingEvent, impl}
-import com.waz.content.{AssetsStorage, MessagesStorage}
-import com.waz.model.{AnyAssetData, AssetStatus}
+import com.waz.content.{AssetsStorage, MessagesStorage, UsersStorage}
+import com.waz.model.ConversationData.ConversationType.OneToOne
+import com.waz.model.{AnyAssetData, AssetStatus, ConversationData}
 import com.waz.service.call.AvsMetrics
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.AnyAssetRequest
@@ -32,6 +33,7 @@ import com.waz.utils._
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
+import scala.concurrent.Future.successful
 
 class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, assets: AssetsStorage, messages: MessagesStorage, downloader: AssetDownloader) {
   import Threading.Implicits.Background
@@ -89,4 +91,8 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
 }
 object TrackingEventsService {
   private implicit val logTag: LogTag = logTagFor[TrackingEventsService]
+
+  def isOtto(conv: ConversationData, users: UsersStorage): Future[Boolean] =
+    if (conv.convType == OneToOne) users.get(conv.creator).map(_.exists(_.isOtto))(Threading.Background)
+    else successful(false)
 }

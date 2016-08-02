@@ -152,7 +152,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         message     <- addAssetMessage(convId, in.id, mime)
         asset       <- addAsset(in, conv.remoteId)
         size        <- in.sizeInBytes
-        _           <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, conv.isOtto))
+        isOtto      <- TrackingEventsService.isOtto(conv, usersStorage)
+        _           <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, isOtto))
         shouldSend  <- checkSize(size, mime, message)
         _ <- if (shouldSend) sync.postMessage(message.id, convId) else Future.successful(())
       } yield Some(message)
@@ -178,7 +179,10 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
               case a @ ContentUriAssetForUpload(_, uri) =>
                 a.mimeType .flatMap {
                   case m @ Mime.Image() =>
-                    a.sizeInBytes.flatMap { size => tracking.track(TrackingEvent.imageUploadAsAsset(size, m.str, conv.convType, conv.isOtto)) }
+                    for {
+                      size <- a.sizeInBytes
+                      isOtto <- TrackingEventsService.isOtto(conv, usersStorage)
+                    } tracking.track(TrackingEvent.imageUploadAsAsset(size, m.str, conv.convType, isOtto))
                     sendImageMessage(ImageAssetFactory.getImageAsset(uri), conv) // XXX: this has to run on UI thread
                   case _ =>
                     sendAssetMessage(a, conv, m.getErrorHandler)

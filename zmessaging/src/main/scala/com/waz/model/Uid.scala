@@ -58,8 +58,6 @@ case class UserId(str: String) {
 }
 
 object UserId extends (String => UserId) {
-  val ofOtto = UserId("e1832f71-8cdf-45c3-911d-018926f24c9c")
-
   val Zero = UserId(new UUID(0, 0).toString)
 
   def apply(): UserId = Id.random()

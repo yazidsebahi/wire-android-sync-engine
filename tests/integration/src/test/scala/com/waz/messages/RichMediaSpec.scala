@@ -241,14 +241,14 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
   feature("SoundCloud") {
 
     scenario("Receive message with soundcloud link") {
-      auto2 ? SendText(conv.data.remoteId, "https://soundcloud.com/only1dram/broccoli") should eventually(be(Successful))
+      auto2 ? SendText(conv.data.remoteId, "https://soundcloud.com/lescourgettesgivrees/le-bois-du-casier") should eventually(be(Successful))
 
       var media: MediaAsset = null
 
       withDelay {
         msgs should not be empty
         val msg = msgs.getLastMessage
-        msg.getBody shouldEqual "https://soundcloud.com/only1dram/broccoli"
+        msg.getBody shouldEqual "https://soundcloud.com/lescourgettesgivrees/le-bois-du-casier"
         msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
         msg.getParts should not be empty
 

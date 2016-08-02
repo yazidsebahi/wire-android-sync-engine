@@ -56,7 +56,7 @@ class TrackingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Be
   lazy val oneToOne = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.OneToOne)
   lazy val archived: ConversationData = ConversationData(ConvId(), RConvId(), Some("archived conv"), selfUser.id, ConversationType.Group, archived = true)
   lazy val ottoConv = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.OneToOne)
-  lazy val otto = UserData(UserId.ofOtto, "Otto", Some(EmailAddress("does.not@matt.er")), None, None, None, 0, SearchKey("Otto"), ConnectionStatus.Accepted, new Date, None, Some(ottoConv.remoteId))
+  lazy val otto = UserData(UserId(), "Otto", Some(EmailAddress("welcome+123@wire.com")), None, None, None, 0, SearchKey("Otto"), ConnectionStatus.Accepted, new Date, None, Some(ottoConv.remoteId))
   lazy val auto1 = UserData(UserId(), "auto 1", Some(EmailAddress("n@owhe.re")), None, None, None, 0, SearchKey("auto 1"), ConnectionStatus.Accepted, new Date, None, Some(oneToOne.remoteId))
   lazy val auto2 = UserData(UserId(), "auto 2", Some(EmailAddress("no@whe.re")), None, None, None, 0, SearchKey("auto 2"), ConnectionStatus.Accepted, new Date, None, Some(RConvId()))
 

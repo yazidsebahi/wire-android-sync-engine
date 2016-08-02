@@ -18,8 +18,31 @@
 package com.waz.utils;
 
 import android.content.Context;
+import android.media.AudioFormat;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+
+import java.nio.ByteBuffer;
 
 @SuppressWarnings("deprecation")
 public class Deprecated {
     public static final int MODE_WORLD_READABLE = Context.MODE_WORLD_READABLE;
+    public static final int INFO_OUTPUT_BUFFERS_CHANGED = MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED;
+
+    public static ByteBuffer[] inputBuffersOf(MediaCodec codec) {
+        return codec.getInputBuffers();
+    }
+
+    public static ByteBuffer[] outputBuffersOf(MediaCodec codec) {
+        return codec.getOutputBuffers();
+    }
+
+    public static int numberOfCodecs() {
+        return MediaCodecList.getCodecCount();
+    }
+
+    public static MediaCodecInfo codecInfoAtIndex(int n) {
+        return MediaCodecList.getCodecInfoAt(n);
+    }
 }

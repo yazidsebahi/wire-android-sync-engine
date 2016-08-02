@@ -23,6 +23,7 @@ import android.media.{MediaCodec, MediaFormat}
 import com.waz.bitmap.video.VideoTranscoder.CodecResponse.{CodecBuffer, FormatChanged, TryAgain}
 import com.waz.bitmap.video.VideoTranscoder.{CodecResponse, MediaCodecIterator}
 import com.waz.utils.Cleanup
+import com.waz.utils.Deprecated.{INFO_OUTPUT_BUFFERS_CHANGED, inputBuffersOf, outputBuffersOf}
 
 import scala.util.Try
 
@@ -31,7 +32,7 @@ class MediaCodecHelper(val codec: MediaCodec) extends MediaCodecIterator {
 
   private val outputBufferInfo = new MediaCodec.BufferInfo
 
-  private lazy val inputBuffers = codec.getInputBuffers
+  private lazy val inputBuffers = inputBuffersOf(codec)
   private var outputBuffers = Array.empty[ByteBuffer]
 
   private var outputFormat = Option.empty[MediaFormat]
@@ -48,8 +49,8 @@ class MediaCodecHelper(val codec: MediaCodec) extends MediaCodecIterator {
   override def next(): CodecResponse =
     codec.dequeueOutputBuffer(outputBufferInfo, outputDequeueTimeoutMicros) match {
       case MediaCodec.INFO_TRY_AGAIN_LATER => TryAgain
-      case MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED =>
-        outputBuffers = codec.getOutputBuffers
+      case INFO_OUTPUT_BUFFERS_CHANGED =>
+        outputBuffers = outputBuffersOf(codec)
         TryAgain
       case MediaCodec.INFO_OUTPUT_FORMAT_CHANGED =>
         outputFormat = Some(codec.getOutputFormat)
@@ -60,7 +61,7 @@ class MediaCodecHelper(val codec: MediaCodec) extends MediaCodecIterator {
           TryAgain
         } else {
           eof = (outputBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
-          if (outputBuffers.isEmpty) outputBuffers = codec.getOutputBuffers
+          if (outputBuffers.isEmpty) outputBuffers = outputBuffersOf(codec)
           CodecBuffer(codec, index, outputBuffers(index), outputFormat, eof, outputBufferInfo)
         }
     }
