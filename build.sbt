@@ -281,7 +281,8 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
   .dependsOn(testutils)
   .dependsOn(integration % "it -> test")
   .settings(Defaults.itSettings: _*)
-  .settings(nativeLibsSettings)
+  .settings(nativeLibsSettings: _*)
+  .settings(publishSettings: _*)
   .settings (
     name := "zmessaging-actor",
     crossPaths := false,
@@ -305,7 +306,7 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
       val manifest = baseDirectory.value / "src" / "main" / "AndroidManifest.xml"
       val res = zmessaging.base / "src" / "main" / "res"
       val mappings =
-        nativeLibs.value.files.flatMap(d => (d ** "*").get).map(f => (f, s"/libs/${f.getName}")) ++
+        nativeLibs.value.files.flatMap(d => (d ** "*").get).distinctName.get.map(f => (f, s"/libs/${f.getName}")) ++
           ((res ** "*").get pair rebase(res, "/res")) :+ (manifest, "/AndroidManifest.xml")
       IO.zip(mappings, out)
       out
