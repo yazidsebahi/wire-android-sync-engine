@@ -20,14 +20,13 @@ package com.waz.messages
 import java.util
 
 import akka.pattern.ask
-import android.graphics.Bitmap
 import android.net.Uri
-import com.waz.api.ImageAsset.BitmapCallback
 import com.waz.api.MediaAsset.StreamingCallback
 import com.waz.api.Message.Part
 import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
+import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils.returning
@@ -328,26 +327,3 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
   }
 }
 
-class BitmapSpy(img: ImageAsset, size: Int = 600) {
-  var failed = false
-  var preview = Option.empty[Bitmap]
-  var result = Option.empty[Bitmap]
-
-  private var handle: LoadHandle = _
-
-  load()
-
-  img.addUpdateListener(new UpdateListener {
-    override def updated(): Unit = load()
-  })
-
-  private def load() = {
-    handle = img.getBitmap(size, new BitmapCallback {
-      override def onBitmapLoadingFailed(): Unit = failed = true
-      override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = {
-        if (isPreview) preview = Option(b)
-        else result = Option(b)
-      }
-    })
-  }
-}

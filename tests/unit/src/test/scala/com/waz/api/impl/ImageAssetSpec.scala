@@ -17,15 +17,13 @@
  */
 package com.waz.api.impl
 
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Parcel
 import com.waz.RobolectricUtils
-import com.waz.api.ImageAsset.BitmapCallback
 import com.waz.api.ImageAssetFactory
 import com.waz.model.AssetId
 import com.waz.service.ZMessaging
-import com.waz.testutils.{MockUiModule, MockZMessaging}
+import com.waz.testutils.{BitmapSpy, MockUiModule, MockZMessaging}
 import com.waz.utils.IoUtils
 import org.robolectric.Robolectric
 import org.scalatest._
@@ -72,26 +70,22 @@ class ImageAssetSpec extends FeatureSpec with Matchers with BeforeAndAfter with 
     lazy val img = ImageAssetFactory.getImageAsset(IoUtils.toByteArray(getClass.getResourceAsStream("/images/big.png")))
 
     scenario("Request small image from asset") {
-      var res: Bitmap = null
-      val handle = img.getBitmap(4, new BitmapCallback() {
-        override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = if (!isPreview) res = b
-        override def onBitmapLoadingFailed(): Unit = ()
-      })
+      val spy = new BitmapSpy(img, 4)
       withDelay {
-        res should not be null
+        spy.failed shouldEqual false
+        spy.result shouldBe defined
+        val res = spy.result.get
         res.getWidth should be < 12
         res.getHeight should be < 12
       }
     }
 
     scenario("Request full bitmap from the same asset") {
-      var res: Bitmap = null
-      val handle = img.getSingleBitmap(1024, new BitmapCallback() {
-        override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = res = b
-        override def onBitmapLoadingFailed(): Unit = ()
-      })
+      val spy = new BitmapSpy(img, 1024)
       withDelay {
-        res should not be null
+        spy.failed shouldEqual false
+        spy.result shouldBe defined
+        val res = spy.result.get
         res.getWidth shouldEqual 1920
         res.getHeight shouldEqual 1080
       }

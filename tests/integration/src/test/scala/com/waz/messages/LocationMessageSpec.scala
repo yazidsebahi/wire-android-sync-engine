@@ -20,6 +20,7 @@ package com.waz.messages
 import akka.pattern.ask
 import com.waz.api._
 import com.waz.provision.ActorMessage._
+import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}

@@ -238,13 +238,13 @@ class AssetBitmapSignal(img: ImageAssetData, req: BitmapRequest, imageLoader: Im
 
   override protected def previewLoader(req: BitmapRequest): Loader =
     req match {
-      case Single(_) => EmptyLoader
+      case Single(_, _) => EmptyLoader
       case _ => new AssetBitmapLoader(img, img.versions.head, req, imageLoader, cache)
     }
 
   override protected def fullLoader(req: BitmapRequest): Loader =
     req match {
-      case Single(_) | Round(_, _, _) | Static(_, _) => new AssetBitmapLoader(img, chooseImage(img, static = true), req, imageLoader, cache)
+      case Single(_, _) | Round(_, _, _) | Static(_, _) => new AssetBitmapLoader(img, chooseImage(img, static = true), req, imageLoader, cache)
       case _ =>
         val im = chooseImage(img)
         im.mime.toLowerCase match {

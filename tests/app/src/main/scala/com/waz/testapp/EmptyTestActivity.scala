@@ -21,12 +21,15 @@ import java.io.File
 
 import android.app.{Activity, DownloadManager}
 import android.content.{Context, Intent}
+import android.graphics.Bitmap
 import android.os.{Bundle, Environment}
 import android.provider.MediaStore
 import android.view.View
 import android.view.View.OnClickListener
-import android.widget.Button
+import android.widget.{Button, ImageView}
 import com.waz.ZLog._
+import com.waz.api.ImageAsset.BitmapCallback
+import com.waz.api._
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.content.Mime
 import com.waz.model.AssetMetaData
@@ -39,18 +42,47 @@ class EmptyTestActivity extends Activity with ActivityEventContext {
   import com.waz.threading.Threading.Implicits.Ui
 
   lazy val btnCapture = findViewById(R.id.btnCapture).asInstanceOf[Button]
+  lazy val btnDecode = findViewById(R.id.btnDecode).asInstanceOf[Button]
+  lazy val imageView = findViewById(R.id.image).asInstanceOf[ImageView]
+
+  private var handle: LoadHandle = _
+
+  private var api: ZMessagingApi = _
 
   override def onCreate(savedInstanceState: Bundle) = {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.main)
 
-    ZMessaging.onCreate(getApplication)
+    api = ZMessagingApiFactory.getInstance(this)
 
     btnCapture.setOnClickListener(new OnClickListener {
       override def onClick(v: View): Unit = {
         startActivityForResult(new Intent(MediaStore.ACTION_VIDEO_CAPTURE), 1)
       }
     })
+
+    btnDecode.setOnClickListener(new OnClickListener {
+      override def onClick(v: View): Unit = {
+        Option(handle).foreach(_.cancel())
+        val asset = ImageAssetFactory.getImageAsset(R.raw.gif_image)
+        handle = asset.getBitmap(imageView.getWidth, new BitmapCallback {
+          override def onBitmapLoadingFailed(): Unit = ()
+          override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = imageView.setImageBitmap(b)
+        })
+      }
+    })
+  }
+
+
+  override def onResume(): Unit = {
+    super.onResume()
+    api.onResume()
+  }
+
+
+  override def onPause(): Unit = {
+    super.onPause()
+    api.onPause()
   }
 
   override def onActivityResult(requestCode: Int, resultCode: Int, data: Intent): Unit = {

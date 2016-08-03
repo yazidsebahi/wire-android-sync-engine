@@ -33,7 +33,7 @@ object ImageAssetFactory {
    * Retrieve an image asset from a byte array.
    * This will handle caching, orientation (according to exif data if available) and sampling.
    */
-  def getImageAsset(bytes: Array[Byte]): ImageAsset = ZMessaging.currentUi.images.getOrCreateImageAssetFrom(bytes)
+  def getImageAsset(bytes: Array[Byte]): ImageAsset = ZMessaging.currentUi.images.createImageAssetFrom(bytes)
 
   def getImageAsset(bitmap: Bitmap): ImageAsset = ZMessaging.currentUi.images.getOrCreateImageAssetFrom(bitmap)
 
@@ -50,7 +50,7 @@ object ImageAssetFactory {
    * Retrieve mirrored image asset from a byte array.
    * This will handle caching, orientation (according to exif data if available) and sampling.
    */
-  def getMirroredImageAsset(bytes: Array[Byte]): ImageAsset = ZMessaging.currentUi.images.getOrCreateMirroredImageAssetFrom(bytes)
+  def getMirroredImageAsset(bytes: Array[Byte]): ImageAsset = ZMessaging.currentUi.images.createMirroredImageAssetFrom(bytes)
 
   /**
    * Retrieve an image asset directly from a resource id.

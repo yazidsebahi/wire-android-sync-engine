@@ -84,7 +84,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
       withDelay(conversations should not be empty)
 
       val c = conversations.get(0).asInstanceOf[com.waz.api.impl.Conversation].data.remoteId
-      val input = api.ui.images.getOrCreateImageAssetFrom(image).asInstanceOf[com.waz.api.impl.LocalImageAsset]
+      val input = api.ui.images.createImageAssetFrom(image).asInstanceOf[com.waz.api.impl.LocalImageAsset]
       val response = for {
         asset <- zmessaging.assetGenerator.generateWireAsset(AssetId(), input.data.versions.last, c, profilePicture = false).future
         _ <- zmessaging.assets.updateImageAssets(Seq(asset))

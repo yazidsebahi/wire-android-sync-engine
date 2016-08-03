@@ -126,7 +126,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       val bitmap = withResource(imageStream)(BitmapFactory.decodeStream)
       info(s"bitmap size: (${bitmap.getWidth}, ${bitmap.getHeight})")
 
-      val msg = sendMessage(new Image(ui.images.getOrCreateImageAssetFrom(toByteArray(imageStream))))
+      val msg = sendMessage(new Image(ui.images.createImageAssetFrom(toByteArray(imageStream))))
       val asset = Await.result(service.assetsStorage.getImageAsset(msg.assetId), 5.seconds).get
 
       asset.versions should have size 2

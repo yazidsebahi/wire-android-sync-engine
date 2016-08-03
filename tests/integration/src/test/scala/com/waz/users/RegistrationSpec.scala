@@ -57,7 +57,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
   override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
 
-  def image = api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))).asInstanceOf[LocalImageAsset]
+  def image = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))).asInstanceOf[LocalImageAsset]
 
   lazy val assets = Await.result(assetGenerator.generateWireAsset(AssetId(), image.data.versions.last, RConvId(userId.str), profilePicture = true), 1.second)
 
