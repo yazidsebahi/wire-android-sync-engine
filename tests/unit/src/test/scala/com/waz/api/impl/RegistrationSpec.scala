@@ -203,7 +203,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
       }
 
 
-      self.setPicture(ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
+      self.setPicture(ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
 
       lazy val imageAsset = self.getPicture
       withDelay {

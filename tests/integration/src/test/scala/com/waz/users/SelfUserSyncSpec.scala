@@ -21,7 +21,7 @@ import akka.pattern.ask
 import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.{AccentColors, ImageAsset}
-import com.waz.messages.BitmapSpy
+import com.waz.testutils.BitmapSpy
 import com.waz.model.UserUpdateEvent
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Matchers._

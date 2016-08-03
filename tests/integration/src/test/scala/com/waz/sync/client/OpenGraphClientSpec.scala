@@ -22,7 +22,7 @@ import com.waz.api.ProvisionedApiSpec
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
-import com.waz.znet.Response.{HttpStatus, Status, SuccessStatus}
+import com.waz.znet.Response.SuccessStatus
 import com.waz.znet._
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
