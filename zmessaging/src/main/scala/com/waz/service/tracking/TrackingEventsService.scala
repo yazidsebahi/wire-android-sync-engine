@@ -24,7 +24,7 @@ import com.waz.api.impl.TrackingEvent._
 import com.waz.api.{TrackingEvent, impl}
 import com.waz.content.{AssetsStorage, MessagesStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType.OneToOne
-import com.waz.model.{AnyAssetData, AssetStatus, ConversationData}
+import com.waz.model.{AnyAssetData, AssetStatus, ConversationData, UserId}
 import com.waz.service.call.AvsMetrics
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.AnyAssetRequest
@@ -93,6 +93,6 @@ object TrackingEventsService {
   private implicit val logTag: LogTag = logTagFor[TrackingEventsService]
 
   def isOtto(conv: ConversationData, users: UsersStorage): Future[Boolean] =
-    if (conv.convType == OneToOne) users.get(conv.creator).map(_.exists(_.isOtto))(Threading.Background)
+    if (conv.convType == OneToOne) users.get(UserId(conv.id.str)).map(_.exists(_.isOtto))(Threading.Background)
     else successful(false)
 }
