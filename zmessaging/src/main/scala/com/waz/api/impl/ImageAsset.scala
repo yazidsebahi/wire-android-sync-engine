@@ -256,7 +256,7 @@ trait BitmapLoading { self: com.waz.api.ImageAsset with UiFlags =>
 
   override def getStaticBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Static(width, mirror = this.mirrored), callback)
 
-  override def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Single(width), callback)
+  override def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Single(width, mirror = this.mirrored), callback)
 
   override def getRoundBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Round(width), callback)
 

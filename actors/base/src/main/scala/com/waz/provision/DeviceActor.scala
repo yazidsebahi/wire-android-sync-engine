@@ -299,13 +299,13 @@ class DeviceActor(val deviceName: String,
 
     case SendImage(remoteId, path) =>
       whenConversationExists(remoteId) { conv =>
-        conv.sendMessage(new Image(ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path)))))
+        conv.sendMessage(new Image(ui.images.createImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path)))))
         Successful
       }
 
     case SendImageData(remoteId, bytes) =>
       withConv(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.getOrCreateImageAssetFrom(bytes)))
+        zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes)))
       }
 
     case SendAsset(remoteId, bytes, mime, name, delay) =>
@@ -386,7 +386,7 @@ class DeviceActor(val deviceName: String,
 
     case UpdateProfileImage(path) =>
       whenSelfLoaded { self =>
-        self.setPicture(api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path))))
+        self.setPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path))))
         Successful
       }
 

@@ -143,7 +143,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     scenario("Send a single image") {
       val count = msgs.size
 
-      val im = api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin.png")))
+      val im = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin.png")))
       conv.getFailedCount shouldEqual 0
       conv.sendMessage(new Image(im))
 
@@ -231,7 +231,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     }
 
     scenario("Offline, sending an image as a second message.") {
-      val im = api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin_128.png")))
+      val im = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin_128.png")))
       conv.sendMessage(new Image(im))
       failedImageMessage = Option(withDelay {
         returning(msgs.getLastMessage)(_.getMessageType shouldEqual ApiMessage.Type.ASSET)

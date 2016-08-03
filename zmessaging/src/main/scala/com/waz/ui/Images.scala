@@ -33,8 +33,6 @@ import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
 import com.waz.{HockeyApp, api, bitmap}
 
-import scala.util.hashing.MurmurHash3
-
 class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModule) {
   import Images._
   private implicit val dispatcher = Threading.ImageDispatcher
@@ -72,24 +70,23 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getLocalImageAsset(data: ImageAssetData) = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
 
-  def getOrCreateImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
+  def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     else {
       val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
         override lazy val data: Option[Array[Byte]] = Some(bytes)
       }
-      getLocalImageAsset(ImageAssetData(idFor(bytes), RConvId(), Seq(im)))
+      new LocalImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(im)))
     }
   }
 
-  def getOrCreateMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
+  def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     else {
       val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
         override lazy val data: Option[Array[Byte]] = Some(bytes)
       }
-      val id = AssetId("mirror_" + idFor(bytes).str)
-      returning(getLocalImageAsset(ImageAssetData(id, RConvId(), Seq(im))))(_.setMirrored(true))
+      returning(new LocalImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(im))))(_.setMirrored(true))
     }
   }
 
@@ -106,8 +103,6 @@ object Images {
   private implicit val logTag: LogTag = logTagFor[Images]
 
   val EmptyBitmap = bitmap.EmptyBitmap
-
-  final def idFor(bytes: Array[Byte]): AssetId = AssetId(s"bytes-${MurmurHash3.bytesHash(bytes)}")
 }
 
 trait ImagesComponent {

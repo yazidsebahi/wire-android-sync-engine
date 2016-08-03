@@ -172,7 +172,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
   feature("Conversation background on first sync") {
 
     scenario("set user picture") {
-      self.setPicture(api.ui.images.getOrCreateImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
+      self.setPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
 
       withPush {
         case UserUpdateEvent(_, info) => info.picture.isDefined

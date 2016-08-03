@@ -33,7 +33,7 @@ class LzwDecoder(context: Context, gif: Gif) {
   val maxImageDataSize = gif.frames.map(_.imageDataSize).max
 
   var bgIndex = gif.bgIndex
-  var bgColor = if (gif.gct.isEmpty) Color.TRANSPARENT else (gif.gct(bgIndex) << 8) | 0xFF // bg color converted to RGBA
+  var bgColor = if (gif.gct.isEmpty) Color.TRANSPARENT else gif.gctRGBA(bgIndex)
 
   val inputData = ByteBuffer.allocateDirect(maxImageDataSize)
   val pixels = ByteBuffer.allocateDirect(imageWidth * imageHeight * 4).order(ByteOrder.BIG_ENDIAN).asIntBuffer()
