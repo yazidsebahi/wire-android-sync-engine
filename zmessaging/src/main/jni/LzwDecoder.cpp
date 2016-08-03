@@ -28,13 +28,13 @@
 #define LOG(...) printf(__VA_ARGS__)
 #endif
 
-static const uint MAX_STACK_SIZE = 4096;
-static const uint PIXEL_STACK_SIZE = 8192;
+static const int MAX_STACK_SIZE = 4096;
+static const int PIXEL_STACK_SIZE = 8192;
 static const int NULL_CODE = -1;
 
 
-void LzwDecoder::clear(int x, int y, int w, int h, uint color) {
-    uint* dst = pixels + (x + y * width);
+void LzwDecoder::clear(int x, int y, int w, int h, int color) {
+    int* dst = pixels + (x + y * width);
     for (int l = 0; l < h; ++l) {
         for (int i = 0; i < w; ++i) {
             (*dst++) = color;
@@ -43,10 +43,10 @@ void LzwDecoder::clear(int x, int y, int w, int h, uint color) {
     }
 }
 
-void LzwDecoder::decode(int fx, int fy, int fw, int fh, uint inputSize, int transIndex, uint bgColor, bool interlace, bool transparency) {
-    uint idx = 0;
-    uint npix = fw * fh;
-    uint available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
+void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int transIndex, int bgColor, bool interlace, bool transparency) {
+    int idx = 0;
+    int npix = fw * fh;
+    int available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
 
     unsigned short prefix[MAX_STACK_SIZE];
     byte suffix[MAX_STACK_SIZE];

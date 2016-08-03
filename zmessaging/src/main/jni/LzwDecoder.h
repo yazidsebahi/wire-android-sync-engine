@@ -21,13 +21,12 @@
 #ifndef LzwDecoder_h
 #define LzwDecoder_h
 
-typedef unsigned int uint;
 typedef unsigned char byte;
 
 class LzwDecoder {
 
     public:
-        LzwDecoder(byte* image, uint* pixels, uint* colors, uint width, uint height) {
+        LzwDecoder(byte* image, int* pixels, int* colors, int width, int height) {
             this->image = image;
             this->pixels = pixels;
             this->colors = colors;
@@ -35,14 +34,14 @@ class LzwDecoder {
             this->height = height;
         };
 
-        void clear(int x, int y, int w, int h, uint color);
+        void clear(int x, int y, int w, int h, int color);
 
-        void decode(int x, int y, int w, int h, uint inputSize, int transIndex, uint bgColor, bool interlace, bool transparency);
+        void decode(int x, int y, int w, int h, int inputSize, int transIndex, int bgColor, bool interlace, bool transparency);
 
     private:
         byte* image;
-        uint* pixels;  // pixels array for whole image
-        uint* colors;  // current color table
+        int* pixels;  // pixels array for whole image
+        int* colors;  // current color table
 
         int width;
         int height;
@@ -54,7 +53,7 @@ extern "C" {
 #endif
 
 JNIEXPORT long JNICALL Java_com_waz_bitmap_gif_LzwDecoder_init(JNIEnv *env, jobject obj, jobject image, jobject pixels, jobject colors, jint width, jint height) {
-    return (long) (new LzwDecoder((byte*) env->GetDirectBufferAddress(image), (uint*) env->GetDirectBufferAddress(pixels), (uint*) env->GetDirectBufferAddress(colors), width, height));
+    return (long) (new LzwDecoder((byte*) env->GetDirectBufferAddress(image), (int*) env->GetDirectBufferAddress(pixels), (int*) env->GetDirectBufferAddress(colors), width, height));
 }
 
 JNIEXPORT void JNICALL Java_com_waz_bitmap_gif_LzwDecoder_destroy(JNIEnv *env, jobject obj, jlong decoder) {
