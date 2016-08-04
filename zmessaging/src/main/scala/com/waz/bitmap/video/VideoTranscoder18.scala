@@ -44,7 +44,7 @@ class VideoTranscoder18(context: Context) extends BaseTranscoder(context) {
   }
 
   override def videoStream(extractor: MediaExtractor, inputFormat: MediaFormat, outputFormat: MediaFormat): Managed[MediaCodecIterator] = {
-    val enc = createEncoder(videoCodecInfo, outputFormat)
+    val enc = createEncoder(outputFormat)
     for {
       inputSurface <- Managed(returning(new InputSurface(enc.createInputSurface())) { _.makeCurrent()})
       outputSurface <- Managed(new OutputSurface())
