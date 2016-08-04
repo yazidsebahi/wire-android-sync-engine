@@ -54,8 +54,8 @@ object VideoTranscoder {
   val OUTPUT_VIDEO_COLOR_FORMAT = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
   val OUTPUT_AUDIO_MIME_TYPE = MediaFormat.MIMETYPE_AUDIO_AAC
   val OUTPUT_AUDIO_CHANNEL_COUNT = 1
-  val OUTPUT_AUDIO_BIT_RATE = 80 * 1024
-  val OUTPUT_AUDIO_AAC_PROFILE = MediaCodecInfo.CodecProfileLevel.AACObjectHE
+  val OUTPUT_AUDIO_BIT_RATE = 96 * 1024
+  val OUTPUT_AUDIO_AAC_PROFILE = MediaCodecInfo.CodecProfileLevel.AACObjectLC
   val SAMPLE_RATE_48KHZ = 48000
   val SAMPLE_RATE_8KHZ  = 8000
   val SAMPLE_RATE_16KHZ = 16000
@@ -100,9 +100,6 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
   import VideoTranscoder._
   private implicit val ec = com.waz.threading.Threading.BlockingIO
 
-  lazy val videoCodecInfo = encoderByMime(OUTPUT_VIDEO_MIME_TYPE).get
-  lazy val audioCodecInfo = encoderByMime(OUTPUT_AUDIO_MIME_TYPE).get
-
   def apply(input: Uri, out: File, callback: ProgressData => Unit): CancellableFuture[File] = CancellableFuture {
 
     for {
@@ -111,7 +108,7 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
       audioTrack  = audioTrackIndex(extractor)
       _           = extractor.selectTrack(videoTrack)
       videoFormat = extractor.getTrackFormat(videoTrack)
-      audio       <- if (audioTrack < 0) Managed(Iterator.empty)(Cleanup.empty) else audioStream(input, audioTrack)
+      audio       <- if (audioTrack < 1) Managed(Iterator.empty)(Cleanup.empty) else audioStream(input, audioTrack)
       meta        = getVideoMeta(input).fold(m => throw new Exception(s"Couldn't load video metadata: $m"), identity)
       video       <- videoStream(extractor, videoFormat, outputVideoFormat(videoFormat, meta))
       writer      <- createWriter(out, Seq(video, audio).filter(_.nonEmpty): _*)
@@ -164,7 +161,7 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
       inputFormat = extractor.getTrackFormat(audioTrack)
       (outputFormat, dupSamples) = outputAudioFormat(inputFormat)
       decoder <- Managed(new MediaCodecHelper(createAudioDecoder(inputFormat)))
-      encoder <- Managed(new MediaCodecHelper(createEncoder(audioCodecInfo, outputFormat)))
+      encoder <- Managed(new MediaCodecHelper(createEncoder(outputFormat)))
     } yield {
       decoder.codec.start()
       encoder.codec.start()
@@ -224,8 +221,16 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
   def createAudioDecoder(inputFormat: MediaFormat): MediaCodec =
     returning(MediaCodec.createDecoderByType(getMimeTypeFor(inputFormat))) { _.configure(inputFormat, null, null, 0) }
 
-  def createEncoder(codecInfo: MediaCodecInfo, format: MediaFormat): MediaCodec =
-    returning(MediaCodec.createByCodecName(codecInfo.getName)) { _.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE) }
+  def createEncoder(format: MediaFormat): MediaCodec = {
+
+    val mime = format.getString(MediaFormat.KEY_MIME)
+
+    def supportsFormat(i: MediaCodecInfo) = i.getSupportedTypes.exists(_.equalsIgnoreCase(mime))
+
+    def mediaCodecInfo(): MediaCodecInfo = infos.find(i => i.isEncoder && supportsFormat(i)).get
+
+    returning(MediaCodec.createByCodecName(mediaCodecInfo().getName)) { _.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE) }
+  }
 
 
   def videoTrackIndex(extractor: MediaExtractor): Int =
@@ -273,9 +278,6 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
   private def getMimeTypeFor(format: MediaFormat) = format.getString(MediaFormat.KEY_MIME)
 
   private lazy val infos = Vector.tabulate(numberOfCodecs)(codecInfoAtIndex)
-
-  def encoderByMime(mime: String): Option[MediaCodecInfo] =
-    infos.find(i => i.isEncoder && i.getSupportedTypes.exists(_.equalsIgnoreCase(mime)))
 }
 
 class TrackDecoder(extractor: MediaExtractor, decoder: MediaCodecHelper) extends Iterator[Option[CodecBuffer]] {
@@ -310,7 +312,7 @@ abstract class TrackEncoder(input: Iterator[Option[CodecBuffer]], encoder: Media
   override def hasNext: Boolean = encoder.hasNext
 
   override def next(): CodecResponse = {
-    if (reader.hasNext && reader.head.forall(processFrame(_)))
+    if (reader.hasNext && reader.head.forall(processFrame))
       reader.next()
 
     encoder.next()
