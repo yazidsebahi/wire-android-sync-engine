@@ -32,6 +32,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.threading.Threading

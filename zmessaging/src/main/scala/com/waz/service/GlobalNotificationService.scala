@@ -29,7 +29,7 @@ import com.waz.api.impl.ActiveChannel
 import com.waz.bitmap
 import com.waz.bitmap.BitmapUtils
 import com.waz.model._
-import com.waz.service.NotificationService.Notification
+import com.waz.service.push.NotificationService.Notification
 import com.waz.service.ZMessaging.EmptyNotificationsHandler
 import com.waz.service.assets.AssetService.BitmapRequest.Regular
 import com.waz.service.assets.AssetService.BitmapResult

@@ -15,34 +15,50 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.service.push
 
+import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
+import ImplicitTag._
 import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
+import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.znet.{WebSocketClient, ZNetClient}
 
-class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts) {
-  private implicit val tag: LogTag = logTagFor[WebSocketClientService]
+import scala.concurrent.Future
+
+class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, gcm: GcmGlobalService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts) {
+  import LifecycleState._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
-  import LifecycleState._
 
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
+  val webSocketAlwaysOn = !gcm.gcmAvailable
+
   // true if websocket should be active,
-  // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
-  private[service] val wsActive = lifecycle.lifecycleState.map(s => s == UiActive || s == Active) flatMap {
-    case true   => Signal const true
-    case false  => Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
-  }
+  private[service] val wsActive =
+    if (webSocketAlwaysOn) lifecycle.loggedIn
+    else {
+      // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+      lifecycle.lifecycleState.map(s => s == UiActive || s == Active) flatMap {
+        case true   => Signal const true
+        case false  =>
+          verbose(s"lifecycle no longer active, should stop the client")
+          Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+      }
+    }
 
   val client = wsActive map {
     case true =>
+      if (webSocketAlwaysOn) {
+        // start android service to keep the app running while we need to be connected
+        com.waz.zms.PushService(context)
+      }
       debug(s"Active, client: $clientId")
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
@@ -74,10 +90,18 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, val
     }
   }
 
+  def verifyConnection() =
+    client.head flatMap {
+      case None => Future.successful(())
+      case Some(c) => c.retryIfDisconnected() map { _.foreach(_.ping("ping")) }
+    }
+
+  def awaitActive(): Future[Unit] = wsActive.collect { case false => () }.head
+
   /**
     * Increase the timeout for poorer networks before showing a connection error
     */
-  private def getErrorTimeout(networkMode: NetworkMode) = timeouts.webSocket.connectionTimeout.*(networkMode match {
+  private def getErrorTimeout(networkMode: NetworkMode) = timeouts.webSocket.connectionTimeout * (networkMode match {
     case NetworkMode._2G => 3
     case NetworkMode._3G => 2
     case _ => 1
@@ -85,17 +109,12 @@ class WebSocketClientService(lifecycle: ZmsLifecycle, netClient: ZNetClient, val
 
   network.networkMode { n =>
     // ping web socket on network changes, this should help us discover potential network outage
-    client.head.foreach {
-      case None =>
-      case Some(c) =>
-        verbose(s"network mode changed, will ping or reconnect, mode: $n")
-        c.retryIfDisconnected()
-        c.socket.foreach(_.ping("ping"))
-    }
+    verbose(s"network mode changed, will ping or reconnect, mode: $n")
+    verifyConnection()
   }
 
   private def webSocketUri(clientId: ClientId) =
     Uri.parse(backend.pushUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
-  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(netClient, webSocketUri(clientId))
+  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, webSocketUri(clientId))
 }

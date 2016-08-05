@@ -15,15 +15,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.service.push
 
 import java.util.Date
 
+import android.content.Context
 import com.waz.ZLog._
 import com.waz.content.KeyValueStorage
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.PushService.SlowSyncRequest
+import com.waz.service.EventPipeline
+import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.sync.client.EventsClient.NotificationsResponse
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -32,10 +34,12 @@ import com.waz.utils.events._
 
 import scala.concurrent.{Future, Promise}
 
-class PushService(keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushServiceSignals { self =>
+class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushServiceSignals { self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val tag: LogTag = logTagFor[PushService]
   private implicit val ec = EventContext.Global
+
+  private val wakeLock = new WakeLock(context)
 
   override val pushConnected = webSocket.connected
 
@@ -101,7 +105,7 @@ class PushService(keyValue: KeyValueStorage, client: EventsClient, clientId: Cli
       verbose(s"event: $ev")
     }
     if (notification.hasEventForClient(clientId)) {
-      val f = pipeline(notification.events)
+      val f = wakeLock { pipeline(notification.events) }
       if (!notification.transient) lastNotification.updateLastIdOnNotification(notification.id, f)
     } else {
       verbose(s"received notification intended for other client: $notification")

@@ -27,7 +27,7 @@ import com.waz.threading.SerialDispatchQueue
 import scala.collection.mutable
 import scala.concurrent.Future
 
-class SyncService extends WakefulFutureService with ZMessagingService {
+class SyncService extends FutureService with ZMessagingService {
 
   implicit val dispatcher = new SerialDispatchQueue(name = "SyncService")
   private implicit val logTag: LogTag = logTagFor[SyncService]
@@ -36,7 +36,7 @@ class SyncService extends WakefulFutureService with ZMessagingService {
 
   def accounts = ZMessaging.currentAccounts
 
-  override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
+  override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
     debug(s"onIntent $intent")
     if (intent != null && intent.hasExtra(SyncService.ZUserIdExtra)) {
       val userId = AccountId(intent.getStringExtra(SyncService.ZUserIdExtra))

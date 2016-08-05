@@ -28,7 +28,7 @@ import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.NotificationService.Notification
+import com.waz.service.push.NotificationService.Notification
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.EventContext

@@ -21,9 +21,8 @@ import com.waz.RobolectricUtils
 import com.waz.content.{KeyValueStorage, ZmsDatabase}
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, Uid}
-import com.waz.service.LastNotificationIdService.State._
-import com.waz.service.PushService.SlowSyncRequest
-import com.waz.service.{LastNotificationIdService, PushServiceSignals}
+import LastNotificationIdService.State._
+import PushService.SlowSyncRequest
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._

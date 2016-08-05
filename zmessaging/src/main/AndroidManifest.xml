@@ -9,15 +9,16 @@
     <!-- required for GCM !-->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <permission android:name=".permission.C2D_MESSAGE" android:protectionLevel="signature" />
     <uses-permission android:name=".permission.C2D_MESSAGE" />
 
     <application>
         <service android:name="com.waz.zms.SyncService" />
+        <service android:name="com.waz.zms.PushService" />
         <service android:name="com.waz.zms.CallService" android:exported="true" />
         <service android:name="com.waz.zms.GcmHandlerService" />
-        <service android:name="com.waz.zms.UpdateService" />
 
         <service android:name="com.waz.zms.GmsInstanceIdListenerService" android:exported="false">
             <intent-filter>
@@ -25,9 +26,10 @@
             </intent-filter>
         </service>
 
-        <receiver android:name="com.waz.zms.UpdateBroadcastReceiver">
+        <receiver android:name="com.waz.zms.PushBroadcastReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

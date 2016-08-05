@@ -24,6 +24,7 @@ import com.waz.testutils.DefaultPatienceConfig
 import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.znet.WebSocketClient
 import com.waz.znet.ZNetClient.EmptyClient
+import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
@@ -41,17 +42,25 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
 
   lazy val lifecycle = new ZmsLifecycle
   lazy val network = new NetworkModeService(context)
+  lazy val prefs = new PreferenceService(context)
+  lazy val meta = new MetaDataService(context)
+  lazy val gcm = new GcmGlobalService(context, prefs, meta, BackendConfig.EdgeBackend) {
+    override lazy val gcmAvailable = true
+  }
 
-  lazy val service = new WebSocketClientService(lifecycle, new EmptyClient, network, BackendConfig.EdgeBackend, ClientId(), timeouts)
+  lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, gcm, BackendConfig.EdgeBackend, ClientId(), timeouts)
 
 
   feature("active client") {
-    var client = Option.empty[WebSocketClient]
+    lazy val sub = service.client { c => println(s"client changed: $c") }
+    def client = {
+      sub
+      service.client.head.futureValue
+    }
 
     scenario("client is created when id is set and lifecycle is active") {
-      service.client { client = _ }
-
       lifecycle.lifecycleState ! LifecycleState.Active
+
 
       client shouldBe 'defined
     }

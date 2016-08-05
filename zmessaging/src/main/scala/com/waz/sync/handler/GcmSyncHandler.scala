@@ -20,8 +20,8 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, GcmId}
-import com.waz.service.GcmGlobalService.{GcmNotAvailableException, GcmRegistration}
-import com.waz.service.GcmService
+import com.waz.service.push.GcmGlobalService.{GcmNotAvailableException, GcmRegistration}
+import com.waz.service.push.GcmService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.GcmClient
 import com.waz.sync.client.GcmClient.GcmToken

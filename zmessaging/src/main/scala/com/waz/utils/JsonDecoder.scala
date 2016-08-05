@@ -23,7 +23,7 @@ import java.util.{Date, Locale, TimeZone}
 import android.net.Uri
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.GcmGlobalService.GcmSenderId
+import com.waz.service.push.GcmGlobalService.GcmSenderId
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.{Duration, Instant}
 

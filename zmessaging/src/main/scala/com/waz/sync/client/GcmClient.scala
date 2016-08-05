@@ -19,7 +19,7 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.model.otr.ClientId
-import com.waz.service.GcmGlobalService.GcmSenderId
+import com.waz.service.push.GcmGlobalService.GcmSenderId
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.SuccessHttpStatus

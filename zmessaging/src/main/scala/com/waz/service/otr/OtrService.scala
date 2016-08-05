@@ -31,6 +31,7 @@ import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.sync.client.OtrClient.EncryptedContent

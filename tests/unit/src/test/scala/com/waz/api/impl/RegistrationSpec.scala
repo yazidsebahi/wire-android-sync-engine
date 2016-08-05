@@ -26,6 +26,7 @@ import com.waz.client.RegistrationClient
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
+import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccounts, MockGlobalModule, MockUiModule, MockZMessagingFactory}
@@ -89,8 +90,8 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
               super.syncSelfUser()
             }
           }
-          override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, backend, clientId, timeouts) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(zNetClient.client, Uri.parse("/"), zNetClient.auth) {
+          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, backend, clientId, timeouts) {
+            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("/"), zNetClient.auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }

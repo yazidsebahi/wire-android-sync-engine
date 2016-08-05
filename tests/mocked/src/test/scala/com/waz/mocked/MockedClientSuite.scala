@@ -30,9 +30,10 @@ import com.waz.content.KeyValueStorage
 import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
+import com.waz.service
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
-import com.waz.service.call.FlowManagerService.StateOfReceivedVideo
+import com.waz.service.push.PushService
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -121,8 +122,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, global.backend, clientId, timeouts) {
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, global.backend, clientId, timeouts) {
+      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
         override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None

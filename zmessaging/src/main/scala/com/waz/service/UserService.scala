@@ -24,9 +24,10 @@ import com.waz.api.impl.AccentColor
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.PushService.SlowSyncRequest
+import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.UserService._
 import com.waz.service.assets.AssetService
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.UsersClient

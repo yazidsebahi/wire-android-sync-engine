@@ -27,6 +27,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.call.FlowManagerService.EstablishedFlows
 import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.push.PushService
 import com.waz.service.tracking.TrackingEventsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient

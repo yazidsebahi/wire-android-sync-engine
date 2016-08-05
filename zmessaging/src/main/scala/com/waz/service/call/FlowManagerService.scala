@@ -26,6 +26,7 @@ import com.waz.call._
 import com.waz.log.LogHandler
 import com.waz.model._
 import com.waz.service._
+import com.waz.service.push.PushService
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events._

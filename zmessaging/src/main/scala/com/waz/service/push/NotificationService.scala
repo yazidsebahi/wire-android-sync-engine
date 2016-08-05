@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.service.push
 
 import com.waz.ZLog._
 import com.waz.api.Message
@@ -30,6 +30,7 @@ import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, Location, Text}
 import com.waz.model.Liking.Action.Like
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
+import com.waz.service.{EventScheduler, LifecycleState, UserService, ZmsLifecycle}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant

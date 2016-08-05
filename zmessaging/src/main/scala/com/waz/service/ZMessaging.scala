@@ -36,6 +36,7 @@ import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
+import com.waz.service.push.{GcmService, NotificationService, PushService, WebSocketClientService}
 import com.waz.service.tracking.{TrackingEventsService, TrackingService}
 import com.waz.sync.client._
 import com.waz.sync.handler._

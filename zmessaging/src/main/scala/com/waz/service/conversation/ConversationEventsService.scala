@@ -20,7 +20,8 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.model._
 import com.waz.service.messages.MessagesService
-import com.waz.service.{EventPipeline, EventScheduler, PushService, UserService}
+import com.waz.service.push.PushService
+import com.waz.service.{EventPipeline, EventScheduler, UserService}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._

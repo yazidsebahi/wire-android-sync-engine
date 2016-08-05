@@ -86,7 +86,7 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
   feature("Connection") {
 
     scenario("Connect to server and close") {
-      manager = new WebSocketClient(new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
+      manager = new WebSocketClient(context, new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
       awaitUi(socket.isDefined)
       manager.close()
       awaitUi(socket.isEmpty)
@@ -95,7 +95,7 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
     scenario("Retry connection to unavailable server", Slow) {
       server.stop()
 
-      manager = new WebSocketClient(new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
+      manager = new WebSocketClient(context, new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
       Thread.sleep(1000)
       socket.isDefined shouldEqual false
 
@@ -108,7 +108,7 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
     }
 
     scenario("Retry on closed connection", Slow) {
-      manager = new WebSocketClient(new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
+      manager = new WebSocketClient(context, new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
       awaitUi(socket.isDefined)(10.seconds)
       val ws = socket.get
       socket = None
@@ -119,7 +119,7 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
     }
 
     scenario("Retry when server stops working", Slow) {
-      manager = new WebSocketClient(new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
+      manager = new WebSocketClient(context, new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
       awaitUi(socket.isDefined)(10.seconds)
 
       server.stop()

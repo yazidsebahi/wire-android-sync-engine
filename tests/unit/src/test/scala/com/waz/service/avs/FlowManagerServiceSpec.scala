@@ -22,9 +22,9 @@ import com.waz.RobolectricUtils
 import com.waz.api.{AvsLogLevel, NetworkMode}
 import com.waz.call.FlowManager
 import com.waz.model.UserId
-import com.waz.service.WebSocketClientService
 import com.waz.service.call.FlowManagerService
 import com.waz.service.call.FlowManagerService.AvsLogData
+import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.{EventContext, Signal}
 import org.scalatest._
@@ -47,7 +47,7 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
       })
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, global.backend, clientId, timeouts) {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, global.backend, clientId, timeouts) {
       override val connected = wsConnected
     }
   }
