@@ -99,9 +99,21 @@ public interface Message extends UiObservable, Parcelable {
     Asset getAsset();
     String getBody();
     Instant getTime();
+
+    /**
+     * Returns last time this message was edited (or recalled).
+     * @return
+     */
+    Instant getEditTime();
+
     boolean isDeleted();
     boolean isEmpty();
     boolean isHotKnock();
+
+    /***
+     * true if message was edited.
+     */
+    boolean isEdited();
 
     ImageAsset getImage();
 
@@ -169,6 +181,12 @@ public interface Message extends UiObservable, Parcelable {
      * Deletes message globally. Can only be used on users own messages.
      */
     void recall();
+
+    /**
+     * Edits message - replaces it with given content.
+     * Only text messages can be edited, only by message creator.
+     */
+    void update(MessageContent.Text content);
 
     /**
      * Returns local time when this message was received.

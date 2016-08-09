@@ -23,7 +23,7 @@ import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
-import com.waz.api.MessageContent.Location
+import com.waz.api.MessageContent.{Location, Text}
 import com.waz.api.{IConversation, ImageAssetFactory, UpdateListener}
 import com.waz.model.GenericContent.LinkPreview
 import com.waz.model.GenericMessage.TextMessage
@@ -77,6 +77,10 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def isOtr: Boolean = true
 
   override def getTime: Instant = data.time
+
+  override def getEditTime: Instant = ???
+
+  override def isEdited: Boolean = ???
 
   override def getBody: String = data.protos.lastOption match {
     case Some(TextMessage(content, _, _)) => content
@@ -137,6 +141,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def delete(): Unit = context.zms.flatMapFuture(_.convsUi.deleteMessage(data.convId, id))
 
   override def recall(): Unit = context.zms.flatMapFuture(_.convsUi.recallMessage(data.convId, id))
+
+  override def update(content: Text): Unit = ???
 
   override def equals(other: Any): Boolean = other match {
     case other: Message => id == other.id
@@ -254,6 +260,9 @@ object EmptyMessage extends com.waz.api.Message {
   override def isEmpty: Boolean = true
   override def delete(): Unit = ()
   override def recall(): Unit = ()
+  override def getEditTime: Instant = MessageData.UnknownInstant
+  override def isEdited: Boolean = false
+  override def update(content: Text): Unit = ()
 
   override val getParts: Array[Part] = Array.empty
 }
