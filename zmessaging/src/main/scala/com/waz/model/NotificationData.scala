@@ -18,7 +18,6 @@
 package com.waz.model
 
 import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.NotificationsHandler.GcmNotification
 import com.waz.db.Col._
 import com.waz.db.Dao
@@ -28,8 +27,7 @@ import org.threeten.bp.Instant
 
 case class NotificationData(id: String, msg: String, conv: RConvId, user: UserId, msgType: GcmNotification.Type, serverTime: Instant,
                             localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None,
-                            mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None,
-                            clearTime: Option[Instant] = None)
+                            mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
 
 object NotificationData {
 
@@ -38,7 +36,7 @@ object NotificationData {
 
     override def apply(implicit js: JSONObject): NotificationData = NotificationData('id, 'message, 'conv, 'user,
       GcmNotificationCodec.decode('msgType), 'serverTime, decodeISOInstant('timestamp), 'hotKnock, 'userName,
-      decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage), decodeOptInstant('clearTime))
+      decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage))
   }
 
   implicit lazy val Encoder: JsonEncoder[NotificationData] = new JsonEncoder[NotificationData] {
@@ -51,7 +49,6 @@ object NotificationData {
       o.put("timestamp", JsonEncoder.encodeISOInstant(v.localTime))
       o.put("serverTime", v.serverTime.toEpochMilli)
       o.put("hotKnock", v.hotKnock)
-      v.clearTime foreach { time => o.put("clearTime", JsonEncoder.encodeInstant(time)) }
       v.userName foreach (o.put("userName", _))
       if (v.mentions.nonEmpty) o.put("mentions", JsonEncoder.arrString(v.mentions.map(_.str)))
       v.referencedMessage foreach (o.put("referencedMessage", _))
@@ -61,15 +58,11 @@ object NotificationData {
   implicit object NotificationDataDao extends Dao[NotificationData, String] {
     val Id = text('_id, "PRIMARY KEY")(_.id)
     val Data = text('data)(JsonEncoder.encodeString(_))
-    val Cleared = opt(timestamp('clear_time)).apply(_.clearTime)
 
     override val idCol = Id
-    override val table = Table("GcmData", Id, Data, Cleared) // class renamed to NotificationData, but db table stays unchanged
+    override val table = Table("GcmData", Id, Data) // class renamed to NotificationData, but db table stays unchanged
 
     override def apply(implicit cursor: Cursor): NotificationData = JsonDecoder.decode(cursor.getString(1))
-
-    def deleteClearedBefore(time: Instant)(implicit db: SQLiteDatabase) =
-      db.delete(table.name, s"${Cleared.name} is not null and ${Cleared.name} < ${time.toEpochMilli}", null)
   }
 
   implicit val NotificationOrdering: Ordering[NotificationData] = Ordering.by((data: NotificationData) => (data.localTime, data.id))

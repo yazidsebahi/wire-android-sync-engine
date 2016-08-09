@@ -22,9 +22,7 @@ import com.waz.model.otr.ClientId
 import com.waz.service._
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.znet.WebSocketClient
 import com.waz.znet.ZNetClient.EmptyClient
-import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 

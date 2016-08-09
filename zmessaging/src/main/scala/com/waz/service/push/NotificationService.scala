@@ -18,6 +18,7 @@
 package com.waz.service.push
 
 import com.waz.ZLog._
+import ImplicitTag._
 import com.waz.api.Message
 import com.waz.api.NotificationsHandler.GcmNotification
 import com.waz.api.NotificationsHandler.GcmNotification.LikedContent
@@ -30,33 +31,35 @@ import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, Location, Text}
 import com.waz.model.Liking.Action.Like
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.{EventScheduler, LifecycleState, UserService, ZmsLifecycle}
+import com.waz.service._
 import com.waz.utils._
-import com.waz.utils.events.Signal
+import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
-class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, storage: NotificationStorage, users: UserService, usersStorage: UsersStorage, convs: ConversationStorage, push: PushService) {
+class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle, storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, push: PushService, kv: KeyValueStorage, timeouts: Timeouts) {
   import NotificationService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
   @volatile private var uiActive = false
 
+  private val lastUiVisibleTime = kv.keyValuePref("last_ui_visible_time", Instant.EPOCH)
+
   lifecycle.lifecycleState { state =>
     verbose(s"state updated: $state")
-    uiActive = state == LifecycleState.UiActive
-    if (uiActive) clearNotifications()
+    uiActive = returning(state == LifecycleState.UiActive) { active =>
+      if (active || uiActive) lastUiVisibleTime := Instant.now()
+    }
   }
 
   val notificationEventsStage = EventScheduler.Stage[Event]({ (c, events) =>
-    users.getSelfUserId map { selfUser =>
-      // remove events from self user (may happen that we still have web socket open when ui is paused and new message comes from other device)
+    Future {
+      // remove events from self user
       val incoming = events collect {
-        case e: MessageEvent if !selfUser.contains(e.from) => e
+        case e: MessageEvent if e.from != selfUserId => e
         case e: ContactJoinEvent => e
         case e: UserEvent => e
       }
@@ -81,12 +84,38 @@ class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, st
     }
   }, _ => ! uiActive)
 
+  /**
+    * Map containing lastRead time for every conversation.
+    * For muted conversations lastRead is always set to Instant.MAX,
+    * we don't want to show notifications for muted conversations.
+    */
+  private val lastReadMap = {
+    def convLastRead(c: ConversationData) = if (c.muted) Instant.MAX else c.lastRead
+
+    val timeUpdates = EventStream.union(
+      convs.onAdded,
+      convs.onUpdated map { _ collect { case (prev, conv) if convLastRead(prev) != convLastRead(conv) => conv } }
+    ) filter(_.nonEmpty)
+
+    def loadAll() = convs.getAll.map(_.map(c => c.remoteId -> convLastRead(c)).toMap)
+
+    def update(times: Map[RConvId, Instant], updates: Seq[ConversationData]) =
+      times ++ updates.map(c => c.remoteId -> convLastRead(c))(breakOut)
+
+    new AggregatingSignal(timeUpdates, loadAll(), update)
+  }
+
+  // remove older notifications when lastRead or uiTime is updated
+  lastReadMap.zip(lastUiVisibleTime.signal).throttle(timeouts.notifications.clearThrottling) {
+    case (lastRead, uiTime) => removeReadNotifications(lastRead, uiTime)
+  }
+
   // add notification when message sending fails
   messages.onUpdated { updates =>
     val failedMsgs = updates collect {
       case (prev, msg) if prev.state != msg.state && msg.state == Message.Status.FAILED => msg
     }
-    if (failedMsgs.nonEmpty) {
+    if (!uiActive && failedMsgs.nonEmpty) {
       // XXX: notification data keeps remoteId, so we need to fetch convs here
       Future.traverse(failedMsgs) { msg =>
         convs.get(msg.convId) map {
@@ -97,76 +126,85 @@ class NotificationService(messages: MessagesStorage, lifecycle: ZmsLifecycle, st
     }
   }
 
-  // remove older notifications when lastRead is updated
-  convs.onUpdated { updates =>
-    if (!uiActive) {
-      val lastReadUpdated: Map[RConvId, Instant] = updates.collect {
-        case (prev, conv) if conv.lastRead != prev.lastRead => conv.remoteId -> conv.lastRead
-      } (breakOut)
+  def clearNotifications() =
+    for {
+      _ <- lastUiVisibleTime := Instant.now()
+      // will execute removeReadNotifications as part of this call,
+      // this ensures that it's actually done while wakeLock is acquired by caller
+      lastRead <- lastReadMap.head
+      _ <- removeReadNotifications(lastRead, Instant.now())
+    } yield ()
 
-      if (lastReadUpdated.nonEmpty) {
-        storage.notifications.head flatMap { data =>
-          val toClear = data.filter { case (id, notification) =>
-            lastReadUpdated.get(notification.conv).exists { lastRead =>
-              notification.serverTime != Instant.EPOCH && !lastRead.isBefore(notification.serverTime)
+  private def removeReadNotifications(lastRead: Map[RConvId, Instant], uiTime: Instant) = {
+    verbose(s"removeRead($lastRead, $uiTime)")
+
+    def isRead(notification: NotificationData) =
+      (notification.serverTime == Instant.EPOCH && uiTime.isAfter(notification.localTime)) || lastRead.get(notification.conv).exists(!_.isBefore(notification.serverTime))
+
+    storage.notifications.head flatMap { data =>
+      val toRemove = data collect {
+        case (id, notification) if isRead(notification) => id
+      }
+      verbose(s"toRemove on lastRead change: $toRemove")
+      storage.remove(toRemove)
+    }
+  }
+
+  private def add(notifications: Seq[NotificationData]) =
+    for {
+      lastRead <- lastReadMap.head
+      // filter notifications for unread messages in un-muted conversations
+      ns: Map[String, NotificationData] = notifications.collect {
+        case n if n.serverTime == Instant.EPOCH => n.id -> n
+        case n if lastRead.get(n.conv).forall(_.isBefore(n.serverTime)) => n.id -> n
+      } (breakOut)
+      res <- storage.updateOrCreateAll2(ns.keys, (id, n) => n.getOrElse(ns(id)))
+    } yield res
+
+  def getNotifications =
+    lifecycle.lifecycleState flatMap {
+      case LifecycleState.UiActive => Signal const Seq.empty[Notification]
+      case _ =>
+        for {
+          data <- storage.notifications.map(_.values.toIndexedSeq.sorted)
+          time <- lastUiVisibleTime.signal
+          ns <-
+            if (data.forall(_.localTime.isBefore(time))) Signal const Seq.empty[Notification] // no new messages, don't show anything
+            else Signal.future(createNotifications(data))
+        } yield
+          ns
+    }
+
+  private def createNotifications(ns: Seq[NotificationData]): Future[Seq[Notification]] = {
+    Future.traverse(ns) { data =>
+      usersStorage.get(data.user).flatMap { user =>
+        val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName getOrElse ""
+
+        data.msgType match {
+          case CONNECT_REQUEST | CONNECT_ACCEPTED =>
+            Future.successful(Notification(data, ConvId(data.user.str), userName, userName, groupConv = false))
+          case _ =>
+            for {
+              msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
+              conv <- convs.getByRemoteId(data.conv)
+            } yield {
+              val (g, t) =
+                if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map (m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
+                else (data, None)
+
+              conv.fold {
+                Notification(g, ConvId(data.conv.str), "", userName, groupConv = false, mentioned = data.mentions.contains(selfUserId), likedContent = t)
+              } { conv =>
+                Notification(g, conv.id, conv.displayName, userName, conv.convType == ConversationType.Group, mentioned = data.mentions.contains(selfUserId), likedContent = t)
+              }
             }
-          }
-          if (toClear.isEmpty) Future.successful(())
-          else storage.updateAll2(toClear.keys, { n =>
-            n.copy(clearTime = n.clearTime.orElse(lastReadUpdated.get(n.conv)))
-          })
         }
       }
     }
   }
-
-  private def add(notifications: => Seq[NotificationData]) =
-    if (!uiActive) {
-      val ns: Map[String, NotificationData] = notifications.map { n => n.id -> n } (breakOut)
-      if (ns.nonEmpty) storage.updateOrCreateAll2(ns.keys, (id, n) => n.getOrElse(ns(id)))
-    }
-
-  def getNotifications(throttleDelay: FiniteDuration = 1.second) = storage.notifications.throttle(throttleDelay).map(_.values.toIndexedSeq.sorted) flatMap { data => Signal.future(createNotifications(data)) }
-
-  def clearNotifications() = for {
-    data <- storage.notifications.head
-    time = Instant.now
-    _ <- storage.updateAll2(data.keys, _.copy(clearTime = Some(time)))
-    _ <- storage.deleteClearedBefore(time - 1.hour)
-  } yield ()
-
-  private def createNotifications(ns: Seq[NotificationData]): Future[Seq[Notification]] =
-    users.withSelfUserFuture { selfUserId =>
-      Future.traverse(ns) { data =>
-        usersStorage.get(data.user).flatMap { user =>
-          val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName getOrElse ""
-
-          data.msgType match {
-            case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-              Future.successful(Notification(data, ConvId(data.user.str), userName, userName, groupConv = false))
-            case _ =>
-              for {
-                msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
-                conv <- convs.getByRemoteId(data.conv)
-              } yield {
-                val (g, t) =
-                  if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map (m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
-                  else (data, None)
-
-                conv.fold {
-                  Notification(g, ConvId(data.conv.str), "", userName, groupConv = false, mentioned = data.mentions.contains(selfUserId), likedContent = t)
-                } { conv =>
-                  Notification(g, conv.id, conv.displayName, userName, conv.convType == ConversationType.Group, mentioned = data.mentions.contains(selfUserId), likedContent = t)
-                }
-              }
-          }
-        }
-      }
-    }
 }
 
 object NotificationService {
-  private implicit val Tag: LogTag = logTagFor[NotificationService]
 
   case class Notification(data: NotificationData, conv: ConvId, convName: String = "", userName: String = "", groupConv: Boolean = false, mentioned: Boolean = false, likedContent: Option[LikedContent] = None) extends GcmNotification {
     override def getType = data.msgType

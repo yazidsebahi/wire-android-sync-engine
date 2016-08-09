@@ -28,9 +28,10 @@ import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
+import com.waz.service.Timeouts
 import com.waz.service.push.NotificationService.Notification
 import com.waz.testutils.Matchers._
-import com.waz.testutils.MockZMessaging
+import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
 import com.waz.utils.events.EventContext
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
@@ -41,7 +42,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
+class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
   @volatile var currentNotifications = Nil: Seq[GcmNotification]
 
@@ -50,7 +51,15 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
   lazy val groupConv = ConversationData(ConvId(), RConvId(), Some("group conv"), selfUserId, ConversationType.Group)
 
   lazy val zms = new MockZMessaging(selfUserId = selfUserId) { self =>
-    notifications.getNotifications(Duration.Zero) { currentNotifications = _ } (EventContext.Global)
+
+
+    notifications.getNotifications { currentNotifications = _ } (EventContext.Global)
+
+    override def timeouts = new Timeouts {
+      override val notifications = new Notifications() {
+        override def clearThrottling = 100.millis
+      }
+    }
   }
 
   lazy val service = zms.notifications
@@ -59,23 +68,25 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    Await.result(zms.convsStorage.insert(Seq(oneToOneConv, groupConv)), 5.seconds)
+    zms.convsStorage.insert(Seq(oneToOneConv, groupConv)).await()
   }
 
   before {
+    zms.convsContent.updateConversationLastRead(oneToOneConv.id, Instant.now()).await()
+    zms.convsContent.updateConversationLastRead(groupConv.id, Instant.now()).await()
     clearNotifications()
   }
 
   feature("Add notifications for events") {
 
     scenario("Process user connection event for an unsynced user") {
-      val userId = UserId()
-      val convId = RConvId()
+      val userId = UserId(oneToOneConv.id.str)
+      val convId = oneToOneConv.remoteId
       Await.ready(zms.dispatch(UserConnectionEvent(Uid(), convId, selfUserId, userId, Some("hello"), ConnectionStatus.PendingFromOther, new Date, Some("other user")).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "hello", _, `userId`, GcmNotification.Type.CONNECT_REQUEST, _, _, false, Some("other user"), _, _, None), _, "other user", "other user", false, _, _)) => true
+          case Seq(Notification(NotificationData(_, "hello", _, `userId`, GcmNotification.Type.CONNECT_REQUEST, _, _, false, Some("other user"), _, None), _, "other user", "other user", false, _, _)) => true
         }
       }
     }
@@ -86,7 +97,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, _, `userId`, GcmNotification.Type.CONTACT_JOIN, _, _, _, _, _, _, None), _, _, _, false, _, _)) => true
+          case Seq(Notification(NotificationData(_, _, _, `userId`, GcmNotification.Type.CONTACT_JOIN, _, _, _, _, _, None), _, _, _, false, _, _)) => true
         }
       }
     }
@@ -98,7 +109,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "test name", `convId`, `userId`, GcmNotification.Type.TEXT, _, _, _, _, Seq(`selfUserId`), _, None), _, _, _, false, true, _)) => true
+          case Seq(Notification(NotificationData(_, "test name", `convId`, `userId`, GcmNotification.Type.TEXT, _, _, _, _, Seq(`selfUserId`), None), _, _, _, false, true, _)) => true
         }
       }
     }
@@ -111,7 +122,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, `convId`, `userId`, GcmNotification.Type.ANY_ASSET, _, _, _, _, _, None, None), _, _, _, false, _, _)) => true
+          case Seq(Notification(NotificationData(_, _, `convId`, `userId`, GcmNotification.Type.ANY_ASSET, _, _, _, _, _, None), _, _, _, false, _, _)) => true
         }
       }
     }
@@ -126,7 +137,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "meep", _, _, GcmNotification.Type.TEXT, _, _, _, _, _, _, None), `groupId`, "group conv", _, true, _, _)) => true
+          case Seq(Notification(NotificationData(_, "meep", _, _, GcmNotification.Type.TEXT, _, _, _, _, _, None), `groupId`, "group conv", _, true, _, _)) => true
         }
       }
     }
@@ -187,7 +198,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, _, _, GcmNotification.Type.TEXT, _, _, _, _, _, _, None), `groupId`, "group conv", _, true, _, _)) => true
+          case Seq(Notification(NotificationData(_, _, _, _, GcmNotification.Type.TEXT, _, _, _, _, _, None), `groupId`, "group conv", _, true, _, _)) => true
         }
       }
     }

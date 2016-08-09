@@ -66,7 +66,7 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
 
   protected def save(values: Seq[V])(implicit db: SQLiteDatabase): Unit = dao.insertOrReplace(values)
 
-  protected def delete(keys: Seq[K])(implicit db: SQLiteDatabase): Unit = dao.deleteEvery(keys)
+  protected def delete(keys: Iterable[K])(implicit db: SQLiteDatabase): Unit = dao.deleteEvery(keys)
 
   private def cachedOrElse(key: K, default: => Future[Option[V]]): Future[Option[V]] =
     Option(cache.get(key)).fold(default)(Future.successful)
@@ -266,9 +266,9 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
     returning(db { delete(Seq(key))(_) } .future) { _ => onDeleted ! Seq(key) }
   } .flatten
 
-  def remove(keys: Seq[K]): Future[Unit] = Future {
+  def remove(keys: Iterable[K]): Future[Unit] = Future {
     keys foreach { key => cache.put(key, None) }
-    returning(db { delete(keys)(_) } .future) { _ => onDeleted ! keys }
+    returning(db { delete(keys)(_) } .future) { _ => onDeleted ! keys.toVector }
   } .flatten
 
   def cacheIfNotPresent(key: K, value: V) = cachedOrElse(key, Future {

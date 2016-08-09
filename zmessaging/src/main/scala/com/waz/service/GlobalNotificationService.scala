@@ -56,7 +56,7 @@ class GlobalNotificationService(context: Context, currentZms: Signal[Option[ZMes
     case None => Signal const (Option.empty[ActiveChannel], Option.empty[ActiveChannel])
   }
 
-  private val notifications = currentZms flatMap { _.fold(Signal.const(Seq.empty[Notification]))(_.notifications.getNotifications()) }
+  private val notifications = currentZms flatMap { _.fold(Signal.const(Seq.empty[Notification]))(_.notifications.getNotifications) }
 
   @volatile
   private var notificationsHandler: NotificationsHandler = EmptyNotificationsHandler

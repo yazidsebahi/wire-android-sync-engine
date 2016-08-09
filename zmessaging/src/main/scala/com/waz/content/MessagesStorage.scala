@@ -21,8 +21,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.api.Message
-import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.api.{ErrorResponse, Message}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
@@ -200,7 +198,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
         Future.successful(())
     }
 
-  override def remove(keys: Seq[MessageId]): Future[Unit] =
+  override def remove(keys: Iterable[MessageId]): Future[Unit] =
     for {
       fromDb <- getAll(keys)
       msgs = fromDb.collect { case Some(m) => m }
@@ -291,8 +289,8 @@ object IncomingMessages {
 
 
 class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: LikingsStorage) {
-  import com.waz.utils.events.EventContext.Implicits.global
   import com.waz.threading.Threading.Implicits.Background
+  import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val tag: LogTag = logTagFor[MessageAndLikesStorage]
 
