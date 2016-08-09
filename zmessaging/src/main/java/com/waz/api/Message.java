@@ -48,7 +48,7 @@ public interface Message extends UiObservable, Parcelable {
     enum Type {
         TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, MEMBER_JOIN, MEMBER_LEAVE, CONNECT_REQUEST,
         CONNECT_ACCEPTED, RENAME, MISSED_CALL, INCOMING_CALL, RICH_MEDIA, OTR_ERROR, OTR_IDENTITY_CHANGED, OTR_VERIFIED, OTR_UNVERIFIED,
-        OTR_DEVICE_ADDED, STARTED_USING_DEVICE, HISTORY_LOST, LOCATION, UNKNOWN
+        OTR_DEVICE_ADDED, STARTED_USING_DEVICE, HISTORY_LOST, LOCATION, UNKNOWN, RECALLED
     }
 
     /**
@@ -164,6 +164,11 @@ public interface Message extends UiObservable, Parcelable {
      * Deletes message on users devices. Will not request deletion on the other side.
      */
     void delete();
+
+    /**
+     * Deletes message globally. Can only be used on users own messages.
+     */
+    void recall();
 
     /**
      * Returns local time when this message was received.

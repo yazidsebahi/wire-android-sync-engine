@@ -203,6 +203,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     _ <- sync.postDeleted(convId, id)
   } yield ()
 
+  def recallMessage(convId: ConvId, id: MessageId): Future[Unit] = ???
+
   private def updateLastRead(msg: MessageData) = updateConversationLastRead(msg.convId, msg.time)
 
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]] = convs.setConversationArchived(id, archived)

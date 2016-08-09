@@ -136,6 +136,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def delete(): Unit = context.zms.flatMapFuture(_.convsUi.deleteMessage(data.convId, id))
 
+  override def recall(): Unit = context.zms.flatMapFuture(_.convsUi.recallMessage(data.convId, id))
+
   override def equals(other: Any): Boolean = other match {
     case other: Message => id == other.id
     case _ => false
@@ -251,6 +253,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isLiked: Boolean = false
   override def isEmpty: Boolean = true
   override def delete(): Unit = ()
+  override def recall(): Unit = ()
 
   override val getParts: Array[Part] = Array.empty
 }

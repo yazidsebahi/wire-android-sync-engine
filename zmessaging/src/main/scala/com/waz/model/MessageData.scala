@@ -263,6 +263,7 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     case Message.Type.HISTORY_LOST => "HistoryLost"
     case Message.Type.LOCATION => "Location"
     case Message.Type.UNKNOWN => "Unknown"
+    case Message.Type.RECALLED => "Recalled"
   }
 
   implicit object MessageDataDao extends Dao[MessageData, MessageId]  {
