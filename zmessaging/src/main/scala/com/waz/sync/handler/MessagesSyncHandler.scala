@@ -69,6 +69,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       }
     }
 
+  def postRecalled(convId: ConvId, msgId: MessageId): Future[SyncResult] = ???
+
   def postMessage(convId: ConvId, id: MessageId)(implicit convLock: ConvLock): Future[SyncResult] = {
     def isPartiallySent(msg: MessageData) = assets.storage.getImageAsset(msg.assetId) map { _.exists(_.versions.exists(_.sent)) }
 

@@ -41,6 +41,7 @@ public enum SyncCommand {
     PostSelfPicture("post-picture"),
     PostMessage("post-message"),
     PostDeleted("post-deleted"),
+    PostRecalled("post-recalled"),
     PostConvJoin("post-conv-join"),
     PostConvLeave("post-conv-leave"),
     PostConnection("post-connection"),
