@@ -153,6 +153,8 @@ object ActorMessage {
 
   case class DeleteMessage(convId: RConvId, id: MessageId) extends ActorMessage
 
+  case class RecallMessage(convId: RConvId, id: MessageId) extends ActorMessage
+
   /**
    * Send a Wire text message to a conversation
  *

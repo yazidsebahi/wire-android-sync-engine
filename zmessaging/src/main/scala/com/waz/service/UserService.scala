@@ -38,7 +38,7 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
 import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
-class UserService(selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushService,
+class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushService,
                   assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle) {
 
   private implicit val logTag: LogTag = logTagFor[UserService]

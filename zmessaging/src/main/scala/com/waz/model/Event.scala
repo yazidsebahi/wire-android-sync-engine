@@ -124,9 +124,8 @@ case class CreateConversationEvent(id: Uid, convId: RConvId, time: Date, from: U
 }
 case class RenameConversationEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, name: String) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
 
+@deprecated("this was used for unencrypted messages, we no longer want to support it", "77")
 case class MessageAddEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String) extends MessageEvent with UnarchivingEvent
-case class MessageEditEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
-case class MessageDeleteEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
 
 case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent {
   override val eventId: EventId = EventId.Zero

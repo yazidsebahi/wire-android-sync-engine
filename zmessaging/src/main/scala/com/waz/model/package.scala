@@ -58,7 +58,9 @@ package object model {
         case GM.CLEARED_FIELD_NUMBER      => msg.getCleared
         case GM.CLIENTACTION_FIELD_NUMBER => ClientAction(msg.getClientAction)
         case GM.DELETED_FIELD_NUMBER      => msg.getDeleted
+        case GM.EDITED_FIELD_NUMBER       => msg.getEdited
         case GM.EXTERNAL_FIELD_NUMBER     => msg.getExternal
+        case GM.HIDDEN_FIELD_NUMBER       => msg.getHidden
         case GM.IMAGE_FIELD_NUMBER        => msg.getImage
         case GM.KNOCK_FIELD_NUMBER        => msg.getKnock
         case GM.LASTREAD_FIELD_NUMBER     => msg.getLastRead

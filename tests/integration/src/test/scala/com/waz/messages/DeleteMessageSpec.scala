@@ -18,6 +18,7 @@
 package com.waz.messages
 
 import akka.pattern.ask
+import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
@@ -69,6 +70,58 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     scenario("Delete message on remote device") {
       secondClient ? DeleteMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
       withDelay(msgs should have size 1)
+    }
+  }
+
+  feature("Recall message") {
+
+    scenario("Send new text message") {
+      conv.sendMessage(new Text("test msg to recall"))
+      withDelay {
+        msgs should have size 2
+        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      }
+    }
+
+    scenario("Recall recently sent message") {
+      val msg = msgs.getLastMessage
+      msg.recall()
+      withDelay {
+        msg.getMessageType shouldEqual Message.Type.RECALLED
+        msg.getEditTime.isAfter(msg.getTime) shouldEqual true
+        msgs.getLastMessage.getMessageType shouldEqual Message.Type.RECALLED
+      }
+    }
+
+    scenario("Send another message") {
+      conv.sendMessage(new Text("second recall"))
+      withDelay {
+        msgs should have size 3
+        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      }
+    }
+
+    scenario("Receive recall from other device") {
+      val msg = msgs.getLastMessage
+      secondClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
+      withDelay {
+        msg.getMessageType shouldEqual Message.Type.RECALLED
+        msg.getEditTime.isAfter(msg.getTime) shouldEqual true
+      }
+    }
+
+    scenario("Receive message from other user") {
+      otherUserClient ? SendText(conv.data.remoteId, "test message") should eventually(be(Successful))
+      withDelay(msgs should have size 4)
+    }
+
+    scenario("Receive recall rom other user") {
+      val msg = msgs.getLastMessage
+      otherUserClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
+      withDelay {
+        msg.getMessageType shouldEqual Message.Type.RECALLED
+        msg.getEditTime.isAfter(msg.getTime) shouldEqual true
+      }
     }
   }
 }

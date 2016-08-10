@@ -275,6 +275,11 @@ class DeviceActor(val deviceName: String,
         zmessaging.convsUi.deleteMessage(conv.id, msgId)
       }
 
+    case RecallMessage(convId, msgId) =>
+      withConv(convId) { conv =>
+        zmessaging.convsUi.recallMessage(conv.id, msgId)
+      }
+
     case AcceptConnection(userId) =>
       Option(userId) match {
         case Some(_) =>

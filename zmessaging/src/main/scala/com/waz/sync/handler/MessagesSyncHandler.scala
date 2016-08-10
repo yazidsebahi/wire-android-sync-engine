@@ -59,14 +59,21 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   private implicit val logTag: LogTag = logTagFor[MessagesSyncHandler]
 
   def postDeleted(convId: ConvId, msgId: MessageId): Future[SyncResult] =
-    users.withSelfUserFuture { selfUserId =>
-      convs.convById(convId) flatMap {
-        case Some(conv) =>
-          val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
-          otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
-        case None =>
-          Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
-      }
+    convs.convById(convId) flatMap {
+      case Some(conv) =>
+        val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
+        otrSync.postOtrMessage(ConvId(users.selfUserId.str), RConvId(users.selfUserId.str), msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
+      case None =>
+        Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
+    }
+
+  def postRecalled(convId: ConvId, msgId: MessageId): Future[SyncResult] =
+    convs.convById(convId) flatMap {
+      case Some(conv) =>
+        val msg = GenericMessage(Uid(), Proto.MsgRecall(msgId))
+        otrSync.postOtrMessage(conv.id, conv.remoteId, msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
+      case None =>
+        Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
     }
 
   def postMessage(convId: ConvId, id: MessageId)(implicit convLock: ConvLock): Future[SyncResult] = {

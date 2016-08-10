@@ -54,7 +54,9 @@ case class MessageData(id: MessageId,
                        name: Option[String] = None,
                        state: MessageState = Message.Status.SENT,
                        time: Instant = Instant.now,
-                       localTime: Instant = MessageData.UnknownInstant) {
+                       localTime: Instant = MessageData.UnknownInstant,
+                       editTime: Instant = MessageData.UnknownInstant
+                      ) {
 
   def getContent(index: Int) = {
     if (index == 0) content.headOption.getOrElse(MessageContent.Empty)
@@ -191,7 +193,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
   }
 }
 
-object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant) => MessageData) {
+object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant) => MessageData) {
   val Empty = new MessageData(MessageId(""), ConvId(""), EventId.Zero, Message.Type.UNKNOWN, UserId(""))
   val UnknownInstant = Instant.EPOCH
 
@@ -215,7 +217,9 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
         'name,
         Message.Status.valueOf('state),
         Instant.ofEpochMilli(decodeLong('time)),
-        Instant.ofEpochMilli(decodeLong('localTime)))
+        Instant.ofEpochMilli(decodeLong('localTime)),
+        Instant.ofEpochMilli(decodeLong('editTime))
+      )
   }
 
   implicit lazy val Encoder: JsonEncoder[MessageData] = new JsonEncoder[MessageData] {
@@ -235,6 +239,7 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
       o.put("state", v.state.name())
       o.put("time", v.time.toEpochMilli)
       o.put("localTime", v.localTime.toEpochMilli)
+      o.put("editTime", v.localTime.toEpochMilli)
     }
   }
   
@@ -286,10 +291,11 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     val State = text[MessageState]('msg_state, _.name, Message.Status.valueOf)(_.state)
     val Time = timestamp('time)(_.time)
     val LocalTime = timestamp('local_time)(_.localTime)
+    val EditTime = timestamp('edit_time)(_.editTime)
 
     override val idCol = Id
 
-    override val table = Table("Messages", Id, Conv, SourceSeq, SourceHex, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize)
+    override val table = Table("Messages", Id, Conv, SourceSeq, SourceHex, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
@@ -298,7 +304,7 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     }
 
     override def apply(implicit cursor: Cursor): MessageData =
-      MessageData(Id, Conv, new EventId(SourceSeq, SourceHex), Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime)
+      MessageData(Id, Conv, new EventId(SourceSeq, SourceHex), Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime)
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(Conv, id)
 

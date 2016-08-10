@@ -54,6 +54,7 @@ trait SyncServiceHandle {
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
   def postMessage(id: MessageId, conv: ConvId): Future[SyncId]
   def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId]
+  def postRecalled(conv: ConvId, msg: MessageId): Future[SyncId]
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable): Future[SyncId]
   def postLiking(id: ConvId, liking: Liking): Future[SyncId]
   def postConnection(user: UserId, name: String, message: String): Future[SyncId]
@@ -111,6 +112,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
   def postMessage(id: MessageId, conv: ConvId)  = addRequest(PostMessage(conv, id), timeout = System.currentTimeMillis() + ConversationsService.SendingTimeout.toMillis, forceRetry = true)
   def postDeleted(conv: ConvId, msg: MessageId) = addRequest(PostDeleted(conv, msg))
+  def postRecalled(conv: ConvId, msg: MessageId)= addRequest(PostRecalled(conv, msg))
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, status))
   def postExcludePymk(id: UserId)               = addRequest(PostExcludePymk(id), priority = Priority.Low)
   def postAddressBook(ab: AddressBook)          = addRequest(PostAddressBook(ab))
@@ -190,6 +192,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case RegisterGcmToken               => zms.gcmSync.registerGcm()
     case PostLiking(convId, liking)     => zms.likingsSync.postLiking(convId, liking)
     case PostDeleted(convId, msgId)     => zms.messagesSync.postDeleted(convId, msgId)
+    case PostRecalled(convId, msgId)    => zms.messagesSync.postRecalled(convId, msgId)
     case PostLastRead(convId, time)     => zms.lastReadSync.postLastRead(convId, time)
     case PostOpenGraphMeta(conv, msg)   => zms.openGraphSync.postMessageMeta(conv, msg)
     case PostSessionReset(conv, user, client) => zms.otrSync.postSessionReset(conv, user, client)

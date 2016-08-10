@@ -25,6 +25,7 @@ import com.waz.content.Mime
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.nano.Messages
+import com.waz.model.nano.Messages.MessageEdit
 import com.waz.utils._
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
@@ -418,6 +419,24 @@ object GenericContent {
       Some((proto.content, proto.mention.map(m => UserId(m.userId) -> m.userName).toMap, proto.linkPreview.toSeq))
   }
 
+  type MsgEdit = Messages.MessageEdit
+  implicit object MsgEdit extends GenericContent[MsgEdit] {
+    override def set(msg: GenericMessage) = msg.setEdited
+
+    def apply(ref: MessageId, content: Text) = returning(new MessageEdit) { c =>
+      c.replacingMessageId = ref.str
+      c.setText(content)
+    }
+
+    def unapply(arg: MsgEdit): Option[(MessageId, Text)] =
+      arg.getContentCase match {
+        case Messages.MessageEdit.TEXT_FIELD_NUMBER =>
+          Some((MessageId(arg.replacingMessageId), arg.getText))
+        case _ =>
+          None
+      }
+  }
+
   type Cleared = Messages.Cleared
   implicit object Cleared extends GenericContent[Cleared] {
     override def set(msg: GenericMessage) = msg.setCleared
@@ -447,17 +466,28 @@ object GenericContent {
       Some((RConvId(arg.conversationId), Instant.ofEpochMilli(arg.lastReadTimestamp)))
   }
 
-  type MsgDeleted = Messages.MsgDeleted
+  type MsgDeleted = Messages.MessageHide
   implicit object MsgDeleted extends GenericContent[MsgDeleted] {
-    override def set(msg: GenericMessage) = msg.setDeleted
+    override def set(msg: GenericMessage) = msg.setHidden
 
-    def apply(conv: RConvId, msg: MessageId) = returning(new MsgDeleted) { d =>
+    def apply(conv: RConvId, msg: MessageId) = returning(new Messages.MessageHide) { d =>
       d.conversationId = conv.str
       d.messageId = msg.str
     }
 
     def unapply(proto: MsgDeleted): Option[(RConvId, MessageId)] =
       Some((RConvId(proto.conversationId), MessageId(proto.messageId)))
+  }
+
+  type MsgRecall = Messages.MessageDelete
+  implicit object MsgRecall extends GenericContent[MsgRecall] {
+    override def set(msg: GenericMessage) = msg.setDeleted
+
+    def apply(msg: MessageId) = returning(new Messages.MessageDelete) { d =>
+      d.messageId = msg.str
+    }
+
+    def unapply(proto: MsgRecall): Option[MessageId] = Some(MessageId(proto.messageId))
   }
 
   type Location = Messages.Location

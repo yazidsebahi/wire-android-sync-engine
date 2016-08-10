@@ -146,6 +146,10 @@ object SyncRequest {
     override val mergeKey = (cmd, convId, messageId)
   }
 
+  case class PostRecalled(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostRecalled) {
+    override val mergeKey = (cmd, convId, messageId)
+  }
+
   case class PostAssetStatus(convId: ConvId, messageId: MessageId, status: AssetStatus.Syncable) extends RequestForConversation(Cmd.PostAssetStatus) with SerialExecutionWithinConversation {
     override val mergeKey = (cmd, convId, messageId)
     override def merge(req: SyncRequest) = mergeHelper[PostAssetStatus](req)(Merged(_))
@@ -282,6 +286,7 @@ object SyncRequest {
         case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
         case Cmd.PostMessage           => PostMessage(convId, messageId)
         case Cmd.PostDeleted           => PostDeleted(convId, messageId)
+        case Cmd.PostRecalled          => PostRecalled(convId, messageId)
         case Cmd.PostAssetStatus       => PostAssetStatus(convId, messageId, JsonDecoder[AssetStatus.Syncable]('status))
         case Cmd.PostConvJoin          => PostConvJoin(convId, users)
         case Cmd.PostConvLeave         => PostConvLeave(convId, userId)
@@ -333,6 +338,7 @@ object SyncRequest {
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
         case PostMessage(_, messageId)        => putId("message", messageId)
         case PostDeleted(_, messageId)        => putId("message", messageId)
+        case PostRecalled(_, messageId)       => putId("message", messageId)
         case PostConnectionStatus(_, status)  => status foreach { status => o.put("status", status.code) }
         case PostConvJoin(_, users)           => o.put("users", arrString(users.toSeq map (_.str)))
         case PostConvLeave(_, user)           => putId("user", user)
