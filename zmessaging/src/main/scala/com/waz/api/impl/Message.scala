@@ -25,7 +25,7 @@ import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
 import com.waz.api.MessageContent.{Location, Text}
 import com.waz.api.{IConversation, ImageAssetFactory, UpdateListener}
-import com.waz.model.GenericContent.LinkPreview
+import com.waz.model.GenericContent.{LinkPreview, MsgEdit}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
@@ -78,9 +78,12 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getTime: Instant = data.time
 
-  override def getEditTime: Instant = ???
+  override def getEditTime: Instant = data.editTime
 
-  override def isEdited: Boolean = ???
+  override def isEdited: Boolean = data.protos exists {
+    case GenericMessage(_, MsgEdit(_, _)) => true
+    case _ => false
+  }
 
   override def getBody: String = data.protos.lastOption match {
     case Some(TextMessage(content, _, _)) => content

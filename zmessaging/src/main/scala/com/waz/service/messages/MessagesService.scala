@@ -45,7 +45,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
-class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdater, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
+class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
     likings: LikingsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater) {
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[MessagesService]
@@ -71,6 +71,8 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
     val filtered = events.filter(e => conv.cleared.isBefore(e.time.instant))
 
+    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, GenericMessage(_, MsgRecall(ref))) => (time.instant, from, ref) }
+
     for {
       as    <- updateAssets(filtered)
       msgs  = filtered map { createMessage(conv, _) } filter (_ != MessageData.Empty)
@@ -78,6 +80,7 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
+      _     <- Future.traverse(recalls) { case (time, user, msg) => recallMessage(conv.id, msg, user, time) }
     } yield res
   }
 
@@ -162,6 +165,7 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
           case LastRead(remoteId, timestamp) => MessageData.Empty
           case Cleared(remoteId, timestamp) => MessageData.Empty
           case MsgDeleted(_, _) => MessageData.Empty
+          case MsgRecall(_) => MessageData.Empty
           case _ =>
             error(s"unexpected generic message content: $msgContent")
             // TODO: this message should be processed again after app update, maybe future app version will understand it
@@ -214,6 +218,12 @@ class MessagesService(val selfUserId: UserId, val content: MessagesContentUpdate
       }
     }
   }
+
+  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, time: Instant = Instant.now()) =
+    content.updateMessage(msgId) { msg =>
+      if (msg.convId != convId || msg.userId != userId || msg.isSystemMessage) msg // can not recall this message
+      else msg.copy(msgType = Message.Type.RECALLED, editTime = time max msg.time)
+    }
 
   def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData] = {
     verbose(s"addTextMessage($convId, $content, $mentions)")

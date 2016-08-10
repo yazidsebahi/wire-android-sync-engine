@@ -203,7 +203,14 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     _ <- sync.postDeleted(convId, id)
   } yield ()
 
-  def recallMessage(convId: ConvId, id: MessageId): Future[Unit] = ???
+  def recallMessage(convId: ConvId, id: MessageId): Future[Option[MessageData]] =
+    messages.recallMessage(convId, id, users.selfUserId) flatMap {
+      case Some(msg) =>
+        sync.postRecalled(convId, id) map { _ => Some(msg) }
+      case None =>
+        warn(s"could not recall message $convId, $id")
+        Future successful None
+    }
 
   private def updateLastRead(msg: MessageData) = updateConversationLastRead(msg.convId, msg.time)
 
