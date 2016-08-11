@@ -27,6 +27,7 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.Mime
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.Event.EventDecoder
 import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
@@ -48,6 +49,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.util.Try
 
 class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
   import Threading.Implicits.Background
@@ -90,7 +92,20 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   def events(resource: String) = {
     val json = readResource(resource)
-    JsonDecoder.array[Event](json.getJSONArray("events")).collect { case me: MessageEvent => me }
+    val arr = json.getJSONArray("events")
+    Seq.tabulate(arr.length()) { i =>
+      import JsonDecoder._
+      implicit val js = arr.getJSONObject(i)
+
+      lazy val data = if (js.has("data") && !js.isNull("data")) Try(js.getJSONObject("data")).toOption else None
+      lazy val id = data.flatMap(decodeOptUid('nonce)(_)).getOrElse(Uid())
+
+      // test data contains old events that are no longer supported, but we can convert them to generic messages
+      decodeString('type) match {
+        case "conversation.message-add" => textMessageEvent(id, 'conversation, 'time, 'from, decodeString('content)(data.get))
+        case _ => EventDecoder(js)
+      }
+    } .collect { case me: MessageEvent => me }
   }
 
   def processEventsFromJson(resource: String) = {
@@ -112,12 +127,17 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     lazy val convId = conv.id
 
     scenario("Process add message event") {
-      val event = MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), UserId(), "message").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), conv.remoteId, new Date(), UserId(), "message").withCurrentLocalTime()
 
       Await.ready(messages.processEvents(conv, Seq(event)), timeout)
 
       withDelay {
-        listMessages(convId) shouldEqual List(MessageData(MessageId(event.id), convId, event.eventId, Message.Type.TEXT, event.from, MessageData.textContent("message"), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT, firstMessage = true))
+        listMessages(convId) should have size 1
+        listMessages(convId).head shouldEqual MessageData(
+          MessageId(event.id), convId, EventId.Zero, Message.Type.TEXT, event.from, MessageData.textContent("message"),
+          time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT, firstMessage = true,
+          protos = Seq(event.asInstanceOf[GenericMessageEvent].content)
+        )
       }
     }
 
@@ -224,8 +244,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         case (c, m) => c shouldEqual m
       }
       current should have size 59
-      current.mkString(",") shouldEqual messages.mkString(",")
-      current shouldEqual messages
     }
 
     scenario("Process missed call event") {
@@ -269,13 +287,11 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("Add local message at the end") {
       val conv = addGroup()
-      val event = MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), UserId(), "message")
+      val event = textMessageEvent(Uid(), conv.remoteId, new Date(), UserId(), "message")
       Await.result(messages.processEvents(conv, Seq(event.withCurrentLocalTime())), timeout)
       awaitUi(100.millis)
       val msg = Await.result(messages.addTextMessage(conv.id, "local message"), timeout)
-
       lastMessage(conv.id) shouldEqual Some(msg)
-      msg.source shouldEqual EventId.local(2)
       listMessages(conv.id).map(_.contentString) shouldEqual List("message", "local message")
     }
 
@@ -293,11 +309,11 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("Move local message up in history when new event is received") {
       val conv = addGroup()
-      Await.ready(messages.processEvents(conv, Seq(MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), UserId(), "message 1").withCurrentLocalTime())), timeout)
+      Await.ready(messages.processEvents(conv, Seq(textMessageEvent(Uid(), conv.remoteId, new Date(), UserId(), "message 1").withCurrentLocalTime())), timeout)
       Await.ready(messages.addTextMessage(conv.id, "local message"), timeout)
       val time = System.currentTimeMillis()
-      Await.ready(messages.processEvents(conv, Seq(MessageAddEvent(Uid(), conv.remoteId, EventId(2), new Date(time + 2), UserId(), "message 2").withCurrentLocalTime())), timeout)
-      Await.ready(messages.processEvents(conv, Seq(MessageAddEvent(Uid(), conv.remoteId, EventId(3), new Date(time + 3), UserId(), "message 3").withCurrentLocalTime())), timeout)
+      Await.ready(messages.processEvents(conv, Seq(textMessageEvent(Uid(), conv.remoteId, new Date(time + 2), UserId(), "message 2").withCurrentLocalTime())), timeout)
+      Await.ready(messages.processEvents(conv, Seq(textMessageEvent(Uid(), conv.remoteId, new Date(time + 3), UserId(), "message 3").withCurrentLocalTime())), timeout)
 
       awaitUi(100.millis)
       listMessages(conv.id).map(_.contentString) shouldEqual List("message 1", "local message", "message 2", "message 3")
@@ -402,8 +418,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     def addMessage(content: String) = {
       val conv = addGroup()
-      val eventId = EventId(1)
-      val event = MessageAddEvent(Uid(), RConvId(conv.id.str), eventId, new Date, UserId(), content)
+      val event = textMessageEvent(Uid(), RConvId(conv.id.str), new Date, UserId(), content)
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
 
@@ -412,7 +427,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         msgs should have size 1
         val m = msgs.head
         m.convId shouldEqual conv.id
-        m.source shouldEqual eventId
         m
       }
     }

@@ -114,8 +114,7 @@ case class MessageData(id: MessageId,
   }
 
   override def toString: String =
-    if (ZmsVersion.DEBUG) super.toString
-    else s"MessageData($id, $convId, $source, $msgType, $userId, $content, protos len: ${protos.length}, $state, $time)"
+    s"MessageData($id, $convId, $source, $msgType, $userId, $content, protos len: ${protos.length}, $state, $time)"
 }
 
 case class MessageContent(

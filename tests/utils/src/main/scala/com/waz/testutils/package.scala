@@ -17,6 +17,8 @@
  */
 package com.waz
 
+import java.util.Date
+
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
@@ -28,8 +30,8 @@ import com.waz.api.impl._
 import com.waz.api.{CoreList, IConversation}
 import com.waz.cache.CacheEntryData
 import com.waz.content.{Mime, MsgCursor}
-import com.waz.model.nano.Messages.GenericMessage
-import com.waz.model.{Contact, MessageData, NameSource, PhoneNumber}
+import com.waz.model.GenericContent.Text
+import com.waz.model.{otr => _, _}
 import com.waz.service.ContactsService
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
@@ -260,4 +262,7 @@ package object testutils {
   }
 
   def randomPhoneNumber = PhoneNumber("+0" + (Random.nextInt(9) + 1).toString + Array.fill(13)(Random.nextInt(10)).mkString)
+
+  def textMessageEvent(id: Uid, conv: RConvId, time: Date, from: UserId, text: String) =
+    GenericMessageEvent(id, conv, time, from, GenericMessage(id, Text(text)))
 }

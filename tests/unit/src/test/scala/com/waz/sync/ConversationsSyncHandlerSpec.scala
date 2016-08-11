@@ -25,11 +25,12 @@ import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model.{MessageAddEvent, _}
+import com.waz.model._
 import com.waz.service.conversation.ConversationsService
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.sync.client._
+import com.waz.testutils._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging, _}
 import com.waz.threading.{CancellableFuture, Threading}
@@ -213,6 +214,6 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
     val startSeq = start.fold(1L)(_.sequence max 1)
     val endSeq = maxSeq min end.fold(maxSeq)(_.sequence) min size.fold(maxSeq)(_ + startSeq - 1)
     info(s"generateEvents($start, $end, $size) - generating from: $startSeq to: $endSeq")
-    Some(for (i <- startSeq to endSeq) yield MessageAddEvent(Uid(i, i), convId, EventId(i, i.toString), new Date, UserId(i.toString), i.toString)) // generated messages have to be consistent (expecially uid and userId)
+    Some(for (i <- startSeq to endSeq) yield textMessageEvent(Uid(i, i), convId, new Date(i * 1000), UserId(i.toString), i.toString)) // generated messages have to be consistent (expecially uid and userId)
   }
 }

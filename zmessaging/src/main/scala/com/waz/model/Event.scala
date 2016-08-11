@@ -124,9 +124,6 @@ case class CreateConversationEvent(id: Uid, convId: RConvId, time: Date, from: U
 }
 case class RenameConversationEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, name: String) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
 
-@deprecated("this was used for unencrypted messages, we no longer want to support it", "77")
-case class MessageAddEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String) extends MessageEvent with UnarchivingEvent
-
 case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent {
   override val eventId: EventId = EventId.Zero
 }
@@ -378,7 +375,6 @@ object ConversationEvent {
       decodeString('type) match {
         case "conversation.create" => CreateConversationEvent(id, 'conversation, 'time, 'from, JsonDecoder[ConversationResponse]('data))
         case "conversation.rename" => RenameConversationEvent(id, 'conversation, 'id, 'time, 'from, decodeString('name)(data.get))
-        case "conversation.message-add" => MessageAddEvent(id, 'conversation, 'id, 'time, 'from, decodeString('content)(data.get))
         case "conversation.member-join" => MemberJoinEvent(id, 'conversation, 'id, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-leave" => MemberLeaveEvent(id, 'conversation, 'id, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-update" => MemberUpdateEvent(id, 'conversation, 'time, 'from, ConversationState.Decoder(data.get))

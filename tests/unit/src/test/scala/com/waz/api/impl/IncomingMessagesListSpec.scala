@@ -53,7 +53,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
   feature("Incoming events") {
 
     scenario("Add freshly received message to incoming messages list") {
-      val event = MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), "with local time").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), conv.remoteId, new Date, UserId(), "with local time").withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       withDelay {
         val msgs = incoming
@@ -79,12 +79,12 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Don't add messages without local time") {
-      val event = MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), "no local time")
+      val event = textMessageEvent(Uid(), conv.remoteId, new Date, UserId(), "no local time")
       incoming should have size 2
     }
 
     scenario("Don't add messages from muted conversations") {
-      val event = MessageAddEvent(Uid(), mutedConv.remoteId, EventId(1), new Date, UserId(), "with local time").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), mutedConv.remoteId, new Date, UserId(), "with local time").withCurrentLocalTime()
       service.dispatch(event)
       awaitUi(200.millis)
       incoming should have size 2
@@ -100,7 +100,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Add more messages to conversation with connect request") {
-      val event = MessageAddEvent(Uid(), conv1.remoteId, EventId(2), new Date, UserId(), "first").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), conv1.remoteId, new Date, UserId(), "first").withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       withDelay {
         val msgs = incoming
@@ -110,7 +110,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
         msgs.last.firstMessage shouldEqual true
       }
 
-      val event1 = MessageAddEvent(Uid(), conv1.remoteId, EventId(3), new Date, UserId(), "second").withCurrentLocalTime()
+      val event1 = textMessageEvent(Uid(), conv1.remoteId, new Date, UserId(), "second").withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event1) }
 
       withDelay {

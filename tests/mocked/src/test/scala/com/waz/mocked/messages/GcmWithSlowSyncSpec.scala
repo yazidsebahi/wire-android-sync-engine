@@ -26,6 +26,7 @@ import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.sync.client.PushNotification
 import com.waz.testutils.Implicits._
+import com.waz.testutils._
 import com.waz.utils.returning
 import org.scalatest.{FeatureSpec, Matchers}
 
@@ -67,7 +68,7 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
       withDelay {
         zmessaging.websocket.connected.currentValue shouldEqual Some(false)
       }
-      val newMsg = MessageAddEvent(Uid(), convId, EventId(9), new Date, userId, "meep")
+      val newMsg = textMessageEvent(Uid(), convId, new Date, userId, "meep")
       pushMessageToAppInBackground(newMsg)
 
       forceSlowSync()
@@ -90,7 +91,7 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
       withDelay {
         zmessaging.websocket.connected.currentValue shouldEqual Some(false)
       }
-      val newMsg = readNewMessageOnOtherDevice(EventId(10))
+      val newMsg = readNewMessageOnOtherDevice()
       pushMessageToAppInBackground(newMsg)
 
       forceSlowSync()
@@ -108,14 +109,14 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
 
     def markAllMessagesAsRead(msgs: MessagesList): Unit = msgs.get(msgs.size - 1)
 
-    def readNewMessageOnOtherDevice(eventId: EventId): MessageAddEvent = {
-      returning(MessageAddEvent(Uid(), convId, eventId, SystemTimeline.next(), userId, "meep meep")) { msgAdd =>
+    def readNewMessageOnOtherDevice() = {
+      returning(textMessageEvent(Uid(), convId, SystemTimeline.next(), userId, "meep meep")) { msgAdd =>
         addEvent(msgAdd)
-        markAsRead(convId, eventId)
+        markAsRead(convId)
       }
     }
 
-    def pushMessageToAppInBackground(msg: MessageAddEvent): Unit = {
+    def pushMessageToAppInBackground(msg: MessageEvent): Unit = {
       pushGcm(PushNotification(Uid(), Seq(msg), transient = false), selfUserId)
       awaitUi(1.second)
     }

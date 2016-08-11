@@ -30,6 +30,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.Timeouts
 import com.waz.service.push.NotificationService.Notification
+import com.waz.testutils._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
 import com.waz.utils.events.EventContext
@@ -128,7 +129,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     }
 
     scenario("Receiving the same message twice") {
-      val ev1 = MessageAddEvent(Uid(), groupConv.remoteId, EventId(2), new Date, UserId(), "meep")
+      val ev1 = textMessageEvent(Uid(), groupConv.remoteId, new Date, UserId(), "meep")
       val ev2 = ev1.copy()
 
       Await.ready(zms.dispatch(ev1, ev2), 5.seconds)
@@ -143,7 +144,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     }
 
     scenario("Don't show duplicate notification even if notifications were cleared") {
-      val ev = MessageAddEvent(Uid(), groupConv.remoteId, EventId(2), new Date, UserId(), "meep")
+      val ev = textMessageEvent(Uid(), groupConv.remoteId, new Date, UserId(), "meep")
 
       zms.dispatch(ev)
 
@@ -159,7 +160,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     }
 
     scenario("Ignore events from self user") {
-      val ev = MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date, selfUserId, "meep")
+      val ev = textMessageEvent(Uid(), groupConv.remoteId, new Date, selfUserId, "meep")
 
       Await.ready(zms.dispatch(ev), 5.seconds)
       awaitUi(200.millis)
@@ -170,11 +171,11 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Remove older notifications when lastRead is updated") {
       val time = System.currentTimeMillis()
       zms.dispatch(
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time), UserId(), "meep"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 10), UserId(), "meep1"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 20), UserId(), "meep2"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 30), UserId(), "meep3"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 40), UserId(), "meep4")
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time), UserId(), "meep"),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 10), UserId(), "meep1"),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 20), UserId(), "meep2"),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 30), UserId(), "meep3"),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 40), UserId(), "meep4")
       )
 
       withDelay {
@@ -192,7 +193,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
   feature("List notifications") {
 
     scenario("List notifications with local conversation ids") {
-      Await.ready(zms.dispatch(MessageAddEvent(Uid(), groupConv.remoteId, EventId(2), new Date, UserId(), "test msg")), 5.seconds)
+      Await.ready(zms.dispatch(textMessageEvent(Uid(), groupConv.remoteId, new Date, UserId(), "test msg")), 5.seconds)
 
       val groupId = groupConv.id
 

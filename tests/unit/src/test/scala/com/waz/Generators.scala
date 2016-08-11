@@ -59,7 +59,6 @@ object Generators {
     oneOf[Event](
       resultOf(UserConnectionEvent.apply _),
       resultOf(ContactJoinEvent),
-      resultOf(MessageAddEvent),
       resultOf(MemberJoinEvent),
       resultOf(MemberLeaveEvent),
       resultOf(RenameConversationEvent),

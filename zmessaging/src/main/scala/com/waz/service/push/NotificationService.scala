@@ -72,7 +72,6 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
         case RenameConversationEvent(_, convId, eventId, time, userId, name) => NotificationData(s"$RENAME-$convId-$eventId", "", convId, userId, RENAME, time.instant)
         case MissedCallEvent(_, convId, eventId, time, userId) => NotificationData(s"$MISSED_CALL-$convId-$eventId", "", convId, userId, MISSED_CALL, time.instant)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Text(msg, mentions, _))) => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
-        case MessageAddEvent(id, convId, eventId, time, userId, msg)                                     => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Knock(hot))) => NotificationData(s"$KNOCK-$convId-$id-$hot", "", convId, userId, KNOCK, time.instant, hotKnock = hot)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Like)) => NotificationData(s"$LIKE-$convId-$id-$userId", "", convId, userId, LIKE, time.instant, referencedMessage = Some(MessageId(id.str)))
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Location(_, _, _, _))) => NotificationData(s"$LOCATION-$convId-$id", "", convId, userId, LOCATION, time.instant)

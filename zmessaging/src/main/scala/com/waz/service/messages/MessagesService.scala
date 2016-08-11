@@ -125,9 +125,6 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
     val convId = conv.id
 
     event match {
-      case MessageAddEvent(_, _, eventId, time, from, text) =>
-        val (tpe, ct) = MessageData.messageContent(text)
-        MessageData(id, convId, eventId, tpe, from, ct, time = time.instant, localTime = event.localTime.instant)
       case ConnectRequestEvent(_, _, eventId, time, from, text, recipient, name, email) =>
         MessageData(id, convId, eventId, Message.Type.CONNECT_REQUEST, from, MessageData.textContent(text), recipient = Some(recipient), email = email, name = Some(name), time = time.instant, localTime = event.localTime.instant)
       case RenameConversationEvent(_, _, eventId, time, from, name) =>

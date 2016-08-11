@@ -24,7 +24,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.testutils.{EmptySyncService, MockAccountService, MockZMessaging}
+import com.waz.testutils._
 import com.waz.threading.CancellableFuture
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.znet.ZNetClient.EmptyClient
@@ -337,7 +337,7 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   def hotKnock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(true))))
   def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock(false))))
 
-  def sendTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, eventId(old), if (old) date(old) else date(old), user1.id, "hello"))
+  def sendTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, "hello"))
   def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
 
   def sendImageMessage[T](old: Boolean = false): Unit =

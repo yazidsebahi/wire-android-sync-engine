@@ -25,6 +25,7 @@ import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Cleared, LastRead, LikingAction}
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
@@ -185,7 +186,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     ev
   }
 
-  def markAsRead(convId: RConvId, eventId: EventId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): GenericMessageEvent = {
+  def markAsRead(convId: RConvId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): GenericMessageEvent = {
     val t = time.next()
     returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), t, selfUserId, GenericMessage(Uid(), LastRead(convId, t.instant)))) { lastRead =>
       addEvent(lastRead)
@@ -248,7 +249,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     val current = events.getOrElse(convId, Nil)
     val time = timeline.getOrElse(if (current.isEmpty) DefaultTimeline else ArtificialTimeline(Instant.ofEpochMilli(current.map(_.time).max.getTime)))
     val es = for (i <- 1 to count) yield {
-      MessageAddEvent(Uid(), convId, nextEventId(convId), time.next(), from, s"$msg $i")
+      GenericMessageEvent(Uid(), convId, time.next(), from, TextMessage(s"$msg $i", Map.empty))
     }
     events(convId) = current ++: es
     addNotification(PushNotification(Uid(), es))
