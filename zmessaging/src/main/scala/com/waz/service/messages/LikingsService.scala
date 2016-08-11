@@ -53,5 +53,6 @@ object LikingsService {
 
 case class MessageAndLikes(message: MessageData, likes: IndexedSeq[UserId], likedBySelf: Boolean)
 object MessageAndLikes extends ((MessageData, IndexedSeq[UserId], Boolean) => MessageAndLikes) {
-  val Empty = MessageAndLikes(MessageData.Empty, Vector.empty, false)
+  val Empty = MessageAndLikes(MessageData.Empty, Vector.empty, likedBySelf = false)
+  val Deleted = MessageAndLikes(MessageData.Deleted, Vector.empty, likedBySelf = false)
 }

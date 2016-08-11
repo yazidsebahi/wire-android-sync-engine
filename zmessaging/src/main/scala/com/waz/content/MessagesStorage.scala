@@ -296,6 +296,7 @@ class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, liki
 
   val onUpdate = EventStream[MessageId]() // TODO: use batching, maybe report new message data instead of just id
 
+  messages.onDeleted { ids => ids foreach { onUpdate ! _ } }
   messages.messageChanged { ms => ms foreach { m => onUpdate ! m.id }}
   likings.onChanged { _ foreach { l => onUpdate ! l.message } }
 

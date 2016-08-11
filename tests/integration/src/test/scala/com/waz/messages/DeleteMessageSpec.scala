@@ -24,6 +24,7 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
+import scala.concurrent.duration._
 
 class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ThreadActorSpec { test =>
 
@@ -58,8 +59,12 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     }
 
     scenario("Delete received message") {
-      msgs.getLastMessage.delete()
-      withDelay(msgs should have size 1)
+      val msg = msgs.getLastMessage
+      msg.delete()
+      withDelay {
+        msgs should have size 1
+        msg.isDeleted shouldEqual true
+      }
     }
 
     scenario("Receive another message") {
@@ -68,12 +73,24 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     }
 
     scenario("Delete message on remote device") {
-      secondClient ? DeleteMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
-      withDelay(msgs should have size 1)
+      val msg = msgs.getLastMessage
+      secondClient ? DeleteMessage(conv.data.remoteId, msg.data.id) should eventually(be(Successful))
+      withDelay {
+        msgs should have size 1
+        msg.isDeleted shouldEqual true
+      }
     }
   }
 
   feature("Recall message") {
+
+    def checkLastMessageIsRecalled(msg: Message) = withDelay {
+      msg.isDeleted shouldEqual true
+      val last = msgs.getLastMessage
+      last.getMessageType shouldEqual Message.Type.RECALLED
+      last.getEditTime.isAfter(msg.getTime) shouldEqual true
+      last.getBody shouldBe empty
+    }
 
     scenario("Send new text message") {
       conv.sendMessage(new Text("test msg to recall"))
@@ -86,11 +103,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     scenario("Recall recently sent message") {
       val msg = msgs.getLastMessage
       msg.recall()
-      withDelay {
-        msg.getMessageType shouldEqual Message.Type.RECALLED
-        msg.getEditTime.isAfter(msg.getTime) shouldEqual true
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.RECALLED
-      }
+      checkLastMessageIsRecalled(msg)
     }
 
     scenario("Send another message") {
@@ -104,10 +117,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     scenario("Receive recall from other device") {
       val msg = msgs.getLastMessage
       secondClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
-      withDelay {
-        msg.getMessageType shouldEqual Message.Type.RECALLED
-        msg.getEditTime.isAfter(msg.getTime) shouldEqual true
-      }
+      checkLastMessageIsRecalled(msg)
     }
 
     scenario("Receive message from other user") {
@@ -118,9 +128,55 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     scenario("Receive recall rom other user") {
       val msg = msgs.getLastMessage
       otherUserClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
+      checkLastMessageIsRecalled(msg)
+    }
+
+    scenario("Send and recall link message") {
+      conv.sendMessage(new Text("http://wire.com"))
+      withDelay { msgs should have size 5 }
+      val msg = msgs.getLastMessage
+      msg.recall()
+      checkLastMessageIsRecalled(msg)
+
+      awaitUi(3.seconds)
+
+      checkLastMessageIsRecalled(msg)
+    }
+
+    scenario("Receive link message from other user") {
+      otherUserClient ? SendText(conv.data.remoteId, "http://wire.com") should eventually(be(Successful))
+      withDelay(msgs should have size 6)
+    }
+
+    scenario("Receive recall for link message") {
+      val msg = msgs.getLastMessage
+      otherUserClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
       withDelay {
-        msg.getMessageType shouldEqual Message.Type.RECALLED
-        msg.getEditTime.isAfter(msg.getTime) shouldEqual true
+        msg.isDeleted shouldEqual true
+      }
+      awaitUi(3.seconds)
+
+      checkLastMessageIsRecalled(msg)
+    }
+
+    scenario("Delete system message for recall") {
+      val msg = msgs.getLastMessage
+      msg.delete()
+      withDelay {
+        msgs should have size 5
+        msg.isDeleted shouldEqual true
+      }
+    }
+
+    scenario("Delete system message for recall on second device") {
+      val msg = msgs.getLastMessage
+      msg.getMessageType shouldEqual Message.Type.RECALLED
+
+      secondClient ? DeleteMessage(conv.data.remoteId, msg.data.id) should eventually(be(Successful))
+
+      withDelay {
+        msgs should have size 4
+        msg.isDeleted shouldEqual true
       }
     }
   }

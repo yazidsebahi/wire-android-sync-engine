@@ -67,10 +67,10 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
         Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
     }
 
-  def postRecalled(convId: ConvId, msgId: MessageId): Future[SyncResult] =
+  def postRecalled(convId: ConvId, msgId: MessageId, recalled: MessageId): Future[SyncResult] =
     convs.convById(convId) flatMap {
       case Some(conv) =>
-        val msg = GenericMessage(Uid(), Proto.MsgRecall(msgId))
+        val msg = GenericMessage(msgId, Proto.MsgRecall(recalled))
         otrSync.postOtrMessage(conv.id, conv.remoteId, msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
       case None =>
         Future successful SyncResult(ErrorResponse.internalError("conversation not found"))

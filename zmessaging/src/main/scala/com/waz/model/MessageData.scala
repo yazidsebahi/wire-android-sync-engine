@@ -107,6 +107,9 @@ case class MessageData(id: MessageId,
     case _ => false
   }
 
+  def canRecall(convId: ConvId, userId: UserId) =
+    msgType != RECALLED && this.convId == convId && this.userId == userId && !isSystemMessage
+
   def isAssetMessage = MessageData.IsAsset(msgType)
 
   def hasSameContentType(m: MessageData) = {
@@ -194,6 +197,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
 
 object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant) => MessageData) {
   val Empty = new MessageData(MessageId(""), ConvId(""), EventId.Zero, Message.Type.UNKNOWN, UserId(""))
+  val Deleted = new MessageData(MessageId(""), ConvId(""), EventId.Zero, Message.Type.UNKNOWN, UserId(""), state = Message.Status.DELETED)
   val UnknownInstant = Instant.EPOCH
 
   type MessageState = Message.Status

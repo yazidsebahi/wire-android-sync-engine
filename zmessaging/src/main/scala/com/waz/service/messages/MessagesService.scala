@@ -71,7 +71,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
     val filtered = events.filter(e => conv.cleared.isBefore(e.time.instant))
 
-    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, GenericMessage(_, MsgRecall(ref))) => (time.instant, from, ref) }
+    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(ref))) => (msg, from, time.instant) }
 
     for {
       as    <- updateAssets(filtered)
@@ -80,7 +80,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
-      _     <- Future.traverse(recalls) { case (time, user, msg) => recallMessage(conv.id, msg, user, time) }
+      _     <- Future.traverse(recalls) { case (GenericMessage(id, MsgRecall(ref)), user, time) => recallMessage(conv.id, ref, user, MessageId(id.str), time) }
     } yield res
   }
 
@@ -216,10 +216,13 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
     }
   }
 
-  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, time: Instant = Instant.now()) =
-    content.updateMessage(msgId) { msg =>
-      if (msg.convId != convId || msg.userId != userId || msg.isSystemMessage) msg // can not recall this message
-      else msg.copy(msgType = Message.Type.RECALLED, editTime = time max msg.time)
+  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMessageId: MessageId = MessageId(), time: Instant = Instant.now()) =
+    content.getMessage(msgId) flatMap {
+      case Some(msg) if msg.canRecall(convId, userId) =>
+        content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
+          content.addMessage(MessageData(systemMessageId, convId, EventId.Zero, Message.Type.RECALLED, editTime = time max msg.time, userId = userId, protos = Seq(GenericMessage(systemMessageId, MsgRecall(msgId)))))
+        }
+      case _ => Future successful None
     }
 
   def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData] = {

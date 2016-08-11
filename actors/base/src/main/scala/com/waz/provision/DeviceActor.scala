@@ -271,8 +271,13 @@ class DeviceActor(val deviceName: String,
       }
 
     case DeleteMessage(convId, msgId) =>
-      withConv(convId) { conv =>
-        zmessaging.convsUi.deleteMessage(conv.id, msgId)
+      getConv(convId) flatMap  { conv =>
+       zmessaging.messagesStorage.getMessage(msgId) flatMap {
+          case Some(msg) =>
+            zmessaging.convsUi.deleteMessage(conv.id, msgId) map { _ => Successful }
+          case None =>
+            Future successful Failed("No message found with given id")
+        }
       }
 
     case RecallMessage(convId, msgId) =>
