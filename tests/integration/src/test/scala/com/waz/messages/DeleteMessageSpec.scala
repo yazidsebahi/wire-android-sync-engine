@@ -90,6 +90,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
       last.getMessageType shouldEqual Message.Type.RECALLED
       last.getEditTime.isAfter(msg.getTime) shouldEqual true
       last.getBody shouldBe empty
+      last.getMessageStatus shouldEqual Message.Status.SENT
     }
 
     scenario("Send new text message") {

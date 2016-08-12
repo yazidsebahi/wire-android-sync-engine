@@ -71,7 +71,11 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     convs.convById(convId) flatMap {
       case Some(conv) =>
         val msg = GenericMessage(msgId, Proto.MsgRecall(recalled))
-        otrSync.postOtrMessage(conv.id, conv.remoteId, msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
+        otrSync.postOtrMessage(conv.id, conv.remoteId, msg) flatMap {
+          case Left(e) => Future successful SyncResult(e)
+          case Right(time) =>
+            msgContent.updateMessage(msgId)(_.copy(editTime = time.instant, state = Message.Status.SENT)) map { _ => SyncResult.Success }
+        }
       case None =>
         Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
     }

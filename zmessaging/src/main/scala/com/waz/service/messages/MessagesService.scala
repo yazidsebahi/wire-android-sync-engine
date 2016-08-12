@@ -80,7 +80,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
-      _     <- Future.traverse(recalls) { case (GenericMessage(id, MsgRecall(ref)), user, time) => recallMessage(conv.id, ref, user, MessageId(id.str), time) }
+      _     <- Future.traverse(recalls) { case (GenericMessage(id, MsgRecall(ref)), user, time) => recallMessage(conv.id, ref, user, MessageId(id.str), time, Message.Status.SENT) }
     } yield res
   }
 
@@ -216,11 +216,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
     }
   }
 
-  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMessageId: MessageId = MessageId(), time: Instant = Instant.now()) =
+  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMessageId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.canRecall(convId, userId) =>
         content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
-          content.addMessage(MessageData(systemMessageId, convId, EventId.Zero, Message.Type.RECALLED, editTime = time max msg.time, userId = userId, protos = Seq(GenericMessage(systemMessageId, MsgRecall(msgId)))))
+          content.addMessage(MessageData(systemMessageId, convId, EventId.Zero, Message.Type.RECALLED, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMessageId, MsgRecall(msgId)))))
         }
       case _ => Future successful None
     }
