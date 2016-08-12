@@ -169,6 +169,8 @@ object ActorMessage {
    */
   case class SendText(remoteId: RConvId, msg: String) extends ActorMessage
 
+  case class UpdateText(msgId: MessageId, msg: String) extends ActorMessage
+
   /**
    * Have a device send an image to a conversation
    * @param remoteId The (remote) conversation id. Note on [[RConvId]]: @see SendText

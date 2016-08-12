@@ -270,6 +270,16 @@ class DeviceActor(val deviceName: String,
         Successful
       }
 
+    case UpdateText(msgId, text) =>
+      zmessaging.messagesStorage.getMessage(msgId) flatMap {
+        case Some(msg) if msg.userId == zmessaging.selfUserId =>
+          zmessaging.convsUi.updateMessage(msg.convId, msgId, new MessageContent.Text(text)) map { _ => Successful }
+        case Some(_) =>
+          Future successful Failed("Can not update messages from other user")
+        case None =>
+          Future successful Failed("No message found with given id")
+      }
+
     case DeleteMessage(convId, msgId) =>
       getConv(convId) flatMap  { conv =>
        zmessaging.messagesStorage.getMessage(msgId) flatMap {

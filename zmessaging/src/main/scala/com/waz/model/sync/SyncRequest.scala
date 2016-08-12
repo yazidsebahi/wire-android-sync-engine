@@ -140,6 +140,7 @@ object SyncRequest {
 
   case class PostOpenGraphMeta(convId: ConvId, messageId: MessageId, editTime: Instant) extends RequestForConversation(Cmd.PostOpenGraphMeta) {
     override val mergeKey = (cmd, convId, messageId)
+    override def merge(req: SyncRequest) = mergeHelper[PostOpenGraphMeta](req)(r => Merged(PostOpenGraphMeta(convId, messageId, editTime max r.editTime)))
   }
 
   case class PostDeleted(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostDeleted) {
@@ -341,6 +342,7 @@ object SyncRequest {
         case PostRecalled(_, msg, recalled)   =>
           putId("message", msg)
           putId("recalled", recalled)
+
         case PostConnectionStatus(_, status)  => status foreach { status => o.put("status", status.code) }
         case PostConvJoin(_, users)           => o.put("users", arrString(users.toSeq map (_.str)))
         case PostConvLeave(_, user)           => putId("user", user)

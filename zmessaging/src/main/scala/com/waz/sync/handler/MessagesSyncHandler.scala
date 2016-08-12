@@ -28,6 +28,7 @@ import com.waz.content.{MessagesStorage, Mime}
 import com.waz.model.AssetData.UploadKey
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.GenericContent.Asset.ImageMetaData
+import com.waz.model.GenericContent.MsgEdit
 import com.waz.model._
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater, ConversationsService}
@@ -140,15 +141,33 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
         }
       }
 
+    def postTextMessage() = {
+      val (gm, isEdit) = msg.protos.lastOption match {
+        case Some(m @ GenericMessage(id, MsgEdit(ref, text))) => (m, true) // FIXME: what if original message was not yet sent, we should just send a TextMessage with new content, how do we know if original was sent ?
+        case _ => (GenericMessage.TextMessage(msg), false)
+      }
+
+      otrSync.postOtrMessage(conv, gm) flatMap {
+        case Right(time) if isEdit =>
+          // delete original message and create new message with edited content
+          for {
+            _ <- msgContent.deleteOnUserRequest(Seq(msg.id))
+            msg <- msgContent.messagesStorage.insert(msg.copy(id = MessageId(gm.messageId), editTime = time.instant, state = Message.Status.SENT))
+          } yield Right(msg)
+
+        case Right(time) => Future successful Right(msg.copy(time = time.instant))
+        case Left(err) => Future successful Left(err)
+      }
+    }
 
     def post: ErrorOr[Instant] = msg.msgType match {
       case Message.Type.ASSET       => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
       case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
       case Message.Type.KNOCK       => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
-      case Message.Type.TEXT        => otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)).map(_.map(_.instant))
+      case Message.Type.TEXT        => postTextMessage().map(_.map(_.time))
       case Message.Type.RICH_MEDIA  =>
-        otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)) flatMap {
-          case Right(time) => sync.postOpenGraphData(conv.id, msg.id, msg.editTime) map { _ => Right(time.instant) }
+        postTextMessage() flatMap {
+          case Right(m) => sync.postOpenGraphData(conv.id, m.id, m.editTime) map { _ => Right(m.time) }
           case Left(err) => Future successful Left(err)
         }
       case tpe =>

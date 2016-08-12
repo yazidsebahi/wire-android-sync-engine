@@ -194,7 +194,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
       if (msg.isLocal && !updated.isLocal && lastLocalMessageByType.get(msg.msgType).exists(_.id == msg.id))
         lastLocalMessageByType.remove(msg.msgType)
       else if (updated.isLocal && !msg.isLocal)
-        error(s"non-local message was updated to local: $msg -> $updated")
+        debug(s"non-local message was updated to local: $msg -> $updated")
     }
 
     if (updates.nonEmpty) {

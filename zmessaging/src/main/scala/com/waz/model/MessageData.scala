@@ -28,7 +28,8 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location}
+import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location, MsgEdit, Text}
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
 import com.waz.service.conversation.ConversationsService
@@ -62,7 +63,11 @@ case class MessageData(id: MessageId,
     else content.drop(index).headOption.getOrElse(MessageContent.Empty)
   }
 
-  def contentString = content.map(_.content).mkString(" ")
+  lazy val contentString = protos.lastOption match {
+    case Some(TextMessage(ct, _, _)) => ct
+    case _ if msgType == api.Message.Type.RICH_MEDIA => content.map(_.content).mkString(" ")
+    case _ => content.headOption.fold("")(_.content)
+  }
 
   def assetId = AssetId(id.str)
 

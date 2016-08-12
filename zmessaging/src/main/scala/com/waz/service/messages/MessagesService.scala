@@ -71,7 +71,9 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
     val filtered = events.filter(e => conv.cleared.isBefore(e.time.instant))
 
-    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(ref))) => (msg, from, time.instant) }
+    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
+
+    val edits = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
 
     for {
       as    <- updateAssets(filtered)
@@ -81,6 +83,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
       _     <- Future.traverse(recalls) { case (GenericMessage(id, MsgRecall(ref)), user, time) => recallMessage(conv.id, ref, user, MessageId(id.str), time, Message.Status.SENT) }
+      _     <- Future.traverse(edits) { case (gm @ GenericMessage(id, MsgEdit(ref, Text(text, mentions, _))), user, time) => processMessageEdit(conv.id, ref, user, MessageId(id.str), time, text, mentions, gm) }
     } yield res
   }
 
@@ -163,6 +166,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
           case Cleared(remoteId, timestamp) => MessageData.Empty
           case MsgDeleted(_, _) => MessageData.Empty
           case MsgRecall(_) => MessageData.Empty
+          case MsgEdit(_, _) => MessageData.Empty
           case _ =>
             error(s"unexpected generic message content: $msgContent")
             // TODO: this message should be processed again after app update, maybe future app version will understand it
@@ -226,6 +230,25 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
         }
       case _ => Future successful None
     }
+
+  def processMessageEdit(convId: ConvId, msgId: MessageId, userId: UserId, updatedId: MessageId, time: Instant, text: String, mentions: Map[UserId, String], gm: GenericMessage) = {
+    // FIXME: there will be a race condition if the same message is edited on two devices at the same time
+    // it could happen that we already deleted original message and posted different MsgEdit
+    content.getMessage(msgId) flatMap {
+      case Some(msg) if msg.userId == userId && msg.convId == convId =>
+        verbose(s"got edit event for msg: $msg")
+        content.deleteOnUserRequest(Seq(msg.id)) flatMap { _ =>
+          val (tpe, ct) = MessageData.messageContent(text, mentions)
+          content.addMessage(MessageData(updatedId, convId, tpe, userId, ct, Seq(gm), time = msg.time, localTime = msg.localTime, editTime = time))
+        }
+      case _ =>
+        // this could happen if original message was already deleted or edited
+        // FIXME: if message was previously edited then we should compare editTime and apply the earlier one
+        // but currently we have no way of knowing that, as we don't keep edit history
+        verbose(s"didn't find the original message for edit: $gm")
+        Future.successful(())
+    }
+  }
 
   def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData] = {
     verbose(s"addTextMessage($convId, $content, $mentions)")

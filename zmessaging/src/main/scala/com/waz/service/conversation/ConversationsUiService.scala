@@ -20,11 +20,12 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.MessageContent.Asset.ErrorHandler
+import com.waz.api.MessageContent.Text
 import com.waz.api.impl._
 import com.waz.api.{ImageAssetFactory, Message, NetworkMode}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Location
+import com.waz.model.GenericContent.{Location, MsgEdit}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service._
@@ -36,9 +37,11 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils._
+import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.language.higherKinds
 
 class ConversationsUiService(assets: AssetService, users: UserService, usersStorage: UsersStorage,
@@ -195,6 +198,22 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
       case _ =>
         error(s"sendMessage($content) not supported yet")
         Future.failed(new IllegalArgumentException(s"MessageContent: $content is not supported yet"))
+    }
+  }
+
+  def updateMessage(convId: ConvId, id: MessageId, content: Text): Future[Option[MessageData]] = {
+    verbose(s"updateMessage($convId, $id, $content")
+    messages.content.updateMessage(id) {
+      case m if m.convId == convId && m.userId == selfUserId =>
+        val (tpe, ct) = MessageData.messageContent(content.getContent, weblinkEnabled = true)
+        verbose(s"updated content: ${(tpe, ct)}")
+        m.copy(msgType = tpe, content = ct, protos = Seq(GenericMessage(Uid(), MsgEdit(id, GenericContent.Text(content.getContent)))), state = Message.Status.PENDING, editTime = (m.time max m.editTime).plus(1.millis) max Instant.now)
+      case m =>
+        warn(s"Can not update msg: $m")
+        m
+    } flatMap {
+      case Some(m) => sync.postMessage(m.id, m.convId) map { _ => Some(m) } // using PostMessage sync request to use the same logic for failures and retrying
+      case None => Future successful None
     }
   }
 

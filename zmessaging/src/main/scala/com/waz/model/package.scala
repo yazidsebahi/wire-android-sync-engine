@@ -82,6 +82,8 @@ package object model {
       def unapply(msg: GenericMessage): Option[(String, Map[UserId, String], Seq[LinkPreview])] = msg match {
         case GenericMessage(_, Text(content, mentions, links)) =>
           Some((content, mentions, links))
+        case GenericMessage(_, MsgEdit(_, Text(content, mentions, links))) =>
+          Some((content, mentions, links))
         case _ =>
           None
       }
