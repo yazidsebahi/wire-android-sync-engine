@@ -113,13 +113,10 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
     }
   })
 
-  def updateConversation(id: ConvId, convType: Option[ConversationType] = None, hidden: Option[Boolean] = None, muted: Option[Boolean] = None, archived: Option[Option[EventId]] = None) =
+  def updateConversation(id: ConvId, convType: Option[ConversationType] = None, hidden: Option[Boolean] = None) =
     storage.update(id, { conv =>
-      if (convType.forall(_ == conv.convType) && hidden.forall(_ == conv.hidden) && muted.forall(_ == conv.muted) && archived.forall(_ == conv.archived)) conv
-      else
-        conv.copy(
-          convType = convType.getOrElse(conv.convType), hidden = hidden.getOrElse(conv.hidden),
-          muted = muted.getOrElse(conv.muted), archived = archived.fold(conv.archived)(_.isDefined)) // TODO: use archive time
+      if (convType.forall(_ == conv.convType) && hidden.forall(_ == conv.hidden)) conv
+      else conv.copy(convType = convType.getOrElse(conv.convType), hidden = hidden.getOrElse(conv.hidden))
     })
 
   def hideConversation(id: ConvId) = updateConversationHidden(id, hidden = true)
