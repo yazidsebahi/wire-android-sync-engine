@@ -55,7 +55,7 @@ object UnarchivingEventProcessingStage {
   }
 
   private def shouldUnarchive(selfUserId: UserId, event: Event): Boolean = event match {
-    case MemberLeaveEvent(_, _, _, _, _, leaving) if leaving contains selfUserId => false
+    case MemberLeaveEvent(_, _, _, _, leaving) if leaving contains selfUserId => false
     case GenericMessageEvent(_, _, _, _, GenericMessage(_, content)) =>
       content match {
         case _: Text  => true

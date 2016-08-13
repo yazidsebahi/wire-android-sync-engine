@@ -116,7 +116,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   def getMessage(id: MessageId) = Await.result(zms.messagesStorage.getMessage(id), 5.seconds)
 
   feature("Post text message") {
-    def addMessage(): MessageData = addLocalMessage(MessageData(MessageId(), conv.id, EventId.local(1), Message.Type.TEXT, userId, MessageData.textContent("text"), time = Instant.now))
+    def addMessage(): MessageData = addLocalMessage(MessageData(MessageId(), conv.id, Message.Type.TEXT, userId, MessageData.textContent("text"), time = Instant.now))
 
     scenario("Post text successfully") {
       val msg = addMessage()
@@ -183,7 +183,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       val preview = data(0)
       val medium = data(1)
       val id = MessageId(asset.id.str)
-      val msg = addLocalMessage(MessageData(id, conv.id, EventId.local(1), Message.Type.ASSET, userId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
+      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
 
       (msg, asset, preview, medium)
     }

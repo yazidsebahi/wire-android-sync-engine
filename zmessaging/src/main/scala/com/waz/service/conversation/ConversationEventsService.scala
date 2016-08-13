@@ -57,12 +57,11 @@ class ConversationEventsService(push: PushService, convs: ConversationsContentUp
       users.withSelfUserFuture { selfUserId =>
         verbose(s"updateLastEvent($conv, $es)")
         val lastTime = es.maxBy(_.time).time
-        val lastEvent = Some(es.maxBy(_.eventId).eventId).filter(_ != EventId.Zero)
         val fromSelf = es.filter(_.from == selfUserId)
         val lastRead = if (fromSelf.isEmpty) None else Some(fromSelf.maxBy(_.time).time.instant)
 
         for {
-          _ <- convs.updateLastEvent(conv.id, lastTime.instant, lastEvent)
+          _ <- convs.updateLastEvent(conv.id, lastTime.instant)
           _ <- lastRead match {
             case None => Future successful None
             case Some(time) => convs.updateConversationLastRead(conv.id, time)

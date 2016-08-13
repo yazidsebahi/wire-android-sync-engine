@@ -89,6 +89,11 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     },
     Migration(70, 71) { implicit db =>
       db.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
+    },
+    Migration(71, 72) { implicit db =>
+      MessageDataMigration.v72(db)
+      ConversationDataMigration.v72(db)
+      ConversationMembersMigration.v72(db)
     }
   )
 
@@ -101,5 +106,5 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 71
+  val DbVersion = 72
 }

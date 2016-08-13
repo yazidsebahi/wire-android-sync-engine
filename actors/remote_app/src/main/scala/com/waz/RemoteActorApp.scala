@@ -80,37 +80,3 @@ object RemoteActorApp extends App {
   }
 }
 
-object JCE {
-
-  def removeCryptographyRestrictions() =
-    try {
-      /*
-       * JceSecurity.isRestricted = false;
-       * JceSecurity.defaultPolicy.perms.clear();
-       * JceSecurity.defaultPolicy.add(CryptoAllPermission.INSTANCE);
-       */
-      val jceSecurity = Class.forName("javax.crypto.JceSecurity")
-      val cryptoPermissions = Class.forName("javax.crypto.CryptoPermissions")
-      val cryptoAllPermission = Class.forName("javax.crypto.CryptoAllPermission")
-
-      val isRestrictedField = jceSecurity.getDeclaredField("isRestricted")
-      isRestrictedField.setAccessible(true)
-      isRestrictedField.set(null, false)
-
-      val defaultPolicyField = jceSecurity.getDeclaredField("defaultPolicy")
-      defaultPolicyField.setAccessible(true)
-      val defaultPolicy = defaultPolicyField.get(null).asInstanceOf[PermissionCollection]
-
-      val perms = cryptoPermissions.getDeclaredField("perms")
-      perms.setAccessible(true)
-      perms.get(defaultPolicy).asInstanceOf[java.util.Map[_,_]].clear()
-
-      val instance = cryptoAllPermission.getDeclaredField("INSTANCE")
-      instance.setAccessible(true)
-      defaultPolicy.add(instance.get(null).asInstanceOf[Permission])
-    } catch {
-      case e: Exception =>
-        println("Failed to remove cryptography restrictions")
-        e.printStackTrace()
-    }
-}

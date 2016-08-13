@@ -90,8 +90,8 @@ class BlockingSpec extends FeatureSpec with Matchers with ProvisionedApiSpec wit
 
     scenario("We should not receive any messages from blocked contact") {
       val lastMsg = MessageDataDao.last(ConvId(otherUserId.str))
-      val lastEventId = ConversationDataDao.getById(ConvId(otherUserId.str)).get.lastEvent
-      info(s"lastEventId: $lastEventId")
+      val lastEventTime = ConversationDataDao.getById(ConvId(otherUserId.str)).get.lastEventTime
+      info(s"lastEventTime: $lastEventTime")
 
       auto2 ! SendText(RConvId(self.getUser.getId), s"test message 1 $msgHex")
       auto2 ! SendText(RConvId(self.getUser.getId), s"test message 2 $msgHex")
@@ -100,7 +100,7 @@ class BlockingSpec extends FeatureSpec with Matchers with ProvisionedApiSpec wit
 
       awaitUi(5.seconds)
       MessageDataDao.last(ConvId(otherUserId.str)) shouldEqual lastMsg
-      ConversationDataDao.getById(ConvId(otherUserId.str)).get.lastEvent shouldEqual lastEventId
+      ConversationDataDao.getById(ConvId(otherUserId.str)).get.lastEventTime shouldEqual lastEventTime
     }
   }
 

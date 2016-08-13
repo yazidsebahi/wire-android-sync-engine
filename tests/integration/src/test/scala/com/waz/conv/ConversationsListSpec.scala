@@ -63,7 +63,6 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
       val msgs = lastConv.getMessages
 
       withDelay(msgs should not be empty)(15.seconds)
-      val last = msgs.getLastMessage.data.source
 
       zmessaging.eventPipeline(Seq(GenericMessageEvent(Uid(), lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message", Map.empty)).withCurrentLocalTime()))
 
@@ -82,7 +81,6 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
       val msgs = lastConv.getMessages
 
       withDelay(msgs should not be empty)(15.seconds)
-      val last = msgs.getLastMessage.data.source
 
       zmessaging.eventPipeline(Seq(GenericMessageEvent(Uid(), lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message 1", Map.empty)).withCurrentLocalTime()))
 

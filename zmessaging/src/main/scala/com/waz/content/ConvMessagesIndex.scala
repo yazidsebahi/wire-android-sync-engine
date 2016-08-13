@@ -43,8 +43,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   private val lastLocalMessageByType = new mutable.HashMap[Message.Type, MessageData]
   private var firstMessage = Option.empty[MessageData]
 
-  private var lastEventId = EventId.Zero
-
   private object sources {
     val failedCount = Signal(0)
     val missedCall = Signal(Option.empty[MessageData])
@@ -88,7 +86,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
         firstMessage = MessageDataDao.first(conv)
         val last = MessageDataDao.last(conv)
         lastMessage ! last
-        lastEventId = last.fold(EventId.Zero)(_.source)
 
         lastSentMessage ! MessageDataDao.lastSent(conv)
       }
@@ -122,8 +119,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   def lastLocalMessage(tpe: Message.Type) = init.map { _ => lastLocalMessageByType.get(tpe).map(_.id) }
 
   def firstMessageId = init.map { _ => firstMessage.map(_.id) }
-
-  def getLastEventId = init.map { _ => lastEventId }
 
   private[content] def delete(msg: MessageData): Future[Unit] = init map { _ =>
     if (msg.state.isFailed) failedCount.mutate(c => math.max(c - 1, 0))
@@ -178,7 +173,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
       val firstIter = msgs.iterator.filter(m => MessagesStorage.FirstMessageTypes(m.msgType))
       if (firstIter.nonEmpty) {
         val first = firstIter.minBy(_.time)
-        if (first.source.sequence < 20 && firstMessage.forall(_.time.isAfter(first.time)))
+        if (firstMessage.forall(_.time.isAfter(first.time)))
           firstMessage = Some(first)
       }
 
@@ -222,8 +217,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val sent = msgs.filter(_.state == Status.SENT)
     if (sent.nonEmpty)
       updateLastSent(sent.maxBy(_.time))
-
-    lastEventId = lastEventId max msgs.maxBy(_.source).source
   }
 
   private def updateLast(last: MessageData): Unit =

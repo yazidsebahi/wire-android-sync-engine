@@ -17,8 +17,6 @@
  */
 package com.waz.service.conversation
 
-import java.util.Date
-
 import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.HockeyApp
@@ -38,6 +36,7 @@ import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.EventContext
+import org.threeten.bp.Instant
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
@@ -105,7 +104,7 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
         addMemberJoinMessage(created.id, from, data.members.map(_.userId).toSet)
       )}
 
-    case ConversationEvent(_, rConvId, _, _, _) =>
+    case ConversationEvent(_, rConvId, _, _) =>
       convByRemoteId(rConvId) flatMap {
         case Some(conv) => processUpdateEvent(conv, ev)
         case None if retryCount > 3 =>
@@ -113,9 +112,9 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
           successful(())
         case None =>
           ev match {
-            case MemberJoinEvent(_, _, eventId, time, from, members) if from != selfUserId =>
+            case MemberJoinEvent(_, _, time, from, members, _) if from != selfUserId =>
               // this happens when we are added to group conversation
-              createGroupConversationOnMemberJoin(rConvId, eventId, time, from, members)
+              createGroupConversationOnMemberJoin(rConvId, time.instant, from, members)
             case _ =>
               warn(s"No conversation data found for event: $ev on try: $retryCount")
               processConvWithRemoteId(rConvId, retryAsync = true) { processUpdateEvent(_, ev) }
@@ -124,9 +123,9 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
   }
 
   private def processUpdateEvent(conv: ConversationData, ev: ConversationEvent): Future[Any] = ev match {
-    case RenameConversationEvent(_, _, eventId, time, _, name) => updateConversationName(conv.id, name, Some(eventId))
+    case RenameConversationEvent(_, _, time, _, name) => updateConversationName(conv.id, name, Some(time.instant))
 
-    case MemberJoinEvent(id, convId, eventId, time, from, userIds) =>
+    case MemberJoinEvent(id, convId, time, from, userIds, _) =>
       def joined(updated: ConversationData) = ! conv.activeMember && updated.activeMember && updated.convType == ConversationType.Group
 
       def ensureConvActive() = updateConversationStatus(conv.id, ConversationStatus.Active, time.instant).map(_.map(_._2).filter(joined))
@@ -134,13 +133,13 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
 
       for {
         _        <- users.syncNotExistingOrExpired(userIds)
-        _        <- membersStorage.add(conv.id, eventId, userIds: _*)
+        _        <- membersStorage.add(conv.id, time.instant, userIds: _*)
         selfUser <- selfUserOrFail
         _        <- if (userIds.contains(selfUser)) ensureConvActive() else successful(None)
       } yield ()
 
-    case MemberLeaveEvent(id, convId, eventId, time, from, userIds) =>
-      membersStorage.remove(conv.id, eventId, userIds: _*) flatMap { _ =>
+    case MemberLeaveEvent(id, convId, time, from, userIds) =>
+      membersStorage.remove(conv.id, time.instant, userIds: _*) flatMap { _ =>
         withSelfUserFuture { selfUserId =>
           if (userIds.contains(selfUserId)) updateConversationStatus(conv.id, ConversationStatus.Inactive, time.instant)
           else successful(())
@@ -149,9 +148,9 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
 
     case MemberUpdateEvent(id, convId, time, from, state) => updateConversationState(conv.id, state)
 
-    case ConnectRequestEvent(_, _, eventId, _, from, _, recipient, _, _) =>
+    case ConnectRequestEvent(_, _, time, from, _, recipient, _, _) =>
       debug(s"ConnectRequestEvent(from = $from, recipient = $recipient")
-      membersStorage.add(conv.id, eventId, from, recipient) flatMap { added =>
+      membersStorage.add(conv.id, time.instant, from, recipient) flatMap { added =>
         val userIdsAdded = added map (_.userId)
         usersStorage.listAll(userIdsAdded) map { localUsers =>
           syncIfNeeded(localUsers: _*)
@@ -162,9 +161,9 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
     case _ => successful(())
   }
 
-  private def createGroupConversationOnMemberJoin(remoteId: RConvId, event: EventId, time: Date, from: UserId, members: Seq[UserId]) = {
-    insertConversation(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time.instant, lastEvent = event)) flatMap { conv =>
-      membersStorage.add(conv.id, event, from +: members: _*) flatMap { ms =>
+  private def createGroupConversationOnMemberJoin(remoteId: RConvId, time: Instant, from: UserId, members: Seq[UserId]) = {
+    insertConversation(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
+      membersStorage.add(conv.id, time, from +: members: _*) flatMap { ms =>
         addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
           sync.syncConversation(conv.id) flatMap { _ => sync.syncCallState(conv.id, fromFreshNotification = false) }
           conv
@@ -245,7 +244,7 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
     def updateMembers() = Future.sequence(convs map {
         case ConversationResponse(conv, members) =>
           convByRemoteId(conv.remoteId) flatMap {
-            case Some(c) => membersStorage.set(c.id, conv.lastEvent, selfUserId +: members.filter(_.active).map(_.userId))
+            case Some(c) => membersStorage.set(c.id, conv.lastEventTime, selfUserId +: members.filter(_.active).map(_.userId))
             case _ =>
               error(s"updateMembers() didn't find conv with given remote id for: $conv")
               successful(())
@@ -265,7 +264,7 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]] =
     updateConversationArchived(id, archived) flatMap {
       case Some((_, conv)) =>
-        sync.postConversationState(id, ConversationState(archived = Some(conv.archived), archiveTime = Some(conv.archiveTime), archiveEvent = Some(if (conv.archived) Some(conv.lastEvent) else None))) map { _ => Some(conv) }
+        sync.postConversationState(id, ConversationState(archived = Some(conv.archived), archiveTime = Some(conv.archiveTime))) map { _ => Some(conv) }
       case None =>
         Future successful None
     }

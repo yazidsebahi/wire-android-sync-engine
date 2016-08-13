@@ -133,7 +133,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isFirstMessage: Boolean = data.firstMessage
 
-  override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.source.sequence == 1
+  override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.firstMessage
 
   override def getLocalTime: Instant = data.localTime
 

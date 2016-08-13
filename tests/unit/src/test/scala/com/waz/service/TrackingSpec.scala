@@ -70,10 +70,10 @@ class TrackingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Be
       Vector(
         zmessaging.convsStorage.insert(group ++ Seq(oneToOne, archived, ottoConv)),
         zmessaging.usersStorage.insert(Seq(auto1, otto)),
-        zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, EventId(0), Message.Type.MEMBER_JOIN, selfUser.id)),
-        zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, EventId(1), Message.Type.MEMBER_JOIN, otto.id)),
-        zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, EventId(2), Message.Type.TEXT, otto.id)),
-        zmessaging.messagesStorage.insert(MessageData(MessageId(), oneToOne.id, EventId(0), Message.Type.ASSET, selfUser.id)),
+        zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, Message.Type.MEMBER_JOIN, selfUser.id)),
+        zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, Message.Type.MEMBER_JOIN, otto.id)),
+        zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, Message.Type.TEXT, otto.id)),
+        zmessaging.messagesStorage.insert(MessageData(MessageId(), oneToOne.id, Message.Type.ASSET, selfUser.id)),
         zmessaging.callLog.add(KindOfCallingEvent.CALL_DROPPED, Option(CallSessionId()), ConvId(), false)
       ) ++ (1 to 42).map(_ => zmessaging.callLog.add(KindOfCallingEvent.CALL_ESTABLISHED, Option(CallSessionId()), ConvId(), false))
     ).await()
@@ -105,12 +105,12 @@ class TrackingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Be
     }
 
     scenario("Send text to bot") {
-      zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, EventId(3), Message.Type.TEXT, selfUser.id))
+      zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, Message.Type.TEXT, selfUser.id))
       tracking should resemble(TrackingStats(4, 2, 1, 1, 1, 2, 42, 0, 1, 1, 1)) soon
     }
 
     scenario("Send image somewhere") {
-      zmessaging.messagesStorage.insert(MessageData(MessageId(), oneToOne.id, EventId(1), Message.Type.ASSET, selfUser.id))
+      zmessaging.messagesStorage.insert(MessageData(MessageId(), oneToOne.id, Message.Type.ASSET, selfUser.id))
       tracking should resemble(TrackingStats(4, 2, 1, 1, 1, 2, 42, 0, 1, 2, 1)) soon
     }
 

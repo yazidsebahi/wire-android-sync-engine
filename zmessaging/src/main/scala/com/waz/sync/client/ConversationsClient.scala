@@ -124,16 +124,15 @@ object ConversationsClient {
       implicit val jsObj = self
 
       val id = decodeRConvId('id)(js)
-      val lastEvent = decodeEid('last_event)(js)
       val convType = ConversationType(decodeInt('type)(js))
-      val renameEvt = if (convType == ConversationType.Group) Some(lastEvent) else None
       val lastEventTime = decodeISOInstant('last_event_time)(js)
+      val renameEvt = if (convType == ConversationType.Group) lastEventTime else Instant.EPOCH
 
       val state = ConversationState.Decoder(self)
 
       ConversationData(
         ConvId(id.str), id, decodeOptString('name)(js) filterNot (_.isEmpty), decodeUserId('creator)(js), convType,
-        lastEventTime, lastEvent, 'status, decodeISOInstant('status_time),
+        lastEventTime, 'status, decodeISOInstant('status_time),
         Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime), renameEvent = renameEvt
       )
     }

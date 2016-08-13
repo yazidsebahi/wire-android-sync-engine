@@ -110,7 +110,6 @@ class MockedConvsListSpec extends FeatureSpec with Matchers with Inspectors with
       withDelay(zmessaging.websocket.connected.currentValue shouldEqual Some(false))
 
       val current = events.getOrElse(convId, Nil)
-      val lastId = current.lastOption.fold(EventId.Zero)(_.eventId)
       val messageEvent = textMessageEvent(Uid(), convId, SystemTimeline.next(), selfUserId, "meep")
       val updateEvent = new GenericMessageEvent(Uid(), RConvId(selfUserId.str), SystemTimeline.next(), selfUserId, GenericMessage(Uid(), LastRead(convId, messageEvent.time.instant)))
       addNotification(PushNotification(Uid(), Vector(messageEvent, updateEvent), transient = false))

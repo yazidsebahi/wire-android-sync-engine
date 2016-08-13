@@ -261,9 +261,9 @@ case class AnyAssetData(id: AssetId, convId: RConvId, mimeType: Mime, sizeInByte
       CachedAssetRequest(cacheKey, mimeType, name)
   }
 
-  def withDownloadFailed(): AnyAssetData = copy(status = status.key.fold(status)(DownloadFailed(_)))
+  def withDownloadFailed(): AnyAssetData = copy(status = status.key.fold(status)(DownloadFailed))
 
-  def clearDownloadState(): AnyAssetData = copy(status = status.key.fold(status)(UploadDone(_)))
+  def clearDownloadState(): AnyAssetData = copy(status = status.key.fold(status)(UploadDone))
 }
 
 object AnyAssetData {

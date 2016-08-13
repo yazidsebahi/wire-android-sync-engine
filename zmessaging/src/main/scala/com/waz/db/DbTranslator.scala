@@ -50,11 +50,6 @@ object DbTranslator {
     override def save(value: Uid, name: String, values: ContentValues): Unit = values.put(name, value.str)
     override def bind(value: Uid, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, value.str)
   }
-  implicit object EventIdTranslator extends DbTranslator[EventId] {
-    override def load(cursor: Cursor, index: Int): EventId = EventId(cursor.getString(index))
-    override def save(value: EventId, name: String, values: ContentValues): Unit = values.put(name, value.str)
-    override def bind(value: EventId, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, value.str)
-  }
   implicit object IntTranslator extends DbTranslator[Int] {
     override def load(cursor: Cursor, index: Int): Int = cursor.getInt(index)
     override def save(value: Int, name: String, values: ContentValues): Unit = values.put(name, Integer.valueOf(value))

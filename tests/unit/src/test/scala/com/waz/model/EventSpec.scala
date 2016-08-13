@@ -19,10 +19,8 @@ package com.waz.model
 
 import com.waz.model.Event.EventDecoder
 import com.waz.model.otr.ClientId
-import com.waz.testutils.Matchers._
 import com.waz.utils.JsonDecoder
 import org.json.JSONObject
-import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest._
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 
@@ -83,76 +81,9 @@ class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with Given
         case e => fail(s"unexpected event: $e")
       }
     }
-
-    scenario("parse conversation state archived - legacy") {
-      val state = JsonDecoder.decode[ConversationState]("""{"archived":"83.800122000a5929e0"}""")
-      state shouldEqual ConversationState(Some(true), None, None, None, Some(Some(EventId("83.800122000a5929e0"))))
-    }
-  }
-
-  feature("event ids") {
-
-    scenario("localId") {
-      EventId.local(0) shouldEqual EventId(0, "!000000000000000")
-      EventId.local(0).toString shouldEqual "0.!000000000000000"
-    }
-
-    scenario("isLocal") {
-      EventId.local(0).isLocal shouldEqual true
-      EventId.local(0).isLocal shouldEqual true
-      EventId.local(2) should beLocal
-      EventId(0).isLocal shouldEqual false
-      EventId(1231) should not(beLocal)
-      EventId(1, "1341234123412") should not(beLocal)
-    }
-
-    scenario("nextLocalId") {
-      EventId.nextLocal(EventId.local(0)) shouldEqual EventId(0, "!000000000000001")
-      EventId.nextLocal(EventId(1, "341234123412341")) shouldEqual EventId(2, "!000000000000000")
-    }
-
-    scenario("parsing event ids from invalid strings") {
-      val genInvalidEventIds = for {
-        c <- Gen.oneOf('8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'a', 'b', 'c', 'd', 'e', 'f')
-        xs <- Gen.listOfN(15, Gen.oneOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'))
-        hex <- Arbitrary.arbitrary[Long]
-      } yield EventId(s"$c${xs.mkString}.$hex")
-
-      forAll(genInvalidEventIds) { id: EventId =>
-        id.str shouldEqual EventId("0." + id.hex).str
-      }
-    }
-
-    scenario("converting valid event ids from and to strings") {
-      forAll { (a: Long, b: Long) =>
-        whenever(a != java.lang.Long.MIN_VALUE) {
-          val hex = EventId.hexString(b)
-          val id = EventId(math.abs(a), hex)
-          id shouldEqual EventId(id.str)
-        }
-      }
-    }
-
-    scenario("event ordering") {
-      EventId.local(1) should be < EventId(1)
-
-      val genEventIds = for {
-        hex <- Gen.listOfN(16, Gen.oneOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'))
-        seq <- Gen.choose(0L, Long.MaxValue)
-      } yield EventId(seq, hex.mkString)
-
-      forAll(genEventIds) { (e: EventId) =>
-        e should be <= EventId.MaxValue
-        e should be >= EventId.Zero
-      }
-
-      forAll(genEventIds, genEventIds) { (e1: EventId, e2: EventId) =>
-        if (e1.sequence < e2.sequence) e1 should be < e2
-        else if (e1.sequence > e2.sequence) e1 should be > e2
-      }
-    }
   }
 }
+
 object EventSpec {
   val selfUser = UserData("Self User")
   val otherUser = UserData("Other User")

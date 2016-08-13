@@ -146,22 +146,6 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   feature("Ordering") {
     import testutils.withUpdate
 
-
-    scenario("Notify messages list if sent message sequence id is changed") {
-      val msgs = service.messagesStorage.getEntries(conv.id)
-      val msg = withUpdate(msgs) {
-        sendMessage(new MessageContent.Text("test"))
-      }
-      val eventId = EventId(msg.source.sequence + 1, "800122000a5b8a02")
-      withUpdate(msgs) {
-        service.convEvents.handlePostConversationEvent(RenameConversationEvent(Uid(msg.id.str), conv.remoteId, eventId, new Date(), selfUser.id, "test"))
-      }
-      val e = getMessage(msg.id).get
-      e.state shouldEqual Message.Status.SENT
-      e.source shouldEqual eventId
-      getMessage(msg.id).map(_.source) shouldEqual Some(eventId)
-    }
-
     scenario("Don't update messages list if time is unchanged") {
       val msgs = service.messagesStorage.getEntries(conv.id)
       @volatile var updateCount = 0

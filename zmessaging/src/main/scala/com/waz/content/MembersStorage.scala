@@ -25,6 +25,7 @@ import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{AggregatingSignal, Signal}
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
+import org.threeten.bp.Instant
 
 import scala.collection._
 import scala.concurrent.Future
@@ -52,16 +53,20 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
 
   def getActiveConvs(user: UserId): Future[Seq[ConvId]] = getActive(user) map { _.map(_.convId) }
 
-  def add(conv: ConvId, event: EventId, users: UserId*): Future[Set[ConversationMemberData]] =
+  def add(conv: ConvId, time: Instant, users: UserId*): Future[Set[ConversationMemberData]] =
     updateOrCreateAll2(users.map((_, conv)), { (k, v) =>
       v match {
-        case None     => ConversationMemberData(k._1, conv, active = true, event)
-        case Some(m)  => m.copy(active = true, eventId = event)
+        case Some(m) if m.time.isAfter(time) => m
+        case Some(m) => m.copy(active = true, time = time)
+        case None    => ConversationMemberData(k._1, conv, active = true, time)
       }
     })
 
-  def remove(conv: ConvId, event: EventId, users: UserId*): Future[Seq[ConversationMemberData]] =
-    updateAll2(users.map(_ -> conv), _.copy(active = false, eventId = event)).map(_.map(_._2))
+  def remove(conv: ConvId, time: Instant, users: UserId*): Future[Seq[ConversationMemberData]] =
+    updateAll2(users.map(_ -> conv), {
+      case m if m.time.isAfter(time) => m
+      case m => m.copy(active = false, time = time)
+    }).map(_.map(_._2))
 
   def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]] =
     updateOrCreateAll2(users.map(_ -> conv), { (k, v) => v.fold(ConversationMemberData(k._1, conv, active = true)){_.copy(active = true)} })
@@ -70,12 +75,12 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
     updateAll2(users.map(_ -> conv), _.copy(active = false)).map(_.map(_._2))
 
 
-  def set(conv: ConvId, event: EventId, users: Seq[UserId]): Future[Unit] = getActiveUsers(conv) flatMap { active =>
+  def set(conv: ConvId, time: Instant, users: Seq[UserId]): Future[Unit] = getActiveUsers(conv) flatMap { active =>
     val usersSet = users.toSet
     val toRemove = active.filterNot(usersSet)
     val toAdd = usersSet -- toRemove
 
-    remove(conv, toRemove: _*).zip(add(conv, toAdd.toSeq: _*)).map(_ => ())
+    remove(conv, time, toRemove: _*).zip(add(conv, time, toAdd.toSeq: _*)).map(_ => ())
   }
 
   def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv) map (_.exists(_.active))
