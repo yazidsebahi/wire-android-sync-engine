@@ -104,13 +104,16 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     scenario("Recall recently sent message") {
       val msg = msgs.getLastMessage
       msg.recall()
-      checkLastMessageIsRecalled(msg)
+      withDelay {
+        msg.isDeleted shouldEqual true
+        msgs should have size 1
+      }
     }
 
     scenario("Send another message") {
       conv.sendMessage(new Text("second recall"))
       withDelay {
-        msgs should have size 3
+        msgs should have size 2
         msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
       }
     }
@@ -118,15 +121,18 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     scenario("Receive recall from other device") {
       val msg = msgs.getLastMessage
       secondClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
-      checkLastMessageIsRecalled(msg)
+      withDelay {
+        msg.isDeleted shouldEqual true
+        msgs should have size 1
+      }
     }
 
     scenario("Receive message from other user") {
       otherUserClient ? SendText(conv.data.remoteId, "test message") should eventually(be(Successful))
-      withDelay(msgs should have size 4)
+      withDelay(msgs should have size 2)
     }
 
-    scenario("Receive recall rom other user") {
+    scenario("Receive recall from other user") {
       val msg = msgs.getLastMessage
       otherUserClient ? RecallMessage(conv.data.remoteId, msgs.getLastMessage.data.id) should eventually(be(Successful))
       checkLastMessageIsRecalled(msg)
@@ -134,19 +140,18 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
 
     scenario("Send and recall link message") {
       conv.sendMessage(new Text("http://wire.com"))
-      withDelay { msgs should have size 5 }
+      withDelay { msgs should have size 3 }
       val msg = msgs.getLastMessage
       msg.recall()
-      checkLastMessageIsRecalled(msg)
-
       awaitUi(3.seconds)
 
-      checkLastMessageIsRecalled(msg)
+      msg.isDeleted shouldEqual true
+      msgs should have size 2
     }
 
     scenario("Receive link message from other user") {
       otherUserClient ? SendText(conv.data.remoteId, "http://wire.com") should eventually(be(Successful))
-      withDelay(msgs should have size 6)
+      withDelay(msgs should have size 3)
     }
 
     scenario("Receive recall for link message") {
@@ -164,7 +169,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
       val msg = msgs.getLastMessage
       msg.delete()
       withDelay {
-        msgs should have size 5
+        msgs should have size 2
         msg.isDeleted shouldEqual true
       }
     }
@@ -176,27 +181,28 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
       secondClient ? DeleteMessage(conv.data.remoteId, msg.data.id) should eventually(be(Successful))
 
       withDelay {
-        msgs should have size 4
+        msgs should have size 1
         msg.isDeleted shouldEqual true
       }
     }
 
-    scenario("Send two messages and recall the first one") {
-      conv.sendMessage(new Text("test 1"))
-      conv.sendMessage(new Text("test 2"))
+    scenario("Receive two messages and recall for the first one") {
+      otherUserClient ? SendText(conv.data.remoteId, "test 1") should eventually(be(Successful))
+      otherUserClient ? SendText(conv.data.remoteId, "test 2") should eventually(be(Successful))
 
       withDelay {
-        msgs should have size 6
+        msgs should have size 3
         msgs.getLastMessage.getBody shouldEqual "test 2"
       }
 
-      val msg = msgs.get(4)
-      msg.recall()
+      val msg = msgs.get(1)
+
+      otherUserClient ? RecallMessage(conv.data.remoteId, msg.data.id) should eventually(be(Successful))
 
       withDelay {
         msg.isDeleted shouldEqual true
         withClue(msgs.map(m => (m.getMessageType, m.getBody))) {
-          msgs.get(4).getMessageType shouldEqual Message.Type.RECALLED
+          msgs.get(1).getMessageType shouldEqual Message.Type.RECALLED
         }
       }
     }

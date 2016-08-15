@@ -216,11 +216,13 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
     }
   }
 
-  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMessageId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
+  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.canRecall(convId, userId) =>
         content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
-          content.addMessage(MessageData(systemMessageId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMessageId, MsgRecall(msgId)))))
+          val recall = MessageData(systemMsgId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMsgId, MsgRecall(msgId))))
+          if (userId == selfUserId) Future successful Some(recall) // don't save system message for self user
+          else content.addMessage(recall)
         }
       case _ => Future successful None
     }
