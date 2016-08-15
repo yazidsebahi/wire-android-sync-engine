@@ -36,12 +36,12 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
-  var lastReadSync = None: Option[EventId]
+  var lastReadSync = None: Option[Instant]
 
   private implicit lazy val dispatcher = Threading.Background
 
   lazy val convId = ConvId()
-  lazy val convData = ConversationData(convId, RConvId(convId.str), None, UserId(), ConversationType.Group, lastEvent = EventId(1000), lastRead = timeForEvent(990))
+  lazy val convData = ConversationData(convId, RConvId(convId.str), None, UserId(), ConversationType.Group, lastRead = timeForEvent(990))
   lazy val selfUserId = UserId()
 
   lazy val zmessaging = new MockZMessaging(selfUserId = this.selfUserId) {
@@ -52,7 +52,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
     override lazy val messages: com.waz.ui.Messages = new com.waz.ui.Messages()(this) {
 
       override def updateLastRead(conv: ConvId, msg: MessageData) = {
-        lastReadSync = Some(msg.source)
+        lastReadSync = Some(msg.time)
         super.updateLastRead(conv, msg)
       }
     }
@@ -78,11 +78,10 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
 
   def timeForEvent(seq: Long) = Instant.EPOCH.plusSeconds(10 * seq)
 
-  def generateMessages(from: EventId, to: EventId, conv: ConvId = convId) = {
+  def generateMessages(from: Long, to: Long, conv: ConvId = convId) = {
     Await.result(Future.sequence(
-      (from.sequence until to.sequence) map { seq =>
-        val ev = EventId(seq, seq.toString)
-        zmessaging.messagesStorage.addMessage(MessageData(MessageId("m_" + seq.toString), conv, ev, api.Message.Type.TEXT, UserId("u_" + seq.toString), MessageData.textContent("test " + seq), state = Status.SENT, time = timeForEvent(seq)))
+      (from until to) map { seq =>
+        zmessaging.messagesStorage.addMessage(MessageData(MessageId("m_" + seq.toString), conv, api.Message.Type.TEXT, UserId("u_" + seq.toString), MessageData.textContent("test " + seq), state = Status.SENT, time = timeForEvent(seq)))
       }
     ), 5.seconds)
   }
@@ -94,7 +93,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
 
     scenario("update last read index with time not in messages list") {
       zmessaging.convsContent.updateConversationLastRead(conv.id, timeForEvent(120).minusMillis(5))
-      generateMessages(EventId(100), EventId(140), conv.id)
+      generateMessages(100, 140, conv.id)
 
       withDelay {
         msgs.size shouldEqual 40
@@ -110,7 +109,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
         msgs.getUnreadCount shouldEqual 18
         msgs.getLastReadIndex shouldEqual 21
       }
-      lastReadSync shouldEqual Some(m.asInstanceOf[com.waz.api.impl.Message].data.source)
+      lastReadSync shouldEqual Some(m.asInstanceOf[com.waz.api.impl.Message].data.time)
     }
 
     scenario("update last read on notification") {
@@ -123,7 +122,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
     }
 
     scenario(s"update last read index on new message") {
-      generateMessages(EventId(80), EventId(99), conv.id)
+      generateMessages(80, 99, conv.id)
       withDelay {
         msgs.getLastReadIndex shouldEqual 41
       }
@@ -171,9 +170,9 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
       Await.result(zmessaging.messagesStorage.addMessage(data), 5.seconds)
 
     scenario("Create conv member join message") {
-      addMessage(MessageData(MessageId(), conv.id, EventId(1), api.Message.Type.MEMBER_JOIN, user, Nil, members = Set(user), time = Instant.ofEpochMilli(1)))
-      addMessage(MessageData(MessageId(), conv.id, EventId(2), api.Message.Type.CONNECT_REQUEST, user, Seq(MessageContent(api.Message.Part.Type.TEXT, "req")), recipient = Some(selfUserId), time = Instant.ofEpochMilli(2)))
-      addMessage(MessageData(MessageId(), conv.id, EventId(3), api.Message.Type.MEMBER_JOIN, selfUserId, Nil, members = Set(selfUserId), time = Instant.ofEpochMilli(3)))
+      addMessage(MessageData(MessageId(), conv.id, api.Message.Type.MEMBER_JOIN, user, Nil, members = Set(user), time = Instant.ofEpochMilli(1), firstMessage = true))
+      addMessage(MessageData(MessageId(), conv.id, api.Message.Type.CONNECT_REQUEST, user, Seq(MessageContent(api.Message.Part.Type.TEXT, "req")), recipient = Some(selfUserId), time = Instant.ofEpochMilli(2)))
+      addMessage(MessageData(MessageId(), conv.id, api.Message.Type.MEMBER_JOIN, selfUserId, Nil, members = Set(selfUserId), time = Instant.ofEpochMilli(3)))
       withDelay {
         msgs should have size 3
         msgs.get(0).isCreateConversation shouldEqual true

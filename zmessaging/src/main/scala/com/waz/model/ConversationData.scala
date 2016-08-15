@@ -34,7 +34,6 @@ case class ConversationData(id: ConvId,
                             creator: UserId,
                             convType: ConversationType,
                             lastEventTime: Instant = Instant.EPOCH,
-                            lastEvent: EventId = EventId.Zero,
                             status: Int = 0,
                             statusTime: Instant = Instant.EPOCH,
                             lastRead: Instant = Instant.EPOCH,
@@ -51,7 +50,7 @@ case class ConversationData(id: ConvId,
                             unjoinedCall: Boolean = false,
                             missedCallMessage: Option[MessageId] = None,
                             incomingKnockMessage: Option[MessageId] = None,
-                            renameEvent: Option[EventId] = None,
+                            renameEvent: Instant = Instant.EPOCH,
                             voiceMuted: Boolean = false,
                             hidden: Boolean = false,
                             verified: Verification = Verification.UNKNOWN) {
@@ -73,14 +72,10 @@ case class ConversationData(id: ConvId,
   def updated(d: ConversationData): Option[ConversationData] = {
     val ct = if (ConversationType.isOneToOne(convType) && d.convType != ConversationType.OneToOne) convType else d.convType
     val st = if (d.statusTime.isAfter(statusTime)) d.status else status
-    val nameSource = (renameEvent, d.renameEvent) match {
-      case (None, Some(a)) => d
-      case (Some(a), Some(b)) if b > a => d
-      case _ => this
-    }
+    val nameSource = if (d.renameEvent.isAfter(renameEvent)) d else this
 
     val updated = copy(remoteId = d.remoteId, name = nameSource.name, creator = d.creator, convType = ct,
-      lastEventTime = lastEventTime max d.lastEventTime, lastEvent = d.lastEvent max lastEvent, status = st, statusTime = statusTime max d.statusTime,
+      lastEventTime = lastEventTime max d.lastEventTime, status = st, statusTime = statusTime max d.statusTime,
       lastRead = lastRead max d.lastRead, muted = d.muted,
       muteTime = d.muteTime, archived = d.archived, cleared = cleared max d.cleared,
       renameEvent = nameSource.renameEvent, searchKey = nameSource.searchKey)
@@ -94,7 +89,7 @@ case class ConversationData(id: ConvId,
  *
  * @param active - false if user left the conversation
  */
-case class ConversationMemberData(userId: UserId, convId: ConvId, active: Boolean = true, eventId: EventId = EventId.Zero)
+case class ConversationMemberData(userId: UserId, convId: ConvId, active: Boolean = true, time: Instant = Instant.EPOCH)
 
 object ConversationData {
 
@@ -144,7 +139,7 @@ object ConversationData {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): ConversationData = ConversationData(
       id = 'id, remoteId = 'remoteId, name = decodeOptString('name), creator = 'creator, convType = ConversationType('convType),
-      lastEventTime = decodeInstant('lastEventTime), lastEvent = decodeEid('lastEvent),
+      lastEventTime = decodeInstant('lastEventTime),
       status = 'status, statusTime = decodeInstant('statusTime),
       lastRead = decodeInstant('lastReadTime),
       muted = 'muted, muteTime = decodeInstant('muteTime), archived = 'archived,
@@ -152,7 +147,7 @@ object ConversationData {
       generatedName = 'generatedName, searchKey = decodeOptString('name) map SearchKey,
       unreadCount = 'unreadCount, failedCount = 'failedCount, hasVoice = 'hasVoice, unjoinedCall = 'unjoinedCall,
       missedCallMessage = decodeOptMessageId('missedCallMessage), incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
-      renameEvent = decodeOptEid('renameEvent), voiceMuted = 'voiceMuted, hidden = 'hidden, verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf))
+      renameEvent = decodeInstant('renameEventTime), voiceMuted = 'voiceMuted, hidden = 'hidden, verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf))
   }
 
   implicit lazy val Encoder: JsonEncoder[ConversationData] = new JsonEncoder[ConversationData] {
@@ -163,7 +158,6 @@ object ConversationData {
       o.put("creator", v.creator.str)
       o.put("convType", v.convType.id)
       o.put("lastEventTime", v.lastEventTime.toEpochMilli)
-      o.put("lastEvent", v.lastEvent.str)
       o.put("status", v.status)
       o.put("statusTime", v.statusTime.toEpochMilli)
       o.put("lastReadTime", v.lastRead.toEpochMilli)
@@ -179,7 +173,7 @@ object ConversationData {
       o.put("unjoinedCall", v.unjoinedCall)
       v.missedCallMessage foreach (id => o.put("missedCallMessage", id.str))
       v.incomingKnockMessage foreach (id => o.put("incomingKnockMessage", id.str))
-      v.renameEvent foreach (id => o.put("renameEvent", id.str))
+      o.put("renameEventTime", v.renameEvent.toEpochMilli)
       o.put("voiceMuted", v.voiceMuted)
       o.put("hidden", v.hidden)
       o.put("trusted", v.verified)
@@ -193,7 +187,6 @@ object ConversationData {
     val Creator       = id[UserId]('creator).apply(_.creator)
     val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
     val LastEventTime = timestamp('last_event_time)(_.lastEventTime)
-    val LastEvent     = eid('last_event)(_.lastEvent)
     val Status        = int('status)(_.status)
     val StatusTime    = timestamp('status_time)(_.statusTime)
     val LastRead      = timestamp('last_read)(_.lastRead)
@@ -210,14 +203,14 @@ object ConversationData {
     val UnjoinedCall  = bool('unjoined_call)(_.unjoinedCall)
     val MissedCall    = opt(id[MessageId]('missed_call))(_.missedCallMessage)
     val IncomingKnock = opt(id[MessageId]('incoming_knock))(_.incomingKnockMessage)
-    val RenameEvent   = opt(eid('rename_event))(_.renameEvent)
+    val RenameEvent   = timestamp('rename_event_time)(_.renameEvent)
     val VoiceMuted    = bool('voice_muted)(_.voiceMuted)
     val Hidden        = bool('hidden)(_.hidden)
     val Verified      = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, LastEvent, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified)
-    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, LastEvent, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified)
+    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified)
+    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified)
 
     import com.waz.model.ConversationData.ConversationType._
 
@@ -260,11 +253,11 @@ object ConversationMemberData {
     val UserId = id[UserId]('user_id).apply(_.userId)
     val ConvId = id[ConvId]('conv_id).apply(_.convId)
     val Active = bool('active)(_.active)
-    val EventId = eid('event_id).apply(_.eventId)
+    val Time = timestamp('time).apply(_.time)
 
     override val idCol = (UserId, ConvId)
-    override val table = Table("ConversationMembers", UserId, ConvId, Active, EventId)
-    override def apply(implicit cursor: Cursor): ConversationMemberData = ConversationMemberData(UserId, ConvId, Active, EventId)
+    override val table = Table("ConversationMembers", UserId, ConvId, Active, Time)
+    override def apply(implicit cursor: Cursor): ConversationMemberData = ConversationMemberData(UserId, ConvId, Active, Time)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)

@@ -48,7 +48,6 @@ object Matchers {
   import org.scalatest.Matchers._
   import org.scalatest.OptionValues._
 
-  val beLocal = new LocalEventMatcher
   def eventually[T](m: Matcher[T])(implicit timeout: FiniteDuration = 5.seconds): Matcher[Awaitable[T]] = m compose (x => Await.result(x, timeout * spanScaleFactor))
 
   def beMatching[A](pf: PartialFunction[Any, Any]): Matcher[A] = new Matcher[A] {

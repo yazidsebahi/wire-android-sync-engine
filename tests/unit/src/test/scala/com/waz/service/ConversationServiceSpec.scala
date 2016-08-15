@@ -26,7 +26,6 @@ import com.waz.content.GlobalDatabase
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
-import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -99,7 +98,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
   def assertMessage(msgOpt: Option[MessageData], msgType: Message.Type, convId: Option[ConvId] = None,
                     name: Option[String] = None, userId: Option[UserId] = None, id: Option[MessageId] = None,
-                    eventId: Option[EventId] = None, members: Option[Seq[UserId]] = None): MessageData = {
+                    members: Option[Seq[UserId]] = None): MessageData = {
 
     msgOpt should be('defined)
     val msg = msgOpt.get
@@ -109,8 +108,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convId foreach { msg.convId shouldEqual _ }
       name foreach { name => msg.name shouldEqual Some(name) }
       userId foreach { msg.userId shouldEqual _ }
-      eventId foreach { msg.source shouldEqual _ }
-      members foreach { msg.members.toSet shouldEqual _.toSet } // TODO: check message entries
+      members foreach { msg.members shouldEqual _.toSet } // TODO: check message entries
     }
 
     msg
@@ -150,13 +148,12 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val messagesCount = listMessages(conv.id).size
 
       When("rename event is received on push channel")
-      val eventId = EventId(10)
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, eventId, new Date(), selfUser.id, "new name"))
+      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "new name"))
 
       Thread.sleep(500) // push event is handled async so we need to give it some time
 
-      Then("message eventId and time is updated")
-      assertMessage(lastMessage(conv.id), Message.Type.RENAME, Some(conv.id), Some("new name"), Some(selfUser.id), id = Some(msg.id), eventId = Some(eventId))
+      Then("message status and time is updated")
+      assertMessage(lastMessage(conv.id), Message.Type.RENAME, Some(conv.id), Some("new name"), Some(selfUser.id), id = Some(msg.id))
 
       listMessages(conv.id) should have size messagesCount
     }
@@ -266,13 +263,12 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convMemberJoinSync shouldEqual Some((conv.id, Seq(user1.id)))
 
       When("push notification is received for member join")
-      val event = EventId(10)
-      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, event, new Date(), selfUser.id, Seq(user1.id)))
+      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, new Date(), selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 
       Then("message is updated")
       listMessages(conv.id) should have size 1
-      assertMessage(lastMessage(conv.id), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), eventId = Some(event), members = Some(Seq(user1.id)))
+      assertMessage(lastMessage(conv.id), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), members = Some(Seq(user1.id)))
     }
 
     scenario("Add multiple members to conversation") {
@@ -302,13 +298,12 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convMemberJoinSync shouldEqual Some((conv.id, users.map(_.id)))
 
       When("push notification is received for member join")
-      val event = EventId(10)
-      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, event, new Date(), selfUser.id, users.map(_.id)))
+      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, new Date(), selfUser.id, users.map(_.id)))
       Thread.sleep(500)
 
       Then("message is updated")
       listMessages(conv.id) should have size 1
-      assertMessage(lastMessage(conv.id), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), eventId = Some(event), members = Some(users.map(_.id)))
+      assertMessage(lastMessage(conv.id), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), members = Some(users.map(_.id)))
     }
 
     scenario("Add members twice before push notification is received") {
@@ -332,30 +327,27 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val msg = assertMessage(lastMessage(conv.id), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), members = Some(Seq(user1.id, user2.id)))
 
       When("push notification is received for only one user")
-      val event = EventId(10)
       Thread.sleep(500)
-      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, event, (msg.time - 1.milli).javaDate, selfUser.id, Seq(user1.id)))
+      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, (msg.time - 1.milli).javaDate, selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 
       Then("message is split in two, with first one updated to push result")
       val msgs = listMessages(conv.id)
       msgs should have size 2
-      assertMessage(Some(msgs(0)), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), eventId = Some(event), members = Some(Seq(user1.id)))
+      assertMessage(Some(msgs(0)), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), members = Some(Seq(user1.id)))
       assertMessage(Some(msgs(1)), Message.Type.MEMBER_JOIN, Some(conv.id), userId = Some(selfUser.id), members = Some(Seq(user2.id)))
-      msgs(1).source should beLocal
     }
 
     scenario("Create conversation on incoming member join event containing self") {
       deleteAllConvs()
       listConvs should have size 0
-      val ev = MemberJoinEvent(Uid(), RConvId(), EventId(10), new Date, user1.id, Seq(selfUser.id))
+      val ev = MemberJoinEvent(Uid(), RConvId(), new Date, user1.id, Seq(selfUser.id))
       Await.result(conversations.processConversationEvent(ev, selfUser.id), timeout)
 
       getConv(ev.convId) should be('defined)
       val conv = getConv(ev.convId).get
       conv.creator shouldEqual user1.id
       conv.convType shouldEqual ConversationType.Group
-      conv.lastEvent shouldEqual ev.eventId
       listMembers(conv.id).map(_.userId).toSet shouldEqual Set(selfUser.id, user1.id)
 
       listMessages(conv.id) should have size 1
@@ -366,14 +358,13 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("Create conversation on incoming member join event containing self and other users") {
       deleteAllConvs()
-      val ev = MemberJoinEvent(Uid(), RConvId(), EventId(10), new Date, user1.id, Seq(user2.id, selfUser.id))
+      val ev = MemberJoinEvent(Uid(), RConvId(), new Date, user1.id, Seq(user2.id, selfUser.id))
       Await.result(conversations.processConversationEvent(ev, selfUser.id), timeout)
 
       getConv(ev.convId) should be('defined)
       val conv = getConv(ev.convId).get
       conv.creator shouldEqual user1.id
       conv.convType shouldEqual ConversationType.Group
-      conv.lastEvent shouldEqual ev.eventId
       listMembers(conv.id).map(_.userId).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
 
       listMessages(conv.id) should have size 1
@@ -483,13 +474,12 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convMemberLeaveSync shouldEqual Some((conv.id, user1.id))
 
       When("push notification is received for member leave")
-      val event = EventId(10)
-      service.dispatchEvent(MemberLeaveEvent(Uid(), conv.remoteId, event, new Date(), selfUser.id, Seq(user1.id)))
+      service.dispatchEvent(MemberLeaveEvent(Uid(), conv.remoteId, new Date(), selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 
       Then("message is updated")
       listMessages(conv.id) should have size 1
-      assertMessage(lastMessage(conv.id), Message.Type.MEMBER_LEAVE, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), eventId = Some(event), members = Some(Seq(user1.id)))
+      assertMessage(lastMessage(conv.id), Message.Type.MEMBER_LEAVE, Some(conv.id), userId = Some(selfUser.id), id = Some(msg.id), members = Some(Seq(user1.id)))
     }
 
     scenario("Remove just added user - before join notification is received") {
@@ -686,7 +676,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val conv = getConv(ConvId(user1.id.str)).get
       listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id)
 
-      val event = MemberJoinEvent(Uid(), conv.remoteId, EventId(1), new Date, selfUser.id, Seq(user1.id))
+      val event = MemberJoinEvent(Uid(), conv.remoteId, new Date, selfUser.id, Seq(user1.id))
       service.dispatchEvent(event)
       Thread.sleep(500)
 
@@ -696,7 +686,6 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       msg.map(_.userId) shouldEqual Some(selfUser.id)
       msg.map(_.members) shouldEqual Some(Set(user1.id))
-      msg.map(_.source) shouldEqual Some(event.eventId)
     }
   }
 }

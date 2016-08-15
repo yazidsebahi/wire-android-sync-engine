@@ -109,8 +109,6 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
         msg1 should not(beAHotKnock)
         msg1 should haveConvId
         msg1 should not(beCurrent)
-
-        msg1.source.sequence shouldEqual 1
       }
 
       lastMessage(conv.id) shouldEqual msg1
@@ -193,7 +191,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val msg = knock()
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -210,7 +208,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       Thread.sleep(250)
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, Message.Type.TEXT, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -226,7 +224,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val msg = knock()
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)
@@ -244,7 +242,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
 
       val msgId = MessageId()
-      addMessage(MessageData(msgId, conv.id, EventId(2), Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
+      addMessage(MessageData(msgId, conv.id, Message.Type.KNOCK, user1.id, MessageData.textContent("msg"), time = Instant.now))
 
       val msg1 = knock()
       msg1 should beAKnock(otherId = msg.id)

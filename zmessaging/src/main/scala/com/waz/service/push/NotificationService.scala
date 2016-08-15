@@ -67,10 +67,10 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
         case ev @ UserConnectionEvent(_, convId, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime => NotificationData(s"$CONNECT_REQUEST-$convId-$userId", msg.getOrElse(""), convId, userId, CONNECT_REQUEST, time.instant, userName = name)
         case ev @ UserConnectionEvent(_, convId, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime => NotificationData(s"$CONNECT_ACCEPTED-$convId-$userId", "", convId, userId, CONNECT_ACCEPTED, time.instant, userName = name)
         case ContactJoinEvent(_, userId, _) => NotificationData(s"$CONTACT_JOIN-$userId", "", RConvId.Empty, userId, CONTACT_JOIN, Instant.EPOCH)
-        case MemberJoinEvent(_, convId, eventId, time, userId, members) if members != Seq(userId) => NotificationData(s"$MEMBER_JOIN-$convId-$eventId", "", convId, userId, MEMBER_JOIN, time.instant) // ignoring auto-generated member join event when user accepts connection
-        case MemberLeaveEvent(_, convId, eventId, time, userId, _) => NotificationData(s"$MEMBER_LEAVE-$convId-$eventId", "", convId, userId, MEMBER_LEAVE, time.instant)
-        case RenameConversationEvent(_, convId, eventId, time, userId, name) => NotificationData(s"$RENAME-$convId-$eventId", "", convId, userId, RENAME, time.instant)
-        case MissedCallEvent(_, convId, eventId, time, userId) => NotificationData(s"$MISSED_CALL-$convId-$eventId", "", convId, userId, MISSED_CALL, time.instant)
+        case MemberJoinEvent(id, convId, time, userId, members, _) if members != Seq(userId) => NotificationData(s"$MEMBER_JOIN-$convId-$id", "", convId, userId, MEMBER_JOIN, time.instant) // ignoring auto-generated member join event when user accepts connection
+        case MemberLeaveEvent(id, convId, time, userId, _) => NotificationData(s"$MEMBER_LEAVE-$convId-$id", "", convId, userId, MEMBER_LEAVE, time.instant)
+        case RenameConversationEvent(id, convId, time, userId, name) => NotificationData(s"$RENAME-$convId-$id", "", convId, userId, RENAME, time.instant)
+        case MissedCallEvent(id, convId, time, userId) => NotificationData(s"$MISSED_CALL-$convId-$id", "", convId, userId, MISSED_CALL, time.instant)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Text(msg, mentions, _))) => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Knock(hot))) => NotificationData(s"$KNOCK-$convId-$id-$hot", "", convId, userId, KNOCK, time.instant, hotKnock = hot)
         case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Like)) => NotificationData(s"$LIKE-$convId-$id-$userId", "", convId, userId, LIKE, time.instant, referencedMessage = Some(MessageId(id.str)))

@@ -28,7 +28,6 @@ import com.waz.utils._
 import com.waz.znet.Request
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, OptionValues}
-import scala.concurrent.duration._
 
 class ConversationStateSpec extends FeatureSpec with Matchers with OptionValues with ProvisionedApiSpec with RemoteZmsSpec with ScalaFutures with DefaultPatienceConfig { test =>
 
@@ -50,20 +49,6 @@ class ConversationStateSpec extends FeatureSpec with Matchers with OptionValues 
   private lazy val conv3 = {
     withDelay(convs should not be empty)
     convs.find(_.data.id == ConvId(provisionedUserId("auto3").str)).get
-  }
-
-  scenario("archive on remote with legacy request") {
-    awaitUiFuture(remote.login(email, password))
-
-    // post archived event
-    val res = remote.account.get.netClient.apply(Request.Put(s"${ConversationsClient.ConversationsPath}/${conv2.data.remoteId}/self", JsonEncoder { _.put("archived", EventId(1).toString) })).future.futureValue
-    info(s"$res")
-    res.status.isSuccess shouldEqual true
-
-    withDelay {
-      conv2.isArchived shouldEqual true
-      archived should not be empty
-    } (10.seconds)
   }
 
   scenario("mute on remote with legacy request") {

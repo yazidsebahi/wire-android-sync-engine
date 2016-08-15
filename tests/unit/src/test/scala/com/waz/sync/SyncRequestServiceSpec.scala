@@ -381,7 +381,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       assertMerged(convId, PostSelfPicture(Some(AssetId())), PostSelfPicture(None)) { case PostSelfPicture(None) => true }
       assertMerged(convId, PostConv(convId, Nil, None), PostConv(convId, Seq(UserId()), Some("name"))) { case PostConv(`convId`, Seq(_), Some("name")) => true }
       assertMerged(convId, PostConvState(convId, ConversationState(archived = Some(true), archiveTime = Some(Instant.ofEpochMilli(5)))), PostConvState(convId, ConversationState(archived = Some(false), archiveTime = Some(Instant.ofEpochMilli(7))))) {
-        case PostConvState(`convId`, ConversationState(Some(false), Some(time), None, None, None)) => time == Instant.ofEpochMilli(7)
+        case PostConvState(`convId`, ConversationState(Some(false), Some(time), None, None)) => time == Instant.ofEpochMilli(7)
       }
     }
 

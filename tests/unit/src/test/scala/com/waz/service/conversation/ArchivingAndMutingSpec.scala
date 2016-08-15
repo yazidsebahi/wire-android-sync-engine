@@ -327,11 +327,11 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   def awaitSuccess[T](op: => Future[Option[T]]): T = Await.result(op, 1.second).value
   def withConvFromStore(op: ConversationData => Unit): Unit = withDelay { op(getConv(conv.id).value) }
 
-  def memberJoin(old: Boolean = false): Unit = service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, Seq()))
-  def memberLeave(old: Boolean = false, user: UserId = user1.id): Unit = service.dispatchEvent(MemberLeaveEvent(Uid(), conv.remoteId, eventId(old), date(old), user, Seq(user)))
+  def memberJoin(old: Boolean = false): Unit = service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, date(old), user1.id, Seq()))
+  def memberLeave(old: Boolean = false, user: UserId = user1.id): Unit = service.dispatchEvent(MemberLeaveEvent(Uid(), conv.remoteId, date(old), user, Seq(user)))
   def memberUpdate(): Unit = service.dispatchEvent(MemberUpdateEvent(Uid(), conv.remoteId, new Date, selfUser.id, ConversationState()))
 
-  def renameConv(old: Boolean = false): Unit = service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, ""))
+  def renameConv(old: Boolean = false): Unit = service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, date(old), user1.id, ""))
 
   def knock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(false))))
   def hotKnock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(true))))
@@ -341,15 +341,14 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
 
   def sendImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(new GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(MessageId(), ImageAsset("preview", 0, 0, 0, 0, "", 1, None, None)), RAssetDataId(), None))
+    service.dispatchEvent(GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(MessageId(), ImageAsset("preview", 0, 0, 0, 0, "", 1, None, None)), RAssetDataId(), None))
 
   def sendGenericImageMessage[T](old: Boolean = false): Unit =
     service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset("preview", 0, 0, 0, 0, "", 0, None, None))))
 
-  def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id))
-  def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), conv.remoteId, eventId(old), date(old), user1.id, Some("missed")))
+  def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(Uid(), conv.remoteId, date(old), user1.id))
+  def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), conv.remoteId, date(old), user1.id, Some("missed")))
 
-  def eventId(old: Boolean): EventId = if (old) EventId.Zero else EventId.MaxValue
   def date(old: Boolean): Date = if (old) new Date(System.currentTimeMillis() - 100000) else new Date
 
   def beArchived: Matcher[ConversationData] = be(true) compose (_.archived)

@@ -98,7 +98,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       wsConnected ! true
       withDelay { lastNotificationId should be ('defined) }
       val id = Uid()
-      service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), EventId.Zero, new Date, UserId(), Nil))))
+      service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), new Date, UserId(), Nil))))
       withDelay { lastNotificationId shouldEqual Some(id) }
     }
 

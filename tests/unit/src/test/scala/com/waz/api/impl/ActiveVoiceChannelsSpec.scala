@@ -35,7 +35,7 @@ class ActiveVoiceChannelsSpec extends FeatureSpec with Matchers with BeforeAndAf
   lazy val zmessaging = new MockZMessaging(selfUserId = selfId)
   implicit lazy val ui = new MockUiModule(zmessaging)
 
-  val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group, lastEvent = EventId(1000))
+  val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

@@ -257,7 +257,7 @@ object SyncRequest {
     val a = if (o.archiveTime.exists(t => n.archiveTime.forall(_.isBefore(t)))) o else n
     val m = if (o.muteTime.exists(t => n.muteTime.forall(_.isBefore(t)))) o else n
 
-    ConversationState(a.archived, a.archiveTime, m.muted, m.muteTime, a.archiveEvent)
+    ConversationState(a.archived, a.archiveTime, m.muted, m.muteTime)
   }
 
   implicit lazy val Decoder: JsonDecoder[SyncRequest] = new JsonDecoder[SyncRequest] {

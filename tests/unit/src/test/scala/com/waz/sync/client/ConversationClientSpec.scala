@@ -131,7 +131,7 @@ class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures
 
       val res = ConversationResponse.Decoder(new JSONObject(json))
       val conv = res.conversation
-      conv.archived shouldEqual true
+      conv.archived shouldEqual false
       conv.archiveTime shouldEqual conv.lastEventTime
       conv.muted shouldEqual false
       conv.muteTime shouldEqual conv.lastEventTime
@@ -151,7 +151,7 @@ class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures
 
       JsonObjectResponse(json.getJSONArray("conversations").getJSONObject(0)) match {
         case ConversationsResult(Seq(conversation), false) => info(s"parsed conversation: $conversation")
-          conversation.conversation.renameEvent shouldEqual Some(conversation.conversation.lastEvent)
+          conversation.conversation.renameEvent shouldEqual conversation.conversation.lastEventTime
         case _ => fail("conversation response didn't match")
       }
     }

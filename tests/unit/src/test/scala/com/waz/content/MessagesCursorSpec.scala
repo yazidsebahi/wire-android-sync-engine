@@ -40,13 +40,13 @@ import scala.concurrent.duration._
 class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with PropertyChecks { test =>
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(100, Millis))
 
-  implicit val entryGen : Gen[Entry] = resultOf(Entry(_: MessageId, _: Instant, _: EventId))
+  implicit val entryGen : Gen[Entry] = resultOf(Entry(_: MessageId, _: Instant))
   implicit val arbEntry = Arbitrary(entryGen)
 
   import MessagesCursor._
   implicit lazy val cursorDispatcher = new SerialDispatchQueue()
 
-  def entry(i: Int) = new Entry(MessageId(i.toString), Instant.ofEpochMilli(1000 + i), EventId(i, "0"))
+  def entry(i: Int) = new Entry(MessageId(i.toString), Instant.ofEpochMilli(1000 + i))
 
   lazy val convId = ConvId()
   lazy val items = Seq.tabulate(2000) { i => entry(i * 10) }
@@ -55,8 +55,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val msgLoader = new MessageAndLikesStorage(UserId(), zms.messagesStorage, zms.likingsStorage) {
     override def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]] = withLikes(ids map { id =>
-      val seq = id.str.toLong
-      MessageData(id, convId, EventId(seq, "0"), Message.Type.TEXT, UserId(id.str), Seq(MessageContent(Message.Part.Type.TEXT, id.str)))
+      MessageData(id, convId, Message.Type.TEXT, UserId(id.str), Seq(MessageContent(Message.Part.Type.TEXT, id.str)))
     })
     override def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]] = Future.successful(msgs.map { m => MessageAndLikes(m, IndexedSeq.empty, likedBySelf = false)})
   }
@@ -68,9 +67,9 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   }
 
   def createCursor(items: Seq[Entry]) = {
-    val c = new MatrixCursor(Array("id", "time", "event_seq", "event_hex"), items.size)
+    val c = new MatrixCursor(Array("id", "time"), items.size)
     items foreach { e =>
-      c.addRow(Array[AnyRef](e.id.str, new java.lang.Long(e.time.toEpochMilli), new java.lang.Long(e.eventId.sequence), e.eventId.hex))
+      c.addRow(Array[AnyRef](e.id.str, new java.lang.Long(e.time.toEpochMilli)))
     }
     c
   }
@@ -99,7 +98,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   feature(s"IndexWindow") {
 
     scenario("compute index") {
-      val window = new IndexWindow(100, IndexedSeq.tabulate(100)(i => Entry(MessageId(s"$i"), Instant.ofEpochMilli(1000 + i), EventId(i))))
+      val window = new IndexWindow(100, IndexedSeq.tabulate(100)(i => Entry(MessageId(s"$i"), Instant.ofEpochMilli(1000 + i))))
       window.msgs.zipWithIndex foreach { case (e, i) =>
         withClue(s"$e msgs: ${window.msgs.take(5)}") {
           window.indexOf(e.time) shouldEqual 100 + i

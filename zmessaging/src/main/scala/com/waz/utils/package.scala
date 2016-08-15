@@ -176,6 +176,8 @@ package object utils {
     def max(b: Date) = if (a.toEpochMilli < b.getTime) b else a
     def min(b: bp.Instant) = if (a isBefore b) a else b
     def min(b: Date) = if (a.toEpochMilli < b.getTime) a else b
+    def >=(b: bp.Instant) = !a.isBefore(b)
+    def <=(b: bp.Instant) = !a.isAfter(b)
   }
 
   implicit lazy val InstantIsOrdered: Ordering[Instant] = Ordering.ordered[Instant]

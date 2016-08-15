@@ -101,7 +101,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
       conversations should have size(count + 1)
 
       withDelay {
-        conv.value.data.lastEvent should be > EventId.Zero
+        conv.value.data.lastEventTime.toEpochMilli should be > 0L
       }
       awaitUi(5.seconds)
     }
@@ -262,7 +262,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
 
       withDelay {
         msgs.getLastMessage.getMessageType shouldEqual Message.Type.MEMBER_JOIN
-        msgs.getLastMessage.data.source.nonLocal shouldEqual true
+        msgs.getLastMessage.data.isLocal shouldEqual false
       }
     }
 

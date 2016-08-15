@@ -55,9 +55,9 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
 
   def insertConversation(conv: ConversationData) = storage.insert(conv)
 
-  def updateConversationName(id: ConvId, name: String, eventId: Option[EventId] = None) = storage.update(id, { conv =>
-      if (conv.convType == ConversationType.Group && eventId.forall(_ >= conv.renameEvent.getOrElse(EventId.Zero)))
-        conv.copy(name = if (name.isEmpty) None else Some(name), renameEvent = eventId.orElse(conv.renameEvent))
+  def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None) = storage.update(id, { conv =>
+      if (conv.convType == ConversationType.Group && time.forall(_ >= conv.renameEvent))
+        conv.copy(name = if (name.isEmpty) None else Some(name), renameEvent = time.getOrElse(conv.renameEvent))
       else
         conv
     })
@@ -90,26 +90,25 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
     verbose(s"updateConversationState($conv, state: $state)")
 
     val (archived, archiveTime) = state match {
-      case ConversationState(Some(a), Some(t), _, _, _) if !t.isBefore(conv.archiveTime) => (a, t)
-      case ConversationState(Some(a), None, _, _, Some(_)) => (a, conv.archiveTime) // legacy conv state change
+      case ConversationState(Some(a), Some(t), _, _) if t >= conv.archiveTime => (a, t)
       case _ => (conv.archived, conv.archiveTime)
     }
 
     val (muted, muteTime) = state match {
-      case ConversationState(_, _, Some(m), Some(t), _) if !t.isBefore(conv.muteTime) => (m, t)
+      case ConversationState(_, _, Some(m), Some(t)) if t >= conv.muteTime => (m, t)
       case _ => (conv.muted, conv.muteTime)
     }
 
     conv.copy(archived = archived, archiveTime = archiveTime, muted = muted, muteTime = muteTime)
   })
 
-  def updateLastEvent(id: ConvId, time: Instant, event: Option[EventId] = None) = storage.update(id, { conv =>
-    verbose(s"updateLastEvent($conv, $event, $time)")
+  def updateLastEvent(id: ConvId, time: Instant) = storage.update(id, { conv =>
+    verbose(s"updateLastEvent($conv, $time)")
 
-    if (event.forall(_ < conv.lastEvent) && conv.lastEventTime.isAfter(time)) conv
+    if (conv.lastEventTime.isAfter(time)) conv
     else {
-      debug(s"updating: $conv, lastEvent: $event, lastEventTime: $time")
-      conv.copy(lastEvent = event.fold(conv.lastEvent)(_ max conv.lastEvent), lastEventTime = conv.lastEventTime max time)
+      debug(s"updating: $conv, lastEventTime: $time")
+      conv.copy(lastEventTime = conv.lastEventTime max time)
     }
   })
 
@@ -133,7 +132,7 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
     } yield conv
 
   def addConversationMembers(convId: ConvId, selfUserId: UserId, members: Seq[UserId]) =
-    membersStorage.add(convId, EventId.Zero, selfUserId +: members: _*)
+    membersStorage.add(convId, selfUserId +: members: _*)
 
   /**
    * Finds or creates local one-to-one conversation with given user and/or remoteId.

@@ -280,8 +280,8 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     CreateConversationEvent(Uid(), conv, new Date, user, ConversationResponse(ConversationData(ConvId(conv.str), conv, None, user, ConversationType.WaitForConnection), Nil))
 
   def conversationConnectRequestEvent(user: UserId, conv: RConvId) = 
-    ConnectRequestEvent(Uid(), conv, EventId.Zero, new Date, selfUser.id, "Hello Test", user, "One2One", None)
+    ConnectRequestEvent(Uid(), conv, new Date, selfUser.id, "Hello Test", user, "One2One", None)
   
-  def memberJoinEvent(user: UserId, conv: RConvId, event: EventId = EventId(2)) =
-    MemberJoinEvent(Uid(), conv, event, new Date, selfUser.id, Seq(user))
+  def memberJoinEvent(user: UserId, conv: RConvId) =
+    MemberJoinEvent(Uid(), conv, new Date, selfUser.id, Seq(user))
 }
