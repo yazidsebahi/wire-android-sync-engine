@@ -18,7 +18,6 @@
 package com.waz
 
 import java.io.File
-import java.security.{Permission, PermissionCollection}
 import java.util.Properties
 import java.util.zip.ZipFile
 

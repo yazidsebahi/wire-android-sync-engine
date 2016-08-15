@@ -180,5 +180,25 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
         msg.isDeleted shouldEqual true
       }
     }
+
+    scenario("Send two messages and recall the first one") {
+      conv.sendMessage(new Text("test 1"))
+      conv.sendMessage(new Text("test 2"))
+
+      withDelay {
+        msgs should have size 6
+        msgs.getLastMessage.getBody shouldEqual "test 2"
+      }
+
+      val msg = msgs.get(4)
+      msg.recall()
+
+      withDelay {
+        msg.isDeleted shouldEqual true
+        withClue(msgs.map(m => (m.getMessageType, m.getBody))) {
+          msgs.get(4).getMessageType shouldEqual Message.Type.RECALLED
+        }
+      }
+    }
   }
 }

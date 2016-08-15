@@ -220,7 +220,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.canRecall(convId, userId) =>
         content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
-          content.addMessage(MessageData(systemMessageId, convId, Message.Type.RECALLED, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMessageId, MsgRecall(msgId)))))
+          content.addMessage(MessageData(systemMessageId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMessageId, MsgRecall(msgId)))))
         }
       case _ => Future successful None
     }
