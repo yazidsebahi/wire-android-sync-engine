@@ -70,7 +70,7 @@ trait SyncServiceHandle {
   def postInvitation(i: Invitation): Future[SyncId]
   def postTypingState(id: ConvId, typing: Boolean): Future[SyncId]
   def postExcludePymk(id: UserId): Future[SyncId]
-  def postOpenGraphData(conv: ConvId, msg: MessageId): Future[SyncId]
+  def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: Instant): Future[SyncId]
 
   def registerGcm(): Future[SyncId]
   def deleteGcmToken(token: GcmId): Future[SyncId]
@@ -128,7 +128,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postLiking(id: ConvId, liking: Liking): Future[SyncId]          = addRequest(PostLiking(id, liking))
   def postLastRead(id: ConvId, time: Instant)         = addRequest(PostLastRead(id, time), priority = Priority.Low, delay = timeouts.messages.lastReadPostDelay)
   def postCleared(id: ConvId, time: Instant)          = addRequest(PostCleared(id, time))
-  def postOpenGraphData(conv: ConvId, msg: MessageId) = addRequest(PostOpenGraphMeta(conv, msg), priority = Priority.Low)
+  def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = addRequest(PostOpenGraphMeta(conv, msg, time), priority = Priority.Low)
 
   def registerGcm()                                 = addRequest(RegisterGcmToken, priority = Priority.Low, forceRetry = true)
   def deleteGcmToken(token: GcmId)                  = addRequest(DeleteGcmToken(token), priority = Priority.Low)
@@ -193,7 +193,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostLiking(convId, liking)     => zms.likingsSync.postLiking(convId, liking)
     case PostDeleted(convId, msgId)     => zms.messagesSync.postDeleted(convId, msgId)
     case PostLastRead(convId, time)     => zms.lastReadSync.postLastRead(convId, time)
-    case PostOpenGraphMeta(conv, msg)   => zms.openGraphSync.postMessageMeta(conv, msg)
+    case PostOpenGraphMeta(conv, msg, time)   => zms.openGraphSync.postMessageMeta(conv, msg, time)
     case PostRecalled(convId, msg, recall)    => zms.messagesSync.postRecalled(convId, msg, recall)
     case PostSessionReset(conv, user, client) => zms.otrSync.postSessionReset(conv, user, client)
   }

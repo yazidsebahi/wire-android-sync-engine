@@ -37,6 +37,7 @@ import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.utils.RichFuture
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
@@ -44,13 +45,16 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
   import OpenGraphSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
-  def postMessageMeta(convId: ConvId, msgId: MessageId): Future[SyncResult] = messages.getMessage(msgId) flatMap {
+  def postMessageMeta(convId: ConvId, msgId: MessageId, editTime: Instant): Future[SyncResult] = messages.getMessage(msgId) flatMap {
     case None => Future successful SyncResult(internalError(s"No message found with id: $msgId"))
     case Some(msg) if msg.msgType != Message.Type.RICH_MEDIA =>
       debug(s"postMessageMeta, message is not RICH_MEDIA: $msg")
       Future successful SyncResult.Success
     case Some(msg) if msg.content.forall(_.tpe != Part.Type.WEB_LINK) =>
       verbose(s"postMessageMeta, no WEB_LINK found in msg: $msg")
+      Future successful SyncResult.Success
+    case Some(msg) if msg.editTime != editTime =>
+      verbose(s"postMessageMeta, message has already been edited: $msg")
       Future successful SyncResult.Success
     case Some(msg) =>
       convs.get(convId) flatMap {
@@ -75,6 +79,12 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       }
   }
 
+  private def updateIfNotEdited(msg: MessageData, updater: MessageData => MessageData) =
+    messages.update(msg.id, {
+      case m if msg.editTime == m.editTime => updater(m)
+      case m => m
+    })
+
   def updateOpenGraphData(msg: MessageData): Future[Either[Iterable[ErrorResponse], Seq[MessageContent]]] = {
 
     def updateOpenGraphData(part: MessageContent) =
@@ -95,7 +105,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       verbose(s"loaded open graph data: $res")
       if (errors.nonEmpty) error(s"open graph loading failed: $errors")
 
-      messages.update(msg.id, _.copy(content = parts)) map { _ =>
+      updateIfNotEdited(msg, _.copy(content = parts)) map { _ =>
         if (errors.isEmpty) Right(parts.filter(_.tpe == Part.Type.WEB_LINK))
         else Left(errors)
       }
@@ -126,7 +136,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
 
           val proto = GenericMessage(msg.id, Text(content, mentions, updated))
 
-          messages.update(msg.id, _.copy(protos = Seq(proto))) map { _ => if (errors.isEmpty) Right(proto) else Left(errors) }
+          updateIfNotEdited(msg, _.copy(protos = Seq(proto))) map { _ => if (errors.isEmpty) Right(proto) else Left(errors) }
         }
 
       case _ =>

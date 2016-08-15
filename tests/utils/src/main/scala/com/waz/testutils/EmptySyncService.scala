@@ -62,7 +62,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postInvitation(i: Invitation) = sid
   override def postTypingState(id: ConvId, t: Boolean) = sid
   override def postExcludePymk(id: UserId): Future[SyncId] = sid
-  override def postOpenGraphData(conv: ConvId, msg: MessageId) = sid
+  override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
 
   override def registerGcm() = sid
   override def deleteGcmToken(token: GcmId) = sid

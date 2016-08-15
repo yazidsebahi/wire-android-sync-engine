@@ -148,7 +148,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       case Message.Type.TEXT        => otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)).map(_.map(_.instant))
       case Message.Type.RICH_MEDIA  =>
         otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)) flatMap {
-          case Right(time) => sync.postOpenGraphData(conv.id, msg.id) map { _ => Right(time.instant) }
+          case Right(time) => sync.postOpenGraphData(conv.id, msg.id, msg.editTime) map { _ => Right(time.instant) }
           case Left(err) => Future successful Left(err)
         }
       case tpe =>
