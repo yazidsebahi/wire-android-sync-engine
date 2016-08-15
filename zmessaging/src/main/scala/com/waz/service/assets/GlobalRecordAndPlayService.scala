@@ -179,7 +179,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def playhead(key: MediaKey): Signal[bp.Duration] = stateSource flatMap {
     case Playing(_, `key`) =>
-      new ClockSignal(tickInterval).flatMap { i =>
+      ClockSignal(tickInterval).flatMap { i =>
         Signal.future(duringIdentityTransition { case Playing(player, `key`) => player.playhead })
       }
     case Paused(player, `key`, media, _) =>
@@ -196,7 +196,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
   def recordingLevel(key: AssetMediaKey): EventStream[Float] =
     stateSource.flatMap {
       case Recording(_, `key`, _, _, _) =>
-        new ClockSignal(tickInterval).flatMap { i =>
+        ClockSignal(tickInterval).flatMap { i =>
           Signal.future(duringIdentityTransition { case Recording(recorder, `key`, _, _, _) => successful((peakLoudness(recorder.maxAmplitudeSinceLastCall), i)) })
         }
       case other => Signal.empty[(Float, Instant)]

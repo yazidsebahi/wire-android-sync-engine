@@ -19,7 +19,6 @@ package com.waz.api.impl.search
 
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.User
 import com.waz.api.impl.CoreList
 import com.waz.model.SearchQuery.TopPeople
 import com.waz.model.{SearchQuery, UserData, UserId}
@@ -37,9 +36,10 @@ class UserSearchResult(query: SearchQuery = TopPeople, limit: Int, filter: Set[S
     if (users.keys != us.keys) notifyChanged()
   }
 
-  override def get(position: Int): User = ui.users.getUser(users at position)
+  override def get(position: Int): api.User = ui.users.getUser(users at position)
   override def size: Int = users.size
-  override def getAll: Array[User] = users.valuesIterator.map(ui.users.getUser).toArray
+  override def getAll: Array[api.User] = users.valuesIterator.map(ui.users.getUser).toArray
+  override def getFirstN(n: Int): Array[api.User] = users.valuesIterator.take(n).map(ui.users.getUser).toArray
 }
 
 object UserSearchResult {

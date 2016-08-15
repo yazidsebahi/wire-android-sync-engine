@@ -182,7 +182,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       val preview = data(0)
       val medium = data(1)
       val id = MessageId(asset.id.str)
-      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
+      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
 
       (msg, asset, preview, medium)
     }

@@ -18,7 +18,7 @@
 package com.waz.mocked.connections
 
 import com.waz.api.MockedClientApiSpec
-import com.waz.api.impl.SearchQuery.TopPeople
+import com.waz.model.SearchQuery.TopPeople
 import com.waz.mocked.MockBackend
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 import scala.concurrent.duration._
@@ -40,12 +40,10 @@ class InitialConnectionStatusSpec extends FeatureSpec with Matchers with BeforeA
 
     awaitUi(1.second)
     val search = api.search()
-    val users = search.getTopPeople(40)
+    val users = search.getTopPeople(40, Array.empty)
 
     withDelay {
       users.getAll should have size 30
-      users.getConnected should have size 30
-      users.getUnconnected should be (empty)
       all (users.getAll) shouldBe 'connected
     } (30.seconds)
 

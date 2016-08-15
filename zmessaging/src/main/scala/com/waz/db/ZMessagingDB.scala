@@ -68,25 +68,28 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     },
     Migration(68, 69)(MessageDataMigration.v69),
     Migration(69, 70)(AssetDataMigration.v70),
-    Migration(70, 71) { db =>
-      db.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
+    Migration(70, 71) {
+      _.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
     },
-    Migration(70, 71) { implicit db =>
-      db.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
+    Migration(70, 71) {
+      _.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
     },
-    Migration(71, 72) { implicit db =>
+    Migration(71, 72) { db =>
       MessageDataMigration.v72(db)
       ConversationDataMigration.v72(db)
       ConversationMembersMigration.v72(db)
     },
-    Migration(72, 73) { implicit db =>
-      db.execSQL("CREATE TABLE EditHistory (original_id TEXT PRIMARY KEY, updated_id TEXT, timestamp INTEGER)")
+    Migration(72, 73) {
+      _.execSQL("CREATE TABLE EditHistory (original_id TEXT PRIMARY KEY, updated_id TEXT, timestamp INTEGER)")
     },
     Migration(73, 74) { implicit db =>
       db.execSQL("DROP TABLE IF EXISTS GcmData") // just dropping all data, not worth the trouble to migrate that
       db.execSQL("CREATE TABLE NotificationData (_id TEXT PRIMARY KEY, data TEXT)")
     },
-    Migration(74, 75)(SearchQueryCacheMigration.v75)
+    Migration(74, 75) { db =>
+      SearchQueryCacheMigration.v75(db)
+      SyncJobMigration.v75(db)
+    }
   )
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {

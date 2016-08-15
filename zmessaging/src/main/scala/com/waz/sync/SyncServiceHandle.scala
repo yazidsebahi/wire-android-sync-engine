@@ -38,7 +38,7 @@ import scala.concurrent.duration._
 trait SyncServiceHandle {
   def syncUsersIfNotEmpty(ids: Seq[UserId]): Future[Unit] = if (ids.nonEmpty) syncUsers(ids: _*).map(_ => ())(Threading.Background) else Future.successful(())
 
-  def syncSearchQuery(cache: SearchQueryCache): Future[SyncId]
+  def syncSearchQuery(query: SearchQuery): Future[SyncId]
   def syncUsers(ids: UserId*): Future[SyncId]
   def syncSelfUser(): Future[SyncId]
   def deleteAccount(): Future[SyncId]
@@ -95,7 +95,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
     service.addRequest(SyncJob(SyncId(), req, dependsOn.toSet, priority = priority, optional = optional, timeout = timeout, timestamp = timestamp, startTime = startTime), forceRetry)
   }
 
-  def syncSearchQuery(cache: SearchQueryCache)     = addRequest(SyncSearchQuery(cache.query), priority = Priority.High)
+  def syncSearchQuery(query: SearchQuery)          = addRequest(SyncSearchQuery(query), priority = Priority.High)
   def syncUsers(ids: UserId*)                      = addRequest(SyncUser(ids.toSet))
   def syncSelfUser()                               = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount()                              = addRequest(DeleteAccount)

@@ -21,7 +21,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
-import com.waz.content.{EditHistoryStorage, LikingsStorage, Mime}
+import com.waz.content.{EditHistoryStorage, LikingsStorage}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.Original
@@ -224,7 +224,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.canRecall(convId, userId) =>
         content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
-          val recall = MessageData(systemMsgId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMsgId, MsgRecall(msgId))))
+          val recall = MessageData(systemMsgId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMsgId.uid, MsgRecall(msgId))))
           if (userId == selfUserId) Future successful Some(recall) // don't save system message for self user
           else content.addMessage(recall)
         }

@@ -279,7 +279,7 @@ object SyncRequest {
       SyncCommand.fromName(js.getString("cmd")) match {
         case Cmd.SyncUser              => SyncUser(users)
         case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
-        case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('query)))
+        case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
         case Cmd.SyncCallState         => SyncCallState(convId, fromFreshNotification = false)
         case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name)
         case Cmd.PostConvName          => PostConvName(convId, 'name)
@@ -338,7 +338,7 @@ object SyncRequest {
       req match {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
-        case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey)
+        case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
         case DeleteGcmToken(token)            => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))

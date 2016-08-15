@@ -24,14 +24,12 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model._
-import com.waz.service.assets
-import assets.AssetService.BitmapRequest.Regular
-import assets.AssetService.BitmapResult.BitmapLoaded
-import assets.AssetService.{BitmapRequest, BitmapResult}
+import com.waz.service.assets.AssetService.BitmapRequest.Regular
+import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
+import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}
 import com.waz.threading.CancellableFuture
 import com.waz.ui.MemoryImageCache
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowLog
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
@@ -101,10 +99,6 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     loadDelay = mockDelay(medium = 500.millis)
   }
 
-  after {
-    ShadowLog.stream = null
-  }
-
   def checkLoaded(req: BitmapRequest, preview: Option[(Int, Int)] = None, full: Option[(Int, Int)] = None, delay: FiniteDuration = Duration.Zero)(im: ImageData*) = {
     val data = asset(im: _*)
     val listener = new SignalListener(data, req)
@@ -120,7 +114,6 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   feature("Wire asset loading") {
 
     scenario("Load asset with invalid metadata") {
-      ShadowLog.stream = System.out
       checkLoaded(Regular(500), Some((500, 500)), Some((996, 660)))(image("smallProfile", 280, 280, 0, 0), image("medium", 996, 660, 0, 0))
     }
 

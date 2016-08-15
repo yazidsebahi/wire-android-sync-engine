@@ -165,7 +165,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
 
     def post: ErrorOr[Instant] = msg.msgType match {
       case ASSET                  => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
-      case KNOCK                  => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
+      case KNOCK                  => otrSync.postOtrMessage(conv, GenericMessage(msg.id.uid, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
       case TEXT | TEXT_EMOJI_ONLY => postTextMessage().map(_.map(_.time))
       case RICH_MEDIA  =>
         postTextMessage() flatMap {

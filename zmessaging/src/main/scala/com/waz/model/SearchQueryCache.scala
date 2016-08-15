@@ -18,6 +18,7 @@
 package com.waz.model
 
 import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.utils.{JsonDecoder, JsonEncoder}
@@ -40,5 +41,7 @@ object SearchQueryCache {
     override val table = Table("SearchQueries", Query, Timestamp, Entries)
 
     override def apply(implicit cursor: Cursor): SearchQueryCache = SearchQueryCache(Query, Timestamp, Entries)
+
+    def deleteBefore(i: Instant)(implicit db: SQLiteDatabase) = db.delete(table.name, s"${Timestamp.name} < ?", Array(Timestamp(i)))
   }
 }

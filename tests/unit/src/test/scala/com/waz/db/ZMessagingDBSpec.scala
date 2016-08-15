@@ -17,23 +17,29 @@
  */
 package com.waz.db
 
+import android.content.ContentValues
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
+import com.waz.Generators
 import com.waz.api.{KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
+import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
-import com.waz.utils.DbLoader
+import com.waz.model.sync.SyncJob.SyncJobDao
+import com.waz.model.sync.{SyncCommand, SyncJob}
+import com.waz.utils.{DbLoader, returning}
 import org.robolectric.Robolectric
 import org.scalatest._
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
 
-class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with BeforeAndAfter with RobolectricTests with DbLoader {
+class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with GeneratorDrivenPropertyChecks with BeforeAndAfter with RobolectricTests with DbLoader {
   lazy val dbHelper = new ZMessagingDB(Robolectric.application, "")
 
   after {
@@ -70,7 +76,6 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Be
       UserDataDao.list should have size numberOfUsersBeforeMigration
       UserDataDao.list foreach { user =>
         user.relation should not be null
-        user.excludeFromPymk shouldEqual false
       }
     }
 
@@ -171,6 +176,70 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Be
         if (m.msgType == Message.Type.KNOCK) m.protos should have size 1
         m.editTime shouldEqual Instant.EPOCH
       }
+    }
+
+    scenario("Inline search results in 75") {
+      implicit val db = loadDb("/db/zmessaging_60.db")
+      dbHelper.onUpgrade(db, 60, 75)
+
+      val cachedQuery = SearchQueryCache(SearchQuery.Recommended("meep moop"), Instant.now, Some(Vector(UserId("a"), UserId("b"))))
+      SearchQueryCacheDao.insertOrIgnore(cachedQuery)
+      SearchQueryCacheDao.list shouldEqual Vector(cachedQuery)
+    }
+
+    scenario("Drop excludeFromPYMK and search from sync jobs in 75") {
+      implicit val db = loadDb("/db/zmessaging_60.db")
+      import Generators._
+      import SyncRequests._
+
+      forAll { job: SyncJob =>
+        whenever(job.request.cmd != SyncCommand.SyncSearchQuery) {
+          SyncJobDao.insertOrIgnore(job)
+        }
+      }
+
+      val before = SyncJobDao.list
+
+      before should have size 100
+
+      db.insert(SyncJobDao.table.name, null, returning(new ContentValues) { cv =>
+        cv.put("_id", "f94af0bf-4043-4278-8891-6d5562c266b3")
+        cv.put("data",
+          """{
+            |  "id": "f94af0bf-4043-4278-8891-6d5562c266b3",
+            |  "request": {
+            |    "cmd": "sync-search",
+            |    "queryCacheKey": 42
+            |  },
+            |  "priority": 10,
+            |  "timestamp": 1471360327536,
+            |  "startTime": 0,
+            |  "state": "WAITING"
+            |}
+          """.stripMargin)
+      })
+
+      db.insert(SyncJobDao.table.name, null, returning(new ContentValues) { cv =>
+        cv.put("_id", "7c75141c-29f3-47d1-b52d-715991a81fdf")
+        cv.put("data",
+          """{
+            |  "id": "7c75141c-29f3-47d1-b52d-715991a81fdf",
+            |  "request": {
+            |    "cmd": "post-exclude-pymk",
+            |    "user": "33c897d1-276a-4c1b-a3bf-9c51c374e661"
+            |  },
+            |  "priority": 10,
+            |  "timestamp": 1471360406264,
+            |  "startTime": 0,
+            |  "state": "WAITING"
+            |}
+          """.stripMargin)
+      })
+
+      dbHelper.onUpgrade(db, 60, 75)
+
+      SyncJobDao.list should have size 100
+      SyncJobDao.list shouldEqual before
     }
   }
 

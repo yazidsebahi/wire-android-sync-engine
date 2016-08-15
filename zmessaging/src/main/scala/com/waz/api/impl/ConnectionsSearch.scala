@@ -18,7 +18,6 @@
 package com.waz.api.impl
 
 import com.waz.api
-import com.waz.api.SearchResultOrdering
 import com.waz.model.{ConvId, UserData, UserId}
 import com.waz.service.{SearchKey, ZMessaging}
 import com.waz.ui.{SignalLoading, UiModule}
@@ -28,32 +27,25 @@ import org.threeten.bp.Instant
 
 import scala.collection._
 
-class ConnectionsSearch(query: SearchKey, filter: Array[String], order: SearchResultOrdering)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
+class ConnectionsSearch(query: SearchKey, filter: Array[String])(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private val filteredIds = filter.toSet
 
   private var users = Vector.empty[UserData]
 
   addLoader { zms =>
-    order match {
-      case SearchResultOrdering.BY_NAME =>
-        usersFrom(zms).map(_.sortBy(_.name)(currentLocaleOrdering))
-      case SearchResultOrdering.BY_LAST_EVENT_TIME =>
-        for {
-          users <- usersFrom(zms)
-          times <- lastEventTimes(zms, users.map(u => ConvId(u.id.str))(breakOut))
-          order  = Ordering.by[UserData, Instant](u => times.getOrElse(u.id, Instant.EPOCH)).reverse
-        } yield users.sorted(order)
-    }
+    usersFrom(zms).map(_.sortBy(_.name)(currentLocaleOrdering))
   } { conns =>
+    val changed = ! users.corresponds(conns)((a, b) => a.id == b.id)
     users = conns
-    notifyChanged()
+    if (changed) notifyChanged()
   }
 
   private def usersFrom(zms: ZMessaging): Signal[Vector[UserData]] =
     zms.users.acceptedUsers
-       .map(_.values.filter(u => query.isAtTheStartOfAnyWordIn(u.searchKey))
-                    .filterNot(u => filteredIds.contains(u.id.str))
-                    .toVector)
+       .map(_.valuesIterator
+             .filter(u => query.isAtTheStartOfAnyWordIn(u.searchKey))
+             .filterNot(u => filteredIds.contains(u.id.str))
+             .toVector)
 
   private def lastEventTimes(zms: ZMessaging, ids: Set[ConvId]): Signal[Map[UserId, Instant]] =
     zms.convsStorage.convsSignal.map { convs =>
@@ -66,4 +58,5 @@ class ConnectionsSearch(query: SearchKey, filter: Array[String], order: SearchRe
   override def get(position: Int): api.User = ui.users.getUser(users(position))
   override def size(): Int = users.length
   override def getAll: Array[api.User] = users.map(ui.users.getUser)(breakOut)
+  override def getFirstN(n: Int): Array[api.User] = users.iterator.take(n).map(ui.users.getUser).toArray
 }

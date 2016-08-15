@@ -30,7 +30,7 @@ class ClockSignalSpec extends FeatureSpec with Matchers with OptionValues with R
   implicit val tolerance = 100.millis.tolerance
 
   scenario("Subscribe, unsubscribe, re-subscribe") {
-    val signal = new ClockSignal(1.millis)
+    val signal = ClockSignal(1.millis)
 
     val v1 = signal.value
     v1 should beRoughly(now)

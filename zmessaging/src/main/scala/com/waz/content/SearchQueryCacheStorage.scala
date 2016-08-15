@@ -20,7 +20,14 @@ package com.waz.content
 import android.content.Context
 import com.waz.model.{SearchQuery, SearchQueryCache}
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
+import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.{CachedStorage, TrimmingLruCache}
+import com.waz.utils._
+import org.threeten.bp.Instant
 
-class SearchQueryCacheStorage(context: Context, storage: Database) extends CachedStorage[SearchQuery, SearchQueryCache](new TrimmingLruCache(context, Fixed(20)), storage)(SearchQueryCacheDao, "SearchQueryCacheStorage")
+import scala.concurrent.Future
+
+class SearchQueryCacheStorage(context: Context, storage: Database) extends CachedStorage[SearchQuery, SearchQueryCache](new TrimmingLruCache(context, Fixed(20)), storage)(SearchQueryCacheDao, "SearchQueryCacheStorage") {
+  import Threading.Implicits.Background
+  def deleteBefore(i: Instant): Future[Unit] = storage(SearchQueryCacheDao.deleteBefore(i)(_)).future.flatMap(_ => deleteCached(_.timestamp.isBefore(i)))
+}

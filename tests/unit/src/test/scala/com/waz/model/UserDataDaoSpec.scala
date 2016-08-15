@@ -67,7 +67,7 @@ class UserDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   import UserDataDao.{insertOrReplace, list, get, findByConnectionStatus}
   implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
 
-  def search(str: String, selfUserId: Option[UserId] = None, limit: Option[Int] = None) = UserDataDao.search(SearchKey(str), selfUserId, limit).acquire(_.map(_.id).to[Vector])
+  def search(str: String) = UserDataDao.recommendedPeople(SearchKey(str)).acquire(_.map(_.id).to[Vector])
 
   feature("CRUD") {
 
@@ -99,45 +99,33 @@ class UserDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     }
   }
 
-  feature("Searching") {
+  feature("Searching for recommended people") {
 
     scenario("search by name part") {
       insertOrReplace(users)
 
-      search("friend").toSet shouldEqual users.filter(_.name.contains("friend")).map(_.id).toSet
+      search("friend").toSet shouldBe empty
 
-      search("f").toSet shouldEqual users.filter(_.name.contains("friend")).map(_.id).toSet
+      search("f").toSet shouldBe empty
 
-      search("s").toSet shouldEqual users.filter(_.name.contains("some")).map(_.id).toSet
+      search("s").toSet shouldBe empty
 
-      search("r").toSet shouldEqual users.filter(_.name.contains("related")).map(_.id).toSet
-      search("re").toSet shouldEqual users.filter(_.name.contains("related")).map(_.id).toSet
-      search("rel").toSet shouldEqual users.filter(_.name.contains("related")).map(_.id).toSet
-      search("rela").toSet shouldEqual users.filter(_.name.contains("related")).map(_.id).toSet
+      search("r").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
+      search("re").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
+      search("rel").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
+      search("rela").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
 
-      search("1").toSet shouldEqual users.filter(_.name.contains(" 1")).map(_.id).toSet
+      search("1").toSet shouldEqual users.find(_.name == "related user 1").map(_.id).toSet
 
-      search("z").toSet shouldEqual Set()
+      search("z").toSet shouldBe empty
 
-      search("user") shouldEqual List(6, 7, 3, 4, 0, 1).map(i => users(i).id)
+      search("user").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
     }
 
     scenario("search by whole name") {
       insertOrReplace(users)
 
-      search("friend user 1").toSet shouldEqual users.filter(_.name.contains("friend user 1")).map(_.id).toSet
-    }
-
-    scenario("search by name with limit") {
-      insertOrReplace(users)
-
-      search("user", limit = Some(2)).length should be(2)
-    }
-
-    scenario("don't return self user in search results") {
-      insertOrReplace(users)
-
-      search("user", Some(users.head.id)).toSet shouldEqual users.tail.filter(_.name.contains("user")).map(_.id).toSet
+      search("related user 1").toSet shouldEqual users.find(_.name == "related user 1").map(_.id).toSet
     }
   }
 

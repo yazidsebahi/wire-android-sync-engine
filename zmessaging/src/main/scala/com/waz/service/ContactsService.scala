@@ -418,6 +418,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
       _ <- storage(AddressBook.save(ab)(_)).future
       _ <- storage(ContactsOnWireDao.insertOrIgnore(onWire)(_)).future
       _ <- users.syncNotExistingOrExpired(pymk)
+      _ <- usersStorage.updateOrCreateAll2(pymk, (id, existing) => existing.getOrElse(UserData(id, "")).copy(relation = Relation.First))
       _ <- Future(contactsOnWire.mutate(_ ++ onWire))
       _ <- lastUploadTime := Some(now)
       _ <- addressBookVersionOfLastUpload := Some(CurrentAddressBookVersion)

@@ -48,34 +48,6 @@ class SyncIndicatorSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     }
   }
 
-  feature("SearchQuery indicator") {
-
-    scenario("sync on first top people search") {
-      withSyncIndicator(search.getSyncIndicator) {
-        search.getTopPeople(10)
-      }
-    }
-
-    scenario("sync on search") {
-      withSyncIndicator(search.getSyncIndicator) {
-        search.getUsers("test", 10)
-      }
-      withSyncIndicator(search.getSyncIndicator) {
-        search.getUsers("other", 10)
-      }
-      withSyncIndicator(search.getSyncIndicator) {
-        search.getUsers("test1", 10)
-      }
-    }
-
-    scenario("Don't sync on second top people search") {
-      withSyncIndicator(search.getSyncIndicator, Seq()) {
-        search.getTopPeople(10)
-        awaitUi(1.second)
-      } should not contain SyncState.SYNCING
-    }
-  }
-
   feature("Failed sync") {
 
     scenario("Show failed state if sync fails") {

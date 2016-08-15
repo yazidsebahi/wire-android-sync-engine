@@ -77,7 +77,8 @@ case class UserData(
     name = user.name,
     email = user.email.orElse(email),
     phone = user.phone.orElse(phone),
-    searchKey = SearchKey(user.name))
+    searchKey = SearchKey(user.name),
+    relation = user.level)
 
   def updated(name: Option[String] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, picture: Option[AssetId] = None, trackingId: Option[String] = None): UserData =
      copy(
@@ -214,14 +215,19 @@ object UserData {
     def listContacts(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"(${Conn.name} = ? or ${Conn.name} = ?) and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code, ConnectionStatus.Blocked.code), null, null, null))
 
     def topPeople(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
-      search(s"${Conn.name} = ? and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code))
+      search(s"${Conn.name} = ? and ${Deleted.name} = 0", Array(Conn(ConnectionStatus.Accepted)))
 
     def recommendedPeople(query: SearchKey)(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
-      search(s"(${SKey.name} LIKE ? OR ${SKey.name} LIKE ?) AND (${Rel.name} = ? OR ${Rel.name} = ?) AND ${Deleted.name} = 0", Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", Relation.Second.toString, Relation.Third.toString))
+      search(s"""    (${SKey.name} LIKE ? OR ${SKey.name} LIKE ? OR ${Email.name} = ?)
+                |AND (${Rel.name} = '${Rel(Relation.First)}' OR ${Rel.name} = '${Rel(Relation.Second)}' OR ${Rel.name} = '${Rel(Relation.Third)}')
+                |AND ${Deleted.name} = 0
+                |AND ${Conn.name} != '${Conn(ConnectionStatus.Accepted)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Blocked)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Self)}'
+              """.stripMargin,
+        Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", query.asciiRepresentation))
 
     private def search(whereClause: String, args: Array[String])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
       iterating(db.query(table.name, null, whereClause, args, null, null,
-        s"case when ${Conn.name} = '${ConnectionStatus.Accepted.code}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
+        s"case when ${Conn.name} = '${Conn(ConnectionStatus.Accepted)}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
 
     def findWireBots(implicit db: SQLiteDatabase) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
   }

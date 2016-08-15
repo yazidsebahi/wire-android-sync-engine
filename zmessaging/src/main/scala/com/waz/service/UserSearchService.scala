@@ -17,7 +17,6 @@
  */
 package com.waz.service
 
-import android.content.Context
 import com.waz.ZLog._
 import com.waz.content.{CommonConnectionsStorage, SearchQueryCacheStorage, UsersStorage}
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
@@ -26,6 +25,7 @@ import com.waz.model.{SearchQuery, _}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.threading.Threading
+import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils._
 import com.waz.utils.events._
 import org.threeten.bp.Instant
@@ -33,31 +33,43 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.Future.traverse
+import scala.concurrent.duration._
 
-class UserSearchService(context: Context, queryCache: SearchQueryCacheStorage, commonConnsStorage: CommonConnectionsStorage,
+class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage: CommonConnectionsStorage,
     userService: UserService, usersStorage: UsersStorage, timeouts: Timeouts, sync: SyncServiceHandle) {
 
   import Threading.Implicits.Background
   import com.waz.service.UserSearchService._
   import timeouts.search._
 
-  val onCommonConnectionsChanged = EventStream[UserId]()
+  ClockSignal(1.day)(i => queryCache.deleteBefore(i - cacheExpiryTime))(EventContext.Global)
 
   def searchUserData(query: SearchQuery, limit: Option[Int] = None): Signal[SeqMap[UserId, UserData]] =
     queryCache.optSignal(query).flatMap {
       case r if r.forall(cached => (cacheExpiryTime elapsedSince cached.timestamp) || cached.entries.isEmpty) =>
         verbose(s"no cached entries for query $query")
 
-        Signal.future(refresh(query).flatMap(_ => query match {
+        val withinThreeLevels = Set(Relation.First, Relation.Second, Relation.Third)
+
+        def fallbackToLocal = query match {
           case TopPeople =>
             usersStorage.find[UserData, Vector[UserData]](u => ! u.deleted && u.connection == ConnectionStatus.Accepted, db => UserDataDao.topPeople(db), identity)
           case Recommended(prefix) =>
             val key = SearchKey(prefix)
-            usersStorage.find[UserData, Vector[UserData]](u => ! u.deleted && (u.relation == Relation.Second || u.relation == Relation.Third) && key.isAtTheStartOfAnyWordIn(u.searchKey), db => UserDataDao.recommendedPeople(key)(db), identity)
-        }).logFailure())
+            usersStorage.find[UserData, Vector[UserData]](u => ! u.deleted && ! u.isConnected && withinThreeLevels(u.relation) && (key.isAtTheStartOfAnyWordIn(u.searchKey) || u.email.exists(_.str == prefix)), db => UserDataDao.recommendedPeople(key)(db), identity)
+        }
+
+        fallbackToLocal.map(_.sortBy(_.name)(currentLocaleOrdering)).flatMap { users =>
+          lazy val fresh = SearchQueryCache(query, Instant.now, Some(users.map(_.id)))
+          def update(q: SearchQueryCache): SearchQueryCache = if ((cacheExpiryTime elapsedSince q.timestamp) || q.entries.isEmpty) fresh else q
+
+          queryCache.updateOrCreate(query, update, fresh)
+        }.flatMap(_ => sync.syncSearchQuery(query)).logFailure()
+
+        Signal.empty[Vector[UserData]]
       case Some(cached) =>
-        verbose(s"query $query cached")
-        if ((cacheRefreshInterval elapsedSince cached.timestamp)) refresh(query)
+        verbose(s"query $query cached: ${cached.entries.map(_.size)} (${cached.timestamp})")
+        if ((cacheRefreshInterval elapsedSince cached.timestamp)) queryCache.getOrCreate(query, SearchQueryCache(query, Instant.now, None)).flatMap(_ => sync.syncSearchQuery(query)).logFailure()
         cached.entries.fold2(Signal.const(Vector.empty[UserData]), ids => usersStorage.listSignal(ids))
     }.map { users =>
       query match {
@@ -69,18 +81,18 @@ class UserSearchService(context: Context, queryCache: SearchQueryCacheStorage, c
       }
     }.map(users => SeqMap(limit.fold2(users, users.take))(_.id, identity))
 
-  private def refresh(query: SearchQuery): Future[SyncId] = {
-    verbose(s"refresh $query")
-    queryCache.updateOrCreate(query, old => old, SearchQueryCache(query, Instant.now, None)).flatMap(cache => sync.syncSearchQuery(cache))
-  }
+  def updateSearchResults(query: SearchQuery, results: Seq[UserSearchEntry]): Future[Unit] = {
+    def updating(ids: Vector[UserId])(cached: SearchQueryCache) = cached.copy(query, Instant.now, if (ids.nonEmpty || cached.entries.isEmpty) Some(ids) else cached.entries)
 
-  def updateSearchResults(query: SearchQuery, results: Seq[UserSearchEntry]): Future[Unit] =
     for {
       updated <- userService.updateUsers(results)
       _       <- userService.syncIfNeeded(updated.toSeq: _*)
       _       <- traverse(results)(u => u.commonCount.mapFuture(c => updateCommonConnections(u.id, c, u.common)))
-      _       <- queryCache.update(query, _.copy(timestamp = Instant.now, entries = Some(results.map(_.id)(breakOut))))
+      ids      = results.map(_.id)(breakOut): Vector[UserId]
+      _        = verbose(s"updateSearchResults($query, $ids)")
+      _       <- queryCache.updateOrCreate(query, updating(ids), SearchQueryCache(query, Instant.now, Some(ids)))
     } yield ()
+  }
 
   def commonConnections(userId: UserId, fullList: Boolean): Signal[Option[CommonConnectionsData]] = {
     def shouldRefreshCommonConnections(conn: CommonConnectionsData) = {
