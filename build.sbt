@@ -162,7 +162,7 @@ lazy val actors: Project = project.in(file("actors") / "base")
   .dependsOn(zmessaging)
   .settings(publishSettings: _*)
   .settings(
-    name := "actors_core",
+    name := "actors-core",
     exportJars := true,
     libraryDependencies ++= Seq(
       "org.robolectric" % "android-all" % RobolectricVersion % Provided,
