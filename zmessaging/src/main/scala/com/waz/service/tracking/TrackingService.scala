@@ -23,13 +23,14 @@ import com.waz.api.Message.Type.{ASSET, KNOCK, RICH_MEDIA, TEXT}
 import com.waz.content.{ConversationStorage, MessagesStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType.{Group, OneToOne}
 import com.waz.model.MessageData.MessageEntry
-import com.waz.model.UserData.UserDataDao.findWelcomeBot
+import com.waz.model.UserData.UserDataDao.findWireBots
 import com.waz.model._
 import com.waz.service.UserService
 import com.waz.service.call.CallLogService
 import com.waz.utils._
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
 
+import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.language.postfixOps
 
@@ -44,16 +45,19 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
     val statsSignal = new AggregatingSignal[Op, TrackingStats](statsChanges(self), loadStats(self), (stats, op) => op(stats), stashing = false)
     val botStatsSignal =
       for {
-        botRConvId <- new AggregatingSignal[RConvId, Option[RConvId]](botConvChanges, loadBotConv, (b, a) => Some(a))
-        botConvId  <- Signal.future(botRConvId.flatMapFuture(conversations.getByRemoteId).map(_.map(_.id)).logFailure(true))
-        botStats   <- new AggregatingSignal[Op, TrackingStats](botChanges(self, botConvId), loadBotStats(self, botConvId), (stats, op) => op(stats))
+        botRConvIds <- new AggregatingSignal[(Set[RConvId], Set[RConvId]), Set[RConvId]](botConvChanges, loadBotConv, { case (ids, (l, r)) => ids ++ l -- r })
+        botConvIds  <- Signal.future(conversations.getByRemoteIds(botRConvIds).map(_.toSet).logFailure(true))
+        botStats    <- new AggregatingSignal[Op, TrackingStats](botChanges(self, botConvIds), loadBotStats(self, botConvIds), (stats, op) => op(stats))
       } yield botStats
 
     statsSignal.combine(botStatsSignal)(_ + _)
   }
 
-  private def botConvChanges: EventStream[RConvId] = usersStorage.onChanged.map(_.find(_.isOtto).flatMap(_.conversation)).collect { case Some(id) => id }
-  private def loadBotConv: Future[Option[RConvId]] = usersStorage.find(_.isOtto, findWelcomeBot(_), _.conversation).map(_.headOption.flatten).logFailure(true)
+  private def botConvChanges: EventStream[(Set[RConvId], Set[RConvId])] = usersStorage.onChanged.map { changed =>
+    val (keepOrAdd, remove) = changed.partition(_.isWireBot)
+    (keepOrAdd.flatMap(_.conversation)(breakOut): Set[RConvId], remove.flatMap(_.conversation)(breakOut): Set[RConvId])
+  }
+  private def loadBotConv: Future[Set[RConvId]] = usersStorage.find(_.isWireBot, findWireBots(_), _.conversation).map(_.flatten.toSet).logFailure(true)
 
   private def statsChanges(self: UserId): EventStream[Op] =
     EventStream.union[Op](
@@ -82,13 +86,13 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
     }
   } logFailure true
 
-  private def botChanges(self: UserId, botConvId: Option[ConvId]): EventStream[Op] =
+  private def botChanges(self: UserId, botPredicate: ConvId => Boolean): EventStream[Op] =
     EventStream.union[Op](
-      messages.onAdded.map(ms => Fold(ms.map(m => Add(botDiff(self, botConvId, m))):_*)),
-      messages.onUpdated.map(ms => Fold(ms.map { case (old, nu) => Fold(Subtract(botDiff(self, botConvId, old)), Add(botDiff(self, botConvId, nu))) }:_*)))
+      messages.onAdded.map(ms => Fold(ms.map(m => Add(botDiff(self, botPredicate, m))):_*)),
+      messages.onUpdated.map(ms => Fold(ms.map { case (old, nu) => Fold(Subtract(botDiff(self, botPredicate, old)), Add(botDiff(self, botPredicate, nu))) }:_*)))
 
-  private def loadBotStats(self: UserId, botConvId: Option[ConvId]): Future[TrackingStats] =
-    botConvId.mapFuture(c => messages.countMessages(c, isMsgFrom(self))).map(_.fold2(TrackingStats.Empty, TrackingStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _))).logFailure(true)
+  private def loadBotStats(self: UserId, botIds: Set[ConvId]): Future[TrackingStats] =
+    Future.traverse(botIds.toVector)(c => messages.countMessages(c, isMsgFrom(self))).map(_.sum).map(TrackingStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _)).logFailure(true)
 
   private def convDiff(c: ConversationData) = TrackingStats((c.convType == Group)?, c.archived?, c.muted?,
     (c.convType == OneToOne && !c.hidden)?, (c.convType == OneToOne && c.hidden)?, 0, 0, 0, 0, 0, 0)
@@ -99,13 +103,13 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
   private def msgDiff(self: UserId, m: MessageData) = TrackingStats(0, 0, 0, 0, 0, 0, 0, 0,
     (m.userId == self && (m.msgType == TEXT || m.msgType == RICH_MEDIA))?, (m.userId == self && m.msgType == ASSET)?, 0)
 
-  private def botDiff(self: UserId, botConv: Option[ConvId], m: MessageData) = TrackingStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, isBotInteraction(self, botConv, m)?)
+  private def botDiff(self: UserId, botPredicate: ConvId => Boolean, m: MessageData) = TrackingStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, isBotInteraction(self, botPredicate, m)?)
 
   private def userDiff(u: UserData) = TrackingStats(0, 0, 0, 0, 0, isAutoConnect(u)?, 0, 0, 0, 0, 0)
 
-  private def isAutoConnect(u: UserData) = u.isAutoConnect && ! u.isOtto
+  private def isAutoConnect(u: UserData) = u.isAutoConnect && ! u.isWireBot
   private def isMsgFrom(self: UserId)(m: MessageEntry) = m.user == self && interactive(m.tpe)
-  private def isBotInteraction(self: UserId, bot: Option[ConvId], m: MessageData) = m.userId == self && interactive(m.msgType) && bot.exists(_ == m.convId)
+  private def isBotInteraction(self: UserId, isBot: ConvId => Boolean, m: MessageData) = m.userId == self && interactive(m.msgType) && isBot(m.convId)
   private val interactive = Set(ASSET, KNOCK, TEXT, RICH_MEDIA, ASSET)
 }
 

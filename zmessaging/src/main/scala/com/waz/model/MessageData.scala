@@ -28,7 +28,7 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location, MsgEdit, Text}
+import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
