@@ -171,6 +171,7 @@ package object testutils {
       override def areEqual(a: MessageData, b: Any): Boolean = {
         b match {
           case m: MessageData =>
+            if (m.copy(protos = Nil) != a.copy(protos = Nil)) println(s"message content differ: \n$a\n$m\n")
             m.copy(protos = Nil) == a.copy(protos = Nil) && m.protos.size == a.protos.size && m.protos.zip(a.protos).forall { case (p1, p2) => GenericMessageEquality.areEqual(p1, p2) }
           case _ => false
         }

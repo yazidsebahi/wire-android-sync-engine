@@ -78,7 +78,14 @@ object MessageDataMigration {
       db.execSQL(table.createSql)
 
       // copy all data
-      db.execSQL(s"INSERT INTO Messages_tmp SELECT ${Columns.v72.all.map(_.name).mkString(", ")} FROM Messages")
+      val firstMessage = """
+                           |CASE
+                           |  WHEN first_msg = 1 THEN 1
+                           |  WHEN msg_type = 'MemberJoin' AND source_seq = 1 THEN 1
+                           |  ELSE 0
+                           |END""".stripMargin
+
+      db.execSQL(s"INSERT INTO Messages_tmp SELECT _id, conv_id, msg_type, user_id, content, protos, time, local_time, ($firstMessage), members, recipient, email, name, msg_state, content_size, edit_time FROM Messages")
 
       db.execSQL("DROP TABLE Messages")
       db.execSQL("DROP INDEX IF EXISTS Messages_conv_source_idx")

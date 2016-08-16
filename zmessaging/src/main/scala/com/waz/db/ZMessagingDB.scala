@@ -28,6 +28,7 @@ import com.waz.model.CommonConnectionsData.CommonConnectionsDataDao
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
+import com.waz.model.EditHistory.EditHistoryDao
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.InvitedContacts.InvitedContactsDao
@@ -52,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
-    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao
+    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao
   )
 
   override val migrations = Seq(
@@ -94,6 +95,9 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
       MessageDataMigration.v72(db)
       ConversationDataMigration.v72(db)
       ConversationMembersMigration.v72(db)
+    },
+    Migration(72, 73) { implicit db =>
+      db.execSQL("CREATE TABLE EditHistory (original_id TEXT PRIMARY KEY, updated_id TEXT, timestamp INTEGER)")
     }
   )
 
@@ -106,5 +110,5 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 72
+  val DbVersion = 73
 }

@@ -23,18 +23,20 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import org.threeten.bp.Instant
 
-case class MsgDeletion(msg: MessageId, time: Instant)
 
-object MsgDeletion {
+case class EditHistory(originalId: MessageId, updatedId: MessageId, time: Instant)
 
-  implicit object MsgDeletionDao extends Dao[MsgDeletion, MessageId] {
-    val Message = id[MessageId]('message_id).apply(_.msg)
+object EditHistory {
+
+  implicit object EditHistoryDao extends Dao[EditHistory, MessageId] {
+    val Original = id[MessageId]('original_id).apply(_.originalId)
+    val Updated = id[MessageId]('updated_id).apply(_.updatedId)
     val Timestamp = timestamp('timestamp)(_.time)
 
-    override val idCol = Message
-    override val table = Table("MsgDeletion", Message, Timestamp)
+    override val idCol = Original
+    override val table = Table("EditHistory", Original, Updated, Timestamp)
 
-    override def apply(implicit cursor: Cursor) = MsgDeletion(Message, Timestamp)
+    override def apply(implicit cursor: Cursor) = EditHistory(Original, Updated, Timestamp)
 
     def deleteOlder(time: Instant)(implicit db: SQLiteDatabase) =
       db.delete(table.name, s"${Timestamp.name} < ${time.toEpochMilli}", null)

@@ -150,10 +150,10 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       otrSync.postOtrMessage(conv, gm) flatMap {
         case Right(time) if isEdit =>
           // delete original message and create new message with edited content
-          for {
-            _ <- msgContent.deleteOnUserRequest(Seq(msg.id))
-            msg <- msgContent.messagesStorage.insert(msg.copy(id = MessageId(gm.messageId), editTime = time.instant, state = Message.Status.SENT))
-          } yield Right(msg)
+          service.applyMessageEdit(conv.id, msg.userId, time.instant, gm) map {
+            case Some(m) => Right(m)
+            case _ => Right(msg.copy(time = time.instant))
+          }
 
         case Right(time) => Future successful Right(msg.copy(time = time.instant))
         case Left(err) => Future successful Left(err)

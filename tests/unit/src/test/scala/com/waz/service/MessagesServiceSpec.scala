@@ -262,7 +262,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
       messages.processEvents(conv, Seq(event)).futureValue
       listMessages(convId) should have size 1
-      listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
+      listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), firstMessage = true, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
       service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, None, AssetStatus.UploadInProgress, event.time.instant))
     }
 
@@ -276,7 +276,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
       messages.processEvents(conv, Seq(event)).futureValue
       listMessages(convId) should have size 1
-      listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
+      listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), firstMessage = true, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
       service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), event.time.instant))
     }
   }

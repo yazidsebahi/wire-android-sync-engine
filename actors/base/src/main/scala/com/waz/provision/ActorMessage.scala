@@ -22,6 +22,7 @@ import com.waz.api.Message
 import com.waz.api.impl.AccentColor
 import com.waz.model._
 import com.waz.threading.QueueReport
+import org.threeten.bp.Instant
 
 trait ActorMessage
 
@@ -356,7 +357,7 @@ object ActorMessage {
 
   case class GetDeviceFingerPrint() extends ActorMessage
 
-  case class MessageInfo(id: MessageId, tpe: Message.Type)
+  case class MessageInfo(id: MessageId, tpe: Message.Type, time: Instant)
 
   case class ConvMessages(msgs: Array[MessageInfo]) extends ActorMessage
 

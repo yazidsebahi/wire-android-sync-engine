@@ -98,13 +98,38 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
         msgs.get(2).getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
       }
     }
+
+    scenario("Edit on two devices in the same time") {
+      secondClient ? SendText(conv.data.remoteId, "test message 2") should eventually(be(Successful))
+      withDelay {
+        msgs should have size 5
+        msgs.getLastMessage.getBody shouldEqual "test message 2"
+      }
+
+      val msg = msgs.getLastMessage
+      secondClient ? UpdateText(msg.data.id, "updated on remote") //should eventually(be(Successful))
+      msg.update(new Text("updated locally"))
+
+      withDelay {
+        msg.isDeleted shouldEqual true
+        val last = msgs.getLastMessage
+        last.getMessageStatus shouldEqual Message.Status.SENT
+        last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
+      }
+
+      val remote = (secondClient ? GetMessages(conv.data.remoteId)).await().asInstanceOf[ConvMessages].msgs
+
+      info(s"last msg: ${msgs.getLastMessage.data}")
+      remote.last.id shouldEqual msgs.getLastMessage.data.id
+      remote.last.time shouldEqual msgs.getLastMessage.data.time
+    }
   }
 
   feature("Edit link message") {
     scenario("Send link with text and edit it") {
       conv.sendMessage(new Text("test wire.com edit"))
       withDelay {
-        msgs should have size 5
+        msgs should have size 6
         msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
         msgs.getLastMessage.getMessageType shouldEqual Message.Type.RICH_MEDIA
         msgs.getLastMessage.getParts.toSeq.map(_.getPartType) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT)
@@ -115,7 +140,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       msg.update(new Text("edited message facebook.com"))
 
       withDelay {
-        msgs should have size 5
+        msgs should have size 6
         msg.isDeleted shouldEqual true
         val last = msgs.getLastMessage
         last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
@@ -132,7 +157,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
     scenario("Receive link with text and edit update") {
       otherUserClient ? SendText(conv.data.remoteId, "test message wire.com") should eventually(be(Successful))
       withDelay {
-        msgs should have size 6
+        msgs should have size 7
         msgs.getLastMessage.getBody shouldEqual "test message wire.com"
       }
 
@@ -140,14 +165,14 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       conv.sendMessage(new Text("test"))
 
-      withDelay(msgs should have size 7)
+      withDelay(msgs should have size 8)
 
       otherUserClient ? UpdateText(msg.data.id, "updated facebook.com test") should eventually(be(Successful))
 
       withDelay {
         msg.isDeleted shouldEqual true
-        msgs should have size 7
-        val updated = msgs.get(5)
+        msgs should have size 8
+        val updated = msgs.get(6)
         updated.getId should not equal msg.getId
         updated.getBody shouldEqual "updated facebook.com test"
         updated.getMessageType shouldEqual Message.Type.RICH_MEDIA

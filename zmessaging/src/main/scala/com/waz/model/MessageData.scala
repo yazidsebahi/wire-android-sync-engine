@@ -121,7 +121,7 @@ case class MessageData(id: MessageId,
   }
 
   override def toString: String =
-    s"MessageData($id, $convId, $msgType, $userId, $content, protos len: ${protos.length}, $state, $time)"
+    s"MessageData($id, $convId, $msgType, $userId, $content, protos len: ${protos.length}, $firstMessage, $members, $recipient, $email, $name, $state, $time, local: $localTime, edit: $editTime)"
 }
 
 case class MessageContent(

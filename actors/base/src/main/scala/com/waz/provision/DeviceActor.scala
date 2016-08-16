@@ -251,7 +251,7 @@ class DeviceActor(val deviceName: String,
 
         ConvMessages(Array.tabulate(cursor.size) { i =>
           val m = cursor(i)
-          MessageInfo(m.message.id, m.message.msgType)
+          MessageInfo(m.message.id, m.message.msgType, m.message.time)
         })
       }
 

@@ -18,8 +18,8 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.model.MsgDeletion.MsgDeletionDao
-import com.waz.model.{MessageId, MsgDeletion}
+import com.waz.model.EditHistory.EditHistoryDao
+import com.waz.model.{EditHistory, MessageId}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
@@ -29,20 +29,19 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 /**
-  * Deletion history is only stored for short time to handle partial message updates (assets, link preview).
-  * We need that to discard new versions of previously deleted messages.
-  * We don't want to store it permanently, so will drop items older than 2 weeks.
+  * Edit history is only needed for short time to resolve race conditions when some message is edited on two devices at the same time.
+  * We don't want to store it permanently, so will drop items older than 1 week.
   */
-class MsgDeletionStorage(context: Context, storage: Database) extends CachedStorage[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached") {
-  import MsgDeletionStorage._
+class EditHistoryStorage(context: Context, storage: Database) extends CachedStorage[MessageId, EditHistory](new TrimmingLruCache(context, Fixed(512)), storage)(EditHistoryDao, "EditHistoryStorage_Cached") {
+  import EditHistoryStorage._
   import Threading.Implicits.Background
 
   // run db cleanup on each app start, will wait a bit to not execute it too soon
   CancellableFuture.delayed((5 + Random.nextInt(10)).seconds) {
-    storage { MsgDeletionDao.deleteOlder(Instant.now.minus(DeletionExpiryTime))(_) }
+    storage { EditHistoryDao.deleteOlder(Instant.now.minus(EditExpiryTime))(_) }
   }
 }
 
-object MsgDeletionStorage {
-  val DeletionExpiryTime = 14.days
+object EditHistoryStorage {
+  val EditExpiryTime = 7.days
 }

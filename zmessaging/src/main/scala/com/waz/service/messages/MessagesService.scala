@@ -21,7 +21,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
-import com.waz.content.{LikingsStorage, Mime}
+import com.waz.content.{EditHistoryStorage, LikingsStorage, Mime}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.Original
@@ -45,7 +45,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
-class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
+class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
     likings: LikingsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater) {
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[MessagesService]
@@ -83,7 +83,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
       _     <- Future.traverse(recalls) { case (GenericMessage(id, MsgRecall(ref)), user, time) => recallMessage(conv.id, ref, user, MessageId(id.str), time, Message.Status.SENT) }
-      _     <- Future.traverse(edits) { case (gm @ GenericMessage(id, MsgEdit(ref, Text(text, mentions, _))), user, time) => processMessageEdit(conv.id, ref, user, MessageId(id.str), time, text, mentions, gm) }
+      _     <- RichFuture.traverseSequential(edits) { case (gm @ GenericMessage(id, MsgEdit(ref, Text(text, mentions, links))), user, time) => applyMessageEdit(conv.id, user, time, gm) }
     } yield res
   }
 
@@ -231,22 +231,59 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, a
       case _ => Future successful None
     }
 
-  def processMessageEdit(convId: ConvId, msgId: MessageId, userId: UserId, updatedId: MessageId, time: Instant, text: String, mentions: Map[UserId, String], gm: GenericMessage) = {
-    // FIXME: there will be a race condition if the same message is edited on two devices at the same time
-    // it could happen that we already deleted original message and posted different MsgEdit
-    content.getMessage(msgId) flatMap {
-      case Some(msg) if msg.userId == userId && msg.convId == convId =>
-        verbose(s"got edit event for msg: $msg")
-        content.deleteOnUserRequest(Seq(msg.id)) flatMap { _ =>
-          val (tpe, ct) = MessageData.messageContent(text, mentions)
-          content.addMessage(MessageData(updatedId, convId, tpe, userId, ct, Seq(gm), time = msg.time, localTime = msg.localTime, editTime = time))
+  def applyMessageEdit(convId: ConvId, userId: UserId, time: Instant, gm: GenericMessage) = Serialized.future("applyMessageEdit", convId) {
+
+    def findLatestUpdate(id: MessageId): Future[Option[MessageData]] =
+      content.getMessage(id) flatMap {
+        case Some(msg) => Future successful Some(msg)
+        case None =>
+          edits.get(id) flatMap {
+            case Some(EditHistory(_, updated, _)) => findLatestUpdate(updated)
+            case None => Future successful None
+          }
+      }
+
+    gm match {
+      case GenericMessage(id, MsgEdit(msgId, Text(text, mentions, links))) =>
+
+        def applyEdit(msg: MessageData) = for {
+            _ <- edits.insert(EditHistory(msg.id, MessageId(id.str), time))
+            (tpe, ct) = MessageData.messageContent(text, mentions, links, weblinkEnabled = true)
+            res <- content.addMessage(MessageData(MessageId(id.str), convId, tpe, userId, ct, Seq(gm), time = msg.time, localTime = msg.localTime, editTime = time))
+            _ <- content.deleteOnUserRequest(Seq(msg.id))
+        } yield res
+
+        content.getMessage(msgId) flatMap {
+          case Some(msg) if msg.userId == userId && msg.convId == convId =>
+            verbose(s"got edit event for msg: $msg")
+            applyEdit(msg)
+          case _ =>
+            // original message was already deleted, let's check if it was already updated
+            edits.get(msgId) flatMap {
+              case Some(EditHistory(_, updated, editTime)) if editTime <= time =>
+                verbose(s"message $msgId has already been updated, discarding later update")
+                Future successful None
+
+              case Some(EditHistory(_, updated, editTime)) =>
+                // this happens if message has already been edited locally,
+                // but that edit is actually newer than currently received one, so we should revert it
+                // we always use only the oldest edit for given message (as each update changes the message id)
+                verbose(s"message $msgId has already been updated, will overwrite new message")
+                findLatestUpdate(updated) flatMap {
+                  case Some(msg) => applyEdit(msg)
+                  case None =>
+                    error(s"Previously updated message was not found for: $gm")
+                    Future successful None
+                }
+
+              case None =>
+                verbose(s"didn't find the original message for edit: $gm")
+                Future successful None
+            }
         }
       case _ =>
-        // this could happen if original message was already deleted or edited
-        // FIXME: if message was previously edited then we should compare editTime and apply the earlier one
-        // but currently we have no way of knowing that, as we don't keep edit history
-        verbose(s"didn't find the original message for edit: $gm")
-        Future.successful(())
+        error(s"invalid message for applyMessageEdit: $gm")
+        Future successful None
     }
   }
 
