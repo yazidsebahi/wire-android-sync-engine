@@ -176,25 +176,26 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
   def updateAll(updaters: scala.collection.Map[K, V => V]): Future[Seq[(V, V)]] =
     updateAll2(updaters.keys.toVector, { v => updaters(dao.idExtractor(v))(v) })
 
-  def updateAll2(keys: Iterable[K], updater: V => V): Future[Seq[(V, V)]] = {
-    getAll(keys) flatMap { values =>
-      val updated = keys.iterator.zip(values.iterator) .flatMap { case (k, v) =>
-        Option(cache.get(k)).flatten.orElse(v).flatMap { value =>
-          val updated = updater(value)
-          if (updated != value) {
-            cache.put(k, Some(updated))
-            Some(value -> updated)
-          } else None
-        }
-      } .toVector
+  def updateAll2(keys: Iterable[K], updater: V => V): Future[Seq[(V, V)]] =
+    if (keys.isEmpty) Future successful Seq.empty[(V, V)]
+    else
+      getAll(keys) flatMap { values =>
+        val updated = keys.iterator.zip(values.iterator) .flatMap { case (k, v) =>
+          Option(cache.get(k)).flatten.orElse(v).flatMap { value =>
+            val updated = updater(value)
+            if (updated != value) {
+              cache.put(k, Some(updated))
+              Some(value -> updated)
+            } else None
+          }
+        } .toVector
 
-      if (updated.isEmpty) Future.successful(Vector.empty)
-      else
-        returning (db { save(updated.map(_._2))(_) } .future.map { _ => updated }) { _ =>
-          onUpdated ! updated
-        }
-    }
-  }
+        if (updated.isEmpty) Future.successful(Vector.empty)
+        else
+          returning (db { save(updated.map(_._2))(_) } .future.map { _ => updated }) { _ =>
+            onUpdated ! updated
+          }
+      }
 
   def updateOrCreate(key: K, updater: V => V, creator: => V): Future[V] = get(key) flatMap { loaded =>
     val prev = Option(cache.get(key)).getOrElse(loaded)
@@ -204,40 +205,42 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
   def updateOrCreateAll(updaters: K Map (Option[V] => V)): Future[Set[V]] =
     updateOrCreateAll2(updaters.keys.toVector, { (key, v) => updaters(key)(v)})
 
-  def updateOrCreateAll2(keys: Iterable[K], updater: ((K, Option[V]) => V)): Future[Set[V]] = {
-    verbose(s"updateOrCreateAll($keys)")
-    getAll(keys) flatMap { values =>
-      val loaded: Map[K, Option[V]] = keys.iterator.zip(values.iterator).map { case (k, v) => k -> Option(cache.get(k)).flatten.orElse(v) }.toMap
-      val toSave = Vector.newBuilder[V]
-      val added = Vector.newBuilder[V]
-      val updated = Vector.newBuilder[(V, V)]
+  def updateOrCreateAll2(keys: Iterable[K], updater: ((K, Option[V]) => V)): Future[Set[V]] =
+    if (keys.isEmpty) Future successful Set.empty[V]
+    else {
+      verbose(s"updateOrCreateAll($keys)")
+      getAll(keys) flatMap { values =>
+        val loaded: Map[K, Option[V]] = keys.iterator.zip(values.iterator).map { case (k, v) => k -> Option(cache.get(k)).flatten.orElse(v) }.toMap
+        val toSave = Vector.newBuilder[V]
+        val added = Vector.newBuilder[V]
+        val updated = Vector.newBuilder[(V, V)]
 
-      val result = keys .map { key =>
-        val current = loaded.get(key).flatten
-        val next = updater(key, current)
-        current match {
-          case Some(c) if c != next =>
-            cache.put(key, Some(next))
-            toSave += next
-            updated += (c -> next)
-          case None =>
-            cache.put(key, Some(next))
-            toSave += next
-            added += next
-          case Some(_) => // unchanged, ignore
+        val result = keys .map { key =>
+          val current = loaded.get(key).flatten
+          val next = updater(key, current)
+          current match {
+            case Some(c) if c != next =>
+              cache.put(key, Some(next))
+              toSave += next
+              updated += (c -> next)
+            case None =>
+              cache.put(key, Some(next))
+              toSave += next
+              added += next
+            case Some(_) => // unchanged, ignore
+          }
+          next
+        } .toSet
+
+        val addedResult = added.result
+        val updatedResult = updated.result
+
+        returning (db { save(toSave.result)(_) } .future.map { _ => result }) { _ =>
+          if (addedResult.nonEmpty) onAdded ! addedResult
+          if (updatedResult.nonEmpty) onUpdated ! updatedResult
         }
-        next
-      } .toSet
-
-      val addedResult = added.result
-      val updatedResult = updated.result
-
-      returning (db { save(toSave.result)(_) } .future.map { _ => result }) { _ =>
-        if (addedResult.nonEmpty) onAdded ! addedResult
-        if (updatedResult.nonEmpty) onUpdated ! updatedResult
       }
     }
-  }
 
   private def addInternal(key: K, value: V): Future[V] = {
     cache.put(key, Some(value))

@@ -198,18 +198,12 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
   private[service] def addMessage(msg: MessageData): Future[Option[MessageData]] = addMessages(msg.convId, Seq(msg)).map(_.headOption)
 
   // updates server timestamp for local messages, this should make sure that local messages are ordered correctly after one of them is sent
-  def updateLocalMessageTimes(conv: ConvId, prevTime: Instant, time: Instant) = {
-
-    def updater(m: MessageData) = {
-      verbose(s"try updating local message time, msg: $m, time: $time")
-      if (m.isLocal) m.copy(time = time.plusMillis(m.time.toEpochMilli - prevTime.toEpochMilli)) else m
-    }
-
+  def updateLocalMessageTimes(conv: ConvId, prevTime: Instant, time: Instant) =
     messagesStorage.findLocalFrom(conv, prevTime) flatMap { local =>
       verbose(s"local messages from $prevTime: $local")
-      if (local.isEmpty) Future successful Seq.empty[(MessageData, MessageData)]
-      else
-        messagesStorage updateAll2(local.map(_.id), updater) // local.sortBy(_.time).zipWithIndex.map { case (m, i) => m.id -> updater _ }(breakOut)
+      messagesStorage updateAll2(local.map(_.id), { m =>
+        verbose(s"try updating local message time, msg: $m, time: $time")
+        if (m.isLocal) m.copy(time = time.plusMillis(m.time.toEpochMilli - prevTime.toEpochMilli)) else m
+      })
     }
-  }
 }
