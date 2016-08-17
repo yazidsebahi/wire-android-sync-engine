@@ -164,12 +164,14 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       updateCount shouldEqual 0
     }
 
+    def reload(msg: MessageData) = service.messagesStorage.get(msg.id).await().get
+
     scenario("Send multiple messages and maintain local ordering") {
       val msgs = service.messagesStorage.getEntries(conv.id)
       val msg = withUpdate(msgs) { sendMessage(new MessageContent.Text("test")) }
       val msg1 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test1")) }
-      val msg2 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test2")) }
-      val msg3 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test3")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test2")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test3")) }
 
       val time = Instant.now()
       withUpdate(msgs) {
@@ -180,7 +182,35 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       ms.drop(ms.size - 4).map(_.contentString) shouldEqual Seq("test", "test1", "test2", "test3")
 
       withUpdate(msgs) {
-        service.messagesSync.messageSent(conv.id, msg1, time + 2.seconds)
+        service.messagesSync.messageSent(conv.id, reload(msg1), time + 2.seconds)
+      }
+
+      val ms1 = listMessages
+      withClue(ms1.map(m => (m.contentString, m.time))) {
+        ms1.drop(ms1.size - 4).map(_.contentString) shouldEqual Seq("test", "test1", "test2", "test3")
+      }
+    }
+
+    scenario("Send multiple messages and maintain local ordering when local clock is in future") {
+      val time = Instant.now().minus(1.minute)
+
+      val msgs = service.messagesStorage.getEntries(conv.id)
+      val msg = withUpdate(msgs) { sendMessage(new MessageContent.Text("test")) }
+      val msg1 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test1")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test2")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test3")) }
+
+      withUpdate(msgs) {
+        service.messagesSync.messageSent(conv.id, msg, time + 1.second)
+      }
+
+      val ms = listMessages
+      ms.drop(ms.size - 4).map(_.contentString) shouldEqual Seq("test", "test1", "test2", "test3")
+
+      info(ms.drop(ms.size - 5).map(m => (m.contentString, m.time)).mkString(", "))
+
+      withUpdate(msgs) {
+        service.messagesSync.messageSent(conv.id, reload(msg1), time + 2.seconds)
       }
 
       val ms1 = listMessages
