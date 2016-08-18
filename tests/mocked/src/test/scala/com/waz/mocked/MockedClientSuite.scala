@@ -59,6 +59,8 @@ import scala.util.Random
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
   private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
 
+  val webSocketAlwaysOn = false
+
   @volatile private var pushService = Option.empty[PushService]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
@@ -123,6 +125,9 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     }
 
     override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, global.backend, clientId, timeouts) {
+
+      override val webSocketAlwaysOn = suite.webSocketAlwaysOn
+
       override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
         override def close() = dispatcher {
           connected ! false
