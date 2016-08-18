@@ -19,18 +19,11 @@ package com.waz.mocked
 
 import android.content.Context
 import com.waz.media.manager.MediaManager
-import com.waz.media.manager.context.IntensityLevel
 import com.waz.service.{PlaybackRoute, PreferenceService, MediaManagerService}
-import com.waz.utils.returning
 
 class MockedMediaManagerService(context: Context, prefs: PreferenceService) extends MediaManagerService(context, prefs) {
 
   def changePlaybackRoute(route: PlaybackRoute): Unit = mediaManager foreach (_.onPlaybackRouteChanged(route.avsIndex))
 
-  override lazy val mediaManager: Option[MediaManager] = {
-    Some(returning(new MediaManager {
-      override def setIntensity(level: IntensityLevel): Unit = ()
-      override def EnableSpeaker(b: Boolean): Unit = ()
-    })(_ addListener listener))
-  }
+  override lazy val mediaManager: Option[MediaManager] = None
 }

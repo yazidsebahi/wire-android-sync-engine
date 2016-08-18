@@ -26,9 +26,10 @@ class GcmBroadcastReceiver extends BroadcastReceiver {
   private implicit val logTag: LogTag = logTagFor[GcmBroadcastReceiver]
 
   override def onReceive(context: Context, intent: Intent): Unit = {
+    import scala.collection.JavaConverters._
 
     val extras = Option(intent.getExtras)
-    verbose(s"Received gcm: $intent")
+    verbose(s"Received gcm: $intent, extras: ${extras.map { ex => ex.keySet().asScala.map(k => (k, ex.get(k)))}}")
 
     val serviceIntent = new Intent(context, classOf[GcmHandlerService])
     extras.foreach(serviceIntent.putExtras)

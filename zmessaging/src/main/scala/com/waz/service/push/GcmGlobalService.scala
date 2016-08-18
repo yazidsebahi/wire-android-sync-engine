@@ -15,9 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.service.push
 
-import android.app.{Activity, Dialog}
 import android.content.{Context, SharedPreferences}
 import com.google.android.gms.common.{ConnectionResult, GooglePlayServicesUtil}
 import com.google.android.gms.gcm.GoogleCloudMessaging
@@ -27,7 +26,8 @@ import com.waz.HockeyApp
 import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog._
 import com.waz.model._
-import com.waz.service.GcmGlobalService.{GcmRegistration, GcmSenderId}
+import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
+import com.waz.service.{BackendConfig, MetaDataService, PreferenceService}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.LoggedTry
 import com.waz.utils.events.EventContext
@@ -52,7 +52,7 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
       ConnectionResult.DEVELOPER_ERROR
   }
 
-  lazy val gcmAvailable = gcmCheckResult == ConnectionResult.SUCCESS
+  lazy val gcmAvailable = metadata.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
 
   def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
     if (reg.version == appVersion) reg
@@ -97,6 +97,7 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
             HockeyApp.saveException(ex, s"unable to register gcm for sender $gcmSenderId")
             CancellableFuture.successful(None)
         }
+        CancellableFuture successful None
       }
   }
 
@@ -111,16 +112,13 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
     } else reg
   }
 
-  def getGcmErrorDialog(context: Activity): Dialog =
-    if (!gcmAvailable && GooglePlayServicesUtil.isUserRecoverableError(gcmCheckResult))
-      GooglePlayServicesUtil.getErrorDialog(gcmCheckResult, context, 9000)
-    else null
-
   def unregister() = editPreferences(GcmRegistration().save(_)).future map { _ => withGcm(unregisterFromGoogle()) } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
 
   private def withGcm[A](body: => A): A = if (gcmAvailable) body else throw new GcmGlobalService.GcmNotAvailableException
 
-  private def registerWithGoogle(senderIds: Seq[String]) = InstanceID.getInstance(context).getToken(senderIds mkString ",", GoogleCloudMessaging.INSTANCE_ID_SCOPE)
+  private def registerWithGoogle(senderIds: Seq[String]) =
+     InstanceID.getInstance(context).getToken(senderIds mkString ",", GoogleCloudMessaging.INSTANCE_ID_SCOPE)
+
   private def unregisterFromGoogle(): Unit = LoggedTry.local { InstanceID.getInstance(context).deleteInstanceID() }
 }
 

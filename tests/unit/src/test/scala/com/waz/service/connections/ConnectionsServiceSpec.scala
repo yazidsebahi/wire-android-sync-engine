@@ -163,7 +163,6 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       val msg = service.lastMessage(conv.id)
       msg should be('defined)
-      msg.get.source should beLocal
       msg.map(_.msgType) shouldEqual Some(Message.Type.CONNECT_REQUEST)
       msg.map(_.userId) shouldEqual Some(selfUser.id)
       msg.map(_.contentString) shouldEqual Some("Hello from test")
@@ -203,7 +202,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       val rconvId = RConvId()
       val events = Seq[Event](
         CreateConversationEvent(Uid(), rconvId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(), rconvId, Some("test"), selfUser.id, ConversationType.WaitForConnection), Seq())),
-        ConnectRequestEvent(Uid(), rconvId, EventId(1), new Date, selfUser.id, "test", otherUser.id, "test", None),
+        ConnectRequestEvent(Uid(), rconvId, new Date, selfUser.id, "test", otherUser.id, "test", None),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.PendingFromUser, new Date)
       )
 
@@ -236,7 +235,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       val rconvId = RConvId()
       val time = System.currentTimeMillis()
       val events = Seq[Event](
-        MemberJoinEvent(Uid(), rconvId, EventId(2), new Date(time + 4), selfUser.id, Seq(otherUser.id)),
+        MemberJoinEvent(Uid(), rconvId, new Date(time + 4), selfUser.id, Seq(otherUser.id)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.Accepted, new Date(time + 5))
       )
 
@@ -271,7 +270,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
         getConv(rconvId).map(_.hidden) shouldEqual Some(true)
       }
 
-      service.dispatchEvent(ConnectRequestEvent(Uid(), rconvId, EventId(1), new Date, selfUser.id, "test", otherUser.id, "test", None))
+      service.dispatchEvent(ConnectRequestEvent(Uid(), rconvId, new Date, selfUser.id, "test", otherUser.id, "test", None))
 
       withDelay {
         listConvs should have size 1
@@ -286,7 +285,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       val time = System.currentTimeMillis()
       val events = Seq[Event](
         CreateConversationEvent(Uid(), rconvId, new Date(time), selfUser.id, ConversationResponse(ConversationData(ConvId(), rconvId, Some("test"), selfUser.id, ConversationType.WaitForConnection), Seq())),
-        ConnectRequestEvent(Uid(), rconvId, EventId(1), new Date(time + 1), selfUser.id, "test", otherUser.id, "test", None),
+        ConnectRequestEvent(Uid(), rconvId, new Date(time + 1), selfUser.id, "test", otherUser.id, "test", None),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.PendingFromUser, new Date(time + 1))
       )
 
@@ -311,9 +310,9 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       val time = System.currentTimeMillis()
       val events = Seq[Event](
         CreateConversationEvent(Uid(), rconvId, new Date(time), selfUser.id, ConversationResponse(ConversationData(ConvId(), rconvId, Some("test"), selfUser.id, ConversationType.WaitForConnection), Seq())),
-        ConnectRequestEvent(Uid(), rconvId, EventId(1), new Date(time + 1), selfUser.id, "test", otherUser.id, "test", None),
+        ConnectRequestEvent(Uid(), rconvId, new Date(time + 1), selfUser.id, "test", otherUser.id, "test", None),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.PendingFromUser, new Date(time + 2)),
-        MemberJoinEvent(Uid(), rconvId, EventId(2), new Date(time + 3), selfUser.id, Seq(otherUser.id)),
+        MemberJoinEvent(Uid(), rconvId, new Date(time + 3), selfUser.id, Seq(otherUser.id)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.Accepted, new Date(time + 4))
       )
 
@@ -338,9 +337,9 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       val time = System.currentTimeMillis()
       val events = Seq[Event](
         CreateConversationEvent(Uid(), rconvId, new Date(time), selfUser.id, ConversationResponse(ConversationData(ConvId(), rconvId, Some("test"), selfUser.id, ConversationType.WaitForConnection), Seq())),
-        ConnectRequestEvent(Uid(), rconvId, EventId(1), new Date(time + 1), selfUser.id, "test", otherUser.id, "test", None),
+        ConnectRequestEvent(Uid(), rconvId, new Date(time + 1), selfUser.id, "test", otherUser.id, "test", None),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.PendingFromUser, new Date(time + 2)),
-        MemberJoinEvent(Uid(), rconvId, EventId(2), new Date(time + 3), selfUser.id, Seq(otherUser.id)),
+        MemberJoinEvent(Uid(), rconvId, new Date(time + 3), selfUser.id, Seq(otherUser.id)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.Accepted, new Date(time + 4))
       )
 

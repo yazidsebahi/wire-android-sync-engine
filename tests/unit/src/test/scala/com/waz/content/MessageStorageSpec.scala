@@ -40,9 +40,9 @@ class MessageStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   feature("Unread count") {
 
     scenario("Receive new message and last read with older event at the same time") {
-      val msg = messages.addMessage(MessageData(MessageId(), conv.id, EventId(1), Message.Type.TEXT, UserId())).futureValue
-      messages.addMessage(MessageData(MessageId(), conv.id, EventId(2), Message.Type.TEXT, UserId()))
-      messages.addMessage(MessageData(MessageId(), conv.id, EventId(3), Message.Type.TEXT, UserId()))
+      val msg = messages.addMessage(MessageData(MessageId(), conv.id, Message.Type.TEXT, UserId())).futureValue
+      messages.addMessage(MessageData(MessageId(), conv.id, Message.Type.TEXT, UserId()))
+      messages.addMessage(MessageData(MessageId(), conv.id, Message.Type.TEXT, UserId()))
       zms.convsContent.updateConversationLastRead(conv.id, msg.time).futureValue shouldBe 'defined
 
       withDelay {

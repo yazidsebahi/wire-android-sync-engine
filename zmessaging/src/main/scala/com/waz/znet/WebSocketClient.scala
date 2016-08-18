@@ -17,21 +17,23 @@
  */
 package com.waz.znet
 
+import android.content.Context
 import android.net.Uri
 import com.koushikdutta.async.callback.{CompletedCallback, DataCallback}
 import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http.WebSocket.StringCallback
 import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket}
 import com.koushikdutta.async.{ByteBufferList, DataEmitter}
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.utils.ExponentialBackoff
 import com.waz.utils.events.{EventStream, Signal}
+import com.waz.utils.{ExponentialBackoff, WakeLock}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent}
 import org.json.JSONObject
 
-import scala.concurrent.Promise
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Left, Try}
@@ -39,10 +41,12 @@ import scala.util.{Failure, Left, Try}
 /**
  * Handles WebSocket connection, will pass all received messages to callback, and retry connection if needed.
  */
-class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvider, backoff: ExponentialBackoff = new ExponentialBackoff(250.millis, 5.minutes) ) {
+class WebSocketClient(context: Context, client: AsyncClient, uri: => Uri, auth: AccessTokenProvider, backoff: ExponentialBackoff = new ExponentialBackoff(250.millis, 5.minutes) ) {
+  import WebSocketClient._
 
-  private implicit val logTag: LogTag = logTagFor[WebSocketClient]
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
+
+  private val wakeLock = new WakeLock(context)
 
   val connected = Signal(false)
   val onError   = EventStream[Exception]()
@@ -75,14 +79,16 @@ class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvide
     connected ! false
   }
 
-  def retryIfDisconnected() = connected.head foreach {
+  def retryIfDisconnected() = connected.head flatMap {
     case false if !closed =>
       verbose(s"retrying")
       retryCount = 0
       future.cancel()
       future = connect()
+      future.future.map(Some(_))
     case _ =>
       verbose("already connected")
+      Future.successful(socket)
   }
 
   private def closeCurrentSocket() = socket.foreach { s =>
@@ -139,11 +145,12 @@ class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvide
     connected ! true
 
     webSocket.setStringCallback(new StringCallback {
-      override def onStringAvailable(s: String): Unit = onMessage ! Try(JsonObjectResponse(new JSONObject(s))).getOrElse(StringResponse(s))
+      override def onStringAvailable(s: String): Unit = wakeLock { onMessage ! Try(JsonObjectResponse(new JSONObject(s))).getOrElse(StringResponse(s)) }
     })
     webSocket.setDataCallback(new DataCallback {
-      override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit =
+      override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit = wakeLock {
         onMessage ! Try(JsonObjectResponse(new JSONObject(new String(bb.getAllByteArray, "utf8")))).getOrElse(BinaryResponse(bb.getAllByteArray, ""))
+      }
     })
     webSocket.setClosedCallback(new CompletedCallback {
       override def onCompleted(ex: Exception): Unit = dispatcher {
@@ -171,7 +178,7 @@ class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvide
   }
 
   private def schedulePing(webSocket: WebSocket): CancellableFuture[Unit] =
-    CancellableFuture.delay(45.second) flatMap { _ =>
+    CancellableFuture.delay(PING_INTERVAL) flatMap { _ =>
       if (closed) CancellableFuture.successful({})
       else {
         webSocket.ping("ping")
@@ -181,7 +188,8 @@ class WebSocketClient(client: AsyncClient, uri: => Uri, auth: AccessTokenProvide
 }
 
 object WebSocketClient {
+  val PING_INTERVAL = 8.minutes
 
-  def apply(client: ZNetClient, pushUri: => Uri) =
-    new WebSocketClient(client.client, pushUri, client.auth)
+  def apply(context: Context, client: ZNetClient, pushUri: => Uri) =
+    new WebSocketClient(context, client.client, pushUri, client.auth)
 }

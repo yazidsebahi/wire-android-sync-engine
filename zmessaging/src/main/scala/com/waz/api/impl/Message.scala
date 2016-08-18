@@ -23,9 +23,9 @@ import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
-import com.waz.api.MessageContent.Location
+import com.waz.api.MessageContent.{Location, Text}
 import com.waz.api.{IConversation, ImageAssetFactory, UpdateListener}
-import com.waz.model.GenericContent.LinkPreview
+import com.waz.model.GenericContent.{LinkPreview, MsgEdit}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
@@ -50,7 +50,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   updateParts()
   reload() // always reload because data from constructor might always be outdated already
 
-  def reload() = context.zms.flatMapFuture(_.msgAndLikes.getMessageAndLikes(id))(Threading.Background).map(_ foreach set)(Threading.Ui)
+  def reload() = context.zms.flatMapFuture(_.msgAndLikes.getMessageAndLikes(id))(Threading.Background).map { m => set(m.getOrElse(MessageAndLikes.Deleted)) } (Threading.Ui)
 
   def set(msg: MessageAndLikes): Unit = if (msg.message != data || msg.likes != likes || msg.likedBySelf != likedBySelf) {
     data = msg.message
@@ -78,11 +78,14 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getTime: Instant = data.time
 
-  override def getBody: String = data.protos.lastOption match {
-    case Some(TextMessage(content, _, _)) => content
-    case _ if data.msgType == api.Message.Type.RICH_MEDIA => data.contentString
-    case _ => content.content
+  override def getEditTime: Instant = data.editTime
+
+  override def isEdited: Boolean = data.protos exists {
+    case GenericMessage(_, MsgEdit(_, _)) => true
+    case _ => false
   }
+
+  override def getBody: String = data.contentString
 
   override def getLocation: Location = data.location.orNull
 
@@ -126,7 +129,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isFirstMessage: Boolean = data.firstMessage
 
-  override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.source.sequence == 1
+  override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.firstMessage
 
   override def getLocalTime: Instant = data.localTime
 
@@ -135,6 +138,10 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
     else error(s"Retrying a message that has not yet failed (${data.state}): $id")
 
   override def delete(): Unit = context.zms.flatMapFuture(_.convsUi.deleteMessage(data.convId, id))
+
+  override def recall(): Unit = context.zms.flatMapFuture(_.convsUi.recallMessage(data.convId, id))
+
+  override def update(content: Text): Unit = context.zms.flatMapFuture(_.convsUi.updateMessage(data.convId, id, content))
 
   override def equals(other: Any): Boolean = other match {
     case other: Message => id == other.id
@@ -251,6 +258,10 @@ object EmptyMessage extends com.waz.api.Message {
   override def isLiked: Boolean = false
   override def isEmpty: Boolean = true
   override def delete(): Unit = ()
+  override def recall(): Unit = ()
+  override def getEditTime: Instant = MessageData.UnknownInstant
+  override def isEdited: Boolean = false
+  override def update(content: Text): Unit = ()
 
   override val getParts: Array[Part] = Array.empty
 }

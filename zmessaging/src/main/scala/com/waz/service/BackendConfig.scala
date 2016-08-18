@@ -17,7 +17,7 @@
  */
 package com.waz.service
 
-import com.waz.service.GcmGlobalService.GcmSenderId
+import com.waz.service.push.GcmGlobalService.GcmSenderId
 
 case class BackendConfig(baseUrl: String, pushUrl: String, gcmSenderId: GcmSenderId, environment: String) {
   import BackendConfig._

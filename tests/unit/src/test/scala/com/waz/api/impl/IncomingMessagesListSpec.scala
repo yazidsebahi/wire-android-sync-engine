@@ -53,7 +53,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
   feature("Incoming events") {
 
     scenario("Add freshly received message to incoming messages list") {
-      val event = MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), "with local time").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), conv.remoteId, new Date, UserId(), "with local time").withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       withDelay {
         val msgs = incoming
@@ -79,19 +79,19 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Don't add messages without local time") {
-      val event = MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), "no local time")
+      val event = textMessageEvent(Uid(), conv.remoteId, new Date, UserId(), "no local time")
       incoming should have size 2
     }
 
     scenario("Don't add messages from muted conversations") {
-      val event = MessageAddEvent(Uid(), mutedConv.remoteId, EventId(1), new Date, UserId(), "with local time").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), mutedConv.remoteId, new Date, UserId(), "with local time").withCurrentLocalTime()
       service.dispatch(event)
       awaitUi(200.millis)
       incoming should have size 2
     }
 
     scenario("Add connect request messages") {
-      val event = ConnectRequestEvent(Uid(), conv1.remoteId, EventId(1), new Date, UserId(), "with local time", selfUser.id, "meep", None).withCurrentLocalTime()
+      val event = ConnectRequestEvent(Uid(), conv1.remoteId, new Date, UserId(), "with local time", selfUser.id, "meep", None).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       val msgs = incoming
       msgs should have size 3
@@ -100,7 +100,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Add more messages to conversation with connect request") {
-      val event = MessageAddEvent(Uid(), conv1.remoteId, EventId(2), new Date, UserId(), "first").withCurrentLocalTime()
+      val event = textMessageEvent(Uid(), conv1.remoteId, new Date, UserId(), "first").withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       withDelay {
         val msgs = incoming
@@ -110,7 +110,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
         msgs.last.firstMessage shouldEqual true
       }
 
-      val event1 = MessageAddEvent(Uid(), conv1.remoteId, EventId(3), new Date, UserId(), "second").withCurrentLocalTime()
+      val event1 = textMessageEvent(Uid(), conv1.remoteId, new Date, UserId(), "second").withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event1) }
 
       withDelay {
@@ -125,7 +125,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
 
   feature("IncomingMessagesList") {
 
-    def md(localTime: Instant = Instant.now) = MessageData(MessageId(), conv.id, EventId(1), api.Message.Type.TEXT, conv.creator, localTime = localTime)
+    def md(localTime: Instant = Instant.now) = MessageData(MessageId(), conv.id, api.Message.Type.TEXT, conv.creator, localTime = localTime)
 
     def loadMessages(msgs: List[MessageData], list: IncomingMessages = new IncomingMessages) = {
       var received = Nil: List[MessageData]
@@ -161,6 +161,6 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
 
   def createConv(muted: Boolean): ConversationData = {
     val conv = ConvId()
-    Await.result(service.convsContent.insertConversation(ConversationData(conv, RConvId(conv.str), None, UserId(), ConversationType.Group, lastEvent = EventId(1000), muted = muted)), timeout)
+    Await.result(service.convsContent.insertConversation(ConversationData(conv, RConvId(conv.str), None, UserId(), ConversationType.Group, muted = muted)), timeout)
   }
 }

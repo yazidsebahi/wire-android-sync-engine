@@ -29,6 +29,7 @@ import com.waz.service.assets.{AssetLoader, GlobalRecordAndPlayService}
 import com.waz.service.downloads.DownloadRequest.{AssetFromInputStream, UnencodedAudioAsset, VideoAsset}
 import com.waz.service.downloads._
 import com.waz.service.images.ImageLoader
+import com.waz.service.push.GcmGlobalService
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.znet._

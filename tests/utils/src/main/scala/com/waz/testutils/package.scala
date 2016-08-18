@@ -17,6 +17,9 @@
  */
 package com.waz
 
+import java.security.{Permission, PermissionCollection}
+import java.util.Date
+
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
@@ -28,8 +31,8 @@ import com.waz.api.impl._
 import com.waz.api.{CoreList, IConversation}
 import com.waz.cache.CacheEntryData
 import com.waz.content.{Mime, MsgCursor}
-import com.waz.model.nano.Messages.GenericMessage
-import com.waz.model.{Contact, MessageData, NameSource, PhoneNumber}
+import com.waz.model.GenericContent.Text
+import com.waz.model.{otr => _, _}
 import com.waz.service.ContactsService
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
@@ -168,6 +171,7 @@ package object testutils {
       override def areEqual(a: MessageData, b: Any): Boolean = {
         b match {
           case m: MessageData =>
+            if (m.copy(protos = Nil) != a.copy(protos = Nil)) println(s"message content differ: \n$a\n$m\n")
             m.copy(protos = Nil) == a.copy(protos = Nil) && m.protos.size == a.protos.size && m.protos.zip(a.protos).forall { case (p1, p2) => GenericMessageEquality.areEqual(p1, p2) }
           case _ => false
         }
@@ -260,4 +264,42 @@ package object testutils {
   }
 
   def randomPhoneNumber = PhoneNumber("+0" + (Random.nextInt(9) + 1).toString + Array.fill(13)(Random.nextInt(10)).mkString)
+
+  def textMessageEvent(id: Uid, conv: RConvId, time: Date, from: UserId, text: String) =
+    GenericMessageEvent(id, conv, time, from, GenericMessage(id, Text(text)))
+}
+
+object JCE {
+
+  def removeCryptographyRestrictions() =
+    try {
+      /*
+       * JceSecurity.isRestricted = false;
+       * JceSecurity.defaultPolicy.perms.clear();
+       * JceSecurity.defaultPolicy.add(CryptoAllPermission.INSTANCE);
+       */
+      val jceSecurity = Class.forName("javax.crypto.JceSecurity")
+      val cryptoPermissions = Class.forName("javax.crypto.CryptoPermissions")
+      val cryptoAllPermission = Class.forName("javax.crypto.CryptoAllPermission")
+
+      val isRestrictedField = jceSecurity.getDeclaredField("isRestricted")
+      isRestrictedField.setAccessible(true)
+      isRestrictedField.set(null, false)
+
+      val defaultPolicyField = jceSecurity.getDeclaredField("defaultPolicy")
+      defaultPolicyField.setAccessible(true)
+      val defaultPolicy = defaultPolicyField.get(null).asInstanceOf[PermissionCollection]
+
+      val perms = cryptoPermissions.getDeclaredField("perms")
+      perms.setAccessible(true)
+      perms.get(defaultPolicy).asInstanceOf[java.util.Map[_,_]].clear()
+
+      val instance = cryptoAllPermission.getDeclaredField("INSTANCE")
+      instance.setAccessible(true)
+      defaultPolicy.add(instance.get(null).asInstanceOf[Permission])
+    } catch {
+      case e: Exception =>
+        println("Failed to remove cryptography restrictions")
+        e.printStackTrace()
+    }
 }

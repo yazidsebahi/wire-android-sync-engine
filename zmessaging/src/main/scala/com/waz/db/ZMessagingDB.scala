@@ -28,6 +28,7 @@ import com.waz.model.CommonConnectionsData.CommonConnectionsDataDao
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
+import com.waz.model.EditHistory.EditHistoryDao
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.InvitedContacts.InvitedContactsDao
@@ -52,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
-    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao
+    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao
   )
 
   override val migrations = Seq(
@@ -86,6 +87,21 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
           }
         }
       }
+    },
+    Migration(70, 71) { implicit db =>
+      db.execSQL("ALTER TABLE Messages ADD COLUMN edit_time INTEGER DEFAULT 0")
+    },
+    Migration(71, 72) { implicit db =>
+      MessageDataMigration.v72(db)
+      ConversationDataMigration.v72(db)
+      ConversationMembersMigration.v72(db)
+    },
+    Migration(72, 73) { implicit db =>
+      db.execSQL("CREATE TABLE EditHistory (original_id TEXT PRIMARY KEY, updated_id TEXT, timestamp INTEGER)")
+    },
+    Migration(73, 74) { implicit db =>
+      db.execSQL("DROP TABLE IF EXISTS GcmData") // just dropping all data, not worth the trouble to migrate that
+      db.execSQL("CREATE TABLE NotificationData (_id TEXT PRIMARY KEY, data TEXT)")
     }
   )
 
@@ -98,5 +114,5 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 70
+  val DbVersion = 74
 }

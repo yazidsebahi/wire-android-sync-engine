@@ -25,24 +25,26 @@ import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model.{MessageAddEvent, _}
+import com.waz.model._
 import com.waz.service.conversation.ConversationsService
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.sync.client._
+import com.waz.testutils._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging, _}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient._
 import org.scalatest._
 import org.scalatest.concurrent.{ScalaFutures, ScaledTimeSpans}
+import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaFutures with ScaledTimeSpans with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
-  type EventsGenerator = (RConvId, Option[EventId], Option[EventId], Option[Int]) => Option[Seq[ConversationEvent]]
+  type EventsGenerator = (RConvId, Option[Long], Option[Long], Option[Int]) => Option[Seq[ConversationEvent]]
   type ConvsGenerator = (Option[RConvId]) => Either[ErrorResponse, ConversationsResult]
   
   private lazy implicit val dispatcher = Threading.Background
@@ -120,10 +122,10 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
     }
 
     scenario("create conv with too many members") {
-      val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group, lastEvent = EventId(1500)))
+      val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group, lastEventTime = Instant.ofEpochMilli(1500)))
       val members = Seq.fill(128)(UserId())
       postConvResponse = Right(ConversationResponse(conv, members.take(64).map(u => ConversationMemberData(u, conv.id))))
-      postMemberJoinResponse = Right(Some(MemberJoinEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), members.drop(64))))
+      postMemberJoinResponse = Right(Some(MemberJoinEvent(Uid(), conv.remoteId, new Date, UserId(), members.drop(64), false)))
 
       handler.postConversation(conv.id, members, Some("Test group")).futureValue shouldEqual SyncResult.Success
 
@@ -199,7 +201,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
     scenario("Post many members") {
       val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
       val members = Seq.fill(128)(UserId())
-      postMemberJoinResponse = Right(Some(MemberJoinEvent(Uid(), conv.remoteId, EventId(1), new Date, UserId(), members.take(64))))
+      postMemberJoinResponse = Right(Some(MemberJoinEvent(Uid(), conv.remoteId, new Date, UserId(), members.take(64), false)))
 
       handler.postConversationMemberJoin(conv.id, members).futureValue shouldEqual SyncResult.Success
 
@@ -209,10 +211,10 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
 
   def insertConv(data: ConversationData): ConversationData = Await.result(service.convsStorage.insert(data), 5.seconds)
 
-  def generateEvents(maxSeq: Long)(convId: RConvId, start: Option[EventId], end: Option[EventId], size: Option[Int]) = {
-    val startSeq = start.fold(1L)(_.sequence max 1)
-    val endSeq = maxSeq min end.fold(maxSeq)(_.sequence) min size.fold(maxSeq)(_ + startSeq - 1)
+  def generateEvents(maxSeq: Long)(convId: RConvId, start: Option[Long], end: Option[Long], size: Option[Int]) = {
+    val startSeq = start.fold(1L)(_ max 1)
+    val endSeq = maxSeq min end.getOrElse(maxSeq) min size.fold(maxSeq)(_ + startSeq - 1)
     info(s"generateEvents($start, $end, $size) - generating from: $startSeq to: $endSeq")
-    Some(for (i <- startSeq to endSeq) yield MessageAddEvent(Uid(i, i), convId, EventId(i, i.toString), new Date, UserId(i.toString), i.toString)) // generated messages have to be consistent (expecially uid and userId)
+    Some(for (i <- startSeq to endSeq) yield textMessageEvent(Uid(i, i), convId, new Date(i * 1000), UserId(i.toString), i.toString)) // generated messages have to be consistent (expecially uid and userId)
   }
 }

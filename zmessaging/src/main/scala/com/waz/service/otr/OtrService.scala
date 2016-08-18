@@ -31,6 +31,7 @@ import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.sync.client.OtrClient.EncryptedContent
@@ -235,18 +236,15 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
     members.getActiveUsers(convId) flatMap { users =>
       verbose(s"active users: $users")
       Future.traverse(users) { user =>
-        clientsStorage.getClients(user) flatMap { cs =>
-          verbose(s"user clients: $cs")
-          encrypt(user, cs.filter(_ != clientId))
-        }
+        targetClients(user) flatMap { encrypt(user, _) }
       } map (res => EncryptedContent(res.toMap.filter(_._2.nonEmpty)))
     }
   }
 
   // list of clients to which the message should be sent for given user
-  private def targetClients(user: UserId, selfUserId: UserId, selfClientId: ClientId) =
+  private def targetClients(user: UserId) =
     clientsStorage.getClients(user) map { cs =>
-      if (user == selfUserId) cs.filter(_.id != selfClientId)
+      if (user == selfUserId) cs.filter(_.id != clientId)
       else cs
     }
 

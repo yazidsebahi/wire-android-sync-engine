@@ -63,33 +63,32 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
 
   def addLocalMessage(msg: MessageData, state: Status = Status.PENDING) = Serialized.future("add local message", msg.convId) {
     verbose(s"addLocalMessage: $msg")
-    nextLocalEventIdAndTime(msg.convId) flatMap { case (eventId, time) =>
-      verbose(s"adding message to storage: $eventId, $time")
-      messagesStorage.addMessage(msg.copy(source = eventId, state = state, time = time, localTime = Instant.now))
+    nextLocalTime(msg.convId) flatMap { time =>
+      verbose(s"adding message to storage: $time")
+      messagesStorage.addMessage(msg.copy(state = state, time = time, localTime = Instant.now))
     }
   }
 
   def addLocalSentMessage(msg: MessageData) = Serialized.future("add local message", msg.convId) {
     verbose(s"addLocalSentMessage: $msg")
-    lastSentEventIdAndTime(msg.convId) flatMap { case (ev, t) =>
-      val (eventId, time) = (EventId.nextLocal(ev), t.plusMillis(1))
-      verbose(s"adding message to storage: $eventId, $time")
-      messagesStorage.addMessage(msg.copy(source = EventId.nextLocal(eventId), state = Status.SENT, time = time, localTime = Instant.now))
+    lastSentEventTime(msg.convId) flatMap { t =>
+      verbose(s"adding local sent message to storage, $t")
+      messagesStorage.addMessage(msg.copy(state = Status.SENT, time = t.plusMillis(1), localTime = Instant.now))
     }
   }
 
-  private def nextLocalEventIdAndTime(convId: ConvId) =
+  private def nextLocalTime(convId: ConvId) =
     messagesStorage.getLastMessage(convId) flatMap {
-      case Some(msg) => Future.successful((msg.source, msg.time))
-      case _ => convs.get(convId).map(_.fold((EventId.Zero, MessageData.UnknownInstant)) { c => (c.lastEvent, c.lastEventTime) })
-    } map { case (ev, time) =>
-      (EventId.nextLocal(ev), Instant.now.max(time.plusMillis(1)))
+      case Some(msg) => Future successful msg.time
+      case _ => convs.get(convId).map(_.fold(MessageData.UnknownInstant)(_.lastEventTime))
+    } map { time =>
+      Instant.now.max(time.plusMillis(1))
     }
 
-  private def lastSentEventIdAndTime(convId: ConvId) =
+  private def lastSentEventTime(convId: ConvId) =
     messagesStorage.getLastSentMessage(convId) flatMap {
-      case Some(msg) => Future.successful((msg.source, msg.time))
-      case _ => convs.get(convId).map(_.fold((EventId.Zero, MessageData.UnknownInstant)) { c => (c.lastEvent, c.lastEventTime) })
+      case Some(msg) => Future successful msg.time
+      case _ => convs.get(convId).map(_.fold(MessageData.UnknownInstant)(_.lastEventTime))
     }
 
   /**
@@ -102,7 +101,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
           @volatile var shouldCreate = false
           verbose(s"got local message: $msg, will update")
           updateMessage(msg.id) { msg =>
-            if (msg.source.isLocal) update(msg)
+            if (msg.isLocal) update(msg)
             else { // msg was already synced, need to create new local message
               shouldCreate = true
               msg
@@ -118,12 +117,12 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
 
   private[service] def addMessages(convId: ConvId, msgs: Seq[MessageData]): Future[Set[MessageData]] = {
     verbose(s"addMessages($msgs)")
-    val (systemMsgs, contentMsgs) = msgs.partition(_.isSystemMessage)
 
     for {
+      toAdd <- skipPreviouslyDeleted(msgs)
+      (systemMsgs, contentMsgs) = toAdd.partition(_.isSystemMessage)
       sm <- addSystemMessages(convId, systemMsgs)
-      toAdd <- skipPreviouslyDeleted(contentMsgs)
-      cm <- addContentMessages(convId, toAdd)
+      cm <- addContentMessages(convId, contentMsgs)
     } yield sm.toSet ++ cm
   }
 
@@ -136,11 +135,11 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
   private def addSystemMessages(convId: ConvId, msgs: Seq[MessageData]): Future[Seq[MessageData]] =
     if (msgs.isEmpty) Future.successful(Seq.empty)
     else {
-      messagesStorage.getMessages(convId, msgs.map(_.source)) flatMap { prev =>
-        val prevEvents = prev.map(m => m.source)
-        val toAdd = msgs.filterNot(m => prevEvents.contains(m.source))
+      messagesStorage.getMessages(msgs.map(_.id): _*) flatMap { prev =>
+        val prevIds: Set[MessageId] = prev.collect { case Some(m) => m.id } (breakOut)
+        val toAdd = msgs.filterNot(m => prevIds.contains(m.id))
 
-        RichFuture.traverseSequential(toAdd.groupBy(_.source).toSeq) { case (_, ms) =>
+        RichFuture.traverseSequential(toAdd.groupBy(_.id).toSeq) { case (_, ms) =>
           val msg = ms.last
           messagesStorage.lastLocalMessage(convId, msg.msgType) flatMap {
             case Some(m) if m.userId == msg.userId =>
@@ -148,7 +147,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
 
               if (m.msgType == Message.Type.MEMBER_JOIN || m.msgType == Message.Type.MEMBER_LEAVE) {
                 val remaining = m.members.diff(msg.members)
-                if (remaining.nonEmpty) addMessage(m.copy(id = MessageId(), source = EventId.nextLocal(msg.source max m.source), members = remaining))
+                if (remaining.nonEmpty) addMessage(m.copy(id = MessageId(), members = remaining))
               }
               messagesStorage.update(m.id, m => msg.copy(id = m.id, localTime = m.localTime)).map(_.fold2(msg, _._2))
             case res =>
@@ -160,21 +159,16 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
     }
 
   private def addContentMessages(convId: ConvId, msgs: Seq[MessageData]): Future[Set[MessageData]] = {
-
     // merge data from multiple events in single message
     def merge(msgs: Seq[MessageData]): MessageData = {
 
-      def mergeSource(s1: EventId, s2: EventId) =
-        if (s1 == EventId.Zero || s1.isLocal) s2
-        else if (s2 == EventId.Zero || s2.isLocal) s1
-        else s1 min s2
-
       def mergeLocal(m: MessageData, msg: MessageData) =
-        msg.copy(id = m.id, source = mergeSource(msg.source, m.source), localTime = m.localTime)
+        msg.copy(id = m.id, localTime = m.localTime)
 
       def mergeMatching(prev: MessageData, msg: MessageData) = {
-        val u = prev.copy(msgType = msg.msgType, source = mergeSource(msg.source, prev.source), time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
+        val u = prev.copy(msgType = msg.msgType, time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
         prev.msgType match {
+          case Message.Type.RECALLED => prev // ignore updates to already recalled message
           case Message.Type.KNOCK => u.copy(localTime = if (msg.hotKnock && !prev.hotKnock) msg.localTime else prev.localTime)
           case _ => u
         }
@@ -204,18 +198,12 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
   private[service] def addMessage(msg: MessageData): Future[Option[MessageData]] = addMessages(msg.convId, Seq(msg)).map(_.headOption)
 
   // updates server timestamp for local messages, this should make sure that local messages are ordered correctly after one of them is sent
-  def updateLocalMessageTimes(conv: ConvId, prevTime: Instant, time: Instant) = {
-
-    def updater(time: Instant)(m: MessageData) = {
-      verbose(s"try updating local message time, msg: $m, time: $time")
-      if (m.isLocal && m.time.isBefore(time)) m.copy(time = time) else m
-    }
-
+  def updateLocalMessageTimes(conv: ConvId, prevTime: Instant, time: Instant) =
     messagesStorage.findLocalFrom(conv, prevTime) flatMap { local =>
-      verbose(s"local messages: $local")
-      if (local.isEmpty) Future successful Seq.empty[(MessageData, MessageData)]
-      else
-        messagesStorage updateAll local.sortBy(_.time).zipWithIndex.map { case (m, i) => m.id -> updater(time.plusMillis(i)) _ }(breakOut)
+      verbose(s"local messages from $prevTime: $local")
+      messagesStorage updateAll2(local.map(_.id), { m =>
+        verbose(s"try updating local message time, msg: $m, time: $time")
+        if (m.isLocal) m.copy(time = time.plusMillis(m.time.toEpochMilli - prevTime.toEpochMilli)) else m
+      })
     }
-  }
 }

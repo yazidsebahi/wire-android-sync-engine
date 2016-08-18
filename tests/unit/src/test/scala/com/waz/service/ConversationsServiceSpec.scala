@@ -20,7 +20,7 @@ package com.waz.service
 import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
-import com.waz.RobolectricUtils
+import com.waz.{RobolectricUtils, testutils}
 import com.waz.api.{ErrorType, Message}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ErrorData.ErrorDataDao
@@ -104,19 +104,18 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
   feature("Last event property") {
 
     scenario("Update last event and time on message add event") {
-      val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), selfUserId, ConversationType.Group, lastEvent = EventId(2), lastEventTime = Instant.ofEpochMilli(100)))
+      val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), selfUserId, ConversationType.Group, lastEventTime = Instant.ofEpochMilli(100)))
 
-      val ev = EventId(3)
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, ev, new Date(1000), UserId(), "test"))
+      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(1000), UserId(), "test"))
       withDelay {
-        convsContent.convById(conv.id).map(_.map(m => (m.lastEvent, m.lastEventTime))) should eventually(be(Some((ev, Instant.ofEpochMilli(1000)))))
+        convsContent.convById(conv.id).map(_.map(_.lastEventTime)) should eventually(be(Some(Instant.ofEpochMilli(1000))))
       }
     }
 
     scenario("Update lastRead on message from self") {
-      val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), selfUserId, ConversationType.Group, lastEvent = EventId(2), lastEventTime = Instant.ofEpochMilli(100)))
+      val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), selfUserId, ConversationType.Group, lastEventTime = Instant.ofEpochMilli(100)))
 
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(3), new Date(1000), selfUserId, "test"))
+      service.dispatchEvent(testutils.textMessageEvent(Uid(), conv.remoteId, new Date(1000), selfUserId, "test"))
       withDelay {
         convsContent.convById(conv.id).map(_.map(m => m.lastRead)).futureValue shouldEqual Some(Instant.ofEpochMilli(1000))
       }
@@ -127,7 +126,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
 
     scenario("load missed call info") {
       val oneToOneConv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), user.id, ConversationType.Group, lastRead = Instant.now.minusSeconds(1000)))
-      service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), oneToOneConv.remoteId, EventId(10), new Date(), user.id, Some("missed")))
+      service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), oneToOneConv.remoteId, new Date(), user.id, Some("missed")))
 
       withDelay {
         Await.result(convsContent.convById(oneToOneConv.id), timeout).flatMap(_.missedCallMessage) should be('defined)
@@ -136,9 +135,8 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
 
     scenario("after a call ends, the conv updates its last event time") {
       val oneToOneConv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), user.id, ConversationType.Group))
-      val eventId = EventId(10)
       val eventTime = new Date
-      service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), oneToOneConv.remoteId, eventId, eventTime, user.id, None))
+      service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), oneToOneConv.remoteId, eventTime, user.id, None))
       awaitUi(100.millis)
       Await.result(convsContent.convById(oneToOneConv.id), timeout).map(_.lastEventTime) shouldEqual Some(eventTime.instant)
     }
@@ -164,7 +162,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
     scenario("Dismiss failed create conversation error") {
       val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("invalid group conv"), user.id, ConversationType.Group))
       addMember(conv.id, UserId())
-      addMessage(MessageData(MessageId(), conv.id, EventId(0), Message.Type.TEXT, UserId()))
+      addMessage(MessageData(MessageId(), conv.id, Message.Type.TEXT, UserId()))
       val err = ErrorDataDao.insertOrReplace(ErrorData(Uid(), ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER, Nil, Nil, Some(conv.id)))
       Await.result(service.errors.dismissError(err.id), timeout)
 

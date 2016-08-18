@@ -30,6 +30,7 @@ import com.waz.testutils.MockZMessaging
 import com.waz.threading.Threading
 import org.robolectric.Robolectric
 import org.scalatest._
+import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 
@@ -40,7 +41,8 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("user 1")
 
-  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group, lastEvent = EventId(10), renameEvent = Some(EventId(10))).withFreshSearchKey
+  lazy val time = System.currentTimeMillis() - 100
+  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group, renameEvent = Instant.ofEpochMilli(time)).withFreshSearchKey
 
   implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
@@ -55,8 +57,6 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
 
   feature("Syncing") {
 
-    val time = System.currentTimeMillis() - 100
-
     scenario("Set name from initial sync event") {
       service.dispatchEvent(CreateConversationEvent(Uid(), conv.remoteId, new Date(time), selfUser.id, ConversationResponse(conv, Seq(ConversationMemberData(selfUser.id, conv.id), ConversationMemberData(user1.id, conv.id)))))
       withDelay {
@@ -65,13 +65,13 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
     }
 
     scenario("Don't update name on event older than just fetched lastEvent") {
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, EventId(9), new Date(time - 100), user1.id, "old name"))
+      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(time - 100), user1.id, "old name"))
       awaitUi(200.millis)
       getConv(conv.id).flatMap(_.name) shouldEqual Some("convName")
     }
 
     scenario("Update name on new RenameEvent") {
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, EventId(15), new Date(time + 1), user1.id, "updated name"))
+      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(time + 1), user1.id, "updated name"))
       withDelay {
         getConv(conv.id).flatMap(_.name) shouldEqual Some("updated name")
         getConv(conv.id).map(_.lastEventTime.toEpochMilli) shouldEqual Some(time + 1)
@@ -79,7 +79,7 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
     }
 
     scenario("Don't update name on older RenameEvent") {
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, EventId(12), new Date(time - 100), user1.id, "prev name"))
+      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(time), user1.id, "prev name"))
       awaitUi(200.millis)
       getConv(conv.id).flatMap(_.name) shouldEqual Some("updated name")
       getConv(conv.id).map(_.lastEventTime.toEpochMilli) shouldEqual Some(time + 1)

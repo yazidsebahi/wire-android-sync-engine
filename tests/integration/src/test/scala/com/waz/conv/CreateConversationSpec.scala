@@ -24,7 +24,7 @@ import com.waz.api.{IConversation, ProvisionedApiSpec, Message => ApiMessage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.PushService.SlowSyncRequest
+import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.RemoteZmsSpec
 import com.waz.sync.client.ConnectionsClient
 import com.waz.testutils.DefaultPatienceConfig

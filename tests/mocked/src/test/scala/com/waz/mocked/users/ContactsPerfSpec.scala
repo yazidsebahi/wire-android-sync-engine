@@ -57,5 +57,5 @@ class ContactsPerfSpec extends FeatureSpec with OptionValues with MockedClientAp
       Contact(ContactId(), v(0), StructuredName, v(0), SearchKey(v(0)), Set(PhoneNumber(v(1)), PhoneNumber(v(2))), Set(EmailAddress(v(3)), EmailAddress(v(4))))
     }.toVector
 
-  implicit lazy val SourceCleanup = new Cleanup[Source] { def apply(a: Source): Unit = a.close() }
+  implicit lazy val SourceCleanup: Cleanup[Source] = new Cleanup[Source] { def apply(a: Source): Unit = a.close() }
 }

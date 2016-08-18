@@ -49,6 +49,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postMessage(id: MessageId, conv: ConvId) = sid
   override def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = sid
   override def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId] = sid
+  override def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId): Future[SyncId] = sid
   override def postSelfPicture(picture: Option[AssetId]) = sid
   override def postConversationName(id: ConvId, n: String) = sid
   override def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = sid
@@ -61,7 +62,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postInvitation(i: Invitation) = sid
   override def postTypingState(id: ConvId, t: Boolean) = sid
   override def postExcludePymk(id: UserId): Future[SyncId] = sid
-  override def postOpenGraphData(conv: ConvId, msg: MessageId) = sid
+  override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
 
   override def registerGcm() = sid
   override def deleteGcmToken(token: GcmId) = sid

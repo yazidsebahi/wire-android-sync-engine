@@ -24,6 +24,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.RichFuture

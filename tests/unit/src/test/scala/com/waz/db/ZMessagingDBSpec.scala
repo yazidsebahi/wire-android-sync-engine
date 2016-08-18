@@ -126,9 +126,9 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Be
         conv.incomingKnockMessage shouldEqual None
         conv.lastRead should be >= Instant.EPOCH
         if (conv.convType == ConversationType.Group)
-          conv.renameEvent shouldEqual Some(conv.lastEvent)
+          conv.renameEvent shouldEqual conv.lastEventTime
         else
-          conv.renameEvent shouldEqual None
+          conv.renameEvent shouldEqual Instant.EPOCH
       }
     }
 
@@ -152,12 +152,24 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Be
 
     scenario("Migrate to protobuf model in 69") {
       implicit val db = loadDb("/db/zmessaging_60.db")
-      dbHelper.onUpgrade(db, 60, 69)
+      dbHelper.onUpgrade(db, 60, 71)
 
       val msgs = MessageDataDao.list
       msgs should have size 994
       msgs foreach { m =>
         if (m.msgType == Message.Type.KNOCK) m.protos should have size 1
+      }
+    }
+
+    scenario("Add message editTime column in 71") {
+      implicit val db = loadDb("/db/zmessaging_60.db")
+      dbHelper.onUpgrade(db, 60, 71)
+
+      val msgs = MessageDataDao.list
+      msgs should have size 994
+      msgs foreach { m =>
+        if (m.msgType == Message.Type.KNOCK) m.protos should have size 1
+        m.editTime shouldEqual Instant.EPOCH
       }
     }
   }

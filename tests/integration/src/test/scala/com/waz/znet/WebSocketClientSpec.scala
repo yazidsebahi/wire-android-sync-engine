@@ -78,7 +78,7 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
     scenario("Receive name change update") {
       val latch = new CountDownLatch(1)
 
-      val manager = new WebSocketClient(asyncClient, Uri.parse(backend.pushUrl), auth)
+      val manager = new WebSocketClient(context, asyncClient, Uri.parse(backend.pushUrl), auth)
 
       manager.onMessage {
         case resp @ JsonObjectResponse(js) if js.toString.contains("auto1_updated") =>

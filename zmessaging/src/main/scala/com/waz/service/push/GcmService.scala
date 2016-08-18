@@ -15,11 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.service.push
 
 import com.waz.ZLog._
 import com.waz.model._
-import com.waz.service.GcmGlobalService.GcmRegistration
+import com.waz.service.push.GcmGlobalService.GcmRegistration
+import com.waz.service.{EventScheduler, LifecycleState, ZmsLifecycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.utils.events.EventContext
 

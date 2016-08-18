@@ -251,7 +251,7 @@ class DeviceActor(val deviceName: String,
 
         ConvMessages(Array.tabulate(cursor.size) { i =>
           val m = cursor(i)
-          MessageInfo(m.message.id, m.message.msgType)
+          MessageInfo(m.message.id, m.message.msgType, m.message.time)
         })
       }
 
@@ -270,9 +270,29 @@ class DeviceActor(val deviceName: String,
         Successful
       }
 
+    case UpdateText(msgId, text) =>
+      zmessaging.messagesStorage.getMessage(msgId) flatMap {
+        case Some(msg) if msg.userId == zmessaging.selfUserId =>
+          zmessaging.convsUi.updateMessage(msg.convId, msgId, new MessageContent.Text(text)) map { _ => Successful }
+        case Some(_) =>
+          Future successful Failed("Can not update messages from other user")
+        case None =>
+          Future successful Failed("No message found with given id")
+      }
+
     case DeleteMessage(convId, msgId) =>
+      getConv(convId) flatMap  { conv =>
+       zmessaging.messagesStorage.getMessage(msgId) flatMap {
+          case Some(msg) =>
+            zmessaging.convsUi.deleteMessage(conv.id, msgId) map { _ => Successful }
+          case None =>
+            Future successful Failed("No message found with given id")
+        }
+      }
+
+    case RecallMessage(convId, msgId) =>
       withConv(convId) { conv =>
-        zmessaging.convsUi.deleteMessage(conv.id, msgId)
+        zmessaging.convsUi.recallMessage(conv.id, msgId)
       }
 
     case AcceptConnection(userId) =>

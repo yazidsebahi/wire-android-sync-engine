@@ -22,6 +22,7 @@ import com.waz.api.Message
 import com.waz.api.impl.AccentColor
 import com.waz.model._
 import com.waz.threading.QueueReport
+import org.threeten.bp.Instant
 
 trait ActorMessage
 
@@ -153,6 +154,8 @@ object ActorMessage {
 
   case class DeleteMessage(convId: RConvId, id: MessageId) extends ActorMessage
 
+  case class RecallMessage(convId: RConvId, id: MessageId) extends ActorMessage
+
   /**
    * Send a Wire text message to a conversation
  *
@@ -166,6 +169,8 @@ object ActorMessage {
    * @param msg the message to send
    */
   case class SendText(remoteId: RConvId, msg: String) extends ActorMessage
+
+  case class UpdateText(msgId: MessageId, msg: String) extends ActorMessage
 
   /**
    * Have a device send an image to a conversation
@@ -352,7 +357,7 @@ object ActorMessage {
 
   case class GetDeviceFingerPrint() extends ActorMessage
 
-  case class MessageInfo(id: MessageId, tpe: Message.Type)
+  case class MessageInfo(id: MessageId, tpe: Message.Type, time: Instant)
 
   case class ConvMessages(msgs: Array[MessageInfo]) extends ActorMessage
 

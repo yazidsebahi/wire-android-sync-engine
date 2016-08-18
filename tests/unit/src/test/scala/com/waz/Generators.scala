@@ -53,17 +53,15 @@ object Generators {
   import MediaAssets._
 
   implicit lazy val genGcmEvent: Gen[Event] = {
-    implicit val arbEventId: Arbitrary[EventId] = Arbitrary(genIncreasingEventId)
     implicit val arbConnectionStatus: Arbitrary[ConnectionStatus] = Arbitrary(oneOf(PendingFromOther, Accepted))
 
     oneOf[Event](
       resultOf(UserConnectionEvent.apply _),
       resultOf(ContactJoinEvent),
-      resultOf(MessageAddEvent),
       resultOf(MemberJoinEvent),
       resultOf(MemberLeaveEvent),
       resultOf(RenameConversationEvent),
-      resultOf(VoiceChannelDeactivateEvent(_: Uid, _: RConvId, _: EventId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
+      resultOf(VoiceChannelDeactivateEvent(_: Uid, _: RConvId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
   }
 
   implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))
@@ -82,7 +80,6 @@ object Generators {
     creator <- arbitrary[UserId]
     convType <- arbitrary[ConversationType]
     lastEventTime <- arbitrary[Instant]
-    lastEvent <- arbitrary[EventId]
     status <- arbitrary[Int]
     statusTime <- arbitrary[Instant]
     muted <- arbitrary[Boolean]
@@ -98,10 +95,10 @@ object Generators {
     unjoinedCall <- arbitrary[Boolean]
     missedCall <- arbitrary[Option[MessageId]]
     incomingKnock <- arbitrary[Option[MessageId]]
-    renameEvent <- arbitrary[Option[EventId]]
+    renameEvent <- arbitrary[Instant]
     voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, lastEvent, status, statusTime, Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, status, statusTime, Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]
@@ -297,11 +294,6 @@ object Generators {
     ids = if (includeSelf) self :: others else others
   } yield MessageAndLikes(msg, ids.toVector, includeSelf))
 
-  implicit lazy val arbEventId: Arbitrary[EventId] = Arbitrary(for {
-    seq <- posNum[Long]
-    hex <- arbitrary[Long] map EventId.hexString
-  } yield EventId(seq, hex))
-
   implicit lazy val arbMetaData: Arbitrary[AssetMetaData] = Arbitrary(oneOf(arbImageMetaData.arbitrary, arbVideoMetaData.arbitrary, arbAudioMetaData.arbitrary))
   implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- optGen(oneOf(ImageData.Tag.Medium, ImageData.Tag.MediumPreview, ImageData.Tag.Preview, ImageData.Tag.SmallProfile))) yield AssetMetaData.Image(d, t))
   implicit lazy val arbVideoMetaData: Arbitrary[AssetMetaData.Video] = Arbitrary(resultOf(AssetMetaData.Video(_: Dim2, _: Duration)))
@@ -334,7 +326,6 @@ object Generators {
   implicit lazy val arbConvState: Arbitrary[ConversationState] = Arbitrary(resultOf(
     ConversationState(_: Option[Boolean], _: Option[Instant], _: Option[Boolean], _: Option[Instant])))
 
-  implicit lazy val genIncreasingEventId: Gen[EventId] = sideEffect(EventId(serialCounter.getAndIncrement))
   lazy val serialCounter: AtomicLong = new AtomicLong()
 
   implicit lazy val arbToken: Arbitrary[Token] = Arbitrary(resultOf(Token))

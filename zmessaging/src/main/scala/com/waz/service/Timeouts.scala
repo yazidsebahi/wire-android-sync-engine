@@ -28,6 +28,7 @@ class Timeouts {
   val calling = new Calling
   val webSocket = new WebSocket
   val messages = new Messages
+  val notifications = new Notifications
 
   class Messages {
     def lastReadPostDelay = 15.seconds
@@ -59,5 +60,9 @@ class Timeouts {
   class WebSocket {
     def inactivityTimeout = 3.seconds
     def connectionTimeout = 8.seconds
+  }
+
+  class Notifications {
+    def clearThrottling = 3.seconds
   }
 }

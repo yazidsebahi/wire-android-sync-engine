@@ -25,8 +25,9 @@ import com.waz.model.VoiceChannelData.ConnectionState
 import com.waz.model.VoiceChannelData._
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
-import com.waz.service.{ZmsLifecycle, ErrorsService, PushService}
-import com.waz.service.call.VoiceChannelService.{Unchanged, CallJoined, CallJoinResult}
+import com.waz.service.{ErrorsService, ZmsLifecycle}
+import com.waz.service.call.VoiceChannelService.{CallJoinResult, CallJoined, Unchanged}
+import com.waz.service.push.PushService
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.RichTraversableOnce
 import com.waz.utils.events.EventContext

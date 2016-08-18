@@ -20,7 +20,29 @@ package com.waz.content
 import android.content.Context
 import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.{MessageId, MsgDeletion}
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.{CachedStorage, TrimmingLruCache}
+import com.waz.utils._
+import org.threeten.bp.Instant
 
-class MsgDeletionStorage(context: Context, storage: Database) extends CachedStorage[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached")
+import scala.concurrent.duration._
+import scala.util.Random
+
+/**
+  * Deletion history is only stored for short time to handle partial message updates (assets, link preview).
+  * We need that to discard new versions of previously deleted messages.
+  * We don't want to store it permanently, so will drop items older than 2 weeks.
+  */
+class MsgDeletionStorage(context: Context, storage: Database) extends CachedStorage[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached") {
+  import MsgDeletionStorage._
+  import Threading.Implicits.Background
+
+  // run db cleanup on each app start, will wait a bit to not execute it too soon
+  CancellableFuture.delayed((5 + Random.nextInt(10)).seconds) {
+    storage { MsgDeletionDao.deleteOlder(Instant.now.minus(DeletionExpiryTime))(_) }
+  }
+}
+
+object MsgDeletionStorage {
+  val DeletionExpiryTime = 14.days
+}

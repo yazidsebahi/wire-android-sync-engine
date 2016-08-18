@@ -171,29 +171,27 @@ object MessagesCursor {
     override def close(): Unit = ()
   }
 
-  case class Entry(id: MessageId, time: Instant, eventId: EventId) {
+  case class Entry(id: MessageId, time: Instant) {
     def <(e: Entry) = Entry.Order.compare(this, e) < 0
   }
 
   object Entry {
-    val Empty = new Entry(MessageId(""), Instant.EPOCH, EventId.Zero)
+    val Empty = new Entry(MessageId(""), Instant.EPOCH)
 
     implicit object Order extends Ordering[Entry] {
       override def compare(x: Entry, y: Entry): Int = {
-        if (x.time == y.time) {
-          if (x.eventId == y.eventId) Ordering.String.compare(x.id.str, y.id.str)
-          else { if (x.eventId < y.eventId) -1 else 1 }
-        } else Ordering.Long.compare(x.time.toEpochMilli, y.time.toEpochMilli)
+        if (x.time == y.time) Ordering.String.compare(x.id.str, y.id.str)
+        else Ordering.Long.compare(x.time.toEpochMilli, y.time.toEpochMilli)
       }
     }
 
     implicit object EntryReader extends Reader[Entry] {
       override def apply(implicit c: Cursor): Entry =
-        Entry(MessageId(c.getString(0)), Instant.ofEpochMilli(c.getLong(1)), EventId(c.getLong(2), c.getString(3)))
+        Entry(MessageId(c.getString(0)), Instant.ofEpochMilli(c.getLong(1)))
     }
 
     def apply(c: Cursor): Entry = EntryReader(c)
-    def apply(m: MessageData): Entry = Entry(m.id, m.time, m.source)
+    def apply(m: MessageData): Entry = Entry(m.id, m.time)
   }
 }
 

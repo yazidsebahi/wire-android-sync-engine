@@ -23,6 +23,7 @@ import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.model.otr.ClientId
+import com.waz.service.push.WebSocketClientService
 import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.MockZMessaging
@@ -55,7 +56,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(lifecycle, zNetClient, network, global.backend, clientId, timeouts) {
+    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, global.backend, clientId, timeouts) {
       override val connected = wsConnected
     }
 
@@ -97,7 +98,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       wsConnected ! true
       withDelay { lastNotificationId should be ('defined) }
       val id = Uid()
-      service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), EventId.Zero, new Date, UserId(), Nil))))
+      service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), new Date, UserId(), Nil))))
       withDelay { lastNotificationId shouldEqual Some(id) }
     }
 

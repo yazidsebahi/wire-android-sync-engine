@@ -28,6 +28,7 @@ import com.waz.content.{MessagesStorage, Mime}
 import com.waz.model.AssetData.UploadKey
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.GenericContent.Asset.ImageMetaData
+import com.waz.model.GenericContent.MsgEdit
 import com.waz.model._
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater, ConversationsService}
@@ -59,14 +60,25 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   private implicit val logTag: LogTag = logTagFor[MessagesSyncHandler]
 
   def postDeleted(convId: ConvId, msgId: MessageId): Future[SyncResult] =
-    users.withSelfUserFuture { selfUserId =>
-      convs.convById(convId) flatMap {
-        case Some(conv) =>
-          val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
-          otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
-        case None =>
-          Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
-      }
+    convs.convById(convId) flatMap {
+      case Some(conv) =>
+        val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
+        otrSync.postOtrMessage(ConvId(users.selfUserId.str), RConvId(users.selfUserId.str), msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
+      case None =>
+        Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
+    }
+
+  def postRecalled(convId: ConvId, msgId: MessageId, recalled: MessageId): Future[SyncResult] =
+    convs.convById(convId) flatMap {
+      case Some(conv) =>
+        val msg = GenericMessage(msgId, Proto.MsgRecall(recalled))
+        otrSync.postOtrMessage(conv.id, conv.remoteId, msg) flatMap {
+          case Left(e) => Future successful SyncResult(e)
+          case Right(time) =>
+            msgContent.updateMessage(msgId)(_.copy(editTime = time.instant, state = Message.Status.SENT)) map { _ => SyncResult.Success }
+        }
+      case None =>
+        Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
     }
 
   def postMessage(convId: ConvId, id: MessageId)(implicit convLock: ConvLock): Future[SyncResult] = {
@@ -129,15 +141,33 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
         }
       }
 
+    def postTextMessage() = {
+      val (gm, isEdit) = msg.protos.lastOption match {
+        case Some(m @ GenericMessage(id, MsgEdit(ref, text))) => (m, true) // FIXME: what if original message was not yet sent, we should just send a TextMessage with new content, how do we know if original was sent ?
+        case _ => (GenericMessage.TextMessage(msg), false)
+      }
+
+      otrSync.postOtrMessage(conv, gm) flatMap {
+        case Right(time) if isEdit =>
+          // delete original message and create new message with edited content
+          service.applyMessageEdit(conv.id, msg.userId, time.instant, gm) map {
+            case Some(m) => Right(m)
+            case _ => Right(msg.copy(time = time.instant))
+          }
+
+        case Right(time) => Future successful Right(msg.copy(time = time.instant))
+        case Left(err) => Future successful Left(err)
+      }
+    }
 
     def post: ErrorOr[Instant] = msg.msgType match {
       case Message.Type.ASSET       => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
       case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
       case Message.Type.KNOCK       => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
-      case Message.Type.TEXT        => otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)).map(_.map(_.instant))
+      case Message.Type.TEXT        => postTextMessage().map(_.map(_.time))
       case Message.Type.RICH_MEDIA  =>
-        otrSync.postOtrMessage(conv, GenericMessage.TextMessage(msg)) flatMap {
-          case Right(time) => sync.postOpenGraphData(conv.id, msg.id) map { _ => Right(time.instant) }
+        postTextMessage() flatMap {
+          case Right(m) => sync.postOpenGraphData(conv.id, m.id, m.editTime) map { _ => Right(m.time) }
           case Left(err) => Future successful Left(err)
         }
       case tpe =>

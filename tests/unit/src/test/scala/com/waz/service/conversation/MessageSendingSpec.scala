@@ -112,10 +112,9 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       msg.state shouldEqual Message.Status.PENDING
 
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.dispatchEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, EventId("2.800122000a5b8a02"), new Date(), selfUser.id, "test"))
+        service.dispatchEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, new Date(), selfUser.id, "test"))
       }
       getMessage(msg.id).map(_.state) shouldEqual Some(Status.SENT)
-      getMessage(msg.id).map(_.source) shouldEqual Some(EventId("2.800122000a5b8a02"))
     }
   }
 
@@ -147,22 +146,6 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   feature("Ordering") {
     import testutils.withUpdate
 
-
-    scenario("Notify messages list if sent message sequence id is changed") {
-      val msgs = service.messagesStorage.getEntries(conv.id)
-      val msg = withUpdate(msgs) {
-        sendMessage(new MessageContent.Text("test"))
-      }
-      val eventId = EventId(msg.source.sequence + 1, "800122000a5b8a02")
-      withUpdate(msgs) {
-        service.convEvents.handlePostConversationEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, eventId, new Date(), selfUser.id, "test"))
-      }
-      val e = getMessage(msg.id).get
-      e.state shouldEqual Message.Status.SENT
-      e.source shouldEqual eventId
-      getMessage(msg.id).map(_.source) shouldEqual Some(eventId)
-    }
-
     scenario("Don't update messages list if time is unchanged") {
       val msgs = service.messagesStorage.getEntries(conv.id)
       @volatile var updateCount = 0
@@ -173,23 +156,22 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       }
       updateCount = 0
 
-      val eventId = EventId(msg.source.sequence, "800122000a5b81234")
-      service.dispatchEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, eventId, msg.time.javaDate, selfUser.id, "test"))
+      service.dispatchEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, msg.time.javaDate, selfUser.id, "test"))
       awaitUi(200.millis)
       val e = getMessage(msg.id).get
       e.state shouldEqual Message.Status.SENT
-      e.source shouldEqual eventId
-      getMessage(msg.id).map(_.source) shouldEqual Some(eventId)
 
       updateCount shouldEqual 0
     }
+
+    def reload(msg: MessageData) = service.messagesStorage.get(msg.id).await().get
 
     scenario("Send multiple messages and maintain local ordering") {
       val msgs = service.messagesStorage.getEntries(conv.id)
       val msg = withUpdate(msgs) { sendMessage(new MessageContent.Text("test")) }
       val msg1 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test1")) }
-      val msg2 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test2")) }
-      val msg3 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test3")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test2")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test3")) }
 
       val time = Instant.now()
       withUpdate(msgs) {
@@ -200,7 +182,35 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       ms.drop(ms.size - 4).map(_.contentString) shouldEqual Seq("test", "test1", "test2", "test3")
 
       withUpdate(msgs) {
-        service.messagesSync.messageSent(conv.id, msg1, time + 2.seconds)
+        service.messagesSync.messageSent(conv.id, reload(msg1), time + 2.seconds)
+      }
+
+      val ms1 = listMessages
+      withClue(ms1.map(m => (m.contentString, m.time))) {
+        ms1.drop(ms1.size - 4).map(_.contentString) shouldEqual Seq("test", "test1", "test2", "test3")
+      }
+    }
+
+    scenario("Send multiple messages and maintain local ordering when local clock is in future") {
+      val time = Instant.now().minus(1.minute)
+
+      val msgs = service.messagesStorage.getEntries(conv.id)
+      val msg = withUpdate(msgs) { sendMessage(new MessageContent.Text("test")) }
+      val msg1 = withUpdate(msgs) { sendMessage(new MessageContent.Text("test1")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test2")) }
+      withUpdate(msgs) { sendMessage(new MessageContent.Text("test3")) }
+
+      withUpdate(msgs) {
+        service.messagesSync.messageSent(conv.id, msg, time + 1.second)
+      }
+
+      val ms = listMessages
+      ms.drop(ms.size - 4).map(_.contentString) shouldEqual Seq("test", "test1", "test2", "test3")
+
+      info(ms.drop(ms.size - 5).map(m => (m.contentString, m.time)).mkString(", "))
+
+      withUpdate(msgs) {
+        service.messagesSync.messageSent(conv.id, reload(msg1), time + 2.seconds)
       }
 
       val ms1 = listMessages
@@ -212,8 +222,8 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   feature("Last read") {
     scenario("Sent message should be marked as read") {
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), selfUser.id, "test 1"))
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(2), new Date(), selfUser.id, "test 2"))
+      service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 1"))
+      service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 2"))
       awaitUi(100.millis)
 
       val msg = sendMessage(new MessageContent.Text("test"))
@@ -224,34 +234,32 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     }
 
     scenario("Mark posted message read once it's synced with same id sequence") {
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), selfUser.id, "test 1"))
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(2), new Date(), selfUser.id, "test 2"))
+      service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 1"))
+      service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 2"))
       awaitUi(100.millis)
 
       val msg = sendMessage(new MessageContent.Text("test"))
       Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(msg.time)
 
       lastReadSync shouldEqual None
-      val eventId = EventId(msg.source.sequence ,"800122000a5b8a02")
       val time = new Date()
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, eventId, time, selfUser.id, "test"))
+        service.convEvents.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
     }
 
     scenario("Change last read even when unreadCount > 0") {
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(1), new Date(), selfUser.id, "test 1"))
-      service.dispatchEvent(MessageAddEvent(Uid(), conv.remoteId, EventId(2), new Date(), selfUser.id, "test 2"))
+      service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 1"))
+      service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 2"))
       awaitUi(100.millis)
 
       val msg = sendMessage(new MessageContent.Text("test"))
       Await.result(service.convsStorage.update(conv.id, _.copy(unreadCount = 1)), 1.second)
 
-      val eventId = EventId(msg.source.sequence, "800122000a5b8a02")
       val time = new Date
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(MessageAddEvent(Uid(msg.id.str), conv.remoteId, eventId, time, selfUser.id, "test"))
+        service.convEvents.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
       Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(time.instant)

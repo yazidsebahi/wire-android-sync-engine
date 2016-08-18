@@ -24,13 +24,15 @@ import com.waz.RobolectricUtils
 import com.waz.api.NotificationsHandler.GcmNotification
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Asset
+import com.waz.model.GenericContent.{Asset, MsgEdit, MsgRecall, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.NotificationService.Notification
+import com.waz.service.Timeouts
+import com.waz.service.push.NotificationService.Notification
 import com.waz.testutils.Matchers._
-import com.waz.testutils.MockZMessaging
+import com.waz.testutils._
+import com.waz.utils._
 import com.waz.utils.events.EventContext
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
@@ -41,7 +43,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
+class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
   @volatile var currentNotifications = Nil: Seq[GcmNotification]
 
@@ -50,7 +52,15 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
   lazy val groupConv = ConversationData(ConvId(), RConvId(), Some("group conv"), selfUserId, ConversationType.Group)
 
   lazy val zms = new MockZMessaging(selfUserId = selfUserId) { self =>
-    notifications.getNotifications(Duration.Zero) { currentNotifications = _ } (EventContext.Global)
+
+
+    notifications.getNotifications { currentNotifications = _ } (EventContext.Global)
+
+    override def timeouts = new Timeouts {
+      override val notifications = new Notifications() {
+        override def clearThrottling = 100.millis
+      }
+    }
   }
 
   lazy val service = zms.notifications
@@ -59,65 +69,68 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    Await.result(zms.convsStorage.insert(Seq(oneToOneConv, groupConv)), 5.seconds)
+    zms.convsStorage.insert(Seq(oneToOneConv, groupConv)).await()
   }
 
   before {
+    zms.convsContent.updateConversationLastRead(oneToOneConv.id, Instant.now()).await()
+    zms.convsContent.updateConversationLastRead(groupConv.id, Instant.now()).await()
     clearNotifications()
   }
 
   feature("Add notifications for events") {
 
     scenario("Process user connection event for an unsynced user") {
-      val userId = UserId()
-      val convId = RConvId()
+      val userId = UserId(oneToOneConv.id.str)
+      val convId = oneToOneConv.remoteId
       Await.ready(zms.dispatch(UserConnectionEvent(Uid(), convId, selfUserId, userId, Some("hello"), ConnectionStatus.PendingFromOther, new Date, Some("other user")).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "hello", _, `userId`, GcmNotification.Type.CONNECT_REQUEST, _, _, false, Some("other user"), _, _, None), _, "other user", "other user", false, _, _)) => true
+          case Seq(Notification(NotificationData(_, "hello", _, `userId`, GcmNotification.Type.CONNECT_REQUEST, _, _, false, Some("other user"), _, None), "other user", "other user", false, _, _)) => true
         }
       }
     }
 
     scenario("Process contact join event") {
-      val userId = UserId(oneToOneConv.id.str)
+      val userId = UserId()
       Await.ready(zms.dispatch(ContactJoinEvent(Uid(), userId, "test name")), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, _, `userId`, GcmNotification.Type.CONTACT_JOIN, _, _, _, _, _, _, None), _, _, _, false, _, _)) => true
+          case Seq(Notification(NotificationData(_, _, _, `userId`, GcmNotification.Type.CONTACT_JOIN, _, _, _, _, _, None), _, _, false, _, _)) => true
         }
       }
     }
 
     scenario("Process mentions event") {
       val userId = UserId(oneToOneConv.id.str)
-      val convId = oneToOneConv.remoteId
-      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), convId, new Date, userId, TextMessage("test name", Map(selfUserId -> "name")))), 5.seconds)
+      val convId = oneToOneConv.id
+
+      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), oneToOneConv.remoteId, new Date, userId, TextMessage("test name", Map(selfUserId -> "name"))).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "test name", `convId`, `userId`, GcmNotification.Type.TEXT, _, _, _, _, Seq(`selfUserId`), _, None), _, _, _, false, true, _)) => true
+          case Seq(Notification(NotificationData(_, "test name", `convId`, `userId`, GcmNotification.Type.TEXT, _, _, _, _, Seq(`selfUserId`), None), _, _, false, true, _)) => true
         }
       }
     }
 
     scenario("Process any asset event") {
       val userId = UserId(oneToOneConv.id.str)
-      val convId = oneToOneConv.remoteId
-      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadCancelled)))), 5.seconds) // this should not generate a notification
-      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), convId, new Date, userId, GenericMessage(MessageId(), Asset(UploadDone(AssetKey(Left(RAssetDataId()), None, AESKey(), Sha256("sha"))))), RAssetDataId(), None)), 5.seconds)
+      val convId = oneToOneConv.id
+      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId(), Asset(UploadCancelled))).withCurrentLocalTime()), 5.seconds) // this should not generate a notification
+      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId(), Asset(UploadDone(AssetKey(Left(RAssetDataId()), None, AESKey(), Sha256("sha"))))), RAssetDataId(), None).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, `convId`, `userId`, GcmNotification.Type.ANY_ASSET, _, _, _, _, _, None, None), _, _, _, false, _, _)) => true
+          case Seq(Notification(NotificationData(_, _, `convId`, `userId`, GcmNotification.Type.ANY_ASSET, _, _, _, _, _, None), _, _, false, _, _)) => true
         }
       }
     }
 
     scenario("Receiving the same message twice") {
-      val ev1 = MessageAddEvent(Uid(), groupConv.remoteId, EventId(2), new Date, UserId(), "meep")
+      val ev1 = textMessageEvent(Uid(), groupConv.remoteId, new Date, UserId(), "meep").withCurrentLocalTime()
       val ev2 = ev1.copy()
 
       Await.ready(zms.dispatch(ev1, ev2), 5.seconds)
@@ -126,13 +139,13 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "meep", _, _, GcmNotification.Type.TEXT, _, _, _, _, _, _, None), `groupId`, "group conv", _, true, _, _)) => true
+          case Seq(Notification(NotificationData(_, "meep", `groupId`, _, GcmNotification.Type.TEXT, _, _, _, _, _, None), "group conv", _, true, _, _)) => true
         }
       }
     }
 
     scenario("Don't show duplicate notification even if notifications were cleared") {
-      val ev = MessageAddEvent(Uid(), groupConv.remoteId, EventId(2), new Date, UserId(), "meep")
+      val ev = textMessageEvent(Uid(), groupConv.remoteId, new Date, UserId(), "meep").withCurrentLocalTime()
 
       zms.dispatch(ev)
 
@@ -148,7 +161,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     }
 
     scenario("Ignore events from self user") {
-      val ev = MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date, selfUserId, "meep")
+      val ev = textMessageEvent(Uid(), groupConv.remoteId, new Date, selfUserId, "meep").withCurrentLocalTime()
 
       Await.ready(zms.dispatch(ev), 5.seconds)
       awaitUi(200.millis)
@@ -159,11 +172,11 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Remove older notifications when lastRead is updated") {
       val time = System.currentTimeMillis()
       zms.dispatch(
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time), UserId(), "meep"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 10), UserId(), "meep1"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 20), UserId(), "meep2"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 30), UserId(), "meep3"),
-        MessageAddEvent(Uid(), groupConv.remoteId, EventId.Zero, new Date(time + 40), UserId(), "meep4")
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time), UserId(), "meep").withCurrentLocalTime(),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 10), UserId(), "meep1").withCurrentLocalTime(),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 20), UserId(), "meep2").withCurrentLocalTime(),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 30), UserId(), "meep3").withCurrentLocalTime(),
+        textMessageEvent(Uid(), groupConv.remoteId, new Date(time + 40), UserId(), "meep4").withCurrentLocalTime()
       )
 
       withDelay {
@@ -176,18 +189,58 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
         currentNotifications should have size 1
       }
     }
+
+    scenario("Remove notifications for recalled messages") {
+      val id = Uid()
+      val user = UserId()
+      val ev = textMessageEvent(id, groupConv.remoteId, new Date(), user, "meep")
+
+      zms.dispatch(ev.withCurrentLocalTime())
+
+      withDelay {
+        currentNotifications should have size 1
+      }
+
+      zms.dispatch(GenericMessageEvent(Uid(), groupConv.remoteId, new Date(), user, GenericMessage(Uid(), MsgRecall(MessageId(id.str)))).withCurrentLocalTime())
+
+      withDelay {
+        currentNotifications should have size 0
+      }
+    }
+
+    scenario("Update notifications for edited messages") {
+      val id = Uid()
+      val user = UserId()
+      val time = new Date()
+      val ev = textMessageEvent(id, groupConv.remoteId, time, user, "meep")
+
+      zms.dispatch(ev.withCurrentLocalTime())
+
+      withDelay {
+        currentNotifications should have size 1
+      }
+
+      zms.dispatch(GenericMessageEvent(Uid(), groupConv.remoteId, new Date(), user, GenericMessage(Uid(), MsgEdit(MessageId(id.str), Text("updated")))).withCurrentLocalTime())
+
+      withDelay {
+        currentNotifications should have size 1
+        currentNotifications.head.getType shouldEqual GcmNotification.Type.TEXT
+        currentNotifications.head.getMessage shouldEqual "updated"
+        currentNotifications.head.asInstanceOf[Notification].data.serverTime shouldEqual time.instant
+      }
+    }
   }
 
   feature("List notifications") {
 
     scenario("List notifications with local conversation ids") {
-      Await.ready(zms.dispatch(MessageAddEvent(Uid(), groupConv.remoteId, EventId(2), new Date, UserId(), "test msg")), 5.seconds)
+      Await.ready(zms.dispatch(textMessageEvent(Uid(), groupConv.remoteId, new Date, UserId(), "test msg").withCurrentLocalTime()), 5.seconds)
 
       val groupId = groupConv.id
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, _, _, GcmNotification.Type.TEXT, _, _, _, _, _, _, None), `groupId`, "group conv", _, true, _, _)) => true
+          case Seq(Notification(NotificationData(_, _, `groupId`, _, GcmNotification.Type.TEXT, _, _, _, _, _, None), "group conv", _, true, _, _)) => true
         }
       }
     }

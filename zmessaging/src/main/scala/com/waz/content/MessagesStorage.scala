@@ -21,8 +21,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.api.Message
-import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.api.{ErrorResponse, Message}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
@@ -112,16 +110,6 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
 
   def addMessage(msg: MessageData): Future[MessageData] = put(msg.id, msg)
 
-  // find latest message up to given event
-  def findLatestUpTo(conv: ConvId, event: EventId): Future[Option[MessageData]] =
-    storage { MessageDataDao.findLatestUpToEvent(conv, event)(_) } .future.flatMap { msg =>
-      var result = msg
-      foreachCached { m =>
-        if (m.source <= event && m.convId == conv && result.forall(_.source <= m.source))
-          result = Some(m)
-      } map { _ => result }
-    }
-
   def countUnread(conv: ConvId, lastReadTime: Instant): Future[Int] =
     storage { MessageDataDao.countNewer(conv, lastReadTime)(_) } .future.flatMap { count =>
       var cachedCount = 0
@@ -142,22 +130,6 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   def getMessages(ids: MessageId*): Future[Seq[Option[MessageData]]] = getAll(ids)
 
   def getIncomingMessages: Signal[List[MessageData]] = Signal.future(incomingMessages).flatMap(_.messages)
-
-  def getMessages(convId: ConvId, events: Seq[EventId]): Future[Vector[MessageData]] = {
-    val evSet = events.toSet
-    find[MessageData, Vector[MessageData]](
-      m => m.convId == convId && evSet(m.source),
-      db => MessageDataDao.findMessages(convId, events)(db),
-      identity)
-  }
-
-  private def findMessageInDb(convId: ConvId, event: EventId) = getMessages(convId, Seq(event)).map(_.headOption)
-
-  def findMessage(convId: ConvId, event: EventId): Future[Option[MessageData]] =
-    msgsIndex(convId) flatMap { _.getLastEventId } flatMap { last =>
-      if (event > last) Future.successful(None)
-      else findMessageInDb(convId, event)
-    }
 
   def getEntries(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.messagesCursor)
 
@@ -200,7 +172,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
         Future.successful(())
     }
 
-  override def remove(keys: Seq[MessageId]): Future[Unit] =
+  override def remove(keys: Iterable[MessageId]): Future[Unit] =
     for {
       fromDb <- getAll(keys)
       msgs = fromDb.collect { case Some(m) => m }
@@ -244,7 +216,10 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
 
 object MessagesStorage {
   val cacheSize = 12048
-  val FirstMessageTypes = Set(Message.Type.TEXT, Message.Type.KNOCK, Message.Type.ASSET)
+  val FirstMessageTypes = {
+    import Message.Type._
+    Set(TEXT, TEXT_EMOJI_ONLY, KNOCK, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, LOCATION)
+  }
 }
 
 class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData]) {
@@ -291,13 +266,14 @@ object IncomingMessages {
 
 
 class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: LikingsStorage) {
-  import com.waz.utils.events.EventContext.Implicits.global
   import com.waz.threading.Threading.Implicits.Background
+  import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val tag: LogTag = logTagFor[MessageAndLikesStorage]
 
   val onUpdate = EventStream[MessageId]() // TODO: use batching, maybe report new message data instead of just id
 
+  messages.onDeleted { ids => ids foreach { onUpdate ! _ } }
   messages.messageChanged { ms => ms foreach { m => onUpdate ! m.id }}
   likings.onChanged { _ foreach { l => onUpdate ! l.message } }
 

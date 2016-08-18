@@ -125,7 +125,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       msg.map(_.msgType) shouldEqual Some(Message.Type.MEMBER_JOIN)
       msg.map(_.userId) shouldEqual Some(selfUser.id)
 
-      service.dispatchEvent(MemberJoinEvent(Uid(), rconvId, EventId(2), new Date, otherUser.id, Seq(selfUser.id)))
+      service.dispatchEvent(MemberJoinEvent(Uid(), rconvId, new Date, otherUser.id, Seq(selfUser.id)))
       service.dispatchEvent(UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date))
 
       withDelay {
@@ -143,7 +143,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       val time = System.currentTimeMillis()
       val events = Seq[Event](
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 3)),
-        MemberJoinEvent(Uid(), rconvId, EventId(2), new Date(time + 1), otherUser.id, Seq(selfUser.id)),
+        MemberJoinEvent(Uid(), rconvId, new Date(time + 1), otherUser.id, Seq(selfUser.id)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 2)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time))
       )
@@ -170,7 +170,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       val time = System.currentTimeMillis()
       val events = Seq[Event](
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time)),
-        MemberJoinEvent(Uid(), rconvId, EventId(2), new Date(time + 1), otherUser.id, Seq(selfUser.id)),
+        MemberJoinEvent(Uid(), rconvId, new Date(time + 1), otherUser.id, Seq(selfUser.id)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 2)),
         UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test1"), ConnectionStatus.Accepted, new Date(time + 3))
       )

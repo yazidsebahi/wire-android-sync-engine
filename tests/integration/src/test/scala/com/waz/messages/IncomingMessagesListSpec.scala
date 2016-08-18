@@ -95,7 +95,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with EitherValu
 
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.data.source.isLocal shouldEqual false
+        msgs.getLastMessage.data.isLocal shouldEqual false
       }
       Thread.sleep(500)
       incoming should have size 1

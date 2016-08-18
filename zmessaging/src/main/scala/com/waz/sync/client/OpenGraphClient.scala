@@ -77,7 +77,7 @@ class OpenGraphClient(netClient: ZNetClient) {
 
 object OpenGraphClient {
   private implicit val tag: LogTag = logTagFor[OpenGraphClient]
-  val MaxHeaderLength = 8 * 1024 // maximum amount of data to load from website
+  val MaxHeaderLength = 16 * 1024 // maximum amount of data to load from website
   val DesktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
   val CookiePattern = """([^=]+)=([^\;]+)""".r
 

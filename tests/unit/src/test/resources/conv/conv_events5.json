@@ -589,7 +589,7 @@
         "type" : "conversation.message-add"
       },
       { "conversation" : "b53ae017-b002-4d8c-8540-4887b58d47c7",
-        "data" : { "content" : "test1" },
+        "data" : { "content" : "test1", "nonce" : "9f35ed9b1-af76-10c0-73728d0c-a37d40f" },
         "from" : "27afc203-c8dc-469a-a427-7126c6e5de4b",
         "id" : "3a.800112314308752f",
         "time" : "2014-04-15T11:10:19.122Z",

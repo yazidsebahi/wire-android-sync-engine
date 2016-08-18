@@ -138,12 +138,17 @@ object SyncRequest {
     override val mergeKey = (cmd, convId, messageId)
   }
 
-  case class PostOpenGraphMeta(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostOpenGraphMeta) {
+  case class PostOpenGraphMeta(convId: ConvId, messageId: MessageId, editTime: Instant) extends RequestForConversation(Cmd.PostOpenGraphMeta) {
     override val mergeKey = (cmd, convId, messageId)
+    override def merge(req: SyncRequest) = mergeHelper[PostOpenGraphMeta](req)(r => Merged(PostOpenGraphMeta(convId, messageId, editTime max r.editTime)))
   }
 
   case class PostDeleted(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostDeleted) {
     override val mergeKey = (cmd, convId, messageId)
+  }
+
+  case class PostRecalled(convId: ConvId, msg: MessageId, recalledId: MessageId) extends RequestForConversation(Cmd.PostRecalled) {
+    override val mergeKey = (cmd, convId, msg, recalledId)
   }
 
   case class PostAssetStatus(convId: ConvId, messageId: MessageId, status: AssetStatus.Syncable) extends RequestForConversation(Cmd.PostAssetStatus) with SerialExecutionWithinConversation {
@@ -253,7 +258,7 @@ object SyncRequest {
     val a = if (o.archiveTime.exists(t => n.archiveTime.forall(_.isBefore(t)))) o else n
     val m = if (o.muteTime.exists(t => n.muteTime.forall(_.isBefore(t)))) o else n
 
-    ConversationState(a.archived, a.archiveTime, m.muted, m.muteTime, a.archiveEvent)
+    ConversationState(a.archived, a.archiveTime, m.muted, m.muteTime)
   }
 
   implicit lazy val Decoder: JsonDecoder[SyncRequest] = new JsonDecoder[SyncRequest] {
@@ -282,6 +287,7 @@ object SyncRequest {
         case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
         case Cmd.PostMessage           => PostMessage(convId, messageId)
         case Cmd.PostDeleted           => PostDeleted(convId, messageId)
+        case Cmd.PostRecalled          => PostRecalled(convId, messageId, decodeId[MessageId]('recalled))
         case Cmd.PostAssetStatus       => PostAssetStatus(convId, messageId, JsonDecoder[AssetStatus.Syncable]('status))
         case Cmd.PostConvJoin          => PostConvJoin(convId, users)
         case Cmd.PostConvLeave         => PostConvLeave(convId, userId)
@@ -304,7 +310,7 @@ object SyncRequest {
         case Cmd.PostClientLabel       => PostClientLabel(decodeId[ClientId]('client), 'label)
         case Cmd.PostLiking            => PostLiking(convId, JsonDecoder[Liking]('liking))
         case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
-        case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId)
+        case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
         case Cmd.Unknown               => Unknown
       }
     }
@@ -333,10 +339,16 @@ object SyncRequest {
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
         case PostMessage(_, messageId)        => putId("message", messageId)
         case PostDeleted(_, messageId)        => putId("message", messageId)
+        case PostRecalled(_, msg, recalled)   =>
+          putId("message", msg)
+          putId("recalled", recalled)
+
         case PostConnectionStatus(_, status)  => status foreach { status => o.put("status", status.code) }
         case PostConvJoin(_, users)           => o.put("users", arrString(users.toSeq map (_.str)))
         case PostConvLeave(_, user)           => putId("user", user)
-        case PostOpenGraphMeta(_, messageId)  => putId("message", messageId)
+        case PostOpenGraphMeta(_, messageId, time) =>
+          putId("message", messageId)
+          o.put("time", time.toEpochMilli)
 
         case PostConnection(_, name, message) =>
           o.put("name", name)

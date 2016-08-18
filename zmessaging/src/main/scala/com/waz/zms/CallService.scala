@@ -31,14 +31,14 @@ import scala.concurrent.{Future, Promise}
 /**
  * Background service keeping track of ongoing calls to make sure ZMessaging is running as long as a call is active.
  */
-class CallService extends WakefulFutureService {
+class CallService extends FutureService {
   import com.waz.zms.CallService._
 
   implicit val ec = EventContext.Global
 
   lazy val executor = new CallExecutor(getApplicationContext, ZMessaging.currentAccounts)
 
-  override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
+  override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
     debug(s"onIntent $intent")
     if (intent != null && intent.hasExtra(ConvIdExtra)) {
       val convId = ConvId(intent.getStringExtra(ConvIdExtra))

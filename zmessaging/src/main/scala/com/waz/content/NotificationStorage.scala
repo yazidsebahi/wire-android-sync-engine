@@ -24,7 +24,6 @@ import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{AggregatingSignal, EventStream}
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
-import org.threeten.bp.Instant
 
 import scala.collection._
 
@@ -37,20 +36,17 @@ class NotificationStorage(context: Context, storage: Database) extends CachedSto
     onDeleted.map(_.map(Removed(_)))
   )
 
-  // signal with all visible data
-  val notifications = new AggregatingSignal[Seq[ContentChange[Any]], Map[String, NotificationData]](changesStream, list().map(_.collect { case n if n.clearTime.isEmpty => n.id -> n } (breakOut)), { (values, changes) =>
+  // signal with all data
+  val notifications = new AggregatingSignal[Seq[ContentChange[Any]], Map[String, NotificationData]](changesStream, list().map(_.map { n => n.id -> n } (breakOut)), { (values, changes) =>
     val added = new mutable.HashMap[String, NotificationData]
     val removed = new mutable.HashSet[String]
     changes foreach {
       case Added(v: NotificationData) =>
         removed -= v.id
         added += v.id -> v
-      case Updated(_, v: NotificationData) if v.clearTime.isEmpty =>
+      case Updated(_, v: NotificationData) =>
         removed -= v.id
         added += v.id -> v
-      case Updated(_, v: NotificationData) =>
-        removed += v.id
-        added -= v.id
       case Removed(id: String) =>
         removed += id
         added -= id
@@ -58,10 +54,4 @@ class NotificationStorage(context: Context, storage: Database) extends CachedSto
     }
     values -- removed ++ added
   })
-
-  def deleteClearedBefore(time: Instant) = storage { implicit db =>
-    NotificationDataDao.deleteClearedBefore(time)
-  } map { _ =>
-    deleteCached(_.clearTime.exists(_.isBefore(time)))
-  }
 }

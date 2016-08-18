@@ -59,7 +59,7 @@ case class UserData(
   def isAcceptedOrPending = connection == ConnectionStatus.Accepted || connection == ConnectionStatus.PendingFromOther || connection == ConnectionStatus.PendingFromUser
   def isVerified = verified == Verification.VERIFIED
   def isAutoConnect = isConnected && ! isSelf && connectionMessage.isEmpty
-  lazy val isOtto = email.exists(e => UserData.botEmail.matcher(e.str).matches)
+  lazy val isWireBot = email.exists(e => UserData.botEmail.matcher(e.str).matches)
 
   def getDisplayName = if (displayName.isEmpty) name else displayName
 
@@ -112,7 +112,7 @@ case class UserData(
 object UserData {
 
   val Empty = UserData(UserId("EMPTY"), "")
-  val botEmail = compile("welcome(\\+\\d+)?@wire\\.com", CASE_INSENSITIVE)
+  val botEmail = compile("(welcome|anna)(\\+\\d+)?@wire\\.com", CASE_INSENSITIVE)
 
   type ConnectionStatus = com.waz.api.User.ConnectionStatus
   object ConnectionStatus {
@@ -230,6 +230,6 @@ object UserData {
         s"case when ${Conn.name} = '${ConnectionStatus.Accepted.code}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC",
         limit.fold[String](null)(_.toString)))
 
-    def findWelcomeBot(implicit db: SQLiteDatabase) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com'", null, null, null, null, "1"))
+    def findWireBots(implicit db: SQLiteDatabase) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
   }
 }

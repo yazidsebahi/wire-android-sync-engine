@@ -27,6 +27,7 @@ import com.waz.model._
 import com.waz.sync.client.PushNotification
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
+import com.waz.testutils._
 import org.scalatest.{FeatureSpec, Inspectors, Matchers}
 import com.waz.utils._
 
@@ -109,8 +110,7 @@ class MockedConvsListSpec extends FeatureSpec with Matchers with Inspectors with
       withDelay(zmessaging.websocket.connected.currentValue shouldEqual Some(false))
 
       val current = events.getOrElse(convId, Nil)
-      val lastId = current.lastOption.fold(EventId.Zero)(_.eventId)
-      val messageEvent = MessageAddEvent(Uid(), convId, EventId(lastId.sequence + 1), SystemTimeline.next(), selfUserId, "meep")
+      val messageEvent = textMessageEvent(Uid(), convId, SystemTimeline.next(), selfUserId, "meep")
       val updateEvent = new GenericMessageEvent(Uid(), RConvId(selfUserId.str), SystemTimeline.next(), selfUserId, GenericMessage(Uid(), LastRead(convId, messageEvent.time.instant)))
       addNotification(PushNotification(Uid(), Vector(messageEvent, updateEvent), transient = false))
 

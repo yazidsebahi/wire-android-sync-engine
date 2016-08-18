@@ -936,7 +936,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       callSessionId += groupId -> CallSessionId("group-4-session-id")
       setupGroupCall()
 
-      addNotification(MemberLeaveEvent(Uid(), groupId, EventId(300), new Date, UserId("meep"), Seq(selfId)))
+      addNotification(MemberLeaveEvent(Uid(), groupId, new Date, UserId("meep"), Seq(selfId)))
       withDelay {
         group.hasVoiceChannel shouldEqual false
         groupVoice.getState shouldEqual Idle

@@ -30,7 +30,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.util.Try
 
-class GcmHandlerService extends WakefulFutureService with ZMessagingService {
+class GcmHandlerService extends FutureService with ZMessagingService {
 
   private implicit val logTag: LogTag = logTagFor[GcmHandlerService]
   import Threading.Implicits.Background
@@ -38,7 +38,7 @@ class GcmHandlerService extends WakefulFutureService with ZMessagingService {
   lazy val gcm = ZMessaging.currentGlobal.gcmGlobal
   lazy val accounts = ZMessaging.currentAccounts
 
-  override protected def onIntent(intent: Intent, id: Int): Future[Any] = {
+  override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
     import com.waz.zms.GcmHandlerService._
 
     def extrasToString = Option(intent.getExtras).map(ex => ex.keySet().asScala.map(k => s"$k -> ${ex.get(k)}").toSeq)

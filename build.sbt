@@ -7,7 +7,7 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "76"
+val MajorVersion = "77"
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -162,7 +162,7 @@ lazy val actors: Project = project.in(file("actors") / "base")
   .dependsOn(zmessaging)
   .settings(publishSettings: _*)
   .settings(
-    name := "actors_core",
+    name := "actors-core",
     exportJars := true,
     libraryDependencies ++= Seq(
       "org.robolectric" % "android-all" % RobolectricVersion % Provided,
@@ -281,7 +281,8 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
   .dependsOn(testutils)
   .dependsOn(integration % "it -> test")
   .settings(Defaults.itSettings: _*)
-  .settings(nativeLibsSettings)
+  .settings(nativeLibsSettings: _*)
+  .settings(publishSettings: _*)
   .settings (
     name := "zmessaging-actor",
     crossPaths := false,
@@ -304,9 +305,15 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
       val out = target.value / "actors_res.zip"
       val manifest = baseDirectory.value / "src" / "main" / "AndroidManifest.xml"
       val res = zmessaging.base / "src" / "main" / "res"
-      val mappings =
-        nativeLibs.value.files.flatMap(d => (d ** "*").get).map(f => (f, s"/libs/${f.getName}")) ++
-          ((res ** "*").get pair rebase(res, "/res")) :+ (manifest, "/AndroidManifest.xml")
+      val mappings = {
+        val libs = nativeLibs.value.files.flatMap(d => (d ** "*").get).filter(_.isFile)
+        val distinct = { // remove duplicate libs, always select first one, as nativeLibs are first on the path
+          val names = new scala.collection.mutable.HashSet[String]()
+          libs.filter { f => names.add(f.getName) }
+        }
+        println(s"libs: $libs\n distinct: $distinct")
+        distinct.map(f => (f, s"/libs/${f.getName}")) ++ ((res ** "*").get pair rebase(res, "/res")) :+ (manifest, "/AndroidManifest.xml")
+      }
       IO.zip(mappings, out)
       out
     },

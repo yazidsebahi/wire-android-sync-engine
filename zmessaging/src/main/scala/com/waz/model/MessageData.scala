@@ -22,13 +22,14 @@ import android.database.DatabaseUtils.queryNumEntries
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.waz.api
-import com.waz.api.{Message, ZmsVersion}
+import com.waz.api.Message
 import com.waz.api.Message.Type._
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location}
+import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
 import com.waz.service.conversation.ConversationsService
@@ -42,7 +43,6 @@ import scala.collection.breakOut
 
 case class MessageData(id: MessageId,
                        convId: ConvId,
-                       source: EventId,
                        msgType: Message.Type,
                        userId: UserId,
                        content: Seq[MessageContent] = Seq.empty,
@@ -54,14 +54,20 @@ case class MessageData(id: MessageId,
                        name: Option[String] = None,
                        state: MessageState = Message.Status.SENT,
                        time: Instant = Instant.now,
-                       localTime: Instant = MessageData.UnknownInstant) {
+                       localTime: Instant = MessageData.UnknownInstant,
+                       editTime: Instant = MessageData.UnknownInstant
+                      ) {
 
   def getContent(index: Int) = {
     if (index == 0) content.headOption.getOrElse(MessageContent.Empty)
     else content.drop(index).headOption.getOrElse(MessageContent.Empty)
   }
 
-  def contentString = content.map(_.content).mkString(" ")
+  lazy val contentString = protos.lastOption match {
+    case Some(TextMessage(ct, _, _)) => ct
+    case _ if msgType == api.Message.Type.RICH_MEDIA => content.map(_.content).mkString(" ")
+    case _ => content.headOption.fold("")(_.content)
+  }
 
   def assetId = AssetId(id.str)
 
@@ -72,6 +78,11 @@ case class MessageData(id: MessageId,
       case GenericMessage(_, Knock(true)) => true
       case _ => false
     }
+
+  def mentions = protos.lastOption match {
+    case Some(TextMessage(_, ms, _)) => ms
+    case _ => Map.empty
+  }
 
   lazy val imageDimensions: Option[Dim2] = msgType match {
     case Message.Type.ASSET =>
@@ -105,6 +116,9 @@ case class MessageData(id: MessageId,
     case _ => false
   }
 
+  def canRecall(convId: ConvId, userId: UserId) =
+    msgType != RECALLED && this.convId == convId && this.userId == userId && !isSystemMessage
+
   def isAssetMessage = MessageData.IsAsset(msgType)
 
   def hasSameContentType(m: MessageData) = {
@@ -112,8 +126,7 @@ case class MessageData(id: MessageId,
   }
 
   override def toString: String =
-    if (ZmsVersion.DEBUG) super.toString
-    else s"MessageData($id, $convId, $source, $msgType, $userId, $content, protos len: ${protos.length}, $state, $time)"
+    s"MessageData($id, $convId, $msgType, $userId, $content, protos len: ${protos.length}, $firstMessage, $members, $recipient, $email, $name, $state, $time, local: $localTime, edit: $editTime)"
 }
 
 case class MessageContent(
@@ -191,8 +204,9 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
   }
 }
 
-object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant) => MessageData) {
-  val Empty = new MessageData(MessageId(""), ConvId(""), EventId.Zero, Message.Type.UNKNOWN, UserId(""))
+object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant) => MessageData) {
+  val Empty = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""))
+  val Deleted = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""), state = Message.Status.DELETED)
   val UnknownInstant = Instant.EPOCH
 
   type MessageState = Message.Status
@@ -203,7 +217,6 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     override def apply(implicit js: JSONObject): MessageData =
       MessageData('id,
         decodeId[ConvId]('convId),
-        'source,
         MessageTypeCodec.decode('msgType),
         'userId,
         decodeSeq[MessageContent]('content),
@@ -215,14 +228,15 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
         'name,
         Message.Status.valueOf('state),
         Instant.ofEpochMilli(decodeLong('time)),
-        Instant.ofEpochMilli(decodeLong('localTime)))
+        Instant.ofEpochMilli(decodeLong('localTime)),
+        Instant.ofEpochMilli(decodeLong('editTime))
+      )
   }
 
   implicit lazy val Encoder: JsonEncoder[MessageData] = new JsonEncoder[MessageData] {
     override def apply(v: MessageData): JSONObject = JsonEncoder { o =>
       o.put("id", v.id.str)
       o.put("convId", v.convId.str)
-      o.put("source", v.source.str)
       o.put("msgType", MessageTypeCodec.encode(v.msgType))
       o.put("userId", v.userId.str)
       o.put("content", JsonEncoder.arr(v.content))
@@ -235,6 +249,7 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
       o.put("state", v.state.name())
       o.put("time", v.time.toEpochMilli)
       o.put("localTime", v.localTime.toEpochMilli)
+      o.put("editTime", v.localTime.toEpochMilli)
     }
   }
   
@@ -263,6 +278,7 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     case Message.Type.HISTORY_LOST => "HistoryLost"
     case Message.Type.LOCATION => "Location"
     case Message.Type.UNKNOWN => "Unknown"
+    case Message.Type.RECALLED => "Recalled"
   }
 
   implicit object MessageDataDao extends Dao[MessageData, MessageId]  {
@@ -270,8 +286,6 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
 
     val Id = id[MessageId]('_id, "PRIMARY KEY").apply(_.id)
     val Conv = id[ConvId]('conv_id).apply(_.convId)
-    val SourceSeq = long('source_seq)(_.source.sequence)
-    val SourceHex = text('source_hex)(_.source.hex)
     val Type = text[Message.Type]('msg_type, MessageTypeCodec.encode, MessageTypeCodec.decode)(_.msgType)
     val User = id[UserId]('user_id).apply(_.userId)
     val Content = jsonArray[MessageContent, Seq, Vector]('content).apply(_.content)
@@ -285,36 +299,36 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     val State = text[MessageState]('msg_state, _.name, Message.Status.valueOf)(_.state)
     val Time = timestamp('time)(_.time)
     val LocalTime = timestamp('local_time)(_.localTime)
+    val EditTime = timestamp('edit_time)(_.editTime)
 
     override val idCol = Id
 
-    override val table = Table("Messages", Id, Conv, SourceSeq, SourceHex, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize)
+    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
-      db.execSQL(s"CREATE INDEX IF NOT EXISTS Messages_conv_source_idx on Messages ( conv_id, source_seq, source_hex )")
-      db.execSQL(s"CREATE INDEX IF NOT EXISTS Messages_conv_time_source_idx on Messages ( conv_id, time, source_seq, source_hex )")
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS Messages_conv_time on Messages ( conv_id, time)")
     }
 
     override def apply(implicit cursor: Cursor): MessageData =
-      MessageData(Id, Conv, new EventId(SourceSeq, SourceHex), Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime)
+      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime)
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(Conv, id)
 
     def deleteUpTo(id: ConvId, upTo: Instant)(implicit db: SQLiteDatabase) = db.delete(table.name, s"${Conv.name} = '${id.str}' AND ${Time.name} <= ${Time(upTo)}", null)
 
-    def first(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC, ${SourceSeq.name} ASC, ${SourceHex.name} ASC", "1"))
+    def first(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC", "1"))
 
-    def last(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} DESC, ${SourceSeq.name} DESC, ${SourceHex.name} DESC", "1"))
+    def last(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} DESC", "1"))
 
-    def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${State.name} = '${Message.Status.SENT.name}'", null, null, null, s"${Time.name} DESC, ${SourceSeq.name} DESC, ${SourceHex.name} DESC", "1"))
+    def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${State.name} = '${Message.Status.SENT.name}'", null, null, null, s"${Time.name} DESC", "1"))
 
     def lastIncomingKnock(convId: ConvId, selfUser: UserId)(implicit db: SQLiteDatabase): Option[MessageData] = single(
-      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ? AND ${User.name} <> ?", Array(convId.toString, Type(Message.Type.KNOCK), selfUser.str), null, null, s"${SourceSeq.name} DESC, ${SourceHex.name} DESC", "1")
+      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ? AND ${User.name} <> ?", Array(convId.toString, Type(Message.Type.KNOCK), selfUser.str), null, null, s"${Time.name} DESC", "1")
     )
 
     def lastMissedCall(convId: ConvId)(implicit db: SQLiteDatabase): Option[MessageData] = single(
-      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ?", Array(convId.toString, Type(Message.Type.MISSED_CALL)), null, null, s"${SourceSeq.name} DESC, ${SourceHex.name} DESC", "1")
+      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ?", Array(convId.toString, Type(Message.Type.MISSED_CALL)), null, null, s"${Time.name} DESC", "1")
     )
 
     private val MessageEntryColumns = Array(Id.name, User.name, Type.name, State.name, ContentSize.name)
@@ -324,11 +338,6 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
 
     def countMessages(convId: ConvId, p: MessageEntry => Boolean)(implicit db: SQLiteDatabase): Int =
       iteratingWithReader(MessageEntryReader)(db.query(table.name, MessageEntryColumns, s"${Conv.name} = ?", Array(convId.toString), null, null, null)).acquire(_ count p)
-
-    def findMessages(convId: ConvId, event: Seq[EventId])(implicit db: SQLiteDatabase) = {
-      val eventsSet = event.toSet
-      iterating(db.query(table.name, null, s"${Conv.name} = '${convId.str}' AND ${SourceSeq.name} IN (${event.map(_.sequence).mkString(",")})", null, null, null, null)).map(_ filter (m => eventsSet(m.source) ))
-    }
 
     def countNewer(convId: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
       queryNumEntries(db, table.name, s"${Conv.name} = '${convId.str}' AND ${Time.name} > ${time.toEpochMilli}")
@@ -340,16 +349,16 @@ object MessageData extends ((MessageId, ConvId, EventId, Message.Type, UserId, S
     def findLocalFrom(convId: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$convId' AND ${State.name} in ('${Message.Status.DEFAULT}', '${Message.Status.PENDING}', '${Message.Status.FAILED}') AND ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
 
-    def findLatestUpToEvent(convId: ConvId, event: EventId)(implicit db: SQLiteDatabase) =
-      single(db.query(table.name, null, s"${Conv.name} = '$convId' AND (${SourceSeq.name} < ${event.sequence} OR ${SourceSeq.name} = ${event.sequence} AND ${SourceHex.name} <= '${event.hex}')", null, null, null, s"${SourceSeq.name} DESC ,${SourceHex.name} DESC", "1"))
+    def findLatestUpTo(convId: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
+      single(db.query(table.name, null, s"${Conv.name} = '$convId' AND ${Time.name} < ${time.toEpochMilli}", null, null, null, s"${Time.name} DESC", "1"))
 
-    def findMessages(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC, ${SourceSeq.name} ASC, ${SourceHex.name} ASC")
+    def findMessages(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")
 
     def findMessagesFrom(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
-      iterating(db.query(table.name, null, s"${Conv.name} = '$conv' and ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC, ${SourceSeq.name} ASC, ${SourceHex.name} ASC"))
+      iterating(db.query(table.name, null, s"${Conv.name} = '$conv' and ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
 
-    private val IndexColumns = Array(Id.name, Time.name, SourceSeq.name, SourceHex.name)
-    def msgIndexCursor(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, IndexColumns, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC, ${SourceSeq.name} ASC, ${SourceHex.name} ASC")
+    private val IndexColumns = Array(Id.name, Time.name)
+    def msgIndexCursor(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, IndexColumns, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")
 
     def countAtLeastAsOld(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
       queryNumEntries(db, table.name, s"""${Conv.name} = '${Conv(conv)}' AND ${Time.name} <= ${Time(time)}""")

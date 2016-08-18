@@ -93,6 +93,6 @@ object TrackingEventsService {
   private implicit val logTag: LogTag = logTagFor[TrackingEventsService]
 
   def isOtto(conv: ConversationData, users: UsersStorage): Future[Boolean] =
-    if (conv.convType == OneToOne) users.get(UserId(conv.id.str)).map(_.exists(_.isOtto))(Threading.Background)
+    if (conv.convType == OneToOne) users.get(UserId(conv.id.str)).map(_.exists(_.isWireBot))(Threading.Background)
     else successful(false)
 }

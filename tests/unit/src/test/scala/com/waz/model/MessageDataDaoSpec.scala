@@ -38,14 +38,14 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   val knockUser = UserId()
 
   val events = List(
-    MessageData(MessageId(), convId, EventId(2), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(1)),
-    MessageData(MessageId(), convId, EventId(7), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(2)),
-    MessageData(MessageId(), convId, EventId(3), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(3)),
-    MessageData(MessageId(), convId, EventId(3), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(4)),
-    MessageData(MessageId(), convId, EventId(1), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
-    MessageData(MessageId(), convId, EventId(5), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
-    MessageData(MessageId(), convId, EventId(6), Message.Type.KNOCK, knockUser, time = Instant.ofEpochMilli(6)),
-    MessageData(MessageId(), ConvId(), EventId(8), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(7))
+    MessageData(MessageId(), convId, Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(1)),
+    MessageData(MessageId(), convId, Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(2)),
+    MessageData(MessageId(), convId, Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(3)),
+    MessageData(MessageId(), convId, Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(4)),
+    MessageData(MessageId(), convId, Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
+    MessageData(MessageId(), convId, Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(5)),
+    MessageData(MessageId(), convId, Message.Type.KNOCK, knockUser, time = Instant.ofEpochMilli(6)),
+    MessageData(MessageId(), ConvId(), Message.Type.TEXT, UserId(), time = Instant.ofEpochMilli(7))
   )
 
   after {
@@ -55,9 +55,9 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
   import com.waz.model.MessageData.MessageDataDao._
 
-  scenario("find messages returns events ordered by time, then source event id") {
+  scenario("find messages returns events ordered by time") {
     insertOrReplace(events)
-    list(findMessages(convId)) shouldEqual events.filter(_.convId == convId).sortBy(ev => (ev.time, ev.source.sequence, ev.source.hex))
+    list(findMessages(convId)) shouldEqual events.filter(_.convId == convId).sortBy(_.time)
   }
 
   feature("MessageContent decoding") {
@@ -111,7 +111,7 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     scenario("Decode message with sample content json") {
       val json = returning(new JSONArray)(arr => contents.foreach(i => arr.put(i._1)))
 
-      val msg = MessageData(MessageId(), convId, EventId(6), Message.Type.RICH_MEDIA, UserId())
+      val msg = MessageData(MessageId(), convId, Message.Type.RICH_MEDIA, UserId())
       insertOrReplace(msg)
 
       getById(msg.id) shouldEqual Some(msg)

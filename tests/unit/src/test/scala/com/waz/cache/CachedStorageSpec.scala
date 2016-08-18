@@ -73,7 +73,7 @@ class CachedStorageSpec extends FeatureSpec with Tables with Matchers with Befor
 
     storage = new CachedStorage[String, Item](new TrimmingLruCache[String, Option[Item]](context, Fixed(6)), db)(ItemDao, "CachedStorage") {
 
-      override protected def delete(keys: Seq[String])(implicit db: SQLiteDatabase): Unit = {
+      override protected def delete(keys: Iterable[String])(implicit db: SQLiteDatabase): Unit = {
         Thread.sleep(delay.toMillis)
         data --= keys
       }

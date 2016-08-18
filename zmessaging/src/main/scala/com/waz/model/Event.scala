@@ -88,7 +88,6 @@ case class ContactJoinEvent(id: Uid, user: UserId, name: String) extends Event
 case class GcmTokenRemoveEvent(id: Uid, token: String, senderId: String, client: Option[String]) extends Event
 
 sealed trait ConversationEvent extends RConvEvent {
-  val eventId: EventId
   val time: Date
   val from: UserId
 }
@@ -105,32 +104,20 @@ sealed trait MessageEvent extends ConversationOrderEvent
 // events that can lead to automatic unarchiving
 sealed trait UnarchivingEvent extends ConversationOrderEvent
 
-sealed trait EditEvent extends MessageEvent {
-  val ref: EventId
-}
-
 case class IgnoredEvent(id: Uid, json: JSONObject) extends Event
 
 case class UnknownEvent(id: Uid, json: JSONObject) extends Event
 case class UnknownConvEvent(id: Uid, json: JSONObject) extends ConversationEvent {
   override val convId: RConvId = RConvId()
   override val from: UserId = UserId()
-  override val eventId: EventId = EventId.Zero
   override val time: Date = new Date
 }
 
-case class CreateConversationEvent(id: Uid, convId: RConvId, time: Date, from: UserId, data: ConversationResponse) extends ConversationStateEvent with ConversationOrderEvent {
-  override val eventId: EventId = EventId.Zero
-}
-case class RenameConversationEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, name: String) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
+case class CreateConversationEvent(id: Uid, convId: RConvId, time: Date, from: UserId, data: ConversationResponse) extends ConversationStateEvent with ConversationOrderEvent
 
-case class MessageAddEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String) extends MessageEvent with UnarchivingEvent
-case class MessageEditEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, content: String, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
-case class MessageDeleteEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, ref: EventId) extends MessageEvent with EditEvent with UnarchivingEvent
+case class RenameConversationEvent(id: Uid, convId: RConvId, time: Date, from: UserId, name: String) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
 
-case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent {
-  override val eventId: EventId = EventId.Zero
-}
+case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent
 
 
 sealed trait OtrError
@@ -138,28 +125,21 @@ case object Duplicate extends OtrError
 case class DecryptionError(msg: String, from: UserId, sender: ClientId) extends OtrError
 case class IdentityChangedError(from: UserId, sender: ClientId) extends OtrError
 
-case class OtrErrorEvent(id: Uid, convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent with UnarchivingEvent {
-  override val eventId: EventId = EventId.Zero
-}
+case class OtrErrorEvent(id: Uid, convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent with UnarchivingEvent
 
-case class GenericAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetDataId, data: Option[Array[Byte]]) extends MessageEvent with UnarchivingEvent {
-  override val eventId: EventId = EventId.Zero
-}
+case class GenericAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetDataId, data: Option[Array[Byte]]) extends MessageEvent with UnarchivingEvent
 
-case class TypingEvent(id: Uid, convId: RConvId, time: Date, from: UserId, isTyping: Boolean) extends ConversationEvent {
-  override val eventId: EventId = EventId.Zero
-}
+case class TypingEvent(id: Uid, convId: RConvId, time: Date, from: UserId, isTyping: Boolean) extends ConversationEvent
 
-case class MemberJoinEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
-case class MemberLeaveEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
-case class MemberUpdateEvent(id: Uid, convId: RConvId, time: Date, from: UserId, state: ConversationState) extends ConversationStateEvent {
-  override val eventId: EventId = EventId.Zero // XXX: is that ok ??
-}
-case class ConnectRequestEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent with ConversationOrderEvent
+case class MemberJoinEvent(id: Uid, convId: RConvId, time: Date, from: UserId, userIds: Seq[UserId], firstEvent: Boolean = false) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
+case class MemberLeaveEvent(id: Uid, convId: RConvId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
+case class MemberUpdateEvent(id: Uid, convId: RConvId, time: Date, from: UserId, state: ConversationState) extends ConversationStateEvent
 
-case class VoiceChannelEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, oldCount: Int, newCount: Int) extends ConversationEvent with ConversationOrderEvent
-case class VoiceChannelActivateEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId) extends ConversationEvent with UnarchivingEvent
-case class VoiceChannelDeactivateEvent(id: Uid, convId: RConvId, eventId: EventId, time: Date, from: UserId, reason: Option[String]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
+case class ConnectRequestEvent(id: Uid, convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent with ConversationOrderEvent
+
+case class VoiceChannelEvent(id: Uid, convId: RConvId, time: Date, from: UserId, oldCount: Int, newCount: Int) extends ConversationEvent with ConversationOrderEvent
+case class VoiceChannelActivateEvent(id: Uid, convId: RConvId, time: Date, from: UserId) extends ConversationEvent with UnarchivingEvent
+case class VoiceChannelDeactivateEvent(id: Uid, convId: RConvId, time: Date, from: UserId, reason: Option[String]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
 
 sealed trait CallEvent extends Event {
   val convId: RConvId
@@ -192,28 +172,20 @@ sealed trait OtrEvent extends ConversationEvent {
   val recipient: ClientId
   val ciphertext: Array[Byte]
 }
-case class OtrMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent with ConversationEvent {
-  override val eventId: EventId = EventId.Zero
-}
-case class OtrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetDataId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent {
-  override val eventId: EventId = EventId.Zero
-}
+case class OtrMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent with ConversationEvent
 
-case class ConversationState(archived: Option[Boolean] = None, archiveTime: Option[Instant] = None, muted: Option[Boolean] = None, muteTime: Option[Instant] = None, archiveEvent: Option[Option[EventId]] = None)
+case class OtrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetDataId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent
+
+case class ConversationState(archived: Option[Boolean] = None, archiveTime: Option[Instant] = None, muted: Option[Boolean] = None, muteTime: Option[Instant] = None)
 
 object ConversationState {
 
   private def encode(state: ConversationState, o: JSONObject) = {
     state.archived foreach { o.put("otr_archived", _) }
-    state.archiveEvent foreach {
-      case Some(event)  => o.put("archived", event.str)
-      case None         => o.put("archived", "false")
-    }
     state.archiveTime foreach { time =>
       o.put("otr_archived_ref", JsonEncoder.encodeISOInstant(time))
     }
     state.muted.foreach(o.put("otr_muted", _))
-    state.muted.foreach(o.put("muted", _))
     state.muteTime foreach { time =>
       o.put("otr_muted_ref", JsonEncoder.encodeISOInstant(time))
     }
@@ -227,12 +199,8 @@ object ConversationState {
     import com.waz.utils.JsonDecoder._
 
     override def apply(implicit js: JSONObject): ConversationState = {
-      val archiveEvent = decodeOptString('archived).map {
-        case "false" | "" => None
-        case str => Some(EventId(str))
-      }
       val archiveTime = decodeOptISOInstant('otr_archived_ref)
-      val archived = archiveTime.map( _ => decodeBool('otr_archived)).orElse(archiveEvent.map(_.isDefined))
+      val archived = archiveTime.map( _ => decodeBool('otr_archived))
 
       val (muted, muteTime) = (decodeOptISOInstant('otr_muted_ref), decodeOptISOInstant('muted_time)) match {
         case (Some(t), Some(t1)) if t1.isAfter(t) => (decodeOptBoolean('muted), Some(t1))
@@ -241,7 +209,7 @@ object ConversationState {
         case _                                    => (None, None)
       }
 
-      ConversationState(archived, archiveTime, muted, muteTime, archiveEvent)
+      ConversationState(archived, archiveTime, muted, muteTime)
     }
   }
 
@@ -330,7 +298,7 @@ object Event {
 object MissedCallEvent {
   val MissedCallReason = Some("missed")
 
-  def unapply(e: VoiceChannelDeactivateEvent): Option[(Uid, RConvId, EventId, Date, UserId)] = if (e.reason == MissedCallReason) Some((e.id, e.convId, e.eventId, e.time, e.from)) else None
+  def unapply(e: VoiceChannelDeactivateEvent): Option[(Uid, RConvId, Date, UserId)] = if (e.reason == MissedCallReason) Some((e.id, e.convId, e.time, e.from)) else None
 }
 
 object UserConnectionEvent {
@@ -339,17 +307,11 @@ object UserConnectionEvent {
   }
 }
 
-object MessageEvent {
-  def unapply(e: MessageEvent): Option[(Uid, RConvId, EventId, Date, UserId)] = Some((e.id, e.convId, e.eventId, e.time, e.from))
-}
-
-object EditEvent {
-  def unapply(e: EditEvent): Option[(Uid, RConvId, EventId, Date, UserId, EventId)] = Some((e.id, e.convId, e.eventId, e.time, e.from, e.ref))
-}
-
 object ConversationEvent {
 
-  def unapply(e: ConversationEvent): Option[(Uid, RConvId, EventId, Date, UserId)] =Some((e.id, e.convId, e.eventId, e.time, e.from))
+  val EventId = """(\d+).([0-9a-fA-F]+)""".r
+
+  def unapply(e: ConversationEvent): Option[(Uid, RConvId, Date, UserId)] =Some((e.id, e.convId, e.time, e.from))
 
   implicit lazy val ConversationEventDecoder: JsonDecoder[ConversationEvent] = new JsonDecoder[ConversationEvent] {
     private implicit val tag: LogTag = "ConversationEventDecoder"
@@ -357,36 +319,33 @@ object ConversationEvent {
     def decodeBytes(str: String) = Base64.decode(str, Base64.NO_WRAP)
 
     def otrMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
-      new OtrMessageEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), decodeBytes('text), decodeOptString('data) map decodeBytes)
+      OtrMessageEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), decodeBytes('text), decodeOptString('data) map decodeBytes)
 
     def otrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
-      new OtrAssetEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), RAssetDataId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
+      OtrAssetEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), RAssetDataId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
 
     override def apply(implicit js: JSONObject): ConversationEvent = LoggedTry {
 
       lazy val data = if (js.has("data") && !js.isNull("data")) Try(js.getJSONObject("data")).toOption else None
-      lazy val id = data.flatMap(decodeOptUid('nonce)(_)).getOrElse {
-        // if no nonce is present then we are going to use id generated from conversation id and eventId,
-        // this should give us pretty unique and stable id
-        val conv = decodeString('conversation)
-        if (js.has("id")) {
-          val uid = UUID.fromString(conv)
-          val eventId = decodeEid('id)
-          Uid(uid.getMostSignificantBits ^ eventId.sequence, EventId.hexNumber(eventId.hex))
-        } else Uid(conv) // this is only the case for conversation.create so we can use conv id
+      lazy val id = decodeOptString('id) match {
+        case Some(EventId(seq, hex)) =>
+          // id is generated from conversation id and eventId, this should give us pretty unique and stable id
+          val uid = UUID.fromString('conversation)
+          Uid(uid.getMostSignificantBits ^ seq.toLong, java.lang.Long.parseLong(hex.substring(1), 16))
+        case _ =>
+          Uid()
       }
 
       decodeString('type) match {
-        case "conversation.create" => CreateConversationEvent(id, 'conversation, 'time, 'from, JsonDecoder[ConversationResponse]('data))
-        case "conversation.rename" => RenameConversationEvent(id, 'conversation, 'id, 'time, 'from, decodeString('name)(data.get))
-        case "conversation.message-add" => MessageAddEvent(id, 'conversation, 'id, 'time, 'from, decodeString('content)(data.get))
-        case "conversation.member-join" => MemberJoinEvent(id, 'conversation, 'id, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
-        case "conversation.member-leave" => MemberLeaveEvent(id, 'conversation, 'id, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
+        case "conversation.create" => CreateConversationEvent('conversation, 'conversation, 'time, 'from, JsonDecoder[ConversationResponse]('data))
+        case "conversation.rename" => RenameConversationEvent(id, 'conversation, 'time, 'from, decodeString('name)(data.get))
+        case "conversation.member-join" => MemberJoinEvent(id, 'conversation, 'time, 'from, decodeUserIdSeq('user_ids)(data.get), decodeString('id).startsWith("1."))
+        case "conversation.member-leave" => MemberLeaveEvent(id, 'conversation, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-update" => MemberUpdateEvent(id, 'conversation, 'time, 'from, ConversationState.Decoder(data.get))
-        case "conversation.connect-request" => ConnectRequestEvent(id, 'conversation, 'id, 'time, 'from, decodeString('message)(data.get), decodeUserId('recipient)(data.get), decodeString('name)(data.get), decodeOptString('email)(data.get))
-        case "conversation.voice-channel" => VoiceChannelEvent(id, 'conversation, 'id, 'time, 'from, decodeInt('old_member_count)(data.get), decodeInt('new_member_count)(data.get))
-        case "conversation.voice-channel-activate" => VoiceChannelActivateEvent(id, 'conversation, 'id, 'time, 'from)
-        case "conversation.voice-channel-deactivate" => VoiceChannelDeactivateEvent(id, 'conversation, 'id, 'time, 'from, data.flatMap(d => decodeOptString('reason)(d)))
+        case "conversation.connect-request" => ConnectRequestEvent(id, 'conversation, 'time, 'from, decodeString('message)(data.get), decodeUserId('recipient)(data.get), decodeString('name)(data.get), decodeOptString('email)(data.get))
+        case "conversation.voice-channel" => VoiceChannelEvent(id, 'conversation, 'time, 'from, decodeInt('old_member_count)(data.get), decodeInt('new_member_count)(data.get))
+        case "conversation.voice-channel-activate" => VoiceChannelActivateEvent(id, 'conversation, 'time, 'from)
+        case "conversation.voice-channel-deactivate" => VoiceChannelDeactivateEvent(id, 'conversation, 'time, 'from, data.flatMap(d => decodeOptString('reason)(d)))
         case "conversation.typing" => TypingEvent(id, 'conversation, 'time, 'from, isTyping = data.fold(false)(data => decodeString('status)(data) == "started"))
         case "conversation.otr-message-add" => otrMessageEvent(id, 'conversation, 'time, 'from)(data.get)
         case "conversation.otr-asset-add" => otrAssetEvent(id, 'conversation, 'time, 'from)(data.get)
