@@ -183,4 +183,42 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       }
     }
   }
+
+  feature("editing scenarios") {
+
+    scenario("post multiple, edit, post more") {
+      val count = msgs.size()
+
+      otherUserClient ? SendText(conv.data.remoteId, "other 1") should eventually(be(Successful))
+      otherUserClient ? SendText(conv.data.remoteId, "other 2") should eventually(be(Successful))
+      otherUserClient ? SendText(conv.data.remoteId, "other 3") should eventually(be(Successful))
+      otherUserClient ? SendText(conv.data.remoteId, "other 4") should eventually(be(Successful))
+
+      conv.sendMessage(new Text("self 1"))
+      conv.sendMessage(new Text("self 2"))
+      conv.sendMessage(new Text("self 3"))
+
+      withDelay {
+        msgs should have size (count + 7)
+        msgs.toSeq.drop(count).map(_.getBody) shouldEqual Seq("other 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3")
+      }
+
+      val msg = msgs.get(count)
+
+      otherUserClient ? UpdateText(msg.data.id, "updated 1") should eventually(be(Successful))
+
+      withDelay {
+        msgs should have size (count + 7)
+        msgs.toSeq.drop(count).map(_.getBody) shouldEqual Seq("updated 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3")
+      }
+
+      otherUserClient ? SendText(conv.data.remoteId, "other 5") should eventually(be(Successful))
+      otherUserClient ? SendText(conv.data.remoteId, "other 6") should eventually(be(Successful))
+
+      withDelay {
+        msgs should have size (count + 9)
+        msgs.toSeq.drop(count).map(_.getBody) shouldEqual Seq("updated 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3", "other 5", "other 6")
+      }
+    }
+  }
 }

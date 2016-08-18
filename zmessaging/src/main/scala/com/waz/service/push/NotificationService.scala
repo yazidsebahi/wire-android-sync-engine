@@ -17,8 +17,8 @@
  */
 package com.waz.service.push
 
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import ImplicitTag._
 import com.waz.api.Message
 import com.waz.api.NotificationsHandler.GcmNotification
 import com.waz.api.NotificationsHandler.GcmNotification.LikedContent
@@ -26,12 +26,12 @@ import com.waz.api.NotificationsHandler.GcmNotification.Type._
 import com.waz.content._
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, Location, Text}
-import com.waz.model.Liking.Action.Like
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service._
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
 import org.threeten.bp.Instant
@@ -41,8 +41,9 @@ import scala.concurrent.Future
 
 class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle, storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, push: PushService, kv: KeyValueStorage, timeouts: Timeouts) {
   import NotificationService._
-  import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
+
+  private implicit val dispatcher = new SerialDispatchQueue(name = "NotificationService")
 
   @volatile private var uiActive = false
 
@@ -56,31 +57,16 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
   }
 
   val notificationEventsStage = EventScheduler.Stage[Event]({ (c, events) =>
-    Future {
-      // remove events from self user
-      val incoming = events collect {
-        case e: MessageEvent if e.from != selfUserId => e
-        case e: ContactJoinEvent => e
-        case e: UserEvent => e
-      }
-      add(incoming collect {
-        case ev @ UserConnectionEvent(_, convId, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime => NotificationData(s"$CONNECT_REQUEST-$convId-$userId", msg.getOrElse(""), convId, userId, CONNECT_REQUEST, time.instant, userName = name)
-        case ev @ UserConnectionEvent(_, convId, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime => NotificationData(s"$CONNECT_ACCEPTED-$convId-$userId", "", convId, userId, CONNECT_ACCEPTED, time.instant, userName = name)
-        case ContactJoinEvent(_, userId, _) => NotificationData(s"$CONTACT_JOIN-$userId", "", RConvId.Empty, userId, CONTACT_JOIN, Instant.EPOCH)
-        case MemberJoinEvent(id, convId, time, userId, members, _) if members != Seq(userId) => NotificationData(s"$MEMBER_JOIN-$convId-$id", "", convId, userId, MEMBER_JOIN, time.instant) // ignoring auto-generated member join event when user accepts connection
-        case MemberLeaveEvent(id, convId, time, userId, _) => NotificationData(s"$MEMBER_LEAVE-$convId-$id", "", convId, userId, MEMBER_LEAVE, time.instant)
-        case RenameConversationEvent(id, convId, time, userId, name) => NotificationData(s"$RENAME-$convId-$id", "", convId, userId, RENAME, time.instant)
-        case MissedCallEvent(id, convId, time, userId) => NotificationData(s"$MISSED_CALL-$convId-$id", "", convId, userId, MISSED_CALL, time.instant)
-        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Text(msg, mentions, _))) => NotificationData(s"$TEXT-$convId-$id", msg, convId, userId, TEXT, time.instant, mentions = mentions.keys.toSeq)
-        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Knock(hot))) => NotificationData(s"$KNOCK-$convId-$id-$hot", "", convId, userId, KNOCK, time.instant, hotKnock = hot)
-        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Like)) => NotificationData(s"$LIKE-$convId-$id-$userId", "", convId, userId, LIKE, time.instant, referencedMessage = Some(MessageId(id.str)))
-        case GenericMessageEvent(_, convId, time, userId, GenericMessage(id, Location(_, _, _, _))) => NotificationData(s"$LOCATION-$convId-$id", "", convId, userId, LOCATION, time.instant)
-        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(Some(Original(Mime.Video(), _, _, _, _)), _, UploadDone(_))), _, _) => NotificationData(s"$VIDEO_ASSET-$id", "", convId, userId, VIDEO_ASSET, time.instant)
-        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, UploadDone(_))), _, _) => NotificationData(s"$AUDIO_ASSET-$id", "", convId, userId, AUDIO_ASSET, time.instant)
-        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, Asset(_, _, UploadDone(_))), _, _) => NotificationData(s"$ANY_ASSET-$id", "", convId, userId, ANY_ASSET, time.instant)
-        case GenericAssetEvent(_, convId, time, userId, GenericMessage(id, _: ImageAsset), _, _) => NotificationData(s"$ASSET-$id", "", convId, userId, ASSET, time.instant)
-      })
-    }
+    add(events collect {
+      case ev @ UserConnectionEvent(_, _, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime =>
+        NotificationData(s"$CONNECT_REQUEST-$userId", msg.getOrElse(""), ConvId(userId.str), userId, CONNECT_REQUEST, time.instant, userName = name)
+      case ev @ UserConnectionEvent(_, _, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
+        NotificationData(s"$CONNECT_ACCEPTED-$userId", "", ConvId(userId.str), userId, CONNECT_ACCEPTED, time.instant, userName = name)
+      case ContactJoinEvent(_, userId, _) =>
+        verbose(s"ContactJoinEvent")
+        NotificationData(s"$CONTACT_JOIN-$userId", "", ConvId(userId.str), userId, CONTACT_JOIN, Instant.EPOCH)
+        // TODO: likes
+    })
   }, _ => ! uiActive)
 
   /**
@@ -96,10 +82,10 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
       convs.onUpdated map { _ collect { case (prev, conv) if convLastRead(prev) != convLastRead(conv) => conv } }
     ) filter(_.nonEmpty)
 
-    def loadAll() = convs.getAll.map(_.map(c => c.remoteId -> convLastRead(c)).toMap)
+    def loadAll() = convs.getAll.map(_.map(c => c.id -> convLastRead(c)).toMap)
 
-    def update(times: Map[RConvId, Instant], updates: Seq[ConversationData]) =
-      times ++ updates.map(c => c.remoteId -> convLastRead(c))(breakOut)
+    def update(times: Map[ConvId, Instant], updates: Seq[ConversationData]) =
+      times ++ updates.map(c => c.id -> convLastRead(c))(breakOut)
 
     new AggregatingSignal(timeUpdates, loadAll(), update)
   }
@@ -109,19 +95,63 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
     case (lastRead, uiTime) => removeReadNotifications(lastRead, uiTime)
   }
 
-  // add notification when message sending fails
+  messages.onAdded { addForIncoming(_) }
+
   messages.onUpdated { updates =>
+    // add notification when message sending fails
     val failedMsgs = updates collect {
       case (prev, msg) if prev.state != msg.state && msg.state == Message.Status.FAILED => msg
     }
     if (!uiActive && failedMsgs.nonEmpty) {
-      // XXX: notification data keeps remoteId, so we need to fetch convs here
-      Future.traverse(failedMsgs) { msg =>
-        convs.get(msg.convId) map {
-          case Some(conv) => Some(NotificationData(s"$MESSAGE_SENDING_FAILED-${msg.id}", msg.contentString, conv.remoteId, msg.userId, MESSAGE_SENDING_FAILED, Instant.EPOCH, referencedMessage = Some(msg.id)))
-          case None => None // that's pretty much impossible
+      storage.insert(failedMsgs map { msg => NotificationData(msg.id.str, msg.contentString, msg.convId, msg.userId, MESSAGE_SENDING_FAILED, Instant.EPOCH) })
+    }
+
+    // add notifications for uploaded assets
+    val updatedAssets = updates collect {
+      case (prev, msg) if msg.state == Message.Status.SENT && msg.msgType == Message.Type.ANY_ASSET => msg
+    }
+    if (updatedAssets.nonEmpty) addForIncoming(updatedAssets)
+  }
+
+  messages.onDeleted { ids =>
+    storage.remove(ids.map(_.str))
+  }
+
+  private def addForIncoming(msgs: Seq[MessageData]) = {
+    verbose(s"addForIncoming($msgs)")
+    lastReadMap.head map { lastRead =>
+      verbose(s"lastRead: $lastRead")
+      msgs.filter(m => m.userId != selfUserId && lastRead.get(m.convId).forall(_.isBefore(m.time)) && m.localTime != Instant.EPOCH)
+    } flatMap { ms =>
+      verbose(s"filtered: $ms")
+      storage.insert(ms flatMap notification)
+    }
+  }
+
+  private def notification(msg: MessageData) = {
+    import Message.Type._
+
+    def data(tpe: GcmNotification.Type) = Some(NotificationData(msg.id.str, msg.contentString, msg.convId, msg.userId, tpe, msg.time, msg.localTime, mentions = msg.mentions.keys.toSeq, hotKnock = msg.hotKnock))
+
+    msg.msgType match {
+      case TEXT | TEXT_EMOJI_ONLY | RICH_MEDIA => data(GcmNotification.Type.TEXT)
+      case KNOCK => data(GcmNotification.Type.KNOCK)
+      case ASSET => data(GcmNotification.Type.ASSET)
+      case LOCATION => data(GcmNotification.Type.LOCATION)
+      case RENAME => data(GcmNotification.Type.RENAME)
+      case MISSED_CALL => data(GcmNotification.Type.MISSED_CALL)
+      case ANY_ASSET =>
+        msg.protos.lastOption match {
+          case Some(GenericMessage(_, Asset(Some(Original(Mime.Video(), _, _, _, _)), _, UploadDone(_)))) => data(GcmNotification.Type.VIDEO_ASSET)
+          case Some(GenericMessage(_, Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, UploadDone(_)))) => data(GcmNotification.Type.AUDIO_ASSET)
+          case Some(GenericMessage(_, Asset(_, _, UploadDone(_)))) => data(GcmNotification.Type.ANY_ASSET)
+          case _ => None
         }
-      } map { ns => add(ns.flatten) }
+      case MEMBER_JOIN =>
+        if (msg.members == Set(msg.userId)) None // ignoring auto-generated member join event when user accepts connection
+        else data(GcmNotification.Type.MEMBER_JOIN)
+      case MEMBER_LEAVE => data(GcmNotification.Type.MEMBER_LEAVE)
+      case _ => None
     }
   }
 
@@ -134,7 +164,7 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
       _ <- removeReadNotifications(lastRead, Instant.now())
     } yield ()
 
-  private def removeReadNotifications(lastRead: Map[RConvId, Instant], uiTime: Instant) = {
+  private def removeReadNotifications(lastRead: Map[ConvId, Instant], uiTime: Instant) = {
     verbose(s"removeRead($lastRead, $uiTime)")
 
     def isRead(notification: NotificationData) =
@@ -152,12 +182,11 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
   private def add(notifications: Seq[NotificationData]) =
     for {
       lastRead <- lastReadMap.head
-      // filter notifications for unread messages in un-muted conversations
-      ns: Map[String, NotificationData] = notifications.collect {
-        case n if n.serverTime == Instant.EPOCH => n.id -> n
-        case n if lastRead.get(n.conv).forall(_.isBefore(n.serverTime)) => n.id -> n
-      } (breakOut)
-      res <- storage.updateOrCreateAll2(ns.keys, (id, n) => n.getOrElse(ns(id)))
+      res <- storage.insert(notifications filter { n =>
+        // filter notifications for unread messages in un-muted conversations
+        n.serverTime == Instant.EPOCH || lastRead.get(n.conv).forall(_.isBefore(n.serverTime))
+      })
+      _ = verbose(s"inserted: $res")
     } yield res
 
   def getNotifications =
@@ -181,20 +210,20 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
 
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(Notification(data, ConvId(data.user.str), userName, userName, groupConv = false))
+            Future.successful(Notification(data, userName, userName, groupConv = false))
           case _ =>
             for {
               msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
-              conv <- convs.getByRemoteId(data.conv)
+              conv <- convs.get(data.conv)
             } yield {
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map (m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
 
               conv.fold {
-                Notification(g, ConvId(data.conv.str), "", userName, groupConv = false, mentioned = data.mentions.contains(selfUserId), likedContent = t)
+                Notification(g, "", userName, groupConv = false, mentioned = data.mentions.contains(selfUserId), likedContent = t)
               } { conv =>
-                Notification(g, conv.id, conv.displayName, userName, conv.convType == ConversationType.Group, mentioned = data.mentions.contains(selfUserId), likedContent = t)
+                Notification(g, conv.displayName, userName, conv.convType == ConversationType.Group, mentioned = data.mentions.contains(selfUserId), likedContent = t)
               }
             }
         }
@@ -205,10 +234,10 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
 
 object NotificationService {
 
-  case class Notification(data: NotificationData, conv: ConvId, convName: String = "", userName: String = "", groupConv: Boolean = false, mentioned: Boolean = false, likedContent: Option[LikedContent] = None) extends GcmNotification {
+  case class Notification(data: NotificationData, convName: String = "", userName: String = "", groupConv: Boolean = false, mentioned: Boolean = false, likedContent: Option[LikedContent] = None) extends GcmNotification {
     override def getType = data.msgType
     override def getConversationName: String = convName
-    override def getConversationId: String = conv.str
+    override def getConversationId: String = data.conv.str
     override def getMessage: String = data.msg
     override def getUserName: String = userName
     override def getUserId: String = data.user.str

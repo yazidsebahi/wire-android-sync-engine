@@ -25,7 +25,7 @@ import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class NotificationData(id: String, msg: String, conv: RConvId, user: UserId, msgType: GcmNotification.Type, serverTime: Instant,
+case class NotificationData(id: String, msg: String, conv: ConvId, user: UserId, msgType: GcmNotification.Type, serverTime: Instant,
                             localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None,
                             mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
 
@@ -60,7 +60,7 @@ object NotificationData {
     val Data = text('data)(JsonEncoder.encodeString(_))
 
     override val idCol = Id
-    override val table = Table("GcmData", Id, Data) // class renamed to NotificationData, but db table stays unchanged
+    override val table = Table("NotificationData", Id, Data)
 
     override def apply(implicit cursor: Cursor): NotificationData = JsonDecoder.decode(cursor.getString(1))
   }

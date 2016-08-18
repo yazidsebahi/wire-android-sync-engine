@@ -79,6 +79,11 @@ case class MessageData(id: MessageId,
       case _ => false
     }
 
+  def mentions = protos.lastOption match {
+    case Some(TextMessage(_, ms, _)) => ms
+    case _ => Map.empty
+  }
+
   lazy val imageDimensions: Option[Dim2] = msgType match {
     case Message.Type.ASSET =>
       protos.collectFirst {
