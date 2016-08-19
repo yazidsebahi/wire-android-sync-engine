@@ -61,9 +61,9 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
     service = new MockZMessaging(account, selfUserId = selfUser.id) {
 
       override lazy val sync = new EmptySyncService {
-        override def postMessage(id: MessageId, conv: ConvId) = {
+        override def postMessage(id: MessageId, conv: ConvId, time: Instant) = {
           messageSync = Some(id)
-          super.postMessage(id, conv)
+          super.postMessage(id, conv, time)
         }
       }
 

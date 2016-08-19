@@ -68,14 +68,14 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
       for {
         msg <- addTextMessage(convId, m, mentions)
         _   <- updateLastRead(msg)
-        _   <- sync.postMessage(msg.id, convId)
+        _   <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def sendLocationMessage(loc: Location) =
       for {
         msg <- addLocationMessage(convId, loc)
         _   <- updateLastRead(msg)
-        _   <- sync.postMessage(msg.id, convId)
+        _   <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
@@ -89,7 +89,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         msg <- addImageMessage(convId, assetId, img.getWidth, img.getHeight)
         _   <- updateLastRead(msg)
         _   <- addImageAsset(assetId, img, conv.remoteId, isSelf = false)
-        _   <- sync.postMessage(msg.id, convId)
+        _   <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def createImageThenMessage(img: api.ImageAsset, conv: ConversationData) =
@@ -97,7 +97,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         data <- addImageAsset(AssetId(), img, conv.remoteId, isSelf = false)
         msg  <- addImageMessage(convId, data.id, data.width, data.height)
         _    <- updateLastRead(msg)
-        _    <- sync.postMessage(msg.id, convId)
+        _    <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def sendAssetMessage(in: AssetForUpload, conv: ConversationData, handler: ErrorHandler): Future[Option[MessageData]] = {
@@ -158,7 +158,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         isOtto      <- TrackingEventsService.isOtto(conv, usersStorage)
         _           <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, isOtto))
         shouldSend  <- checkSize(size, mime, message)
-        _ <- if (shouldSend) sync.postMessage(message.id, convId) else Future.successful(())
+        _ <- if (shouldSend) sync.postMessage(message.id, convId, message.editTime) else Future.successful(())
       } yield Some(message)
     }
 
@@ -212,7 +212,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         warn(s"Can not update msg: $m")
         m
     } flatMap {
-      case Some(m) => sync.postMessage(m.id, m.convId) map { _ => Some(m) } // using PostMessage sync request to use the same logic for failures and retrying
+      case Some(m) => sync.postMessage(m.id, m.convId, m.editTime) map { _ => Some(m) } // using PostMessage sync request to use the same logic for failures and retrying
       case None => Future successful None
     }
   }
@@ -366,11 +366,11 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
       getActiveKnockMessage(id, selfUserId) flatMap {
         case Some(msg) if msg.hotKnock => CancellableFuture.successful(None) // ignore - hot knock not expired
         case Some(msg) => // change to hot knock
-          sync.postMessage(msg.id, id)
+          sync.postMessage(msg.id, id, msg.editTime)
           updateKnockToHotKnock(msg.id)
         case _ =>
           addKnockMessage(id, selfUserId) map { msg =>
-            sync.postMessage(msg.id, id)
+            sync.postMessage(msg.id, id, msg.editTime)
             Some(msg)
           }
       }

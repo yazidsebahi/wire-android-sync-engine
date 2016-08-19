@@ -33,6 +33,7 @@ import com.waz.utils._
 import com.waz.utils.events.EventContext
 import org.robolectric.Robolectric
 import org.scalatest.{FeatureSpec, Matchers}
+import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 
@@ -224,7 +225,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       zmessaging.network.networkMode ! NetworkMode.OFFLINE
 
       withDelay {
-        zmessaging.sync.postMessage(failedTextMessage.get.id, ConvId(conv.getId))
+        zmessaging.sync.postMessage(failedTextMessage.get.id, ConvId(conv.getId), Instant.EPOCH)
         conv.getFailedCount shouldEqual 1
         msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.FAILED
       }(20.seconds)

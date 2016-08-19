@@ -69,7 +69,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostExcludePymk requests") { PostExcludePymk(UserId()) should beUnchangedByEncodingAndDecoding }
     scenario("DeleteGcmToken requests") { DeleteGcmToken(GcmId()) should beUnchangedByEncodingAndDecoding }
     scenario("SyncSearchQuery requests") { SyncSearchQuery(-1L) should beUnchangedByEncodingAndDecoding }
-    scenario("PostMessage requests") { PostMessage(ConvId(), MessageId()) should beUnchangedByEncodingAndDecoding }
+    scenario("PostMessage requests") { PostMessage(ConvId(), MessageId(), Instant.now()) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvJoin requests") { PostConvJoin(ConvId(), Set(UserId(), UserId())) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvLeave requests") { PostConvLeave(ConvId(), UserId()) should beUnchangedByEncodingAndDecoding }
     scenario("PostConnection requests") { PostConnection(UserId(), "name", "message") should beUnchangedByEncodingAndDecoding }
@@ -100,7 +100,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))),
         SyncSearchQuery(42L),
         PostSelfPicture(Some(AssetId())),
-        PostMessage(ConvId(), MessageId()),
+        PostMessage(ConvId(), MessageId(), Instant.now()),
         PostConvJoin(ConvId(), Set(UserId(), UserId())),
         PostConnection(UserId(), "name", "message"),
         PostConnectionStatus(UserId(), Some(ConnectionStatus.Ignored)),

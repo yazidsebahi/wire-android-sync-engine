@@ -134,8 +134,15 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostTypingState](req)(Merged(_))
   }
 
-  case class PostMessage(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostMessage) with SerialExecutionWithinConversation {
+  case class PostMessage(convId: ConvId, messageId: MessageId, editTime: Instant) extends RequestForConversation(Cmd.PostMessage) with SerialExecutionWithinConversation {
     override val mergeKey = (cmd, convId, messageId)
+    override def merge(req: SyncRequest) = mergeHelper[PostMessage](req) { r =>
+      // those requests are merged if message was edited multiple times (or unsent message was edited before sync is finished)
+      // editTime == Instant.EPOCH is a special value, it marks initial message sync, we need to preserve that info
+      // sync handler will check editTime and will just upload regular message (with current content) instead of an edit if it's EPOCH
+      val time = if (editTime == Instant.EPOCH) Instant.EPOCH else editTime max r.editTime
+      Merged(PostMessage(convId, messageId, time))
+    }
   }
 
   case class PostOpenGraphMeta(convId: ConvId, messageId: MessageId, editTime: Instant) extends RequestForConversation(Cmd.PostOpenGraphMeta) {
@@ -285,7 +292,7 @@ object SyncRequest {
         case Cmd.PostExcludePymk       => PostExcludePymk(userId)
         case Cmd.PostConnectionStatus  => PostConnectionStatus(userId, opt('status, js => ConnectionStatus(js.getString("status"))))
         case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
-        case Cmd.PostMessage           => PostMessage(convId, messageId)
+        case Cmd.PostMessage           => PostMessage(convId, messageId, 'time)
         case Cmd.PostDeleted           => PostDeleted(convId, messageId)
         case Cmd.PostRecalled          => PostRecalled(convId, messageId, decodeId[MessageId]('recalled))
         case Cmd.PostAssetStatus       => PostAssetStatus(convId, messageId, JsonDecoder[AssetStatus.Syncable]('status))
@@ -337,7 +344,10 @@ object SyncRequest {
         case DeleteGcmToken(token)            => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
-        case PostMessage(_, messageId)        => putId("message", messageId)
+        case PostMessage(_, messageId, time)  =>
+          putId("message", messageId)
+          o.put("time", time.toEpochMilli)
+
         case PostDeleted(_, messageId)        => putId("message", messageId)
         case PostRecalled(_, msg, recalled)   =>
           putId("message", msg)

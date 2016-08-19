@@ -123,7 +123,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postMessageResponse = Future.successful(Right(new Date))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Success
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Success
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.SENT)
     }
 
@@ -131,7 +131,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       val msg = addMessage()
       postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = true)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = true)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.PENDING)
     }
 
@@ -140,7 +140,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
       onLine = false
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
 
@@ -148,7 +148,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       val msg = addMessage()
       postMessageResponse = Future.successful(Left(ErrorResponse(400, "", "")))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(400, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(400, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
 
@@ -157,7 +157,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       Await.result(zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - SendingTimeout - 10.millis) }, 5.seconds)
       postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
 
@@ -165,7 +165,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       val msg = addMessage()
       postMessageResponse = CancellableFuture.delayed(2.seconds) { Left(ErrorResponse.Cancelled) }
 
-      Await.result(handler.postMessage(conv.id, msg.id), 5.seconds) shouldEqual SyncResult.Failure(Some(ErrorResponse.Cancelled), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 5.seconds) shouldEqual SyncResult.Failure(Some(ErrorResponse.Cancelled), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED_READ)
     }
   }
@@ -193,7 +193,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postImageResult = Right(None)
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Success
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Success
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.SENT)
     }
 
@@ -202,7 +202,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = true)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = true)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.PENDING)
     }
 
@@ -212,7 +212,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       onLine = false
       postImageResult = Left(ErrorResponse(500, "", ""))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
 
@@ -221,7 +221,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postImageResult = Left(ErrorResponse(400, "", ""))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(400, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(400, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
 
@@ -231,7 +231,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
 
@@ -241,7 +241,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = true)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = true)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.PENDING)
     }
 
@@ -251,7 +251,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
       postImageResult = Left(ErrorResponse(400, "", ""))
 
-      Await.result(handler.postMessage(conv.id, msg.id), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(400, "", "")), shouldRetry = false)
+      Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(400, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
     }
   }

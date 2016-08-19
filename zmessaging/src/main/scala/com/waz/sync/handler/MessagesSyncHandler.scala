@@ -81,7 +81,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
         Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
     }
 
-  def postMessage(convId: ConvId, id: MessageId)(implicit convLock: ConvLock): Future[SyncResult] = {
+  def postMessage(convId: ConvId, id: MessageId, editTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
     def isPartiallySent(msg: MessageData) = assets.storage.getImageAsset(msg.assetId) map { _.exists(_.versions.exists(_.sent)) }
 
     def shouldGiveUpSending(msg: MessageData) = isPartiallySent(msg) map { partiallySent =>
@@ -94,7 +94,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       }
     } flatMap {
       case (Some(msg), Some(conv)) =>
-        postMessage(conv, msg)
+        postMessage(conv, msg, editTime)
           .recover {
             case c: CancelException =>
               SyncResult(ErrorResponse.Cancelled)
@@ -125,7 +125,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
   }
 
-  private def postMessage(conv: ConversationData, msg: MessageData)(implicit convLock: ConvLock): Future[SyncResult] = {
+  private def postMessage(conv: ConversationData, msg: MessageData, reqEditTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
 
     def postImageMessage() =
       assetSync.withImageAsset(conv.remoteId, msg.assetId) { asset =>
@@ -142,10 +142,11 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       }
 
     def postTextMessage() = {
-      val (gm, isEdit) = msg.protos.lastOption match {
-        case Some(m @ GenericMessage(id, MsgEdit(ref, text))) => (m, true) // FIXME: what if original message was not yet sent, we should just send a TextMessage with new content, how do we know if original was sent ?
-        case _ => (GenericMessage.TextMessage(msg), false)
-      }
+      val (gm, isEdit) =
+        msg.protos.lastOption match {
+          case Some(m @ GenericMessage(id, MsgEdit(ref, text))) if reqEditTime != Instant.EPOCH => (m, true) // will send edit only if original message was already sent (reqEditTime > EPOCH)
+          case _ => (GenericMessage.TextMessage(msg), false)
+        }
 
       otrSync.postOtrMessage(conv, gm) flatMap {
         case Right(time) if isEdit =>
