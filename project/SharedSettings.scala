@@ -16,14 +16,14 @@ object SharedSettings {
   case class EmailTestUser(email: String, password: String)
   case class InternalBackendPasswords(edge: String, staging: String)
 
-  val avsVersion = "2.8.4"
+  val avsVersion = "2.8.61"
   val audioVersion = "1.195.0"
   val RobolectricVersion = "5.0.0_r2-robolectric-1"
   val supportLibVersion = "23.1.1"
   val cryptoboxVersion = "0.8.1"
 
   object Deps {
-    lazy val avs = "com.wire.avs" % "avs" % avsVersion
+    lazy val avs = "com.wire" % "avs" % avsVersion
     lazy val avsAudio = "com.wire.avs" % "audio-notifications" % audioVersion
     lazy val cryptobox = "com.wire" % "cryptobox-android" % cryptoboxVersion
     lazy val genericMessage = "com.wire" % "generic-message-proto" % "1.14.0"
@@ -102,7 +102,7 @@ object SharedSettings {
       "com.google.android.gms" % "play-services-gcm" % "7.8.0",
       Deps.avs,
       Deps.cryptobox,
-      "com.wire.avs" % "avs-native" % avsVersion % Native,
+      "com.wire" % "avs-native" % avsVersion % Native,
       "com.wire" % "cryptobox-jni-osx" % cryptoboxVersion % Native,
       "com.wire" % "cryptobox-jni-linux-x86_64" % cryptoboxVersion % Native,
       Deps.localytics,
