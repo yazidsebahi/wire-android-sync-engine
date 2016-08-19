@@ -26,6 +26,7 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
+import org.threeten.bp.Instant
 
 class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ThreadActorSpec { test =>
 
@@ -76,10 +77,41 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       }
     }
 
-    scenario("Send emoji only message and edit it") {
-      conv.sendMessage(new Text("\u263A"))
+    scenario("Send text message and edit it right away ") {
+      val service = zmessaging.convsUi
+      val lock = zmessaging.syncRequests.scheduler.queue.acquire(conv.id).await() // block sync service
+
+      val m = service.sendMessage(conv.id, new Text("test msg to edit")).await().get
+      val m1 = service.updateMessage(conv.id, m.id, new Text("updated")).await()
+
+      withDelay { msgs should have size 3 }
+
+      val msg = msgs.getLastMessage
+      msg.getId shouldEqual m.id.str
+
+      lock.release() // start sync now
+
       withDelay {
         msgs should have size 3
+        msg.getMessageStatus shouldEqual Message.Status.SENT
+      }
+
+      val remote = (otherUserClient ? GetMessages(conv.data.remoteId)).await().asInstanceOf[ConvMessages].msgs.toSeq
+      info(s"messages on remote: $remote")
+      info(s"updated: $m1")
+      info(s"last: ${msgs.getLastMessage.data}")
+
+      remote should have size msgs.size()
+      remote.last.id shouldEqual m.id
+
+      msg.getBody shouldEqual "updated"
+    }
+
+    scenario("Send emoji only message and edit it") {
+      val count = msgs.size()
+      conv.sendMessage(new Text("\u263A"))
+      withDelay {
+        msgs should have size (count + 1)
         msgs.getLastMessage.getMessageType shouldEqual Message.Type.TEXT_EMOJI_ONLY
         msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
       }
@@ -89,7 +121,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       msg.update(new Text("\u263B"))
 
       withDelay {
-        msgs should have size 3
+        msgs should have size (count + 1)
         msg.isDeleted shouldEqual true
         val last = msgs.getLastMessage
         last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli

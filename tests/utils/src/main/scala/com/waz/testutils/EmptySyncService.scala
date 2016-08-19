@@ -46,7 +46,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postConnection(user: UserId, name: String, message: String) = sid
   override def postConnectionStatus(userId: UserId, status: ConnectionStatus) = sid
   override def postSelfUser(u: UserInfo) = sid
-  override def postMessage(id: MessageId, conv: ConvId) = sid
+  override def postMessage(id: MessageId, conv: ConvId, time: Instant) = sid
   override def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = sid
   override def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId] = sid
   override def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId): Future[SyncId] = sid
