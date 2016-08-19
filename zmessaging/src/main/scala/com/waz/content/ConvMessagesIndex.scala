@@ -220,10 +220,8 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   }
 
   private def updateLast(last: MessageData): Unit =
-    if (lastMessage.currentValue.forall(_.forall(!_.time.isAfter(last.time))))
-      lastMessage.mutate(_.filter(_.time.isAfter(last.time)).orElse(Some(last)))
+    lastMessage.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
 
   private def updateLastSent(last: MessageData): Unit =
-    if (lastSentMessage.currentValue.forall(_.forall(!_.time.isAfter(last.time))))
-      lastSentMessage.mutate(_.filter(_.time.isAfter(last.time)).orElse(Some(last)))
+    lastSentMessage.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
 }
