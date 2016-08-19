@@ -133,7 +133,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
     val handler = syncJobHandler
 
     val conv = ConvId()
-    addRequest(PostMessage(conv, MessageId()))
+    addRequest(PostMessage(conv, MessageId(), Instant.EPOCH))
     addRequest(PostConvState(conv, ConversationState(None, None, None, None)))
     addRequest(PostConvName(conv, "name"))
 
@@ -152,7 +152,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
   scenario("keep order of conversation commands") {
     val conv = ConvId()
 
-    addRequest(PostMessage(conv, MessageId()))
+    addRequest(PostMessage(conv, MessageId(), Instant.EPOCH))
     addRequest(PostConvState(conv, ConversationState(None, None, None, None)))
     addRequest(PostConvName(conv, "name"))
 
@@ -199,7 +199,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
   scenario("update priority of dependent conversation commands") {
     val conv = ConvId()
     addRequest(SyncSelf, priority = Priority.Normal)
-    addRequest(PostMessage(conv, MessageId()), priority = Priority.Optional)
+    addRequest(PostMessage(conv, MessageId(), Instant.EPOCH), priority = Priority.Optional)
     addRequest(PostConvState(conv, ConversationState(None, None, None, None)))
     addRequest(PostConvName(conv, "name"), priority = Priority.High)
     awaitUi(100.millis)
@@ -248,8 +248,8 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
     val conv = ConvId()
     val msg = MessageId(s"msg-0")
     val msgs = (1 to 10).map(idx => MessageId(s"msg-$idx"))
-    Await.result(service.syncRequests.addRequest(SyncJob(SyncId(), PostMessage(conv, msg), state = SyncState.FAILED, offline = true, startTime = new Date().getTime + 1000L)), 5.seconds)
-    msgs foreach { m => addRequest(PostMessage(conv, m)) }
+    Await.result(service.syncRequests.addRequest(SyncJob(SyncId(), PostMessage(conv, msg, Instant.EPOCH), state = SyncState.FAILED, offline = true, startTime = new Date().getTime + 1000L)), 5.seconds)
+    msgs foreach { m => addRequest(PostMessage(conv, m, Instant.EPOCH)) }
 
     service.network.networkMode ! NetworkMode._3G
 
@@ -348,7 +348,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
   feature("Merging") {
 
     def assertMerged(conv: ConvId, reqs: SyncRequest*)(merged: PartialFunction[SyncRequest, Boolean]): Unit = {
-      val lock = service.syncRequests.scheduler.queue.acquire(conv).futureValue // to make sure requests are not started to early
+      val lock = service.syncRequests.scheduler.queue.acquire(conv).futureValue // to make sure requests are not started too early
 
       reqs foreach { addRequest(_) }
 
@@ -419,9 +419,9 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Add second conv request while first is being processed, both should be processed (sequentially)") {
       val convId = ConvId()
-      addRequest(PostMessage(convId, MessageId()))
+      addRequest(PostMessage(convId, MessageId(), Instant.EPOCH))
       awaitUi(100.millis)
-      addRequest(PostMessage(convId, MessageId()))
+      addRequest(PostMessage(convId, MessageId(), Instant.EPOCH))
 
       executeScheduled should have size 1
       executeScheduled should have size 1

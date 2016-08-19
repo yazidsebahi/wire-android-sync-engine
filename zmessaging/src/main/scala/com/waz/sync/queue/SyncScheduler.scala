@@ -51,7 +51,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
   private[sync] lazy val alarmManager = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
   private[sync] lazy val syncIntent = SyncService.intent(context, userId)
 
-  private[sync] val queue = new SyncSerializer
+  private[waz] val queue = new SyncSerializer
   private[sync] val executor = new SyncExecutor(this, content, network, handler)
   private[sync] val executions = new mutable.HashMap[SyncId, Future[SyncResult]]()
   private[sync] val executionsCount = Signal(0)

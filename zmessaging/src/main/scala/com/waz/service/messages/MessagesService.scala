@@ -461,7 +461,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       if (msg.state == Status.SENT || msg.state == Status.PENDING) msg
       else msg.copy(state = Status.PENDING)
     } .flatMap {
-      case Some(msg) => sync.postMessage(msg.id, conv) map (Some(_))
+      case Some(msg) => sync.postMessage(msg.id, conv, msg.editTime) map (Some(_))
       case _ => successful(None)
     }
 

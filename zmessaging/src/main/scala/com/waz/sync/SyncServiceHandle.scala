@@ -52,7 +52,7 @@ trait SyncServiceHandle {
 
   def postSelfUser(info: UserInfo): Future[SyncId]
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
-  def postMessage(id: MessageId, conv: ConvId): Future[SyncId]
+  def postMessage(id: MessageId, conv: ConvId, editTime: Instant): Future[SyncId]
   def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId]
   def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId): Future[SyncId]
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable): Future[SyncId]
@@ -108,10 +108,10 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None)      = addRequest(SyncConversation(Set(id)), dependsOn = dependsOn.toSeq)
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal) = addRequest(SyncCallState(id, fromFreshNotification = fromFreshNotification), priority = priority)
 
-  def postSelfUser(info: UserInfo)              = addRequest(PostSelf(info))
-  def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
-  def postMessage(id: MessageId, conv: ConvId)  = addRequest(PostMessage(conv, id), timeout = System.currentTimeMillis() + ConversationsService.SendingTimeout.toMillis, forceRetry = true)
-  def postDeleted(conv: ConvId, msg: MessageId) = addRequest(PostDeleted(conv, msg))
+  def postSelfUser(info: UserInfo)                            = addRequest(PostSelf(info))
+  def postSelfPicture(picture: Option[AssetId])               = addRequest(PostSelfPicture(picture))
+  def postMessage(id: MessageId, conv: ConvId, time: Instant) = addRequest(PostMessage(conv, id, time), timeout = System.currentTimeMillis() + ConversationsService.SendingTimeout.toMillis, forceRetry = true)
+  def postDeleted(conv: ConvId, msg: MessageId)               = addRequest(PostDeleted(conv, msg))
   def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId)            = addRequest(PostRecalled(conv, msg, recalled))
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, status))
   def postExcludePymk(id: UserId)               = addRequest(PostExcludePymk(id), priority = Priority.Low)
@@ -205,7 +205,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     implicit val convLock = lock
 
     req match {
-      case PostMessage(convId, messageId)     => zms.messagesSync.postMessage(convId, messageId)
+      case PostMessage(convId, messageId, time) => zms.messagesSync.postMessage(convId, messageId, time)
       case PostAssetStatus(cid, mid, status)  => zms.messagesSync.postAssetStatus(cid, mid, status)
 
       case PostConvJoin(convId, u)            => zms.conversationSync.postConversationMemberJoin(convId, u.toSeq)

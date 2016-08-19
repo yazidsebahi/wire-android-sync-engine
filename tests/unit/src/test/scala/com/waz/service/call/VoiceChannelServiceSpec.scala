@@ -43,6 +43,7 @@ import org.robolectric.Robolectric
 import org.robolectric.shadows.ShadowTelephonyManager2
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.threeten.bp.Instant
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -82,9 +83,9 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     service = new MockZMessaging(selfUserId = selfUser.id) {
 
       override lazy val sync = new EmptySyncService {
-        override def postMessage(id: MessageId, conv: ConvId) = {
+        override def postMessage(id: MessageId, conv: ConvId, time: Instant) = {
           messageSync = Some(id)
-          super.postMessage(id, conv)
+          super.postMessage(id, conv, time)
         }
       }
 

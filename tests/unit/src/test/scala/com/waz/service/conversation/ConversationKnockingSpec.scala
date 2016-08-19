@@ -54,9 +54,9 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
   lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
     override lazy val sync = new EmptySyncService {
-      override def postMessage(id: MessageId, conv: ConvId) = {
+      override def postMessage(id: MessageId, conv: ConvId, time: Instant) = {
         messageSync = Some(id)
-        super.postMessage(id, conv)
+        super.postMessage(id, conv, time)
       }
     }
 
