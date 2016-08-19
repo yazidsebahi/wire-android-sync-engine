@@ -160,16 +160,18 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       }
     }
 
+    import Message.Type._
+
     def post: ErrorOr[Instant] = msg.msgType match {
-      case Message.Type.ASSET       => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
-      case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
-      case Message.Type.KNOCK       => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
-      case Message.Type.TEXT        => postTextMessage().map(_.map(_.time))
-      case Message.Type.RICH_MEDIA  =>
+      case ASSET                  => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
+      case KNOCK                  => otrSync.postOtrMessage(conv, GenericMessage(msg.id, Proto.Knock(msg.hotKnock))).map(_.map(_.instant))
+      case TEXT | TEXT_EMOJI_ONLY => postTextMessage().map(_.map(_.time))
+      case RICH_MEDIA  =>
         postTextMessage() flatMap {
           case Right(m) => sync.postOpenGraphData(conv.id, m.id, m.editTime) map { _ => Right(m.time) }
           case Left(err) => Future successful Left(err)
         }
+      case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
       case tpe =>
         msg.protos.headOption match {
           case Some(proto) =>
