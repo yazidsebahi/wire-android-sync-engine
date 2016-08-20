@@ -53,9 +53,7 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
   private var groupConvs = Set.empty[ConvId]
   private var groupMembers = BiRelation.empty[ConvId, UserId]
 
-  private val queue = new ThrottledProcessingQueue[Any](500.millis, { ids =>
-    withSelfUserFuture { selfUser => updateGroupNames(selfUser, ids.toSet) }
-  }, "GroupConvNameUpdater")
+  private val queue = new ThrottledProcessingQueue[Any](500.millis, { ids => updateGroupNames(ids.toSet) }, "GroupConvNameUpdater")
 
   // load groups and members
   lazy val init = for {
@@ -118,14 +116,17 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
   }
 
   def forceNameUpdate(id: ConvId) = convs.get(id) flatMap {
-    case Some(conv) =>
-      users.withSelfUserFuture { selfUserId =>
-        for {
-          members <- membersStorage.get(conv.id)
-          users <- usersStorage.getAll(members.map(_.userId).filter(_ != selfUserId))
-          name = generatedName(users.map(_.map(_.getDisplayName)))
-          _ <- convs.update(conv.id,  _.copy(generatedName = name))
-        } yield ()
+    case Some(conv) if conv.convType == ConversationType.Group =>
+      for {
+        members <- membersStorage.get(conv.id)
+        users <- usersStorage.getAll(members.map(_.userId).filter(_ != selfUserId))
+        name = generatedName(users.map(_.map(_.getDisplayName)))
+        res <- convs.update(conv.id,  _.copy(generatedName = name))
+      } yield res
+    case Some(conv) => // one to one conv should use full user name
+      usersStorage.get(UserId(conv.id.str)) flatMap {
+        case Some(user) => convs.update(conv.id, _.copy(generatedName = user.name))
+        case None => Future successful None
       }
     case None =>
       Future successful None
@@ -156,7 +157,7 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
   }
 
 
-  private def updateGroupNames(selfUser: UserId, ids: Set[Any]) = init flatMap { _ =>
+  private def updateGroupNames(ids: Set[Any]) = init flatMap { _ =>
     val convIds = ids flatMap {
       case id: ConvId => Seq(id)
       case id: UserId => groupMembers.foreset(id)
@@ -164,11 +165,11 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
     }
 
     val members: Map[ConvId, Seq[UserId]] = convIds.map { id => id -> groupMembers.afterset(id).toSeq } (breakOut)
-    val users = members.flatMap(_._2)
+    val users = members.flatMap(_._2).toSeq.distinct.filter(_ != selfUserId)
 
     usersStorage.getAll(users) flatMap { uds =>
       val names: Map[UserId, Option[String]] = users.zip(uds.map(_.map(_.getDisplayName)))(breakOut)
-      val convNames = members.mapValues { users => generatedName(users.filterNot(_ == selfUser) map names) }
+      val convNames = members.mapValues { us => generatedName(us map names) }
       convs.updateAll2(convIds, { c => c.copy(generatedName = convNames(c.id)) })
     }
   }
@@ -180,6 +181,9 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
 }
 
 object NameUpdater {
-  def generatedName(convType: ConversationType)(users: GenTraversable[UserData]): String =
-    users.map(user => if (convType == ConversationType.Group) user.getDisplayName else user.name).filter(_.nonEmpty).mkString(", ")
+  def generatedName(convType: ConversationType)(users: GenTraversable[UserData]): String = {
+    val us = users.filter(_.connection != ConnectionStatus.Self)
+    if (convType == ConversationType.Group) us.map(user => user.getDisplayName).filter(_.nonEmpty).mkString(", ")
+    else us.headOption.fold("")(_.name)
+  }
 }
