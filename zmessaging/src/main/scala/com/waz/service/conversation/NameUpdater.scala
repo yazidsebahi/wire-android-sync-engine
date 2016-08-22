@@ -169,8 +169,8 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
 
     usersStorage.getAll(users) flatMap { uds =>
       val names: Map[UserId, Option[String]] = users.zip(uds.map(_.map(_.getDisplayName)))(breakOut)
-      val convNames = members.mapValues { us => generatedName(us map names) }
-      convs.updateAll2(convIds, { c => c.copy(generatedName = convNames(c.id)) })
+      val convNames = members.mapValues { us => generatedName(us.filter(_ != selfUserId) map { names.get(_).flatten }) }
+      convs.updateAll2(convIds, { c => convNames.get(c.id).fold(c) { name => c.copy(generatedName = name) } })
     }
   }
 
