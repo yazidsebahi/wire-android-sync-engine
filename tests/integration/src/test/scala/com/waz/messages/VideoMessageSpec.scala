@@ -26,10 +26,9 @@ import android.net.Uri
 import com.waz.api._
 import com.waz.api.impl.DoNothingAndProceed
 import com.waz.cache._
-import com.waz.content.Mime
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.otr.ClientId
-import com.waz.model.{AssetStatus => _, MessageContent => _, _}
+import com.waz.model.{Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
 import com.waz.service
 import com.waz.service.{UserModule, ZMessagingFactory}

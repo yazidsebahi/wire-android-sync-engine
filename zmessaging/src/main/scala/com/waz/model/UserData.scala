@@ -46,7 +46,6 @@ case class UserData(
                  connectionMessage: Option[String] = None, // incoming connection request message
                  conversation: Option[RConvId] = None, // remote conversation id with this contact (one-to-one)
                  relation: Relation = Relation.Other,
-                 excludeFromPymk: Boolean = false, // don't show user in results of recommended ppl search
                  syncTimestamp: Long = 0,
                  displayName: String = "",
                  verified: Verification = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
@@ -78,7 +77,8 @@ case class UserData(
     name = user.name,
     email = user.email.orElse(email),
     phone = user.phone.orElse(phone),
-    searchKey = SearchKey(user.name))
+    searchKey = SearchKey(user.name),
+    relation = user.level)
 
   def updated(name: Option[String] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, picture: Option[AssetId] = None, trackingId: Option[String] = None): UserData =
      copy(
@@ -154,7 +154,7 @@ object UserData {
       id = 'id, name = 'name, email = decodeOptEmailAddress('email), phone = decodeOptPhoneNumber('phone),
       trackingId = decodeOptId[TrackingId]('trackingId), picture = decodeOptAssetId('assetId), accent = decodeInt('accent), searchKey = SearchKey('name),
       connection = ConnectionStatus('connection), connectionLastUpdated = new Date(decodeLong('connectionLastUpdated)), connectionMessage = decodeOptString('connectionMessage),
-      conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation), excludeFromPymk = decodeBool('excludeFromPymk),
+      conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation),
       syncTimestamp = decodeLong('syncTimestamp), 'displayName, Verification.valueOf('verified), deleted = 'deleted)
   }
 
@@ -172,7 +172,6 @@ object UserData {
       v.connectionMessage foreach (o.put("connectionMessage", _))
       v.conversation foreach (id => o.put("rconvId", id.str))
       o.put("relation", v.relation.id)
-      o.put("excludeFromPymk", v.excludeFromPymk)
       o.put("syncTimestamp", v.syncTimestamp)
       o.put("displayName", v.displayName)
       o.put("verified", v.verified.name)
@@ -195,16 +194,15 @@ object UserData {
     val Conversation = opt(id[RConvId]('conversation))(_.conversation)
     val Rel = text[Relation]('relation, _.name, Relation.valueOf)(_.relation)
     val Timestamp = long('timestamp)(_.syncTimestamp)
-    val Exclude = bool('exclude_pymk)(_.excludeFromPymk)
     val DisplayName = text('display_name)(_.displayName)
     val Verified = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
     val Deleted = bool('deleted)(_.deleted)
 
     override val idCol = Id
-    override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Exclude, Timestamp, DisplayName, Verified, Deleted)
+    override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted)
 
     override def apply(implicit cursor: Cursor): UserData =
-      new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Exclude, Timestamp, DisplayName, Verified, Deleted)
+      new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted)
 
     def get(id: UserId)(implicit db: SQLiteDatabase): Option[UserData] = single(find(Id, id)(db))
 
@@ -216,19 +214,20 @@ object UserData {
 
     def listContacts(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"(${Conn.name} = ? or ${Conn.name} = ?) and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code, ConnectionStatus.Blocked.code), null, null, null))
 
-    def topPeople(limit: Option[Int] = None)(implicit db: SQLiteDatabase): Vector[UserId] =
-      search(s"${Conn.name} = ? and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code), limit).acquire(_.map(_.id).to[Vector])
+    def topPeople(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
+      search(s"${Conn.name} = ? and ${Deleted.name} = 0", Array(Conn(ConnectionStatus.Accepted)))
 
-    def recommendedPeople(limit: Option[Int] = None)(implicit db: SQLiteDatabase): Vector[UserId] =
-      search(s"(${Rel.name} = ? or ${Rel.name} = ?) and ${Exclude.name} = 0 and ${Deleted.name} = 0", Array(Relation.Second.toString, Relation.Third.toString), limit).acquire(_.map(_.id).to[Vector])
+    def recommendedPeople(query: SearchKey)(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
+      search(s"""    (${SKey.name} LIKE ? OR ${SKey.name} LIKE ? OR ${Email.name} = ?)
+                |AND (${Rel.name} = '${Rel(Relation.First)}' OR ${Rel.name} = '${Rel(Relation.Second)}' OR ${Rel.name} = '${Rel(Relation.Third)}')
+                |AND ${Deleted.name} = 0
+                |AND ${Conn.name} != '${Conn(ConnectionStatus.Accepted)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Blocked)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Self)}'
+              """.stripMargin,
+        Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", query.asciiRepresentation))
 
-    def search(query: SearchKey, selfUserId: Option[UserId] = None, limit: Option[Int] = None)(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
-      search(s"(${SKey.name} like ? or ${SKey.name} like ?) and ${Id.name} != ? and ${Deleted.name} = 0", Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", selfUserId.fold("")(_.str)), limit)
-
-    private def search(whereClause: String, args: Array[String], limit: Option[Int])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
+    private def search(whereClause: String, args: Array[String])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
       iterating(db.query(table.name, null, whereClause, args, null, null,
-        s"case when ${Conn.name} = '${ConnectionStatus.Accepted.code}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC",
-        limit.fold[String](null)(_.toString)))
+        s"case when ${Conn.name} = '${Conn(ConnectionStatus.Accepted)}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
 
     def findWireBots(implicit db: SQLiteDatabase) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
   }

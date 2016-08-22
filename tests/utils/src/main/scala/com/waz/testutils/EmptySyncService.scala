@@ -31,7 +31,7 @@ class EmptySyncService extends EmptySyncServiceTrait
 object EmptySyncService extends EmptySyncService
 
 trait EmptySyncServiceTrait extends SyncServiceHandle {
-  override def syncSearchQuery(cache: SearchQueryCache) = sid
+  override def syncSearchQuery(query: SearchQuery) = sid
   override def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None) = sid
   override def syncConversations(dependsOn: Option[SyncId] = None) = sid
   override def syncSelfUser() = sid
@@ -61,7 +61,6 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postAddressBook(ab: AddressBook) = sid
   override def postInvitation(i: Invitation) = sid
   override def postTypingState(id: ConvId, t: Boolean) = sid
-  override def postExcludePymk(id: UserId): Future[SyncId] = sid
   override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
 
   override def registerGcm() = sid

@@ -18,28 +18,44 @@
 package com.waz.api.impl
 
 import com.waz.api
-import com.waz.api.impl.search.UsersSearch.EmptyResult
-import com.waz.service.SearchKey
+import com.waz.model.{ConvId, UserData, UserId}
+import com.waz.service.{SearchKey, ZMessaging}
 import com.waz.ui.{SignalLoading, UiModule}
-import com.waz.utils.Locales._
+import com.waz.utils.Locales.currentLocaleOrdering
+import com.waz.utils.events.Signal
+import org.threeten.bp.Instant
 
 import scala.collection._
 
-class ConnectionsSearch(query: SearchKey, filter: Array[String])(implicit val ui: UiModule)extends api.UsersSearchResult with CoreList[api.User] with SignalLoading {
+class ConnectionsSearch(searchTerm: String, filter: Array[String], alsoSearchByEmail: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private val filteredIds = filter.toSet
+  private val query = SearchKey(searchTerm)
+  private val predicate: UserData => Boolean = u =>
+    (query.isAtTheStartOfAnyWordIn(u.searchKey) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str)
 
-  private var users = EmptyResult
+  private var users = Vector.empty[UserData]
 
-  addLoader(_.users.acceptedUsers.map {
-      _.values.filter(u => query.isAtTheStartOfAnyWordIn(u.searchKey)).filterNot(u => filteredIds.contains(u.id.str)).toVector.sortBy(_.name)(currentLocaleOrdering)
-  }, EmptyResult) { conns =>
+  addLoader { zms =>
+    usersFrom(zms).map(_.sortBy(_.name)(currentLocaleOrdering))
+  } { conns =>
+    val changed = ! users.corresponds(conns)((a, b) => a.id == b.id)
     users = conns
-    notifyChanged()
+    if (changed) notifyChanged()
   }
+
+  private def usersFrom(zms: ZMessaging): Signal[Vector[UserData]] =
+    zms.users.acceptedUsers.map(_.valuesIterator.filter(predicate).toVector)
+
+  private def lastEventTimes(zms: ZMessaging, ids: Set[ConvId]): Signal[Map[UserId, Instant]] =
+    zms.convsStorage.convsSignal.map { convs =>
+      convs.conversations.iterator
+        .filter(c => ids.contains(c.id))
+        .map(c => UserId(c.id.str) -> c.lastEventTime)
+        .toMap
+    }
 
   override def get(position: Int): api.User = ui.users.getUser(users(position))
   override def size(): Int = users.length
   override def getAll: Array[api.User] = users.map(ui.users.getUser)(breakOut)
-  override def getUnconnected: Array[api.User] = Array.empty
-  override def getContacts: Array[api.User] = getAll
+  override def getFirstN(n: Int): Array[api.User] = users.iterator.take(n).map(ui.users.getUser).toArray
 }

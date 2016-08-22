@@ -21,9 +21,8 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
-import com.waz.content.Mime
 import com.waz.model.AssetMetaData.{HasDimensions, HasDuration}
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, Content, MediaKey, UnauthenticatedContent}
 import com.waz.ui.{SignalLoading, UiModule}

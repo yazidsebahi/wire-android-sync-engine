@@ -17,7 +17,7 @@
  */
 package com.waz.sync.client
 
-import com.waz.api.impl.SearchQuery.{Named, RecommendedPeople, TopPeople}
+import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserId
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
@@ -32,95 +32,6 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
-
-  val suggestionsResponse =
-    """
-      |{
-      |    "buildNumber": 3737,
-      |    "compares": 30445,
-      |    "description": "ip-10-104-211-81.eu-west-1.compute.internal",
-      |    "documents": [
-      |        {
-      |            "accent_id": 0,
-      |            "id": "3514effc-b813-421f-bf17-9e26e9fece28",
-      |            "level": 1,
-      |            "name": "Foo",
-      |            "weight": 11
-      |        },
-      |        {
-      |            "accent_id": 0,
-      |            "id": "ffd8f54e-5241-4ba6-84e5-480fd23a16f9",
-      |            "level": 2,
-      |            "name": "Meep",
-      |            "weight": 43
-      |        },
-      |        {
-      |            "accent_id": 0,
-      |            "id": "202474e5-aab8-4696-a871-6f23c7731cf0",
-      |            "level": 2,
-      |            "name": "Moop",
-      |            "weight": 30
-      |        }
-      |    ],
-      |    "error": null,
-      |    "found": 0,
-      |    "friends": 0,
-      |    "friendsOfFriends": 0,
-      |    "returned": 3,
-      |    "time": 24
-      |}
-      |    """.stripMargin
-
-  val suggestionsWithCommonResponse =
-    """
-      |{
-      |  "took": 1,
-      |  "found": 0,
-      |  "documents": [
-      |    {
-      |      "total_mutual_friends": 1,
-      |      "mutual_friends": [
-      |        "3514effc-b813-421f-bf17-9e26e9fece28"
-      |      ],
-      |      "weight": 32767,
-      |      "accent_id": 1,
-      |      "name": "Somebody",
-      |      "id": "b3744e9b-dde2-4bfe-80f0-a57579b4e4b4",
-      |      "level": 1
-      |    },
-      |    {
-      |      "total_mutual_friends": 0,
-      |      "mutual_friends": [],
-      |      "weight": 32719,
-      |      "accent_id": 1,
-      |      "name": "Batman",
-      |      "id": "2f559c52-1a83-4122-950a-e7fd8ff4b377",
-      |      "level": 1
-      |    },
-      |    {
-      |      "total_mutual_friends": 2,
-      |      "mutual_friends": [
-      |        "3514effc-b813-421f-bf17-9e26e9fece28",
-      |        "855edd40-e735-4960-92d2-951256c5af31"
-      |      ],
-      |      "weight": 32719,
-      |      "accent_id": 6,
-      |      "name": "Spiderman",
-      |      "id": "dcae6e1b-acce-4e7a-9c46-4eeac32e64b1",
-      |      "level": 1
-      |    },
-      |    {
-      |      "accent_id": 0,
-      |      "id": "202474e5-aab8-4696-a871-6f23c7731cf0",
-      |      "level": 2,
-      |      "name": "Knuddel",
-      |      "weight": 30
-      |    }
-      |  ],
-      |  "returned": 3
-      |}
-    """.stripMargin
-
   val searchQueryResponse =
     """
       |{
@@ -358,7 +269,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
   feature("Response parsing") {
     scenario("graphSearch") {
       val client = new TestUserSearchClient(searchQueryResponse)
-      val result = Await.result(client.graphSearch(Named("z"), 10), 5.seconds)
+      val result = Await.result(client.graphSearch(Recommended("z"), 10), 5.seconds)
 
       result should be('right)
       result.right.get.length should be(3)
@@ -366,7 +277,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
     scenario("graphSearch 1") {
       val client = new TestUserSearchClient(searchQueryResponse1)
-      val result = Await.result(client.graphSearch(Named("z"), 10), 5.seconds)
+      val result = Await.result(client.graphSearch(Recommended("z"), 10), 5.seconds)
 
       result should be('right)
       result.right.get.length should be(6)
@@ -374,7 +285,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
     scenario("graphSearch 2") {
       val client = new TestUserSearchClient(searchQueryResponse2)
-      val result = Await.result(client.graphSearch(Named("a"), 10), 5.seconds)
+      val result = Await.result(client.graphSearch(Recommended("a"), 10), 5.seconds)
 
       result should be('right)
       result.right.get.length should be(1)
@@ -387,22 +298,12 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
       result should be('right)
       result.right.get.length should be(8)
     }
-
-    scenario("suggestions with common connections") {
-      val client = new TestUserSearchClient(suggestionsWithCommonResponse)
-      val result = Await.result(client.graphSearch(RecommendedPeople, 10), 5.seconds)
-
-      result should be('right)
-      result.right.get.length should be(4)
-      result.right.get.map(_.commonCount) shouldEqual Seq(Some(1), Some(0), Some(2), None)
-      result.right.get.map(_.common) shouldEqual Seq(Seq(UserId("3514effc-b813-421f-bf17-9e26e9fece28")), Nil, Seq(UserId("3514effc-b813-421f-bf17-9e26e9fece28"), UserId("855edd40-e735-4960-92d2-951256c5af31")), Nil)
-    }
   }
 
   feature("Requests") {
     scenario("graphSearch request") {
       val client = new TestUserSearchClient(searchQueryResponse)
-      Await.result(client.graphSearch(Named("z"), 10), 5.seconds)
+      Await.result(client.graphSearch(Recommended("z"), 10), 5.seconds)
 
       request.httpMethod should be("GET")
       request.resourcePath should be(Some("/search/contacts?q=z&size=10&l=3&d=1"))
@@ -416,29 +317,12 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
       request.resourcePath should be(Some("/search/common/12"))
     }
 
-    scenario("request for the recommended people") {
-      val client = new TestUserSearchClient(suggestionsResponse)
-      Await.result(client.graphSearch(RecommendedPeople, 2), 5.seconds)
-
-      request.httpMethod should be("GET")
-      request.resourcePath should be(Some("/search/suggestions?size=2"))
-    }
-
     scenario("request for the top people") {
       val client = new TestUserSearchClient(searchQueryResponse)
       Await.result(client.graphSearch(TopPeople, 10), 5.seconds)
 
       request.httpMethod should be("GET")
       request.resourcePath should be(Some("/search/top?size=10"))
-    }
-
-    scenario("request to exclude user from pymk") {
-      val client = new TestUserSearchClient(EmptyResponse)
-      val uid = UserId()
-      Await.result(client.postExcludePymk(uid), 5.seconds)
-
-      request.httpMethod should be("PUT")
-      request.resourcePath should be(Some(s"/search/suggestions/$uid/ignore"))
     }
   }
 }

@@ -31,7 +31,6 @@ import com.koushikdutta.async.future.{Future, SimpleFuture}
 import com.koushikdutta.async.http.callback.HttpConnectCallback
 import com.koushikdutta.async.http.{AsyncHttpClient, AsyncHttpRequest, AsyncHttpResponse, Headers}
 import com.koushikdutta.async.{AsyncServer, AsyncSocket, ByteBufferList}
-import com.waz.RobolectricUnitTests
 import com.waz.ZLog.LogTag
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
@@ -50,7 +49,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, TimeoutException}
 import scala.util.Random
 
-class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricUnitTests {
+class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
   implicit val tag: LogTag = "AsyncClientSpec"
   
   val wireMockPort = 9000 + Random.nextInt(3000)

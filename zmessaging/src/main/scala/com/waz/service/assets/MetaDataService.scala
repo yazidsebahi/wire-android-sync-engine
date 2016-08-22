@@ -21,9 +21,9 @@ import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
-import com.waz.content.{AssetsStorage, Mime}
+import com.waz.content.AssetsStorage
 import com.waz.model.AssetMetaData.Empty
-import com.waz.model.{AnyAssetData, AssetId, AssetMetaData, Uid}
+import com.waz.model._
 import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future

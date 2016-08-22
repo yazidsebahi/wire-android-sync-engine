@@ -19,7 +19,6 @@ package com.waz.mocked.messages
 
 import com.waz.RobolectricUtils
 import com.waz.api.NotificationsHandler.GcmNotification
-import com.waz.api.impl.SearchQuery
 import com.waz.api.impl.conversation.BaseConversation
 import com.waz.api.{CoreList, IConversation, MockedClientApiSpec}
 import com.waz.mocked.MockBackend.DefaultTimeline
@@ -73,7 +72,6 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     friends.foreach((u, c) => addMessageEvents(c, count = 10, from = u, timeline = Some(SystemTimeline)))
     searchResults += SearchQuery.TopPeople -> friends.keys.map(id => UserSearchEntry(id, id.str, None, None, 0, Some(true), false, Relation.First))
-    friends.keys.foreach(id => searchResults += SearchQuery.Named(id.str) -> Seq(UserSearchEntry(id, id.str, None, None, 0, Some(true), false, Relation.First)))
 
     groups.filterNot(Set(groups keys 4, groups keys 5)).foreach((id, users) => addMessageEvents(id, count = 10, from = users.head, timeline = Some(SystemTimeline)))
   }
@@ -304,8 +302,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
       case IConversation.Type.GROUP =>
         inspect(api.search().getGroupConversations("", 100), ConvId(conv.getId), expectedToBeFound)
       case IConversation.Type.ONE_TO_ONE =>
-        inspect(api.search().getUsers("", 100), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
-        inspect(api.search().getUsers(conv.getOtherParticipant.getId, 100), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
+        inspect(api.search().getConnections("", Array.empty, true), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
       case tpe => fail(s"unexpected conversation type: $tpe")
     }
 

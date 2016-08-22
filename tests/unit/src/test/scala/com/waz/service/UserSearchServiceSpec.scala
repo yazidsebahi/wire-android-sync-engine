@@ -17,50 +17,54 @@
  */
 package com.waz.service
 
-import java.util.concurrent.TimeoutException
-
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.User.ConnectionStatus
-import com.waz.api.impl.SearchQuery
-import com.waz.model.CommonConnectionsData.CommonConnectionsDataDao
-import com.waz.model.SearchEntry.SearchEntryDao
-import com.waz.model.SearchQueryCache.SearchQueryCacheDao
-import com.waz.model.UserData.UserDataDao
+import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model._
+import com.waz.service.UserSearchService.MinCommonConnections
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.UserSearchClient.UserSearchEntry
+import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.Threading
+import com.waz.utils._
 import org.scalatest._
+import org.threeten.bp.Instant
+import org.threeten.bp.Instant.{EPOCH, now}
 
+import scala.collection.breakOut
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future.successful
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils {
+class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with OptionValues with RobolectricTests with RobolectricUtils {
 
   implicit def db: SQLiteDatabase = zms.storage.db.dbHelper.getWritableDatabase
 
-  lazy val users = Seq(UserData("other user 1"), UserData("other user 2"), UserData("some name"),
-    UserData("related user 1").copy(relation = Relation.Second),
-    UserData("related user 2").copy(relation = Relation.Second),
-    UserData("other related").copy(relation = Relation.Third),
-    UserData("friend user 1").copy(connection = ConnectionStatus.ACCEPTED),
-    UserData("friend user 2").copy(connection = ConnectionStatus.ACCEPTED),
-    UserData("some other friend").copy(connection = ConnectionStatus.ACCEPTED)
-  )
+  lazy val users = Seq(
+    UserData(id('a), "other user 1"),
+    UserData(id('b), "other user 2"),
+    UserData(id('c), "some name"),
+    UserData(id('d), "related user 1").copy(relation = Relation.Second),
+    UserData(id('e), "related user 2").copy(relation = Relation.Second),
+    UserData(id('f), "other related").copy(relation = Relation.Third),
+    UserData(id('g), "friend user 1").copy(connection = ConnectionStatus.ACCEPTED),
+    UserData(id('h), "friend user 2").copy(connection = ConnectionStatus.ACCEPTED),
+    UserData(id('i), "some other friend").copy(connection = ConnectionStatus.ACCEPTED))
 
-  var syncRequest = None: Option[SearchQueryCache]
-  var commonSyncRequest = Option.empty[UserId]
-  var onSync: SearchQueryCache => CancellableFuture[Boolean] = _
+  @volatile var syncRequest = Option.empty[SearchQuery]
+  @volatile var commonSyncRequest = Option.empty[UserId]
+  @volatile var onSync: SearchQuery => Future[Unit] = { _ => successful(()) }
+  case object Meep
 
   lazy val zms = new MockZMessaging() {
     override lazy val sync: SyncServiceHandle = new EmptySyncService {
-      override def syncSearchQuery(cache: SearchQueryCache) = {
-        syncRequest = Some(cache)
-        onSync(cache)
-        super.syncSearchQuery(cache)
+      override def syncSearchQuery(query: SearchQuery) = Serialized.future(Meep) {
+        syncRequest = Some(query)
+        onSync(query).flatMap(_ => super.syncSearchQuery(query))(Threading.Background)
       }
 
       override def syncCommonConnections(id: UserId): Future[SyncId] = {
@@ -69,134 +73,95 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       }
     }
   }
-  
-  def service = zms.usersearch
 
-  def query(q: String = "friend") = SearchQuery.Named(q)
+  def service = zms.userSearch
+  def id(s: Symbol) = UserId(s.toString)
+  def ids(s: Symbol*) = s.map(id)(breakOut): Vector[UserId]
 
   before {
-    onSync = { _ => CancellableFuture.successful(true)}
+    Await.result(Future.traverse(users)(zms.usersStorage.addOrOverwrite), 5.seconds)
+  }
+
+  after {
+    onSync = { _ => successful(()) }
     syncRequest = None
     commonSyncRequest = None
 
-    Await.result(Future.sequence(users map zms.usersStorage.addOrOverwrite), 5.seconds)
+    Await.result(Serialized.future(Meep)(successful(())), 5.seconds)
+
     deleteCache()
   }
 
-  scenario("Don't return local results too soon, should have a delay") {
-    intercept[TimeoutException] {
-      Await.result(service.searchUsers(query()), zms.timeouts.userSearch.localSearchDelay - 50.millis)
+  def search(q: SearchQuery, limit: Option[Int] = None) = service.searchUserData(q, limit).map(_.keys)
+
+  feature("Recommended people search") {
+    scenario("Return local search results") {
+      def verifySearch(prefix: String, matches: Seq[UserId]) = {
+        val result = search(Recommended(prefix)).sink
+        forAsLongAs(100.millis, after = 50.millis)(result.current.get should contain theSameElementsAs(matches))
+      }
+
+      verifySearch("r", ids('d, 'e, 'f))
+      verifySearch("re", ids('d, 'e, 'f))
+      verifySearch("rel", ids('d, 'e, 'f))
+      verifySearch("relt", Nil)
+      verifySearch("u", ids('d, 'e))
+      verifySearch("us", ids('d, 'e))
+      verifySearch("use", ids('d, 'e))
+      verifySearch("user", ids('d, 'e))
+      verifySearch("use", ids('d, 'e))
+      verifySearch("used", Nil)
     }
-  }
 
-  scenario("Return local search results after a delay") {
-    val res = Await.result(service.searchUsers(query()), zms.timeouts.userSearch.localSearchDelay + 500.millis)
-
-    res.toSet shouldEqual users.filter(_.name.contains("friend")).map(_.id).toSet
-  }
-
-  scenario("Schedule sync if no cached query is found") {
-    Await.result(service.searchUsers(query()), 10.seconds)
-
-    syncRequest match {
-      case Some(SearchQueryCache(_, SearchQuery.Named("friend"), _, _)) => // expected
-      case _ => fail(s"Expected sync request, got: $syncRequest")
+    scenario("Schedule sync if no cached query is found") {
+      val result = search(Recommended("rel")).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value should have size 3)
+      syncRequest.value shouldEqual Recommended("rel")
     }
-  }
 
-  scenario("Schedule sync with limit if no cached query is found") {
-    Await.result(service.searchUsers(query("frien"), 10), 10.seconds)
+    scenario("Do not schedule another sync if cache is found") {
+      val result = search(Recommended("rel"), Some(2)).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value should have size 2)
+      syncRequest.value shouldEqual Recommended("rel")
+      syncRequest = None
 
-    syncRequest match {
-      case Some(SearchQueryCache(_, SearchQuery.Named("frien"), Some(10), _)) => // expected
-      case _ => fail(s"Expected sync request, got: $syncRequest")
+      val result2 = search(Recommended("rel"), Some(3)).sink
+      forAsLongAs(100.millis, after = 50.millis)(result2.current.value should have size 3)
+      syncRequest shouldBe None
+    }
+
+    scenario("Return backend result if it isn't empty") {
+      onSync = backendResults(users.filter(_.name contains "user").filterNot(_.id == id('e)))
+
+      val result = search(Recommended("user")).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('a, 'b, 'd)))
+      syncRequest shouldBe defined
+    }
+
+    scenario("Return local result if backend result is empty") {
+      onSync = backendResults(Nil)
+
+      val result = search(Recommended("user")).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e)))
+      syncRequest shouldBe defined
+    }
+
+    scenario("Refresh when cached results are expired") {
+      zms.searchQueryCache.insert(SearchQueryCache(SearchQuery.Recommended("user"), EPOCH, Some(ids('a, 'b, 'd, 'e))))
+
+      val result = search(Recommended("user")).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e)))
+      syncRequest shouldBe defined
     }
   }
 
   feature("Top people search") {
     scenario("Return only connected users on top people search") {
-      val topPeople = Await.result(service.searchUsers(SearchQuery.TopPeople, 10), 10.seconds)
+      val result = search(TopPeople).sink
 
-      topPeople should not be empty
-      topPeople.map(id => users.find(_.id == id).get) foreach (_.connection shouldEqual ConnectionStatus.ACCEPTED)
-    }
-  }
-
-  feature("Recommended people search") {
-    scenario("Recommended people search returns the latest cached result if current") {
-      addCacheEntry(SearchQuery.RecommendedPeople, users.drop(3).take(3), System.currentTimeMillis())
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 3).matcher[Seq[UserId]])(10.seconds)
-      syncRequest shouldEqual None
-    }
-
-    scenario("Recommended people search doesn't return excluded users") {
-      addCacheEntry(SearchQuery.RecommendedPeople, users.drop(3).take(3), System.currentTimeMillis())
-      Await.result(service.excludeFromPymk(users(4).id), 5.seconds)
-
-      info(s"users: ${users.map(_.id)}")
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 2).matcher[Seq[UserId]])(10.seconds)
-      syncRequest shouldEqual None
-    }
-
-    scenario("Recommended people search returns the latest cached result if current and schedules sync if not fresh") {
-      addCacheEntry(SearchQuery.RecommendedPeople, users.drop(3).take(3), System.currentTimeMillis() - zms.timeouts.userSearch.cacheRefreshInterval.toMillis - 100L)
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 3).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
-    }
-
-    scenario("Recommended people search returns backend result if it isn't empty") {
-      onSync = backendResults(users.drop(3).take(3))
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 3).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
-    }
-
-    scenario("Recommended people search doesn't return excluded users even when returned by backend") {
-      Await.result(service.excludeFromPymk(users(4).id), 5.seconds)
-      onSync = backendResults(users.drop(3).take(3))
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 2).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
-    }
-
-    scenario("Recommended people search returns address book matches if backend result for recommended people is empty") {
-      onSync = backendResults(Seq())
-      addCacheEntry(SearchQuery.AddressBook, users.drop(2), System.currentTimeMillis())
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 4).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
-    }
-
-    scenario("Recommended people search returns address book matches as long as backend doesn't sync") {
-      addCacheEntry(SearchQuery.AddressBook, users.drop(2), System.currentTimeMillis())
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 4).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
-    }
-
-    scenario("Recommended people search returns address book matches if the latest backend results are expired") {
-      addCacheEntry(SearchQuery.AddressBook, users.drop(2), System.currentTimeMillis())
-      addCacheEntry(SearchQuery.RecommendedPeople, users, 0L)
-
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 4).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
-    }
-
-    scenario("For no recommended people results and no address book matches, we fall back to local database") {
-      val recommended = service.searchUsers(SearchQuery.RecommendedPeople)
-      recommended should eventually((have size 3).matcher[Seq[UserId]])(10.seconds)
-      syncRequest should be (defined)
+      within(500.millis) {
+        result.current.value should contain theSameElementsAs(ids('g, 'h, 'i))
+      }
     }
   }
 
@@ -204,139 +169,50 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     lazy val userId = users.head.id
 
     scenario("Request sync when common connections are requested") {
-      service.getCommonConnections(userId, fullList = false) should eventually(be(None))
+      val result = service.commonConnections(userId, fullList = false).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value shouldBe None)
       commonSyncRequest shouldEqual Some(userId)
     }
 
     scenario("Request sync when local common connections are expired") {
-      val data = CommonConnectionsDataDao.insertOrReplace(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), System.currentTimeMillis() - zms.timeouts.userSearch.cacheRefreshInterval.toMillis - 1))
+      val data = zms.commonConnections.insert(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), now - zms.timeouts.search.cacheRefreshInterval - 1.milli)).await()
 
-      service.getCommonConnections(userId, fullList = false) should eventually(be(Some(data)))
+      val result = service.commonConnections(userId, fullList = false).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value.value shouldEqual data)
       commonSyncRequest shouldEqual Some(userId)
     }
 
     scenario("Request sync when not enough common connections is cached") {
-      val data = CommonConnectionsDataDao.insertOrReplace(CommonConnectionsData(userId, 10, Seq.fill(3)(UserId()), System.currentTimeMillis()))
+      val data = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(3)(UserId()), now)).await()
 
-      service.getCommonConnections(userId, fullList = false) should eventually(be(Some(data)))
+      val result = service.commonConnections(userId, fullList = false).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value.value shouldEqual data)
       commonSyncRequest shouldEqual Some(userId)
     }
 
     scenario("Don't request sync when requesting top common connections are already loaded") {
-      val data = CommonConnectionsDataDao.insertOrReplace(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), System.currentTimeMillis()))
-      service.getCommonConnections(userId, fullList = false) should eventually(be(Some(data)))
+      val data = zms.commonConnections.insert(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), now)).await()
+      val result = service.commonConnections(userId, fullList = false).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value.value shouldEqual data)
       commonSyncRequest shouldEqual None
 
-      val data1 = CommonConnectionsDataDao.insertOrReplace(CommonConnectionsData(userId, 10, Seq.fill(UserSearchService.MinCommonConnections)(UserId()), System.currentTimeMillis()))
-      service.getCommonConnections(userId, fullList = false) should eventually(be(Some(data1)))
+      val data1 = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(MinCommonConnections)(UserId()), now)).await()
+      val result1 = service.commonConnections(userId, fullList = false).sink
+      forAsLongAs(100.millis, after = 50.millis)(result1.current.value.value shouldEqual data1)
       commonSyncRequest shouldEqual None
 
-      val data2 = CommonConnectionsDataDao.insertOrReplace(CommonConnectionsData(userId, 10, Seq.fill(10)(UserId()), System.currentTimeMillis()))
-
-      service.getCommonConnections(userId, fullList = true) should eventually(be(Some(data2)))
+      val data2 = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(10)(UserId()), now)).await()
+      val result2 = service.commonConnections(userId, fullList = true).sink
+      forAsLongAs(100.millis, after = 50.millis)(result2.current.value.value shouldEqual data2)
       commonSyncRequest shouldEqual None
     }
   }
 
-  scenario("Return fresh data from backend immediately after the sync is completed") {
-    Given("fast backend sync")
-    onSync = backendResults(users.take(2))
-
-    When("searching for users")
-    val res = Await.result(service.searchUsers(query()), 500.millis)
-
-    Then("sync request is sent")
-    syncRequest.isDefined shouldEqual true
-
-    And("freshly synced results are returned almost immediately")
-    res.toSet shouldEqual users.take(2).map(_.id).toSet
+  def backendResults(results: Seq[UserData]): SearchQuery => Future[Unit] = { query =>
+    service.updateSearchResults(query, results.map { r =>
+      UserSearchEntry(r.id, r.name, r.email, r.phone, r.accent, Some(r.connection == ConnectionStatus.ACCEPTED), r.connection == ConnectionStatus.BLOCKED, r.relation)
+    })
   }
 
-  scenario("Load fresh results from cache") {
-    Given("fresh query cache")
-    addCacheEntry(query(), users.take(2), System.currentTimeMillis())
-
-    When("searching for users")
-    val res = Await.result(service.searchUsers(query()), 200.millis)
-
-    Then("sync is not scheduled")
-    syncRequest shouldEqual None
-
-    And("cached result is returned")
-    res.toSet shouldEqual users.take(2).map(_.id).toSet
-  }
-
-  scenario("Load fresh results from cache with limit") {
-    Given("fresh query cache with a query limit")
-    addCacheEntry(query(), users.take(1), System.currentTimeMillis(), limit = Some(1))
-
-    When("searching for users")
-    val res = Await.result(service.searchUsers(query(), limit = 1), 200.millis)
-
-    Then("sync is not scheduled")
-    syncRequest shouldEqual None
-
-    And("cached result is returned")
-    res.toSet shouldEqual users.take(1).map(_.id).toSet
-  }
-
-  scenario("Load old cache result and schedule sync") {
-    Given("old query cache result")
-    val cache = addCacheEntry(query(), users.take(2), System.currentTimeMillis() - zms.timeouts.userSearch.cacheRefreshInterval.toMillis - 100)
-
-    When("searching for users")
-    val res = Await.result(service.searchUsers(query()), 200.millis)
-
-    Then("sync is scheduled")
-    syncRequest shouldEqual Some(cache)
-
-    And("cached result is returned")
-    res.toSet shouldEqual users.take(2).map(_.id).toSet
-  }
-
-  scenario("Discard very old cache results") {
-    Given("expired query cache result")
-    addCacheEntry(query(), users.take(2), System.currentTimeMillis() - SearchQueryCache.CacheExpiryTime.toMillis - 100)
-    And("users in local db")
-    Await.ready(zms.db(UserDataDao.insertOrReplace(users)(_)), 15.seconds)
-
-    When("searching for users")
-    val res = Await.result(service.searchUsers(query()), zms.timeouts.userSearch.localSearchDelay + 500.millis)
-
-    Then("sync is scheduled")
-    syncRequest match {
-      case Some(SearchQueryCache(_, friend, _, _)) => // expected
-      case _ => fail(s"Expected sync request, got: $syncRequest")
-    }
-
-    And("expired result is ignored, returning local search result")
-    res.toSet shouldEqual users.filter(_.name.contains("friend")).map(_.id).toSet
-  }
-
-  def backendResults(results: Seq[UserData]): SearchQueryCache => CancellableFuture[Boolean] = { cache =>
-    Threading.Background {
-      updateCacheResults(cache, results)
-      service.onSearchResultChanged ! cache.query
-      true
-    }
-  }
-
-  def addCacheEntry(query: SearchQuery.Query, users: Seq[UserData], timestamp: Long = System.currentTimeMillis(), limit: Option[Int] = None): SearchQueryCache = {
-    val cache = Await.result(zms.db { implicit db => SearchQueryCacheDao.add(query, limit) }, 5.seconds)
-    updateCacheResults(cache, users, timestamp)
-  }
-
-  def deleteCache() =
-    Await.result(zms.db { implicit db =>
-      SearchQueryCacheDao.deleteAll
-      SearchEntryDao.deleteAll
-    }, 5.seconds)
-
-  def updateCacheResults(cache: SearchQueryCache, users: Seq[UserData], timestamp: Long = System.currentTimeMillis()): SearchQueryCache = {
-    Await.result(zms.db { implicit db =>
-      UserDataDao.insertOrReplace(users)
-      SearchEntryDao.insertOrReplace(users.sortBy(_.name).zipWithIndex map { case (u, n) => SearchEntry(cache.id, u.id, 0, n) })
-      SearchQueryCacheDao.update(cache)(_.copy(timestamp = timestamp)).get
-    }, 15.seconds)
-  }
+  def deleteCache() = Await.result(zms.searchQueryCache.deleteBefore(Instant.now + 1.day), 5.seconds)
 }

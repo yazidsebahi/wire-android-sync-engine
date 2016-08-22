@@ -98,7 +98,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("update knock on event") {
       val msg = knock()
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock(false))))
       Thread.sleep(250)
 
       val msg1 = lastMessage(conv.id)
@@ -150,9 +150,9 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val msg = knock()
       val msg1 = knock()
 
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg1.id, Knock(true))))
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg1.id, Knock(true))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock(false))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg1.id.uid, Knock(true))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg1.id.uid, Knock(true))))
       Thread.sleep(250)
 
       listMessages(conv.id) should have size 1
@@ -204,7 +204,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("knock, incoming message, knock") {
       val msg = knock()
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock(false))))
       Thread.sleep(250)
 
       val msgId = MessageId()
@@ -237,7 +237,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("knock, incoming knock, knock") {
       val msg = knock()
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id, Knock(false))))
+      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock(false))))
       Thread.sleep(250)
 
 
@@ -275,7 +275,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
     scenario("receive single knock") {
       val incoming = service.messagesStorage.getIncomingMessages
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(MessageId(), Knock(false))).withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock(false))).withCurrentLocalTime())
       }
 
       withDelay {
@@ -290,11 +290,11 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       val incoming = service.messagesStorage.getIncomingMessages
       val msgId = MessageId()
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(false))).withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId.uid, Knock(false))).withCurrentLocalTime())
       }
 
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(true))).withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId.uid, Knock(true))).withCurrentLocalTime())
       }
 
       withDelay {

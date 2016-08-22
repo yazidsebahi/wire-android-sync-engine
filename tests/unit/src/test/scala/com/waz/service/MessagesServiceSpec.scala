@@ -24,7 +24,6 @@ import com.waz.ZLog.LogTag
 import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.api.impl.ErrorResponse.internalError
-import com.waz.content.Mime
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
@@ -32,7 +31,7 @@ import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.UserDataDao
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.Implicits._
 import com.waz.testutils._
@@ -132,7 +131,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         listMessages(convId) should have size 1
         listMessages(convId).head shouldEqual MessageData(
-          MessageId(event.id), convId, Message.Type.TEXT, event.from, MessageData.textContent("message"),
+          MessageId.fromUid(event.id), convId, Message.Type.TEXT, event.from, MessageData.textContent("message"),
           time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT, firstMessage = true,
           protos = Seq(event.asInstanceOf[GenericMessageEvent].content)
         )
@@ -250,7 +249,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
       Await.ready(messages.processEvents(conv, Seq(event)), timeout)
 
-      listMessages(convId) shouldEqual List(MessageData(MessageId(event.id), convId, Message.Type.MISSED_CALL, event.from, Nil, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT))
+      listMessages(convId) shouldEqual List(MessageData(MessageId.fromUid(event.id), convId, Message.Type.MISSED_CALL, event.from, Nil, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT))
     }
 
     lazy val assetId = AssetId()
@@ -323,7 +322,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(false)))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(false)))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -340,7 +339,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(false)))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(false)))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -357,7 +356,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(false)))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(false)))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -368,7 +367,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         msgs.last.hotKnock shouldEqual false
       }
 
-      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id, Knock(true)))
+      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(true)))
       event2.localTime = new Date
 
       messages.processEvents(conv, Seq(event2.withCurrentLocalTime()))
@@ -384,7 +383,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val user = UserId()
       val msgId = MessageId()
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId, Knock(false)))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId.uid, Knock(false)))
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
 
@@ -394,7 +393,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         msgs.last.hotKnock shouldEqual false
       }
 
-      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId, Knock(true)))
+      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId.uid, Knock(true)))
       event2.localTime = new Date
 
       messages.processEvents(conv, Seq(event2.withCurrentLocalTime()))
@@ -632,7 +631,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       incoming { _ => updateCount += 1}
 
       withDelay(updateCount shouldEqual 1)
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(MessageId(), Knock(false))).withCurrentLocalTime())
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock(false))).withCurrentLocalTime())
 
       withDelay {
         updateCount shouldEqual 2
@@ -658,14 +657,14 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay(updateCount shouldEqual 1)
 
       val msgId = MessageId()
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(false))).withCurrentLocalTime())
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId.uid, Knock(false))).withCurrentLocalTime())
 
       withDelay {
         updateCount should be > 1
       }
       val count = updateCount
 
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId, Knock(true))).withCurrentLocalTime())
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId.uid, Knock(true))).withCurrentLocalTime())
 
       withDelay {
         updateCount should be > count

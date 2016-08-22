@@ -141,7 +141,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
       _ <- Future.traverse(cs) { messagesStorage.deleteAll }
     } yield (), timeout)
 
-  def listMembers(conv: ConvId) = Await.result(membersStorage.get(conv), timeout)
+  def listMembers(conv: ConvId) = Await.result(membersStorage.getByConv(conv), timeout)
 
   def insertUsers(users: Seq[UserData]) = users map { user => Await.result(usersStorage.addOrOverwrite(user), timeout) }
   def insertUser(user: UserData) = Await.result(usersStorage.addOrOverwrite(user), timeout)

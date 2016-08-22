@@ -38,7 +38,7 @@ import scala.concurrent.duration._
 trait SyncServiceHandle {
   def syncUsersIfNotEmpty(ids: Seq[UserId]): Future[Unit] = if (ids.nonEmpty) syncUsers(ids: _*).map(_ => ())(Threading.Background) else Future.successful(())
 
-  def syncSearchQuery(cache: SearchQueryCache): Future[SyncId]
+  def syncSearchQuery(query: SearchQuery): Future[SyncId]
   def syncUsers(ids: UserId*): Future[SyncId]
   def syncSelfUser(): Future[SyncId]
   def deleteAccount(): Future[SyncId]
@@ -69,7 +69,6 @@ trait SyncServiceHandle {
   def postAddressBook(ab: AddressBook): Future[SyncId]
   def postInvitation(i: Invitation): Future[SyncId]
   def postTypingState(id: ConvId, typing: Boolean): Future[SyncId]
-  def postExcludePymk(id: UserId): Future[SyncId]
   def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: Instant): Future[SyncId]
 
   def registerGcm(): Future[SyncId]
@@ -96,7 +95,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
     service.addRequest(SyncJob(SyncId(), req, dependsOn.toSet, priority = priority, optional = optional, timeout = timeout, timestamp = timestamp, startTime = startTime), forceRetry)
   }
 
-  def syncSearchQuery(cache: SearchQueryCache)     = addRequest(SyncSearchQuery(cache.id), priority = Priority.High)
+  def syncSearchQuery(query: SearchQuery)          = addRequest(SyncSearchQuery(query), priority = Priority.High)
   def syncUsers(ids: UserId*)                      = addRequest(SyncUser(ids.toSet))
   def syncSelfUser()                               = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount()                              = addRequest(DeleteAccount)
@@ -114,7 +113,6 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postDeleted(conv: ConvId, msg: MessageId)               = addRequest(PostDeleted(conv, msg))
   def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId)            = addRequest(PostRecalled(conv, msg, recalled))
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, status))
-  def postExcludePymk(id: UserId)               = addRequest(PostExcludePymk(id), priority = Priority.Low)
   def postAddressBook(ab: AddressBook)          = addRequest(PostAddressBook(ab))
   def postInvitation(i: Invitation)             = addRequest(PostInvitation(i))
   def postConnection(user: UserId, name: String, message: String)     = addRequest(PostConnection(user, name, message))
@@ -169,7 +167,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
   def zmsHandler(zms: ZMessaging): PartialFunction[SyncRequest, Future[SyncResult]] = {
     case SyncConversation(convs)  => zms.conversationSync.syncConversations(convs.toSeq)
     case SyncUser(u)              => zms.usersSync.syncUsers(u.toSeq: _*)
-    case SyncSearchQuery(key)     => zms.usersearchSync.syncSearchQuery(key)
+    case SyncSearchQuery(query)   => zms.usersearchSync.syncSearchQuery(query)
     case SyncRichMedia(messageId) => zms.richmediaSync.syncRichMedia(messageId)
     case DeleteGcmToken(token)    => zms.gcmSync.deleteGcmToken(token)
 
@@ -177,7 +175,6 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostConnectionStatus(userId, status)   => zms.connectionsSync.postConnectionStatus(userId, status)
 
     case SyncCommonConnections(userId)  => zms.usersearchSync.syncCommonConnections(userId)
-    case PostExcludePymk(userId)        => zms.usersearchSync.postExcludePymk(userId)
 
     case SyncCallState(convId, fresh)   => zms.voicechannelSync.syncCallState(convId, fresh)
     case SyncConversations              => zms.conversationSync.syncConversations()

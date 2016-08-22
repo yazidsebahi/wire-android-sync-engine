@@ -18,55 +18,43 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
-import com.waz.content.ZmsDatabase
-import com.waz.model.SearchQueryCache.SearchQueryCacheDao
-import com.waz.model.UserId
+import com.waz.content.SearchQueryCacheStorage
+import com.waz.model.{SearchQuery, UserId}
 import com.waz.service.UserSearchService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.UserSearchClient
 import com.waz.threading.Threading
 
 import scala.concurrent.Future
+import scala.concurrent.Future.successful
 
 object UserSearchSyncHandler {
   val DefaultLimit = 50
 }
 
-class UserSearchSyncHandler(storage: ZmsDatabase, userSearchService: UserSearchService, client: UserSearchClient) {
+class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient) {
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[UserSearchSyncHandler]
 
-  def syncSearchQuery(cacheId: Long): Future[SyncResult] = storage.read {
-    SearchQueryCacheDao.getById(cacheId)(_)
-  } flatMap {
-    case None =>
-      error(s"SearchQueryCache not found with id: $cacheId")
-      Future successful SyncResult.Failure(None, shouldRetry = false)
-    case Some(cache) =>
-      debug(s"starting sync for: $cache")
-      client.graphSearch(cache.query, cache.limit.getOrElse(UserSearchSyncHandler.DefaultLimit)).future flatMap {
-        case Right(results) =>
-          debug(s"searchSync, got: $results")
-          userSearchService.updateSearchResults(cache, results) map (SyncResult(_))
-        case Left(error) =>
-          warn("graphSearch request failed")
-          Future successful SyncResult(error)
-      }
+  def syncSearchQuery(query: SearchQuery): Future[SyncResult] = {
+    debug(s"starting sync for: $query")
+    client.graphSearch(query, UserSearchSyncHandler.DefaultLimit).future flatMap {
+      case Right(results) =>
+        debug(s"searchSync, got: $results")
+        userSearch.updateSearchResults(query, results).map(_ => SyncResult.Success)
+      case Left(error) =>
+        warn("graphSearch request failed")
+        successful(SyncResult(error))
+    }
   }
 
   def syncCommonConnections(user: UserId): Future[SyncResult] = {
     debug(s"starting sync commonConnections for UserId: $user")
     client.loadCommonConnections(user).future flatMap {
-      case Right(results) => userSearchService.updateCommonConnections(user, results) map (_ => SyncResult.Success)
+      case Right(results) => userSearch.updateCommonConnections(user, results).map(_ => SyncResult.Success)
       case Left(error) =>
         warn("loadCommonConnections request failed")
-        Future successful SyncResult(error)
+        successful(SyncResult(error))
     }
   }
-  
-  def postExcludePymk(user: UserId): Future[SyncResult] =
-    client.postExcludePymk(user).future map {
-      case None => SyncResult.Success
-      case Some(error) => SyncResult(error)
-    }
 }

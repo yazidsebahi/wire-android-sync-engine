@@ -92,7 +92,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
   def addMembers(conv: ConvId, users: UserId*) = Await.result(service.membersStorage.add(conv, users:_*), 1.second)
   def removeMember(conv: ConvId, user: UserId) = Await.result(service.membersStorage.remove(conv, user), 1.second)
   def listActiveMembers(conv: ConvId) = Await.result(service.membersStorage.getActiveUsers(conv), 1.second).toList
-  def listMembers(conv: ConvId) = Await.result(service.membersStorage.get(conv), 1.second).toList
+  def listMembers(conv: ConvId) = Await.result(service.membersStorage.getByConv(conv), 1.second).toList
 
   def insertUsers(users: Seq[UserData]) = users map { user => Await.result(service.usersStorage.addOrOverwrite(user), 1.second) }
   def insertUser(user: UserData) = Await.result(service.usersStorage.addOrOverwrite(user), 1.second)
@@ -135,7 +135,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       Await.ready(service.dispatch(ContactJoinEvent(Uid(), userId, "test name")), 1.second)
       syncRequestedUsers shouldEqual Set(userId)
       service.usersStorage.get(userId) should eventually(beMatching {
-        case Some(UserData(`userId`, "test name", _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)) => true
+        case Some(UserData(`userId`, "test name", _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)) => true
       })
     }
   }

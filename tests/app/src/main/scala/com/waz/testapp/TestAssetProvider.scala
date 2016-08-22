@@ -22,7 +22,7 @@ import android.content.{ContentProvider, ContentValues}
 import android.database.Cursor
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.content.Mime
+import com.waz.model.Mime
 
 class TestAssetProvider extends ContentProvider {
   private implicit val Tag: LogTag = logTagFor[TestAssetProvider]

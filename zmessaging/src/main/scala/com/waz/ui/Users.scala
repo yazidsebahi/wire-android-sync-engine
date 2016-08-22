@@ -90,8 +90,6 @@ class Users(implicit ui: UiModule) {
 
   def cancelConnection(user: User): Unit = zms(_.connection.cancelConnection(user.id))
 
-  def excludeFromPymk(user: User): Unit = zms(_.usersearch.excludeFromPymk(user.id))
-
   def blockUser(user: User): Unit = zms(_.connection.blockConnection(user.id))
 
   def unblockUser(user: User): IConversation = {

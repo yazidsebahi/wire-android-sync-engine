@@ -24,8 +24,7 @@ import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
-import com.waz.content.Mime
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.model.otr.ClientId
 import com.waz.sync.client.OtrClient._
 import com.waz.threading.{CancellableFuture, Threading}

@@ -21,7 +21,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
-import com.waz.content.{EditHistoryStorage, LikingsStorage, Mime}
+import com.waz.content.{EditHistoryStorage, LikingsStorage}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.Original
@@ -124,7 +124,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
   }
 
   private def createMessage(conv: ConversationData, event: MessageEvent) = {
-    val id = MessageId(event.id)
+    val id = MessageId.fromUid(event.id)
     val convId = conv.id
 
     event match {
@@ -195,7 +195,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   def updateKnockToHotKnock(msgId: MessageId) = messagesStorage.update(msgId, { msg =>
     if (msg.hotKnock) msg
-    else msg.copy(protos = msg.protos :+ GenericMessage(msgId, Knock(true)), localTime = Instant.now)
+    else msg.copy(protos = msg.protos :+ GenericMessage(msgId.uid, Knock(true)), localTime = Instant.now)
   }).mapSome(_._2)
 
   /**
@@ -224,7 +224,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.canRecall(convId, userId) =>
         content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
-          val recall = MessageData(systemMsgId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMsgId, MsgRecall(msgId))))
+          val recall = MessageData(systemMsgId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMsgId.uid, MsgRecall(msgId))))
           if (userId == selfUserId) Future successful Some(recall) // don't save system message for self user
           else content.addMessage(recall)
         }
@@ -292,18 +292,18 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     val (tpe, ct) = MessageData.messageContent(content, mentions, weblinkEnabled = true)
     verbose(s"parsed content: $ct")
     val id = MessageId()
-    addLocalMessage(MessageData(id, convId, tpe, selfUserId, ct, protos = Seq(GenericMessage(id, Text(content, mentions, Nil))))) // FIXME: links
+    addLocalMessage(MessageData(id, convId, tpe, selfUserId, ct, protos = Seq(GenericMessage(id.uid, Text(content, mentions, Nil))))) // FIXME: links
   }
 
   def addLocationMessage(convId: ConvId, content: Location): Future[MessageData] = {
     verbose(s"addLocationMessage($convId, $content)")
     val id = MessageId()
-    addLocalMessage(MessageData(id, convId, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id, content))))
+    addLocalMessage(MessageData(id, convId, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id.uid, content))))
   }
 
   def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = {
     val id = MessageId(assetId.str)
-    addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
+    addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
   }
 
   def addAssetMessage(convId: ConvId, assetId: AssetId, mime: Mime): Future[MessageData] = withSelfUserFuture { selfUserId =>

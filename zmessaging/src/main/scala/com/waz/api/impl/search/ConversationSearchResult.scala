@@ -26,28 +26,20 @@ import com.waz.service.SearchKey
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
 
-class ConversationsSearch(initialPrefix: String = "", initialLimit: Int = 0)(implicit ui: UiModule) extends api.ConversationsSearch with CoreList[IConversation] with SignalLoading {
+class ConversationSearchResult(prefix: String, limit: Int)(implicit ui: UiModule) extends api.ConversationSearchResult with CoreList[IConversation] with SignalLoading {
   import com.waz.threading.Threading.Implicits.Background
-  private implicit val tag = logTagFor[ConversationsSearch]
+  private implicit val tag = logTagFor[ConversationSearchResult]
 
-  @volatile private var convs = IndexedSeq.empty[ConvId]
-  private val searchParams = Signal((initialPrefix, initialLimit))
+  @volatile private var convs = Vector.empty[ConvId]
 
-  addLoader({ zms =>
-    searchParams flatMap { case (prefix, limit) =>
-      Signal.future(zms.convsUi.findGroupConversations(SearchKey(prefix), limit).map(_.map(_.id).toVector))
-    }
-  }, IndexedSeq.empty) { cs =>
-    verbose(s"loaded conversations (${searchParams.currentValue}): $cs")
+  addLoader { zms =>
+    Signal.future(zms.convsUi.findGroupConversations(SearchKey(prefix), limit).map(_.map(_.id).toVector))
+  } { cs =>
+    verbose(s"loaded conversations ($prefix, $limit): $cs")
     if (convs != cs) {
       convs = cs
       notifyChanged()
     }
-  }
-
-  override def query(prefix: String, limit: Int): Unit = {
-    verbose(s"query($prefix, $limit)")
-    searchParams ! (prefix, limit)
   }
 
   def getAll: Array[IConversation] = convs.map(ui.convs.convById)(collection.breakOut)

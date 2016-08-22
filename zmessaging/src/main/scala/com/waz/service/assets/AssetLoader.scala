@@ -23,7 +23,7 @@ import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.Mime
+import com.waz.model.Mime
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads.{Downloader, DownloaderService}
 import com.waz.threading.CancellableFuture

@@ -117,6 +117,7 @@ object RAssetDataId {
 }
 
 case class MessageId(str: String) {
+  def uid = Uid(str)
   override def toString: String = str
 }
 
@@ -124,7 +125,7 @@ object MessageId {
   val Empty = MessageId("")
 
   def apply(): MessageId = Id.random()
-  def apply(uid: Uid): MessageId = MessageId(uid.str)
+  def fromUid(uid: Uid): MessageId = MessageId(uid.str)
 
   implicit object Id extends Id[MessageId] {
     override def random() = MessageId(Uid().toString)

@@ -44,7 +44,7 @@ object MessageDataMigration {
         forEachRow(db.query("Messages", Array("_id", "hot"), "msg_type = 'Knock'", null, null, null, null)) { c =>
           stmt.clearBindings()
           val id = c.getString(0)
-          val protos = Seq(GenericMessage(MessageId(id), Knock(src.HotKnock.load(c, 1))))
+          val protos = Seq(GenericMessage(Uid(id), Knock(src.HotKnock.load(c, 1))))
 
           dst.Protos.bind(protos, 1, stmt)
           stmt.bindString(2, id)

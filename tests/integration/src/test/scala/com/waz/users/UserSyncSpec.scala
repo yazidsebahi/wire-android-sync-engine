@@ -22,6 +22,7 @@ import com.waz.api._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{FeatureSpec, Matchers}
+
 import scala.concurrent.duration._
 
 class UserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec {
@@ -29,7 +30,7 @@ class UserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec {
 
   override val provisionFile = "/four_users_connected.json"
 
-  lazy val contacts = api.search().getConnections("a")
+  lazy val contacts = api.search().getConnections("a", Array.empty, false)
 
   scenario("Sync contacts on start") {
     withDelay {

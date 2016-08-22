@@ -22,8 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.impl.ProgressIndicator.ProgressData
 import com.waz.api.impl.{ContentUriAssetForUpload, RecordingLevels, TranscodedVideoAsset}
 import com.waz.bitmap.video.VideoTranscoder
-import com.waz.content.Mime
-import com.waz.model.{AssetData, AssetId}
+import com.waz.model.{AssetData, AssetId, Mime}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, RecordingCancelled, RecordingSuccessful}
 import com.waz.threading.{CancellableFuture, Threading}

@@ -19,7 +19,6 @@ package com.waz.mocked
 
 import java.util.concurrent.atomic.AtomicLong
 
-import com.waz.api.impl.SearchQuery.Query
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
@@ -58,7 +57,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   val members = new mutable.HashMap[RConvId, Seq[ConversationMemberData]]
   val conversations = new mutable.HashMap[RConvId, ConversationData]
   val events = new mutable.HashMap[RConvId, Seq[ConversationEvent]]
-  val searchResults = new mutable.HashMap[Query, Seq[UserSearchEntry]].withDefaultValue(Seq.empty)
+  val searchResults = new mutable.HashMap[SearchQuery, Seq[UserSearchEntry]].withDefaultValue(Seq.empty)
   val convTimeCounter = new mutable.HashMap[RConvId, AtomicLong]
 
   val callSessionId = new mutable.HashMap[RConvId, CallSessionId].withDefaultValue(CallSessionId("default-session-id"))
@@ -209,7 +208,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     }
   }
 
-  def addSearchResults(query: Query, numConnected: Int = 0, numUnconnected: Int = 0, numUnknownConnected: Int = 0, numUnknownUnconnected: Int = 0, numBlocked: Int = 0) = {
+  def addSearchResults(query: SearchQuery, numConnected: Int = 0, numUnconnected: Int = 0, numUnknownConnected: Int = 0, numUnknownUnconnected: Int = 0, numBlocked: Int = 0) = {
     def entry(connected: Option[Boolean], blocked: Boolean)(id: UserId) = UserSearchEntry(id, "dummy", None, None, -1, connected = connected, blocked = blocked, Relation.Other)
 
     val (connected, unknown) = connections.keys.take(numConnected + numUnknownConnected) .splitAt(numConnected)
@@ -283,7 +282,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   override def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = CancellableFuture.delayed(clientDelay)(Right(
     ids.flatMap(id => conversations.get(id).flatMap(c => members.get(id).map(m => ConversationResponse(c, m))))))
 
-  override def graphSearch(query: Query, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delayed(clientDelay)(Right(searchResults(query).take(limit)))
+  override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delayed(clientDelay)(Right(searchResults(query).take(limit)))
 
   override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] =
     CancellableFuture.delayed(clientDelay)(Right(CallStateEvent(Uid(), id, callParticipants.get(id), callDeviceState.get(id), CauseForCallStateEvent.REQUESTED, callParticipants.get(id).map(_ => callSessionId(id)))))

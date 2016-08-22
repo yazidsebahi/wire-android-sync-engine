@@ -28,8 +28,7 @@ import com.waz.api.impl.ProgressIndicator._
 import com.waz.api.impl.{ErrorResponse, ProgressIndicator}
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.cache.{CacheEntry, CacheService}
-import com.waz.content.Mime
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service.TempFileService
 import com.waz.service.assets.{AssetLoader, AudioTranscoder}
 import com.waz.service.downloads.DownloadRequest._

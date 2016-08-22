@@ -15,20 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.utils.events
+package com.waz.content
 
-import com.waz.threading.CancellableFuture.delayed
-import com.waz.threading.Threading.Background
+import android.content.Context
+import com.waz.model.{SearchQuery, SearchQueryCache}
+import com.waz.model.SearchQueryCache.SearchQueryCacheDao
+import com.waz.threading.Threading
+import com.waz.utils.TrimmingLruCache.Fixed
+import com.waz.utils._
 import org.threeten.bp.Instant
-import org.threeten.bp.Instant.now
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.Future
 
-case class ClockSignal(interval: FiniteDuration) extends SourceSignal[Instant](Some(now)) {
-  def refresh: Unit = if (wired) {
-    publish(now)
-    delayed(interval)(refresh)(Background)
-  }
-
-  override def onWire: Unit = refresh
+class SearchQueryCacheStorage(context: Context, storage: Database) extends CachedStorage[SearchQuery, SearchQueryCache](new TrimmingLruCache(context, Fixed(20)), storage)(SearchQueryCacheDao, "SearchQueryCacheStorage") {
+  import Threading.Implicits.Background
+  def deleteBefore(i: Instant): Future[Unit] = storage(SearchQueryCacheDao.deleteBefore(i)(_)).future.flatMap(_ => deleteCached(_.timestamp.isBefore(i)))
 }

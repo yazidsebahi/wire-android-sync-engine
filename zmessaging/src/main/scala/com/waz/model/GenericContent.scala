@@ -21,7 +21,6 @@ package com.waz.model
 import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
-import com.waz.content.Mime
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.nano.Messages

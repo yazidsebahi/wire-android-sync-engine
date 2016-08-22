@@ -23,12 +23,11 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.Mime
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service._
 import com.waz.service.conversation.ConversationsService.SendingTimeout
 import com.waz.sync.client.MessagesClient.OtrMessage
@@ -183,7 +182,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       val preview = data(0)
       val medium = data(1)
       val id = MessageId(asset.id.str)
-      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
+      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
 
       (msg, asset, preview, medium)
     }

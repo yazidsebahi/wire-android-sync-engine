@@ -20,8 +20,7 @@ package com.waz.api.impl
 import android.database.Cursor
 import android.net.Uri
 import android.webkit.MimeTypeMap
-import com.waz.content.Mime
-import com.waz.model.AssetId
+import com.waz.model.{AssetId, Mime}
 import com.waz.service.ZMessaging
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestContentProvider

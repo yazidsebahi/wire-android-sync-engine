@@ -25,10 +25,11 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.cache.{CacheService, Expiration}
-import com.waz.content.{AccountsStorage, Mime}
+import com.waz.content.AccountsStorage
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.AccountId
 import com.waz.service.push.GcmGlobalService
+import com.waz.model.{AccountId, Mime}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.{IoUtils, RichFuture}
 

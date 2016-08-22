@@ -28,6 +28,7 @@ import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Text
+import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserData.ConnectionStatus.{Accepted, PendingFromOther}
 import com.waz.model._
@@ -114,10 +115,9 @@ object Generators {
     connectionMessage <- arbitrary[Option[String]]
     conversation <- arbitrary[Option[RConvId]]
     relation <- arbitrary[Relation]
-    excludeFromPymk <- arbitrary[Boolean]
     syncTimestamp <- posNum[Long]
     displayName <- arbitrary[String]
-  } yield UserData(id, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, excludeFromPymk, syncTimestamp, displayName))
+  } yield UserData(id, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, syncTimestamp, displayName))
 
   implicit lazy val arbRevision: Arbitrary[Revision] = Arbitrary(resultOf(Revision))
   implicit lazy val arbCaptureDeviceData: Arbitrary[CaptureDeviceData] = Arbitrary(resultOf(CaptureDeviceData))
@@ -130,7 +130,7 @@ object Generators {
   implicit lazy val arbOpenGraphData: Arbitrary[OpenGraphData] = Arbitrary(resultOf(OpenGraphData))
   implicit lazy val arbMessageContent: Arbitrary[MessageContent] = Arbitrary(resultOf(MessageContent))
   implicit lazy val arbGenericMessage: Arbitrary[GenericMessage] = Arbitrary(for {
-    id <- arbitrary[MessageId]
+    id <- arbitrary[Uid]
     content = Text("test", Map.empty, Nil) // TODO: implement actual generator
   } yield GenericMessage(id, content))
 
@@ -217,7 +217,6 @@ object Generators {
 
     implicit lazy val arbUserBasedSyncRequest: Arbitrary[RequestForUser] = Arbitrary(oneOf(
       arbitrary[SyncCommonConnections],
-      arbitrary[PostExcludePymk],
       arbitrary[PostConnection],
       arbitrary[PostConnectionStatus]))
 
@@ -250,7 +249,6 @@ object Generators {
     implicit lazy val arbPostTypingStateSyncRequest: Arbitrary[PostTypingState] = Arbitrary(resultOf(PostTypingState))
     implicit lazy val arbCommonConnectionsSyncRequest: Arbitrary[SyncCommonConnections] = Arbitrary(resultOf(SyncCommonConnections))
     implicit lazy val arbPostConnectionStatusSyncRequest: Arbitrary[PostConnectionStatus] = Arbitrary(resultOf(PostConnectionStatus))
-    implicit lazy val arbPostExcludePymkSyncRequest: Arbitrary[PostExcludePymk] = Arbitrary(resultOf(PostExcludePymk))
     implicit lazy val arbMessageSyncRequest: Arbitrary[PostMessage] = Arbitrary(resultOf(PostMessage))
     implicit lazy val arbMessageDelSyncRequest: Arbitrary[PostDeleted] = Arbitrary(resultOf(PostDeleted))
     implicit lazy val arbPostConvJoinSyncRequest: Arbitrary[PostConvJoin] = Arbitrary(resultOf(PostConvJoin))
@@ -300,6 +298,7 @@ object Generators {
   implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(resultOf(AssetMetaData.Audio(_: Duration)))
   implicit lazy val arbDim2: Arbitrary[Dim2] = Arbitrary(for (w <- genDimension; h <- genDimension) yield Dim2(w, h))
   lazy val genDimension = chooseNum(0, 10000)
+  implicit lazy val arbSearchQuery: Arbitrary[SearchQuery] = Arbitrary(frequency((1, Gen.const(TopPeople)), (3, Gen.alphaStr.map(Recommended))))
 
   implicit def optGen[T](implicit gen: Gen[T]): Gen[Option[T]] = frequency((1, Gen.const(None)), (2, gen.map(Some(_))))
 

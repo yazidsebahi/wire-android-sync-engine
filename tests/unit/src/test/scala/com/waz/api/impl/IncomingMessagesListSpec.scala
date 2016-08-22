@@ -66,9 +66,9 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("Update knock to hotknock in incoming messages list") {
       val msgId = MessageId()
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), GenericMessage(msgId, Knock(false))).withCurrentLocalTime()
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), GenericMessage(msgId.uid, Knock(false))).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
-      val event1 = GenericMessageEvent(Uid(), conv.remoteId, new Date, event.from, GenericMessage(msgId, Knock(true))).withCurrentLocalTime()
+      val event1 = GenericMessageEvent(Uid(), conv.remoteId, new Date, event.from, GenericMessage(msgId.uid, Knock(true))).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event1) }
       withDelay {
         val msgs = incoming
