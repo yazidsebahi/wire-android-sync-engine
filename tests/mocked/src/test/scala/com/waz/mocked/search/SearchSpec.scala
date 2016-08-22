@@ -154,7 +154,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
 
     scenario("Find all connections locally") {
       // meeper, elmer, bugs, carrot (cartoon is self, coyote is blocked (by previous test))
-      val conns = api.search.getConnections("", Array.empty, false)
+      val conns = api.search.getConnections("", 30, Array.empty, false)
       soon {
         conns should have size 4
         val all = conns.getAll
@@ -163,27 +163,27 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
     }
 
     scenario("Find local connections by name") {
-      val conns = api.search.getConnections("e", Array.empty, false)
+      val conns = api.search.getConnections("e", 30, Array.empty, false)
       soon(idsOf(conns) shouldEqual idsOfAll(elmer))
 
-      val conns2 = api.search.getConnections("huntsman@thewoods.geo", Array.empty, false)
+      val conns2 = api.search.getConnections("huntsman@thewoods.geo", 30, Array.empty, false)
       forAsLongAs(500.millis)(idsOf(conns2) shouldBe empty)
     }
 
     scenario("Find local connections by name or email") {
-      val conns = api.search.getConnections("e", Array.empty, true)
+      val conns = api.search.getConnections("e", 30, Array.empty, true)
       soon(idsOf(conns) shouldEqual idsOfAll(elmer))
 
-      val conns2 = api.search.getConnections("hunt", Array.empty, true)
+      val conns2 = api.search.getConnections("hunt", 30, Array.empty, true)
       forAsLongAs(500.millis)(idsOf(conns2) shouldBe empty)
 
-      val conns3 = api.search.getConnections("huntsman@thewoods.geo", Array.empty, true)
+      val conns3 = api.search.getConnections("huntsman@thewoods.geo", 30, Array.empty, true)
       soon(idsOf(conns3) shouldEqual idsOfAll(elmer))
     }
 
 
     scenario("Find filtered local connections") {
-      val conns = api.search.getConnections("", Array(meeper.id.str, bugs.id.str), false)
+      val conns = api.search.getConnections("", 30, Array(meeper.id.str, bugs.id.str), false)
       soon(idsOf(conns) shouldEqual idsOfAll(carrot, elmer))
     }
   }
@@ -196,7 +196,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   }
 
   private def whenSearchingForUsers(pattern: String)(f: UserSearchResult => Unit): Unit = {
-    val search = api.search.getConnections(pattern, Array.empty, false)
+    val search = api.search.getConnections(pattern, 30, Array.empty, false)
     val listener = returning(UpdateSpy())(search.addUpdateListener)
     withDelay {
       f(search)

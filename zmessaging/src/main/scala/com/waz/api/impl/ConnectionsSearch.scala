@@ -27,19 +27,19 @@ import org.threeten.bp.Instant
 
 import scala.collection._
 
-class ConnectionsSearch(searchTerm: String, filter: Array[String], alsoSearchByEmail: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
+class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private val filteredIds = filter.toSet
   private val query = SearchKey(searchTerm)
   private val predicate: UserData => Boolean = u =>
     (query.isAtTheStartOfAnyWordIn(u.searchKey) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str)
 
-  private var users = Vector.empty[UserData]
+  private var users = Option.empty[Vector[UserData]]
 
   addLoader { zms =>
-    usersFrom(zms).map(_.sortBy(_.name)(currentLocaleOrdering))
+    usersFrom(zms).map(_.sortBy(_.name)(currentLocaleOrdering).take(limit))
   } { conns =>
-    val changed = ! users.corresponds(conns)((a, b) => a.id == b.id)
-    users = conns
+    val changed = users.forall(u => ! u.corresponds(conns)((a, b) => a.id == b.id))
+    users = Some(conns)
     if (changed) notifyChanged()
   }
 
@@ -54,8 +54,9 @@ class ConnectionsSearch(searchTerm: String, filter: Array[String], alsoSearchByE
         .toMap
     }
 
-  override def get(position: Int): api.User = ui.users.getUser(users(position))
-  override def size(): Int = users.length
-  override def getAll: Array[api.User] = users.map(ui.users.getUser)(breakOut)
-  override def getFirstN(n: Int): Array[api.User] = users.iterator.take(n).map(ui.users.getUser).toArray
+  private[this] def currentUsers = users.getOrElse(Vector.empty)
+
+  override def get(position: Int): api.User = ui.users.getUser(currentUsers(position))
+  override def size(): Int = currentUsers.length
+  override def getAll: Array[api.User] = currentUsers.map(ui.users.getUser)(breakOut)
 }

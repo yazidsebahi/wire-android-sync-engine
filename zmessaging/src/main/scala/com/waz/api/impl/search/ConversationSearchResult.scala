@@ -30,21 +30,21 @@ class ConversationSearchResult(prefix: String, limit: Int)(implicit ui: UiModule
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag = logTagFor[ConversationSearchResult]
 
-  @volatile private var convs = Vector.empty[ConvId]
+  @volatile private var convs = Option.empty[Vector[ConvId]]
 
   addLoader { zms =>
     Signal.future(zms.convsUi.findGroupConversations(SearchKey(prefix), limit).map(_.map(_.id).toVector))
   } { cs =>
     verbose(s"loaded conversations ($prefix, $limit): $cs")
-    if (convs != cs) {
-      convs = cs
+    if (convs.forall(_ != cs)) {
+      convs = Some(cs)
       notifyChanged()
     }
   }
 
-  def getAll: Array[IConversation] = convs.map(ui.convs.convById)(collection.breakOut)
+  private[this] def currentConvs = convs.getOrElse(Vector.empty)
 
-  override def get(position: Int): IConversation = ui.convs.convById(convs(position))
-
-  override def size(): Int = convs.length
+  def getAll: Array[IConversation] = currentConvs.map(ui.convs.convById)(collection.breakOut)
+  override def get(position: Int): IConversation = ui.convs.convById(currentConvs(position))
+  override def size(): Int = currentConvs.length
 }
