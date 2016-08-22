@@ -22,7 +22,7 @@ trait Search {
   def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): UserSearchResult
   def getGroupConversations(query: String, limit: Int): ConversationSearchResult
   def getContacts(query: String): Contacts
-  def getConnections(query: String, filter: Array[String]): UserSearchResult
+  def getConnections(query: String, filter: Array[String], alsoSearchByEmail: Boolean): UserSearchResult
 }
 
 trait UserSearchResult extends CoreList[User] {

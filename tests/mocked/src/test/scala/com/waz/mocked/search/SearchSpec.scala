@@ -47,7 +47,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   val self = UserInfo(selfUserId, Some("Cartoon Consumer"))
   val meeper = UserInfo(UserId("meeper"), Some("Road Runner"))
   val coyote = UserInfo(UserId("coyote"), Some("Wile E. Coyote"))
-  val elmer = UserInfo(UserId("elmer"), Some("Elmer Fudd"))
+  val elmer = UserInfo(UserId("elmer"), Some("Elmer Fudd")).copy(email = Some(EmailAddress("huntsman@thewoods.geo")))
   val bugs = UserInfo(UserId("bugs"), Some("Bugs Bunny"))
   val carrot = UserInfo(UserId("carrot"), Some("Carrot"))
   
@@ -73,9 +73,6 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   override protected def beforeAll(): Unit = {
     (Seq(self, meeper, coyote, elmer, bugs, carrot) ++ recommended) foreach (u => users += u.id -> u)
     Seq(meeper, coyote, elmer, bugs, carrot) foreach (u => addConnection(u.id))
-//    searchResults.put(Named("röäd"), Seq(meeper.entry()))
-//    searchResults.put(Named("C"), Seq(coyote.entry(), carrot.entry()))
-//    searchResults.put(RecommendedPeople, recommended.map(_.entry(Relation.Second)))
 
     prepareContacts(providedContacts:_*)
     postAddressBookResponse = Seq(
@@ -125,53 +122,6 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
     }
   }
 
-//  feature("Recommended people") {
-//    scenario("Include contacts in recommended people by default") {
-//      zmessaging.db(SearchQueryCacheDao.deleteAll(_))
-//      val search = api.search.getRecommendedPeople(10)
-//      withDelay {
-//        idsOfAll(search.getAll:_*) should contain theSameElementsAs idsOfAll(recommended.take(10):_*)
-//      }
-//    }
-//
-//    scenario("Search for recommended and exclude one.") {
-//      zmessaging.db(SearchQueryCacheDao.deleteAll(_))
-//      requestedIgnore = None
-//      val search = api.search().getRecommendedPeople(5)
-//      withDelay {
-//        idsOfAll(search.getAll: _*) should contain theSameElementsAs idsOfAll(recommended.take(5): _*)
-//      }
-//      val excluded = search.getAll.head
-//      excluded.excludeFromPeopleYouMayKnow()
-//      withDelay {
-//        search.getAll should have size 4
-//        idsOfAll(search.getAll: _*) should not contain excluded.getId
-//        requestedIgnore shouldEqual Some(UserId(excluded.getId))
-//      }
-//    }
-//
-//    scenario("Load more recommended people after removing a few") {
-//      requestedIgnore = None
-//      val search = api.search.getRecommendedPeople(15)
-//      withDelay {
-//        idsOfAll(search.getAll: _*) should contain theSameElementsAs idsOfAll(recommended.slice(1, 16): _*)
-//      }
-//      val excluded = search.getAll.take(9)
-//      excluded.take(9) foreach { _.excludeFromPeopleYouMayKnow() }
-//      val excludedIds = idsOfAll(excluded: _*)
-//      withDelay {
-//        search.getAll should have size 6
-//        idsOfAll(search.getAll: _*) should contain noneOf (excludedIds.head, excludedIds(1), excludedIds.drop(2): _*)
-//      }
-//      val extraExcluded = search.getAll.head
-//      extraExcluded.excludeFromPeopleYouMayKnow()
-//      withDelay {
-//        search.getAll should have size 15
-//        idsOfAll(search.getAll: _*) should contain noneOf (extraExcluded.getId, excludedIds.head, excludedIds.drop(1): _*)
-//      }
-//    }
-//  }
-
   feature("Top people") {
 
     scenario("Exclude just blocked users") {
@@ -204,26 +154,37 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
 
     scenario("Find all connections locally") {
       // meeper, elmer, bugs, carrot (cartoon is self, coyote is blocked (by previous test))
-      val conns = api.search.getConnections("", Array.empty)
-      withDelay {
+      val conns = api.search.getConnections("", Array.empty, false)
+      soon {
         conns should have size 4
         val all = conns.getAll
         all map (_.getName) shouldEqual Array("Bugs Bunny", "Carrot", "Elmer Fudd", "Road Runner")
       }
     }
 
-    scenario("Find local connections by query") {
-      val conns = api.search.getConnections("e", Array.empty)
-      withDelay {
-        idsOf(conns) shouldEqual idsOfAll(elmer)
-      }
+    scenario("Find local connections by name") {
+      val conns = api.search.getConnections("e", Array.empty, false)
+      soon(idsOf(conns) shouldEqual idsOfAll(elmer))
+
+      val conns2 = api.search.getConnections("huntsman@thewoods.geo", Array.empty, false)
+      forAsLongAs(500.millis)(idsOf(conns2) shouldBe empty)
     }
 
+    scenario("Find local connections by name or email") {
+      val conns = api.search.getConnections("e", Array.empty, true)
+      soon(idsOf(conns) shouldEqual idsOfAll(elmer))
+
+      val conns2 = api.search.getConnections("hunt", Array.empty, true)
+      forAsLongAs(500.millis)(idsOf(conns2) shouldBe empty)
+
+      val conns3 = api.search.getConnections("huntsman@thewoods.geo", Array.empty, true)
+      soon(idsOf(conns3) shouldEqual idsOfAll(elmer))
+    }
+
+
     scenario("Find filtered local connections") {
-      val conns = api.search.getConnections("", Array(meeper.id.str, bugs.id.str))
-      withDelay {
-        idsOf(conns) shouldEqual idsOfAll(carrot, elmer)
-      }
+      val conns = api.search.getConnections("", Array(meeper.id.str, bugs.id.str), false)
+      soon(idsOf(conns) shouldEqual idsOfAll(carrot, elmer))
     }
   }
 
@@ -235,7 +196,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   }
 
   private def whenSearchingForUsers(pattern: String)(f: UserSearchResult => Unit): Unit = {
-    val search = api.search.getConnections(pattern, Array.empty)
+    val search = api.search.getConnections(pattern, Array.empty, false)
     val listener = returning(UpdateSpy())(search.addUpdateListener)
     withDelay {
       f(search)

@@ -26,7 +26,6 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
-import org.threeten.bp.Instant
 
 class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ThreadActorSpec { test =>
 

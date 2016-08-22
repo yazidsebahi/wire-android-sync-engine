@@ -302,7 +302,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
       case IConversation.Type.GROUP =>
         inspect(api.search().getGroupConversations("", 100), ConvId(conv.getId), expectedToBeFound)
       case IConversation.Type.ONE_TO_ONE =>
-        inspect(api.search().getConnections("", Array.empty), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
+        inspect(api.search().getConnections("", Array.empty, true), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
       case tpe => fail(s"unexpected conversation type: $tpe")
     }
 

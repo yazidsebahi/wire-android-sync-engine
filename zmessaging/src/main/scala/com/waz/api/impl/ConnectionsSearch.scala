@@ -27,8 +27,11 @@ import org.threeten.bp.Instant
 
 import scala.collection._
 
-class ConnectionsSearch(query: SearchKey, filter: Array[String])(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
+class ConnectionsSearch(searchTerm: String, filter: Array[String], alsoSearchByEmail: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private val filteredIds = filter.toSet
+  private val query = SearchKey(searchTerm)
+  private val predicate: UserData => Boolean = u =>
+    (query.isAtTheStartOfAnyWordIn(u.searchKey) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str)
 
   private var users = Vector.empty[UserData]
 
@@ -41,11 +44,7 @@ class ConnectionsSearch(query: SearchKey, filter: Array[String])(implicit val ui
   }
 
   private def usersFrom(zms: ZMessaging): Signal[Vector[UserData]] =
-    zms.users.acceptedUsers
-       .map(_.valuesIterator
-             .filter(u => query.isAtTheStartOfAnyWordIn(u.searchKey))
-             .filterNot(u => filteredIds.contains(u.id.str))
-             .toVector)
+    zms.users.acceptedUsers.map(_.valuesIterator.filter(predicate).toVector)
 
   private def lastEventTimes(zms: ZMessaging, ids: Set[ConvId]): Signal[Map[UserId, Instant]] =
     zms.convsStorage.convsSignal.map { convs =>

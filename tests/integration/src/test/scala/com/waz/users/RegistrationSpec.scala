@@ -214,7 +214,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
     }
 
     scenario("query for 'nnn'") {
-      val users = search.getConnections("nnn", Array.empty)
+      val users = search.getConnections("nnn", Array.empty, true)
       withDelay { users.getAll should be(empty) }
     }
 
