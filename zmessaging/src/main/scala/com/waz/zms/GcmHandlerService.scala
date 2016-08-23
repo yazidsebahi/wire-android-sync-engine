@@ -83,9 +83,9 @@ class GcmHandlerService extends FutureService with ZMessagingService {
       val (callStateEvents, otherEvents) = n.events.partition(_.isInstanceOf[CallStateEvent])
 
       // call state events can not be directly dispatched like the other events because they might be stale
-      handleCallStateNotifications(zms, callStateEvents)
+      handleCallStateNotifications(zms, callStateEvents.map(_.withCurrentLocalTime()))
 
-      zms.eventPipeline(otherEvents)
+      zms.eventPipeline(otherEvents.map(_.withCurrentLocalTime()))
     }
   }
 
