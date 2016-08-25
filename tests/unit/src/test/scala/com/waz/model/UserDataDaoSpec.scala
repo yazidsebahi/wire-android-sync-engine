@@ -20,7 +20,6 @@ package com.waz.model
 import android.database.sqlite.SQLiteDatabase
 import com.waz.db.ZMessagingDB
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
-import com.waz.service.SearchKey
 import org.robolectric.Robolectric
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -64,10 +63,10 @@ class UserDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     Robolectric.application.getDatabasePath("dbName").delete()
   }
 
-  import UserDataDao.{insertOrReplace, list, get, findByConnectionStatus}
+  import UserDataDao.{findByConnectionStatus, get, insertOrReplace, list}
   implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
 
-  def search(str: String) = UserDataDao.recommendedPeople(SearchKey(str)).acquire(_.map(_.id).to[Vector])
+  def search(str: String) = UserDataDao.recommendedPeople(str).acquire(_.map(_.id).to[Vector])
 
   feature("CRUD") {
 

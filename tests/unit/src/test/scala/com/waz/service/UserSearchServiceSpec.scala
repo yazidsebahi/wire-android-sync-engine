@@ -21,11 +21,12 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.User.ConnectionStatus
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
+import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.service.UserSearchService.MinCommonConnections
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.testutils.Implicits._
+import com.waz.testutils.Implicits.SignalToSink
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
@@ -53,7 +54,8 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     UserData(id('f), "other related").copy(relation = Relation.Third),
     UserData(id('g), "friend user 1").copy(connection = ConnectionStatus.ACCEPTED),
     UserData(id('h), "friend user 2").copy(connection = ConnectionStatus.ACCEPTED),
-    UserData(id('i), "some other friend").copy(connection = ConnectionStatus.ACCEPTED))
+    UserData(id('i), "some other friend").copy(connection = ConnectionStatus.ACCEPTED),
+    UserData(id('j), "meep moop").copy(email = Some(EmailAddress("moop@meep.me"))))
 
   @volatile var syncRequest = Option.empty[SearchQuery]
   @volatile var commonSyncRequest = Option.empty[UserId]
@@ -98,7 +100,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Return local search results") {
       def verifySearch(prefix: String, matches: Seq[UserId]) = {
         val result = search(Recommended(prefix)).sink
-        forAsLongAs(100.millis, after = 50.millis)(result.current.get should contain theSameElementsAs(matches))
+        withClue(s"searching for: $prefix")(forAsLongAs(100.millis, after = 100.millis)(result.current.value should contain theSameElementsAs(matches)))
       }
 
       verifySearch("r", ids('d, 'e, 'f))
@@ -111,6 +113,9 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       verifySearch("user", ids('d, 'e))
       verifySearch("use", ids('d, 'e))
       verifySearch("used", Nil)
+      verifySearch("meep", Nil)
+      verifySearch("moop@meep", Nil)
+      verifySearch("moop@meep.me", ids('j))
     }
 
     scenario("Schedule sync if no cached query is found") {
@@ -151,6 +156,15 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
       val result = search(Recommended("user")).sink
       forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e)))
+      syncRequest shouldBe defined
+    }
+
+    scenario("DB search for email") {
+      val user = UserData(id('k), "quiet mouse").copy(email = Some(EmailAddress("sneaky@stealth.org")))
+      zms.db.withTransaction(UserDataDao.insertOrReplace(user)(_))
+
+      val result = search(Recommended("sneaky@stealth.org")).sink
+      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('k)))
       syncRequest shouldBe defined
     }
   }

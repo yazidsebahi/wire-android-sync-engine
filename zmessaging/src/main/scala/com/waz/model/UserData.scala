@@ -217,13 +217,19 @@ object UserData {
     def topPeople(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
       search(s"${Conn.name} = ? and ${Deleted.name} = 0", Array(Conn(ConnectionStatus.Accepted)))
 
-    def recommendedPeople(query: SearchKey)(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
-      search(s"""    (${SKey.name} LIKE ? OR ${SKey.name} LIKE ? OR ${Email.name} = ?)
-                |AND (${Rel.name} = '${Rel(Relation.First)}' OR ${Rel.name} = '${Rel(Relation.Second)}' OR ${Rel.name} = '${Rel(Relation.Third)}')
-                |AND ${Deleted.name} = 0
-                |AND ${Conn.name} != '${Conn(ConnectionStatus.Accepted)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Blocked)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Self)}'
+    def recommendedPeople(prefix: String)(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] = {
+      val query = SearchKey(prefix)
+      search(s"""(
+                |  (
+                |    (
+                |      ${SKey.name} LIKE ? OR ${SKey.name} LIKE ?
+                |    ) AND (${Rel.name} = '${Rel(Relation.First)}' OR ${Rel.name} = '${Rel(Relation.Second)}' OR ${Rel.name} = '${Rel(Relation.Third)}')
+                |  ) OR ${Email.name} = ?
+                |) AND ${Deleted.name} = 0
+                |  AND ${Conn.name} != '${Conn(ConnectionStatus.Accepted)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Blocked)}' AND ${Conn.name} != '${Conn(ConnectionStatus.Self)}'
               """.stripMargin,
-        Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", query.asciiRepresentation))
+        Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", prefix))
+    }
 
     private def search(whereClause: String, args: Array[String])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
       iterating(db.query(table.name, null, whereClause, args, null, null,

@@ -49,14 +49,11 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
       case r if r.forall(cached => (cacheExpiryTime elapsedSince cached.timestamp) || cached.entries.isEmpty) =>
         verbose(s"no cached entries for query $query")
 
-        val withinThreeLevels = Set(Relation.First, Relation.Second, Relation.Third)
-
         def fallbackToLocal = query match {
           case TopPeople =>
-            usersStorage.find[UserData, Vector[UserData]](u => ! u.deleted && u.connection == ConnectionStatus.Accepted, db => UserDataDao.topPeople(db), identity)
+            usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
           case Recommended(prefix) =>
-            val key = SearchKey(prefix)
-            usersStorage.find[UserData, Vector[UserData]](u => ! u.deleted && ! u.isConnected && withinThreeLevels(u.relation) && (key.isAtTheStartOfAnyWordIn(u.searchKey) || u.email.exists(_.str == prefix)), db => UserDataDao.recommendedPeople(key)(db), identity)
+            usersStorage.find[UserData, Vector[UserData]](recommendedPredicate(prefix, withinThreeLevels), db => UserDataDao.recommendedPeople(prefix)(db), identity)
         }
 
         fallbackToLocal.map(_.sortBy(_.name)(currentLocaleOrdering)).flatMap { users =>
@@ -74,12 +71,19 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
     }.map { users =>
       query match {
         case TopPeople =>
-          users filter (u => ! u.deleted && u.connection == ConnectionStatus.Accepted)
+          users filter topPeoplePredicate
         case Recommended(prefix) =>
-          val key = SearchKey(prefix)
-          users filter (u => ! u.deleted && ! u.isConnected && key.isAtTheStartOfAnyWordIn(u.searchKey))
+          users filter recommendedPredicate(prefix, atAnyLevel)
       }
     }.map(users => SeqMap(limit.fold2(users, users.take))(_.id, identity))
+
+  private val topPeoplePredicate: UserData => Boolean = u => ! u.deleted && u.connection == ConnectionStatus.Accepted
+  private def recommendedPredicate(prefix: String, levels: Set[Relation]): UserData => Boolean = {
+    val key = SearchKey(prefix)
+    u => ! u.deleted && ! u.isConnected && ((key.isAtTheStartOfAnyWordIn(u.searchKey) && levels(u.relation)) || u.email.exists(_.str == prefix))
+  }
+  private val withinThreeLevels = Set(Relation.First, Relation.Second, Relation.Third)
+  private val atAnyLevel = Relation.values.toSet
 
   def updateSearchResults(query: SearchQuery, results: Seq[UserSearchEntry]): Future[Unit] = {
     def updating(ids: Vector[UserId])(cached: SearchQueryCache) = cached.copy(query, Instant.now, if (ids.nonEmpty || cached.entries.isEmpty) Some(ids) else cached.entries)
