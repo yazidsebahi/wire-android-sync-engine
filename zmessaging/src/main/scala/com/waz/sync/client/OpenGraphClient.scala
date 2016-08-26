@@ -138,7 +138,7 @@ object OpenGraphClient {
 
     def unapply(body: StringResponse): Option[OpenGraphData] = {
 
-      def htmlTitle = TitlePattern.findFirstIn(body.value)
+      def htmlTitle = TitlePattern.findFirstMatchIn(body.value).map(_.group(1))
 
       val ogMeta = MetaTag.findAllIn(body.value) .flatMap { meta =>
         val attrs = Attribute.findAllMatchIn(meta) .map { m => m.group(1).toLowerCase -> m.group(2) } .toMap
