@@ -377,18 +377,15 @@ object GenericContent {
     }
   }
 
-  type LikingAction = Liking.Action
-  implicit object LikingAction extends GenericContent[Liking.Action] {
+  type Reaction = Liking.Action
+  implicit object Reaction extends GenericContent[Liking.Action] {
 
-    override def set(msg: GenericMessage) = {
-      case Liking.Action.Like   => msg.setLiking(Messages.LIKE)
-      case Liking.Action.Unlike => msg.setLiking(Messages.UNLIKE)
-    }
+    override def set(msg: GenericMessage) = l => msg.setReaction(returning(new Messages.Reaction())(_.emoji = l match {
+      case Liking.Action.Like   => "\uD83D\uDC96"
+      case Liking.Action.Unlike => ""
+    }))
 
-    def apply(v: Int) = v match {
-      case Messages.LIKE => Liking.Action.Like
-      case Messages.UNLIKE => Liking.Action.Unlike
-    }
+    def apply(v: String) = if (v.isEmpty) Liking.Action.Unlike else Liking.Action.Like
   }
 
   type Knock = Messages.Knock
@@ -532,9 +529,11 @@ object GenericContent {
     case object SessionReset extends ClientAction {
       override val value: Int = Messages.RESET_SESSION
     }
+    case class UnknownAction(value: Int) extends ClientAction
 
     def apply(v: Int) = v match {
       case Messages.RESET_SESSION => SessionReset
+      case other                  => UnknownAction(other)
     }
 
     override def set(msg: GenericMessage) = { action => msg.setClientAction(action.value) }

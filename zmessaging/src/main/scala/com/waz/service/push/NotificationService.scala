@@ -39,7 +39,10 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle, storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, push: PushService, kv: KeyValueStorage, timeouts: Timeouts) {
+class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
+    storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: LikingsStorage,
+    push: PushService, kv: KeyValueStorage, timeouts: Timeouts) {
+
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -63,9 +66,8 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
       case ev @ UserConnectionEvent(_, _, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
         NotificationData(s"$CONNECT_ACCEPTED-$userId", "", ConvId(userId.str), userId, CONNECT_ACCEPTED, time.instant, userName = name)
       case ContactJoinEvent(_, userId, _) =>
-        verbose(s"ContactJoinEvent")
+        verbose("ContactJoinEvent")
         NotificationData(s"$CONTACT_JOIN-$userId", "", ConvId(userId.str), userId, CONTACT_JOIN, Instant.EPOCH)
-        // TODO: likes
     })
   }, _ => ! uiActive)
 
@@ -155,13 +157,39 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
     }
   }
 
+  reactionStorage.onChanged { reactions =>
+    val reactionsFromOthers = reactions.filterNot(_.user == selfUserId)
+
+    messages.getAll(reactionsFromOthers.map(_.message)).flatMap { msgs =>
+      val myMsgs = msgs.collect { case Some(m) if m.userId == selfUserId => m.id }(breakOut): Set[MessageId]
+      val rs = reactionsFromOthers.filter(r => myMsgs contains r.message).sortBy(_.timestamp)
+      val (toRemove, toAdd) = rs.foldLeft((Set.empty[(MessageId, UserId)], Map.empty[(MessageId, UserId), Liking])) {
+        case ((rs, as), r @ Liking(m, u, t, Liking.Action.Like))  => (rs - r.id, as + (r.id -> r))
+        case ((rs, as), r @ Liking(m, u, t, Liking.Action.Unlike)) => (rs + r.id, as - r.id)
+      }
+
+      storage.remove(toRemove.map(reactionID)).flatMap { _ =>
+        if (! uiActive)
+          add(toAdd.valuesIterator.map(r => NotificationData(reactionID(r.id), "", ConvId(r.user.str), r.user, LIKE, Instant.EPOCH, referencedMessage = Some(r.message))).toVector)
+        else
+          Future.successful(Nil)
+      }
+    }.logFailure(reportHockey = true)
+  }
+
+  reactionStorage.onDeleted { ids =>
+    storage.remove(ids.map(reactionID))
+  }
+
+  private def reactionID(id: (MessageId, UserId)) = s"$LIKE-$id"
+
   def clearNotifications() =
     for {
       _ <- lastUiVisibleTime := Instant.now()
       // will execute removeReadNotifications as part of this call,
       // this ensures that it's actually done while wakeLock is acquired by caller
       lastRead <- lastReadMap.head
-      _ <- removeReadNotifications(lastRead, Instant.now())
+      _ <- removeReadNotifications(lastRead, Instant.now)
     } yield ()
 
   private def removeReadNotifications(lastRead: Map[ConvId, Instant], uiTime: Instant) = {

@@ -23,7 +23,7 @@ import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.{Cleared, LastRead, LikingAction}
+import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
