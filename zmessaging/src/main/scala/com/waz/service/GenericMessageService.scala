@@ -37,7 +37,7 @@ class GenericMessageService(messages: MessagesContentUpdater, convs: Conversatio
     def lastForConv(items: Seq[(RConvId, Instant)]) = items.groupBy(_._1).map { case (conv, times) => times.maxBy(_._2.toEpochMilli) }
 
     val likes = events collect {
-      case GenericMessageEvent(_, _, time, from, GenericMessage(id, action: Liking.Action)) => Liking(MessageId(id.str), from, time.instant, action)
+      case GenericMessageEvent(_, _, time, from, GenericMessage(_, Reaction(action, msg))) => Liking(msg, from, time.instant, action)
     }
 
     val lastRead = lastForConv(events collect {

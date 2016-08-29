@@ -462,7 +462,7 @@ class DeviceActor(val deviceName: String,
     case WaitDisconnected =>
       waitUntil(channels)(channels => !channels.hasIncomingCall && !channels.hasOngoingCall) map { _ => Successful }
 
-    case SetMessageLiking(remoteId, messageId, action) =>
+    case SetMessageReaction(remoteId, messageId, action) =>
       waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
         val messages = findConvById(remoteId).getMessages
         waitUntil(messages)(_.exists(_.data.id == messageId)) map { messages =>

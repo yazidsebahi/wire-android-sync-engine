@@ -37,7 +37,7 @@ class LikingsSyncHandler(client: MessagesClient, convs: ConversationsContentUpda
   def postLiking(id: ConvId, liking: Liking): Future[SyncResult] =
     convs.convById(id) flatMap {
       case Some(conv) =>
-        otrSync.postOtrMessage(conv, GenericMessage(liking.message.uid, liking.action)) flatMap {
+        otrSync.postOtrMessage(conv, GenericMessage(Uid(), (liking.action, liking.message))) flatMap {
           case Right(time) =>
             service.processLiking(Seq(liking.copy(timestamp = time.instant))) map (_ => SyncResult.Success)
           case Left(error) =>

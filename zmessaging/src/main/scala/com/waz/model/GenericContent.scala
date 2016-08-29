@@ -377,15 +377,22 @@ object GenericContent {
     }
   }
 
-  type Reaction = Liking.Action
-  implicit object Reaction extends GenericContent[Liking.Action] {
+  type Reaction = (Liking.Action, MessageId)
+  implicit object Reaction extends GenericContent[Reaction] {
 
-    override def set(msg: GenericMessage) = l => msg.setReaction(returning(new Messages.Reaction())(_.emoji = l match {
-      case Liking.Action.Like   => "\uD83D\uDC96"
-      case Liking.Action.Unlike => ""
-    }))
+    override def set(msg: GenericMessage) = {
+      case (l, id) => msg.setReaction(returning(new Messages.Reaction()) { r =>
+        r.emoji = l match {
+          case Liking.Action.Like   => "\uD83D\uDC96"
+          case Liking.Action.Unlike => ""
+        }
+        r.messageId = id.str
+      })
+    }
 
-    def apply(v: String) = if (v.isEmpty) Liking.Action.Unlike else Liking.Action.Like
+    def apply(r: String, id: String): Reaction = (if (r.isEmpty) Liking.Action.Unlike else Liking.Action.Like, MessageId(id))
+
+    def unapply(proto: Messages.Reaction): Option[Reaction] = Some(Reaction(proto.emoji, proto.messageId))
   }
 
   type Knock = Messages.Knock

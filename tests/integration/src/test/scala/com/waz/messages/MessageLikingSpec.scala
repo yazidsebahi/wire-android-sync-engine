@@ -23,7 +23,7 @@ import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.model.Liking.Action._
 import com.waz.model._
-import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageLiking, Successful}
+import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageReaction, Successful}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestApplication
@@ -131,5 +131,5 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
 
   def notificationsFromUpdate(n: Int) = notificationsSpy.gcms(n).getNotifications.asScala
 
-  def otherUserDoes(action: Liking.Action, msg: Message) = otherUserClient ? SetMessageLiking(conv.data.remoteId, msg.data.id, action) should eventually(be(Successful))
+  def otherUserDoes(action: Liking.Action, msg: Message) = otherUserClient ? SetMessageReaction(conv.data.remoteId, msg.data.id, action) should eventually(be(Successful))
 }

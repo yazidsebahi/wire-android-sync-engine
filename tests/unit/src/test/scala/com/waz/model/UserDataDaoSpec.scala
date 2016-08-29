@@ -109,10 +109,11 @@ class UserDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
       search("s").toSet shouldBe empty
 
-      search("r").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
-      search("re").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
-      search("rel").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
-      search("rela").toSet shouldEqual users.filter(_.name.contains("related user")).map(_.id).toSet
+      val relatedUsers = users.filter(_.name.contains("related")).map(_.id).toSet
+      search("r").toSet shouldEqual relatedUsers
+      search("re").toSet shouldEqual relatedUsers
+      search("rel").toSet shouldEqual relatedUsers
+      search("rela").toSet shouldEqual relatedUsers
 
       search("1").toSet shouldEqual users.find(_.name == "related user 1").map(_.id).toSet
 

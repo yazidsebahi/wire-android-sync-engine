@@ -152,7 +152,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
             MessageData(id, conv.id, tpe, from, content, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
           case Knock(hotKnock) =>
             MessageData(id, conv.id, Message.Type.KNOCK, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case action: Liking.Action => MessageData.Empty
+          case Reaction(_, _) => MessageData.Empty
           case Asset(_, _, UploadCancelled) => MessageData.Empty
           case Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
             MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
