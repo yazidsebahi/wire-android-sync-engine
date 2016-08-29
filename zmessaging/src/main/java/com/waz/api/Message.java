@@ -38,7 +38,7 @@ public interface Message extends UiObservable, Parcelable {
     };
 
     enum Status {
-        DEFAULT, SENT, PENDING, DELETED, FAILED, FAILED_READ;
+        DEFAULT, SENT, PENDING, DELETED, FAILED, FAILED_READ, DELIVERED;
 
         public boolean isFailed() {
             return this == FAILED;
@@ -141,6 +141,12 @@ public interface Message extends UiObservable, Parcelable {
      * the initial member joins or the connect request message itself, but including knocks.
      */
     boolean isFirstMessage();
+
+    /**
+     * @return whether this message is the last (or "most recent") message sent from this user to the conversation
+     *         this message belongs to
+     */
+    boolean isLastMessageFromSelf();
 
     /**
      * Returns true if self user was mentioned in this message.

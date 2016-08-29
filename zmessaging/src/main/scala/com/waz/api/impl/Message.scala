@@ -129,6 +129,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isFirstMessage: Boolean = data.firstMessage
 
+  override def isLastMessageFromSelf: Boolean = false
+
   override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.firstMessage
 
   override def getLocalTime: Instant = data.localTime
@@ -221,6 +223,7 @@ object EmptyMessage extends com.waz.api.Message {
   override val getMentionedUsers: Array[api.User] = Array.empty
   override def isUserMentioned: Boolean = false
   override def isFirstMessage: Boolean = false
+  override def isLastMessageFromSelf: Boolean = false
   override def getBody: String = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
   override def getLocalTime: Instant = MessageData.UnknownInstant
   override def getImageWidth: Int = 0
