@@ -88,7 +88,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     case AssetError(ms) => Future.traverse(ms) { messages.delete }
   }
 
-  def assetSignal(id: AssetId) = storage.signal(id) flatMap[(AnyAssetData, api.AssetStatus)] {
+  def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AnyAssetData, api.AssetStatus)] {
     case asset @ AnyAssetData(_, _, _, _, _, meta, _, _, _, AssetStatus(status, Some(_)), _) =>
       cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
         case true  =>
