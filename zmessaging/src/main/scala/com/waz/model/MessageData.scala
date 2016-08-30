@@ -208,6 +208,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
   val Empty = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""))
   val Deleted = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""), state = Message.Status.DELETED)
   val UnknownInstant = Instant.EPOCH
+  val isUserContent = Set(TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, RICH_MEDIA, LOCATION)
 
   type MessageState = Message.Status
   import GenericMessage._
@@ -252,7 +253,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       o.put("editTime", v.localTime.toEpochMilli)
     }
   }
-  
+
   implicit lazy val MessageTypeCodec: EnumCodec[Message.Type, String] = EnumCodec.injective {
     case Message.Type.TEXT => "Text"
     case Message.Type.TEXT_EMOJI_ONLY => "TextEmojiOnly"
@@ -322,6 +323,10 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def last(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} DESC", "1"))
 
     def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${State.name} = '${Message.Status.SENT.name}'", null, null, null, s"${Time.name} DESC", "1"))
+
+    def lastFromSelf(conv: ConvId, selfUserId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' AND ${User.name} = '${User(selfUserId)}' AND $userContentPredicate", null, null, null, s"${Time.name} DESC", "1"))
+
+    private val userContentPredicate = isUserContent.map(t => s"${Type.name} = '${Type(t)}'").mkString("(", " OR ", ")")
 
     def lastIncomingKnock(convId: ConvId, selfUser: UserId)(implicit db: SQLiteDatabase): Option[MessageData] = single(
       db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ? AND ${User.name} <> ?", Array(convId.toString, Type(Message.Type.KNOCK), selfUser.str), null, null, s"${Time.name} DESC", "1")
