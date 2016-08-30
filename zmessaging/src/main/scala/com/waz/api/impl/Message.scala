@@ -35,20 +35,30 @@ import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils._
+import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 
-class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[UserId], var likedBySelf: Boolean)(implicit context: UiModule) extends api.Message with UiObservable {
+class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[UserId], var likedBySelf: Boolean)(implicit context: UiModule) extends api.Message with SignalLoading with UiObservable {
 
   private implicit val logTag: LogTag = logTagFor[Message]
+  private val convId = if (data == MessageData.Empty) Signal[ConvId]() else Signal(data.convId)
   private var parts = Array.empty[Part]
+  private var lastMessageFromSelf = false
 
   def this(msg: MessageAndLikes)(context: UiModule) = this(msg.message.id, msg.message, msg.likes, msg.likedBySelf)(context)
   def this(id: MessageId)(context: UiModule) = this(id, MessageData.Empty, Vector.empty, false)(context)
 
   updateParts()
   reload() // always reload because data from constructor might always be outdated already
+  addLoader(zms => convId.flatMap(c => zms.messagesStorage.lastMessageFromSelf(c)), Option.empty[MessageData]) { msg =>
+    val isMostRecentFromSelf = msg.exists(_.id == id)
+    if (isMostRecentFromSelf != lastMessageFromSelf) {
+      lastMessageFromSelf = isMostRecentFromSelf
+      notifyChanged()
+    }
+  }
 
   def reload() = context.zms.flatMapFuture(_.msgAndLikes.getMessageAndLikes(id))(Threading.Background).map { m => set(m.getOrElse(MessageAndLikes.Deleted)) } (Threading.Ui)
 
@@ -58,6 +68,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
     likedBySelf = msg.likedBySelf
     updateParts()
     notifyChanged()
+    convId ! data.convId
   }
 
   private def updateParts(): Unit = parts = data.content.zipWithIndex.map { case (c, index) => new MessagePart(c, data, index) } (breakOut)
@@ -129,7 +140,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isFirstMessage: Boolean = data.firstMessage
 
-  override def isLastMessageFromSelf: Boolean = false
+  override def isLastMessageFromSelf: Boolean = lastMessageFromSelf
 
   override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.firstMessage
 

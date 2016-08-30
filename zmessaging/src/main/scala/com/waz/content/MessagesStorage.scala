@@ -135,6 +135,8 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
 
   def lastMessage(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.lastMessage)
 
+  def lastMessageFromSelf(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.lastMessageFromSelf)
+
   def getLastMessage(conv: ConvId) = msgsIndex(conv).flatMap(_.getLastMessage)
 
   def getLastSentMessage(conv: ConvId) = msgsIndex(conv).flatMap(_.getLastSentMessage)

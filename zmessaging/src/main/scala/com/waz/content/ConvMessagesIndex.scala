@@ -21,11 +21,11 @@ import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.content.ConvMessagesIndex._
-import com.waz.model.MessageData.MessageDataDao
+import com.waz.model.MessageData.{MessageDataDao, isUserContent}
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
-import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
+import com.waz.utils.events.{EventStream, RefreshingSignal, Signal, SourceSignal}
 import org.threeten.bp.Instant
 
 import scala.collection.mutable
@@ -51,6 +51,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val lastMessage = Signal(Option.empty[MessageData])
     val lastSentMessage = Signal(Option.empty[MessageData])
     val lastReadTime = returning(Signal[Instant]())(_.disableAutowiring())
+    val lastMessageFromSelf = Signal(Option.empty[MessageData])
   }
 
   object signals {
@@ -62,6 +63,11 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val incomingKnock: Signal[Option[MessageId]] = Signal(sources.lastReadTime, sources.incomingKnock).map { case (time, msg) => msg.filter(_.time.isAfter(time)).map(_.id) }
     val lastMessage: Signal[Option[MessageData]] = returning(sources.lastMessage)(_.disableAutowiring())
     val lastSentMessage: Signal[Option[MessageData]] = returning(sources.lastSentMessage)(_.disableAutowiring())
+    val lastMessageFromSelf: Signal[Option[MessageData]] = returning(sources.lastMessageFromSelf)(_.disableAutowiring())
+
+    lastMessageFromSelf { msg =>
+      info(s"last message from self is now $msg")
+    }
 
     val unreadCount = for {
       time <- sources.lastReadTime
@@ -87,10 +93,9 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
         incomingKnock ! MessageDataDao.lastIncomingKnock(conv, selfUserId)
         failedCount ! MessageDataDao.countFailed(conv).toInt
         firstMessage = MessageDataDao.first(conv)
-        val last = MessageDataDao.last(conv)
-        lastMessage ! last
-
+        lastMessage ! MessageDataDao.last(conv)
         lastSentMessage ! MessageDataDao.lastSent(conv)
+        lastMessageFromSelf ! MessageDataDao.lastFromSelf(conv, selfUserId)
       }
     }.map { _ =>
       Signal(signals.unreadCount, signals.failedCount, signals.lastMissedCall, signals.incomingKnock).throttle(500.millis) { case (unread, failed, missed, knock) =>
@@ -149,12 +154,14 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   private def removeLast(f: MessageData => Boolean) = {
     val lastRemoved = lastMessage.mutate(_ filterNot f)
     val lastSentRemoved = lastSentMessage.mutate(_ filterNot f)
+    val lastFromSelfRemoved = lastMessageFromSelf.mutate(_ filterNot f)
 
-    if (lastRemoved || lastSentRemoved) {
+    if (lastRemoved || lastSentRemoved || lastFromSelfRemoved) {
       verbose("last message was removed, need to fetch it from db")
       storage.read { implicit db =>
-        MessageDataDao.last(conv) foreach updateLast
-        MessageDataDao.lastSent(conv) foreach updateLastSent
+        MessageDataDao.last(conv) foreach updateSignal(lastMessage)
+        MessageDataDao.lastSent(conv) foreach updateSignal(lastSentMessage)
+        MessageDataDao.lastFromSelf(conv, selfUserId) foreach updateSignal(lastMessageFromSelf)
       }
     }
   }
@@ -214,18 +221,17 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   }
 
   private def updateLast(msgs: Iterable[MessageData]): Unit = {
-    updateLast(msgs.maxBy(_.time))
+    updateSignal(lastMessage)(msgs.maxBy(_.time))
 
     val sent = msgs.filter(_.state == Status.SENT)
-    if (sent.nonEmpty)
-      updateLastSent(sent.maxBy(_.time))
+    if (sent.nonEmpty) updateSignal(lastMessage)(sent.maxBy(_.time))
+
+    val fromSelf = msgs.filter(m => m.userId == selfUserId && isUserContent(m.msgType))
+    if (fromSelf.nonEmpty) updateSignal(lastMessageFromSelf)(fromSelf.maxBy(_.time))
   }
 
-  private def updateLast(last: MessageData): Unit =
-    lastMessage.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
-
-  private def updateLastSent(last: MessageData): Unit =
-    lastSentMessage.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
+  private def updateSignal(signal: SourceSignal[Option[MessageData]])(last: MessageData): Unit =
+    signal.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
 }
 
 object ConvMessagesIndex {
