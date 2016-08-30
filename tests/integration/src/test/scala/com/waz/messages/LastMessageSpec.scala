@@ -28,7 +28,7 @@ import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Inspectors, Matchers}
 
 import scala.concurrent.duration._
 
-class LastMessageFromSelfSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with Inspectors with ProvisionedApiSpec with ThreadActorSpec { test =>
+class LastMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with Inspectors with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   override val provisionFile = "/two_users_connected.json"
 
@@ -39,7 +39,7 @@ class LastMessageFromSelfSpec extends FeatureSpec with Matchers with BeforeAndAf
   lazy val rconv = conv.data.remoteId
   lazy val msgs = conv.getMessages
 
-  lazy val friendClient = registerDevice(logTagFor[LastMessageFromSelfSpec])
+  lazy val friendClient = registerDevice(logTagFor[LastMessageSpec])
 
   scenario("Initial sync") {
     (msgs should have size 1).soon
@@ -52,59 +52,72 @@ class LastMessageFromSelfSpec extends FeatureSpec with Matchers with BeforeAndAf
 
   scenario("Only system message") {
     isLastMessageFromSelfShouldEqual(false)
+    isLastMessageFromOtherShouldEqual(false)
   }
 
   scenario("One message from self") {
     conv.sendMessage(new Text("whee"))
     isLastMessageFromSelfShouldEqual(false, true)
+    isLastMessageFromOtherShouldEqual(false, false)
   }
 
   scenario("Only system message (again) after deletion") {
     msgs(1).delete()
     isLastMessageFromSelfShouldEqual(false)
+    isLastMessageFromOtherShouldEqual(false)
   }
 
   scenario("Only message from system and friend") {
     friendClient ? SendText(rconv, "meep") should eventually(be(Successful))
     isLastMessageFromSelfShouldEqual(false, false)
+    isLastMessageFromOtherShouldEqual(false, true)
   }
 
   scenario("Last message is from self") {
     conv.sendMessage(new Text("moop"))
     isLastMessageFromSelfShouldEqual(false, false, true)
+    isLastMessageFromOtherShouldEqual(false, true, false)
   }
 
   scenario("Friend sends after self") {
     friendClient ? SendText(rconv, "such texting, much wow") should eventually(be(Successful))
     isLastMessageFromSelfShouldEqual(false, false, true, false)
+    isLastMessageFromOtherShouldEqual(false, false, false, true)
   }
 
   scenario("Update last message from self") {
     msgs(2).update(new Text("mööp"))
     isLastMessageFromSelfShouldEqual(false, false, true, false)
+    isLastMessageFromOtherShouldEqual(false, false, false, true)
   }
 
   scenario("Last message is from self (again)") {
     conv.sendMessage(new Text("multipas"))
     isLastMessageFromSelfShouldEqual(false, false, false, false, true)
+    isLastMessageFromOtherShouldEqual(false, false, false, true, false)
   }
 
   scenario("Edit last message") {
     msgs(4).update(new Text("MultiPass"))
     isLastMessageFromSelfShouldEqual(false, false, false, false, true)
+    isLastMessageFromOtherShouldEqual(false, false, false, true, false)
   }
 
   scenario("Recall last message") {
     msgs(4).recall()
     isLastMessageFromSelfShouldEqual(false, false, true, false)
+    isLastMessageFromOtherShouldEqual(false, false, false, true)
   }
 
-  private def isLastMessageFromSelfShouldEqual(flags: Boolean*): Unit = soon {
+  private def isLastMessageFromSelfShouldEqual(flags: Boolean*): Unit = flagsShouldEqual(_.isLastMessageFromSelf)(flags)
+  private def isLastMessageFromOtherShouldEqual(flags: Boolean*): Unit = flagsShouldEqual(_.isLastMessageFromOther)(flags)
+
+  private def flagsShouldEqual(f: Message => Boolean)(flags: Seq[Boolean]): Unit = soon {
     msgs should have size flags.size
 
     forAsLongAs(250.millis) {
       forAll(msgs zip flags) { case (msg, flag) =>
-        msg.isLastMessageFromSelf shouldBe flag
+        f(msg) shouldBe flag
       }
     }
   }

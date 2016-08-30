@@ -46,16 +46,19 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   private val convId = if (data == MessageData.Empty) Signal[ConvId]() else Signal(data.convId)
   private var parts = Array.empty[Part]
   private var lastMessageFromSelf = false
+  private var lastMessageFromOther = false
 
   def this(msg: MessageAndLikes)(context: UiModule) = this(msg.message.id, msg.message, msg.likes, msg.likedBySelf)(context)
   def this(id: MessageId)(context: UiModule) = this(id, MessageData.Empty, Vector.empty, false)(context)
 
   updateParts()
   reload() // always reload because data from constructor might always be outdated already
-  addLoader(zms => convId.flatMap(c => zms.messagesStorage.lastMessageFromSelf(c)), Option.empty[MessageData]) { msg =>
-    val isMostRecentFromSelf = msg.exists(_.id == id)
-    if (isMostRecentFromSelf != lastMessageFromSelf) {
+  addLoader(zms => convId.flatMap(c => zms.messagesStorage.lastMessageFromSelfAndFromOther(c)), (Option.empty[MessageData], Option.empty[MessageData])) { case (fromSelf, fromOther) =>
+    val isMostRecentFromSelf = fromSelf.exists(_.id == id)
+    val isMostRecentFromOther = fromOther.exists(_.id == id)
+    if (isMostRecentFromSelf != lastMessageFromSelf || isMostRecentFromOther != lastMessageFromOther) {
       lastMessageFromSelf = isMostRecentFromSelf
+      lastMessageFromOther = isMostRecentFromOther
       notifyChanged()
     }
   }
@@ -141,6 +144,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def isFirstMessage: Boolean = data.firstMessage
 
   override def isLastMessageFromSelf: Boolean = lastMessageFromSelf
+  override def isLastMessageFromOther: Boolean = lastMessageFromOther
 
   override def isCreateConversation: Boolean = data.msgType == api.Message.Type.MEMBER_JOIN && data.firstMessage
 
@@ -235,6 +239,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isUserMentioned: Boolean = false
   override def isFirstMessage: Boolean = false
   override def isLastMessageFromSelf: Boolean = false
+  override def isLastMessageFromOther: Boolean = false
   override def getBody: String = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
   override def getLocalTime: Instant = MessageData.UnknownInstant
   override def getImageWidth: Int = 0

@@ -149,6 +149,12 @@ public interface Message extends UiObservable, Parcelable {
     boolean isLastMessageFromSelf();
 
     /**
+     * @return whether this message is the last (or "most recent") message received from another user in the conversation
+     *         this message belongs to
+     */
+    boolean isLastMessageFromOther();
+
+    /**
      * Returns true if self user was mentioned in this message.
      */
     boolean isUserMentioned();

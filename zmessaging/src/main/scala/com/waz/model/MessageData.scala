@@ -326,6 +326,8 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def lastFromSelf(conv: ConvId, selfUserId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' AND ${User.name} = '${User(selfUserId)}' AND $userContentPredicate", null, null, null, s"${Time.name} DESC", "1"))
 
+    def lastFromOther(conv: ConvId, selfUserId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' AND ${User.name} != '${User(selfUserId)}' AND $userContentPredicate", null, null, null, s"${Time.name} DESC", "1"))
+
     private val userContentPredicate = isUserContent.map(t => s"${Type.name} = '${Type(t)}'").mkString("(", " OR ", ")")
 
     def lastIncomingKnock(convId: ConvId, selfUser: UserId)(implicit db: SQLiteDatabase): Option[MessageData] = single(

@@ -52,6 +52,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val lastSentMessage = Signal(Option.empty[MessageData])
     val lastReadTime = returning(Signal[Instant]())(_.disableAutowiring())
     val lastMessageFromSelf = Signal(Option.empty[MessageData])
+    val lastMessageFromOther = Signal(Option.empty[MessageData])
   }
 
   object signals {
@@ -64,6 +65,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val lastMessage: Signal[Option[MessageData]] = returning(sources.lastMessage)(_.disableAutowiring())
     val lastSentMessage: Signal[Option[MessageData]] = returning(sources.lastSentMessage)(_.disableAutowiring())
     val lastMessageFromSelf: Signal[Option[MessageData]] = returning(sources.lastMessageFromSelf)(_.disableAutowiring())
+    val lastMessageFromOther: Signal[Option[MessageData]] = returning(sources.lastMessageFromOther)(_.disableAutowiring())
 
     lastMessageFromSelf { msg =>
       info(s"last message from self is now $msg")
@@ -96,6 +98,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
         lastMessage ! MessageDataDao.last(conv)
         lastSentMessage ! MessageDataDao.lastSent(conv)
         lastMessageFromSelf ! MessageDataDao.lastFromSelf(conv, selfUserId)
+        lastMessageFromOther ! MessageDataDao.lastFromOther(conv, selfUserId)
       }
     }.map { _ =>
       Signal(signals.unreadCount, signals.failedCount, signals.lastMissedCall, signals.incomingKnock).throttle(500.millis) { case (unread, failed, missed, knock) =>
@@ -155,6 +158,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val lastRemoved = lastMessage.mutate(_ filterNot f)
     val lastSentRemoved = lastSentMessage.mutate(_ filterNot f)
     val lastFromSelfRemoved = lastMessageFromSelf.mutate(_ filterNot f)
+    val lastFromOtherRemoved = lastMessageFromOther.mutate(_ filterNot f)
 
     if (lastRemoved || lastSentRemoved || lastFromSelfRemoved) {
       verbose("last message was removed, need to fetch it from db")
@@ -162,6 +166,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
         MessageDataDao.last(conv) foreach updateSignal(lastMessage)
         MessageDataDao.lastSent(conv) foreach updateSignal(lastSentMessage)
         MessageDataDao.lastFromSelf(conv, selfUserId) foreach updateSignal(lastMessageFromSelf)
+        MessageDataDao.lastFromOther(conv, selfUserId) foreach updateSignal(lastMessageFromOther)
       }
     }
   }
@@ -226,8 +231,9 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val sent = msgs.filter(_.state == Status.SENT)
     if (sent.nonEmpty) updateSignal(lastMessage)(sent.maxBy(_.time))
 
-    val fromSelf = msgs.filter(m => m.userId == selfUserId && isUserContent(m.msgType))
+    val (fromSelf, fromOther) = msgs.filter(m => isUserContent(m.msgType)).partition(_.userId == selfUserId)
     if (fromSelf.nonEmpty) updateSignal(lastMessageFromSelf)(fromSelf.maxBy(_.time))
+    if (fromOther.nonEmpty) updateSignal(lastMessageFromOther)(fromOther.maxBy(_.time))
   }
 
   private def updateSignal(signal: SourceSignal[Option[MessageData]])(last: MessageData): Unit =
