@@ -37,6 +37,9 @@ case class Liking(message: MessageId, user: UserId, timestamp: Instant, action: 
 object Liking {
   type Id = (MessageId, UserId)
 
+  def like: Action = Action.Like
+  def unlike: Action = Action.Unlike
+
   @SerialVersionUID(1L) sealed abstract class Action(val serial: Int) extends Serializable
 
   object Action {
