@@ -150,6 +150,10 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostOpenGraphMeta](req)(r => Merged(PostOpenGraphMeta(convId, messageId, editTime max r.editTime)))
   }
 
+  case class PostReceipt(convId: ConvId, messageId: MessageId, userId: UserId) extends RequestForConversation(Cmd.PostReceipt) {
+    override val mergeKey = (cmd, messageId)
+  }
+
   case class PostDeleted(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostDeleted) {
     override val mergeKey = (cmd, convId, messageId)
   }
@@ -316,6 +320,7 @@ object SyncRequest {
         case Cmd.PostLiking            => PostLiking(convId, JsonDecoder[Liking]('liking))
         case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
         case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
+        case Cmd.PostReceipt           => PostReceipt(convId, messageId, userId)
         case Cmd.Unknown               => Unknown
       }
     }
@@ -357,6 +362,10 @@ object SyncRequest {
         case PostOpenGraphMeta(_, messageId, time) =>
           putId("message", messageId)
           o.put("time", time.toEpochMilli)
+
+        case PostReceipt(_, messageId, userId) =>
+          putId("message", messageId)
+          putId("user", userId)
 
         case PostConnection(_, name, message) =>
           o.put("name", name)

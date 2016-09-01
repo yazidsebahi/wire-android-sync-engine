@@ -81,6 +81,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostLastRead requests") { forAll((_: PostLastRead) should beUnchangedByEncodingAndDecoding) }
     scenario("SyncPreKeys requests") { forAll((_: SyncPreKeys) should beUnchangedByEncodingAndDecoding) }
     scenario("PostAssetStatus requests") { forAll((_: PostAssetStatus) should beUnchangedByEncodingAndDecoding) }
+    scenario("PostReceipt requests") { forAll((_: PostReceipt) should beUnchangedByEncodingAndDecoding) }
 
     scenario("SelfPicture requests") {
       forAll (Table("asset", Some(AssetId()), None)) { asset: Option[AssetId] => PostSelfPicture(asset) should beUnchangedByEncodingAndDecoding }
@@ -107,7 +108,8 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         SyncPreKeys(UserId(), Set(ClientId(), ClientId())),
         PostLastRead(ConvId(), Instant.now),
         PostCleared(ConvId(), Instant.now),
-        PostAssetStatus(ConvId(), MessageId(), AssetStatus.UploadCancelled)
+        PostAssetStatus(ConvId(), MessageId(), AssetStatus.UploadCancelled),
+        PostReceipt(ConvId(), MessageId(), UserId())
       ) map { SyncJob(SyncId(), _) }
 
       SyncJobDao.insertOrReplace(requests)

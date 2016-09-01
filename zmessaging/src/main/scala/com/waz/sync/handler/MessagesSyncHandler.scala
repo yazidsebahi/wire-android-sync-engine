@@ -65,7 +65,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
         val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
         otrSync.postOtrMessage(ConvId(users.selfUserId.str), RConvId(users.selfUserId.str), msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
       case None =>
-        Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
+        successful(SyncResult(internalError("conversation not found")))
     }
 
   def postRecalled(convId: ConvId, msgId: MessageId, recalled: MessageId): Future[SyncResult] =
@@ -73,19 +73,30 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       case Some(conv) =>
         val msg = GenericMessage(msgId.uid, Proto.MsgRecall(recalled))
         otrSync.postOtrMessage(conv.id, conv.remoteId, msg) flatMap {
-          case Left(e) => Future successful SyncResult(e)
+          case Left(e) => successful(SyncResult(e))
           case Right(time) =>
             msgContent.updateMessage(msgId)(_.copy(editTime = time.instant, state = Message.Status.SENT)) map { _ => SyncResult.Success }
         }
       case None =>
-        Future successful SyncResult(ErrorResponse.internalError("conversation not found"))
+        successful(SyncResult(internalError("conversation not found")))
+    }
+
+  def postReceipt(convId: ConvId, msgId: MessageId, userId: UserId): Future[SyncResult] =
+    convs.convById(convId) flatMap {
+      case Some(conv) =>
+        otrSync.postOtrMessage(conv.id, conv.remoteId, GenericMessage(msgId.uid, Proto.Receipt(msgId))).map {
+          case Left(e) => SyncResult(e)
+          case Right(time) => SyncResult.Success
+        }
+      case None =>
+        successful(SyncResult(internalError("conversation not found")))
     }
 
   def postMessage(convId: ConvId, id: MessageId, editTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
     def isPartiallySent(msg: MessageData) = assets.storage.getImageAsset(msg.assetId) map { _.exists(_.versions.exists(_.sent)) }
 
     def shouldGiveUpSending(msg: MessageData) = isPartiallySent(msg) map { partiallySent =>
-      !partiallySent && (network.isOfflineMode || ConversationsService.SendingTimeout.elapsedSince(msg.time))
+      ! partiallySent && (network.isOfflineMode || ConversationsService.SendingTimeout.elapsedSince(msg.time))
     }
 
     storage.getMessage(id) flatMap { message =>
@@ -156,8 +167,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             case _ => Right(msg.copy(time = time.instant))
           }
 
-        case Right(time) => Future successful Right(msg.copy(time = time.instant))
-        case Left(err) => Future successful Left(err)
+        case Right(time) => successful(Right(msg.copy(time = time.instant)))
+        case Left(err) => successful(Left(err))
       }
     }
 
@@ -170,7 +181,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       case RICH_MEDIA  =>
         postTextMessage() flatMap {
           case Right(m) => sync.postOpenGraphData(conv.id, m.id, m.editTime) map { _ => Right(m.time) }
-          case Left(err) => Future successful Left(err)
+          case Left(err) => successful(Left(err))
         }
       case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
       case tpe =>
@@ -224,7 +235,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             } map { _ => Right(time.instant) }
           case Left(err) =>
             warn(s"postOriginal failed: $err")
-            Future successful Left(err)
+            successful(Left(err))
         }
       }
     }
@@ -295,7 +306,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                 } yield Right(time.instant)
               }
             case Right((k, _)) =>
-              CancellableFuture successful Left(ErrorResponse.internalError(s"postAssetData - unexpected result: $k"))
+              CancellableFuture successful Left(internalError(s"postAssetData - unexpected result: $k"))
           }
         case asset =>
           verbose(s"No asset data found in postAssetData, got: $asset")

@@ -208,10 +208,11 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
   }
 
   /**
-    * @param useFakeOnError - when true, we will return bomb emoji as msg content on encryption errors (for failing client)
-    * @param partialResult - partial content encrypted in previous run, we will use that instead of encrypting again when available
+    * @param useFakeOnError when true, we will return bomb emoji as msg content on encryption errors (for failing client)
+    * @param partialResult partial content encrypted in previous run, we will use that instead of encrypting again when available
+    * @param recipients users who this message shall be encrypted for; None means 'all active users'
     */
-  def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean = false, partialResult: EncryptedContent = EncryptedContent.Empty): Future[OtrClient.EncryptedContent] = {
+  def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean = false, partialResult: EncryptedContent = EncryptedContent.Empty, recipients: Option[Set[UserId]] = None): Future[OtrClient.EncryptedContent] = {
     val msgData = GenericMessage.toByteArray(msg)
 
     def previous(user: UserId, client: ClientId) =
@@ -233,8 +234,9 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
       }
     } map { ms => user -> ms.flatten.toMap }
 
-    members.getActiveUsers(convId) flatMap { users =>
-      verbose(s"active users: $users")
+    members.getActiveUsers(convId) flatMap { all =>
+      val users = all.filter(id => recipients.forall(_(id)))
+      verbose(s"active users: $all, filtered: $users")
       Future.traverse(users) { user =>
         targetClients(user) flatMap { encrypt(user, _) }
       } map (res => EncryptedContent(res.toMap.filter(_._2.nonEmpty)))

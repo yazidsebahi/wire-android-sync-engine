@@ -21,6 +21,7 @@ import com.waz.ZLog._
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.sync.client.OtrClient.{ClientMismatchResponse, EncryptedContent, MessageResponse}
+import com.waz.utils._
 import com.waz.znet.ContentEncoder.RequestContent
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
@@ -31,8 +32,8 @@ class MessagesClient(netClient: ZNetClient) {
   import MessagesClient._
   import com.waz.threading.Threading.Implicits.Background
 
-  def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = {
-    netClient.withErrorHandling("postOtrMessage", Request.Post(ConvMessagesPath(conv, ignoreMissing), content)) {
+  def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, receivers: Option[Set[UserId]] = None): ErrorOrResponse[MessageResponse] = {
+    netClient.withErrorHandling("postOtrMessage", Request.Post(ConvMessagesPath(conv, ignoreMissing, receivers), content)) {
       case Response(SuccessHttpStatus(), ClientMismatchResponse(mismatch), _) => MessageResponse.Success(mismatch)
       case Response(HttpStatus(Status.PreconditionFailed, _), ClientMismatchResponse(mismatch), _) => MessageResponse.Failure(mismatch)
     }
@@ -42,9 +43,11 @@ class MessagesClient(netClient: ZNetClient) {
 object MessagesClient {
   private implicit val tag: LogTag = logTagFor[MessagesClient]
 
-  def ConvMessagesPath(conv: RConvId, ignoreMissing: Boolean) =
-    if (ignoreMissing) s"/conversations/$conv/otr/messages?ignore_missing=true"
-    else s"/conversations/$conv/otr/messages"
+  def ConvMessagesPath(conv: RConvId, ignoreMissing: Boolean, receivers: Option[Set[UserId]] = None) = {
+    val base = s"/conversations/$conv/otr/messages"
+    if (ignoreMissing) s"$base?ignore_missing=true"
+    else receivers.fold2(base, uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
+  }
 
   case class OtrMessage(sender: ClientId, recipients: EncryptedContent, blob: Option[Array[Byte]] = None, nativePush: Boolean = true)
 
