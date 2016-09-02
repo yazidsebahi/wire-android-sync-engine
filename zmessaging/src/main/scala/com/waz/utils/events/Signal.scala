@@ -51,6 +51,13 @@ object Signal {
   def and(sources: Signal[Boolean]*): Signal[Boolean] = new FoldLeftSignal[Boolean, Boolean](sources: _*)(true)(_ && _)
   def or(sources: Signal[Boolean]*): Signal[Boolean] = new FoldLeftSignal[Boolean, Boolean](sources: _*)(false)(_ || _)
 
+  def sequence[A](sources: Signal[A]*): Signal[Seq[A]] = new ProxySignal[Seq[A]](sources: _*) {
+    override protected def computeValue(current: Option[Seq[A]]): Option[Seq[A]] = {
+      val res = sources map { _.value }
+      if (res.exists(_.isEmpty)) None else Some(res.flatten)
+    }
+  }
+
   def future[A](future: Future[A]): Signal[A] = returning(new Signal[A]) { signal =>
     future.onSuccess {
       case res => signal.set(Option(res), Some(Threading.Background))
@@ -115,7 +122,16 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
   }
 
   lazy val onChanged: EventStream[A] = new EventStream[A] with SignalListener { stream =>
-    override def changed(ec: Option[ExecutionContext]): Unit = stream.synchronized { self.value foreach (dispatch(_, ec)) }
+    private var prev = self.value
+
+    override def changed(ec: Option[ExecutionContext]): Unit = stream.synchronized {
+      self.value foreach { current =>
+        if (!prev.contains(current)) {
+          dispatch(current, ec)
+          prev = Some(current)
+        }
+      }
+    }
 
     override protected def onWire(): Unit = self.subscribe(this)
     override protected def onUnwire(): Unit = self.unsubscribe(this)
