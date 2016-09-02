@@ -167,6 +167,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           case MsgDeleted(_, _) => MessageData.Empty
           case MsgRecall(_) => MessageData.Empty
           case MsgEdit(_, _) => MessageData.Empty
+          case Receipt(_) => MessageData.Empty
           case _ =>
             error(s"unexpected generic message content: $msgContent")
             // TODO: this message should be processed again after app update, maybe future app version will understand it

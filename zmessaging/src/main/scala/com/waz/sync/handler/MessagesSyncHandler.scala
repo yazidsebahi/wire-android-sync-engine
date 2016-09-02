@@ -84,7 +84,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   def postReceipt(convId: ConvId, msgId: MessageId, userId: UserId): Future[SyncResult] =
     convs.convById(convId) flatMap {
       case Some(conv) =>
-        otrSync.postOtrMessage(conv.id, conv.remoteId, GenericMessage(msgId.uid, Proto.Receipt(msgId))).map {
+        otrSync.postOtrMessage(conv.id, conv.remoteId, GenericMessage(msgId.uid, Proto.Receipt(msgId)), Some(Set(userId))).map {
           case Left(e) => SyncResult(e)
           case Right(time) => SyncResult.Success
         }

@@ -57,8 +57,8 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] =
     service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
-        postEncryptedMessage(convId, message) {
-          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content), ignoreMissing(retry))
+        postEncryptedMessage(convId, message, recipients = recipients) {
+          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content), ignoreMissing(retry), recipients)
           case (content, retry) =>
             verbose(s"Message content too big, will post as External. Estimated size: ${content.estimatedSize}")
             postExternalMessage(otrClient.id, convId, remoteId, message, recipients)
@@ -114,7 +114,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 
     CancellableFuture.lift {
       postEncryptedMessage(convId, GenericMessage(Uid(message.messageId), Proto.External(key, sha)), recipients = recipients) { (content, retry) =>
-        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data)), ignoreMissing(retry))
+        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data)), ignoreMissing(retry), recipients)
       } map { // that's a bit of a hack, but should be harmless
         case Right(time) => Right(MessageResponse.Success(ClientMismatch(Map.empty, Map.empty, Map.empty, time)))
         case Left(err) => Left(err)

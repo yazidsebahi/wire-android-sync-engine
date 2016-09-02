@@ -29,6 +29,7 @@ import com.waz.utils._
 import com.waz.utils.events.EventContext.Implicits.global
 
 import scala.concurrent.Future
+import scala.concurrent.Future.successful
 
 class ReceiptService(messages: MessagesStorage, convs: ConversationStorage, sync: SyncServiceHandle, selfUserId: UserId) {
   import ImplicitTag._
@@ -45,8 +46,9 @@ class ReceiptService(messages: MessagesStorage, convs: ConversationStorage, sync
 
   val confirmable = Set(TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, RICH_MEDIA, HISTORY_LOST, LOCATION)
 
-  def processReceipts(receipts: Seq[MessageId]) = {
-    debug(s"received receipts: $receipts")
-    messages.updateAll2(receipts, _.copy(state = DELIVERED))
-  }
+  def processReceipts(receipts: Seq[MessageId]) =
+    if (receipts.nonEmpty) {
+      debug(s"received receipts: $receipts")
+      messages.updateAll2(receipts, _.copy(state = DELIVERED))
+    } else successful(Seq.empty)
 }
