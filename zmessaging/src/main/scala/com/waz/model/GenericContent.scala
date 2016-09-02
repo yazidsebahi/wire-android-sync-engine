@@ -508,6 +508,18 @@ object GenericContent {
       Some((l.longitude, l.latitude, Option(l.name).filter(_.nonEmpty), Option(l.zoom).filter(_ != 0)))
   }
 
+  type Receipt = Messages.Confirmation
+  implicit object Receipt extends GenericContent[Receipt] {
+    override def set(msg: GenericMessage) = msg.setConfirmation
+
+    def apply(msg: MessageId) = returning(new Messages.Confirmation) { c =>
+      c.messageId = msg.str
+      c.`type` = Messages.Confirmation.DELIVERED
+    }
+
+    def unapply(proto: Receipt): Option[MessageId] = if (proto.`type` == Messages.Confirmation.DELIVERED) Some(MessageId(proto.messageId)) else None
+  }
+
   type External = Messages.External
   implicit object External extends GenericContent[External] {
     override def set(msg: GenericMessage) = msg.setExternal

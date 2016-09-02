@@ -25,7 +25,7 @@ import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.GenericContent.LastRead
 import com.waz.model.otr.ClientId
-import com.waz.model.{ConvId, GenericMessage, RConvId}
+import com.waz.model.{ConvId, GenericMessage, RConvId, UserId}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
 import com.waz.service._
 import com.waz.sync.otr.OtrSyncHandler
@@ -64,7 +64,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
 
 
       override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
-        override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage): Future[Either[ErrorResponse, Date]] = {
+        override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]]): Future[Either[ErrorResponse, Date]] = {
           if (convId.str == self.str)
             message match {
               case GenericMessage(_, LastRead(cId, time)) =>

@@ -65,6 +65,7 @@ package object model {
         case GM.REACTION_FIELD_NUMBER     => msg.getReaction
         case GM.TEXT_FIELD_NUMBER         => msg.getText
         case GM.LOCATION_FIELD_NUMBER     => msg.getLocation
+        case GM.CONFIRMATION_FIELD_NUMBER => msg.getConfirmation
         case _                            => Unknown
       }
     }

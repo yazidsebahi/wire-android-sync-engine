@@ -60,6 +60,7 @@ public enum SyncCommand {
     PostSessionReset("post-session-reset"),
     PostAssetStatus("post-asset-status"),
     PostOpenGraphMeta("post-og-meta"),
+    PostReceipt("post-receipt"),
     Unknown("unknown");
 
     public final String name;

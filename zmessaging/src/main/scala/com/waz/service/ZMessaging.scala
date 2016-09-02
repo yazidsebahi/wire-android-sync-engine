@@ -217,6 +217,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val notifications: NotificationService    = wire[NotificationService]
   lazy val callLog                               = wire[CallLogService]
   lazy val recordAndPlay                         = wire[RecordAndPlayService]
+  lazy val receipts                              = wire[ReceiptService]
 
 
   lazy val assetSync        = wire[AssetSyncHandler]

@@ -54,14 +54,14 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
     postOtrMessage(conv.id, conv.remoteId, message)
 
-  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
+  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] =
     service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
-        postEncryptedMessage(convId, message) {
-          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content), ignoreMissing(retry))
+        postEncryptedMessage(convId, message, recipients = recipients) {
+          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content), ignoreMissing(retry), recipients)
           case (content, retry) =>
             verbose(s"Message content too big, will post as External. Estimated size: ${content.estimatedSize}")
-            postExternalMessage(otrClient.id, convId, remoteId, message)
+            postExternalMessage(otrClient.id, convId, remoteId, message, recipients)
         }
       case None =>
         successful(Left(internalError("Client is not registered")))
@@ -70,13 +70,13 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   // will retry 3 times, at first we try to send message in normal way,
   // when it fails we will try sending empty messages to contacts for which we can not encrypt the message
   // in last try we will use 'ignore_missing' flag
-  private def postEncryptedMessage(convId: ConvId, message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty)(f: (EncryptedContent, Int) => ErrorOrResponse[MessageResponse]): Future[Either[ErrorResponse, Date]] =
+  private def postEncryptedMessage(convId: ConvId, message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty, recipients: Option[Set[UserId]] = None)(f: (EncryptedContent, Int) => ErrorOrResponse[MessageResponse]): Future[Either[ErrorResponse, Date]] =
     convStorage.get(convId) flatMap {
       case Some(conv) if conv.verified == Verification.UNVERIFIED =>
         // refusing to send messages to 'degraded' conversation, UI should show error and ask user to verify devices (or ignore it - which will change state to UNKNOWN)
         errors.addConvUnverifiedError(convId, MessageId(message.messageId)) map { _ => Left(ErrorResponse.Unverified) }
       case _ =>
-        service.encryptMessage(convId, message, retry > 0, previous) flatMap { content =>
+        service.encryptMessage(convId, message, retry > 0, previous, recipients) flatMap { content =>
           f(content, retry).future flatMap {
             case Right(MessageResponse.Success(ClientMismatch(redundant, _, deleted, time))) =>
               // XXX: we are ignoring redundant clients, we rely on members list to encrypt messages, so if user left the conv then we won't use his clients on next message
@@ -91,10 +91,10 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                       // XXX: encrypt relies on conv members list, we only add clients for users in conv,
                       // if members list is broken then we will always end up with missing clients,
                       // maybe we should update members list in this place ???
-                      postEncryptedMessage(convId, message, retry + 1, content)(f)
+                      postEncryptedMessage(convId, message, retry + 1, content, recipients)(f)
                     case Some(err) if retry < 3 =>
                       error(s"syncSessions for missing clients failed: $err")
-                      postEncryptedMessage(convId, message, retry + 1, content)(f)
+                      postEncryptedMessage(convId, message, retry + 1, content, recipients)(f)
                     case Some(err) =>
                       successful(Left(err))
                   }
@@ -108,13 +108,13 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 
   private def ignoreMissing(retry: Int) = retry > 1
 
-  private def postExternalMessage(clientId: ClientId, convId: ConvId, remoteId: RConvId, message: GenericMessage): ErrorOrResponse[MessageResponse] = {
+  private def postExternalMessage(clientId: ClientId, convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = {
     val key = AESKey()
     val (sha, data) = AESUtils.encrypt(key, GenericMessage.toByteArray(message))
 
     CancellableFuture.lift {
-      postEncryptedMessage(convId, GenericMessage(Uid(message.messageId), Proto.External(key, sha))) { (content, retry) =>
-        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data)), ignoreMissing(retry))
+      postEncryptedMessage(convId, GenericMessage(Uid(message.messageId), Proto.External(key, sha)), recipients = recipients) { (content, retry) =>
+        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data)), ignoreMissing(retry), recipients)
       } map { // that's a bit of a hack, but should be harmless
         case Right(time) => Right(MessageResponse.Success(ClientMismatch(Map.empty, Map.empty, Map.empty, time)))
         case Left(err) => Left(err)

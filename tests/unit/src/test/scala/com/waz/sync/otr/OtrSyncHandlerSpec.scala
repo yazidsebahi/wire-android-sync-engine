@@ -57,14 +57,14 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
   lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
 
     override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, push, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage) {
-      override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent): Future[EncryptedContent] = {
+      override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent, recipients: Option[Set[UserId]]): Future[EncryptedContent] = {
         encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
         Future successful encryptedContent
       }
     }
 
     override lazy val messagesClient: MessagesClient = new MessagesClient(zNetClient) {
-      override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = {
+      override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = {
         postMsgRequests = postMsgRequests :+ (conv, content, ignoreMissing)
         CancellableFuture.successful(if (ignoreMissing || postMsgResponse.missing.isEmpty) Right(MessageResponse.Success(postMsgResponse)) else Right(MessageResponse.Failure(postMsgResponse)))
       }
