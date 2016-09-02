@@ -5,7 +5,7 @@ resolvers ++= Seq(
 )
 
 addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.3.5")
-addSbtPlugin("org.scala-android" % "sbt-android" % "1.6.15")
+addSbtPlugin("org.scala-android" % "sbt-android" % "1.6.16")
 addSbtPlugin("me.lessis" % "bintray-sbt" % "0.3.0")
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.3")
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "1.5.1")

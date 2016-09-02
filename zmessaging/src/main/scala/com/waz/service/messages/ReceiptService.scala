@@ -18,10 +18,11 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
+import com.waz.api.Message.Status.DELIVERED
 import com.waz.api.Message.Type._
 import com.waz.content.{ConversationStorage, MessagesStorage}
 import com.waz.model.ConversationData.ConversationType.OneToOne
-import com.waz.model.UserId
+import com.waz.model.{MessageId, UserId}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -36,11 +37,16 @@ class ReceiptService(messages: MessagesStorage, convs: ConversationStorage, sync
   messages.onAdded { msgs =>
     Future.traverse(msgs.iterator.filter(msg => msg.userId != selfUserId && confirmable(msg.msgType))) { msg =>
       convs.get(msg.convId).map(_.filter(_.convType == OneToOne)).flatMapSome { _ =>
-        debug(s"will send receipt for $msg")
+        verbose(s"will send receipt for $msg")
         sync.postReceipt(msg.convId, msg.id, msg.userId)
       }
     }.logFailure()
   }
 
   val confirmable = Set(TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, RICH_MEDIA, HISTORY_LOST, LOCATION)
+
+  def processReceipts(receipts: Seq[MessageId]) = {
+    debug(s"received receipts: $receipts")
+    messages.updateAll2(receipts, _.copy(state = DELIVERED))
+  }
 }
