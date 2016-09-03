@@ -26,7 +26,6 @@ import com.waz.api.MessageContent._
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.RConvId
 import com.waz.provision.ActorMessage._
-import com.waz.service.conversation.ConversationsService
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventContext
@@ -137,7 +136,7 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
 
     scenario("Clear knock state after timeout") {
       inputState.getKnockState shouldEqual KnockState.DISABLED
-      withDelay(inputState.getKnockState shouldEqual KnockState.NONE)(ConversationsService.KnockTimeout + 1.second)
+      withDelay(inputState.getKnockState shouldEqual KnockState.NONE)(zmessaging.timeouts.messages.knockTimeout + 1.second)
     }
   }
 

@@ -118,7 +118,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
     scenario("knock twice with a delay") {
       val msg = knock()
 
-      updateMessage(msg.id)(_.copy(localTime = Instant.now - ConversationsService.KnockTimeout - 10.millis)) // change local time to simulate delay
+      updateMessage(msg.id)(_.copy(localTime = Instant.now - service.timeouts.messages.knockTimeout - 10.millis)) // change local time to simulate delay
       messageSync = None
 
       val msg1 = knock()
@@ -174,7 +174,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
       knock()
       val msg = knock()
 
-      updateMessage(msg.id)(_.copy(localTime = Instant.now - ConversationsService.KnockTimeout - 10.millis)) // change local time to simulate delay
+      updateMessage(msg.id)(_.copy(localTime = Instant.now - service.timeouts.messages.knockTimeout - 10.millis)) // change local time to simulate delay
       messageSync = None
 
       val msg1 = knock()

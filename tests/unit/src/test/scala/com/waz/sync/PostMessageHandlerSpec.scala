@@ -21,7 +21,7 @@ import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz._
-import com.waz.api.Message
+import com.waz.api.{Message, NetworkMode}
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
@@ -29,7 +29,6 @@ import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.{Mime, _}
 import com.waz.service._
-import com.waz.service.conversation.ConversationsService.SendingTimeout
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.ClientMismatch
 import com.waz.sync.handler.AssetSyncHandler
@@ -61,14 +60,13 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   var postMessageResponse: Future[Either[ErrorResponse, Date]] = _
   var postImageResult: Either[ErrorResponse, Option[Date]] = _
 
-  var onLine = true
   def handler = zms.messagesSync
   def storage = zms.storage.db
 
   lazy val userId = UserId()
   lazy val conv = ConversationData(ConvId(), RConvId(), None, userId, ConversationType.Group)
 
-  implicit lazy val lock = new ConvLock(conv.id, zms.syncRequests.scheduler.queue)
+  implicit lazy val lock = ConvLock(conv.id, zms.syncRequests.scheduler.queue)
 
   lazy val zms: MockZMessaging = new MockZMessaging(selfUserId = userId) {
 
@@ -78,10 +76,8 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       override def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] = postMessageResponse
     }
 
-    override def network: NetworkModeService = new NetworkModeService(context) {
-      override def isOnlineMode: Boolean = onLine
-
-      override def isOfflineMode: Boolean = !onLine
+    override lazy val network: NetworkModeService = new NetworkModeService(context) {
+      override def updateNetworkMode(): Unit = ()
     }
 
     override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync) {
@@ -91,6 +87,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     insertConv(conv)
   }
 
+  def sendingTimeout = zms.timeouts.messages.sendingTimeout
 
   def response(cm: ClientMismatch, ignoreMissing: Boolean = false) =
     CancellableFuture.successful {
@@ -98,7 +95,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
   before {
-    onLine = true
+    zms.network.networkMode ! NetworkMode.WIFI
     postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
     postImageResult = Right(Some(new Date))
   }
@@ -135,9 +132,10 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Text message fails due to server error when offline") {
+      zms.network.networkMode ! NetworkMode.OFFLINE
+
       val msg = addMessage()
       postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
-      onLine = false
 
       Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
       getMessage(msg.id).map(_.state) shouldEqual Some(Message.Status.FAILED)
@@ -153,7 +151,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Text message fails due to server error after timeout") {
       val msg = addMessage()
-      Await.result(zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - SendingTimeout - 10.millis) }, 5.seconds)
+      Await.result(zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - sendingTimeout - 10.millis) }, 5.seconds)
       postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
 
       Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
@@ -206,9 +204,8 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Post image fails completely due to server error when offline") {
-      val (msg, asset, preview, medium) = addMessage()
-
-      onLine = false
+      zms.network.networkMode ! NetworkMode.OFFLINE
+      val (msg, _, _, _) = addMessage()
       postImageResult = Left(ErrorResponse(500, "", ""))
 
       Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
@@ -226,7 +223,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Post image fails completely due to server error after timeout") {
       val (msg, asset, preview, medium) = addMessage()
-      zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - SendingTimeout - 1.milli) } .await()
+      zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - sendingTimeout - 1.milli) } .await()
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 
@@ -236,7 +233,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Post image fails partially due to server error after timeout") {
       val (msg, asset, preview, medium) = addMessage()
-      addLocalMessage(msg.copy(localTime = now - SendingTimeout - 1.milli))
+      addLocalMessage(msg.copy(localTime = now - sendingTimeout - 1.milli))
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 
@@ -246,7 +243,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Post image fails partially due to client error after timeout") {
       val (msg, asset, preview, medium) = addMessage()
-      addLocalMessage(msg.copy(localTime = now - SendingTimeout - 1.milli))
+      addLocalMessage(msg.copy(localTime = now - sendingTimeout - 1.milli))
 
       postImageResult = Left(ErrorResponse(400, "", ""))
 

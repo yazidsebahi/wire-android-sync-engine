@@ -32,7 +32,6 @@ import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Loca
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
-import com.waz.service.conversation.ConversationsService
 import com.waz.service.media.{MessageContentBuilder, RichMediaContentParser}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder, returning}
@@ -375,7 +374,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     /**
      * Returns incoming messages (for all unmuted conversations) with local time greater then given time in millis.
      */
-    def listIncomingMessages(selfUserId: UserId, since: Long = System.currentTimeMillis() - ConversationsService.KnockTimeout.toMillis, limit: Int = 25)(implicit db: SQLiteDatabase): Vector[MessageData] = list(db.rawQuery(
+    def listIncomingMessages(selfUserId: UserId, since: Long, limit: Int = 25)(implicit db: SQLiteDatabase): Vector[MessageData] = list(db.rawQuery(
       s"""
          | SELECT msg.*
          | FROM ${table.name} msg, ${ConversationDataDao.table.name} conv

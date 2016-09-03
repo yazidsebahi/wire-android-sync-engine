@@ -23,7 +23,6 @@ import com.waz.api.IncomingMessagesList.MessageListener
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Knock
 import com.waz.model._
-import com.waz.service.conversation.ConversationsService
 import com.waz.testutils._
 import com.waz.ui._
 import com.waz.utils._
@@ -152,7 +151,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Don't call listeners if received old messages") {
-      val time = Instant.now - ConversationsService.KnockTimeout - 10.millis
+      val time = Instant.now - service.timeouts.messages.knockTimeout - 10.millis
       loadMessages(List(md(time), md(time + 1.milli))) should be(empty)
     }
   }

@@ -31,7 +31,7 @@ import com.waz.model.GenericContent.Asset.ImageMetaData
 import com.waz.model.GenericContent.MsgEdit
 import com.waz.model._
 import com.waz.service.assets._
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater, ConversationsService}
+import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.service.otr.OtrService
 import com.waz.service.tracking.TrackingEventsService
@@ -54,7 +54,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
     assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
     sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService,
-    assetMeta: com.waz.service.assets.MetaDataService, assetPreview: PreviewService, cache: CacheService, errors: ErrorsService) {
+    assetMeta: com.waz.service.assets.MetaDataService, assetPreview: PreviewService, cache: CacheService,
+    errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[MessagesSyncHandler]
@@ -96,7 +97,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     def isPartiallySent(msg: MessageData) = assets.storage.getImageAsset(msg.assetId) map { _.exists(_.versions.exists(_.sent)) }
 
     def shouldGiveUpSending(msg: MessageData) = isPartiallySent(msg) map { partiallySent =>
-      ! partiallySent && (network.isOfflineMode || ConversationsService.SendingTimeout.elapsedSince(msg.time))
+      ! partiallySent && (network.isOfflineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time))
     }
 
     storage.getMessage(id) flatMap { message =>

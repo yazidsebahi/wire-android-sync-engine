@@ -21,7 +21,6 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.IncomingMessagesList.{KnockListener, MessageListener}
 import com.waz.model.MessageData
-import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.MessageAndLikes
 import com.waz.ui._
 import com.waz.utils._
@@ -43,7 +42,7 @@ class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingM
     messages = data.flatMap(m => (0 until math.max(1, m.content.size)).map((m, _))).toArray
     notifyChanged()
 
-    lastMessageTime = lastMessageTime max (Instant.now - ConversationsService.KnockTimeout)
+    lastMessageTime = lastMessageTime max (Instant.now - context.global.timeouts.messages.knockTimeout)
     messages.filter(_._1.localTime isAfter lastMessageTime) foreach {
       case (msg, seq) =>
         verbose(s"calling listeners for new message: $msg")

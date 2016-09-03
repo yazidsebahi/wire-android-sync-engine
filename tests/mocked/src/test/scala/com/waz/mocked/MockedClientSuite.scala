@@ -107,8 +107,10 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
     }
     override lazy val gcmClient          = new GcmClient(zNetClient) {}
-    override lazy val typingClient       = new TypingClient(zNetClient) {}
-    override lazy val invitationClient       = new InvitationClient(zNetClient) {
+    override lazy val typingClient       = new TypingClient(zNetClient) {
+      override def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = suite.updateTypingState(id, isTyping)
+    }
+    override lazy val invitationClient   = new InvitationClient(zNetClient) {
       override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] = suite.postInvitation(i)
     }
     override lazy val giphyClient        = new GiphyClient(zNetClient) {}
@@ -288,4 +290,5 @@ trait MockedClient { test: ApiSpec =>
   def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = successful(Right(Map.empty))
   def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = successful(Right(Nil))
   def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))
+  def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = successful(Right(()))
 }

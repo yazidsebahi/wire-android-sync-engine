@@ -25,7 +25,6 @@ import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync._
 import com.waz.service._
-import com.waz.service.conversation.ConversationsService
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.ConvLock
 import com.waz.threading.Threading
@@ -110,7 +109,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
-  def postMessage(id: MessageId, conv: ConvId, time: Instant) = addRequest(PostMessage(conv, id, time), timeout = System.currentTimeMillis() + ConversationsService.SendingTimeout.toMillis, forceRetry = true)
+  def postMessage(id: MessageId, conv: ConvId, time: Instant) = addRequest(PostMessage(conv, id, time), timeout = System.currentTimeMillis() + timeouts.messages.sendingTimeout.toMillis, forceRetry = true)
   def postDeleted(conv: ConvId, msg: MessageId) = addRequest(PostDeleted(conv, msg))
   def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId) = addRequest(PostRecalled(conv, msg, recalled))
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, status))

@@ -42,7 +42,7 @@ class ConversationsStatsTrackingSpec extends FeatureSpec with Matchers with Opti
   implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
   lazy val service = new MockZMessaging(selfUserId = selfUser.id) {
-    override lazy val messagesStorage = new MessagesStorage(context, db, selfUserId, convsStorage, usersStorage, msgAndLikes) {
+    override lazy val messagesStorage = new MessagesStorage(context, db, selfUserId, convsStorage, usersStorage, msgAndLikes, timeouts) {
       override def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] = Future.failed(new RuntimeException("for testing purposes, we do not want to update unread and failed count from real message count"))
     }
   }

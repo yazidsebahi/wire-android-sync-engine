@@ -29,7 +29,7 @@ import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
+import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.VerificationStateUpdater
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
@@ -46,7 +46,7 @@ import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
 class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
-    likings: LikingsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater) {
+    likings: LikingsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts) {
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[MessagesService]
   private implicit val ec = EventContext.Global
@@ -203,11 +203,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
    * Return last message if it's KNOCK message added by self user.
    */
   def getActiveKnockMessage(convId: ConvId, selfUserId: UserId): Future[Option[MessageData]] = messagesStorage.getLastMessage(convId) map { lastMsg =>
-    lastMsg.filter(m => m.userId == selfUserId && m.msgType == Message.Type.KNOCK && !ConversationsService.knockExpired(m))
+    lastMsg.filter(m => m.userId == selfUserId && m.msgType == Message.Type.KNOCK && !timeouts.messages.knockExpired(m))
   }
 
   def activeKnockMessage(convId: ConvId) = messagesStorage.lastMessage(convId) flatMap {
-    case Some(m) if m.msgType == Message.Type.KNOCK && !ConversationsService.knockExpired(m) =>
+    case Some(m) if m.msgType == Message.Type.KNOCK && !timeouts.messages.knockExpired(m) =>
       Signal.future(users.getSelfUserId.map(_.flatMap { id => Some(m).filter(_.userId == id) }))
     case _ => Signal.const(Option.empty[MessageData])
   }

@@ -23,6 +23,7 @@ import android.telephony.TelephonyManager
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.returning
 
 class NetworkModeService(context: Context) {
   import NetworkModeService._
@@ -32,7 +33,7 @@ class NetworkModeService(context: Context) {
   private lazy val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE).asInstanceOf[ConnectivityManager]
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
 
-  val networkMode = Signal[NetworkMode](NetworkMode.OFFLINE)
+  val networkMode = returning(Signal[NetworkMode](NetworkMode.OFFLINE)) { _.disableAutowiring() }
 
   val receiver = new BroadcastReceiver {
     override def onReceive(context: Context, intent: Intent): Unit = updateNetworkMode()
