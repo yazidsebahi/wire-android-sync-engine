@@ -34,8 +34,9 @@ class TypingSyncHandler(client: TypingClient, convs: ConversationsContentUpdater
   def postTypingState(convId: ConvId, typing: Boolean): Future[SyncResult] = {
     convs.convById(convId) flatMap {
       case Some(conv) =>
-        client.updateTypingState(conv.remoteId, isTyping = typing) map {
-          _.fold(SyncResult(_), _ => SyncResult.Success)
+        client.updateTypingState(conv.remoteId, isTyping = typing).future map {
+          case Right(_) => SyncResult.Success
+          case Left(err) => SyncResult(err).copy(shouldRetry = false) // don't retry, we don't want to block sync queue
         }
 
       case None =>
