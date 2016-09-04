@@ -30,7 +30,7 @@ import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
 import com.waz.service.{BackendConfig, MetaDataService, PreferenceService}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.LoggedTry
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{EventContext, Signal}
 
 import scala.util.control.NonFatal
 
@@ -53,6 +53,9 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
   }
 
   lazy val gcmAvailable = metadata.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
+
+  // current GCM state, true if GCM is registered and working (we are getting notifications on it)
+  val gcmActive = Signal[Boolean]()
 
   def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
     if (reg.version == appVersion) reg

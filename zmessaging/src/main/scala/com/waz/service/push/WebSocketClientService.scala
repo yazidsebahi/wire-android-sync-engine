@@ -38,28 +38,26 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  val webSocketAlwaysOn = !gcm.gcmAvailable
+  private val lifecycleActive = lifecycle.lifecycleState.map(s => s == UiActive || s == Active) flatMap {
+    case true   => Signal const true
+    case false  =>
+      // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+      verbose(s"lifecycle no longer active, should stop the client")
+      Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+  }
 
   // true if websocket should be active,
-  private[service] val wsActive =
-    if (webSocketAlwaysOn) lifecycle.loggedIn
-    else {
-      // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
-      lifecycle.lifecycleState.map(s => s == UiActive || s == Active) flatMap {
-        case true   => Signal const true
-        case false  =>
-          verbose(s"lifecycle no longer active, should stop the client")
-          Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
-      }
-    }
+  val wsActive = gcm.gcmActive flatMap {
+    case true => lifecycleActive // GCM is working, so we only need to use websocket when UI is active
+    case false => lifecycle.loggedIn // GCM is not active, keep websocket whenever user is logged in
+  }
 
   val client = wsActive map {
     case true =>
-      if (webSocketAlwaysOn) {
-        // start android service to keep the app running while we need to be connected
-        com.waz.zms.PushService(context)
-      }
       debug(s"Active, client: $clientId")
+      // start android service to keep the app running while we need to be connected
+      com.waz.zms.PushService(context)
+
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
       prevClient
