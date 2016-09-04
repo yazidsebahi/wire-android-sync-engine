@@ -344,18 +344,12 @@ object ZMessaging { self =>
       error(s"Application: '$app' doesn't implement NotificationsHandlerFactory")
       new NotificationsHandlerFactory {
         override def getCallingEventsHandler: CallingEventsHandler = EmptyEventsHandler
-        override def getNotificationsHandler: NotificationsHandler = EmptyNotificationsHandler
         override def getTrackingEventsHandler: TrackingEventsHandler = EmptyTrackingEventsHandler
       }
   }
 
   object EmptyEventsHandler extends CallingEventsHandler {
     override def onCallingEvent(event: CallingEvent): Unit = ()
-  }
-
-  object EmptyNotificationsHandler extends NotificationsHandler {
-    override def updateGcmNotification(notifications: GcmNotificationsList): Unit = ()
-    override def updateOngoingCallNotification(ongoingCall: NotificationsHandler.ActiveChannel, incomingCall: NotificationsHandler.ActiveChannel, isUiActive: Boolean): Unit = ()
   }
 
   object EmptyTrackingEventsHandler extends TrackingEventsHandler {

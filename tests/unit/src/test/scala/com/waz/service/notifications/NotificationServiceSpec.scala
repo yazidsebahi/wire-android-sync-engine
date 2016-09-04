@@ -21,7 +21,7 @@ import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
-import com.waz.api.NotificationsHandler.GcmNotification
+import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Asset, MsgEdit, MsgRecall, Text}
@@ -29,10 +29,9 @@ import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.Timeouts
-import com.waz.service.push.NotificationService.Notification
+import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
-import com.waz.utils._
 import com.waz.utils.events.EventContext
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
@@ -45,7 +44,7 @@ import scala.concurrent.duration._
 
 class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
-  @volatile var currentNotifications = Nil: Seq[GcmNotification]
+  @volatile var currentNotifications = Nil: Seq[NotificationInfo]
 
   lazy val selfUserId = UserId()
   lazy val oneToOneConv = ConversationData(ConvId(), RConvId(), None, selfUserId, ConversationType.OneToOne)
@@ -78,6 +77,10 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     clearNotifications()
   }
 
+  //Notification(data: NotificationData, convName: String = "", userName: String = "", groupConv: Boolean = false, mentioned: Boolean = false, likedContent: Option[LikedContent] = None)
+
+  //NotificationData(id: String, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant, localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None, mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
+
   feature("Add notifications for events") {
 
     scenario("Process user connection event for an unsynced user") {
@@ -87,7 +90,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "hello", _, `userId`, GcmNotification.Type.CONNECT_REQUEST, _, _, false, Some("other user"), _, None), "other user", "other user", false, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.CONNECT_REQUEST, "hello", false, _, Some("other user"), Some("other user"), false, _, _)) => true
         }
       }
     }
@@ -98,7 +101,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, _, `userId`, GcmNotification.Type.CONTACT_JOIN, _, _, _, _, _, None), _, _, false, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.CONTACT_JOIN, _, _, _, _, _, false, _, _)) => true
         }
       }
     }
@@ -111,7 +114,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "test name", `convId`, `userId`, GcmNotification.Type.TEXT, _, _, _, _, Seq(`selfUserId`), None), _, _, false, true, _)) => true
+          case Seq(NotificationInfo(NotificationType.TEXT, "test name", _, `convId`, _, _, false, true, _)) => true
         }
       }
     }
@@ -124,7 +127,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, `convId`, `userId`, GcmNotification.Type.ANY_ASSET, _, _, _, _, _, None), _, _, false, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.ANY_ASSET, _, _, `convId`, _, _, false, _, _)) => true
         }
       }
     }
@@ -139,7 +142,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, "meep", `groupId`, _, GcmNotification.Type.TEXT, _, _, _, _, _, None), "group conv", _, true, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.TEXT, "meep", _, `groupId`, Some("group conv"), _, true, _, _)) => true
         }
       }
     }
@@ -224,9 +227,8 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should have size 1
-        currentNotifications.head.getType shouldEqual GcmNotification.Type.TEXT
-        currentNotifications.head.getMessage shouldEqual "updated"
-        currentNotifications.head.asInstanceOf[Notification].data.serverTime shouldEqual time.instant
+        currentNotifications.head.tpe shouldEqual NotificationType.TEXT
+        currentNotifications.head.message shouldEqual "updated"
       }
     }
   }
@@ -240,7 +242,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(Notification(NotificationData(_, _, `groupId`, _, GcmNotification.Type.TEXT, _, _, _, _, _, None), "group conv", _, true, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.TEXT, _, _, `groupId`, Some("group conv"), _, true, _, _)) => true
         }
       }
     }

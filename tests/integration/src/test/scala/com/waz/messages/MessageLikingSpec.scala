@@ -31,8 +31,6 @@ import com.waz.testutils.TestApplication.notificationsSpy
 import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 
-import scala.collection.JavaConverters._
-
 @Config(application = classOf[TestApplication])
 class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ThreadActorSpec { test =>
 
@@ -100,11 +98,11 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     notificationsSpy.gcms = Nil
     otherUserDoes(Like, message)
     (notificationsSpy.gcms should have size 1).soon
-    (notificationsFromUpdate(0) should have size 1).soon
+    (notificationsSpy.gcms.head should have size 1).soon
 
     otherUserDoes(Unlike, message)
     (notificationsSpy.gcms should have size 2).soon
-    (notificationsFromUpdate(1) shouldBe empty).soon
+    (notificationsSpy.gcms(1) shouldBe empty).soon
 
     api.onResume()
     (zmessaging.lifecycle.isUiActive shouldBe true).soon
@@ -128,8 +126,6 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
       editedMessage should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)
     }
   }
-
-  def notificationsFromUpdate(n: Int) = notificationsSpy.gcms(n).getNotifications.asScala
 
   def otherUserDoes(action: Liking.Action, msg: Message) = otherUserClient ? SetMessageReaction(conv.data.remoteId, msg.data.id, action) should eventually(be(Successful))
 }

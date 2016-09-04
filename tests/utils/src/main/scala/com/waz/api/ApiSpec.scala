@@ -33,7 +33,8 @@ import com.waz.provision.ActorMessage.{ReleaseRemotes, SpawnRemoteDevice, WaitUn
 import com.waz.provision._
 import com.waz.service._
 import com.waz.testutils.Implicits._
-import com.waz.testutils.RoboPermissionProvider
+import com.waz.testutils.TestApplication.notificationsSpy
+import com.waz.testutils.{RoboPermissionProvider, TestApplication}
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils._
@@ -121,6 +122,14 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     ui.global.permissions.setProvider(new RoboPermissionProvider)
 
     if (initBehaviour == InitOnceBeforeAll) createZMessagingAndLogin()
+
+    implicit val eventContext = EventContext.Global
+
+    val zms = ZMessaging.currentUi.currentZms.collect { case Some(z) => z }
+    zms.map(_.notifications).flatMap(_.getNotifications)(notificationsSpy.gcms :+= _)
+    zms.map(_.voiceContent).flatMap(_.activeChannels).map(_.ongoing)(notificationsSpy.incomingCall = _)
+    zms.map(_.voiceContent).flatMap(_.activeChannels).map(_.incoming)(c => notificationsSpy.incomingCall = c.headOption)
+    zms.flatMap(_.lifecycle.uiActive)(notificationsSpy.uiActive = _)
   }
 
   override protected def beforeEach(): Unit = {

@@ -305,7 +305,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       incomingCall(meep, "meep-42")
 
       withDelay {
-        notificationsSpy.incomingCall.value.getConversationId shouldEqual "meep"
+        notificationsSpy.incomingCall.value.id shouldEqual "meep"
         notificationsSpy.ongoingCall shouldEqual None
         notificationsSpy.uiActive shouldEqual false
       }
@@ -318,7 +318,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
       withDelay {
         notificationsSpy.incomingCall shouldBe None
-        notificationsSpy.ongoingCall.value.getConversationId shouldEqual "meep"
+        notificationsSpy.ongoingCall.value.id shouldEqual "meep"
         notificationsSpy.uiActive shouldEqual false
         spy.callJoinResult shouldEqual None
       }
@@ -994,11 +994,11 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual true
         activeChannels.getIncomingCall shouldEqual foo.voice
 
-        notificationsSpy.ongoingCall.value.getConversationId shouldEqual "meep"
-        notificationsSpy.ongoingCall.value.getState shouldEqual DeviceConnected
+        notificationsSpy.ongoingCall.value.id shouldEqual "meep"
+        notificationsSpy.ongoingCall.value.state shouldEqual DeviceConnected
 
-        notificationsSpy.incomingCall.value.getConversationId shouldEqual "foo"
-        notificationsSpy.incomingCall.value.getState shouldEqual OtherCalling
+        notificationsSpy.incomingCall.value.id shouldEqual "foo"
+        notificationsSpy.incomingCall.value.state shouldEqual OtherCalling
 
         callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = true, isConversationMuted = false, false)
       }

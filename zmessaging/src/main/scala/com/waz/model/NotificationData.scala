@@ -18,14 +18,14 @@
 package com.waz.model
 
 import android.database.Cursor
-import com.waz.api.NotificationsHandler.GcmNotification
+import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class NotificationData(id: String, msg: String, conv: ConvId, user: UserId, msgType: GcmNotification.Type, serverTime: Instant,
+case class NotificationData(id: String, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant,
                             localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None,
                             mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
 
@@ -67,22 +67,22 @@ object NotificationData {
 
   implicit val NotificationOrdering: Ordering[NotificationData] = Ordering.by((data: NotificationData) => (data.localTime, data.id))
 
-  implicit lazy val GcmNotificationCodec: EnumCodec[GcmNotification.Type, String] = EnumCodec.injective {
-    case GcmNotification.Type.CONNECT_REQUEST => "ConnectRequest"
-    case GcmNotification.Type.CONNECT_ACCEPTED => "ConnectAccepted"
-    case GcmNotification.Type.CONTACT_JOIN => "ContactJoin"
-    case GcmNotification.Type.ASSET => "Asset"
-    case GcmNotification.Type.ANY_ASSET => "AnyAsset"
-    case GcmNotification.Type.VIDEO_ASSET => "VideoAsset"
-    case GcmNotification.Type.AUDIO_ASSET => "AudioAsset"
-    case GcmNotification.Type.TEXT => "Text"
-    case GcmNotification.Type.MEMBER_JOIN => "MemberJoin"
-    case GcmNotification.Type.MEMBER_LEAVE => "MemberLeave"
-    case GcmNotification.Type.RENAME => "Rename"
-    case GcmNotification.Type.KNOCK => "Knock"
-    case GcmNotification.Type.MISSED_CALL => "MissedCall"
-    case GcmNotification.Type.LIKE => "Like"
-    case GcmNotification.Type.LOCATION => "Location"
-    case GcmNotification.Type.MESSAGE_SENDING_FAILED => "MessageSendingFailed"
+  implicit lazy val GcmNotificationCodec: EnumCodec[NotificationType, String] = EnumCodec.injective {
+    case NotificationType.CONNECT_REQUEST => "ConnectRequest"
+    case NotificationType.CONNECT_ACCEPTED => "ConnectAccepted"
+    case NotificationType.CONTACT_JOIN => "ContactJoin"
+    case NotificationType.ASSET => "Asset"
+    case NotificationType.ANY_ASSET => "AnyAsset"
+    case NotificationType.VIDEO_ASSET => "VideoAsset"
+    case NotificationType.AUDIO_ASSET => "AudioAsset"
+    case NotificationType.TEXT => "Text"
+    case NotificationType.MEMBER_JOIN => "MemberJoin"
+    case NotificationType.MEMBER_LEAVE => "MemberLeave"
+    case NotificationType.RENAME => "Rename"
+    case NotificationType.KNOCK => "Knock"
+    case NotificationType.MISSED_CALL => "MissedCall"
+    case NotificationType.LIKE => "Like"
+    case NotificationType.LOCATION => "Location"
+    case NotificationType.MESSAGE_SENDING_FAILED => "MessageSendingFailed"
   }
 }

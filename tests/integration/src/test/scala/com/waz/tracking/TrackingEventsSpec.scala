@@ -54,7 +54,6 @@ class TrackingEventsSpec extends FeatureSpec with Matchers with OptionValues wit
         override def handlerFactory: NotificationsHandlerFactory = new NotificationsHandlerFactory {
           override def getCallingEventsHandler: CallingEventsHandler = ???
           override def getTrackingEventsHandler: TrackingEventsHandler = handler
-          override def getNotificationsHandler: NotificationsHandler = ???
         }
       }
   }
