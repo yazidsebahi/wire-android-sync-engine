@@ -19,14 +19,17 @@ package com.waz.service.push
 
 import com.waz.ZLog._
 import com.waz.model._
+import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.push.GcmGlobalService.GcmRegistration
-import com.waz.service.{EventScheduler, LifecycleState, ZmsLifecycle}
+import com.waz.service._
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.PushNotification
 import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
+import scala.collection.breakOut
 
-class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) {
+class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, convsContent: ConversationsContentUpdater, eventPipeline: EventPipeline, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) {
 
   implicit val dispatcher = gcmGlobalService.dispatcher
 
@@ -71,4 +74,24 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, sync:
       }
       case None => Future.successful(None)
     }
+
+  def handleNotification(n: PushNotification): Future[Any] = {
+    // TODO: mark GCM active
+    verbose(s"handleNotification($n")
+    val (callStateEvents, otherEvents) = n.events.partition(_.isInstanceOf[CallStateEvent])
+
+    // call state events can not be directly dispatched like the other events because they might be stale
+    syncCallStateForConversations(callStateEvents.map(_.withCurrentLocalTime()))
+
+    eventPipeline(otherEvents.map(_.withCurrentLocalTime()))
+  }
+
+  private def syncCallStateForConversations(events: Seq[Event]): Unit = {
+    val convs: Set[RConvId] = events .collect { case e: CallStateEvent => e.convId } (breakOut)
+    Future.traverse(convs) { convId =>
+      convsContent.processConvWithRemoteId(convId, retryAsync = false) { conv =>
+        sync.syncCallState(conv.id, fromFreshNotification = true)
+      }
+    }
+  }
 }
