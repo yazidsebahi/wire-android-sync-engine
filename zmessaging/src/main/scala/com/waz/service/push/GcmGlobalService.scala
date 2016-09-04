@@ -25,20 +25,20 @@ import com.localytics.android.Localytics
 import com.waz.HockeyApp
 import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model._
 import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
 import com.waz.service.{BackendConfig, MetaDataService, PreferenceService}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.LoggedTry
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.EventContext
 
-import scala.util.control.NonFatal
+import scala.util.control.{NoStackTrace, NonFatal}
 
 class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: MetaDataService, backendConfig: BackendConfig) {
 
   implicit val dispatcher = new SerialDispatchQueue(name = "GcmGlobalDispatchQueue")
 
-  private implicit val tag: LogTag = logTagFor[GcmGlobalService]
   private implicit val ev = EventContext.Global
 
   import metadata._
@@ -53,9 +53,6 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
   }
 
   lazy val gcmAvailable = metadata.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
-
-  // current GCM state, true if GCM is registered and working (we are getting notifications on it)
-  val gcmActive = Signal[Boolean]()
 
   def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
     if (reg.version == appVersion) reg
@@ -133,7 +130,7 @@ object GcmGlobalService {
   val RegistrationUserPref = "registration_user"
   val RegistrationVersionPref = "registration_version"
 
-  class GcmNotAvailableException extends Exception("Google Play Services not available") with NoReporting
+  class GcmNotAvailableException extends Exception("Google Play Services not available") with NoReporting with NoStackTrace
 
   case class GcmRegistration(token: String = "", user: AccountId = AccountId(""), version: Int = 0) {
     def save(editor: SharedPreferences.Editor) = {

@@ -52,7 +52,8 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     //      maybe this would be enough for some conversations and we would not need to sync so much
     processHistoryEvents(notifications.notifications, new Date)
 
-    if (notifications.lastIdWasFound) debug("got missing notifications, great") else {
+    if (notifications.lastIdWasFound) debug("got missing notifications, great")
+    else {
       info(s"server couldn't provide all missing notifications, will schedule slow sync, after processing available events")
       onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis(), lostHistory = true)
     }
