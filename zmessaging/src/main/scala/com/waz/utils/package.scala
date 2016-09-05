@@ -142,6 +142,7 @@ package object utils {
   implicit def finiteDurationIsThreetenBPDuration(a: FiniteDuration): bp.Duration = a.asJava
 
   implicit class RichFiniteDuration(val a: FiniteDuration) extends AnyVal {
+    def fromEpoch = Instant.ofEpochMilli(a.toMillis)
     def asJava = bp.Duration.ofNanos(a.toNanos)
     def elapsedSince(b: bp.Instant): Boolean = b plus a isBefore now
     def untilNow = {

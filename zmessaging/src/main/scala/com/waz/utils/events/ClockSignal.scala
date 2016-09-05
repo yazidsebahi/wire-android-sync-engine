@@ -24,7 +24,7 @@ import org.threeten.bp.Instant.now
 
 import scala.concurrent.duration.FiniteDuration
 
-class ClockSignal(interval: FiniteDuration) extends SourceSignal[Instant](Some(now)) {
+case class ClockSignal(interval: FiniteDuration) extends SourceSignal[Instant](Some(now)) {
   def refresh: Unit = if (wired) {
     publish(now)
     delayed(interval)(refresh)(Background)

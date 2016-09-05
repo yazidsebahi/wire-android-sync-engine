@@ -118,7 +118,7 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
   def forceNameUpdate(id: ConvId) = convs.get(id) flatMap {
     case Some(conv) if conv.convType == ConversationType.Group =>
       for {
-        members <- membersStorage.get(conv.id)
+        members <- membersStorage.getByConv(conv.id)
         users <- usersStorage.getAll(members.map(_.userId).filter(_ != selfUserId))
         name = generatedName(users.map(_.map(_.getDisplayName)))
         res <- convs.update(conv.id,  _.copy(generatedName = name))

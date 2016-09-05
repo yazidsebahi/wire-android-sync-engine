@@ -20,11 +20,12 @@ package com.waz.content
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.Message.Status
-import com.waz.model.MessageData.MessageDataDao
+import com.waz.content.ConvMessagesIndex._
+import com.waz.model.MessageData.{MessageDataDao, isUserContent}
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
-import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
+import com.waz.utils.events.{EventStream, RefreshingSignal, Signal, SourceSignal}
 import org.threeten.bp.Instant
 
 import scala.collection.mutable
@@ -32,14 +33,14 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: UserId, users: UsersStorage,
-    convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase) {
+    convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase) { self =>
 
   private implicit val tag: LogTag = s"ConvMessagesIndex_$conv"
 
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConvMessagesIndex")
 
-  private val indexUpdated = EventStream[Instant]() // will send timestamp after index is updated in db
+  private val indexChanged = EventStream[Change]()
   private val lastLocalMessageByType = new mutable.HashMap[Message.Type, MessageData]
   private var firstMessage = Option.empty[MessageData]
 
@@ -50,23 +51,33 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     val lastMessage = Signal(Option.empty[MessageData])
     val lastSentMessage = Signal(Option.empty[MessageData])
     val lastReadTime = returning(Signal[Instant]())(_.disableAutowiring())
+    val lastMessageFromSelf = Signal(Option.empty[MessageData])
+    val lastMessageFromOther = Signal(Option.empty[MessageData])
   }
 
   object signals {
+    val indexChanged: EventStream[Change] = self.indexChanged
+
     val lastReadTime: Signal[Instant] = sources.lastReadTime
     val failedCount: Signal[Int] = sources.failedCount
     val lastMissedCall: Signal[Option[MessageId]] = Signal(sources.lastReadTime, sources.missedCall).map { case (time, msg) => msg.filter(_.time.isAfter(time)).map(_.id) }
     val incomingKnock: Signal[Option[MessageId]] = Signal(sources.lastReadTime, sources.incomingKnock).map { case (time, msg) => msg.filter(_.time.isAfter(time)).map(_.id) }
     val lastMessage: Signal[Option[MessageData]] = returning(sources.lastMessage)(_.disableAutowiring())
     val lastSentMessage: Signal[Option[MessageData]] = returning(sources.lastSentMessage)(_.disableAutowiring())
+    val lastMessageFromSelf: Signal[Option[MessageData]] = returning(sources.lastMessageFromSelf)(_.disableAutowiring())
+    val lastMessageFromOther: Signal[Option[MessageData]] = returning(sources.lastMessageFromOther)(_.disableAutowiring())
+
+    lastMessageFromSelf { msg =>
+      info(s"last message from self is now $msg")
+    }
 
     val unreadCount = for {
       time <- sources.lastReadTime
-      _ <- Signal.wrap(Instant.now, indexUpdated).throttle(500.millis)
+      _ <- Signal.wrap(Instant.now, indexChanged.map(_.time)).throttle(500.millis)
       unread <- Signal.future(messages.countUnread(conv, time))
     } yield unread
 
-    val messagesCursor: Signal[MessagesCursor] = new RefreshingSignal(loadCursor, indexUpdated)
+    val messagesCursor: Signal[MessagesCursor] = new RefreshingSignal(loadCursor, indexChanged.filter(_.orderChanged))
   }
 
   import sources._
@@ -84,10 +95,10 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
         incomingKnock ! MessageDataDao.lastIncomingKnock(conv, selfUserId)
         failedCount ! MessageDataDao.countFailed(conv).toInt
         firstMessage = MessageDataDao.first(conv)
-        val last = MessageDataDao.last(conv)
-        lastMessage ! last
-
+        lastMessage ! MessageDataDao.last(conv)
         lastSentMessage ! MessageDataDao.lastSent(conv)
+        lastMessageFromSelf ! MessageDataDao.lastFromSelf(conv, selfUserId)
+        lastMessageFromOther ! MessageDataDao.lastFromOther(conv, selfUserId)
       }
     }.map { _ =>
       Signal(signals.unreadCount, signals.failedCount, signals.lastMissedCall, signals.incomingKnock).throttle(500.millis) { case (unread, failed, missed, knock) =>
@@ -128,7 +139,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
 
     removeLast(_.id == msg.id)
 
-    indexUpdated ! Instant.now
+    indexChanged ! Removed(msg)
   }
 
   private[content] def delete(upTo: Instant = Instant.MAX): Future[Unit] = init map { _ =>
@@ -140,18 +151,22 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
 
     removeLast(!_.time.isAfter(upTo))
 
-    indexUpdated ! Instant.now
+    indexChanged ! RemovedOlder(upTo)
   }
 
   private def removeLast(f: MessageData => Boolean) = {
     val lastRemoved = lastMessage.mutate(_ filterNot f)
     val lastSentRemoved = lastSentMessage.mutate(_ filterNot f)
+    val lastFromSelfRemoved = lastMessageFromSelf.mutate(_ filterNot f)
+    val lastFromOtherRemoved = lastMessageFromOther.mutate(_ filterNot f)
 
-    if (lastRemoved || lastSentRemoved) {
+    if (lastRemoved || lastSentRemoved || lastFromSelfRemoved) {
       verbose("last message was removed, need to fetch it from db")
       storage.read { implicit db =>
-        MessageDataDao.last(conv) foreach updateLast
-        MessageDataDao.lastSent(conv) foreach updateLastSent
+        MessageDataDao.last(conv) foreach updateSignal(lastMessage)
+        MessageDataDao.lastSent(conv) foreach updateSignal(lastSentMessage)
+        MessageDataDao.lastFromSelf(conv, selfUserId) foreach updateSignal(lastMessageFromSelf)
+        MessageDataDao.lastFromOther(conv, selfUserId) foreach updateSignal(lastMessageFromOther)
       }
     }
   }
@@ -182,7 +197,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
 
       updateLast(msgs)
 
-      indexUpdated ! Instant.now
+      indexChanged ! Added(msgs)
     }
   }
 
@@ -206,22 +221,35 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
 
       updateLast(updates.view.map(_._2))
 
-      if (updates.exists { case (prev, up) => prev.convId == conv && (prev.time != up.time || !prev.hasSameContentType(up)) })
-        indexUpdated ! Instant.now()
+      indexChanged ! Updated(updates)
     }
   }
 
   private def updateLast(msgs: Iterable[MessageData]): Unit = {
-    updateLast(msgs.maxBy(_.time))
+    updateSignal(lastMessage)(msgs.maxBy(_.time))
 
     val sent = msgs.filter(_.state == Status.SENT)
-    if (sent.nonEmpty)
-      updateLastSent(sent.maxBy(_.time))
+    if (sent.nonEmpty) updateSignal(lastMessage)(sent.maxBy(_.time))
+
+    val (fromSelf, fromOther) = msgs.filter(m => isUserContent(m.msgType)).partition(_.userId == selfUserId)
+    if (fromSelf.nonEmpty) updateSignal(lastMessageFromSelf)(fromSelf.maxBy(_.time))
+    if (fromOther.nonEmpty) updateSignal(lastMessageFromOther)(fromOther.maxBy(_.time))
   }
 
-  private def updateLast(last: MessageData): Unit =
-    lastMessage.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
+  private def updateSignal(signal: SourceSignal[Option[MessageData]])(last: MessageData): Unit =
+    signal.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
+}
 
-  private def updateLastSent(last: MessageData): Unit =
-    lastSentMessage.mutate(_.filter(m => m.id != last.id && m.time.isAfter(last.time)).orElse(Some(last)))
+object ConvMessagesIndex {
+
+  sealed trait Change {
+    val time: Instant = Instant.now
+    val orderChanged = true
+  }
+  case class Added(msgs: Seq[MessageData]) extends Change
+  case class Removed(msg: MessageData) extends Change
+  case class RemovedOlder(clearTimestamp: Instant) extends Change
+  case class Updated(updates: Seq[(MessageData, MessageData)]) extends Change {
+    override val orderChanged = updates exists { case (prev, up) => prev.time != up.time || !prev.hasSameContentType(up) }
+  }
 }

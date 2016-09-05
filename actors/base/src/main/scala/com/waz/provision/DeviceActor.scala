@@ -31,7 +31,7 @@ import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
 import com.waz.cache.LocalData
-import com.waz.content.{Database, GlobalDatabase, Mime}
+import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
@@ -462,7 +462,7 @@ class DeviceActor(val deviceName: String,
     case WaitDisconnected =>
       waitUntil(channels)(channels => !channels.hasIncomingCall && !channels.hasOngoingCall) map { _ => Successful }
 
-    case SetMessageLiking(remoteId, messageId, action) =>
+    case SetMessageReaction(remoteId, messageId, action) =>
       waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
         val messages = findConvById(remoteId).getMessages
         waitUntil(messages)(_.exists(_.data.id == messageId)) map { messages =>

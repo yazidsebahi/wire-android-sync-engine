@@ -147,7 +147,7 @@ class VoiceChannel(val id: ConvId, var data: VoiceChannelData)(implicit ui: UiMo
   override def getCallDuration(i: bp.Duration): api.UiSignal[bp.Duration] =
     UiSignal(_.voice.voiceChannelSignal(id).flatMap { data =>
       if (data.deviceState != ConnectionState.Connected) Signal.const(ZERO)
-      else new ClockSignal(i.asScala).map(_ => data.tracking.established.fold2(ZERO, between(_, now)))
+      else ClockSignal(i.asScala).map(_ => data.tracking.established.fold2(ZERO, between(_, now)))
     })
 
   override def getCallSessionId: String = data.sessionId.fold("")(_.str)

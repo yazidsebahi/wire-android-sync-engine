@@ -23,9 +23,8 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.impl.{AssetForUpload, ErrorResponse}
 import com.waz.cache.{CacheEntry, CacheService}
-import com.waz.content.Mime
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService
 import com.waz.sync.client.AssetClient
 import com.waz.testutils.Matchers._

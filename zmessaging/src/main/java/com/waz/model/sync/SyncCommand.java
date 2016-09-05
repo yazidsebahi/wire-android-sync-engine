@@ -36,7 +36,6 @@ public enum SyncCommand {
     PostCleared("post-cleared"),
     PostTypingState("post-typing-state"),
     SyncCommonConnections("sync-common-connections"),
-    PostExcludePymk("post-exclude-pymk"),
     PostConnectionStatus("post-conn-status"),
     PostSelfPicture("post-picture"),
     PostMessage("post-message"),
@@ -61,6 +60,7 @@ public enum SyncCommand {
     PostSessionReset("post-session-reset"),
     PostAssetStatus("post-asset-status"),
     PostOpenGraphMeta("post-og-meta"),
+    PostReceipt("post-receipt"),
     Unknown("unknown");
 
     public final String name;

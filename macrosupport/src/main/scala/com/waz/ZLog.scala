@@ -53,32 +53,32 @@ private object ZLogMacros {
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message, $cause)"
   }
 
-  def error(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag])  = {
+  def error(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message)"
   }
 
-  def warnWithCause(c: Context)(message: c.Expr[String], cause: c.Expr[Throwable])(tag: c.Expr[LogTag])  = {
+  def warnWithCause(c: Context)(message: c.Expr[String], cause: c.Expr[Throwable])(tag: c.Expr[LogTag]) = {
     import c.universe._
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message, $cause)"
   }
 
-  def warn(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag])  = {
+  def warn(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message)"
   }
 
-  def info(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag])  = {
+  def info(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.INFO) android.util.Log.i($tag, $message)"
   }
 
-  def debug(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag])  = {
+  def debug(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.DEBUG) android.util.Log.d($tag, $message)"
   }
 
-  def verbose(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag])  = {
+  def verbose(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
     q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.VERBOSE) android.util.Log.v($tag, $message)"
   }

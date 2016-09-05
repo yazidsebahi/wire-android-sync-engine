@@ -18,10 +18,9 @@
 package com.waz.users
 
 import com.waz.api.MockedClientApiSpec
-import com.waz.api.impl.SearchQuery.Query
 import com.waz.mocked.MockBackend
-import com.waz.model.{Relation, UserId}
-import com.waz.service.UserSearchService
+import com.waz.model.{Relation, SearchQuery, UserId, UserInfo}
+import com.waz.service.UserSearchService.MinCommonConnections
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.testutils.Implicits._
 import com.waz.threading.CancellableFuture
@@ -37,19 +36,20 @@ class CommonConnectionsSpec extends FeatureSpec with Matchers with MockBackend w
   lazy val convs = api.getConversations
 
   lazy val search = api.search()
-  lazy val recommendedPeople = search.getRecommendedPeople(10)
+  lazy val recommendedPeople = search.getRecommendedPeople("test", 10, Array.empty)
 
   var requestedCommon = Option.empty[UserId]
   val recommended = UserId()
-  lazy val topCommonConnections = connections.keys.take(UserSearchService.MinCommonConnections).toSeq
+  lazy val topCommonConnections = connections.keys.take(MinCommonConnections).toSeq
 
 
   override protected def beforeAll(): Unit = {
+    users += recommended -> UserInfo(selfUserId, Some("test"))
     for (_ <- 1 to 10) addConnection()
     super.beforeAll()
   }
 
-  override def graphSearch(query: Query, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.successful(Right(Seq(
+  override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.successful(Right(Seq(
     UserSearchEntry(recommended, "test", None, None, 0, Some(false), blocked = false, Relation.Third, Some(10), topCommonConnections)
   )))
 
@@ -76,7 +76,7 @@ class CommonConnectionsSpec extends FeatureSpec with Matchers with MockBackend w
       withDelay {
         common.getTotalCount shouldEqual 10
       }
-      common.getTopConnections should have size UserSearchService.MinCommonConnections
+      common.getTopConnections should have size MinCommonConnections
       common.getTopConnections.map(_.id).toSeq shouldEqual topCommonConnections
 
       awaitUi(250.millis)

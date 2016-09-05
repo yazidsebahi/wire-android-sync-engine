@@ -26,8 +26,7 @@ import com.waz.api
 import com.waz.api.Asset.LoadCallback
 import com.waz.api.AudioEffect
 import com.waz.cache.CacheEntry
-import com.waz.content.Mime
-import com.waz.model.AssetId
+import com.waz.model.{AssetId, Mime}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AudioTranscoder
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, PCMContent}

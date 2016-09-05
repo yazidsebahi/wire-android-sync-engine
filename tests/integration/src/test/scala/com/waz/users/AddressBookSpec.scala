@@ -20,17 +20,20 @@ package com.waz.users
 import java.util.UUID.randomUUID
 
 import com.waz.api.ZMessagingApi.RegistrationListener
-import com.waz.api.impl.AccentColor
+import com.waz.api.impl.{AccentColor, ErrorResponse}
 import com.waz.api.{ApiSpec, CredentialsFactory, Self}
 import com.waz.client.RegistrationClient
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.provision.{EmailClientSuite, UserProvisioner}
-import com.waz.service.SearchKey
-import com.waz.sync.client.AddressBookClient
+import com.waz.service.{SearchKey, UserModule, ZMessaging, ZMessagingFactory}
+import com.waz.sync.client.UserSearchClient.UserSearchEntry
+import com.waz.sync.client.{AddressBookClient, UserSearchClient}
 import com.waz.testutils._
-import com.waz.threading.Threading
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.sha2
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{AsyncClient, TestClientWrapper}
 import org.robolectric.shadows.ShadowContentResolver
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
@@ -44,6 +47,8 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
   override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
 
+  lazy val baseName = s"Android Test User ${randomUUID}"
+
   override protected def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -53,9 +58,9 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     val emailsToRegister = emails.drop(1)
 
     val registeredUsers: Map[EmailAddress, UserInfo] = (for {
-      email <- emailsToRegister
+      (email, n) <- emailsToRegister.zipWithIndex
       _ = println(s"registering $email")
-      info <- new UserProvisioner(email.str, password, "Android Test User", shouldConnect = true, globalModule).register().right.toSeq
+      info <- new UserProvisioner(email.str, password, s"$baseName $n", shouldConnect = false, globalModule).register().right.toSeq
     } yield email -> info)(breakOut)
 
     def abclient(email: EmailAddress) = new AddressBookClient(znetClientFor(email.str, password))
@@ -102,7 +107,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       var selfUser: Self = null
       var failed = true
 
-      api.register(CredentialsFactory.emailCredentials(emails(0).str, password), s"Android Test User A", AccentColor(2), new RegistrationListener {
+      api.register(CredentialsFactory.emailCredentials(emails(0).str, password), "Android Test User A", AccentColor(2), new RegistrationListener {
         override def onRegistrationFailed(code: Int, message: String, label: String): Unit = {
           info(s"failed. code: $code, message: $message, label: $label")
           failed = true
@@ -123,7 +128,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       emailClient.verifyEmail(emails(0).str)(emails(0).str) shouldBe true
 
       awaitUi(10.seconds) // wait for address book upload that was triggered on verified login
-      val search = api.search().getRecommendedPeople(20)
+      val search = api.search().getRecommendedPeople(baseName, 30, Array.empty)
       withDelay { search.getAll.map(_.getId).map(UserId) should contain allOf(usersInAddressBook(0), usersInAddressBook(1), usersInAddressBook.drop(2):_*) }(20.seconds)
     }
 
@@ -131,7 +136,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       login(emails(1).str, password) shouldEqual true
 
       awaitUi(10.seconds) // wait for address book upload that was triggered on verified login
-      val search = api.search().getRecommendedPeople(20)
+      val search = api.search().getRecommendedPeople(baseName, 30, Array.empty)
       withDelay { search.getAll.map(_.getId).map(UserId) should contain allOf(usersInAddressBook(0), usersInAddressBook(1), usersInAddressBook.drop(2):_*) }(20.seconds)
     }
   }
@@ -142,4 +147,15 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   val emails = uuids map (id => EmailAddress(s"android.test+$id@wire.com"))
 
   def newClient = new RegistrationClient(new AsyncClient(wrapper = TestClientWrapper), testBackend)
+
+  override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
+    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user) {
+      override lazy val userSearchClient: UserSearchClient = new UserSearchClient(netClient) {
+        // server response will not update immediately with newly registered users, thus we fail the sync request
+        // which will cause the search to use local suggestions, which should find the contacts because
+        // address book upload will initiate a sync for the matched users
+        override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.successful(Left(ErrorResponse.InternalError))
+      }
+    }
+  }
 }

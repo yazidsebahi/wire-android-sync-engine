@@ -23,7 +23,6 @@ import com.waz.api.InputStateIndicator.KnockState
 import com.waz.api.UsersList
 import com.waz.content.Uris
 import com.waz.model.{ConvId, MessageData, UserId}
-import com.waz.service.conversation.ConversationsService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.EventContext
@@ -40,17 +39,18 @@ class InputStateIndicator(conv: ConvId)(implicit ui: UiModule) extends api.Input
 
   private var knockState = KnockState.NONE
   private var cleanKnockState = CancellableFuture.successful({})
+  private val timeouts = ui.global.timeouts.messages
 
   debug(s"initLoader with uri: ${Uris.MessagesUri(conv)}")
 
   addLoader(_.messages.activeKnockMessage(conv)) { data =>
     debug(s"onLoaded($data)")
 
-    def cleanDelay(msg: MessageData) = ConversationsService.KnockTimeout - between(Instant.now, msg.localTime).asScala
+    def cleanDelay(msg: MessageData) = timeouts.knockTimeout - between(Instant.now, msg.localTime).asScala
 
     cleanKnockState.cancel()
     data match {
-      case Some(msg) if !ConversationsService.knockExpired(msg) =>
+      case Some(msg) if !timeouts.knockExpired(msg) =>
         setKnockState(if (msg.hotKnock) KnockState.DISABLED else KnockState.KNOCKED)
         cleanKnockState = CancellableFuture.delayed(cleanDelay(msg))(setKnockState(KnockState.NONE))(Threading.Ui)
       case Some(msg) => debug(s"knock expired: ${msg.localTime}, delay: ${cleanDelay(msg)}")

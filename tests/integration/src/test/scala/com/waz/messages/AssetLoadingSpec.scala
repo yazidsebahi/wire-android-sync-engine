@@ -24,9 +24,8 @@ import android.content.Context
 import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api._
-import com.waz.content.Mime
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.AssetId
+import com.waz.model.{AssetId, Mime}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendAsset, Successful}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._

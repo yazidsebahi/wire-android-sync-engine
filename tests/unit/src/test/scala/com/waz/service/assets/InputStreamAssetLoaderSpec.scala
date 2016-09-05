@@ -21,8 +21,7 @@ import java.io.{ByteArrayInputStream, FileNotFoundException}
 import java.util.concurrent.CountDownLatch
 
 import com.waz.api.impl
-import com.waz.content.Mime
-import com.waz.model.AssetId
+import com.waz.model.{AssetId, Mime}
 import com.waz.service.downloads.DownloadRequest.AssetFromInputStream
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockGlobalModule

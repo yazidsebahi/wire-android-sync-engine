@@ -22,9 +22,10 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
+import org.threeten.bp.Instant
 
 
-case class CommonConnectionsData(user: UserId, totalCount: Int, connections: Seq[UserId], timestamp: Long = System.currentTimeMillis())
+case class CommonConnectionsData(user: UserId, totalCount: Int, connections: Seq[UserId], timestamp: Instant = Instant.now)
 
 object CommonConnectionsData {
 
@@ -33,7 +34,7 @@ object CommonConnectionsData {
       o.put("user", v.user.str)
       o.put("totalCount", v.totalCount)
       o.put("connections", JsonEncoder.array(v.connections)((arr, u) => arr.put(u.str)))
-      o.put("timestamp", v.timestamp)
+      o.put("timestamp", JsonEncoder.encodeInstant(v.timestamp))
     }
   }
 
@@ -45,7 +46,7 @@ object CommonConnectionsData {
   implicit object CommonConnectionsDataDao extends Dao[CommonConnectionsData, UserId] {
     val Id = id[UserId]('_id, "PRIMARY KEY").apply(_.user)
     val Data = text('data, JsonEncoder.encodeString[CommonConnectionsData], JsonDecoder.decode[CommonConnectionsData]).apply(identity)
-    val Timestamp = long('timestamp)(_.timestamp)
+    val Timestamp = timestamp('timestamp)(_.timestamp)
 
     override val idCol = Id
     override val table = Table("CommonConnections", Id, Data, Timestamp)

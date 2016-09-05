@@ -22,7 +22,7 @@ import java.io.FileInputStream
 import android.database.sqlite.SQLiteDatabase
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.GlobalDatabase
-import com.waz.content.Mime
+import com.waz.model.Mime
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading.Implicits.Background

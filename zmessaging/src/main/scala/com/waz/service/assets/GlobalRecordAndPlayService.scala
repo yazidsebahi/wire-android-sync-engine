@@ -30,8 +30,7 @@ import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
 import com.waz.audioeffect.{AudioEffect => AVSEffect}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
-import com.waz.content.Mime
-import com.waz.model.{AssetId, ErrorData, Uid}
+import com.waz.model.{AssetId, ErrorData, Mime, Uid}
 import com.waz.service.assets.AudioLevels.peakLoudness
 import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.service.{ErrorsService, ZmsLifecycle}
@@ -180,7 +179,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def playhead(key: MediaKey): Signal[bp.Duration] = stateSource flatMap {
     case Playing(_, `key`) =>
-      new ClockSignal(tickInterval).flatMap { i =>
+      ClockSignal(tickInterval).flatMap { i =>
         Signal.future(duringIdentityTransition { case Playing(player, `key`) => player.playhead })
       }
     case Paused(player, `key`, media, _) =>
@@ -197,7 +196,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
   def recordingLevel(key: AssetMediaKey): EventStream[Float] =
     stateSource.flatMap {
       case Recording(_, `key`, _, _, _) =>
-        new ClockSignal(tickInterval).flatMap { i =>
+        ClockSignal(tickInterval).flatMap { i =>
           Signal.future(duringIdentityTransition { case Recording(recorder, `key`, _, _, _) => successful((peakLoudness(recorder.maxAmplitudeSinceLastCall), i)) })
         }
       case other => Signal.empty[(Float, Instant)]

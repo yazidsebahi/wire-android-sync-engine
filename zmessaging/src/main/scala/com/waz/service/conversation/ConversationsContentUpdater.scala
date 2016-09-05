@@ -168,7 +168,7 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
     if (conv.convType == ConversationType.Incoming) conv.copy(hidden = true) else conv
   })
 
-  def hideConversation(user: UserId) = storage.update(ConvId(user.str), _.copy(hidden = true))
+  def hideConversationOfUser(user: UserId) = storage.update(ConvId(user.str), _.copy(hidden = true))
 
   /**
    * Helper for event processing. Can be used whenever some event processing needs to access conversation by remoteId,

@@ -21,7 +21,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns._
 import com.waz.ZLog._
-import com.waz.content.Mime
+import com.waz.model.Mime
 import com.waz.threading.Threading
 
 import scala.concurrent.Future

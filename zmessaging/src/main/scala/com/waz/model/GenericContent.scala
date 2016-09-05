@@ -21,7 +21,6 @@ package com.waz.model
 import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
-import com.waz.content.Mime
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.nano.Messages
@@ -378,18 +377,22 @@ object GenericContent {
     }
   }
 
-  type LikingAction = Liking.Action
-  implicit object LikingAction extends GenericContent[Liking.Action] {
+  type Reaction = (Liking.Action, MessageId)
+  implicit object Reaction extends GenericContent[Reaction] {
 
     override def set(msg: GenericMessage) = {
-      case Liking.Action.Like   => msg.setLiking(Messages.LIKE)
-      case Liking.Action.Unlike => msg.setLiking(Messages.UNLIKE)
+      case (l, id) => msg.setReaction(returning(new Messages.Reaction()) { r =>
+        r.emoji = l match {
+          case Liking.Action.Like   => "\uD83D\uDC96"
+          case Liking.Action.Unlike => ""
+        }
+        r.messageId = id.str
+      })
     }
 
-    def apply(v: Int) = v match {
-      case Messages.LIKE => Liking.Action.Like
-      case Messages.UNLIKE => Liking.Action.Unlike
-    }
+    def apply(r: String, id: String): Reaction = (if (r.isEmpty) Liking.Action.Unlike else Liking.Action.Like, MessageId(id))
+
+    def unapply(proto: Messages.Reaction): Option[Reaction] = Some(Reaction(proto.emoji, proto.messageId))
   }
 
   type Knock = Messages.Knock
@@ -505,6 +508,18 @@ object GenericContent {
       Some((l.longitude, l.latitude, Option(l.name).filter(_.nonEmpty), Option(l.zoom).filter(_ != 0)))
   }
 
+  type Receipt = Messages.Confirmation
+  implicit object Receipt extends GenericContent[Receipt] {
+    override def set(msg: GenericMessage) = msg.setConfirmation
+
+    def apply(msg: MessageId) = returning(new Messages.Confirmation) { c =>
+      c.messageId = msg.str
+      c.`type` = Messages.Confirmation.DELIVERED
+    }
+
+    def unapply(proto: Receipt): Option[MessageId] = if (proto.`type` == Messages.Confirmation.DELIVERED) Some(MessageId(proto.messageId)) else None
+  }
+
   type External = Messages.External
   implicit object External extends GenericContent[External] {
     override def set(msg: GenericMessage) = msg.setExternal
@@ -533,9 +548,11 @@ object GenericContent {
     case object SessionReset extends ClientAction {
       override val value: Int = Messages.RESET_SESSION
     }
+    case class UnknownAction(value: Int) extends ClientAction
 
     def apply(v: Int) = v match {
       case Messages.RESET_SESSION => SessionReset
+      case other                  => UnknownAction(other)
     }
 
     override def set(msg: GenericMessage) = { action => msg.setClientAction(action.value) }

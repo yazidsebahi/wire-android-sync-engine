@@ -80,7 +80,7 @@ object Col {
 
   def text(name: Symbol) = Col[String](name.name, "TEXT")
   def text(name: Symbol, modifiers: String) = Col[String](name.name, "TEXT", modifiers)
-  def text[A](name: Symbol, enc: A => String, dec: String => A) = Col[A](name.name, "TEXT")(new DbTranslator[A] {
+  def text[A](name: Symbol, enc: A => String, dec: String => A, modifiers: String = "") = Col[A](name.name, "TEXT")(new DbTranslator[A] {
     override def save(value: A, name: String, values: ContentValues): Unit = values.put(name, enc(value))
     override def bind(value: A, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, enc(value))
     override def load(cursor: Cursor, index: Int): A = dec(cursor.getString(index))

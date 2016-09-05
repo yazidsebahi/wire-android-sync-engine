@@ -69,18 +69,20 @@ class ZMessagingFactory(global: GlobalModule) {
 
 
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
-  lazy val db                 = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val kvStorage          = wire[KeyValueStorage]
-  lazy val usersStorage       = wire[UsersStorage]
-  lazy val otrClientsStorage  = wire[OtrClientsStorage]
-  lazy val membersStorage     = wire[MembersStorage]
-  lazy val assetsStorage      = wire[AssetsStorage]
-  lazy val voiceStorage       = wire[VoiceChannelStorage]
-  lazy val likingsStorage     = wire[LikingsStorage]
-  lazy val notifStorage       = wire[NotificationStorage]
-  lazy val convsStorage       = wire[ConversationStorage]
-  lazy val msgDeletions       = wire[MsgDeletionStorage]
-  lazy val msgEdits           = wire[EditHistoryStorage]
+  lazy val db                = new ZmsDatabase(accountId, context, dbPrefix)
+  lazy val kvStorage         = wire[KeyValueStorage]
+  lazy val usersStorage      = wire[UsersStorage]
+  lazy val otrClientsStorage = wire[OtrClientsStorage]
+  lazy val membersStorage    = wire[MembersStorage]
+  lazy val assetsStorage     = wire[AssetsStorage]
+  lazy val voiceStorage      = wire[VoiceChannelStorage]
+  lazy val likingsStorage    = wire[LikingsStorage]
+  lazy val notifStorage      = wire[NotificationStorage]
+  lazy val convsStorage      = wire[ConversationStorage]
+  lazy val msgDeletions      = wire[MsgDeletionStorage]
+  lazy val searchQueryCache  = wire[SearchQueryCacheStorage]
+  lazy val commonConnections = wire[CommonConnectionsStorage]
+  lazy val msgEdits          = wire[EditHistoryStorage]
 }
 
 
@@ -90,15 +92,15 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
   private implicit val ev = EventContext.Global
 
-  val account           = userModule.account
-  val global            = account.global
+  val account    = userModule.account
+  val global     = account.global
 
-  val selfUserId        = userModule.userId
-  val accountId         = account.id
+  val selfUserId = userModule.userId
+  val accountId  = account.id
 
-  val zNetClient        = account.netClient
-  val storage           = account.storage
-  val lifecycle         = account.lifecycle
+  val zNetClient = account.netClient
+  val storage    = account.storage
+  val lifecycle  = account.lifecycle
 
   lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync
@@ -143,6 +145,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def convsStorage      = storage.convsStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
+  def searchQueryCache  = storage.searchQueryCache
+  def commonConnections = storage.commonConnections
 
   lazy val messagesStorage: MessagesStorage = wire[MessagesStorage]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
@@ -172,47 +176,48 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val convsContent: ConversationsContentUpdater = wire[ConversationsContentUpdater]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
 
-  lazy val assetDownloader            = wire[AssetDownloader]
-  lazy val assetLoader                = wire[AssetLoader]
-  lazy val imageLoader                = wire[ImageLoader]
+  lazy val assetDownloader = wire[AssetDownloader]
+  lazy val assetLoader     = wire[AssetLoader]
+  lazy val imageLoader     = wire[ImageLoader]
 
-  lazy val push: PushService  = wire[PushService]
-  lazy val gcm: GcmService    = wire[GcmService]
-  lazy val errors         = wire[ErrorsService]
-  lazy val reporting      = new ZmsReportingService(accountId, global.reporting)
-  lazy val websocket: WebSocketClientService = wire[WebSocketClientService]
-  lazy val usersearch     = wire[UserSearchService]
-  lazy val assetGenerator = wire[ImageAssetGenerator]
-  lazy val assetMetaData  = wire[com.waz.service.assets.MetaDataService]
-  lazy val assetPreview   = wire[com.waz.service.assets.PreviewService]
-  lazy val assets: AssetService = wire[AssetService]
-  lazy val users: UserService = wire[UserService]
-  lazy val conversations: ConversationsService = wire[ConversationsService]
-  lazy val convsNotifier  = wire[ConversationsNotifier]
+  lazy val push: PushService                     = wire[PushService]
+  lazy val gcm: GcmService                       = wire[GcmService]
+  lazy val errors                                = wire[ErrorsService]
+  lazy val reporting                             = new ZmsReportingService(accountId, global.reporting)
+  lazy val websocket: WebSocketClientService     = wire[WebSocketClientService]
+  lazy val userSearch                            = wire[UserSearchService]
+  lazy val assetGenerator                        = wire[ImageAssetGenerator]
+  lazy val assetMetaData                         = wire[com.waz.service.assets.MetaDataService]
+  lazy val assetPreview                          = wire[com.waz.service.assets.PreviewService]
+  lazy val assets: AssetService                  = wire[AssetService]
+  lazy val users: UserService                    = wire[UserService]
+  lazy val conversations: ConversationsService   = wire[ConversationsService]
+  lazy val convsNotifier                         = wire[ConversationsNotifier]
   lazy val convEvents: ConversationEventsService = wire[ConversationEventsService]
-  lazy val convsUi        = wire[ConversationsUiService]
-  lazy val convsStats     = wire[ConversationsListStateService]
-  lazy val messages: MessagesService = wire[MessagesService]
-  lazy val connection: ConnectionService = wire[ConnectionService]
-  lazy val flowmanager: FlowManagerService = wire[FlowManagerService]
-  lazy val voiceContent       = wire[VoiceChannelContent]
-  lazy val voice: VoiceChannelService = wire[VoiceChannelService]
-  lazy val contacts: ContactsService = wire[ContactsService]
-  lazy val typing: TypingService = wire[TypingService]
-  lazy val invitations    = wire[InvitationService]
-  lazy val richmedia      = wire[RichMediaService]
-  lazy val tracking       = wire[TrackingService]
-  lazy val trackingEvents = wire[TrackingEventsService]
-  lazy val giphy          = wire[GiphyService]
-  lazy val youtubeMedia   = wire[YouTubeMediaService]
-  lazy val soundCloudMedia = wire[SoundCloudMediaService]
-  lazy val spotifyMedia   = wire[SpotifyMediaService]
-  lazy val otrService: OtrService = wire[OtrService]
-  lazy val genericMsgs: GenericMessageService = wire[GenericMessageService]
-  lazy val likings: LikingsService = wire[LikingsService]
-  lazy val notifications: NotificationService = wire[NotificationService]
-  lazy val callLog = wire[CallLogService]
-  lazy val recordAndPlay = wire[RecordAndPlayService]
+  lazy val convsUi                               = wire[ConversationsUiService]
+  lazy val convsStats                            = wire[ConversationsListStateService]
+  lazy val messages: MessagesService             = wire[MessagesService]
+  lazy val connection: ConnectionService         = wire[ConnectionService]
+  lazy val flowmanager: FlowManagerService       = wire[FlowManagerService]
+  lazy val voiceContent                          = wire[VoiceChannelContent]
+  lazy val voice: VoiceChannelService            = wire[VoiceChannelService]
+  lazy val contacts: ContactsService             = wire[ContactsService]
+  lazy val typing: TypingService                 = wire[TypingService]
+  lazy val invitations                           = wire[InvitationService]
+  lazy val richmedia                             = wire[RichMediaService]
+  lazy val tracking                              = wire[TrackingService]
+  lazy val trackingEvents                        = wire[TrackingEventsService]
+  lazy val giphy                                 = wire[GiphyService]
+  lazy val youtubeMedia                          = wire[YouTubeMediaService]
+  lazy val soundCloudMedia                       = wire[SoundCloudMediaService]
+  lazy val spotifyMedia                          = wire[SpotifyMediaService]
+  lazy val otrService: OtrService                = wire[OtrService]
+  lazy val genericMsgs: GenericMessageService    = wire[GenericMessageService]
+  lazy val likings: LikingsService               = wire[LikingsService]
+  lazy val notifications: NotificationService    = wire[NotificationService]
+  lazy val callLog                               = wire[CallLogService]
+  lazy val recordAndPlay                         = wire[RecordAndPlayService]
+  lazy val receipts                              = wire[ReceiptService]
 
 
   lazy val assetSync        = wire[AssetSyncHandler]

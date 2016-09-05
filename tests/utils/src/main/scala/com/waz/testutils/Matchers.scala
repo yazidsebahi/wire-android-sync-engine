@@ -35,7 +35,6 @@ import org.scalatest.matchers.{MatchResult, Matcher}
 import org.scalatest.time.{Nanoseconds, Span}
 import org.threeten.bp.Instant
 
-import scala.Either.cond
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Awaitable, Future, Promise}
@@ -178,12 +177,6 @@ object Matchers {
 
   def beRoughly(d: Instant)(implicit tolerance: Tolerance): Matcher[Option[Instant]] =
     (be >= (d.toEpochMilli - (tolerance.t * spanScaleFactor).toMillis) and be <= (d.toEpochMilli + (tolerance.t * spanScaleFactor).toMillis)) compose (_.value.toEpochMilli)
-
-  implicit class RichMatcher[A](m: Matcher[A]) {
-    def soon(implicit p: PatienceConfig): Matcher[A] = new Matcher[A] {
-      def apply(a: A) = retryUntilRightOrTimeout(((r: MatchResult) => cond(r.matches, r, r))(m(a)))(p).merge
-    }
-  }
 
   implicit class WithinAndSoonPostfixes[A](f: => A) {
     def within(timeout: FiniteDuration)(implicit p: PatienceConfig): A = Matchers.this.soon(f)(p.copy(timeout = scaled(Span(timeout.toNanos, Nanoseconds))))

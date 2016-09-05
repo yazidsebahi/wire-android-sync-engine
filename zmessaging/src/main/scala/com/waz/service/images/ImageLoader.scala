@@ -29,11 +29,10 @@ import com.waz.api.Permission
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
-import com.waz.content.Mime
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model._
+import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService.BitmapRequest
 import com.waz.service.assets.{AssetLoader, AssetService}
 import com.waz.service.downloads.DownloadRequest._

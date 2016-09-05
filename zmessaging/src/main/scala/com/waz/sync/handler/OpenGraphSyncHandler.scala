@@ -23,7 +23,7 @@ import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
-import com.waz.content.{ConversationStorage, MessagesStorage, Mime}
+import com.waz.content.{ConversationStorage, MessagesStorage}
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
@@ -134,7 +134,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
             case (_, p) => p
           }
 
-          val proto = GenericMessage(msg.id, Text(content, mentions, updated))
+          val proto = GenericMessage(msg.id.uid, Text(content, mentions, updated))
 
           updateIfNotEdited(msg, _.copy(protos = Seq(proto))) map { _ => if (errors.isEmpty) Right(proto) else Left(errors) }
         }

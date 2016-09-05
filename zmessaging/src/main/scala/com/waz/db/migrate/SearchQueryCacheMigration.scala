@@ -15,28 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api;
+package com.waz.db.migrate
 
-public interface SearchQuery extends UiObservable {
+import android.database.sqlite.SQLiteDatabase
 
-    void setQuery(String query, int limit);
-    void setQuery(String query, int limit, String[] filter);
-
-    void setTopPeopleQuery(int limit);
-    void setTopPeopleQuery(int limit, String[] filter);
-
-    /**
-     * The query for recommended people will transparently fall back to address book matches if no results are found.
-     */
-    void setRecommendedPeopleQuery(int limit);
-    void setRecommendedPeopleQuery(int limit, String[] filter);
-
-    User[] getUsers();
-    User[] getContacts();
-    User[] getRelated();
-    User[] getOther();
-
-    IConversation[] getConversations();
-
-    SyncIndicator getSyncIndicator();
+object SearchQueryCacheMigration {
+  lazy val v75: SQLiteDatabase => Unit = { db =>
+    db.execSQL("DROP TABLE IF EXISTS SearchEntries")
+    db.execSQL("DROP TABLE IF EXISTS SearchQueries")
+    db.execSQL("CREATE TABLE SearchQueries (query TEXT PRIMARY KEY, timestamp INTEGER, entries TEXT)")
+  }
 }

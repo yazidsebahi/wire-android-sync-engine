@@ -48,18 +48,18 @@ class Accounts(val global: GlobalModule) {
 
   val currentAccountPref = prefs.preferenceStringSignal(CurrentAccountPref)
 
-  lazy val currentAccountData = currentAccountPref.signal flatMap[Option[AccountData]] {
+  lazy val currentAccountData = currentAccountPref.signal.flatMap[Option[AccountData]] {
     case "" => Signal.const(Option.empty[AccountData])
     case idStr => storage.optSignal(AccountId(idStr))
   }
 
-  lazy val current = currentAccountData flatMap[Option[AccountService]] {
+  lazy val current = currentAccountData.flatMap[Option[AccountService]] {
     case None      => Signal const None
     case Some(acc) => Signal.future(getInstance(acc) map (Some(_)))
   }
 
   lazy val currentZms: Signal[Option[ZMessaging]] =
-    current flatMap[Option[ZMessaging]] {
+    current.flatMap[Option[ZMessaging]] {
       case Some(service) => service.zmessaging
       case None          => Signal const None
     }

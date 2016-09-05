@@ -109,7 +109,7 @@ class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with 
       zmessaging.account.credentials = EmailCredentials(EmailAddress(email), None)
       zmessaging.zNetClient.auth.invalidateToken()
 
-      api.search().getUsers("test", 10)
+      api.search().getRecommendedPeople("test", 10, Array.empty)
 
       withDelay {
         self.isLoggedIn shouldEqual false

@@ -276,7 +276,7 @@ object ActorMessage {
    */
   case class UnmuteConv(remoteId: RConvId) extends ActorMessage
 
-  case class SetMessageLiking(remoteId: RConvId, messageId: MessageId, action: Liking.Action)
+  case class SetMessageReaction(remoteId: RConvId, messageId: MessageId, action: Liking.Action) extends ActorMessage
 
   /**
    * Change the profile picture of the user logged into the remote device

@@ -6,8 +6,7 @@ import android.support.test.InstrumentationRegistry
 import android.support.test.runner.AndroidJUnit4
 import com.waz.api.{AudioEffect, ZMessagingApi, ZMessagingApiFactory}
 import com.waz.api.impl.AudioAssetForUpload
-import com.waz.content.Mime
-import com.waz.model.AssetId
+import com.waz.model.{AssetId, Mime}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService._
 import com.waz.service.assets.PCM

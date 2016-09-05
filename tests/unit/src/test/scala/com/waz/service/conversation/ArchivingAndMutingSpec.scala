@@ -341,7 +341,7 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
 
   def sendImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(MessageId(), ImageAsset("preview", 0, 0, 0, 0, "", 1, None, None)), RAssetDataId(), None))
+    service.dispatchEvent(GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(Uid(), ImageAsset("preview", 0, 0, 0, 0, "", 1, None, None)), RAssetDataId(), None))
 
   def sendGenericImageMessage[T](old: Boolean = false): Unit =
     service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset("preview", 0, 0, 0, 0, "", 0, None, None))))

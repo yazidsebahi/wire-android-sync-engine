@@ -288,16 +288,9 @@ class ConversationsService(context: Context, push: PushService, users: UserServi
 }
 
 object ConversationsService {
-
   import scala.concurrent.duration._
 
-  val SendingTimeout = 1.minute
-
-  val KnockTimeout = 30.seconds
-
   val RetryBackoff = new ExponentialBackoff(500.millis, 3.seconds)
-  
-  def knockExpired(msg: MessageData) = ConversationsService.KnockTimeout.elapsedSince(msg.localTime)
 
   /**
    * Generate temp ConversationID to identify conversations which don't have a RConvId yet

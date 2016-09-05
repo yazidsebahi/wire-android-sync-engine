@@ -19,26 +19,25 @@ package com.waz.sync
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
-import com.waz.api.impl.{ErrorResponse, SearchQuery}
-import com.waz.model.SearchEntry.SearchEntryDao
-import com.waz.model.SearchQueryCache.SearchQueryCacheDao
+import com.waz.api.impl.ErrorResponse
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client._
 import com.waz.sync.handler.UsersSyncHandler
-import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockZMessaging}
+import com.waz.testutils.Matchers._
+import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.scalatest._
-import org.scalatest.concurrent.ScalaFutures
+import org.threeten.bp.Instant.now
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Success, Try}
 
-class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with OptionValues { test =>
   private lazy implicit val dispatcher = Threading.Background
 
   def storage = zms.storage.db
@@ -62,7 +61,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
 
-  def query = SearchQuery.Named("query")
+  def query = SearchQuery.Recommended("query")
 
   before {
     userSyncRequests = Nil
@@ -70,9 +69,9 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     zms = new MockZMessaging() {
 
       override lazy val sync = new EmptySyncService {
-        override def syncSearchQuery(cache: SearchQueryCache) = {
-          searchSync.syncSearchQuery(cache.id)
-          super.syncSearchQuery(cache)
+        override def syncSearchQuery(q: SearchQuery) = {
+          searchSync.syncSearchQuery(q)
+          super.syncSearchQuery(q)
         }
         override def syncUsers(ids: UserId*) = {
           ids foreach { id => userSyncRequests ::= id }
@@ -81,7 +80,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
       }
 
       override lazy val userSearchClient: UserSearchClient = new UserSearchClient(zNetClient) {
-        override def graphSearch(query: SearchQuery.Query, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delay(delay) map { _ => response.get }
+        override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delay(delay) map { _ => response.get }
       }
 
       kvStorage.lastSlowSyncTimestamp = System.currentTimeMillis()
@@ -102,15 +101,15 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   scenario("Create new users from successful search result") {
     Given("empty local db and working search client")
 
-    val entries = List(
+    val entries = Vector(
       UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
       UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
     )
     response = Success(Right(entries))
 
     When("executing sync for new query")
-    val cache = SearchQueryCacheDao.add(query)
-    sync.syncSearchQuery(cache)
+    val cache = zms.searchQueryCache.insert(SearchQueryCache(query, now, None)).await()
+    sync.syncSearchQuery(query)
 
     Then("sync should create new users for received data")
     withDelay {
@@ -119,31 +118,31 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
     And("newly cached query should reference all these new users")
     withDelay {
-      SearchEntryDao.usersForQuery(cache) shouldEqual entries.map(_.id)
+      zms.searchQueryCache.get(query).await().flatMap(_.entries).value shouldEqual entries.map(_.id)
     }
   }
 
   scenario("Create new users from succsessful search result and preserve the order") {
     Given("empty local db and working search client")
 
-    val entries = List(
+    val entries = Vector(
       UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
       UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
     )
     response = Success(Right(entries))
 
     When("executing sync for new query")
-    val cache = SearchQueryCacheDao.add(query)
-    sync.syncSearchQuery(cache)
+    val cache = zms.searchQueryCache.insert(SearchQueryCache(query, now, None)).await()
+    sync.syncSearchQuery(query)
 
     Then("cached query should reference all users in the same order as in the response")
     withDelay {
-      SearchEntryDao.usersForQuery(cache) should be(entries.map(_.id))
+      zms.searchQueryCache.get(query).await().flatMap(_.entries).value shouldEqual entries.map(_.id)
     }
   }
 
   scenario("Update users data from search result") {
-    val entries = List(
+    val entries = Vector(
         UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
         UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
     )
@@ -153,27 +152,28 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     zms.usersStorage.insert(entries.map(UserData(_).copy(name = "test")))
 
     When("executing sync returning these users")
-    val cache = SearchQueryCacheDao.add(query)
-    sync.syncSearchQuery(cache)
+    val cache = zms.searchQueryCache.insert(SearchQueryCache(query, now, None)).await()
+    sync.syncSearchQuery(query)
 
     Then("service updates existing users data")
     withDelay {
-      zms.usersStorage.list().futureValue.filter(_.id != zms.selfUserId).toSet map withoutDisplayName shouldEqual entries.map(UserData(_)).toSet
+      zms.usersStorage.list().await().filter(_.id != zms.selfUserId).toSet map withoutDisplayName shouldEqual entries.map(UserData(_)).toSet
     }
 
     And("newly cached query should reference all users")
-    SearchEntryDao.usersForQuery(cache) shouldEqual entries.map(_.id)
+    zms.searchQueryCache.get(query).await().flatMap(_.entries).value shouldEqual entries.map(_.id)
   }
 
   scenario("Schedule sync for newly created users") {
-    val entries = List(
+    val entries = Vector(
       UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
       UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
     )
     response = Success(Right(entries))
 
     When("executing sync for new query")
-    sync.syncSearchQuery(SearchQueryCacheDao.add(query))
+    val cache = zms.searchQueryCache.insert(SearchQueryCache(query, now, None)).await()
+    sync.syncSearchQuery(query)
 
     Then("service schedules sync for all added users")
     withDelay {
@@ -182,7 +182,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   }
 
   scenario("Schedule sync for old users contained in query results") {
-    val entries = List(
+    val entries = Vector(
         UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
         UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First),
         UserSearchEntry(UserId(), "user 3", Some(EmailAddress("email 3")), None, 1, connected = Some(true), blocked = true, Relation.First)
@@ -196,7 +196,8 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     UserDataDao.insertOrReplace(entries.drop(2).map(UserData(_).copy(name = "", syncTimestamp = System.currentTimeMillis())))
 
     When("executing sync returning results for this existing users")
-    sync.syncSearchQuery(SearchQueryCacheDao.add(query))
+    val cache = zms.searchQueryCache.insert(SearchQueryCache(query, now, None)).await()
+    sync.syncSearchQuery(query)
 
     Then("service schedules sync for old users")
     withDelay {

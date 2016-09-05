@@ -42,8 +42,6 @@ package object model {
         implicitly[GenericContent[A]].set(msg)(content)
       }
 
-    def apply[A: GenericContent](id: MessageId, content: A): GenericMessage = apply(Uid(id.str), content)
-
     def apply(bytes: Array[Byte]): GenericMessage = Messages.GenericMessage.parseFrom(bytes)
 
     def unapply(msg: GenericMessage): Option[(Uid, Any)] = Some((Uid(msg.messageId), content(msg)))
@@ -64,9 +62,10 @@ package object model {
         case GM.IMAGE_FIELD_NUMBER        => msg.getImage
         case GM.KNOCK_FIELD_NUMBER        => msg.getKnock
         case GM.LASTREAD_FIELD_NUMBER     => msg.getLastRead
-        case GM.LIKING_FIELD_NUMBER       => LikingAction(msg.getLiking)
+        case GM.REACTION_FIELD_NUMBER     => msg.getReaction
         case GM.TEXT_FIELD_NUMBER         => msg.getText
         case GM.LOCATION_FIELD_NUMBER     => msg.getLocation
+        case GM.CONFIRMATION_FIELD_NUMBER => msg.getConfirmation
         case _                            => Unknown
       }
     }

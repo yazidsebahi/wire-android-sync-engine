@@ -45,7 +45,7 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
     scenario("Parse title from html tag if no og:title is present") {
       val info = OpenGraphDataResponse.unapply(StringResponse(HabraResponse))
       info shouldBe defined
-      info.get.title should not be empty
+      info.get.title shouldEqual "Интересные публикации / Хабрахабр"
       info.get.image should not be empty
     }
 

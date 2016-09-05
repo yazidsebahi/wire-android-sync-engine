@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.api.{ErrorResponse, Message}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
-import com.waz.service.conversation.ConversationsService
+import com.waz.service.Timeouts
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -36,7 +36,7 @@ import scala.collection._
 import scala.concurrent.Future
 import scala.util.Failure
 
-class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorage, users: UsersStorage, msgAndLikes: => MessageAndLikesStorage) extends
+class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorage, users: UsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
     CachedStorage[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(MessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") {
 
   import com.waz.utils.events.EventContext.Implicits.global
@@ -55,8 +55,8 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
 
   lazy val incomingMessages = storage {
-    MessageDataDao.listIncomingMessages(userId, IncomingMessages.sinceTime)(_)
-  } map { new IncomingMessages(userId, _) }
+    MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.knockTimeout.toMillis)(_)
+  } map { new IncomingMessages(userId, _, timeouts) }
 
   def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] =
     Option(indexes.get(conv)).fold {
@@ -134,6 +134,8 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   def getEntries(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.messagesCursor)
 
   def lastMessage(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.lastMessage)
+
+  def lastMessageFromSelfAndFromOther(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(mi => mi.signals.lastMessageFromSelf zip mi.signals.lastMessageFromOther)
 
   def getLastMessage(conv: ConvId) = msgsIndex(conv).flatMap(_.getLastMessage)
 
@@ -222,13 +224,13 @@ object MessagesStorage {
   }
 }
 
-class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData]) {
-  import com.waz.content.IncomingMessages._
-
+class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: Timeouts) {
   import scala.collection.breakOut
   private implicit val tag: LogTag = logTagFor[IncomingMessages]
 
   private val messagesSource = new SourceSignal[SortedMap[(Long, MessageId), MessageData]](Some(initial.map(m => (m.localTime.toEpochMilli, m.id) -> m)(breakOut)))
+
+  def sinceTime = System.currentTimeMillis - timeouts.messages.knockTimeout.toMillis
 
   val messages = messagesSource map { msgs =>
     val time = sinceTime
@@ -257,13 +259,6 @@ class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData]) {
     messagesSource.mutate(_.filter { case (k, v) => v.convId != conv || v.time.isAfter(upTo)})
   }
 }
-
-object IncomingMessages {
-  val Timeout = ConversationsService.KnockTimeout
-
-  def sinceTime = System.currentTimeMillis - Timeout.toMillis
-}
-
 
 class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: LikingsStorage) {
   import com.waz.threading.Threading.Implicits.Background

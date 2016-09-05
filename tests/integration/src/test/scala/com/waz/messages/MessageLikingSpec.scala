@@ -23,11 +23,17 @@ import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.model.Liking.Action._
 import com.waz.model._
-import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageLiking, Successful}
+import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageReaction, Successful}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
+import com.waz.testutils.TestApplication
+import com.waz.testutils.TestApplication.notificationsSpy
+import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 
+import scala.collection.JavaConverters._
+
+@Config(application = classOf[TestApplication])
 class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   override val provisionFile = "/two_users_connected.json"
@@ -41,7 +47,7 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
   lazy val otherUserClient = registerDevice(logTagFor[MessageLikingSpec])
 
   scenario("Initial sync") {
-    withDelay(msgs should have size 1)
+    (msgs should have size 1).soon
   }
 
   scenario("Init other client") {
@@ -54,32 +60,76 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     withDelay(msgs should have size 2)
     val message = msgs.get(1)
 
-    message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes).soon
+    (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
 
     otherUserDoes(Like, message)
-    message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser)).soon
+    (message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser))).soon
 
     message.like()
-    message should (beLiked and beLikedByThisUser and haveLikesFrom(otherUser, self)).soon
+    (message should (beLiked and beLikedByThisUser and haveLikesFrom(otherUser, self))).soon
 
     otherUserDoes(Unlike, message)
-    message should (beLiked and beLikedByThisUser and haveLikesFrom(self)).soon
+    (message should (beLiked and beLikedByThisUser and haveLikesFrom(self))).soon
 
     otherUserDoes(Like, message)
-    message should (beLiked and beLikedByThisUser and haveLikesFrom(self, otherUser)).soon
+    (message should (beLiked and beLikedByThisUser and haveLikesFrom(self, otherUser))).soon
 
     message.unlike()
-    message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser)).soon
+    (message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser))).soon
 
     message.like()
-    message should (beLiked and beLikedByThisUser and haveLikesFrom(otherUser, self)).soon
+    (message should (beLiked and beLikedByThisUser and haveLikesFrom(otherUser, self))).soon
 
     message.unlike()
-    message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser)).soon
+    (message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser))).soon
 
     otherUserDoes(Unlike, message)
-    message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes).soon
+    (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
   }
 
-  def otherUserDoes(action: Liking.Action, msg: Message) = otherUserClient ? SetMessageLiking(conv.data.remoteId, msg.data.id, action) should eventually(be(Successful))
+  scenario("User A receives a notification if user B likes a message (written by A)") {
+    conv.sendMessage(new Text("moop"))
+    (msgs should have size 3).soon
+    val message = msgs.get(2)
+
+    (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
+
+    api.onPause()
+    (zmessaging.lifecycle.isUiActive shouldBe false).soon
+
+    notificationsSpy.gcms = Nil
+    otherUserDoes(Like, message)
+    (notificationsSpy.gcms should have size 1).soon
+    (notificationsFromUpdate(0) should have size 1).soon
+
+    otherUserDoes(Unlike, message)
+    (notificationsSpy.gcms should have size 2).soon
+    (notificationsFromUpdate(1) shouldBe empty).soon
+
+    api.onResume()
+    (zmessaging.lifecycle.isUiActive shouldBe true).soon
+  }
+
+  scenario("Liked message is edited") {
+    conv.sendMessage(new Text("whee"))
+    (msgs should have size 4).soon
+    val message = msgs.get(3)
+
+    (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
+    otherUserDoes(Like, message)
+    (message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser))).soon
+
+    message.update(new Text("woo"))
+    (message.isDeleted shouldBe true).soon
+    (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
+    soon {
+      val editedMessage = msgs.get(3)
+      editedMessage.isEdited shouldBe true
+      editedMessage should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)
+    }
+  }
+
+  def notificationsFromUpdate(n: Int) = notificationsSpy.gcms(n).getNotifications.asScala
+
+  def otherUserDoes(action: Liking.Action, msg: Message) = otherUserClient ? SetMessageReaction(conv.data.remoteId, msg.data.id, action) should eventually(be(Successful))
 }

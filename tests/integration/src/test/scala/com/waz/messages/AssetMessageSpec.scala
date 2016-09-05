@@ -29,13 +29,12 @@ import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
 import com.waz.cache.LocalData
-import com.waz.content.Mime
 import com.waz.model
 import com.waz.model.AssetData.MaxAllowedAssetSizeInBytes
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed}
 import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.otr.ClientId
-import com.waz.model.{GenericContent, AssetStatus => _, MessageContent => _, _}
+import com.waz.model.{GenericContent, Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
 import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.service.conversation.ConversationsUiService.LargeAssetWarningThresholdInBytes
@@ -681,7 +680,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         }
 
         override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
-          override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
+          override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]]): Future[Either[ErrorResponse, Date]] =
             super.postOtrMessage(convId, remoteId, message).andThen { case Success(r) if r.isRight => otrMessageSyncs :+=(remoteId, message, r) }(Threading.Background)
         }
       }

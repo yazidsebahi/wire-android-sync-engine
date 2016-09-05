@@ -66,9 +66,8 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostTypingState requests") { PostTypingState(ConvId(), isTyping = true) should beUnchangedByEncodingAndDecoding }
     scenario("SyncCallState requests") { SyncCallState(ConvId(), fromFreshNotification = false) should beUnchangedByEncodingAndDecoding }
     scenario("SyncCommonConnections requests") { SyncCommonConnections(UserId()) should beUnchangedByEncodingAndDecoding }
-    scenario("PostExcludePymk requests") { PostExcludePymk(UserId()) should beUnchangedByEncodingAndDecoding }
     scenario("DeleteGcmToken requests") { DeleteGcmToken(GcmId()) should beUnchangedByEncodingAndDecoding }
-    scenario("SyncSearchQuery requests") { SyncSearchQuery(-1L) should beUnchangedByEncodingAndDecoding }
+    scenario("SyncSearchQuery requests") { SyncSearchQuery(SearchQuery.Recommended("meep moop")) should beUnchangedByEncodingAndDecoding }
     scenario("PostMessage requests") { PostMessage(ConvId(), MessageId(), Instant.now()) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvJoin requests") { PostConvJoin(ConvId(), Set(UserId(), UserId())) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvLeave requests") { PostConvLeave(ConvId(), UserId()) should beUnchangedByEncodingAndDecoding }
@@ -82,6 +81,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostLastRead requests") { forAll((_: PostLastRead) should beUnchangedByEncodingAndDecoding) }
     scenario("SyncPreKeys requests") { forAll((_: SyncPreKeys) should beUnchangedByEncodingAndDecoding) }
     scenario("PostAssetStatus requests") { forAll((_: PostAssetStatus) should beUnchangedByEncodingAndDecoding) }
+    scenario("PostReceipt requests") { forAll((_: PostReceipt) should beUnchangedByEncodingAndDecoding) }
 
     scenario("SelfPicture requests") {
       forAll (Table("asset", Some(AssetId()), None)) { asset: Option[AssetId] => PostSelfPicture(asset) should beUnchangedByEncodingAndDecoding }
@@ -98,7 +98,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         DeleteGcmToken(GcmId()),
         PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, None)),
         PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))),
-        SyncSearchQuery(42L),
+        SyncSearchQuery(SearchQuery.Recommended("meep moop")),
         PostSelfPicture(Some(AssetId())),
         PostMessage(ConvId(), MessageId(), Instant.now()),
         PostConvJoin(ConvId(), Set(UserId(), UserId())),
@@ -108,7 +108,8 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         SyncPreKeys(UserId(), Set(ClientId(), ClientId())),
         PostLastRead(ConvId(), Instant.now),
         PostCleared(ConvId(), Instant.now),
-        PostAssetStatus(ConvId(), MessageId(), AssetStatus.UploadCancelled)
+        PostAssetStatus(ConvId(), MessageId(), AssetStatus.UploadCancelled),
+        PostReceipt(ConvId(), MessageId(), UserId())
       ) map { SyncJob(SyncId(), _) }
 
       SyncJobDao.insertOrReplace(requests)

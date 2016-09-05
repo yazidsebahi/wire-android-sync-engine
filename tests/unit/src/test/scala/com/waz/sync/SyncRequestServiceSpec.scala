@@ -189,7 +189,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
     awaitUi(100.millis)
     requested shouldEqual Seq(SyncSelf)
 
-    addRequest(SyncSearchQuery(-1L), priority = Priority.High, dependsOn = Seq(syncId))
+    addRequest(SyncSearchQuery(SearchQuery.TopPeople), priority = Priority.High, dependsOn = Seq(syncId))
 
     awaitUi(100.millis)
     executeScheduled should haveCommands(Cmd.SyncSelf, Cmd.SyncConnections)
@@ -211,14 +211,14 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   scenario("Scheduling pending requests doesn't include recently failed ones.") {
     addRequest(SyncSelf, attempts = 10, startTime = new Date().getTime + 1000L)
-    addRequest(SyncSearchQuery(-1L))
+    addRequest(SyncSearchQuery(SearchQuery.Recommended("meep")))
 
     executeScheduled should haveCommands(Cmd.SyncSearchQuery)
   }
 
   scenario("Pending requests get executed immediately on re-login.") {
     addRequest(SyncSelf, attempts = 10, startTime = new Date().getTime + 1000L)
-    addRequest(SyncSearchQuery(-1L))
+    addRequest(SyncSearchQuery(SearchQuery.TopPeople))
     service.lifecycle.lifecycleState ! LifecycleState.Stopped
     service.lifecycle.lifecycleState ! LifecycleState.Active
 
@@ -228,7 +228,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   scenario("Request failed when offline get executed immediately on network mode change.") {
     Await.result(service.syncRequests.addRequest(SyncJob(SyncId(), SyncSelf, startTime = new Date().getTime + 1000L, state = SyncState.FAILED, offline = true)), 5.seconds)
-    addRequest(SyncSearchQuery(-1L))
+    addRequest(SyncSearchQuery(SearchQuery.Recommended("meep")))
     awaitUi(100.millis)
     service.network.networkMode ! NetworkMode._3G
 
@@ -237,7 +237,7 @@ class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   scenario("Pending requests won't get executed on change to offline mode.") {
     addRequest(SyncSelf, attempts = 10, startTime = new Date().getTime + 1000L)
-    addRequest(SyncSearchQuery(-1L))
+    addRequest(SyncSearchQuery(SearchQuery.TopPeople))
     awaitUi(100.millis)
     service.network.networkMode ! NetworkMode.OFFLINE
 

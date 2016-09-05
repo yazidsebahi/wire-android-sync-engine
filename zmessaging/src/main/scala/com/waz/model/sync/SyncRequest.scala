@@ -19,7 +19,7 @@ package com.waz.model.sync
 
 import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model._
+import com.waz.model.{SearchQuery, _}
 import com.waz.model.otr.ClientId
 import com.waz.sync.client.{ConversationsClient, UsersClient}
 import com.waz.sync.queue.SyncJobMerger._
@@ -88,8 +88,8 @@ object SyncRequest {
     override val mergeKey: Any = (cmd, token)
   }
 
-  case class SyncSearchQuery(queryCacheKey: Long) extends BaseRequest(Cmd.SyncSearchQuery) {
-    override val mergeKey: Any = (cmd, queryCacheKey)
+  case class SyncSearchQuery(query: SearchQuery) extends BaseRequest(Cmd.SyncSearchQuery) {
+    override val mergeKey: Any = (cmd, query)
   }
 
   case class SyncRichMedia(messageId: MessageId) extends BaseRequest(Cmd.SyncRichMedia) {
@@ -150,6 +150,10 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostOpenGraphMeta](req)(r => Merged(PostOpenGraphMeta(convId, messageId, editTime max r.editTime)))
   }
 
+  case class PostReceipt(convId: ConvId, messageId: MessageId, userId: UserId) extends RequestForConversation(Cmd.PostReceipt) {
+    override val mergeKey = (cmd, messageId)
+  }
+
   case class PostDeleted(convId: ConvId, messageId: MessageId) extends RequestForConversation(Cmd.PostDeleted) {
     override val mergeKey = (cmd, convId, messageId)
   }
@@ -199,7 +203,6 @@ object SyncRequest {
   }
 
   case class SyncCommonConnections(userId: UserId) extends RequestForUser(Cmd.SyncCommonConnections)
-  case class PostExcludePymk(userId: UserId) extends RequestForUser(Cmd.PostExcludePymk)
   case class PostConnection(userId: UserId, name: String, message: String) extends RequestForUser(Cmd.PostConnection)
 
   case class PostConnectionStatus(userId: UserId, status: Option[ConnectionStatus]) extends RequestForUser(Cmd.PostConnectionStatus) {
@@ -280,7 +283,7 @@ object SyncRequest {
       SyncCommand.fromName(js.getString("cmd")) match {
         case Cmd.SyncUser              => SyncUser(users)
         case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
-        case Cmd.SyncSearchQuery       => SyncSearchQuery(decodeLong('queryCacheKey))
+        case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
         case Cmd.SyncCallState         => SyncCallState(convId, fromFreshNotification = false)
         case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name)
         case Cmd.PostConvName          => PostConvName(convId, 'name)
@@ -289,7 +292,6 @@ object SyncRequest {
         case Cmd.PostCleared           => PostCleared(convId, 'time)
         case Cmd.PostTypingState       => PostTypingState(convId, 'typing)
         case Cmd.SyncCommonConnections => SyncCommonConnections(userId)
-        case Cmd.PostExcludePymk       => PostExcludePymk(userId)
         case Cmd.PostConnectionStatus  => PostConnectionStatus(userId, opt('status, js => ConnectionStatus(js.getString("status"))))
         case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
         case Cmd.PostMessage           => PostMessage(convId, messageId, 'time)
@@ -318,6 +320,7 @@ object SyncRequest {
         case Cmd.PostLiking            => PostLiking(convId, JsonDecoder[Liking]('liking))
         case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
         case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
+        case Cmd.PostReceipt           => PostReceipt(convId, messageId, userId)
         case Cmd.Unknown               => Unknown
       }
     }
@@ -340,7 +343,7 @@ object SyncRequest {
       req match {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
-        case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey)
+        case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
         case DeleteGcmToken(token)            => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
@@ -359,6 +362,10 @@ object SyncRequest {
         case PostOpenGraphMeta(_, messageId, time) =>
           putId("message", messageId)
           o.put("time", time.toEpochMilli)
+
+        case PostReceipt(_, messageId, userId) =>
+          putId("message", messageId)
+          putId("user", userId)
 
         case PostConnection(_, name, message) =>
           o.put("name", name)
@@ -395,7 +402,7 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
-        case SyncCommonConnections(_) | PostExcludePymk(_) => () // nothing to do
+        case SyncCommonConnections(_) => () // nothing to do
         case SyncCallState(_, _) => () // nothing to do
         case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | RegisterGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
       }

@@ -33,13 +33,13 @@ import scala.concurrent.Future
 class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") {
   private implicit val dispatcher = new SerialDispatchQueue(name = "MembersStorage")
 
-  def get(conv: ConvId) = find(_.convId == conv, ConversationMemberDataDao.findForConv(conv)(_), identity)
+  def getByConv(conv: ConvId) = find(_.convId == conv, ConversationMemberDataDao.findForConv(conv)(_), identity)
 
-  def getActive(conv: ConvId) = find({ m => m.active && m.convId == conv }, ConversationMemberDataDao.findActiveForConv(conv)(_), identity)
+  def getActiveByConv(conv: ConvId) = find({ m => m.active && m.convId == conv }, ConversationMemberDataDao.findActiveForConv(conv)(_), identity)
 
-  def get(user: UserId) = find(_.userId == user, ConversationMemberDataDao.findForUser(user)(_), identity)
+  def getByUser(user: UserId) = find(_.userId == user, ConversationMemberDataDao.findForUser(user)(_), identity)
 
-  def getActive(user: UserId) = find({ m => m.active && m.userId == user }, ConversationMemberDataDao.findActiveForUser(user)(_), identity)
+  def getActiveByUser(user: UserId) = find({ m => m.active && m.userId == user }, ConversationMemberDataDao.findActiveForUser(user)(_), identity)
 
   def activeMembers(conv: ConvId): Signal[Set[UserId]] = new AggregatingSignal[Seq[ConversationMemberData], Set[UserId]](onConvMemberChanged(conv), getActiveUsers(conv).map(_.toSet), { (current, changes) =>
     val (active, inactive) = changes.partition(_.active)
@@ -49,9 +49,9 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
 
   private def onConvMemberChanged(conv: ConvId) = onChanged.map(_.filter(_.convId == conv)).filter(_.nonEmpty)
 
-  def getActiveUsers(conv: ConvId): Future[Seq[UserId]] = getActive(conv) map { _.map(_.userId) }
+  def getActiveUsers(conv: ConvId): Future[Seq[UserId]] = getActiveByConv(conv) map { _.map(_.userId) }
 
-  def getActiveConvs(user: UserId): Future[Seq[ConvId]] = getActive(user) map { _.map(_.convId) }
+  def getActiveConvs(user: UserId): Future[Seq[ConvId]] = getActiveByUser(user) map { _.map(_.convId) }
 
   def add(conv: ConvId, time: Instant, users: UserId*): Future[Set[ConversationMemberData]] =
     updateOrCreateAll2(users.map((_, conv)), { (k, v) =>
@@ -85,7 +85,7 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
 
   def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv) map (_.exists(_.active))
 
-  def delete(conv: ConvId) = get(conv) map { users => remove(users.map(_.userId -> conv)) }
+  def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
 }
 
 object MembersStorage {

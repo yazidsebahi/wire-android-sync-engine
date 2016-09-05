@@ -20,7 +20,6 @@ package com.waz.mocked
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.api.impl.SearchQuery.Query
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
@@ -94,7 +93,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = suite.postName(convId, name)
     }
     override lazy val messagesClient     = new MessagesClient(zNetClient) {
-      override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
+      override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
     }
     override lazy val eventsClient       = new EventsClient(zNetClient) {
       override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOr[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
@@ -108,14 +107,15 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
     }
     override lazy val gcmClient          = new GcmClient(zNetClient) {}
-    override lazy val typingClient       = new TypingClient(zNetClient) {}
-    override lazy val invitationClient       = new InvitationClient(zNetClient) {
+    override lazy val typingClient       = new TypingClient(zNetClient) {
+      override def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = suite.updateTypingState(id, isTyping)
+    }
+    override lazy val invitationClient   = new InvitationClient(zNetClient) {
       override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] = suite.postInvitation(i)
     }
     override lazy val giphyClient        = new GiphyClient(zNetClient) {}
     override lazy val userSearchClient   = new UserSearchClient(zNetClient) {
-      override def graphSearch(query: Query, limit: Int) = suite.graphSearch(query, limit)
-      override def postExcludePymk(user: UserId): CancellableFuture[Option[ErrorResponse]] = suite.postExcludePymk(user)
+      override def graphSearch(query: SearchQuery, limit: Int) = suite.graphSearch(query, limit)
       override def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] = suite.loadCommonConnections(id)
     }
     override lazy val connectionsClient  = new ConnectionsClient(zNetClient) {
@@ -274,8 +274,7 @@ trait MockedClient { test: ApiSpec =>
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
   def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(Uid(), id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
   def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = successful(Right(Right(CallStateEvent(Uid(), id, Some(Set.empty), cause = cause))))
-  def graphSearch(query: Query, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
-  def postExcludePymk(user: UserId): CancellableFuture[Option[ErrorResponse]] = successful(None)
+  def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
@@ -291,4 +290,5 @@ trait MockedClient { test: ApiSpec =>
   def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = successful(Right(Map.empty))
   def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = successful(Right(Nil))
   def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))
+  def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = successful(Right(()))
 }

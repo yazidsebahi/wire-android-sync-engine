@@ -17,13 +17,16 @@
  */
 package com.waz.service
 
+import com.waz.model.MessageData
+
 import scala.concurrent.duration._
+import com.waz.utils._
 
 /** This class enables us to shorten timeouts in testing.
   */
 class Timeouts {
   val contacts: Contacts = new Contacts
-  val userSearch: UserSearch = new UserSearch
+  val search: GraphSearch = new GraphSearch
   val typing = new Typing
   val calling = new Calling
   val webSocket = new WebSocket
@@ -32,6 +35,9 @@ class Timeouts {
 
   class Messages {
     def lastReadPostDelay = 15.seconds
+    def sendingTimeout = 30.seconds
+    def knockTimeout = 30.seconds
+    def knockExpired(msg: MessageData) = knockTimeout.elapsedSince(msg.localTime)
   }
 
   class Contacts {
@@ -41,10 +47,10 @@ class Timeouts {
     def userMatchingInterval = 1.second // the results from matching users to contacts will be processed at most once per this time frame
   }
 
-  class UserSearch {
+  class GraphSearch {
     def cacheRefreshInterval = 1.minute // time after which the search results should be synced again
+    def cacheExpiryTime = 7.days // time after which the cache expires (results are considered invalid, and will be ignored)
     def localSearchDelay = 1.second // time after which we will return local search results if no result is available from backend
-    def dismissedPeopleRefreshThrottling = 15.seconds // don't retrieve recommended people all the time from the backend when they are completely running out...
   }
 
   class Typing {

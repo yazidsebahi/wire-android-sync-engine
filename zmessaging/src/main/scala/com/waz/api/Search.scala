@@ -18,29 +18,17 @@
 package com.waz.api
 
 trait Search {
-  def getUsers(query: String, limit: Int, filter: Array[String] = Array.empty): UsersSearch
-  def getTopPeople(limit: Int, filter: Array[String] = Array.empty): UsersSearchResult
-  def getRecommendedPeople(limit: Int, filter: Array[String] = Array.empty): UsersSearchResult
-
-  def getGroupConversations(query: String, limit: Int): ConversationsSearch
-
+  def getTopPeople(limit: Int, filter: Array[String]): UserSearchResult
+  def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): UserSearchResult
+  def getGroupConversations(query: String, limit: Int): ConversationSearchResult
   def getContacts(query: String): Contacts
-  def getConnections(query: String, filter: Array[String] = Array.empty): UsersSearchResult
-
-  def getSyncIndicator: SyncIndicator
+  def getConnections(query: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean): UserSearchResult
 }
 
-trait UsersSearchResult extends CoreList[User] {
+trait UserSearchResult extends CoreList[User] {
   def getAll: Array[User]
-  def getContacts: Array[User]
-  def getUnconnected: Array[User]
 }
 
-trait UsersSearch extends UsersSearchResult {
-  def query(name: String, limit: Int, filter: Array[String] = Array.empty): Unit
-}
-
-trait ConversationsSearch extends CoreList[IConversation] {
-  def query(prefix: String, limit: Int): Unit
+trait ConversationSearchResult extends CoreList[IConversation] {
   def getAll: Array[IConversation]
 }

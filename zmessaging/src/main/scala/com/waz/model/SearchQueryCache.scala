@@ -17,78 +17,31 @@
  */
 package com.waz.model
 
-import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import com.waz.api.impl.SearchQuery
 import com.waz.db.Col._
-import com.waz.db.{BaseDao, Dao}
+import com.waz.db.Dao
+import com.waz.utils.{JsonDecoder, JsonEncoder}
+import org.json.JSONArray
+import org.threeten.bp.Instant
 
-import scala.concurrent.duration._
-
-case class SearchQueryCache(id: Long, query: SearchQuery.Query, limit: Option[Int], timestamp: Long) {
-  def expired = timestamp + SearchQueryCache.CacheExpiryTime.toMillis < System.currentTimeMillis()
-}
-
-case class SearchEntry(queryId: Long, userId: UserId, level: Int, order: Int = 1)
+case class SearchQueryCache(query: SearchQuery, timestamp: Instant, entries: Option[Vector[UserId]])
 
 object SearchQueryCache {
-  val CacheExpiryTime = 7.days // time after which the cache expires (results are considered invalid, and will be ignored)
+  implicit object SearchQueryCacheDao extends Dao[SearchQueryCache, SearchQuery] {
+    val Query = text[SearchQuery]('query, _.cacheKey, SearchQuery.fromCacheKey, "PRIMARY KEY")(_.query)
+    val Timestamp = timestamp('timestamp)(_.timestamp)
+    val Entries = opt(text[Vector[UserId]]('entries, enc, dec))(_.entries)
 
-  implicit object SearchQueryCacheDao extends Dao[SearchQueryCache, Long] {
-    val Id = long('_id, "PRIMARY KEY")(_.id)
-    val Query = text('query)(_.query.cacheKey)
-    val Limit = opt(int('query_limit))(_.limit)
-    val Timestamp = long('timestamp)(_.timestamp)
+    private def enc(ids: Vector[UserId]): String = JsonEncoder.array(ids)((arr, id) => arr.put(id.str)).toString
+    private def dec(v: String): Vector[UserId] = JsonDecoder.array(new JSONArray(v), (arr, i) => UserId(arr.getString(i)))
 
-    override val idCol = Id
+    override val idCol = Query
 
-    override val table = Table("SearchQueries", Id, Query, Limit, Timestamp)
+    override val table = Table("SearchQueries", Query, Timestamp, Entries)
 
-    override def apply(implicit cursor: Cursor): SearchQueryCache = SearchQueryCache(Id, SearchQuery.fromCacheKey(Query), Limit, Timestamp)
+    override def apply(implicit cursor: Cursor): SearchQueryCache = SearchQueryCache(Query, Timestamp, Entries)
 
-    def add(query: SearchQuery.Query, limit: Option[Int] = None)(implicit db: SQLiteDatabase): SearchQueryCache = {
-      val values = new ContentValues()
-      Query.col.save(query.cacheKey, values)
-      Limit.col.save(limit, values)
-      Timestamp.col.save(0, values)
-      SearchQueryCache(db.insert(table.name, null, values), query, limit, 0)
-    }
-
-    def get(query: SearchQuery.Query, limit: Option[Int] = None)(implicit db: SQLiteDatabase): Option[SearchQueryCache] = {
-      def emptyLimitQuery = single(db.query(table.name, null, s"${Query.name} = ? AND ${Limit.name} IS NULL", Array(query.cacheKey), null, null, s"${Timestamp.name} DESC"))
-      def limitQuery(limit: Int) = single(db.query(table.name, null, s"${Query.name} = ? AND (${Limit.name} IS NULL OR ${Limit.name} >= $limit)", Array(query.cacheKey), null, null, s"${Timestamp.name} DESC"))
-
-      limit.fold(emptyLimitQuery)(limit => limitQuery(limit))
-    }
-
-    def getLatest(query: SearchQuery.Query)(implicit db: SQLiteDatabase): Option[SearchQueryCache] = {
-      val expiredThreshold = System.currentTimeMillis() - CacheExpiryTime.toMillis
-      single(db.query(table.name, null, s"${Query.name} = ? AND ${Timestamp.name} > $expiredThreshold", Array(query.cacheKey), null, null, s"${Timestamp.name} DESC"))
-    }
-  }
-}
-
-object SearchEntry {
-
-  implicit object SearchEntryDao extends BaseDao[SearchEntry] {
-    val QueryId = long('query_id)(_.queryId)
-    val UserId = id[UserId]('user_id).apply(_.userId)
-    val Level = int('level)(_.level)
-    val Order = int('entry_order)(_.order)
-
-    val DefaultLimit = "1000" // huge number, in practice will not be limiting at all
-    
-    override val table = Table("SearchEntries", QueryId, UserId, Level, Order)
-
-    override def apply(implicit cursor: Cursor): SearchEntry = SearchEntry(QueryId, UserId, Level, Order)
-
-    def findEntries(q: SearchQueryCache, limit: Option[Int] = None)(implicit db: SQLiteDatabase): IndexedSeq[SearchEntry] =
-      list(db.query(table.name, null, s"${QueryId.name} = ?", Array(q.id.toString), null, null, s"${Order.name} ASC", limit.fold(DefaultLimit)(_.toString)))
-
-    def deleteEntries(q: SearchQueryCache)(implicit db: SQLiteDatabase) = delete(QueryId, q.id)
-    
-    def usersForQuery(q: SearchQueryCache, limit: Option[Int] = None)(implicit db: SQLiteDatabase): IndexedSeq[UserId] =
-      list(db.query(table.name, null, s"${QueryId.name} = ?", Array(q.id.toString), null, null, s"${Order.name} ASC", limit.fold(DefaultLimit)(_.toString))) map (_.userId)
+    def deleteBefore(i: Instant)(implicit db: SQLiteDatabase) = db.delete(table.name, s"${Timestamp.name} < ?", Array(Timestamp(i)))
   }
 }
