@@ -59,8 +59,6 @@ import scala.util.Random
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
   private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
 
-  val webSocketAlwaysOn = false
-
   @volatile private var pushService = Option.empty[PushService]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
@@ -78,7 +76,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     val mockGcmState = Signal(GcmState(true, true))
   } with ZMessaging(clientId, userModule) {
 
-    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, push, prefs, network)
+    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: MediaManagerService = new MockedMediaManagerService(context, prefs)
 
     override lazy val assetClient        = new AssetClient(zNetClient) {

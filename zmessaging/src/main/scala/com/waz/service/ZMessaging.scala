@@ -36,7 +36,7 @@ import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
-import com.waz.service.push.{GcmService, NotificationService, PushService, WebSocketClientService}
+import com.waz.service.push._
 import com.waz.service.tracking.{TrackingEventsService, TrackingService}
 import com.waz.sync.client._
 import com.waz.sync.handler._
@@ -182,6 +182,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
+  lazy val pushSignals                           = wire[PushServiceSignals]
   lazy val push: PushService                     = wire[PushService]
   lazy val gcm: GcmService                       = wire[GcmService]
   lazy val errors                                = wire[ErrorsService]

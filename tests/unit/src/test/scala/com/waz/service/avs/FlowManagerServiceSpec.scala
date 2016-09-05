@@ -41,7 +41,7 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
   @volatile var notified = false
 
   lazy val zms = new MockZMessaging() {
-    override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, push, prefs, network) {
+    override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, websocket, prefs, network) {
       override lazy val flowManager = Some(new FlowManager(context, requestHandler) {
         override def networkChanged(): Unit = notified = true
       })

@@ -34,18 +34,18 @@ import com.waz.utils.events._
 
 import scala.concurrent.{Future, Promise}
 
-class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushServiceSignals { self =>
+class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService) { self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val tag: LogTag = logTagFor[PushService]
   private implicit val ec = EventContext.Global
 
   private val wakeLock = new WakeLock(context)
 
-  override val pushConnected = webSocket.connected
-
-  val lastNotification = new LastNotificationIdService(keyValue, this, client, clientId)
+  val lastNotification = new LastNotificationIdService(keyValue, signals, client, clientId)
 
   var connectedPushPromise = Promise[PushService]()
+
+  webSocket.connected { signals.pushConnected ! _ }
 
   client.onNotificationsPageLoaded.on(dispatcher) { notifications =>
     // XXX: we will process all available history notifications even for the case that last id was not found,
@@ -55,7 +55,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     if (notifications.lastIdWasFound) debug("got missing notifications, great")
     else {
       info(s"server couldn't provide all missing notifications, will schedule slow sync, after processing available events")
-      onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis(), lostHistory = true)
+      signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis(), lostHistory = true)
     }
   }
 
@@ -81,12 +81,12 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         },
         ws.onError { ex =>
           warn(s"some PushNotification processing failed, will schedule slow sync", ex)
-          onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
+          signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
         }
       )
   }
 
-  pushConnected {
+  webSocket.connected {
     case true =>
       debug("onConnected")
       syncHistoryOnConnect()
@@ -117,7 +117,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     lastNotification.lastNotificationId() map {
       case None =>
         debug("no last notification Id on connect, will schedule slow sync")
-        onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
+        signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
       case Some(LastNotificationIdService.NoNotificationsId) =>
         verbose(s"no last notification available, will try loading all notifications")
         loadNotifications(None)
@@ -130,7 +130,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     client.loadNotifications(lastId, clientId, pageSize = EventsClient.PageSize) map {
       case Left(error) =>
         warn(s"/notifications failed with error: $error, will schedule slow sync")
-        onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
+        signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
 
       case Right(updatedLastId) =>
         verbose(s"notifications loaded, last id: $updatedLastId")
@@ -150,10 +150,9 @@ object PushService {
   case class SlowSyncRequest(time: Long, lostHistory: Boolean = false) // lostHistory is set if there were lost notifications, meaning that some messages might be lost
 }
 
-trait PushServiceSignals {
-
+class PushServiceSignals {
   val onSlowSyncNeeded = new SourceSignal[SlowSyncRequest] with BgEventSource
-  val pushConnected: Signal[Boolean]
+  val pushConnected = Signal[Boolean]()
 }
 
 /**
