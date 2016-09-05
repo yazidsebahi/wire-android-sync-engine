@@ -7,7 +7,7 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "77"
+val MajorVersion = "78"
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
