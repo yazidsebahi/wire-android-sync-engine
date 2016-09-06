@@ -27,10 +27,11 @@ import com.waz.model.UserId
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Inspectors, Matchers}
+import org.scalatest._
 
 import scala.concurrent.duration._
 
+@Ignore //TODO enable once receipt sending is enabled
 class DeliveryReceiptsSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with Inspectors with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   override val provisionFile = "/three_users_group_conv.json"
