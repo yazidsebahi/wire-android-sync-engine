@@ -171,7 +171,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         msg.getMembers.map(_.data.id) should contain theSameElementsAs auto1Members
       }
 
-      api.zmessaging.futureValue.value.push.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis)
+      api.zmessaging.futureValue.value.pushSignals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis)
 
       awaitUi(1.second)
       withDelay {

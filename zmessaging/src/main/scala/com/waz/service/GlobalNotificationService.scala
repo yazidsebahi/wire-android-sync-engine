@@ -29,14 +29,14 @@ import com.waz.api.impl.ActiveChannel
 import com.waz.bitmap
 import com.waz.bitmap.BitmapUtils
 import com.waz.model._
-import com.waz.service.push.NotificationService.Notification
 import com.waz.service.ZMessaging.EmptyNotificationsHandler
 import com.waz.service.assets.AssetService.BitmapRequest.Regular
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.images.BitmapSignal
+import com.waz.service.push.NotificationService.Notification
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.zms.GcmHandlerService
+import com.waz.zms.PushService
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -122,7 +122,7 @@ object GlobalNotificationService {
   class NotificationsList(context: Context, notifications: Seq[GcmNotification]) extends GcmNotificationsList {
 
     lazy val gcmNotifications = notifications.asJava
-    lazy val clearIntent = PendingIntent.getService(context, 9730, GcmHandlerService.clearNotificationsIntent(context), PendingIntent.FLAG_UPDATE_CURRENT)
+    lazy val clearIntent = PendingIntent.getService(context, 9730, PushService.clearNotificationsIntent(context), PendingIntent.FLAG_UPDATE_CURRENT)
 
     override def getNotifications: util.Collection[GcmNotification] = gcmNotifications
 

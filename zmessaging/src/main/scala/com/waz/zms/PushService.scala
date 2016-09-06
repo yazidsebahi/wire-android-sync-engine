@@ -74,15 +74,20 @@ class PushService extends FutureService {
         alarmService.cancel(restartIntent)
         Future successful None
 
-      case Some(zms) if !zms.websocket.webSocketAlwaysOn =>
-        verbose(s"WebSocket is not always ON, stopping")
-        alarmService.cancel(restartIntent)
-        zms.gcm.ensureGcmRegistered() map { _ => None } // let's make sure GCM is registered since we rely on it for push notifications
+      case Some(zms) if PushService.ActionClear == intent.getAction =>
+        zms.notifications.clearNotifications() map { _ => None }
 
       case Some(zms) =>
-        verbose(s"current zms: $zms, scheduling restarts")
-        scheduleRestarts()
-        zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
+        zms.websocket.wsActive.head flatMap {
+          case false =>
+            verbose(s"WebSocket does not need to be active, stopping")
+            alarmService.cancel(restartIntent)
+            Future successful None
+          case true =>
+            verbose(s"current zms: $zms, scheduling restarts")
+            scheduleRestarts()
+            zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
+        }
     }
   } flatMap {
     case None => Future.successful(())
@@ -92,4 +97,8 @@ class PushService extends FutureService {
 
 object PushService {
   def apply(context: Context) = context.startService(new Intent(context, classOf[PushService]))
+
+  val ActionClear = "com.wire.CLEAR_NOTIFICATIONS"
+
+  def clearNotificationsIntent(context: Context) = new Intent(context, classOf[PushService]).setAction(ActionClear)
 }

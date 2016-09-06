@@ -56,7 +56,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
     }
 
-    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, global.backend, clientId, timeouts) {
+    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, mockGcmState, global.backend, clientId, timeouts) {
       override val connected = wsConnected
     }
 
@@ -71,7 +71,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(clientDelay)(Right(lastNotification))
     }
 
-    push.onSlowSyncNeeded { _ => slowSyncRequested += 1 }
+    pushSignals.onSlowSyncNeeded { _ => slowSyncRequested += 1 }
   }
 
   lazy val service = zms.push

@@ -27,7 +27,7 @@ import com.waz.model._
 import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.UserService._
 import com.waz.service.assets.AssetService
-import com.waz.service.push.PushService
+import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.UsersClient
@@ -38,7 +38,7 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
 import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
-class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushService,
+class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushServiceSignals,
                   assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle) {
 
   private implicit val logTag: LogTag = logTagFor[UserService]

@@ -41,7 +41,7 @@ import scala.concurrent.Future
 
 class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
     storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: LikingsStorage,
-    push: PushService, kv: KeyValueStorage, timeouts: Timeouts) {
+    kv: KeyValueStorage, timeouts: Timeouts) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global

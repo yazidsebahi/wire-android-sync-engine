@@ -20,8 +20,10 @@ package com.waz.service.push
 import com.waz.RobolectricUtils
 import com.waz.model.otr.ClientId
 import com.waz.service._
+import com.waz.service.push.GcmService.GcmState
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.utils.events.EventContext.Implicits.global
+import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
@@ -42,11 +44,8 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
   lazy val network = new NetworkModeService(context)
   lazy val prefs = new PreferenceService(context)
   lazy val meta = new MetaDataService(context)
-  lazy val gcm = new GcmGlobalService(context, prefs, meta, BackendConfig.EdgeBackend) {
-    override lazy val gcmAvailable = true
-  }
 
-  lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, gcm, BackendConfig.EdgeBackend, ClientId(), timeouts)
+  lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, Signal const GcmState(true, true), BackendConfig.EdgeBackend, ClientId(), timeouts)
 
 
   feature("active client") {

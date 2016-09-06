@@ -26,7 +26,7 @@ import com.waz.call._
 import com.waz.log.LogHandler
 import com.waz.model._
 import com.waz.service._
-import com.waz.service.push.PushService
+import com.waz.service.push.WebSocketClientService
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events._
@@ -43,7 +43,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-class FlowManagerService(context: Context, netClient: ZNetClient, push: PushService, prefs: PreferenceService, network: NetworkModeService) {
+class FlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: PreferenceService, network: NetworkModeService) {
   import FlowManagerService._
 
   val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
@@ -80,7 +80,7 @@ class FlowManagerService(context: Context, netClient: ZNetClient, push: PushServ
   lazy val lastNetworkModeChange = Signal(Instant.MIN)
   lazy val lastWebsocketConnect = Signal(Instant.MIN)
 
-  push.pushConnected { if (_) lastWebsocketConnect ! Instant.now() }
+  websocket.connected { if (_) lastWebsocketConnect ! Instant.now() }
   network.networkMode { _ => lastNetworkModeChange ! Instant.now() }
 
   lazy val aggregatedInstants = new AggregatingSignal[Instant, Option[(Instant, Instant)]](lastWebsocketConnect.onChanged, Future.successful(None), {

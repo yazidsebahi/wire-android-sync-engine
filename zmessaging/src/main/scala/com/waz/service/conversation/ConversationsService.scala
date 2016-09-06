@@ -30,7 +30,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
-import com.waz.service.push.PushService
+import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.threading.Threading
@@ -43,7 +43,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 import scala.util.control.NoStackTrace
 
-class ConversationsService(context: Context, push: PushService, users: UserService, usersStorage: UsersStorage,
+class ConversationsService(context: Context, push: PushServiceSignals, users: UserService, usersStorage: UsersStorage,
                            messagesStorage: MessagesStorage, membersStorage: MembersStorage,
                            convsStorage: ConversationStorage, val content: ConversationsContentUpdater, listState: ConversationsListStateService,
                            sync: SyncServiceHandle, errors: ErrorsService,

@@ -48,8 +48,6 @@ class MetaDataService(context: Context) {
 
   lazy val internalBuild = metaData.getBoolean("INTERNAL", false)
 
-  lazy val gcmEnabled = metaData.getBoolean("GCM_ENABLED", true)
-
   // rough check for device type, used in otr client info
   lazy val deviceClass = {
     val dm = context.getResources.getDisplayMetrics

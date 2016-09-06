@@ -29,7 +29,7 @@ import com.waz.ZLog._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventStream, Signal}
-import com.waz.utils.{ExponentialBackoff, WakeLock}
+import com.waz.utils.{ExponentialBackoff, WakeLock, returning}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent}
 import org.json.JSONObject
 
@@ -114,12 +114,7 @@ class WebSocketClient(context: Context, client: AsyncClient, uri: => Uri, auth: 
             p.tryComplete(if (ex == null) Try(onConnected(socket)) else Failure(ex))
           }
         })
-        new CancellableFuture(p) {
-          override def cancel()(implicit tag: LogTag): Boolean = {
-            f.cancel(true)
-            super.cancel()(tag)
-          }
-        }
+        returning(new CancellableFuture(p).withTimeout(30.seconds)) { _.onFailure { case _ => f.cancel(true) } }
       }
     case Left(status) =>
       CancellableFuture.failed(new Exception(s"Authentication returned error status: $status"))

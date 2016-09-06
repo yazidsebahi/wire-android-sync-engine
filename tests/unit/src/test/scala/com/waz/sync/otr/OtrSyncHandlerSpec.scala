@@ -56,7 +56,7 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
 
-    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, push, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage) {
+    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage) {
       override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent, recipients: Option[Set[UserId]]): Future[EncryptedContent] = {
         encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
         Future successful encryptedContent

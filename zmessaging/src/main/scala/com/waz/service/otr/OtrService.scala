@@ -31,7 +31,7 @@ import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
-import com.waz.service.push.PushService
+import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.sync.client.OtrClient.EncryptedContent
@@ -49,7 +49,7 @@ import scala.concurrent.duration._
 import scala.util.{Success, Try}
 import scala.{PartialFunction => =/>}
 
-class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushService,
+class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
                  cryptoBox: CryptoBoxService, members: MembersStorage, convs: ConversationsContentUpdater,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage) {
 
