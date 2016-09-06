@@ -52,7 +52,7 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
       ConnectionResult.DEVELOPER_ERROR
   }
 
-  lazy val gcmAvailable = metadata.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
+  lazy val gcmAvailable = gcmCheckResult == ConnectionResult.SUCCESS
 
   def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
     if (reg.version == appVersion) reg
