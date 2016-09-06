@@ -278,7 +278,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
     conversations
     users
 
-    websocket // connect on start
+    push // connect on start
 
     // services listening on lifecycle verified login events
     contacts
