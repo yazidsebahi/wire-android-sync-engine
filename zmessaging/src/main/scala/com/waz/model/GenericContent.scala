@@ -383,14 +383,16 @@ object GenericContent {
     override def set(msg: GenericMessage) = {
       case (l, id) => msg.setReaction(returning(new Messages.Reaction()) { r =>
         r.emoji = l match {
-          case Liking.Action.Like   => "\uD83D\uDC96"
+          case Liking.Action.Like   => heavyBlackHeart
           case Liking.Action.Unlike => ""
         }
         r.messageId = id.str
       })
     }
 
-    def apply(r: String, id: String): Reaction = (if (r.isEmpty) Liking.Action.Unlike else Liking.Action.Like, MessageId(id))
+    val heavyBlackHeart = "\u2764\uFE0F"
+
+    def apply(r: String, id: String): Reaction = (if (r == heavyBlackHeart) Liking.Action.Like else Liking.Action.Unlike, MessageId(id))
 
     def unapply(proto: Messages.Reaction): Option[Reaction] = Some(Reaction(proto.emoji, proto.messageId))
   }
