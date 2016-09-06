@@ -179,8 +179,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getLikes: Array[api.User] = likes.map(context.users.getUser)(breakOut)
 
-  override def like(): Unit = context.zms.flatMapFuture(_.likings.like(data.convId, id))
-  override def unlike(): Unit = context.zms.flatMapFuture(_.likings.unlike(data.convId, id))
+  override def like(): Unit = context.zms.flatMapFuture(_.reactions.like(data.convId, id))
+  override def unlike(): Unit = context.zms.flatMapFuture(_.reactions.unlike(data.convId, id))
   override def isLikedByThisUser: Boolean = likedBySelf
   override def isLiked: Boolean = likes.nonEmpty
 

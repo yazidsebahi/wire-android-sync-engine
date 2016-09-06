@@ -23,20 +23,23 @@ import com.waz.model.Liking.{Action, LikingDao}
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.events.EventContext
-import com.waz.utils.{CachedStorage, TrimmingLruCache}
+import com.waz.utils.events.{AggregatingSignal, EventContext}
+import com.waz.utils._
 import org.threeten.bp.Instant
+import org.threeten.bp.Instant.EPOCH
 
 import scala.collection.{breakOut, mutable}
+import scala.concurrent.duration._
 import scala.concurrent.Future
 
-class LikingsStorage(context: Context, storage: Database) extends CachedStorage[(MessageId, UserId), Liking](new TrimmingLruCache(context, Fixed(MessagesStorage.cacheSize)), storage)(LikingDao, "LikingStorage") {
-  import LikingsStorage._
+class ReactionsStorage(context: Context, storage: Database) extends CachedStorage[(MessageId, UserId), Liking](new TrimmingLruCache(context, Fixed(MessagesStorage.cacheSize)), storage)(LikingDao, "LikingStorage") {
+  import ReactionsStorage._
   import EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue()
 
   private val likesCache = new TrimmingLruCache[MessageId, Map[UserId, Instant]](context, Fixed(1024))
+  private val maxTime = returning(new AggregatingSignal[Instant, Instant](onChanged.map(_.maxBy(_.timestamp).timestamp), storage.read(LikingDao.findMaxTime(_)), _ max _))(_.disableAutowiring())
 
   onChanged.on(dispatcher) { likes =>
     likes.groupBy(_.message) foreach { case (msg, ls) =>
@@ -66,12 +69,13 @@ class LikingsStorage(context: Context, storage: Database) extends CachedStorage[
     Option(likesCache.get(msg))
   } flatMap {
     case Some(users) => Future.successful(Likes(msg, users))
-    case None =>
-      find(_.message == msg, LikingDao.findForMessage(msg)(_), identity) map { updateCache(msg, _) }
+    case None => find(_.message == msg, LikingDao.findForMessage(msg)(_), identity) map { updateCache(msg, _) }
   }
 
-  def addOrUpdate(liking: Liking): Future[Likes] =
-    updateOrCreate(liking.id, _ max liking, liking) flatMap { _ => getLikes(liking.message) }
+  def addOrUpdate(liking: Liking): Future[Likes] = {
+    if (liking.timestamp == EPOCH) updateOrCreate(liking.id, l => l.copy(timestamp = maxTime.currentValue.getOrElse(l.timestamp) + 1.milli, action = liking.action), liking) // local update
+    else updateOrCreate(liking.id, _ max liking, liking)
+  }.flatMap(_ => getLikes(liking.message))
 
   def loadAll(msgs: Seq[MessageId]): Future[Vector[Likes]] = Future {
     msgs.map(m => m -> Option(likesCache.get(m))).toMap
@@ -88,8 +92,8 @@ class LikingsStorage(context: Context, storage: Database) extends CachedStorage[
   }
 }
 
-object LikingsStorage {
-  private implicit val logTag: LogTag = logTagFor[LikingsStorage]
+object ReactionsStorage {
+  private implicit val logTag: LogTag = logTagFor[ReactionsStorage]
 
   private def likers(likings: Seq[Liking]): Map[UserId, Instant] =
     likings.collect { case l if l.action == Action.Like => l.user -> l.timestamp } (breakOut)

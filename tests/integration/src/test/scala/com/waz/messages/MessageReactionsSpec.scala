@@ -18,31 +18,34 @@
 package com.waz.messages
 
 import akka.pattern.ask
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.model.Liking.Action._
 import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageReaction, Successful}
+import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
+import com.waz.sync.client.MessagesClient
+import com.waz.sync.client.MessagesClient.OtrMessage
+import com.waz.sync.client.OtrClient.MessageResponse
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.TestApplication
 import com.waz.testutils.TestApplication.notificationsSpy
+import com.waz.testutils.{TestApplication, UpdateSpy}
+import com.waz.threading.CancellableFuture.delay
+import com.waz.threading.Threading
+import com.waz.utils._
+import com.waz.znet.ZNetClient._
 import org.robolectric.annotation.Config
-import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FeatureSpec, Matchers}
+
+import scala.concurrent.Promise
+import scala.concurrent.duration._
 
 @Config(application = classOf[TestApplication])
-class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with ProvisionedApiSpec with ThreadActorSpec { test =>
-
-  override val provisionFile = "/two_users_connected.json"
-
-  lazy val conversations = api.getConversations
-  lazy val self = provisionedUserId("auto1")
-  lazy val otherUser = provisionedUserId("auto2")
-  lazy val conv = conversations.get(0)
-  lazy val msgs = conv.getMessages
-
-  lazy val otherUserClient = registerDevice(logTagFor[MessageLikingSpec])
+class MessageReactionsSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   scenario("Initial sync") {
     (msgs should have size 1).soon
@@ -54,9 +57,7 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
   }
 
   scenario("This and other user like and unlike a message") {
-    conv.sendMessage(new Text("meep"))
-    withDelay(msgs should have size 2)
-    val message = msgs.get(1)
+    val (n, message) = addMessage("meep")
 
     (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
 
@@ -86,9 +87,7 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
   }
 
   scenario("User A receives a notification if user B likes a message (written by A)") {
-    conv.sendMessage(new Text("moop"))
-    (msgs should have size 3).soon
-    val message = msgs.get(2)
+    val (n, message) = addMessage("moop")
 
     (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
 
@@ -109,9 +108,7 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
   }
 
   scenario("Liked message is edited") {
-    conv.sendMessage(new Text("whee"))
-    (msgs should have size 4).soon
-    val message = msgs.get(3)
+    val (n, message) = addMessage("whee")
 
     (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
     otherUserDoes(Like, message)
@@ -121,11 +118,71 @@ class MessageLikingSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     (message.isDeleted shouldBe true).soon
     (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
     soon {
-      val editedMessage = msgs.get(3)
+      val editedMessage = msgs.get(n)
       editedMessage.isEdited shouldBe true
       editedMessage should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)
     }
   }
 
+  scenario("Rapidly changing one's reaction") {
+    val (n, message) = addMessage("amazeballs")
+    soon(returning(UpdateSpy(message))(spy => forAsLongAs(2.seconds)(spy.numberOfTimesCalled shouldEqual 0)))
+    val gate = Promise[Unit]()
+    Serialized('PostReaction)(gate.future.lift)
+    delayMessages = true
+
+    val spy = UpdateSpy(message)
+    3.times {
+      debug("like")
+      message.like()
+      (message should beLikedByThisUser).soon
+      debug("unlike")
+      message.unlike()
+      (message should not(beLikedByThisUser)).soon
+    }
+    debug("last like")
+    message.like()
+    (message should beLikedByThisUser).soon
+
+    (forAsLongAs(3.seconds)(spy.numberOfTimesCalled shouldEqual 7)).soon
+
+    gate.success(())
+
+    (forAsLongAs(3.seconds)(spy.numberOfTimesCalled shouldEqual 7)).soon
+  }
+
+  before {
+    delayMessages = false
+  }
+
+  override val provisionFile = "/two_users_connected.json"
+
+  lazy val conversations = api.getConversations
+  lazy val self = provisionedUserId("auto1")
+  lazy val otherUser = provisionedUserId("auto2")
+  lazy val conv = conversations.get(0)
+  lazy val msgs = conv.getMessages
+
+  lazy val otherUserClient = registerDevice(logTagFor[MessageReactionsSpec])
+
+  def addMessage(text: String): (Int, Message) = {
+    val n = msgs.size
+    conv.sendMessage(new Text("whee"))
+    (msgs should have size (n + 1)).soon
+    (n, msgs.get(n))
+  }
+
   def otherUserDoes(action: Liking.Action, msg: Message) = otherUserClient ? SetMessageReaction(conv.data.remoteId, msg.data.id, action) should eventually(be(Successful))
+
+  @volatile var delayMessages = false
+
+  override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
+    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user) {
+      override lazy val messagesClient = new MessagesClient(netClient) {
+        override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, receivers: Option[Set[UserId]] = None): ErrorOrResponse[MessageResponse] =
+          if (! delayMessages) super.postMessage(conv, content, ignoreMissing, receivers)
+          else Serialized('PostReaction)(delay(555.millis).flatMap(_ => super.postMessage(conv, content, ignoreMissing, receivers))(Threading.Background))
+      }
+    }
+  }
 }

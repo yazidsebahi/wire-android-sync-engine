@@ -39,7 +39,7 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 
 class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
-    storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: LikingsStorage,
+    storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
     kv: KeyValueStorage, timeouts: Timeouts) {
 
   import NotificationService._

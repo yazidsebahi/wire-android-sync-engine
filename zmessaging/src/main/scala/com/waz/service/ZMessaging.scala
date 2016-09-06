@@ -76,7 +76,7 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val membersStorage    = wire[MembersStorage]
   lazy val assetsStorage     = wire[AssetsStorage]
   lazy val voiceStorage      = wire[VoiceChannelStorage]
-  lazy val likingsStorage    = wire[LikingsStorage]
+  lazy val reactionsStorage  = wire[ReactionsStorage]
   lazy val notifStorage      = wire[NotificationStorage]
   lazy val convsStorage      = wire[ConversationStorage]
   lazy val msgDeletions      = wire[MsgDeletionStorage]
@@ -140,7 +140,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def membersStorage    = storage.membersStorage
   def assetsStorage     = storage.assetsStorage
   def voiceStorage      = storage.voiceStorage
-  def likingsStorage    = storage.likingsStorage
+  def reactionsStorage  = storage.reactionsStorage
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
   def msgDeletions      = storage.msgDeletions
@@ -216,7 +216,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val spotifyMedia                          = wire[SpotifyMediaService]
   lazy val otrService: OtrService                = wire[OtrService]
   lazy val genericMsgs: GenericMessageService    = wire[GenericMessageService]
-  lazy val likings: LikingsService               = wire[LikingsService]
+  lazy val reactions: ReactionsService           = wire[ReactionsService]
   lazy val notifications: NotificationService    = wire[NotificationService]
   lazy val callLog                               = wire[CallLogService]
   lazy val recordAndPlay                         = wire[RecordAndPlayService]
@@ -236,7 +236,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val invitationSync   = wire[InvitationSyncHandler]
   lazy val messagesSync     = wire[MessagesSyncHandler]
   lazy val otrSync          = wire[OtrSyncHandler]
-  lazy val likingsSync      = wire[LikingsSyncHandler]
+  lazy val reactionsSync    = wire[ReactionsSyncHandler]
   lazy val lastReadSync     = wire[LastReadSyncHandler]
   lazy val clearedSync      = wire[ClearedSyncHandler]
   lazy val openGraphSync    = wire[OpenGraphSyncHandler]

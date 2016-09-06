@@ -21,7 +21,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
-import com.waz.service.messages.LikingsService
+import com.waz.service.messages.ReactionsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -29,17 +29,17 @@ import com.waz.utils._
 
 import scala.concurrent.Future
 
-class LikingsSyncHandler(client: MessagesClient, convs: ConversationsContentUpdater, service: LikingsService, otrSync: OtrSyncHandler) {
+class ReactionsSyncHandler(client: MessagesClient, convs: ConversationsContentUpdater, service: ReactionsService, otrSync: OtrSyncHandler) {
 
-  private implicit val logTag: LogTag = logTagFor[LikingsSyncHandler]
+  private implicit val logTag: LogTag = logTagFor[ReactionsSyncHandler]
   import com.waz.threading.Threading.Implicits.Background
 
-  def postLiking(id: ConvId, liking: Liking): Future[SyncResult] =
+  def postReaction(id: ConvId, liking: Liking): Future[SyncResult] =
     convs.convById(id) flatMap {
       case Some(conv) =>
         otrSync.postOtrMessage(conv, GenericMessage(Uid(), (liking.action, liking.message))) flatMap {
           case Right(time) =>
-            service.processLiking(Seq(liking.copy(timestamp = time.instant))) map (_ => SyncResult.Success)
+            service.updateLocalReaction(liking, time.instant).map(_ => SyncResult.Success)
           case Left(error) =>
             Future.successful(SyncResult(error))
         }
