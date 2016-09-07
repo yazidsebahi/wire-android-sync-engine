@@ -162,6 +162,7 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
     val reactionsFromOthers = reactions.filterNot(_.user == selfUserId)
 
     messages.getAll(reactionsFromOthers.map(_.message)).flatMap { msgs =>
+      val convsByMsg = msgs.iterator.flatten.by[MessageId, Map](_.id).mapValues(_.convId)
       val myMsgs = msgs.collect { case Some(m) if m.userId == selfUserId => m.id }(breakOut): Set[MessageId]
       val rs = reactionsFromOthers.filter(r => myMsgs contains r.message).sortBy(_.timestamp)
       val (toRemove, toAdd) = rs.foldLeft((Set.empty[(MessageId, UserId)], Map.empty[(MessageId, UserId), Liking])) {
@@ -171,7 +172,7 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
 
       storage.remove(toRemove.map(reactionID)).flatMap { _ =>
         if (! uiActive)
-          add(toAdd.valuesIterator.map(r => NotificationData(reactionID(r.id), "", ConvId(r.user.str), r.user, LIKE, Instant.EPOCH, referencedMessage = Some(r.message))).toVector)
+          add(toAdd.valuesIterator.map(r => NotificationData(reactionID(r.id), "", convsByMsg.getOrElse(r.message, ConvId(r.user.str)), r.user, LIKE, Instant.EPOCH, referencedMessage = Some(r.message))).toVector)
         else
           Future.successful(Nil)
       }
