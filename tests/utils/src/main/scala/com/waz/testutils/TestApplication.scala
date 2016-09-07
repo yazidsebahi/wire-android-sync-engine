@@ -48,4 +48,8 @@ class CallingEventsSpy(var events: List[CallingEvent]) extends CallingEventsHand
   def latestEvent: Option[CallingEvent] = events.headOption
 }
 
-class NotificationsSpy(var gcms: Seq[Seq[NotificationInfo]], var ongoingCall: Option[VoiceChannelData], var incomingCall: Option[VoiceChannelData], var uiActive: Boolean) extends NotificationsHandler
+class NotificationsSpy(
+  @volatile var gcms: Seq[Seq[NotificationInfo]],
+  @volatile var ongoingCall: Option[VoiceChannelData],
+  @volatile var incomingCall: Option[VoiceChannelData],
+  @volatile var uiActive: Boolean) extends NotificationsHandler

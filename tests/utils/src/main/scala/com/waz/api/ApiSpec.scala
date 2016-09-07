@@ -33,8 +33,8 @@ import com.waz.provision.ActorMessage.{ReleaseRemotes, SpawnRemoteDevice, WaitUn
 import com.waz.provision._
 import com.waz.service._
 import com.waz.testutils.Implicits._
+import com.waz.testutils.RoboPermissionProvider
 import com.waz.testutils.TestApplication.notificationsSpy
-import com.waz.testutils.{RoboPermissionProvider, TestApplication}
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils._
