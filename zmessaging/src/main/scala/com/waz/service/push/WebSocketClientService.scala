@@ -57,7 +57,7 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
     case true =>
       debug(s"Active, client: $clientId")
       // start android service to keep the app running while we need to be connected
-      com.waz.zms.PushService(context)
+      com.waz.zms.WebSocketService(context)
 
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))

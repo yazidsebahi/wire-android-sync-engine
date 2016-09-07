@@ -25,17 +25,20 @@ import com.waz.service.ZMessaging
 import com.waz.service.push.GcmGlobalService.GcmSenderId
 import com.waz.sync.client.PushNotification
 import com.waz.threading.Threading
-import com.waz.utils.LoggedTry
+import com.waz.utils.{LoggedTry, TimedWakeLock}
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class GcmHandlerService extends FutureService with ZMessagingService {
   import Threading.Implicits.Background
 
   lazy val gcm = ZMessaging.currentGlobal.gcmGlobal
   lazy val accounts = ZMessaging.currentAccounts
+
+  override lazy val wakeLock = new TimedWakeLock(getApplicationContext, 2.seconds)
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
     import com.waz.zms.GcmHandlerService._

@@ -17,6 +17,8 @@
  */
 package com.waz.service.push
 
+import android.app.AlarmManager
+import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Message
@@ -25,20 +27,21 @@ import com.waz.api.NotificationsHandler.NotificationType._
 import com.waz.content._
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.GenericContent.{Asset, LastRead}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
+import com.waz.zms.NotificationsAndroidService.{checkNotificationsIntent, checkNotificationsTimeout}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
+class NotificationService(context: Context, selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
     storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
     kv: KeyValueStorage, timeouts: Timeouts) {
 
@@ -50,6 +53,32 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
   @volatile private var uiActive = false
 
   private val lastUiVisibleTime = kv.keyValuePref("last_ui_visible_time", Instant.EPOCH)
+
+  val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
+
+  //For UI to decide if it should make sounds or not
+  val otherDeviceActiveTime = Signal(Instant.EPOCH)
+
+  val notifications = lifecycle.lifecycleState.zip(for {
+    data <- storage.notifications.map(_.values.toIndexedSeq.sorted)
+    uiVisibleTime <- lastUiVisibleTime.signal
+  } yield {
+    if (data.forall(_.localTime.isBefore(uiVisibleTime))) Seq.empty[NotificationData] // no new messages, don't show anything
+    else data
+  }).flatMap {
+    case (LifecycleState.UiActive, _) => Signal.const(Seq.empty[NotificationInfo])
+    case (_, data) => Signal.future(createNotifications(data))
+  }
+
+  val lastReadProcessingStage = EventScheduler.Stage[GenericMessageEvent] { (convId, events) =>
+    events.foreach {
+      case GenericMessageEvent(_, _, _, _, GenericMessage(_, LastRead(conv, time))) =>
+        otherDeviceActiveTime ! Instant.now
+        alarmService.set(AlarmManager.RTC, Instant.now().toEpochMilli + checkNotificationsTimeout.toMillis, checkNotificationsIntent(context))
+      case _ =>
+    }
+    Future.successful(())
+  }
 
   lifecycle.lifecycleState { state =>
     verbose(s"state updated: $state")
@@ -219,22 +248,10 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
       _ = verbose(s"inserted: $res")
     } yield res
 
-  def getNotifications = lifecycle.lifecycleState.flatMap {
-    case LifecycleState.UiActive => Signal.const(Seq.empty[NotificationData])
-    case _ =>
-      for {
-        data <- storage.notifications.map(_.values.toIndexedSeq.sorted)
-        time <- lastUiVisibleTime.signal
-      } yield
-        if (data.forall(_.localTime.isBefore(time))) Seq.empty[NotificationData] // no new messages, don't show anything
-        else data
-  }.flatMap(ns => Signal.future(createNotifications(ns)))
-
   private def createNotifications(ns: Seq[NotificationData]): Future[Seq[NotificationInfo]] = {
     Future.traverse(ns) { data =>
       usersStorage.get(data.user).flatMap { user =>
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
-
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
             Future.successful(NotificationInfo(data.msgType, data.msg, data.hotKnock, data.conv, convName = userName, userName = userName, isGroupConv = false))

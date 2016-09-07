@@ -20,19 +20,22 @@ package com.waz.utils
 import android.content.Context
 import android.os.PowerManager
 import com.waz.ZLog.LogTag
-import com.waz.utils.events.Signal
+import com.waz.threading.CancellableFuture
 import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.threading.Threading.Implicits.Background
+import com.waz.utils.events.Signal
+import org.threeten.bp.Instant
 
+import com.waz.threading.Threading.Implicits.Background
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(implicit tag: LogTag) {
 
-  private val appContext = context.getApplicationContext
-  private lazy val powerManager = appContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
-  private lazy val wakeLock = powerManager.newWakeLock(level, tag)
+  protected val appContext = context.getApplicationContext
+  protected lazy val powerManager = appContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
+  protected lazy val wakeLock = powerManager.newWakeLock(level, tag)
 
-  private val count = Signal[Int]()
+  protected val count = Signal[Int]()
 
   count {
     case 0 if wakeLock.isHeld => wakeLock.release()
@@ -53,4 +56,24 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
     count.mutateOrDefault(_ + 1, 1)
     returning(body) { _.onComplete(_ => count.mutate(_ - 1)) }
   }
+}
+
+//To keep wakelock for a given period of time after executing it's code
+class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: LogTag) extends WakeLock(context) {
+
+  override def apply[A](body: => A): A = {
+    count.mutateOrDefault(_ + 1, 1)
+    try {
+      body
+    } finally {
+      releaseAfterDuration()
+    }
+  }
+
+  override def async[A](body: Future[A]): Future[A] = {
+    count.mutateOrDefault(_ + 1, 1)
+    returning(body) { _.onComplete(_ => releaseAfterDuration()) }
+  }
+
+  private def releaseAfterDuration(): Unit = CancellableFuture.delay(duration).onComplete(_ => count.mutate(_ - 1))
 }

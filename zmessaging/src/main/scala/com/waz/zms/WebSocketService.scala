@@ -32,10 +32,10 @@ import scala.concurrent.Future
 /**
   * Receiver called on boot or when app is updated.
   */
-class PushBroadcastReceiver extends BroadcastReceiver {
+class WebSocketBroadcastReceiver extends BroadcastReceiver {
   override def onReceive(context: Context, intent: Intent): Unit = {
     debug(s"onReceive $intent")
-    WakefulBroadcastReceiver.startWakefulService(context, new Intent(context, classOf[PushService]))
+    WakefulBroadcastReceiver.startWakefulService(context, new Intent(context, classOf[WebSocketService]))
   }
 }
 
@@ -43,11 +43,11 @@ class PushBroadcastReceiver extends BroadcastReceiver {
 /**
   * Service keeping the process running as long as web socket should be connected.
   */
-class PushService extends FutureService {
+class WebSocketService extends FutureService {
 
   private def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
-  private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[PushService]), PendingIntent.FLAG_ONE_SHOT)
+  private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_ONE_SHOT)
 
   override def onStartCommand(intent: Intent, flags: Int, startId: Int): Int = wakeLock {
     verbose(s"onStartCommand($intent, $startId)")
@@ -74,9 +74,6 @@ class PushService extends FutureService {
         alarmService.cancel(restartIntent)
         Future successful None
 
-      case Some(zms) if PushService.ActionClear == intent.getAction =>
-        zms.notifications.clearNotifications() map { _ => None }
-
       case Some(zms) =>
         zms.websocket.wsActive.head flatMap {
           case false =>
@@ -95,10 +92,6 @@ class PushService extends FutureService {
   }
 }
 
-object PushService {
-  def apply(context: Context) = context.startService(new Intent(context, classOf[PushService]))
-
-  val ActionClear = "com.wire.CLEAR_NOTIFICATIONS"
-
-  def clearNotificationsIntent(context: Context) = new Intent(context, classOf[PushService]).setAction(ActionClear)
+object WebSocketService {
+  def apply(context: Context) = context.startService(new Intent(context, classOf[WebSocketService]))
 }

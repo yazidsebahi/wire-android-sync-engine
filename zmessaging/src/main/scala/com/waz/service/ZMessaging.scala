@@ -268,7 +268,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
             )
           )
         ),
-        notifications.notificationEventsStage
+        notifications.notificationEventsStage,
+        notifications.lastReadProcessingStage
       )
     )
   }
