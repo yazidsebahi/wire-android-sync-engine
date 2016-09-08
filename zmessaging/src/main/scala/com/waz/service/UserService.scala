@@ -63,10 +63,12 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     sync.syncSelfUser().map(dependency => sync.syncConnections(Some(dependency)))
   }
 
-  lazy val acceptedUsers: Signal[Map[UserId, UserData]] = new AggregatingSignal[Seq[UserData], Map[UserId, UserData]](usersStorage.onChanged, usersStorage.listAcceptedUsers, { (accu, us) =>
-    val (toAdd, toRemove) = us.partition(_.connection == ConnectionStatus.Accepted)
+  lazy val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]] = new AggregatingSignal[Seq[UserData], Map[UserId, UserData]](usersStorage.onChanged, usersStorage.listUsersByConnectionStatus(acceptedOrBlocked), { (accu, us) =>
+    val (toAdd, toRemove) = us.partition(u => acceptedOrBlocked(u.connection))
     accu -- toRemove.map(_.id) ++ toAdd.map(u => u.id -> u)
   })
+
+  private lazy val acceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
 
   def withSelfUser[A](f: UserId => CancellableFuture[A]) = f(selfUserId)
 

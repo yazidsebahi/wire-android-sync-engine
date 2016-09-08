@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.api
+import com.waz.api.User.ConnectionStatus.BLOCKED
 import com.waz.model.{ConvId, UserData, UserId}
 import com.waz.service.{SearchKey, ZMessaging}
 import com.waz.ui.{SignalLoading, UiModule}
@@ -27,11 +28,11 @@ import org.threeten.bp.Instant
 
 import scala.collection._
 
-class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
+class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean, showBlockedUsers: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private val filteredIds = filter.toSet
   private val query = SearchKey(searchTerm)
   private val predicate: UserData => Boolean = u =>
-    (query.isAtTheStartOfAnyWordIn(u.searchKey) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str)
+    (query.isAtTheStartOfAnyWordIn(u.searchKey) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str) && (showBlockedUsers || (u.connection != BLOCKED))
 
   private var users = Option.empty[Vector[UserData]]
 
@@ -44,7 +45,7 @@ class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], a
   }
 
   private def usersFrom(zms: ZMessaging): Signal[Vector[UserData]] =
-    zms.users.acceptedUsers.map(_.valuesIterator.filter(predicate).toVector)
+    zms.users.acceptedOrBlockedUsers.map(_.valuesIterator.filter(predicate).toVector)
 
   private def lastEventTimes(zms: ZMessaging, ids: Set[ConvId]): Signal[Map[UserId, Instant]] =
     zms.convsStorage.convsSignal.map { convs =>

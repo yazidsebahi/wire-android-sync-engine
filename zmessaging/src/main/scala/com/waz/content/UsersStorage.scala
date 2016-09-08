@@ -77,10 +77,10 @@ class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage
     new RefreshingSignal(listAll(ids).lift, onChanged.map(_.filter(u => idSet(u.id))).filter(_.nonEmpty))
   }
 
-  def listAcceptedUsers: Future[Map[UserId, UserData]] =
+  def listUsersByConnectionStatus(p: Set[ConnectionStatus]): Future[Map[UserId, UserData]] =
     find[(UserId, UserData), Map[UserId, UserData]](
-      user => user.connection == ConnectionStatus.Accepted,
-      db   => UserDataDao.findByConnectionStatus(Set(ConnectionStatus.Accepted))(db),
+      user => p(user.connection),
+      db   => UserDataDao.findByConnectionStatus(p)(db),
       user => (user.id, user))
 
   def listAcceptedOrPendingUsers: Future[Map[UserId, UserData]] =
