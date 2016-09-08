@@ -21,11 +21,10 @@ import android.content.Context
 import android.os.PowerManager
 import com.waz.ZLog.LogTag
 import com.waz.threading.CancellableFuture
+import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.utils.events.Signal
-import org.threeten.bp.Instant
 
-import com.waz.threading.Threading.Implicits.Background
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
