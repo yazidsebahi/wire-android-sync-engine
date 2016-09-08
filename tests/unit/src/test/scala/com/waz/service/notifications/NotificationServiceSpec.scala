@@ -51,9 +51,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
   lazy val groupConv = ConversationData(ConvId(), RConvId(), Some("group conv"), selfUserId, ConversationType.Group)
 
   lazy val zms = new MockZMessaging(selfUserId = selfUserId) { self =>
-
-
-    notifications.getNotifications { currentNotifications = _ } (EventContext.Global)
+    notifications.notifications { currentNotifications = _ } (EventContext.Global)
 
     override def timeouts = new Timeouts {
       override val notifications = new Notifications() {
