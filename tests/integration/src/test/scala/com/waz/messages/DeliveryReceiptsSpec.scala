@@ -31,7 +31,6 @@ import org.scalatest._
 
 import scala.concurrent.duration._
 
-@Ignore //TODO enable once receipt sending is enabled
 class DeliveryReceiptsSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with Inspectors with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   override val provisionFile = "/three_users_group_conv.json"

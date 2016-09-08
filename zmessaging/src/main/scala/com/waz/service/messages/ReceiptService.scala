@@ -21,30 +21,29 @@ import com.waz.ZLog._
 import com.waz.api.Message.Status.DELIVERED
 import com.waz.api.Message.Type._
 import com.waz.content.{ConversationStorage, MessagesStorage}
-//import com.waz.model.ConversationData.ConversationType.OneToOne
+import com.waz.model.ConversationData.ConversationType.OneToOne
 import com.waz.model.{MessageId, UserId}
 import com.waz.sync.SyncServiceHandle
-//import com.waz.threading.Threading
-//import com.waz.utils._
-//import com.waz.utils.events.EventContext
+import com.waz.threading.Threading
+import com.waz.utils._
+import com.waz.utils.events.EventContext
 
-//import scala.concurrent.Future
+import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 class ReceiptService(messages: MessagesStorage, convs: ConversationStorage, sync: SyncServiceHandle, selfUserId: UserId) {
   import ImplicitTag._
-//  import Threading.Implicits.Background
-//  import EventContext.Implicits.global
+  import Threading.Implicits.Background
+  import EventContext.Implicits.global
 
-// TODO enable sending of receipts once adoption of clients who understand them is high enough (also remember to enable com.waz.messages.DeliveryReceiptsSpec)
-//  messages.onAdded { msgs =>
-//    Future.traverse(msgs.iterator.filter(msg => msg.userId != selfUserId && confirmable(msg.msgType))) { msg =>
-//      convs.get(msg.convId).map(_.filter(_.convType == OneToOne)).flatMapSome { _ =>
-//        verbose(s"will send receipt for $msg")
-//        sync.postReceipt(msg.convId, msg.id, msg.userId)
-//      }
-//    }.logFailure()
-//  }
+  messages.onAdded { msgs =>
+    Future.traverse(msgs.iterator.filter(msg => msg.userId != selfUserId && confirmable(msg.msgType))) { msg =>
+      convs.get(msg.convId).map(_.filter(_.convType == OneToOne)).flatMapSome { _ =>
+        verbose(s"will send receipt for $msg")
+        sync.postReceipt(msg.convId, msg.id, msg.userId)
+      }
+    }.logFailure()
+  }
 
   val confirmable = Set(TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, KNOCK, RICH_MEDIA, HISTORY_LOST, LOCATION)
 
