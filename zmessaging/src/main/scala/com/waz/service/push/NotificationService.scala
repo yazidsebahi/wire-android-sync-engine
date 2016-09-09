@@ -263,7 +263,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.msgType, g.msg, g.hotKnock, g.conv, convName = conv.map(_.displayName), userName = userName, isGroupConv = conv.forall(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
+              NotificationInfo(g.msgType, g.msg, g.hotKnock, g.conv, convName = conv.map(_.displayName), userName = userName, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
             }
         }
       }

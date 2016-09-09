@@ -24,6 +24,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.tracking.TrackingStats
 import com.waz.testutils.MockZMessaging
+import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import org.robolectric.Robolectric
 import org.scalatest._
@@ -82,7 +83,7 @@ class ConversationsStatsTrackingSpec extends FeatureSpec with Matchers with Opti
       forAll(addingConvs) { case (conv, groups, archived, muted, contacts, blocked, voice, unread, failed, pending, lastEvent) =>
         Await.result(service.convsStorage.insert(conv), 5.seconds)
 
-        withDelay {
+        soon {
           service.tracking.trackingSignal.currentValue.value shouldEqual TrackingStats(groups, archived, muted, contacts, blocked, 0, 0, 0, 0, 0, 0)
 
           val currentStats = service.convsStats.listStats.currentValue.value
@@ -114,15 +115,18 @@ class ConversationsStatsTrackingSpec extends FeatureSpec with Matchers with Opti
 
       forAll(removingConvs) { case (conv, groups, archived, muted, contacts, blocked, voice, unread, failed, pending, lastEvent) =>
         Await.result(service.convsStorage.remove(conv.id), 5.seconds)
-        service.tracking.trackingSignal.currentValue.value shouldEqual TrackingStats(groups, archived, muted, contacts, blocked, 0, 0, 0, 0, 0, 0)
 
-        val currentStats = service.convsStats.listStats.currentValue.value
-        currentStats.voiceCount shouldEqual voice
-        currentStats.unreadCount shouldEqual unread
-        currentStats.unsentCount shouldEqual failed
-        currentStats.pendingCount shouldEqual pending
+        soon {
+          service.tracking.trackingSignal.currentValue.value shouldEqual TrackingStats(groups, archived, muted, contacts, blocked, 0, 0, 0, 0, 0, 0)
 
-        service.convsStats.lastEventTime shouldEqual lastEvent
+          val currentStats = service.convsStats.listStats.currentValue.value
+          currentStats.voiceCount shouldEqual voice
+          currentStats.unreadCount shouldEqual unread
+          currentStats.unsentCount shouldEqual failed
+          currentStats.pendingCount shouldEqual pending
+
+          service.convsStats.lastEventTime shouldEqual lastEvent
+        }
       }
     }
   }

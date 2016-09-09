@@ -75,10 +75,6 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     clearNotifications()
   }
 
-  //Notification(data: NotificationData, convName: String = "", userName: String = "", groupConv: Boolean = false, mentioned: Boolean = false, likedContent: Option[LikedContent] = None)
-
-  //NotificationData(id: String, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant, localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None, mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
-
   feature("Add notifications for events") {
 
     scenario("Process user connection event for an unsynced user") {
