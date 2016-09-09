@@ -37,7 +37,6 @@ object TestApplication {
   val callingEventsSpy = new CallingEventsSpy(Nil)
   val notificationsSpy = new NotificationsSpy(Seq.empty, None, None, true)
 
-  private val notificationsHandler: NotificationsHandler = notificationsSpy
   private val callingEventsHandler: CallingEventsHandler = callingEventsSpy
 }
 
@@ -52,4 +51,4 @@ class NotificationsSpy(
   @volatile var gcms: Seq[Seq[NotificationInfo]],
   @volatile var ongoingCall: Option[VoiceChannelData],
   @volatile var incomingCall: Option[VoiceChannelData],
-  @volatile var uiActive: Boolean) extends NotificationsHandler
+  @volatile var uiActive: Boolean)
