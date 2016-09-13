@@ -64,10 +64,19 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   eventsClient.onNotificationsPageLoaded.on(dispatcher) { notifications =>
     if (notifications.notifications.nonEmpty) {
-      val last = notifications.notifications.maxBy(_.lastConvEventTime).lastConvEventTime
-      if (last != Instant.EPOCH) {
-        lastFetchedConvEventTime := last
-        lastFetchedLocalTime := Instant.now
+      val convEvents = notifications.notifications.flatMap(_.events).collect { case ce: ConversationEvent => ce }
+      Future.traverse(convEvents.groupBy(_.convId)) { case (convId, evs) =>
+        convsContent.convByRemoteId(convId) collect {
+          case Some(conv) if !conv.muted => evs.maxBy(_.time)
+        }
+      } foreach { evs =>
+        if (evs.nonEmpty) {
+          val last = evs.maxBy(_.time).time.instant
+          if (last != Instant.EPOCH) {
+            lastFetchedConvEventTime := last
+            lastFetchedLocalTime := Instant.now
+          }
+        }
       }
     }
   }
