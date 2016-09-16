@@ -50,7 +50,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   val elmer = UserInfo(UserId("elmer"), Some("Elmer Fudd")).copy(email = Some(EmailAddress("huntsman@thewoods.geo")))
   val bugs = UserInfo(UserId("bugs"), Some("Bugs Bunny"))
   val carrot = UserInfo(UserId("carrot"), Some("Carrot"))
-  
+
   val recommended = 1 to 30 map { idx => UserInfo(UserId(s"user-$idx"), Some(s"User $idx"), email = Some(EmailAddress(s"user-$idx@dev.null"))) }
 
   object generated {
@@ -154,7 +154,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
 
     scenario("Find all connections locally") {
       // meeper, elmer, bugs, carrot (cartoon is self, coyote is blocked (by previous test))
-      val conns = api.search.getConnections("", 30, Array.empty, false)
+      val conns = api.search.getConnectionsByName("", 30, Array.empty)
       soon {
         conns should have size 4
         val all = conns.getAll
@@ -163,27 +163,33 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
     }
 
     scenario("Find local connections by name") {
-      val conns = api.search.getConnections("e", 30, Array.empty, false)
+      val conns = api.search.getConnectionsByName("e", 30, Array.empty)
       soon(idsOf(conns) shouldEqual idsOfAll(elmer))
 
-      val conns2 = api.search.getConnections("huntsman@thewoods.geo", 30, Array.empty, false)
+      val conns2 = api.search.getConnectionsByName("huntsman@thewoods.geo", 30, Array.empty)
       forAsLongAs(500.millis)(idsOf(conns2) shouldBe empty)
+
+      val conns3 = api.search.getConnectionsByName("coyote", 30, Array.empty)
+      forAsLongAs(500.millis)(idsOf(conns3) shouldBe empty)
     }
 
     scenario("Find local connections by name or email") {
-      val conns = api.search.getConnections("e", 30, Array.empty, true)
+      val conns = api.search.getConnectionsByNameOrEmailIncludingBlocked("el", 30, Array.empty)
       soon(idsOf(conns) shouldEqual idsOfAll(elmer))
 
-      val conns2 = api.search.getConnections("hunt", 30, Array.empty, true)
+      val conns2 = api.search.getConnectionsByNameOrEmailIncludingBlocked("hunt", 30, Array.empty)
       forAsLongAs(500.millis)(idsOf(conns2) shouldBe empty)
 
-      val conns3 = api.search.getConnections("huntsman@thewoods.geo", 30, Array.empty, true)
+      val conns3 = api.search.getConnectionsByNameOrEmailIncludingBlocked("huntsman@thewoods.geo", 30, Array.empty)
       soon(idsOf(conns3) shouldEqual idsOfAll(elmer))
+
+      val conns4 = api.search.getConnectionsByNameOrEmailIncludingBlocked("coyote", 30, Array.empty)
+      soon(idsOf(conns4) shouldEqual idsOfAll(coyote))
     }
 
 
     scenario("Find filtered local connections") {
-      val conns = api.search.getConnections("", 30, Array(meeper.id.str, bugs.id.str), false)
+      val conns = api.search.getConnectionsByName("", 30, Array(meeper.id.str, bugs.id.str))
       soon(idsOf(conns) shouldEqual idsOfAll(carrot, elmer))
     }
   }
@@ -196,7 +202,7 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   }
 
   private def whenSearchingForUsers(pattern: String)(f: UserSearchResult => Unit): Unit = {
-    val search = api.search.getConnections(pattern, 30, Array.empty, false)
+    val search = api.search.getConnectionsByName(pattern, 30, Array.empty)
     val listener = returning(UpdateSpy())(search.addUpdateListener)
     withDelay {
       f(search)

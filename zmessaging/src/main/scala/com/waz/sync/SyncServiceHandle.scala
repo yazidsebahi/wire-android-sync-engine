@@ -185,7 +185,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostAddressBook(ab)                   => zms.addressbookSync.postAddressBook(ab)
     case PostInvitation(i)                     => zms.invitationSync.postInvitation(i)
     case RegisterGcmToken                      => zms.gcmSync.registerGcm()
-    case PostLiking(convId, liking)            => zms.likingsSync.postLiking(convId, liking)
+    case PostLiking(convId, liking)            => zms.reactionsSync.postReaction(convId, liking)
     case PostDeleted(convId, msgId)            => zms.messagesSync.postDeleted(convId, msgId)
     case PostLastRead(convId, time)            => zms.lastReadSync.postLastRead(convId, time)
     case PostOpenGraphMeta(conv, msg, time)    => zms.openGraphSync.postMessageMeta(conv, msg, time)

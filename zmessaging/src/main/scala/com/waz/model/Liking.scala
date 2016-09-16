@@ -21,7 +21,7 @@ import android.database.Cursor
 import android.database.DatabaseUtils.{sqlEscapeString => escape}
 import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
-import com.waz.db.Dao2
+import com.waz.db.{Dao2, iteratingWithReader, Reader}
 import com.waz.utils.JsonEncoder.encodeInstant
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
@@ -72,6 +72,14 @@ object Liking {
 
     def findForMessages(ids: Set[MessageId])(implicit db: SQLiteDatabase) = iterating {
       db.query(table.name, null, s"${Message.name} in (${ids.map(id => escape(id.str)).mkString(", ")})", null, null, null, null)
+    }
+
+    def findMaxTime(implicit db: SQLiteDatabase) =
+      iteratingWithReader(InstantReader)(db.rawQuery(s"SELECT MAX(${Timestamp.name}) FROM ${table.name}", null))
+        .acquire(t => if (t.hasNext) t.next else Instant.EPOCH)
+
+    object InstantReader extends Reader[Instant] {
+      override def apply(implicit c: Cursor): Instant = Timestamp.load(c, 0)
     }
   }
 

@@ -53,7 +53,7 @@ class MessagesCursorSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val zms = new MockZMessaging()
 
-  lazy val msgLoader = new MessageAndLikesStorage(UserId(), zms.messagesStorage, zms.likingsStorage) {
+  lazy val msgLoader = new MessageAndLikesStorage(UserId(), zms.messagesStorage, zms.reactionsStorage) {
     override def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]] = withLikes(ids map { id =>
       MessageData(id, convId, Message.Type.TEXT, UserId(id.str), Seq(MessageContent(Message.Part.Type.TEXT, id.str)))
     })

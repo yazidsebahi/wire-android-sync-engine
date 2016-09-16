@@ -36,6 +36,9 @@ class Search(implicit ui: UiModule) extends api.Search {
   override def getContacts(query: String): api.Contacts =
     new Contacts(OnlyContactsBySearchKeyFiltering(SearchKey(query)))
 
-  override def getConnections(query: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean): api.UserSearchResult =
-    new ConnectionsSearch(query, limit, filter, alsoSearchByEmail)
+  override def getConnectionsByName(query: String, limit: Int, filter: Array[String]): api.UserSearchResult =
+    new ConnectionsSearch(query, limit, filter, false, false)
+
+  override def getConnectionsByNameOrEmailIncludingBlocked(query: String, limit: Int, filter: Array[String]): api.UserSearchResult =
+    new ConnectionsSearch(query, limit, filter, true, true)
 }

@@ -17,26 +17,28 @@
  */
 package com.waz.zms
 
-import android.content.{Context, Intent}
+import android.content.Intent
 import android.util.Base64
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.model._
 import com.waz.service.ZMessaging
+import com.waz.service.push.GcmGlobalService.GcmSenderId
 import com.waz.sync.client.PushNotification
 import com.waz.threading.Threading
+import com.waz.utils.{LoggedTry, TimedWakeLock}
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
-import scala.util.Try
+import scala.concurrent.duration._
 
 class GcmHandlerService extends FutureService with ZMessagingService {
-
-  private implicit val logTag: LogTag = logTagFor[GcmHandlerService]
   import Threading.Implicits.Background
 
   lazy val gcm = ZMessaging.currentGlobal.gcmGlobal
   lazy val accounts = ZMessaging.currentAccounts
+
+  override lazy val wakeLock = new TimedWakeLock(getApplicationContext, 2.seconds)
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
     import com.waz.zms.GcmHandlerService._
@@ -45,77 +47,41 @@ class GcmHandlerService extends FutureService with ZMessagingService {
 
     verbose(s"onIntent with extras: $extrasToString")
 
-    if (intent.getAction == ActionClear) {
+    def getNotification = Future {
+      intent match {
+        case FromExtra(from) if from != gcm.gcmSenderId =>
+          info(s"received gcm notification is from unexpected sender, will ignore it")
+          None
+        case ContentAndMac(content, mac) =>
+          Some((content, mac))
+        case _ =>
+          error(s"Received GCM notification, but some required extra field is missing, intent extras: $extrasToString")
+          None
+      }
+    }
+
+    def decryptNotification(content: Array[Byte], mac: Array[Byte]) =
       accounts.getCurrentZms flatMap {
-        case Some(zms) => zms.notifications.clearNotifications()
-        case None => Future.successful(())
+        case Some(zms) =>
+          zms.otrService.decryptGcm(content, mac) map {
+            case Some(EncryptedGcm(notification)) => Some((zms, notification))
+            case resp =>
+              warn(s"gcm decoding failed: $resp")
+              None
+          }
+        case None =>
+          warn("no current zmessaging instance")
+          Future successful None
       }
-    } else if (intent.hasExtra("from") && intent.getStringExtra("from") != gcm.gcmSenderId.str) {
-      info(s"received gcm notification is from unexpected sender, will ignore it")
-      Future.successful(())
-    } else if (intent.hasExtra(TypeExtra) && intent.hasExtra(ContentExtra) && intent.hasExtra(MacExtra) && (intent.getStringExtra(TypeExtra) == "otr" || intent.getStringExtra(TypeExtra) == "cipher")) {
-      val content = intent.getStringExtra(ContentExtra)
-      val mac = intent.getStringExtra(MacExtra)
-      accounts.getCurrentZms.map {
-        case Some(zms) => zms.otrService.decryptGcm(Base64.decode(content, Base64.NO_WRAP | Base64.NO_CLOSE), Base64.decode(mac, Base64.NO_WRAP | Base64.NO_CLOSE)) map {
-          case Some(EncryptedGcm(notification)) => handleNotification(notification, None)
-          case resp => warn(s"gcm decoding failed: $resp")
+
+    getNotification flatMap {
+      case Some((content, mac)) =>
+        decryptNotification(content, mac) flatMap {
+          case Some((zms, notification)) => zms.gcm.handleNotification(notification)
+          case None => Future.successful(())
         }
-        case None => warn("no current zmessaging instance")
-      }
-    } else if (intent.hasExtra(ContentExtra) && intent.hasExtra(UserExtra)) {
-      val content = intent.getStringExtra(ContentExtra)
-      val userId = intent.getStringExtra(UserExtra)
-      Future {
-        (PushNotification.NotificationDecoder(new JSONObject(content)), UserId(userId))
-      } flatMap {
-        case (notification, user) => handleNotification(notification, Some(user))
-      }
-    } else {
-      error(s"Received GCM notification, but some required extra field is missing, intent extras: $extrasToString")
-      Future.successful(())
-    }
-  }
-
-  def handleNotification(n: PushNotification, user: Option[UserId]): Future[Any] = {
-    verbose(s"handleNotification($n")
-    handleGcmNotification(user) { zms =>
-      val (callStateEvents, otherEvents) = n.events.partition(_.isInstanceOf[CallStateEvent])
-
-      // call state events can not be directly dispatched like the other events because they might be stale
-      handleCallStateNotifications(zms, callStateEvents.map(_.withCurrentLocalTime()))
-
-      zms.eventPipeline(otherEvents.map(_.withCurrentLocalTime()))
-    }
-  }
-
-  private def handleCallStateNotifications(zms: ZMessaging, events: Seq[Event]): Unit = events foreach {
-    case e: CallStateEvent =>
-      zms.convsContent.processConvWithRemoteId(e.convId, retryAsync = false) { conv =>
-        zms.sync.syncCallState(conv.id, fromFreshNotification = true)
-      }
-
-    case _ => () // ignore all other events
-  }
-
-  def handleGcmNotification[A](user: Option[UserId])(body: ZMessaging => Future[A]) = {
-    accounts.getCurrentZms flatMap {
-      case Some(zms) =>
-        zms.users.getSelfUserId flatMap {
-          case Some(userId) if user.forall(_ == userId) =>
-            if (zms.push.pushConnected.currentValue.contains(true)) {
-              debug(s"PushService is connected, ignoring GCM")
-              Future.successful(())
-            } else {
-              body(zms)
-            }
-          case current =>
-            error(s"Received GCM notification but current ZMessaging user is different from intended user, will re-register")
-            gcm.unregister() flatMap { _ => zms.sync.registerGcm() }
-        }
-      case _ =>
-        error(s"Received GCM notification but no ZMessaging is available, will unregister from Play Services")
-        gcm.unregister()
+      case None =>
+        Future.successful(())
     }
   }
 }
@@ -124,13 +90,21 @@ object GcmHandlerService {
   val ContentExtra = "data"
   val TypeExtra = "type"
   val MacExtra = "mac"
-  val UserExtra = "user"
 
-  val ActionClear = "com.wire.gcm.CLEAR_NOTIFICATIONS"
+  object FromExtra {
+    def unapply(intent: Intent): Option[GcmSenderId] = Option(intent.getStringExtra("from")) map GcmSenderId
+  }
 
-  def clearNotificationsIntent(context: Context) = new Intent(context, classOf[GcmHandlerService]).setAction(ActionClear)
+  object ContentAndMac {
+    def unapply(intent: Intent): Option[(Array[Byte], Array[Byte])] =
+      (Option(intent.getStringExtra(TypeExtra)), Option(intent.getStringExtra(ContentExtra)), Option(intent.getStringExtra(MacExtra))) match {
+        case (Some("otr" | "cipher"), Some(content), Some(mac)) =>
+          LoggedTry.local { (Base64.decode(content, Base64.NO_WRAP | Base64.NO_CLOSE), Base64.decode(mac, Base64.NO_WRAP | Base64.NO_CLOSE)) } .toOption
+        case _ => None
+      }
+  }
 
   object EncryptedGcm {
-    def unapply(js: JSONObject): Option[PushNotification] = Try { PushNotification.NotificationDecoder(js.getJSONObject("data")) }.toOption
+    def unapply(js: JSONObject): Option[PushNotification] = LoggedTry.local { PushNotification.NotificationDecoder(js.getJSONObject("data")) }.toOption
   }
 }

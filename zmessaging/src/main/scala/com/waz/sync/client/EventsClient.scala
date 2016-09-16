@@ -20,7 +20,7 @@ package com.waz.sync.client
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.otr.ClientId
-import com.waz.model.{Event, OtrEvent, Uid}
+import com.waz.model.{ConversationEvent, Event, OtrEvent, Uid}
 import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
 import com.waz.utils.JsonDecoder._
@@ -29,6 +29,7 @@ import com.waz.znet.Response.{ErrorStatus, HttpStatus, Status, SuccessHttpStatus
 import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import com.waz.znet.{JsonObjectResponse, _}
 import org.json.JSONObject
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.util.control.NonFatal
@@ -82,6 +83,15 @@ case class PushNotification(id: Uid, events: Seq[Event], transient: Boolean = fa
   def hasEventForClient(clientId: ClientId) = events.exists {
     case ev: OtrEvent => clientId == ev.recipient
     case _ => true
+  }
+
+  def lastConvEventTime = {
+    var max = 0L
+    events foreach {
+      case e: ConversationEvent => max = math.max(max, e.time.getTime)
+      case _ =>
+    }
+    Instant ofEpochMilli max
   }
 }
 

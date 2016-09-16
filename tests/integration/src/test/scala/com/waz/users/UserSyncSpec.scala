@@ -30,7 +30,7 @@ class UserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec {
 
   override val provisionFile = "/four_users_connected.json"
 
-  lazy val contacts = api.search().getConnections("a", 30, Array.empty, false)
+  lazy val contacts = api.search().getConnectionsByName("a", 30, Array.empty)
 
   scenario("Sync contacts on start") {
     withDelay {

@@ -16,7 +16,8 @@
 
     <application>
         <service android:name="com.waz.zms.SyncService" />
-        <service android:name="com.waz.zms.PushService" />
+        <service android:name="com.waz.zms.NotificationsAndroidService" />
+        <service android:name="com.waz.zms.WebSocketService" />
         <service android:name="com.waz.zms.CallService" android:exported="true" />
         <service android:name="com.waz.zms.GcmHandlerService" />
 
@@ -26,7 +27,7 @@
             </intent-filter>
         </service>
 
-        <receiver android:name="com.waz.zms.PushBroadcastReceiver">
+        <receiver android:name="com.waz.zms.WebSocketBroadcastReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

@@ -27,6 +27,7 @@ import com.waz.model._
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
+import com.waz.utils.events.EventStream
 import org.threeten.bp.Instant
 
 import scala.collection.Searching.{Found, InsertionPoint}
@@ -56,9 +57,14 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
 
   override def size = cursor.getCount
 
+  val onUpdate = EventStream[MessageId]()
+
   private val subs = Seq (
     loader.onUpdate { m =>
-      if (messages.get(m) != null) loader(Seq(m)).foreach(_.foreach(messages.put(m, _)))
+      if (messages.get(m) != null) loader(Seq(m)).foreach(_.foreach{ mAndL =>
+        messages.put(m, mAndL)
+        onUpdate ! m
+      })
     }
   )
 

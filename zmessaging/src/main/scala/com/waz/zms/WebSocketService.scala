@@ -32,10 +32,10 @@ import scala.concurrent.Future
 /**
   * Receiver called on boot or when app is updated.
   */
-class PushBroadcastReceiver extends BroadcastReceiver {
+class WebSocketBroadcastReceiver extends BroadcastReceiver {
   override def onReceive(context: Context, intent: Intent): Unit = {
     debug(s"onReceive $intent")
-    WakefulBroadcastReceiver.startWakefulService(context, new Intent(context, classOf[PushService]))
+    WakefulBroadcastReceiver.startWakefulService(context, new Intent(context, classOf[WebSocketService]))
   }
 }
 
@@ -43,11 +43,11 @@ class PushBroadcastReceiver extends BroadcastReceiver {
 /**
   * Service keeping the process running as long as web socket should be connected.
   */
-class PushService extends FutureService {
+class WebSocketService extends FutureService {
 
   private def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
-  private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[PushService]), PendingIntent.FLAG_ONE_SHOT)
+  private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_ONE_SHOT)
 
   override def onStartCommand(intent: Intent, flags: Int, startId: Int): Int = wakeLock {
     verbose(s"onStartCommand($intent, $startId)")
@@ -74,15 +74,17 @@ class PushService extends FutureService {
         alarmService.cancel(restartIntent)
         Future successful None
 
-      case Some(zms) if !zms.websocket.webSocketAlwaysOn =>
-        verbose(s"WebSocket is not always ON, stopping")
-        alarmService.cancel(restartIntent)
-        zms.gcm.ensureGcmRegistered() map { _ => None } // let's make sure GCM is registered since we rely on it for push notifications
-
       case Some(zms) =>
-        verbose(s"current zms: $zms, scheduling restarts")
-        scheduleRestarts()
-        zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
+        zms.websocket.wsActive.head flatMap {
+          case false =>
+            verbose(s"WebSocket does not need to be active, stopping")
+            alarmService.cancel(restartIntent)
+            Future successful None
+          case true =>
+            verbose(s"current zms: $zms, scheduling restarts")
+            scheduleRestarts()
+            zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
+        }
     }
   } flatMap {
     case None => Future.successful(())
@@ -90,6 +92,6 @@ class PushService extends FutureService {
   }
 }
 
-object PushService {
-  def apply(context: Context) = context.startService(new Intent(context, classOf[PushService]))
+object WebSocketService {
+  def apply(context: Context) = context.startService(new Intent(context, classOf[WebSocketService]))
 }

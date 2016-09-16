@@ -18,7 +18,6 @@
 package com.waz.mocked.messages
 
 import com.waz.RobolectricUtils
-import com.waz.api.NotificationsHandler.GcmNotification
 import com.waz.api.impl.conversation.BaseConversation
 import com.waz.api.{CoreList, IConversation, MockedClientApiSpec}
 import com.waz.mocked.MockBackend.DefaultTimeline
@@ -302,7 +301,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
       case IConversation.Type.GROUP =>
         inspect(api.search().getGroupConversations("", 100), ConvId(conv.getId), expectedToBeFound)
       case IConversation.Type.ONE_TO_ONE =>
-        inspect(api.search().getConnections("", 30, Array.empty, true), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
+        inspect(api.search().getConnectionsByName("", 30, Array.empty), UserId(conv.getOtherParticipant.getId), expectedToBeFound)
       case tpe => fail(s"unexpected conversation type: $tpe")
     }
 
@@ -315,26 +314,10 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
           awaitUi(67.millis)
         }
       }
-
-    def readAllMessages(): Unit = {
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 11)
-      msgs.asScala.foreach(_.getBody())
-      withDelay(msgs.getUnreadCount shouldBe 0)
-      zmessaging.notifications.clearNotifications()
-      withDelay(gcms shouldBe empty)
-    }
-
-    def receiveSomeMessagesFrom(user: UserId, numberOfMessages: Int): Unit = {
-      val events = addMessageEvents(RConvId(conv.getId), user, numberOfMessages, timeline = Some(SystemTimeline))
-      withDelay(gcms should have size numberOfMessages)
-    }
   }
 
   private val latch = new ReusableCountDownLatch
   import com.waz.threading.Threading.Implicits.Background
   override def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = CancellableFuture(latch.await(1.minute)).flatMap(_ => super.postMessage(convId, msg, ignoreMissing))
   override def postConversationState(convId: RConvId, updated: ConversationState): ErrorOrResponse[Boolean] = CancellableFuture(latch.await(1.minute)).flatMap(_ => super.postConversationState(convId, updated))
-
-  def gcms = TestApplication.notificationsSpy.gcms.lastOption.fold(Vector.empty[GcmNotification])(_.getNotifications.asScala.toVector)
 }

@@ -100,7 +100,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Return local search results") {
       def verifySearch(prefix: String, matches: Seq[UserId]) = {
         val result = search(Recommended(prefix)).sink
-        withClue(s"searching for: $prefix")(forAsLongAs(100.millis, after = 100.millis)(result.current.value should contain theSameElementsAs(matches)))
+        withClue(s"searching for: $prefix")(forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(matches)).soon)
       }
 
       verifySearch("r", ids('d, 'e, 'f))
@@ -120,18 +120,18 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
     scenario("Schedule sync if no cached query is found") {
       val result = search(Recommended("rel")).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value should have size 3)
+      forAsLongAs(250.millis)(result.current.value should have size 3).soon
       syncRequest.value shouldEqual Recommended("rel")
     }
 
     scenario("Do not schedule another sync if cache is found") {
       val result = search(Recommended("rel"), Some(2)).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value should have size 2)
+      forAsLongAs(250.millis)(result.current.value should have size 2).soon
       syncRequest.value shouldEqual Recommended("rel")
       syncRequest = None
 
       val result2 = search(Recommended("rel"), Some(3)).sink
-      forAsLongAs(100.millis, after = 50.millis)(result2.current.value should have size 3)
+      forAsLongAs(250.millis)(result2.current.value should have size 3).soon
       syncRequest shouldBe None
     }
 
@@ -139,7 +139,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       onSync = backendResults(users.filter(_.name contains "user").filterNot(_.id == id('e)))
 
       val result = search(Recommended("user")).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('a, 'b, 'd)))
+      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('a, 'b, 'd))).soon
       syncRequest shouldBe defined
     }
 
@@ -147,7 +147,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       onSync = backendResults(Nil)
 
       val result = search(Recommended("user")).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e)))
+      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e))).soon
       syncRequest shouldBe defined
     }
 
@@ -155,7 +155,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       zms.searchQueryCache.insert(SearchQueryCache(SearchQuery.Recommended("user"), EPOCH, Some(ids('a, 'b, 'd, 'e))))
 
       val result = search(Recommended("user")).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e)))
+      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e))).soon
       syncRequest shouldBe defined
     }
 
@@ -164,7 +164,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       zms.db.withTransaction(UserDataDao.insertOrReplace(user)(_))
 
       val result = search(Recommended("sneaky@stealth.org")).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value should contain theSameElementsAs(ids('k)))
+      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('k))).soon
       syncRequest shouldBe defined
     }
   }
@@ -173,7 +173,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Return only connected users on top people search") {
       val result = search(TopPeople).sink
 
-      within(500.millis) {
+      within(1.second) {
         result.current.value should contain theSameElementsAs(ids('g, 'h, 'i))
       }
     }
@@ -184,7 +184,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
     scenario("Request sync when common connections are requested") {
       val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value shouldBe None)
+      forAsLongAs(250.millis)(result.current.value shouldBe None).soon
       commonSyncRequest shouldEqual Some(userId)
     }
 
@@ -192,7 +192,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       val data = zms.commonConnections.insert(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), now - zms.timeouts.search.cacheRefreshInterval - 1.milli)).await()
 
       val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value.value shouldEqual data)
+      forAsLongAs(250.millis)(result.current.value.value shouldEqual data).soon
       commonSyncRequest shouldEqual Some(userId)
     }
 
@@ -200,24 +200,24 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       val data = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(3)(UserId()), now)).await()
 
       val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value.value shouldEqual data)
+      forAsLongAs(250.millis)(result.current.value.value shouldEqual data).soon
       commonSyncRequest shouldEqual Some(userId)
     }
 
     scenario("Don't request sync when requesting top common connections are already loaded") {
       val data = zms.commonConnections.insert(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), now)).await()
       val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(100.millis, after = 50.millis)(result.current.value.value shouldEqual data)
+      forAsLongAs(250.millis)(result.current.value.value shouldEqual data).soon
       commonSyncRequest shouldEqual None
 
       val data1 = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(MinCommonConnections)(UserId()), now)).await()
       val result1 = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(100.millis, after = 50.millis)(result1.current.value.value shouldEqual data1)
+      forAsLongAs(250.millis)(result1.current.value.value shouldEqual data1).soon
       commonSyncRequest shouldEqual None
 
       val data2 = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(10)(UserId()), now)).await()
       val result2 = service.commonConnections(userId, fullList = true).sink
-      forAsLongAs(100.millis, after = 50.millis)(result2.current.value.value shouldEqual data2)
+      forAsLongAs(250.millis)(result2.current.value.value shouldEqual data2).soon
       commonSyncRequest shouldEqual None
     }
   }

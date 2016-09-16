@@ -260,7 +260,7 @@ class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: 
   }
 }
 
-class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: LikingsStorage) {
+class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: ReactionsStorage) {
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 

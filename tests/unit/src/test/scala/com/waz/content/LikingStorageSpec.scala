@@ -43,7 +43,7 @@ class LikingStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
     override val dbHelper: SQLiteOpenHelper = new ZMessagingDB(Robolectric.application, "dbName")
   }
 
-  lazy val storage = new LikingsStorage(Robolectric.application, database)
+  lazy val storage = new ReactionsStorage(Robolectric.application, database)
 
   override def beforeAll: Unit = {
     val likings = msgIds flatMap { msgId =>

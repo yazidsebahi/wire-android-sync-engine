@@ -32,6 +32,7 @@ import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
+import com.waz.service.push.GcmService.GcmState
 import com.waz.service.push.PushService
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -42,9 +43,9 @@ import com.waz.sync.client.OtrClient.{ClientKey, MessageResponse}
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.sync.client._
-import com.waz.threading.CancellableFuture
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.threading.CancellableFuture.successful
-import com.waz.zms.GcmHandlerService
+import com.waz.utils.events.Signal
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.ZNetClient._
@@ -57,8 +58,6 @@ import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
   private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
-
-  val webSocketAlwaysOn = false
 
   @volatile private var pushService = Option.empty[PushService]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
@@ -73,9 +72,11 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val otrClient: OtrClient = new MockedOtrClient(account.netClient)
   }
 
-  class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends ZMessaging(clientId, userModule) {
+  class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends {
+    val mockGcmState = Signal(GcmState(true, true))
+  } with ZMessaging(clientId, userModule) {
 
-    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, push, prefs, network)
+    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: MediaManagerService = new MockedMediaManagerService(context, prefs)
 
     override lazy val assetClient        = new AssetClient(zNetClient) {
@@ -124,9 +125,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, global.backend, clientId, timeouts) {
-
-      override val webSocketAlwaysOn = suite.webSocketAlwaysOn
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, mockGcmState, global.backend, clientId, timeouts) {
 
       override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
         override def close() = dispatcher {
@@ -186,7 +185,13 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       verbose(s"push ignored, web socket not connected")
       false
   }
-  override def pushGcm(notification: PushNotification, userId: UserId) = Option(ZMessaging.currentAccounts).foreach(_ => new GcmHandlerService().handleNotification(notification, Some(userId)))
+  override def pushGcm(notification: PushNotification, userId: UserId) =
+    Option(ZMessaging.currentAccounts) foreach { accounts =>
+      accounts.getCurrentZms.foreach {
+        case Some(zms) if zms.selfUserId == userId => zms.gcm.handleNotification(notification)
+        case _ =>
+      }(Threading.Background)
+    }
 
   class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClient) extends GlobalModule(context, testBackend) {
     override lazy val client: AsyncClient = testClient

@@ -137,7 +137,6 @@ class UiModule(val accounts: Accounts) extends UiEventContext with ZMessagingRes
   lazy val channels = new Channels
   lazy val invitations = new Invitations(zms, convs, global.regClient)
   lazy val contactDetails = wire[ContactDetailsCache]
-  lazy val notifications = wire[GlobalNotificationService]
   lazy val assets = new UiCache[AssetId, Asset](10)(this)
 
   lazy val globalImageLoader = global.imageLoader
@@ -146,10 +145,6 @@ class UiModule(val accounts: Accounts) extends UiEventContext with ZMessagingRes
 
   def cached[A <: AnyRef](uri: Uri, default: => A) = getOrUpdate(uiCache)(uri, default).asInstanceOf[A]
 
-  Threading.Ui {
-    // ensure notifications service is started
-    notifications
-  }
 }
 
 object UiModule {

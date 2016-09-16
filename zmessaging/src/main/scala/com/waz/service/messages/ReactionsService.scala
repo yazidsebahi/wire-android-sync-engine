@@ -18,37 +18,44 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
-import com.waz.content.{Likes, LikingsStorage}
+import com.waz.content.{Likes, ReactionsStorage}
 import com.waz.model._
 import com.waz.service.UserService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
-import org.threeten.bp.Instant.now
+import com.waz.utils._
+import org.threeten.bp.Instant
+import org.threeten.bp.Instant.EPOCH
 
 import scala.concurrent.Future
 
-class LikingsService(storage: LikingsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserService) {
-  import LikingsService._
+class ReactionsService(storage: ReactionsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserService, selfUserId: UserId) {
+  import ReactionsService._
   import Threading.Implicits.Background
 
-  def like(conv: ConvId, msg: MessageId): Future[Likes] = addLiking(conv, msg, Liking.Action.Like)
+  def like(conv: ConvId, msg: MessageId): Future[Likes] = addReaction(conv, msg, Liking.Action.Like)
 
-  def unlike(conv: ConvId, msg: MessageId): Future[Likes] = addLiking(conv, msg, Liking.Action.Unlike)
+  def unlike(conv: ConvId, msg: MessageId): Future[Likes] = addReaction(conv, msg, Liking.Action.Unlike)
 
-  private def addLiking(conv: ConvId, msg: MessageId, action: Liking.Action): Future[Likes] = {
+  private def addReaction(conv: ConvId, msg: MessageId, action: Liking.Action): Future[Likes] = {
     verbose(s"addLiking: $conv $msg, $action")
+    val reaction = Liking(msg, selfUserId, EPOCH, action) // EPOCH is used to signal "local" in-band
     for {
-      liking <- users.withSelfUserFuture(self => Future.successful(Liking(msg, self, now, action)))
-      likes  <- storage.addOrUpdate(liking)
-      _      <- sync.postLiking(conv, liking)
+      likes  <- storage.addOrUpdate(reaction)
+      _      <- sync.postLiking(conv, reaction)
     } yield likes
   }
 
-  def processLiking(likings: Seq[Liking]): Future[Seq[Likes]] = Future.traverse(likings) { storage.addOrUpdate } // FIXME: use batching
+  def updateLocalReaction(local: Liking, backendTime: Instant) = storage.update(local.id, { stored =>
+    if (stored.timestamp <= local.timestamp) stored.copy(action = local.action, timestamp = backendTime)
+    else stored
+  })
+
+  def processReactions(likings: Seq[Liking]): Future[Seq[Likes]] = Future.traverse(likings) { storage.addOrUpdate } // FIXME: use batching
 }
 
-object LikingsService {
-  private implicit val logTag: LogTag = logTagFor[LikingsService]
+object ReactionsService {
+  private implicit val logTag: LogTag = logTagFor[ReactionsService]
 }
 
 case class MessageAndLikes(message: MessageData, likes: IndexedSeq[UserId], likedBySelf: Boolean)

@@ -35,7 +35,7 @@ import com.waz.testutils._
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ZNetClient._
 import org.robolectric.annotation.Config
-import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues}
+import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues, Tag}
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.duration._
@@ -305,7 +305,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       incomingCall(meep, "meep-42")
 
       withDelay {
-        notificationsSpy.incomingCall.value.getConversationId shouldEqual "meep"
+        notificationsSpy.incomingCall.value.id.str shouldEqual "meep"
         notificationsSpy.ongoingCall shouldEqual None
         notificationsSpy.uiActive shouldEqual false
       }
@@ -318,7 +318,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
       withDelay {
         notificationsSpy.incomingCall shouldBe None
-        notificationsSpy.ongoingCall.value.getConversationId shouldEqual "meep"
+        notificationsSpy.ongoingCall.value.id.str shouldEqual "meep"
         notificationsSpy.uiActive shouldEqual false
         spy.callJoinResult shouldEqual None
       }
@@ -347,7 +347,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     var callStart = 0L
     lazy val c = conv("meep")
 
-    scenario("Join an incoming call") {
+    scenario("Join an incoming call", Tag("poots")) {
       callParticipants.clear()
       spy.reset()
 
@@ -994,11 +994,11 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
         activeChannels.hasIncomingCall shouldEqual true
         activeChannels.getIncomingCall shouldEqual foo.voice
 
-        notificationsSpy.ongoingCall.value.getConversationId shouldEqual "meep"
-        notificationsSpy.ongoingCall.value.getState shouldEqual DeviceConnected
+        notificationsSpy.ongoingCall.value.id.str shouldEqual "meep"
+        notificationsSpy.ongoingCall.value.state shouldEqual DeviceConnected
 
-        notificationsSpy.incomingCall.value.getConversationId shouldEqual "foo"
-        notificationsSpy.incomingCall.value.getState shouldEqual OtherCalling
+        notificationsSpy.incomingCall.value.id.str shouldEqual "foo"
+        notificationsSpy.incomingCall.value.state shouldEqual OtherCalling
 
         callingEventsSpy.latestEvent.value shouldEqual IncomingRingingStarted(KindOfCall.ONE_TO_ONE, isVideoCall = false, isUiActive = true, networkMode = NetworkMode.WIFI, inOngoingCall = true, isConversationMuted = false, false)
       }

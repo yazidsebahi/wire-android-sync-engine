@@ -18,15 +18,15 @@
 package com.waz.mocked.connections
 
 import com.waz.api.MockedClientApiSpec
-import com.waz.mocked.{PushBehaviour, Timeline, MockBackend}
+import com.waz.mocked.{MockBackend, PushBehaviour, Timeline}
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{RConvId, UserConnectionEvent, UserId, Uid}
+import com.waz.model.{RConvId, Uid, UserConnectionEvent, UserId}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestApplication
 import com.waz.testutils.TestApplication._
 import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
-import scala.collection.JavaConverters._
+
 import scala.concurrent.duration._
 
 @Config(application = classOf[TestApplication])
@@ -54,7 +54,7 @@ class ConnectionSyncSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
   }
 
   scenario("The (old) incoming connections should not result in connection request messages in the notifications") {
-    notificationsSpy.gcms flatMap (_.getNotifications.asScala) should be (empty)
+    notificationsSpy.gcms.flatten should be(empty)
   }
 
   scenario("The (old) incoming connections should not result in connection request messages in the inbox") {

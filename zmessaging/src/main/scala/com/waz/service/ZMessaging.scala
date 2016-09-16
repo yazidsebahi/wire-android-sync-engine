@@ -36,7 +36,7 @@ import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
-import com.waz.service.push.{GcmService, NotificationService, PushService, WebSocketClientService}
+import com.waz.service.push._
 import com.waz.service.tracking.{TrackingEventsService, TrackingService}
 import com.waz.sync.client._
 import com.waz.sync.handler._
@@ -76,7 +76,7 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val membersStorage    = wire[MembersStorage]
   lazy val assetsStorage     = wire[AssetsStorage]
   lazy val voiceStorage      = wire[VoiceChannelStorage]
-  lazy val likingsStorage    = wire[LikingsStorage]
+  lazy val reactionsStorage  = wire[ReactionsStorage]
   lazy val notifStorage      = wire[NotificationStorage]
   lazy val convsStorage      = wire[ConversationStorage]
   lazy val msgDeletions      = wire[MsgDeletionStorage]
@@ -140,13 +140,15 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def membersStorage    = storage.membersStorage
   def assetsStorage     = storage.assetsStorage
   def voiceStorage      = storage.voiceStorage
-  def likingsStorage    = storage.likingsStorage
+  def reactionsStorage  = storage.reactionsStorage
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache
   def commonConnections = storage.commonConnections
+
+  def gcmState          = gcm.gcmState
 
   lazy val messagesStorage: MessagesStorage = wire[MessagesStorage]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
@@ -180,6 +182,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
+  lazy val pushSignals                           = wire[PushServiceSignals]
   lazy val push: PushService                     = wire[PushService]
   lazy val gcm: GcmService                       = wire[GcmService]
   lazy val errors                                = wire[ErrorsService]
@@ -213,7 +216,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val spotifyMedia                          = wire[SpotifyMediaService]
   lazy val otrService: OtrService                = wire[OtrService]
   lazy val genericMsgs: GenericMessageService    = wire[GenericMessageService]
-  lazy val likings: LikingsService               = wire[LikingsService]
+  lazy val reactions: ReactionsService           = wire[ReactionsService]
   lazy val notifications: NotificationService    = wire[NotificationService]
   lazy val callLog                               = wire[CallLogService]
   lazy val recordAndPlay                         = wire[RecordAndPlayService]
@@ -233,7 +236,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val invitationSync   = wire[InvitationSyncHandler]
   lazy val messagesSync     = wire[MessagesSyncHandler]
   lazy val otrSync          = wire[OtrSyncHandler]
-  lazy val likingsSync      = wire[LikingsSyncHandler]
+  lazy val reactionsSync    = wire[ReactionsSyncHandler]
   lazy val lastReadSync     = wire[LastReadSyncHandler]
   lazy val clearedSync      = wire[ClearedSyncHandler]
   lazy val openGraphSync    = wire[OpenGraphSyncHandler]
@@ -265,7 +268,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
             )
           )
         ),
-        notifications.notificationEventsStage
+        notifications.notificationEventsStage,
+        notifications.lastReadProcessingStage
       )
     )
   }
@@ -275,7 +279,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
     conversations
     users
 
-    websocket // connect on start
+    push // connect on start
 
     // services listening on lifecycle verified login events
     contacts
@@ -341,18 +345,12 @@ object ZMessaging { self =>
       error(s"Application: '$app' doesn't implement NotificationsHandlerFactory")
       new NotificationsHandlerFactory {
         override def getCallingEventsHandler: CallingEventsHandler = EmptyEventsHandler
-        override def getNotificationsHandler: NotificationsHandler = EmptyNotificationsHandler
         override def getTrackingEventsHandler: TrackingEventsHandler = EmptyTrackingEventsHandler
       }
   }
 
   object EmptyEventsHandler extends CallingEventsHandler {
     override def onCallingEvent(event: CallingEvent): Unit = ()
-  }
-
-  object EmptyNotificationsHandler extends NotificationsHandler {
-    override def updateGcmNotification(notifications: GcmNotificationsList): Unit = ()
-    override def updateOngoingCallNotification(ongoingCall: NotificationsHandler.ActiveChannel, incomingCall: NotificationsHandler.ActiveChannel, isUiActive: Boolean): Unit = ()
   }
 
   object EmptyTrackingEventsHandler extends TrackingEventsHandler {

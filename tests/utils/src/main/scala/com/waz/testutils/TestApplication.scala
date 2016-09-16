@@ -18,21 +18,25 @@
 package com.waz.testutils
 
 import android.app.Application
-import com.waz.api.NotificationsHandler.{ActiveChannel, NotificationsHandlerFactory}
+import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
 import com.waz.api._
+import com.waz.model.VoiceChannelData
 import com.waz.service.ZMessaging
+import com.waz.service.push.NotificationService.NotificationInfo
 
 class TestApplication extends Application with NotificationsHandlerFactory {
-  override def getNotificationsHandler: NotificationsHandler = TestApplication.notificationsHandler
-  override def getCallingEventsHandler: CallingEventsHandler = TestApplication.callingEventsHandler
+
+  import TestApplication._
+
+  override def getCallingEventsHandler: CallingEventsHandler = callingEventsHandler
   override def getTrackingEventsHandler: TrackingEventsHandler = ZMessaging.EmptyTrackingEventsHandler
 }
 
 object TestApplication {
+
   val callingEventsSpy = new CallingEventsSpy(Nil)
   val notificationsSpy = new NotificationsSpy(Seq.empty, None, None, true)
 
-  private val notificationsHandler: NotificationsHandler = notificationsSpy
   private val callingEventsHandler: CallingEventsHandler = callingEventsSpy
 }
 
@@ -43,11 +47,8 @@ class CallingEventsSpy(var events: List[CallingEvent]) extends CallingEventsHand
   def latestEvent: Option[CallingEvent] = events.headOption
 }
 
-class NotificationsSpy(var gcms: Seq[GcmNotificationsList], var ongoingCall: Option[ActiveChannel], var incomingCall: Option[ActiveChannel], var uiActive: Boolean) extends NotificationsHandler {
-  override def updateGcmNotification(notifications: GcmNotificationsList): Unit = gcms :+= notifications
-  override def updateOngoingCallNotification(ongoingCall: ActiveChannel, incomingCall: ActiveChannel, isUiActive: Boolean): Unit = {
-    this.ongoingCall = Option(ongoingCall)
-    this.incomingCall = Option(incomingCall)
-    uiActive = isUiActive
-  }
-}
+class NotificationsSpy(
+  @volatile var gcms: Seq[Seq[NotificationInfo]],
+  @volatile var ongoingCall: Option[VoiceChannelData],
+  @volatile var incomingCall: Option[VoiceChannelData],
+  @volatile var uiActive: Boolean)

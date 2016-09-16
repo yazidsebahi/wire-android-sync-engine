@@ -41,7 +41,7 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
   val wsConnected = Signal(false)
 
   lazy val pushSignals = new PushServiceSignals {
-    override val pushConnected: Signal[Boolean] = wsConnected
+    override val pushConnected = wsConnected
   }
   lazy val eventsClient = new EventsClient(new EmptyClient) {
     override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(100.millis)(Right(lastNotificationResponse))

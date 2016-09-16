@@ -68,7 +68,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
     lifecycle.acquireUi()
 
     override lazy val conversations: ConversationsService =
-      new ConversationsService(context, push, users, usersStorage, messagesStorage, membersStorage,
+      new ConversationsService(context, pushSignals, users, usersStorage, messagesStorage, membersStorage,
         convsStorage, convsContent, convsStats, sync, errors, messages, assets, db, messagesContent, kvStorage, eventScheduler) {
 
         override def updateConversations(conversations: Seq[ConversationResponse]) = Future.successful(Nil)

@@ -34,6 +34,7 @@ import com.waz.provision._
 import com.waz.service._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.RoboPermissionProvider
+import com.waz.testutils.TestApplication.notificationsSpy
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils._
@@ -67,9 +68,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user)
   }
 
-  class ApiZMessaging(clientId: ClientId, user: UserModule)
-      extends ZMessaging(clientId, user) {
-
+  class ApiZMessaging(clientId: ClientId, user: UserModule) extends ZMessaging(clientId, user) {
     override lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), events =>
       returning(eventScheduler.enqueue(events))(_ => eventSpies.get.foreach(pf => events.foreach(e => pf.applyOrElse(e, (_: Event) => ())))))
 
@@ -121,6 +120,14 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     ui.global.permissions.setProvider(new RoboPermissionProvider)
 
     if (initBehaviour == InitOnceBeforeAll) createZMessagingAndLogin()
+
+    implicit val eventContext = EventContext.Global
+
+    val zms = ZMessaging.currentUi.currentZms.collect { case Some(z) => z }
+    zms.map(_.notifications).flatMap(_.notifications)(notificationsSpy.gcms :+= _)
+    zms.map(_.voiceContent).flatMap(_.activeChannels).map(_.ongoing)(notificationsSpy.ongoingCall = _)
+    zms.map(_.voiceContent).flatMap(_.activeChannels).map(_.incoming)(c => notificationsSpy.incomingCall = c.headOption)
+    zms.flatMap(_.lifecycle.uiActive)(notificationsSpy.uiActive = _)
   }
 
   override protected def beforeEach(): Unit = {

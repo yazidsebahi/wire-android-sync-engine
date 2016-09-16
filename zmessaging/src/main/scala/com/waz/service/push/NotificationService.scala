@@ -17,31 +17,33 @@
  */
 package com.waz.service.push
 
+import android.app.AlarmManager
+import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Message
-import com.waz.api.NotificationsHandler.GcmNotification
-import com.waz.api.NotificationsHandler.GcmNotification.LikedContent
-import com.waz.api.NotificationsHandler.GcmNotification.Type._
+import com.waz.api.NotificationsHandler.NotificationType
+import com.waz.api.NotificationsHandler.NotificationType._
 import com.waz.content._
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Asset
 import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.GenericContent.{Asset, LastRead}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
+import com.waz.zms.NotificationsAndroidService.{checkNotificationsIntent, checkNotificationsTimeout}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
-    storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: LikingsStorage,
-    push: PushService, kv: KeyValueStorage, timeouts: Timeouts) {
+class NotificationService(context: Context, selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
+    storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
+    kv: KeyValueStorage, timeouts: Timeouts) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -51,6 +53,32 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
   @volatile private var uiActive = false
 
   private val lastUiVisibleTime = kv.keyValuePref("last_ui_visible_time", Instant.EPOCH)
+
+  val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
+
+  //For UI to decide if it should make sounds or not
+  val otherDeviceActiveTime = Signal(Instant.EPOCH)
+
+  val notifications = lifecycle.lifecycleState.zip(for {
+    data <- storage.notifications.map(_.values.toIndexedSeq.sorted)
+    uiVisibleTime <- lastUiVisibleTime.signal
+  } yield {
+    if (data.forall(_.localTime.isBefore(uiVisibleTime))) Seq.empty[NotificationData] // no new messages, don't show anything
+    else data
+  }).flatMap {
+    case (LifecycleState.UiActive, _) => Signal.const(Seq.empty[NotificationInfo])
+    case (_, data) => Signal.future(createNotifications(data))
+  }
+
+  val lastReadProcessingStage = EventScheduler.Stage[GenericMessageEvent] { (convId, events) =>
+    events.foreach {
+      case GenericMessageEvent(_, _, _, _, GenericMessage(_, LastRead(conv, time))) =>
+        otherDeviceActiveTime ! Instant.now
+        alarmService.set(AlarmManager.RTC, Instant.now().toEpochMilli + checkNotificationsTimeout.toMillis, checkNotificationsIntent(context))
+      case _ =>
+    }
+    Future.successful(())
+  }
 
   lifecycle.lifecycleState { state =>
     verbose(s"state updated: $state")
@@ -133,26 +161,28 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
   private def notification(msg: MessageData) = {
     import Message.Type._
 
-    def data(tpe: GcmNotification.Type) = Some(NotificationData(msg.id.str, msg.contentString, msg.convId, msg.userId, tpe, msg.time, msg.localTime, mentions = msg.mentions.keys.toSeq, hotKnock = msg.hotKnock))
+    def data(tpe: NotificationType) = Some(NotificationData(msg.id.str, msg.contentString, msg.convId, msg.userId, tpe, msg.time, msg.localTime, mentions = msg.mentions.keys.toSeq, hotKnock = msg.hotKnock))
 
     msg.msgType match {
-      case TEXT | TEXT_EMOJI_ONLY | RICH_MEDIA => data(GcmNotification.Type.TEXT)
-      case KNOCK => data(GcmNotification.Type.KNOCK)
-      case ASSET => data(GcmNotification.Type.ASSET)
-      case LOCATION => data(GcmNotification.Type.LOCATION)
-      case RENAME => data(GcmNotification.Type.RENAME)
-      case MISSED_CALL => data(GcmNotification.Type.MISSED_CALL)
-      case ANY_ASSET =>
+      case TEXT | TEXT_EMOJI_ONLY | RICH_MEDIA => data(NotificationType.TEXT)
+      case KNOCK        => data(NotificationType.KNOCK)
+      case ASSET        => data(NotificationType.ASSET)
+      case LOCATION     => data(NotificationType.LOCATION)
+      case RENAME       => data(NotificationType.RENAME)
+      case MISSED_CALL  => data(NotificationType.MISSED_CALL)
+      case ANY_ASSET    =>
         msg.protos.lastOption match {
-          case Some(GenericMessage(_, Asset(Some(Original(Mime.Video(), _, _, _, _)), _, UploadDone(_)))) => data(GcmNotification.Type.VIDEO_ASSET)
-          case Some(GenericMessage(_, Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, UploadDone(_)))) => data(GcmNotification.Type.AUDIO_ASSET)
-          case Some(GenericMessage(_, Asset(_, _, UploadDone(_)))) => data(GcmNotification.Type.ANY_ASSET)
+          case Some(GenericMessage(_, Asset(Some(Original(Mime.Video(), _, _, _, _)), _, UploadDone(_)))) => data(NotificationType.VIDEO_ASSET)
+          case Some(GenericMessage(_, Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, UploadDone(_)))) => data(NotificationType.AUDIO_ASSET)
+          case Some(GenericMessage(_, Asset(_, _, UploadDone(_)))) => data(NotificationType.ANY_ASSET)
           case _ => None
         }
-      case MEMBER_JOIN =>
+      case AUDIO_ASSET  => data(NotificationType.AUDIO_ASSET)
+      case VIDEO_ASSET  => data(NotificationType.VIDEO_ASSET)
+      case MEMBER_JOIN  =>
         if (msg.members == Set(msg.userId)) None // ignoring auto-generated member join event when user accepts connection
-        else data(GcmNotification.Type.MEMBER_JOIN)
-      case MEMBER_LEAVE => data(GcmNotification.Type.MEMBER_LEAVE)
+        else data(NotificationType.MEMBER_JOIN)
+      case MEMBER_LEAVE => data(NotificationType.MEMBER_LEAVE)
       case _ => None
     }
   }
@@ -218,42 +248,22 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
       _ = verbose(s"inserted: $res")
     } yield res
 
-  def getNotifications =
-    lifecycle.lifecycleState flatMap {
-      case LifecycleState.UiActive => Signal const Seq.empty[Notification]
-      case _ =>
-        for {
-          data <- storage.notifications.map(_.values.toIndexedSeq.sorted)
-          time <- lastUiVisibleTime.signal
-          ns <-
-            if (data.forall(_.localTime.isBefore(time))) Signal const Seq.empty[Notification] // no new messages, don't show anything
-            else Signal.future(createNotifications(data))
-        } yield
-          ns
-    }
-
-  private def createNotifications(ns: Seq[NotificationData]): Future[Seq[Notification]] = {
+  private def createNotifications(ns: Seq[NotificationData]): Future[Seq[NotificationInfo]] = {
     Future.traverse(ns) { data =>
       usersStorage.get(data.user).flatMap { user =>
-        val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName getOrElse ""
-
+        val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(Notification(data, userName, userName, groupConv = false))
+            Future.successful(NotificationInfo(data.msgType, data.msg, data.hotKnock, data.conv, convName = userName, userName = userName, isGroupConv = false))
           case _ =>
             for {
-              msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
+              msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
               conv <- convs.get(data.conv)
             } yield {
               val (g, t) =
-                if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map (m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
+                if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-
-              conv.fold {
-                Notification(g, "", userName, groupConv = false, mentioned = data.mentions.contains(selfUserId), likedContent = t)
-              } { conv =>
-                Notification(g, conv.displayName, userName, conv.convType == ConversationType.Group, mentioned = data.mentions.contains(selfUserId), likedContent = t)
-              }
+              NotificationInfo(g.msgType, g.msg, g.hotKnock, g.conv, convName = conv.map(_.displayName), userName = userName, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
             }
         }
       }
@@ -263,22 +273,14 @@ class NotificationService(selfUserId: UserId, messages: MessagesStorage, lifecyc
 
 object NotificationService {
 
-  case class Notification(data: NotificationData, convName: String = "", userName: String = "", groupConv: Boolean = false, mentioned: Boolean = false, likedContent: Option[LikedContent] = None) extends GcmNotification {
-    override def getType = data.msgType
-    override def getConversationName: String = convName
-    override def getConversationId: String = data.conv.str
-    override def getMessage: String = data.msg
-    override def getUserName: String = userName
-    override def getUserId: String = data.user.str
-    override def getTypeOfLikedContent: LikedContent = likedContent.getOrElse(LikedContent.TEXT_OR_URL)
-    override def isGroupConversation: Boolean = groupConv
-    override def isHotKnock: Boolean = data.hotKnock
-    override def isUserMentioned: Boolean = mentioned
-
-    override def getContent: String =
-      if (data.user == UserId.Zero) data.msg
-      else {
-        (if (convName.isEmpty) "UNKNOWN" else convName) + "\n" + data.msg // XXX: this is only some fallback string to be used in UI until they implement correct handling
-      }
-  }
+  case class NotificationInfo(tpe: NotificationType,
+                              message: String,
+                              isPing: Boolean,
+                              convId: ConvId,
+                              convName: Option[String] = None,
+                              userName: Option[String] = None,
+                              isGroupConv: Boolean = false,
+                              isUserMentioned: Boolean = false,
+                              likedContent: Option[LikedContent] = None
+                             )
 }

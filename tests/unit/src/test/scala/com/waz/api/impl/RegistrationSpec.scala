@@ -26,13 +26,14 @@ import com.waz.client.RegistrationClient
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
+import com.waz.service.push.GcmService.GcmState
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccounts, MockGlobalModule, MockUiModule, MockZMessagingFactory}
 import com.waz.threading.CancellableFuture
 import com.waz.ui.UiModule
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
@@ -90,7 +91,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, gcmGlobal, backend, clientId, timeouts) {
+          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, Signal const GcmState(true, true), backend, clientId, timeouts) {
             override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("/"), zNetClient.auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }

@@ -96,7 +96,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         }
       }
 
-      override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, push, prefs, network) {
+      override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, websocket, prefs, network) {
         override lazy val flowManager = None
       }
 

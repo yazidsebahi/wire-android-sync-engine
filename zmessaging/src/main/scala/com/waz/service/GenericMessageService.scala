@@ -22,14 +22,14 @@ import com.waz.model.GenericContent._
 import com.waz.model._
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
-import com.waz.service.messages.{LikingsService, MessagesContentUpdater, ReceiptService}
+import com.waz.service.messages.{ReactionsService, MessagesContentUpdater, ReceiptService}
 import com.waz.utils._
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future.traverse
 
 class GenericMessageService(messages: MessagesContentUpdater, convs: ConversationsContentUpdater,
-    convEvents: ConversationEventsService, images: AssetService, likings: LikingsService, receipts: ReceiptService) {
+    convEvents: ConversationEventsService, images: AssetService, reactions: ReactionsService, receipts: ReceiptService) {
 
   private implicit val tag: LogTag = logTagFor[GenericMessageService]
   import com.waz.threading.Threading.Implicits.Background
@@ -38,7 +38,7 @@ class GenericMessageService(messages: MessagesContentUpdater, convs: Conversatio
 
     def lastForConv(items: Seq[(RConvId, Instant)]) = items.groupBy(_._1).map { case (conv, times) => times.maxBy(_._2.toEpochMilli) }
 
-    val likes = events collect {
+    val incomingReactions = events collect {
       case GenericMessageEvent(_, _, time, from, GenericMessage(_, Reaction(action, msg))) => Liking(msg, from, time.instant, action)
     }
 
@@ -63,7 +63,7 @@ class GenericMessageService(messages: MessagesContentUpdater, convs: Conversatio
       _ <- traverse(lastRead) { case (remoteId, timestamp) =>
         convs.processConvWithRemoteId(remoteId, retryAsync = true) { conv => convs.updateConversationLastRead(conv.id, timestamp) }
       }
-      _ <- likings.processLiking(likes)
+      _ <- reactions.processReactions(incomingReactions)
       _ <- traverse(cleared) { case (remoteId, timestamp) =>
         convs.processConvWithRemoteId(remoteId, retryAsync = true) { conv => convs.updateConversationCleared(conv.id, timestamp) }
       }
