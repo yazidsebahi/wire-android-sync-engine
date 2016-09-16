@@ -110,11 +110,7 @@ trait DataSource {
    */
   def skipBlock(): Int = {
     blockSize = read()
-    var n = 0
-    while (n < blockSize) {
-      n += skipBytes(blockSize - n) // TODO: check EOF
-    }
-    n
+    if (skipFully(blockSize)) blockSize else -1
   }
 
   /**
