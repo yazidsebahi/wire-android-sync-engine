@@ -21,11 +21,13 @@ import android.content.Intent
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.model.UserId
 import com.waz.service.ZMessaging
 import com.waz.service.push.GcmGlobalService.GcmSenderId
 import com.waz.sync.client.PushNotification
 import com.waz.threading.Threading
 import com.waz.utils.{LoggedTry, TimedWakeLock}
+import com.waz.zms.GcmHandlerService.Notification.{EncryptedData, Unencrypted}
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
@@ -53,8 +55,10 @@ class GcmHandlerService extends FutureService with ZMessagingService {
           info(s"received gcm notification is from unexpected sender, will ignore it")
           None
         case ContentAndMac(content, mac) =>
-          Some((content, mac))
-        case _ =>
+          Some(EncryptedData(content, mac))
+        case NotificationForUser(notification, user) =>
+          Some(Unencrypted(notification, user))
+        case  _ =>
           error(s"Received GCM notification, but some required extra field is missing, intent extras: $extrasToString")
           None
       }
@@ -75,10 +79,20 @@ class GcmHandlerService extends FutureService with ZMessagingService {
       }
 
     getNotification flatMap {
-      case Some((content, mac)) =>
+      case Some(EncryptedData(content, mac)) =>
         decryptNotification(content, mac) flatMap {
           case Some((zms, notification)) => zms.gcm.handleNotification(notification)
           case None => Future.successful(())
+        }
+      case Some(Unencrypted(notification, userId)) =>
+        accounts.getCurrentZms flatMap {
+          case Some(zms) if zms.selfUserId == userId =>
+            zms.gcm.handleNotification(notification)
+          case Some(zms) =>
+            warn(s"received notification for wrong user: $extrasToString")
+            Future.successful(())
+          case None =>
+            Future.successful(())
         }
       case None =>
         Future.successful(())
@@ -88,6 +102,7 @@ class GcmHandlerService extends FutureService with ZMessagingService {
 
 object GcmHandlerService {
   val ContentExtra = "data"
+  val UserExtra = "user"
   val TypeExtra = "type"
   val MacExtra = "mac"
 
@@ -104,7 +119,22 @@ object GcmHandlerService {
       }
   }
 
+  object NotificationForUser {
+    def unapply(intent: Intent): Option[(PushNotification, UserId)] =
+      (Option(intent.getStringExtra(ContentExtra)), Option(intent.getStringExtra(UserExtra))) match {
+        case (Some(content), Some(user)) =>
+          LoggedTry.local { (PushNotification.NotificationDecoder(new JSONObject(content)), UserId(user)) } .toOption
+        case _ => None
+      }
+  }
+
   object EncryptedGcm {
     def unapply(js: JSONObject): Option[PushNotification] = LoggedTry.local { PushNotification.NotificationDecoder(js.getJSONObject("data")) }.toOption
+  }
+
+  sealed trait Notification
+  object Notification {
+    case class EncryptedData(data: Array[Byte], mac: Array[Byte]) extends Notification
+    case class Unencrypted(notification: PushNotification, userId: UserId) extends Notification
   }
 }
