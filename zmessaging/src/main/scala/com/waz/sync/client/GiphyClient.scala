@@ -43,6 +43,15 @@ class GiphyClient(netClient: ZNetClient) {
         Nil
     }
 
+  def loadTrending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[Seq[ImageData]]] =
+    netClient(Request.Get(path = trendingPath(offset, limit))) map {
+      case Response(SuccessHttpStatus(), SearchGiphyResponse(images), _) => images
+      case resp =>
+        warn(s"unexpected response for trending: $resp")
+        Nil
+    }
+
+
   def search(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[Seq[ImageData]]] =
     netClient(Request.Get(path = searchPath(keyword, offset, limit))) map {
       case Response(SuccessHttpStatus(), SearchGiphyResponse(images), _) => images
@@ -60,6 +69,8 @@ object GiphyClient {
   val RandomGifPath = s"$BasePath/random"
 
   def searchPath(keyword: String, offset: Int, limit: Int) = s"$BasePath/search?q=${URLEncoder.encode(keyword, "utf8")}&offset=$offset&limit=$limit"
+
+  def trendingPath(offset: Int, limit: Int) = s"$BasePath/trending?offset=$offset&limit=$limit"
 
   trait GiphyResponse[T] { self =>
 

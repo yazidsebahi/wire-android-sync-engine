@@ -39,17 +39,26 @@ class GiphyService(client: GiphyClient) {
   def searchGiphyImage(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[ImageAssetData]] = {
     client.search(keyword, offset, limit).map {
       case Nil => Nil
-      case images => images flatMap { is =>
-        val previews = is.filter(_.tag == ImageData.Tag.Preview)
-        val gifs = is.filter(i => i.tag != ImageData.Tag.Preview && i.size <= ImageAssetGenerator.MaxGifSize)
-        if (gifs.isEmpty || previews.isEmpty) Nil
-        else {
-          val medium = gifs.maxBy(_.size)
-          val preview = previews.minBy(_.width).copy(origWidth = medium.width, origHeight = medium.height)
-          val still = previews.find(_.width == medium.width).map(_.copy(tag = ImageData.Tag.MediumPreview, origWidth = medium.width, origHeight = medium.height))
-          Seq(ImageAssetData(AssetId(), RConvId(), Seq(Some(preview), still, Some(medium)).flatten))
-        }
-      }
+      case images => images flatMap imageAssetData
+    }
+  }
+
+  def trending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[ImageAssetData]] = {
+    client.loadTrending(offset, limit).map {
+      case Nil => Nil
+      case images => images flatMap imageAssetData
+    }
+  }
+
+  private def imageAssetData(is: Seq[ImageData]) = {
+    val previews = is.filter(_.tag == ImageData.Tag.Preview)
+    val gifs = is.filter(i => i.tag != ImageData.Tag.Preview && i.size <= ImageAssetGenerator.MaxGifSize)
+    if (gifs.isEmpty || previews.isEmpty) Nil
+    else {
+      val medium = gifs.maxBy(_.size)
+      val preview = previews.minBy(_.width).copy(origWidth = medium.width, origHeight = medium.height)
+      val still = previews.find(_.width == medium.width).map(_.copy(tag = ImageData.Tag.MediumPreview, origWidth = medium.width, origHeight = medium.height))
+      Seq(ImageAssetData(AssetId(), RConvId(), Seq(Some(preview), still, Some(medium)).flatten))
     }
   }
 }

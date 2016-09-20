@@ -25,4 +25,5 @@ trait GiphyResults extends CoreList[ImageAsset] with EventualReadiness
 trait Giphy {
   def random() : GiphyResults
   def search(searchQuery: String) : GiphyResults
+  def trending() : GiphyResults
 }
