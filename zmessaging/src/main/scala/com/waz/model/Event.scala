@@ -92,7 +92,7 @@ sealed trait ConversationEvent extends RConvEvent {
   val from: UserId
 }
 
-// events that change conversation list ordering (update lastEvent property)
+// events that may change conversation list ordering (update lastEvent property)
 sealed trait ConversationOrderEvent extends ConversationEvent
 
 // events that affect conversation state
