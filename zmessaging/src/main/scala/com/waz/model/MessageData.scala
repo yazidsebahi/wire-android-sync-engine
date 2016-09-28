@@ -22,7 +22,7 @@ import android.database.DatabaseUtils.queryNumEntries
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.waz.api
-import com.waz.api.Message
+import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.Message.Type._
 import com.waz.db.Col._
 import com.waz.db.Dao
@@ -54,7 +54,9 @@ case class MessageData(id: MessageId,
                        state: MessageState = Message.Status.SENT,
                        time: Instant = Instant.now,
                        localTime: Instant = MessageData.UnknownInstant,
-                       editTime: Instant = MessageData.UnknownInstant
+                       editTime: Instant = MessageData.UnknownInstant,
+                       ephemeral: EphemeralExpiration = EphemeralExpiration.NONE,
+                       expiryTime: Option[Instant] = None // local expiration time
                       ) {
 
   def getContent(index: Int) = {
@@ -203,7 +205,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
   }
 }
 
-object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant) => MessageData) {
+object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant, EphemeralExpiration, Option[Instant]) => MessageData) {
   val Empty = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""))
   val Deleted = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""), state = Message.Status.DELETED)
   val UnknownInstant = Instant.EPOCH
@@ -229,7 +231,9 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
         Message.Status.valueOf('state),
         Instant.ofEpochMilli(decodeLong('time)),
         Instant.ofEpochMilli(decodeLong('localTime)),
-        Instant.ofEpochMilli(decodeLong('editTime))
+        Instant.ofEpochMilli(decodeLong('editTime)),
+        EphemeralExpiration.getForMillis(decodeLong('ephemeral)),
+        decodeOptLong('expiryTime) map Instant.ofEpochMilli
       )
   }
 
@@ -250,6 +254,8 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       o.put("time", v.time.toEpochMilli)
       o.put("localTime", v.localTime.toEpochMilli)
       o.put("editTime", v.localTime.toEpochMilli)
+      o.put("ephemeral", v.ephemeral.milliseconds)
+      v.expiryTime foreach { t => o.put("expiryTime", t.toEpochMilli) }
     }
   }
 
@@ -300,10 +306,12 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     val Time = timestamp('time)(_.time)
     val LocalTime = timestamp('local_time)(_.localTime)
     val EditTime = timestamp('edit_time)(_.editTime)
+    val Ephemeral = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
+    val ExpiryTime = opt(timestamp('expiry_time))(_.expiryTime)
 
     override val idCol = Id
 
-    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime)
+    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime, Ephemeral, ExpiryTime)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
@@ -311,7 +319,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     }
 
     override def apply(implicit cursor: Cursor): MessageData =
-      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime)
+      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime, Ephemeral, ExpiryTime)
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(Conv, id)
 
@@ -362,6 +370,15 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def findMessagesFrom(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$conv' and ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
+
+    def findExpired(time: Instant = Instant.now)(implicit db: SQLiteDatabase) =
+      iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL and ${ExpiryTime.name} <= ${time.toEpochMilli}", null, null, null, s"${ExpiryTime.name} ASC"))
+
+    def findExpiring()(implicit db: SQLiteDatabase) =
+      iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL", null, null, null, s"${ExpiryTime.name} ASC"))
+
+    def findEphemeral(conv: ConvId)(implicit db: SQLiteDatabase) =
+      iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Ephemeral.name} IS NOT NULL and ${ExpiryTime.name} IS NULL", null, null, null, s"${Time.name} ASC"))
 
     private val IndexColumns = Array(Id.name, Time.name)
     def msgIndexCursor(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, IndexColumns, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")

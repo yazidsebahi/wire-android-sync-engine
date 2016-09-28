@@ -92,6 +92,10 @@ object ConversationDataMigration {
     }
   }
 
+  lazy val v76 = { implicit db: SQLiteDatabase =>
+    db.execSQL("ALTER TABLE Conversations ADD COLUMN ephemeral INTEGER DEFAULT 0")
+  }
+
   object Columns {
 
     object v63 {
