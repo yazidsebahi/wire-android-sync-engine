@@ -92,7 +92,8 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
       case ev @ UserConnectionEvent(_, _, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime =>
         NotificationData(s"$CONNECT_REQUEST-$userId", msg.getOrElse(""), ConvId(userId.str), userId, CONNECT_REQUEST, time.instant, userName = name)
       case ev @ UserConnectionEvent(_, _, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
-        NotificationData(s"$CONNECT_ACCEPTED-$userId", "", ConvId(userId.str), userId, CONNECT_ACCEPTED, time.instant, userName = name)
+        // this event doesn't generate corresponding message, we can not use event time for notification, as it would not be properly dismissed
+        NotificationData(s"$CONNECT_ACCEPTED-$userId", "", ConvId(userId.str), userId, CONNECT_ACCEPTED, Instant.EPOCH, userName = name)
       case ContactJoinEvent(_, userId, _) =>
         verbose("ContactJoinEvent")
         NotificationData(s"$CONTACT_JOIN-$userId", "", ConvId(userId.str), userId, CONTACT_JOIN, Instant.EPOCH)

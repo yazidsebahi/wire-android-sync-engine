@@ -87,6 +87,12 @@ object AESUtils {
               case e => throw e
             }
         }
+
+        private val skipBuffer = Array.ofDim[Byte](4096)
+
+        // skip is not supported in some android versions (as well as on some JVMs), so we just read required number of bytes instead
+        override def skip(n: Long): Long =
+          read(skipBuffer, 0, math.min(skipBuffer.length, n.toInt))
       }
     }
 }

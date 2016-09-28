@@ -52,4 +52,22 @@ class GiphyIntegrationSpec extends FeatureSpec with Matchers with ProvisionedApi
       (catSearch.size should be > 25).soon
     }
   }
+
+  feature("trending") {
+
+    lazy val results = api.getGiphy.trending()
+
+    scenario("search") {
+      (results should (be('ready) and have(size(25)))).soon
+
+      val img = results.head
+      img.data.versions.map(_.tag) shouldEqual Seq(Tag.Preview, Tag.MediumPreview, Tag.Medium)
+      img.shouldBeAnAnimatedGif
+    }
+
+    scenario("fetch next page on demand") {
+      results(23).shouldBeAnAnimatedGif
+      (results.size should be > 25).soon
+    }
+  }
 }

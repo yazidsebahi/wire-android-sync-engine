@@ -33,6 +33,8 @@ class Giphy(implicit ui: UiModule) extends com.waz.api.Giphy {
 
   override def search(searchQuery: String) = executeGiphyRequest(_.searchGiphyImage(searchQuery, _, _))
 
+  override def trending() = executeGiphyRequest(_.trending(_, _))
+
   private def executeGiphyRequest(f: (GiphyService, Int, Int) => CancellableFuture[Seq[ImageAssetData]]): GiphyResults = {
     def load(offset: Int) = ui.zms.flatMap(zms => f(zms.giphy, offset, GiphyResults.PageSize)).recover {
       case e: Exception =>

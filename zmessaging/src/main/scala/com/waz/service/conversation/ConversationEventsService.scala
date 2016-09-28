@@ -18,6 +18,7 @@
 package com.waz.service.conversation
 
 import com.waz.ZLog._
+import com.waz.model.GenericContent.{MsgDeleted, MsgEdit, MsgRecall, Reaction, Receipt}
 import com.waz.model._
 import com.waz.service.messages.MessagesService
 import com.waz.service.{EventPipeline, EventScheduler, UserService}
@@ -32,6 +33,7 @@ class ConversationEventsService(convs: ConversationsContentUpdater, messages: Me
   private implicit val tag: LogTag = logTagFor[ConversationEventsService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
 
+  val selfUserId = users.selfUserId
   val conversationEventsStage = EventScheduler.Stage[ConversationOrderEvent](processPushedConversationEvents)
 
   def handlePostConversationEvent(event: ConversationEvent) = {
@@ -50,22 +52,31 @@ class ConversationEventsService(convs: ConversationsContentUpdater, messages: Me
     )) map { _ => () }
   }
 
-  private def processPushedConversationEvents(convId: RConvId, es: Seq[ConversationOrderEvent]) =
+  private def processPushedConversationEvents(convId: RConvId, events: Seq[ConversationOrderEvent]) = {
+
+    // some generic message events should not update conversation order, will filter them out here
+    // TODO: we should reconsider this implementation completely, in future there are going to be more content types that should not affect ordering
+    // we may want to decouple lastEventTime and conv ordering, order should be based on last visible change / last message, events are no longer relevant
+    val es = events filter {
+      case GenericAssetEvent(_, _, _, _, GenericMessage(_, _ : MsgEdit | _ : MsgDeleted | _: MsgRecall | _: Receipt | _: Reaction), _, _) => false
+      case _ => true
+    }
+
     if (es.isEmpty) Future.successful(())
     else convs.processConvWithRemoteId(convId, retryAsync = true) { conv =>
-      users.withSelfUserFuture { selfUserId =>
-        verbose(s"updateLastEvent($conv, $es)")
-        val lastTime = es.maxBy(_.time).time
-        val fromSelf = es.filter(_.from == selfUserId)
-        val lastRead = if (fromSelf.isEmpty) None else Some(fromSelf.maxBy(_.time).time.instant)
+      verbose(s"updateLastEvent($conv, $es)")
+      val lastTime = es.maxBy(_.time).time
+      val fromSelf = es.filter(_.from == selfUserId)
+      val lastRead = if (fromSelf.isEmpty) None else Some(fromSelf.maxBy(_.time).time.instant)
 
-        for {
-          _ <- convs.updateLastEvent(conv.id, lastTime.instant)
-          _ <- lastRead match {
-            case None => Future successful None
-            case Some(time) => convs.updateConversationLastRead(conv.id, time)
-          }
-        } yield ()
-      }
+      for {
+        _ <- convs.updateLastEvent(conv.id, lastTime.instant)
+        _ <- lastRead match {
+          case None => Future successful None
+          case Some(time) => convs.updateConversationLastRead(conv.id, time)
+        }
+      } yield ()
     }
+  }
+
 }
