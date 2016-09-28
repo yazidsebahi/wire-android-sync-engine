@@ -236,6 +236,9 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           if (userId == selfUserId) Future successful Some(recall) // don't save system message for self user
           else content.addMessage(recall)
         }
+      case Some(msg) if msg.isEphemeral && convId.str == userId.str =>
+        // ephemeral messages will be recalled by receiver in 1-1 conv (once msg expires)
+        content.deleteOnUserRequest(Seq(msgId)) map { _ => None }
       case _ => Future successful None
     }
 

@@ -33,6 +33,8 @@ trait UiObservable extends com.waz.api.UiObservable {
 
   override def removeUpdateListener(listener: UpdateListener): Unit = updateListeners.remove(listener)
 
+  def getListenersCount = updateListeners.size
+
   protected def notifyChanged(): Unit = {
     Threading.assertUiThread()
     debug(s"notifyChanged, $this")

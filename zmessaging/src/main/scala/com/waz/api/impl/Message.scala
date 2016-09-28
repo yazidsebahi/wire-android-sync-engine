@@ -72,7 +72,18 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
     updateParts()
     notifyChanged()
     convId ! data.convId
+    notifyEphemeralRead()
   }
+
+
+  override def addUpdateListener(listener: UpdateListener): Unit = {
+    super.addUpdateListener(listener)
+    notifyEphemeralRead()
+  }
+
+  private def notifyEphemeralRead() =
+    if (data.ephemeral != EphemeralExpiration.NONE && data.expiryTime.isEmpty && getListenersCount > 0)
+      context.zms { _.ephemeral.onMessageRead(id) }
 
   private def updateParts(): Unit = parts = data.content.zipWithIndex.map { case (c, index) => new MessagePart(c, data, index) } (breakOut)
 

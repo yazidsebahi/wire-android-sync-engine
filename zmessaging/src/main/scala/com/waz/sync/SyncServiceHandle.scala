@@ -53,7 +53,7 @@ trait SyncServiceHandle {
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
   def postMessage(id: MessageId, conv: ConvId, editTime: Instant): Future[SyncId]
   def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId]
-  def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId): Future[SyncId]
+  def postRecalled(conv: ConvId, currentMsgId: MessageId, recalledMsgId: MessageId): Future[SyncId]
   def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable): Future[SyncId]
   def postLiking(id: ConvId, liking: Liking): Future[SyncId]
   def postConnection(user: UserId, name: String, message: String): Future[SyncId]
