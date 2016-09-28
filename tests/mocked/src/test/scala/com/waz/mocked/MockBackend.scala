@@ -27,7 +27,7 @@ import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.model.otr.{Client, ClientId}
+import com.waz.model.otr.Client
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.sync.client.EventsClient.LoadNotificationsResponse

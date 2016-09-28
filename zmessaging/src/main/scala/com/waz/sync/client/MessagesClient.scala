@@ -18,8 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
-import com.waz.model._
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, _}
 import com.waz.sync.client.OtrClient.{ClientMismatchResponse, EncryptedContent, MessageResponse}
 import com.waz.utils._
 import com.waz.znet.ContentEncoder.RequestContent
@@ -44,7 +43,7 @@ object MessagesClient {
   private implicit val tag: LogTag = logTagFor[MessagesClient]
 
   def ConvMessagesPath(conv: RConvId, ignoreMissing: Boolean, receivers: Option[Set[UserId]] = None) = {
-    val base = s"/conversations/$conv/otr/messages"
+    val base = s"/conversations/${conv.str}/otr/messages"
     if (ignoreMissing) s"$base?ignore_missing=true"
     else receivers.fold2(base, uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
   }

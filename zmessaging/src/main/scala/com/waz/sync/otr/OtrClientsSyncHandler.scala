@@ -24,8 +24,8 @@ import com.waz.api.ClientRegistrationState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
 import com.waz.content.{KeyValueStorage, OtrClientsStorage}
-import com.waz.model.otr.{Client, ClientId, Location, UserClients}
-import com.waz.model.{AccountId, UserId}
+import com.waz.model.otr.{Client, Location, UserClients}
+import com.waz.model.{AccountId, ClientId, UserId}
 import com.waz.service.otr._
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient

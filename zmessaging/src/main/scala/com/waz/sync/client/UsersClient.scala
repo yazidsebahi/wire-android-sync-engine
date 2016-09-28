@@ -70,7 +70,7 @@ class UsersClient(netClient: ZNetClient) {
     case Response(SuccessHttpStatus(), resp, _) => Right(())
   }
 
-  def usersPath(ids: Seq[UserId]) = Request.query(UsersPath, "ids" -> ids.mkString(","))
+  def usersPath(ids: Seq[UserId]) = Request.query(UsersPath, "ids" -> ids.map(_.str).mkString(","))
 }
 
 object UsersClient {

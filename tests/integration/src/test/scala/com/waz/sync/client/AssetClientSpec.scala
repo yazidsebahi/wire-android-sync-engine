@@ -24,8 +24,7 @@ import com.waz.api.ProvisionedApiSpec
 import com.waz.cache.LocalData
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.otr.ClientId
-import com.waz.model.{Mime, _}
+import com.waz.model.{ClientId, Mime, _}
 import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}
 import com.waz.service.downloads.DownloadRequest.ImageAssetRequest
 import com.waz.service.images.BitmapSignal

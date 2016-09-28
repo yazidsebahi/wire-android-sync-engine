@@ -276,18 +276,18 @@ object ConversationMemberData {
     def findForUser(userId: UserId)(implicit db: SQLiteDatabase) = iterating(find(UserId, userId))
 
     def findActiveForConv(convId: ConvId)(implicit db: SQLiteDatabase) = iterating {
-      db.query(table.name, null, s"${Active.name} = 1 AND ${ConvId.name} = '$convId'", null, null, null, null)
+      db.query(table.name, null, s"${Active.name} = 1 AND ${ConvId.name} = '${ConvId(convId)}'", null, null, null, null)
     }
 
     def findActiveForUser(userId: UserId)(implicit db: SQLiteDatabase) = iterating {
-      db.query(table.name, null, s"${Active.name} = 1 AND ${UserId.name} = '$userId'", null, null, null, null)
+      db.query(table.name, null, s"${Active.name} = 1 AND ${UserId.name} = '${UserId(userId)}'", null, null, null, null)
     }
 
-    def get(convId: ConvId, userId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, userId.toString), null, null, null))
+    def get(convId: ConvId, userId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.str, userId.str), null, null, null))
 
-    def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.mkString("'", "','", "'")})", Array(convId.toString), null, null, null))
+    def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.map(_.str).mkString("'", "','", "'")})", Array(convId.str), null, null, null))
 
-    def isActiveMember(convId: ConvId, user: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ? AND ${Active.name} = 1", Array(convId.toString, user.toString), null, null, null)).isDefined
+    def isActiveMember(convId: ConvId, user: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ? AND ${Active.name} = 1", Array(convId.str, user.str), null, null, null)).isDefined
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(ConvId, id)
   }

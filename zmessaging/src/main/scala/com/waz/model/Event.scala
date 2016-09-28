@@ -25,7 +25,7 @@ import com.waz.api.CauseForCallStateEvent
 import com.waz.model.ConversationEvent.ConversationEventDecoder
 import com.waz.model.Event.{CallProperties, EventDecoder}
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.otr.{Client, ClientId}
+import com.waz.model.otr.Client
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.OtrClient
 import com.waz.utils.JsonDecoder._
@@ -262,7 +262,7 @@ object Event {
         participants = if (js.has("participants") && !js.isNull("participants")) Some(callParticipants(js)) else None,
         device = if (js.has("self") && !js.isNull("self")) Some(callDeviceState(js.getJSONObject("self"))) else None,
         cause = cause(js),
-        sessionId = JsonDecoder.decodeOptId('session)(js, CallSessionId.Id),
+        sessionId = JsonDecoder.decodeOptId('session)(js, CallSessionId.IdGen),
         sequenceNumber = JsonDecoder.decodeOptCallSequenceNumber('sequence)(js))
     }
 

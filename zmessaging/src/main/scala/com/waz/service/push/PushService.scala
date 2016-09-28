@@ -22,8 +22,7 @@ import java.util.Date
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.content.KeyValueStorage
-import com.waz.model._
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, _}
 import com.waz.service.EventPipeline
 import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.sync.client.EventsClient.NotificationsResponse

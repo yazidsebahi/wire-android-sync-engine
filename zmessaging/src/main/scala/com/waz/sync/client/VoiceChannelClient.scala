@@ -60,7 +60,7 @@ object VoiceChannelClient {
 
   val causesKnownToBackend = Set(CauseForCallStateEvent.DISCONNECTED, CauseForCallStateEvent.INTERRUPTED, CauseForCallStateEvent.REQUESTED, CauseForCallStateEvent.GONE)
   
-  def callStatePath(conv: RConvId) = s"/conversations/$conv/call/state"
+  def callStatePath(conv: RConvId) = s"/conversations/${conv.str}/call/state"
 
   case class JoinCallFailed(label: String, maxJoined: Option[Int], memberCount: Option[Int], maxMembers: Option[Int])
 
@@ -82,7 +82,7 @@ object VoiceChannelClient {
       case JsonObjectResponse(js) =>
         Try {
           val s = js.getJSONObject("self")
-          (EventDecoder.callDeviceState(s), EventDecoder.callParticipants(js), EventDecoder.cause(js), JsonDecoder.decodeOptId('session)(js, CallSessionId.Id), JsonDecoder.decodeOptCallSequenceNumber('sequence)(js))
+          (EventDecoder.callDeviceState(s), EventDecoder.callParticipants(js), EventDecoder.cause(js), JsonDecoder.decodeOptId[CallSessionId]('session)(js, CallSessionId.IdGen), JsonDecoder.decodeOptCallSequenceNumber('sequence)(js))
         } match {
           case Success(res) => Some(res)
           case Failure(ex) => error("call state parsing failed", ex); None

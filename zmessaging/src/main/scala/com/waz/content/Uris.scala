@@ -43,11 +43,11 @@ object Uris {
   val ContactsUri = Uri.parse(s"$Base/contacts")
   val SpotifyUri = Uri.parse(s"$Base/spotify")
 
-  def ConversationUri(convId: ConvId): Uri = ConversationsUri.buildUpon().appendEncodedPath(convId.toString).build()
+  def ConversationUri(convId: ConvId): Uri = ConversationsUri.buildUpon().appendEncodedPath(convId.str).build()
 
   def InputStateIndicatorUri(id: ConvId) = ConversationUri(id).buildUpon().appendEncodedPath("input-state").build()
 
-  def MessagesUri(convId: ConvId): Uri = MessagesRootUri.buildUpon().appendEncodedPath(convId.toString).build()
+  def MessagesUri(convId: ConvId): Uri = MessagesRootUri.buildUpon().appendEncodedPath(convId.str).build()
 
   def ConvMembersUri(convId: ConvId): Uri = ConvMembersRootUri.buildUpon().appendEncodedPath(convId.str).build()
 

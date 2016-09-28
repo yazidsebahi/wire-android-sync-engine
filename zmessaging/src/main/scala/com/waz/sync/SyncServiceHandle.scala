@@ -20,8 +20,7 @@ package com.waz.sync
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model._
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, _}
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync._
 import com.waz.service._

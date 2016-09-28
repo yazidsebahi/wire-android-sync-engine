@@ -24,8 +24,7 @@ import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.GenericContent.LastRead
-import com.waz.model.otr.ClientId
-import com.waz.model.{ConvId, GenericMessage, RConvId, UserId}
+import com.waz.model._
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
 import com.waz.service._
 import com.waz.sync.otr.OtrSyncHandler

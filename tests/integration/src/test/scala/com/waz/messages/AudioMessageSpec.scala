@@ -23,8 +23,7 @@ import akka.pattern.ask
 import com.waz.api._
 import com.waz.api.impl.DoNothingAndProceed
 import com.waz.cache._
-import com.waz.model.otr.ClientId
-import com.waz.model.{Mime, AssetStatus => _, MessageContent => _, _}
+import com.waz.model.{ClientId, Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
 import com.waz.service
 import com.waz.service.assets.PreviewService

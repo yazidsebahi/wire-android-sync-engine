@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
-import com.waz.model.otr.ClientId
+import com.waz.model.ClientId
 import com.waz.service.push.GcmGlobalService.GcmSenderId
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}

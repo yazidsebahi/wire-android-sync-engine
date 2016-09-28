@@ -23,8 +23,7 @@ import com.waz.ZLog._
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.{ClientRegistrationState, CredentialsFactory, InitListener, LoginListener}
 import com.waz.client.RegistrationClient
-import com.waz.model._
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, _}
 import com.waz.service._
 import com.waz.service.push.GcmService.GcmState
 import com.waz.service.push.WebSocketClientService

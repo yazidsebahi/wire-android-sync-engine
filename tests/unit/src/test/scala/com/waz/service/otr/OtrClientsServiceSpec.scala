@@ -22,13 +22,12 @@ import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.model.otr.{Client, ClientId, SignalingKey}
+import com.waz.model.otr.{Client, SignalingKey}
 import com.waz.sync.client.OtrClient
 import com.waz.testutils.{MockUserModule, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -63,10 +62,6 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
   before {
     deleteResponse = Right(())
     deleteRequest = None
-  }
-
-  after {
-    ShadowLog.stream = null
   }
 
   feature("Clients listing") {
@@ -128,7 +123,6 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
   feature("Delete client") {
 
     scenario("Try deleting not existing client") {
-      ShadowLog.stream = System.out
       val res = service.otrClientsService.deleteClient(ClientId(), "passwd").futureValue
       res shouldBe 'left
       deleteRequest shouldBe empty

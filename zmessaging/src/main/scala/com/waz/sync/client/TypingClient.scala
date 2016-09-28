@@ -36,5 +36,5 @@ class TypingClient(netClient: ZNetClient) {
 }
 
 object TypingClient {
-  def typingPath(id: RConvId): String = s"/conversations/$id/typing"
+  def typingPath(id: RConvId): String = s"/conversations/${id.str}/typing"
 }

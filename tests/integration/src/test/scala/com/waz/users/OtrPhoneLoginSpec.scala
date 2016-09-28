@@ -23,8 +23,7 @@ import akka.pattern.ask
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
 import com.waz.login.RegistrationUtils
-import com.waz.model.AccountId
-import com.waz.model.otr.ClientId
+import com.waz.model.{AccountId, ClientId}
 import com.waz.provision.ActorMessage.{DeleteAllOtherDevices, Login, RegisterPhone, Successful}
 import com.waz.provision.EmailClientSuite
 import com.waz.testutils.Implicits._

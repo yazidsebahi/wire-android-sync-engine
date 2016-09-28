@@ -23,8 +23,8 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.Verification
 import com.waz.content.KeyValueStorage
-import com.waz.model.AccountId
-import com.waz.model.otr.{Client, ClientId, SignalingKey}
+import com.waz.model.{AccountId, ClientId}
+import com.waz.model.otr.{Client, SignalingKey}
 import com.waz.service.MetaDataService
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._

@@ -19,8 +19,8 @@ package com.waz.content
 
 import android.content.Context
 import com.waz.api.Verification
-import com.waz.model.UserId
-import com.waz.model.otr.{Client, ClientId, UserClients}
+import com.waz.model.{ClientId, UserId}
+import com.waz.model.otr.{Client, UserClients}
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.Signal

@@ -18,7 +18,6 @@
 package com.waz.model
 
 import com.waz.model.Event.EventDecoder
-import com.waz.model.otr.ClientId
 import com.waz.utils.JsonDecoder
 import org.json.JSONObject
 import org.scalatest._
@@ -93,8 +92,8 @@ object EventSpec {
        |  "connection": {
        |    "status": "sent",
        |    "conversation": "f660330f-f0e3-4511-8d15-71251f44ce32",
-       |    "to": "${otherUser.id}",
-       |    "from": "${selfUser.id}",
+       |    "to": "${otherUser.id.str}",
+       |    "from": "${selfUser.id.str}",
        |    "last_update": "2014-06-12T10:04:02.047Z",
        |    "message": "Hello Test"
        |  },

@@ -281,7 +281,7 @@ object VoiceChannelService {
 
     def stateEvent(id: ConvId, event: CallStateEvent): CallMetrics = {
       val self = event.device.fold("-") { d => s"self=${if (d.joined) "joined" else "idle"}" }
-      val parts = event.participants.fold("-") { p => s"joined=[${shortenedUserIds(p filter (_.joined) map (_.user))}]" }
+      val parts = event.participants.fold("-") { p => s"joined=[${p filter (_.joined) map (_.user) mkString ","}]" }
       val cause = event.cause.asJson
       log(s"stateEvent($id, $self, $parts, $cause)")
     }
@@ -290,7 +290,7 @@ object VoiceChannelService {
     def flowEvent(kind: String): CallMetrics = log(s"flowEvent($kind)")
     def flowRequest(req: String): CallMetrics = log(s"flowRequest($req)")
     def flowResponse(req: String): CallMetrics = log(s"flowResponse($req)")
-    def flowsEstablished(id: ConvId, ids: Set[UserId]): CallMetrics = log(s"flowEstablished($id, ${shortenedUserIds(ids)})")
+    def flowsEstablished(id: ConvId, ids: Set[UserId]): CallMetrics = log(s"flowEstablished($id, ${ids mkString ","})")
 
     private def log(msg: String, isJoin: Boolean = false): CallMetrics = {
       val now = Instant.now
@@ -298,7 +298,5 @@ object VoiceChannelService {
       verbose(f"Call Metrics: $joinDelta%7s ms since join, $lastDelta%7s ms since previous - $msg")
       copy(lastEvent = Some(now), lastJoin = if (isJoin) Some(now) else lastJoin)
     }
-
-    private def shortenedUserIds(ids: Set[UserId]): String = ids map (_.str take 4) mkString ","
   }
 }

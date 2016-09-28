@@ -19,8 +19,7 @@ package com.waz.model.sync
 
 import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{SearchQuery, _}
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, SearchQuery, _}
 import com.waz.sync.client.{ConversationsClient, UsersClient}
 import com.waz.sync.queue.SyncJobMerger._
 import com.waz.utils._
@@ -330,13 +329,13 @@ object SyncRequest {
     import JsonEncoder._
 
     override def apply(req: SyncRequest): JSONObject = JsonEncoder { o =>
-      def putId[A: Id](name: String, id: A) = o.put(name, implicitly[Id[A]].encode(id))
+      def putId[A <: Id: IdGen](name: String, id: A) = o.put(name, implicitly[IdGen[A]].encode(id))
 
       o.put("cmd", req.cmd.name)
 
       req match {
-        case user: RequestForUser => o.put("user", user.userId)
-        case conv: RequestForConversation => o.put("conv", conv.convId)
+        case user: RequestForUser => o.put("user", user.userId.str)
+        case conv: RequestForConversation => o.put("conv", conv.convId.str)
         case _ => ()
       }
 

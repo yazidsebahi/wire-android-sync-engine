@@ -129,7 +129,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getMessageType = data.msgType
 
-  override def getConversationId: String = data.convId.toString
+  override def getConversationId: String = data.convId.str
 
   override def getConversation: IConversation = context.convs.convById(data.convId)
 

@@ -17,38 +17,17 @@
  */
 package com.waz.model.otr
 
-import java.math.BigInteger
-
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.{Id, UserId}
+import com.waz.model._
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
-import scala.util.Random
-
-case class ClientId(str: String) {
-  def longId = new BigInteger(str, 16).longValue()
-  override def toString: String = str
-}
-
-object ClientId {
-
-  implicit val id: Id[ClientId] = new Id[ClientId] {
-    override def random(): ClientId = ClientId(Random.nextLong().toHexString)
-    override def decode(str: String): ClientId = ClientId(str)
-    override def encode(id: ClientId): String = id.str
-  }
-
-  def apply() = id.random()
-
-  def opt(id: String) = Option(id).filter(_.nonEmpty).map(ClientId(_))
-}
 
 case class Location(lon: Double, lat: Double, name: String) {
 

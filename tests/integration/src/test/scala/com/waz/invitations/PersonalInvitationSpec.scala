@@ -23,8 +23,7 @@ import com.waz.api.Invitations.InvitationDetailsCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.AccentColor
-import com.waz.model.otr.ClientId
-import com.waz.model.{Contact, _}
+import com.waz.model.{ClientId, Contact, _}
 import com.waz.provision.InternalBackendClient
 import com.waz.service
 import com.waz.service._

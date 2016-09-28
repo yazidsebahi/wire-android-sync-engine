@@ -18,8 +18,7 @@
 package com.waz.testutils
 
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model._
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, _}
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.sync._
 import org.threeten.bp.Instant

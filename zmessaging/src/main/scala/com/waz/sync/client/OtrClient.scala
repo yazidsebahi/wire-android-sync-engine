@@ -23,7 +23,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.model.otr._
-import com.waz.model.{AccountId, UserId}
+import com.waz.model.{AccountId, ClientId, UserId}
 import com.waz.utils._
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -130,11 +130,11 @@ object OtrClient {
 
   val clientsPath = "/clients"
   val prekeysPath = "/users/prekeys"
-  def clientPath(id: ClientId) = s"/clients/$id"
-  def clientKeyIdsPath(id: ClientId) = s"/clients/$id/prekeys"
-  def userPreKeysPath(user: UserId) = s"/users/$user/prekeys"
-  def userClientsPath(user: UserId) = s"/users/$user/clients"
-  def clientPreKeyPath(user: UserId, client: ClientId) = s"/users/$user/prekeys/$client"
+  def clientPath(id: ClientId) = s"/clients/${id.str}"
+  def clientKeyIdsPath(id: ClientId) = s"/clients/${id.str}/prekeys"
+  def userPreKeysPath(user: UserId) = s"/users/${user.str}/prekeys"
+  def userClientsPath(user: UserId) = s"/users/${user.str}/clients"
+  def clientPreKeyPath(user: UserId, client: ClientId) = s"/users/${user.str}/prekeys/${client.str}"
 
   import JsonDecoder._
 

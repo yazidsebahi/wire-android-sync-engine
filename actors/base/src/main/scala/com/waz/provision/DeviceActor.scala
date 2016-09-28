@@ -35,8 +35,7 @@ import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
-import com.waz.model.otr.ClientId
-import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
+import com.waz.model.{ClientId, ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
 import com.waz.service.PreferenceService.Pref
 import com.waz.service._
 import com.waz.service.assets.PreviewService

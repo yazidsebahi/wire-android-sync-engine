@@ -208,7 +208,7 @@ object UserData {
 
     override def getCursor(id: UserId)(implicit db: SQLiteDatabase): Cursor = find(Id, id)(db)
 
-    override def delete(id: UserId)(implicit db: SQLiteDatabase): Int = db.delete(table.name, Id.name + "=?", Array(id.toString))
+    override def delete(id: UserId)(implicit db: SQLiteDatabase): Int = db.delete(table.name, Id.name + "=?", Array(id.str))
 
     def findByConnectionStatus(status: Set[ConnectionStatus])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] = iterating(findInSet(Conn, status))
 

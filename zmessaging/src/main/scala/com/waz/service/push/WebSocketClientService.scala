@@ -22,7 +22,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import ImplicitTag._
 import com.waz.api.NetworkMode
-import com.waz.model.otr.ClientId
+import com.waz.model.ClientId
 import com.waz.service._
 import com.waz.service.push.GcmService.GcmState
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}

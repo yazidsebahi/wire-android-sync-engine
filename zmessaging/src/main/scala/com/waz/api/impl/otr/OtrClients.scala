@@ -25,8 +25,8 @@ import com.waz.api
 import com.waz.api.OtrClient.{DeleteCallback, ResetCallback}
 import com.waz.api.impl.{CoreList, ErrorResponse, UiObservable, UiSignal}
 import com.waz.api.{Location, OtrClientType, Verification, OtrClient => ApiClient}
-import com.waz.model.otr.{Client, ClientId}
-import com.waz.model.{AccountData, ConvId, UserId, otr}
+import com.waz.model.otr.Client
+import com.waz.model._
 import com.waz.service.AccountService
 import com.waz.service.otr.OtrService
 import com.waz.sync.SyncResult

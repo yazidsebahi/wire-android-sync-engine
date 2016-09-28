@@ -19,8 +19,7 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.otr.ClientId
-import com.waz.model.{ConversationEvent, Event, OtrEvent, Uid}
+import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
 import com.waz.utils.JsonDecoder._

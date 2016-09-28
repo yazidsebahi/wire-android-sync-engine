@@ -25,7 +25,6 @@ import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
 import com.waz.utils.{JsonDecoder, JsonEncoder}

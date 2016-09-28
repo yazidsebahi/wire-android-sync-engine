@@ -28,7 +28,7 @@ import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.KeyValueStorage
 import com.waz.model.UserData._
 import com.waz.model._
-import com.waz.model.otr.{Client, ClientId, SignalingKey}
+import com.waz.model.otr.{Client, SignalingKey}
 import com.waz.service
 import com.waz.service._
 import com.waz.service.call.FlowManagerService

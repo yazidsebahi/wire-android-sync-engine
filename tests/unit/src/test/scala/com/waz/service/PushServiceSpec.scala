@@ -21,8 +21,7 @@ import java.util.Date
 
 import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
-import com.waz.model._
-import com.waz.model.otr.ClientId
+import com.waz.model.{ClientId, _}
 import com.waz.service.push.WebSocketClientService
 import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.sync.client.{EventsClient, PushNotification}
