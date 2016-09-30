@@ -19,6 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.model.GenericContent.Reaction
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.ReactionsService
@@ -37,7 +38,7 @@ class ReactionsSyncHandler(client: MessagesClient, convs: ConversationsContentUp
   def postReaction(id: ConvId, liking: Liking): Future[SyncResult] =
     convs.convById(id) flatMap {
       case Some(conv) =>
-        otrSync.postOtrMessage(conv, GenericMessage(Uid(), (liking.action, liking.message))) flatMap {
+        otrSync.postOtrMessage(conv, GenericMessage(Uid(), Reaction(liking.message, liking.action))) flatMap {
           case Right(time) =>
             service.updateLocalReaction(liking, time.instant).map(_ => SyncResult.Success)
           case Left(error) =>
