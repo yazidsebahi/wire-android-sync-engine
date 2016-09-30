@@ -168,7 +168,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def addLikingEvent(convId: RConvId, messageId: MessageId, action: Liking.Action, time: Timeline = DefaultTimeline, from: UserId = selfUserId)(implicit p: PushBehaviour) =
-    addEvent(GenericMessageEvent(Uid(), convId, time.next(), from, GenericMessage(Uid(), (action, messageId))))
+    addEvent(GenericMessageEvent(Uid(), convId, time.next(), from, GenericMessage(Uid(), Reaction(messageId, action))))
 
   def addEvent(ev: ConversationEvent)(implicit p: PushBehaviour): ev.type = {
     require (ev match {

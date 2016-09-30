@@ -34,7 +34,9 @@ class ConversationEventsService(convs: ConversationsContentUpdater, messages: Me
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
 
   val selfUserId = users.selfUserId
-  val conversationEventsStage = EventScheduler.Stage[ConversationOrderEvent](processPushedConversationEvents)
+  val conversationEventsStage = EventScheduler.Stage[ConversationOrderEvent] { (convId, es) =>
+    processPushedConversationEvents(convId, filterConvOrderEvents(es))
+  }
 
   def handlePostConversationEvent(event: ConversationEvent) = {
     debug(s"handlePostConversationEvent($event)")
@@ -52,16 +54,16 @@ class ConversationEventsService(convs: ConversationsContentUpdater, messages: Me
     )) map { _ => () }
   }
 
-  private def processPushedConversationEvents(convId: RConvId, events: Seq[ConversationOrderEvent]) = {
-
-    // some generic message events should not update conversation order, will filter them out here
-    // TODO: we should reconsider this implementation completely, in future there are going to be more content types that should not affect ordering
-    // we may want to decouple lastEventTime and conv ordering, order should be based on last visible change / last message, events are no longer relevant
-    val es = events filter {
-      case GenericAssetEvent(_, _, _, _, GenericMessage(_, _ : MsgEdit | _ : MsgDeleted | _: MsgRecall | _: Receipt | _: Reaction), _, _) => false
+  // some generic message events should not update conversation order, will filter them out here
+  // TODO: we should reconsider this implementation completely, in future there are going to be more content types that should not affect ordering
+  // we may want to decouple lastEventTime and conv ordering, order should be based on last visible change / last message, events are no longer relevant
+  private[service] def filterConvOrderEvents(events: Seq[ConversationOrderEvent]) =
+    events filter {
+      case GenericMessageEvent(_, _, _, _, GenericMessage(_, _ : MsgEdit | _ : MsgDeleted | _: MsgRecall | _: Receipt | _: Reaction)) => false
       case _ => true
     }
 
+  private def processPushedConversationEvents(convId: RConvId, es: Seq[ConversationOrderEvent]) =
     if (es.isEmpty) Future.successful(())
     else convs.processConvWithRemoteId(convId, retryAsync = true) { conv =>
       verbose(s"updateLastEvent($conv, $es)")
@@ -77,6 +79,4 @@ class ConversationEventsService(convs: ConversationsContentUpdater, messages: Me
         }
       } yield ()
     }
-  }
-
 }
