@@ -377,24 +377,25 @@ object GenericContent {
     }
   }
 
-  type Reaction = (Liking.Action, MessageId)
+  type Reaction = Messages.Reaction
   implicit object Reaction extends GenericContent[Reaction] {
 
-    override def set(msg: GenericMessage) = {
-      case (l, id) => msg.setReaction(returning(new Messages.Reaction()) { r =>
-        r.emoji = l match {
-          case Liking.Action.Like   => heavyBlackHeart
-          case Liking.Action.Unlike => ""
-        }
-        r.messageId = id.str
-      })
+    override def set(msg: GenericMessage) = msg.setReaction
+
+    val HeavyBlackHeart = "\u2764\uFE0F"
+
+    def apply(msg: MessageId, action: Liking.Action): Reaction = returning(new Messages.Reaction) { proto =>
+      proto.emoji = action match {
+        case Liking.Action.Like   => HeavyBlackHeart
+        case Liking.Action.Unlike => ""
+      }
+      proto.messageId = msg.str
     }
 
-    val heavyBlackHeart = "\u2764\uFE0F"
-
-    def apply(r: String, id: String): Reaction = (if (r == heavyBlackHeart) Liking.Action.Like else Liking.Action.Unlike, MessageId(id))
-
-    def unapply(proto: Messages.Reaction): Option[Reaction] = Some(Reaction(proto.emoji, proto.messageId))
+    def unapply(proto: Messages.Reaction): Option[(MessageId, Liking.Action)] = Some((MessageId(proto.messageId), proto.emoji match {
+      case HeavyBlackHeart => Liking.Action.Like
+      case _               => Liking.Action.Unlike
+    }))
   }
 
   type Knock = Messages.Knock
