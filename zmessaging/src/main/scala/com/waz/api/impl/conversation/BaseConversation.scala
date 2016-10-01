@@ -85,11 +85,12 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 
   def getUsers = ui.cached(Uris.ConvMembersUri(id), new MembersList(id))
 
-  override def isEphemeral: Boolean = ???
+  override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
 
-  override def getEphemeralExpiration: EphemeralExpiration = ???
+  override def getEphemeralExpiration = data.ephemeral
 
-  override def setEphemeralExpiration(expiration: EphemeralExpiration): Unit = ???
+  override def setEphemeralExpiration(expiration: EphemeralExpiration): Unit =
+    ui.zms.flatMapFuture { _.convsUi.setEphemeral(id, expiration) }
 
   override def isMemberOfConversation: Boolean = data.activeMember
 

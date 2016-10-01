@@ -180,7 +180,7 @@ public interface Message extends UiObservable, Parcelable {
 
     /**
      * Exact time when the message will expire, could be in past if message already expired.
-     * @return Instant.MAX if message is not ephemeral
+     * @return Instant.MAX if message is not ephemeral or counter was not yet started.
      */
     Instant getExpirationTime();
 

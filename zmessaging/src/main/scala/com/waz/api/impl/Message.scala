@@ -101,11 +101,11 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getLocation: Location = data.location.orNull
 
-  override def isEphemeral: Boolean = ???
+  override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
 
-  override def getEphemeralExpiration: EphemeralExpiration = ???
+  override def getEphemeralExpiration = data.ephemeral
 
-  override def getExpirationTime: Instant = ???
+  override def getExpirationTime: Instant = data.expiryTime.getOrElse(Instant.MAX)
 
   override def getImage = getImage(0, 0)
 

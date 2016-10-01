@@ -22,7 +22,7 @@ import com.waz.api
 import com.waz.api.MessageContent.Asset.ErrorHandler
 import com.waz.api.MessageContent.Text
 import com.waz.api.impl._
-import com.waz.api.{ImageAssetFactory, Message, NetworkMode}
+import com.waz.api.{EphemeralExpiration, ImageAssetFactory, Message, NetworkMode}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Location, MsgEdit}
@@ -385,6 +385,9 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
       case _ => None
     }
   }
+
+  def setEphemeral(id: ConvId, expiration: EphemeralExpiration) =
+    convStorage.update(id, _.copy(ephemeral = expiration))
 }
 
 object ConversationsUiService {
