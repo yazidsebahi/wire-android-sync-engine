@@ -38,6 +38,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   require(id == data.id)
 
   private var initials = computeInitials(data.name)
+  private var firstContact = Option.empty[api.ContactDetails]
 
   // XXX: listen to storage directly if no ZMessaging is available
   // this is needed for Self.getUser to work, UI accesses it before zms is fully logged in
@@ -47,6 +48,10 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
       case Some(zms) => zms.users.userSignal(id)
     }
   } { set }
+
+  addLoader(_.contacts.contactForUser(id)) { cont =>
+    firstContact = cont.map(c => ui.contactDetails.getOrElseUpdate(c.id, new ContactDetails(c, false)(ui)))
+  }
 
   def set(d: UserData): Unit = {
     require(this.id == d.id)
@@ -120,6 +125,10 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def getCommonConnections = ui.cached(Uris.CommonConnectionsUri(id), new CommonConnections(id)(ui))
 
+  override def isContact: Boolean = firstContact.nonEmpty
+
+  override def getFirstContact: api.ContactDetails = firstContact.orNull
+
   override def equals(other: Any): Boolean = other match {
     case other: User => other.id == id
     case _ => false
@@ -167,4 +176,6 @@ object EmptyUser extends com.waz.api.User {
   override def getVerified: Verification = Verification.UNKNOWN
   override def isDeleted: Boolean = false
   override def isAutoConnection: Boolean = false
+  override def isContact: Boolean = false
+  override def getFirstContact: api.ContactDetails = null
 }
