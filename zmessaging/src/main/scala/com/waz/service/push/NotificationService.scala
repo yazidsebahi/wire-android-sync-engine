@@ -200,7 +200,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     verbose(s"removeRead(lastUiVisibleTime: $uiTime, last read for conv: ${fCol(lastRead)})")
 
     def isRead(notification: NotificationData) =
-      (notification.serverTime == Instant.EPOCH && uiTime.isAfter(notification.localTime)) || lastRead.get(notification.conv).exists(!_.isBefore(notification.serverTime))
+      uiTime.isAfter(notification.localTime) || lastRead.get(notification.conv).exists(!_.isBefore(notification.serverTime))
 
     storage.notifications.head flatMap { data =>
       verbose(s"notifications.head contains: ${fCol(data)}")
