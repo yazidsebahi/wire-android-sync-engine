@@ -17,10 +17,10 @@
  */
 package com.waz.content
 
-sealed trait ContentChange[+T]
+sealed trait ContentChange[K, +V]
 
 object ContentChange {
-  case class Added[T](item: T) extends ContentChange[T]
-  case class Removed[T](item: T) extends ContentChange[T]
-  case class Updated[T](prev: T, current: T) extends ContentChange[T]
+  case class Added  [K, V] (id: K, item: V)             extends ContentChange[K, V]
+  case class Updated[K, V] (id: K, prev: V, current: V) extends ContentChange[K, V]
+  case class Removed[K, V] (id: K)                      extends ContentChange[K, V]
 }

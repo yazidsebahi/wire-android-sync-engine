@@ -20,7 +20,7 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.content.ContentChange.{Added, Removed, Updated}
 import com.waz.content.{ContentChange, ConversationStorage}
-import com.waz.model.ConversationData
+import com.waz.model.{ConvId, ConversationData}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events
@@ -52,18 +52,18 @@ object ConversationsNotifier {
   val ConversationListOrdering = Ordering.by((c : ConversationData) => (c.convType == ConversationType.Self, c.hasVoice, c.lastEventTime)).reverse
   val ArchivedListOrdering = Ordering.by((c: ConversationData) => c.lastEventTime).reverse
 
-  class ConversationEventsEventStream(convs: ConversationStorage, filter: ConversationData => Boolean) extends events.EventStream[ContentChange[ConversationData]] {
+  class ConversationEventsEventStream(convs: ConversationStorage, filter: ConversationData => Boolean) extends events.EventStream[ContentChange[ConvId, _ <: ConversationData]] {
 
     import com.waz.utils.events.EventContext.Implicits.global
     @volatile var observers = Seq.empty[Subscription]
 
     override protected def onWire(): Unit = {
       observers = Seq(
-        convs.convAdded(conv => if (filter(conv)) publish(Added(conv))),
-        convs.convDeleted(conv => if (filter(conv)) publish(Removed(conv))),
+        convs.convAdded(conv => if (filter(conv)) publish(Added(conv.id, conv))),
+        convs.convDeleted(conv => if (filter(conv)) publish(Removed(conv.id))),
         convs.convUpdated { case (prev, conv) =>
           if (filter(conv) || filter(prev))
-            publish(Updated(prev, conv))
+            publish(Updated(prev.id, prev, conv))
         }
       )
     }
@@ -74,7 +74,6 @@ object ConversationsNotifier {
 
   class SelfConversationSignal(convs: ConversationStorage, getSelf: => Future[Option[ConversationData]]) extends Signal[Option[ConversationData]] {
 
-    import com.waz.threading.Threading.Implicits.Background
     import com.waz.utils.events.EventContext.Implicits.global
 
     implicit val tag: LogTag = logTagFor[SelfConversationSignal]
@@ -86,9 +85,9 @@ object ConversationsNotifier {
 
     override protected def onWire(): Unit = {
       observer = Some(stream {
-        case Added(conv) => publish(Some(conv))
-        case Removed(conv) => update()
-        case Updated(prev, conv) =>
+        case Added(_, conv) => publish(Some(conv))
+        case Removed(_) => update()
+        case Updated(_, prev, conv) =>
           if (isSelf(conv)) publish(Some(conv))
           else if (isSelf(prev)) update()
       })

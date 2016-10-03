@@ -21,6 +21,8 @@ import java.math.BigInteger
 import java.nio.ByteBuffer
 import java.util.UUID
 
+import com.waz.api.NotificationsHandler.NotificationType
+import com.waz.api.NotificationsHandler.NotificationType._
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
@@ -244,4 +246,22 @@ object ClientId {
   def apply() = id.random()
 
   def opt(id: String) = Option(id).filter(_.nonEmpty).map(ClientId(_))
+}
+
+//NotificationId
+case class NotId(str: String) extends BaseId(str)
+
+object NotId {
+
+  implicit val id: IdGen[NotId] = new IdGen[NotId] {
+    override def random(): NotId = NotId(Random.nextLong().toHexString)
+    override def decode(str: String): NotId = NotId(str)
+  }
+
+  def apply(): NotId = id.random()
+  def apply(tpe: NotificationType, userId: UserId): NotId = NotId(s"$tpe-${userId.str}")
+  def apply(id: (MessageId, UserId)): NotId = NotId(s"$LIKE-${id._1.str}-${id._2.str}")
+  def apply(msgId: MessageId): NotId = NotId(msgId.str)
+  def apply(s: Symbol): NotId = NotId(s.toString)
+
 }
