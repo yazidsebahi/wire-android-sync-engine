@@ -51,6 +51,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   addLoader(_.contacts.contactForUser(id)) { cont =>
     firstContact = cont.map(c => ui.contactDetails.getOrElseUpdate(c.id, new ContactDetails(c, false)(ui)))
+    notifyChanged()
   }
 
   def set(d: UserData): Unit = {
