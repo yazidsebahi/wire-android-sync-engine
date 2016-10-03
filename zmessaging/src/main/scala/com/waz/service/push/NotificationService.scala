@@ -149,12 +149,12 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
   }
 
   private def addForIncoming(msgs: Seq[MessageData]) = {
-    verbose(s"addForIncoming($msgs)")
+    verbose(s"addForIncoming(${fCol(msgs)}")
     lastReadMap.head map { lastRead =>
-      verbose(s"lastRead: $lastRead")
+      verbose(s"lastRead: ${fCol(lastRead)}")
       msgs.filter(m => m.userId != selfUserId && lastRead.get(m.convId).forall(_.isBefore(m.time)) && m.localTime != Instant.EPOCH)
     } flatMap { ms =>
-      verbose(s"filtered: $ms")
+      verbose(s"filtered: ${fCol(ms)}")
       storage.insert(ms flatMap notification)
     }
   }
@@ -225,16 +225,17 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     } yield ()
 
   private def removeReadNotifications(lastRead: Map[ConvId, Instant], uiTime: Instant) = {
-    verbose(s"removeRead($lastRead, $uiTime)")
+    verbose(s"removeRead(lastUiVisibleTime: $uiTime, last read for conv: ${fCol(lastRead)})")
 
     def isRead(notification: NotificationData) =
       (notification.serverTime == Instant.EPOCH && uiTime.isAfter(notification.localTime)) || lastRead.get(notification.conv).exists(!_.isBefore(notification.serverTime))
 
     storage.notifications.head flatMap { data =>
+      verbose(s"notifications.head contains: ${fCol(data)}")
       val toRemove = data collect {
         case (id, notification) if isRead(notification) => id
       }
-      verbose(s"toRemove on lastRead change: $toRemove")
+      verbose(s"toRemove on lastRead change: ${fCol(toRemove.toSeq)}")
       storage.remove(toRemove)
     }
   }
@@ -246,7 +247,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
         // filter notifications for unread messages in un-muted conversations
         n.serverTime == Instant.EPOCH || lastRead.get(n.conv).forall(_.isBefore(n.serverTime))
       })
-      _ = verbose(s"inserted: $res")
+      _ = verbose(s"inserted: ${fCol(res)}")
     } yield res
 
   private def createNotifications(ns: Seq[NotificationData]): Future[Seq[NotificationInfo]] = {
