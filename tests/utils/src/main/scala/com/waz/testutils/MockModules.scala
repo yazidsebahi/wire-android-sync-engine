@@ -25,7 +25,7 @@ import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.model.otr.Client
+import com.waz.model.otr.{Client, ClientId}
 import com.waz.service._
 import com.waz.service.push.GcmService.GcmState
 import com.waz.service.push.WebSocketClientService

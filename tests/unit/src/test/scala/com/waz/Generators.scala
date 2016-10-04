@@ -31,8 +31,9 @@ import com.waz.model.GenericContent.Text
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserData.ConnectionStatus.{Accepted, PendingFromOther}
-import com.waz.model.{ClientId, _}
+import com.waz.model._
 import com.waz.model.messages.media._
+import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncRequest._
 import com.waz.model.sync.{SyncJob, SyncRequest}
 import com.waz.service.SearchKey

@@ -18,11 +18,12 @@
 package com.waz.sync.client
 
 import android.util.Base64
-import com.waz.model.{ClientId, UserId}
+import com.waz.model.UserId
+import com.waz.model.otr.ClientId
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient._
 import com.waz.utils._
-import com.waz.znet.ContentEncoder.{BinaryRequestContent, GzippedRequestContent, JsonContentEncoder}
+import com.waz.znet.ContentEncoder.{GzippedRequestContent, BinaryRequestContent, JsonContentEncoder}
 import com.waz.znet.JsonObjectResponse
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog

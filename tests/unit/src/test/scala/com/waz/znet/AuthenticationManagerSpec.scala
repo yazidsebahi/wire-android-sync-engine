@@ -78,7 +78,7 @@ class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with Befor
     }
   })
 
-  def loginReqJson = s"""{"email":"$email","label":"${userId.str}","password":"$password"}"""
+  def loginReqJson = s"""{"email":"$email","label":"$userId","password":"$password"}"""
 
   def verifyLoginRequested() =
     verify(postRequestedFor(urlEqualTo("/login?persist=true"))

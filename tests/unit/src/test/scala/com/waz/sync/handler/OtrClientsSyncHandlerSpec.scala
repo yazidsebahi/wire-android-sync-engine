@@ -19,8 +19,8 @@ package com.waz.sync.handler
 
 import com.waz.RobolectricUtils
 import com.waz.api.Verification
-import com.waz.model.otr.{Client, SignalingKey}
-import com.waz.model.{AccountId, ClientId, UserData, UserId}
+import com.waz.model.otr.{Client, ClientId, SignalingKey}
+import com.waz.model.{AccountId, UserData, UserId}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient
 import com.waz.testutils.Matchers._

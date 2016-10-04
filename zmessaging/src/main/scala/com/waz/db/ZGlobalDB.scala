@@ -27,7 +27,8 @@ import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.Migrations
 import com.waz.db.migrate.{TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
-import com.waz.model.{AccountId, ClientId, UserId}
+import com.waz.model.otr.ClientId
+import com.waz.model.{AccountId, UserId}
 import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, Resource}
 import com.waz.znet.AuthenticationManager.Token
 

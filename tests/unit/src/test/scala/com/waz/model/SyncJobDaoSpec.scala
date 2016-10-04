@@ -21,6 +21,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.db.ZMessagingDB
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.UserData.ConnectionStatus
+import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncJob.SyncJobDao
 import com.waz.model.sync.SyncRequest._
 import com.waz.model.sync.{SyncJob, SyncRequest}

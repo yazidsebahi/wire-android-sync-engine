@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.otr.{Client, UserClients}
+import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.service.otr.OtrService
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.client.MessagesClient.OtrMessage

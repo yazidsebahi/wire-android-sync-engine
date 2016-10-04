@@ -141,7 +141,7 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       convo2 = getConv(convId)
 
       convo1 should be(convo2)
-      convo1.get.id should be(ConvId(user.id.str))
+      convo1.get.id should be(ConvId(user.id.toString))
       convo1.get.remoteId should be(convId)
       convo1.get.convType should be(ConversationData.ConversationType.WaitForConnection)
 
@@ -178,7 +178,7 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
       convo = getConv(convId)
       convo.get.remoteId should be(convId)
-      convo.get.id should be(ConvId(user.id.str))
+      convo.get.id should be(ConvId(user.id.toString))
       convo.get.convType shouldEqual ConversationType.WaitForConnection
 
       Then("otherUsers connection status should be set to sent")
@@ -214,7 +214,7 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       val convo2 = getConv(convId)
 
       convo1 should be(convo2)
-      convo1.get.id should be(ConvId(user.id.str))
+      convo1.get.id should be(ConvId(user.id.toString))
       convo1.get.remoteId should be(convId)
       convo1.get.convType should be(ConversationData.ConversationType.WaitForConnection)
 

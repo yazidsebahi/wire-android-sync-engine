@@ -26,7 +26,7 @@ import com.waz.api.Verification
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.otr.{Client, SignalingKey}
+import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.testutils._
 import com.waz.testutils.Implicits._
 import com.waz.threading.Threading.Implicits.Background

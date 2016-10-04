@@ -36,7 +36,7 @@ class CursorIteratorSpec extends FeatureSpec with Matchers with GeneratorDrivenP
   scenario("single element cursor") {
     val id = Uid()
     val c = newCursor
-    c.addRow(Array[AnyRef](id.str, "item1", Integer.valueOf(1)))
+    c.addRow(Array[AnyRef](id, "item1", Integer.valueOf(1)))
 
     new CursorIterator[TestItem](c).toList should be(List(TestItem(id, "item1", 1)))
   }
@@ -44,7 +44,7 @@ class CursorIteratorSpec extends FeatureSpec with Matchers with GeneratorDrivenP
   scenario("list random data") {
     forAll { items: List[TestItem] =>
       val cursor = newCursor
-      items foreach { i => cursor.addRow(Array[AnyRef](i.id.str, i.str, Integer.valueOf(i.int))) }
+      items foreach { i => cursor.addRow(Array[AnyRef](i.id, i.str, Integer.valueOf(i.int))) }
 
       new CursorIterator[TestItem](cursor).toList should be(items)
     }

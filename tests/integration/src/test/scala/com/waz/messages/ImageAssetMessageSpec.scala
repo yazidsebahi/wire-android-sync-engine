@@ -24,7 +24,8 @@ import com.waz.api.MessageContent.Image
 import com.waz.api._
 import com.waz.api.impl.LocalImageAsset
 import com.waz.cache.{CacheEntry, LocalData}
-import com.waz.model.{ClientId, RConvId}
+import com.waz.model.RConvId
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
 import com.waz.service._
 import com.waz.sync.client.AssetClient

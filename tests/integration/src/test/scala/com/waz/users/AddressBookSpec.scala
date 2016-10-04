@@ -24,7 +24,8 @@ import com.waz.api.impl.{AccentColor, ErrorResponse}
 import com.waz.api.{ApiSpec, CredentialsFactory, Self}
 import com.waz.client.RegistrationClient
 import com.waz.model.AddressBook.ContactHashes
-import com.waz.model.{ClientId, _}
+import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.provision.{EmailClientSuite, UserProvisioner}
 import com.waz.service.{SearchKey, UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.sync.client.UserSearchClient.UserSearchEntry

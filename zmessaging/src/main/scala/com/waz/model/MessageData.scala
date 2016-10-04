@@ -298,7 +298,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     val Protos = protoSeq[GenericMessage, Seq, Vector]('protos).apply(_.protos)
     val ContentSize = int('content_size)(_.content.size)
     val FirstMessage = bool('first_msg)(_.firstMessage)
-    val Members = set[UserId]('members, _.map(_.str).mkString(","), _.split(",").filter(!_.isEmpty).map(UserId(_))(breakOut))(_.members)
+    val Members = set[UserId]('members, _.mkString(","), _.split(",").filter(!_.isEmpty).map(UserId(_))(breakOut))(_.members)
     val Recipient = opt(id[UserId]('recipient))(_.recipient)
     val Email = opt(text('email))(_.email)
     val Name = opt(text('name))(_.name)
@@ -315,7 +315,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
-      db.execSQL(s"CREATE INDEX IF NOT EXISTS Messages_conv_time on Messages ( ${Conv.name}, ${Time.name})")
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS Messages_conv_time on Messages ( conv_id, time)")
     }
 
     override def apply(implicit cursor: Cursor): MessageData =
@@ -325,11 +325,11 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def deleteUpTo(id: ConvId, upTo: Instant)(implicit db: SQLiteDatabase) = db.delete(table.name, s"${Conv.name} = '${id.str}' AND ${Time.name} <= ${Time(upTo)}", null)
 
-    def first(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}'", null, null, null, s"${Time.name} ASC", "1"))
+    def first(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC", "1"))
 
-    def last(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}'", null, null, null, s"${Time.name} DESC", "1"))
+    def last(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} DESC", "1"))
 
-    def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' AND ${State.name} = '${Message.Status.SENT.name}'", null, null, null, s"${Time.name} DESC", "1"))
+    def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${State.name} = '${Message.Status.SENT.name}'", null, null, null, s"${Time.name} DESC", "1"))
 
     def lastFromSelf(conv: ConvId, selfUserId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' AND ${User.name} = '${User(selfUserId)}' AND $userContentPredicate", null, null, null, s"${Time.name} DESC", "1"))
 
@@ -338,11 +338,11 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     private val userContentPredicate = isUserContent.map(t => s"${Type.name} = '${Type(t)}'").mkString("(", " OR ", ")")
 
     def lastIncomingKnock(convId: ConvId, selfUser: UserId)(implicit db: SQLiteDatabase): Option[MessageData] = single(
-      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ? AND ${User.name} <> ?", Array(convId.str, Type(Message.Type.KNOCK), selfUser.str), null, null, s"${Time.name} DESC", "1")
+      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ? AND ${User.name} <> ?", Array(convId.toString, Type(Message.Type.KNOCK), selfUser.str), null, null, s"${Time.name} DESC", "1")
     )
 
     def lastMissedCall(convId: ConvId)(implicit db: SQLiteDatabase): Option[MessageData] = single(
-      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ?", Array(convId.str, Type(Message.Type.MISSED_CALL)), null, null, s"${Time.name} DESC", "1")
+      db.query(table.name, null, s"${Conv.name} = ? AND ${Type.name} = ?", Array(convId.toString, Type(Message.Type.MISSED_CALL)), null, null, s"${Time.name} DESC", "1")
     )
 
     private val MessageEntryColumns = Array(Id.name, User.name, Type.name, State.name, ContentSize.name)
@@ -351,25 +351,25 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     }
 
     def countMessages(convId: ConvId, p: MessageEntry => Boolean)(implicit db: SQLiteDatabase): Int =
-      iteratingWithReader(MessageEntryReader)(db.query(table.name, MessageEntryColumns, s"${Conv.name} = ?", Array(convId.str), null, null, null)).acquire(_ count p)
+      iteratingWithReader(MessageEntryReader)(db.query(table.name, MessageEntryColumns, s"${Conv.name} = ?", Array(convId.toString), null, null, null)).acquire(_ count p)
 
     def countNewer(convId: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
-      queryNumEntries(db, table.name, s"${Conv.name} = '${Conv(convId)}' AND ${Time.name} > ${time.toEpochMilli}")
+      queryNumEntries(db, table.name, s"${Conv.name} = '${convId.str}' AND ${Time.name} > ${time.toEpochMilli}")
 
-    def countFailed(convId: ConvId)(implicit db: SQLiteDatabase) = queryNumEntries(db, table.name, s"${Conv.name} = '${Conv(convId)}' AND ${State.name} = '${Message.Status.FAILED}'")
+    def countFailed(convId: ConvId)(implicit db: SQLiteDatabase) = queryNumEntries(db, table.name, s"${Conv.name} = '${convId.str}' AND ${State.name} = '${Message.Status.FAILED}'")
 
-    def listLocalMessages(convId: ConvId)(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"${Conv.name} = '${Conv(convId)}' AND ${State.name} in ('${Message.Status.DEFAULT}', '${Message.Status.PENDING}', '${Message.Status.FAILED}')", null, null, null, s"${Time.name} ASC"))
+    def listLocalMessages(convId: ConvId)(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"${Conv.name} = '$convId' AND ${State.name} in ('${Message.Status.DEFAULT}', '${Message.Status.PENDING}', '${Message.Status.FAILED}')", null, null, null, s"${Time.name} ASC"))
 
     def findLocalFrom(convId: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
-      iterating(db.query(table.name, null, s"${Conv.name} = '${Conv(convId)}' AND ${State.name} in ('${Message.Status.DEFAULT}', '${Message.Status.PENDING}', '${Message.Status.FAILED}') AND ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
+      iterating(db.query(table.name, null, s"${Conv.name} = '$convId' AND ${State.name} in ('${Message.Status.DEFAULT}', '${Message.Status.PENDING}', '${Message.Status.FAILED}') AND ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
 
     def findLatestUpTo(convId: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
-      single(db.query(table.name, null, s"${Conv.name} = '${Conv(convId)}' AND ${Time.name} < ${time.toEpochMilli}", null, null, null, s"${Time.name} DESC", "1"))
+      single(db.query(table.name, null, s"${Conv.name} = '$convId' AND ${Time.name} < ${time.toEpochMilli}", null, null, null, s"${Time.name} DESC", "1"))
 
-    def findMessages(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}'", null, null, null, s"${Time.name} ASC")
+    def findMessages(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")
 
     def findMessagesFrom(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
-      iterating(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' and ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
+      iterating(db.query(table.name, null, s"${Conv.name} = '$conv' and ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
 
     def findExpired(time: Instant = Instant.now)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL and ${ExpiryTime.name} <= ${time.toEpochMilli}", null, null, null, s"${ExpiryTime.name} ASC"))
@@ -381,7 +381,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Ephemeral.name} IS NOT NULL and ${ExpiryTime.name} IS NULL", null, null, null, s"${Time.name} ASC"))
 
     private val IndexColumns = Array(Id.name, Time.name)
-    def msgIndexCursor(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, IndexColumns, s"${Conv.name} = '${Conv(conv)}'", null, null, null, s"${Time.name} ASC")
+    def msgIndexCursor(conv: ConvId)(implicit db: SQLiteDatabase) = db.query(table.name, IndexColumns, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")
 
     def countAtLeastAsOld(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
       queryNumEntries(db, table.name, s"""${Conv.name} = '${Conv(conv)}' AND ${Time.name} <= ${Time(time)}""")

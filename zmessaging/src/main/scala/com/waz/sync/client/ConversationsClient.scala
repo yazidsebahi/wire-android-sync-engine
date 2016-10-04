@@ -52,28 +52,28 @@ class ConversationsClient(netClient: ZNetClient) {
     }
 
   def loadConversation(id: RConvId): ErrorOrResponse[ConversationResponse] =
-    netClient.withErrorHandling(s"loadConversation($id)", Request.Get(s"$ConversationsPath/${id.str}")) {
+    netClient.withErrorHandling(s"loadConversation($id)", Request.Get(s"$ConversationsPath/$id")) {
       case Response(SuccessHttpStatus(), ConversationsResult(Seq(conversation), _), _) => conversation
     }
 
   def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] =
-    netClient.withErrorHandling("postName", Request.Put(s"$ConversationsPath/${convId.str}", Json("name" -> name))) {
+    netClient.withErrorHandling("postName", Request.Put(s"$ConversationsPath/$convId", Json("name" -> name))) {
       case Response(SuccessHttpStatus(), EventsResponse(event: RenameConversationEvent), _) => Some(event)
     }
 
   def postConversationState(convId: RConvId, state: ConversationState): ErrorOrResponse[Boolean] =
-    netClient.withErrorHandling("postConversationState", Request.Put(s"$ConversationsPath/${convId.str}/self", state)(ConversationState.StateContentEncoder)) {
+    netClient.withErrorHandling("postConversationState", Request.Put(s"$ConversationsPath/$convId/self", state)(ConversationState.StateContentEncoder)) {
       case Response(SuccessHttpStatus(), _, _) => true
     }
 
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
-    netClient.withErrorHandling("postMemberJoin", Request.Post(s"$ConversationsPath/${conv.str}/members", Json("users" -> Json(members)))) {
+    netClient.withErrorHandling("postMemberJoin", Request.Post(s"$ConversationsPath/$conv/members", Json("users" -> Json(members)))) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberJoinEvent), _) => Some(event)
       case Response(HttpStatus(Response.Status.NoResponse, _), EmptyResponse, _) => None
     }
 
   def postMemberLeave(conv: RConvId, user: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] =
-    netClient.withErrorHandling("postMemberLeave", Request.Delete(s"$ConversationsPath/${conv.str}/members/${user.str}")) {
+    netClient.withErrorHandling("postMemberLeave", Request.Delete(s"$ConversationsPath/$conv/members/$user")) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberLeaveEvent), _) => Some(event)
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
     }
@@ -81,7 +81,7 @@ class ConversationsClient(netClient: ZNetClient) {
   def postConversation(users: Seq[UserId], name: Option[String] = None): ErrorOrResponse[ConversationResponse] = {
     debug(s"postConversation($users, $name)")
     val payload = JsonEncoder { o =>
-      o.put("users", Json(users.map(_.str)))
+      o.put("users", Json(users))
       name.foreach(o.put("name", _))
     }
     netClient.withErrorHandling("postConversation", Request.Post(ConversationsPath, payload)) {
@@ -103,7 +103,7 @@ object ConversationsClient {
     val args = (start, ids) match {
       case (None, Nil) =>   Seq("size" -> limit)
       case (Some(id), _) => Seq("size" -> limit, "start" -> id.str)
-      case _ =>             Seq("ids" -> ids.map(_.str).mkString(","))
+      case _ =>             Seq("ids" -> ids.mkString(","))
     }
     Request.query(ConversationsPath, args: _*)
   }

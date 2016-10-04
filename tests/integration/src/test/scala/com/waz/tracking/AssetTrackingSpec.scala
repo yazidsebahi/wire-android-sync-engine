@@ -22,7 +22,8 @@ import java.io.{ByteArrayInputStream, InputStream}
 import android.content.Context
 import com.waz.api._
 import com.waz.api.impl.{CancelOnWarning, DoNothingAndProceed}
-import com.waz.model.{ClientId, Mime, _}
+import com.waz.model.{Mime, _}
+import com.waz.model.otr.ClientId
 import com.waz.service
 import com.waz.service.tracking.TrackingEventsService
 import com.waz.service.{UserModule, ZMessagingFactory}

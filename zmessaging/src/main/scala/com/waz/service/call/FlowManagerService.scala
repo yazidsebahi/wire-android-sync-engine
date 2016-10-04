@@ -215,7 +215,7 @@ class FlowManagerService(context: Context, netClient: ZNetClient, websocket: Web
         participantIds foreach (id => fm.addUser(convId.str, id.str, null)) // passing the user names to AVS is optional (only used for debugging), and we don't want to retrieve them in this place, so we pass "null"
       } catch { case e: NoSuchMethodError => warn("AVS version too old to support setting users when acquiring flows. Would need 1.10.+ for that. Ignoring.") }
 
-      fm.acquireFlows(convId.str, sessionId .map (_.str) .getOrElse(""))
+      fm.acquireFlows(convId.toString, sessionId .map (_.toString) .getOrElse(""))
     }
   }
 

@@ -36,7 +36,7 @@ object UserInfo {
       val mime = decodeString('content_type)(js)
       val size = decodeInt('content_length)(js)
       val data = decodeOptString('data)(js)
-      val id = decodeRAssetDataId('id)(js)
+      val id = RAssetDataId(decodeString('id)(js))
       implicit val info = js.getJSONObject("info")
 
       ImageData('tag, mime, 'width, 'height, 'original_width, 'original_height, size, Some(id), data.filter(_.nonEmpty), sent = true)

@@ -24,7 +24,8 @@ import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
-import com.waz.model.{ClientId, Mime, _}
+import com.waz.model.{Mime, _}
+import com.waz.model.otr.ClientId
 import com.waz.sync.client.OtrClient._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder.{apply => _, _}
@@ -122,14 +123,14 @@ object AssetClient {
     def unapply(content: JsonObjectResponse): Option[UploadResponse] = LoggedTry.local(UploadResponse.Decoder(content.value)).toOption
   }
 
-  def postAssetPath(conv: RConvId) = s"/conversations/${conv.str}/assets"
+  def postAssetPath(conv: RConvId) = s"/conversations/$conv/assets"
   def postOtrAssetPath(conv: RConvId, ignoreMissing: Boolean) =
-    if (ignoreMissing) s"/conversations/${conv.str}/otr/assets?ignore_missing=true"
-    else s"/conversations/${conv.str}/otr/assets"
+    if (ignoreMissing) s"/conversations/$conv/otr/assets?ignore_missing=true"
+    else s"/conversations/$conv/otr/assets"
 
   def postOtrAssetPath(conv: RConvId, asset: RAssetDataId, ignoreMissing: Boolean) =
-    if (ignoreMissing) s"/conversations/${conv.str}/otr/assets/${asset.str}?ignore_missing=true"
-    else s"/conversations/${conv.str}/otr/assets/${asset.str}"
+    if (ignoreMissing) s"/conversations/$conv/otr/assets/$asset?ignore_missing=true"
+    else s"/conversations/$conv/otr/assets/$asset"
 
   def getAssetPath(conv: RConvId, asset: AssetKey): String = (asset.remoteId, asset.otrKey) match {
     case (Left(id), AESKey.Empty) => getAssetPath(conv, id)
@@ -138,8 +139,8 @@ object AssetClient {
   }
 
   def getAssetPathV3(asset: RemoteKey) = s"$AssetsV3Path/${asset.str}"
-  def getAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/${conv.str}/assets/${asset.str}"
-  def getOtrAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/${conv.str}/otr/assets/${asset.str}"
+  def getAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/$conv/assets/$asset"
+  def getOtrAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/$conv/otr/assets/$asset"
 
   def imageMetadata(image: ImageData, assetId: AssetId, nativePush: Boolean) = JsonEncoder { o =>
     o.put("width", image.width)
@@ -149,8 +150,8 @@ object AssetClient {
     o.put("inline", image.data.fold(false)(_.length < 10000))
     o.put("public", true)
     o.put("tag", image.tag)
-    o.put("correlation_id", assetId.str)
-    o.put("nonce", assetId.str)
+    o.put("correlation_id", assetId)
+    o.put("nonce", assetId)
     o.put("native_push", nativePush)
   }
 

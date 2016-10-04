@@ -19,8 +19,8 @@ package com.waz.content
 
 import com.waz.RobolectricUtils
 import com.waz.api.{OtrClientType, Verification}
-import com.waz.model.otr.{Client, Location, SignalingKey, UserClients}
-import com.waz.model.{AESKey, AccountId, ClientId, UserId}
+import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
+import com.waz.model.{AESKey, AccountId, UserId}
 import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}

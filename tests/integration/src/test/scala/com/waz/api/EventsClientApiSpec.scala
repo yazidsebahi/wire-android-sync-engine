@@ -18,7 +18,8 @@
 package com.waz.api
 
 import com.waz.ZLog._
-import com.waz.model.{ClientId, Uid}
+import com.waz.model.Uid
+import com.waz.model.otr.ClientId
 import com.waz.sync.client.EventsClient
 import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.testutils.Matchers._

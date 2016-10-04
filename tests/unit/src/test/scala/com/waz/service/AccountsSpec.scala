@@ -19,7 +19,8 @@ package com.waz.service
 
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials, ErrorResponse, PhoneCredentials}
-import com.waz.model.{ClientId, _}
+import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.sync.client.UsersClient
 import com.waz.testutils._
 import com.waz.testutils.Matchers._

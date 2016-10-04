@@ -33,7 +33,8 @@ import com.waz.model
 import com.waz.model.AssetData.MaxAllowedAssetSizeInBytes
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed}
 import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.{ClientId, GenericContent, Mime, AssetStatus => _, MessageContent => _, _}
+import com.waz.model.otr.ClientId
+import com.waz.model.{GenericContent, Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
 import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.service.conversation.ConversationsUiService.LargeAssetWarningThresholdInBytes

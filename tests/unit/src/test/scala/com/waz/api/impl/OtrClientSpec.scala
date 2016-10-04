@@ -19,8 +19,8 @@ package com.waz.api.impl
 
 import com.waz.RobolectricUtils
 import com.waz.api.impl.otr.{OtrClient, OtrClients}
-import com.waz.model.{ClientId, UserId}
-import com.waz.model.otr.Client
+import com.waz.model.UserId
+import com.waz.model.otr.{Client, ClientId}
 import com.waz.service.ZMessaging
 import com.waz.testutils.{MockUiModule, MockZMessaging}
 import org.robolectric.Robolectric

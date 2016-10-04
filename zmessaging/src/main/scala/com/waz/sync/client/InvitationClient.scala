@@ -58,8 +58,8 @@ object InvitationClient {
   implicit lazy val EncodeInvite: JsonEncoder[Invitation] = new JsonEncoder[Invitation] {
     def apply(i: Invitation): JSONObject = JsonEncoder { js =>
       i.method match {
-        case Left(e) => js.put("email", e.str)
-        case Right(p) => js.put("phone", p.str)
+        case Left(e) => js.put("email", e)
+        case Right(p) => js.put("phone", p)
       }
       js.put("invitee_name", i.nameOfInvitee)
       js.put("inviter_name", i.nameOfInviter)

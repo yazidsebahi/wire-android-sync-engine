@@ -24,7 +24,8 @@ import com.waz.api.IConversation.Type.GROUP
 import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.model.Liking.Action._
-import com.waz.model.{ClientId, _}
+import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SetMessageReaction, Successful}
 import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.sync.client.MessagesClient

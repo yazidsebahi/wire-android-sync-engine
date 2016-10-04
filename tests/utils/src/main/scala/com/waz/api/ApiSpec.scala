@@ -27,7 +27,8 @@ import akka.util.Timeout
 import android.database.Cursor
 import com.typesafe.config.ConfigFactory
 import com.waz.model.AccountData.AccountDataDao
-import com.waz.model.{ClientId, _}
+import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{ReleaseRemotes, SpawnRemoteDevice, WaitUntilRegistered}
 import com.waz.provision._
 import com.waz.service._

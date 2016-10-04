@@ -21,8 +21,8 @@ import com.waz.ZLog._
 import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.content._
-import com.waz.model.otr.{Client, UserClients}
-import com.waz.model._
+import com.waz.model.otr.{Client, ClientId, UserClients}
+import com.waz.model.{OtrClientAddEvent, OtrClientEvent, OtrClientRemoveEvent, UserId}
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient

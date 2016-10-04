@@ -19,7 +19,8 @@ package com.waz.service.push
 
 import com.waz.RobolectricUtils
 import com.waz.content.{KeyValueStorage, ZmsDatabase}
-import com.waz.model.{AccountId, ClientId, Uid}
+import com.waz.model.otr.ClientId
+import com.waz.model.{AccountId, Uid}
 import LastNotificationIdService.State._
 import PushService.SlowSyncRequest
 import com.waz.sync.client.{EventsClient, PushNotification}

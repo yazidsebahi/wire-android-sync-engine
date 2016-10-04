@@ -24,7 +24,8 @@ import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
 import com.waz.api._
 import com.waz.api.impl.LogLevel
 import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
-import com.waz.model.{ClientId, _}
+import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
 import com.waz.service.assets.{AssetLoader, AssetService, RecordAndPlayService}
 import com.waz.service.call._

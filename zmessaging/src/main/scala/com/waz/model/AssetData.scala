@@ -103,7 +103,7 @@ object ImageData {
 
   private implicit val logTag: LogTag = logTagFor(ImageData)
 
-  def cacheKey(remoteId: Option[RAssetDataId], url: Option[String] = None) = s"image-data://${remoteId.map(_.str).getOrElse("")}/${url.getOrElse("")}"
+  def cacheKey(remoteId: Option[RAssetDataId], url: Option[String] = None) = s"image-data://${remoteId.getOrElse("")}/${url.getOrElse("")}"
 
   def apply(prev: Proto.Asset.Preview, id: Option[RAssetDataId]): ImageData = prev match {
     case Proto.Asset.Preview(mime, size, key, sha, None) =>

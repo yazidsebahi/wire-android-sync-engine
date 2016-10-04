@@ -18,7 +18,7 @@
 package com.waz.service.push
 
 import com.waz.RobolectricUtils
-import com.waz.model.ClientId
+import com.waz.model.otr.ClientId
 import com.waz.service._
 import com.waz.service.push.GcmService.GcmState
 import com.waz.testutils.DefaultPatienceConfig

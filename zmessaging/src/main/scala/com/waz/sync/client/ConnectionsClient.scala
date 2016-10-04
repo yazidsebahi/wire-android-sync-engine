@@ -43,12 +43,12 @@ class ConnectionsClient(netClient: ZNetClient) {
     }
 
   def loadConnection(id: UserId): ErrorOrResponse[UserConnectionEvent] =
-    netClient.withErrorHandling(s"loadConnection($id)", Request.Get(s"$ConnectionsPath/${id.str}")) {
+    netClient.withErrorHandling(s"loadConnection($id)", Request.Get(s"$ConnectionsPath/$id")) {
       case Response(SuccessHttpStatus(), ConnectionResponseExtractor(evt), _) => evt
     }
 
   def createConnection(user: UserId, name: String, message: String): ErrorOrResponse[UserConnectionEvent] = {
-    val jsonData = Json("user" -> user.str, "name" -> name, "message" -> message)
+    val jsonData = Json("user" -> user.toString, "name" -> name, "message" -> message)
     netClient.withErrorHandling("createConnection", Request.Post(ConnectionsPath, jsonData)) {
       case Response(SuccessHttpStatus(), ConnectionResponseExtractor(event), _) =>
         verbose(s"createConnection response: $event")
@@ -57,7 +57,7 @@ class ConnectionsClient(netClient: ZNetClient) {
   }
 
   def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] =
-    netClient.withErrorHandling("updateConnection", Request.Put(s"$ConnectionsPath/${user.str}", Json("status" -> status.code))) {
+    netClient.withErrorHandling("updateConnection", Request.Put(s"$ConnectionsPath/$user", Json("status" -> status.code))) {
       case Response(SuccessHttpStatus(), ConnectionResponseExtractor(event), _) =>
         verbose(s"updateConnection response: $event")
         Some(event)

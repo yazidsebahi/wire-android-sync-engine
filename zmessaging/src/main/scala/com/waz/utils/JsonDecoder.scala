@@ -21,7 +21,8 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 
 import android.net.Uri
-import com.waz.model.{ClientId, _}
+import com.waz.model._
+import com.waz.model.otr.ClientId
 import com.waz.service.push.GcmGlobalService.GcmSenderId
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.{Duration, Instant}
@@ -156,7 +157,7 @@ object JsonDecoder {
   implicit def decodeRAssetDataId(s: Symbol)(implicit js: JSONObject): RAssetDataId = RAssetDataId(js.getString(s.name))
   implicit def decodeMessageId(s: Symbol)(implicit js: JSONObject): MessageId = MessageId(js.getString(s.name))
 
-  implicit def decodeId[A <: Id](s: Symbol)(implicit js: JSONObject, id: IdGen[A]): A = id.decode(js.getString(s.name))
+  implicit def decodeId[A](s: Symbol)(implicit js: JSONObject, id: Id[A]): A = id.decode(js.getString(s.name))
 
-  implicit def decodeOptId[A <: Id](s: Symbol)(implicit js: JSONObject, id: IdGen[A]): Option[A] = if (js.has(s.name) && !js.isNull(s.name)) Some(id.decode(js.getString(s.name))) else None
+  implicit def decodeOptId[A](s: Symbol)(implicit js: JSONObject, id: Id[A]): Option[A] = if (js.has(s.name) && !js.isNull(s.name)) Some(id.decode(js.getString(s.name))) else None
 }

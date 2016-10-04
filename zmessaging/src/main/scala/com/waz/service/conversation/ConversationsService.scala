@@ -296,5 +296,5 @@ object ConversationsService {
    * Generate temp ConversationID to identify conversations which don't have a RConvId yet
    */
   def generateTempConversationId(users: UserId *) =
-    RConvId(users.map(_.str).sorted.foldLeft("")(_ + _))
+    RConvId(users.map(_.toString).sorted.foldLeft("")(_ + _))
 }

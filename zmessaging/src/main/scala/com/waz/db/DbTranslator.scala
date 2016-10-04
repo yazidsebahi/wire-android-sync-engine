@@ -47,6 +47,11 @@ object DbTranslator {
     override def save(value: String, name: String, values: ContentValues): Unit = values.put(name, value)
     override def bind(value: String, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, value)
   }
+  implicit object UidTranslator extends DbTranslator[Uid] {
+    override def load(cursor: Cursor, index: Int): Uid = Uid(cursor.getString(index))
+    override def save(value: Uid, name: String, values: ContentValues): Unit = values.put(name, value.str)
+    override def bind(value: Uid, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, value.str)
+  }
   implicit object IntTranslator extends DbTranslator[Int] {
     override def load(cursor: Cursor, index: Int): Int = cursor.getInt(index)
     override def save(value: Int, name: String, values: ContentValues): Unit = values.put(name, Integer.valueOf(value))
@@ -127,11 +132,11 @@ object DbTranslator {
     override def bind(value: File, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, literal(value))
     override def literal(value: File): String = value.getCanonicalPath
   }
-  implicit def idTranslator[A <: Id: IdGen](): DbTranslator[A] = new DbTranslator[A] {
+  implicit def idTranslator[A: Id](): DbTranslator[A] = new DbTranslator[A] {
     override def save(value: A, name: String, values: ContentValues): Unit = values.put(name, literal(value))
     override def bind(value: A, index: Int, stmt: SQLiteProgram): Unit = stmt.bindString(index, literal(value))
-    override def load(cursor: Cursor, index: Int): A = implicitly[IdGen[A]].decode(cursor.getString(index))
-    override def literal(value: A): String = implicitly[IdGen[A]].encode(value)
+    override def load(cursor: Cursor, index: Int): A = implicitly[Id[A]].decode(cursor.getString(index))
+    override def literal(value: A): String = implicitly[Id[A]].encode(value)
   }
   implicit def jsonTranslator[A: JsonDecoder : JsonEncoder](): DbTranslator[A] = new DbTranslator[A] {
     override def save(value: A, name: String, values: ContentValues): Unit = values.put(name, literal(value))
