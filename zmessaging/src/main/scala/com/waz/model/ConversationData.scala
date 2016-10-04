@@ -19,7 +19,7 @@ package com.waz.model
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import com.waz.api.{IConversation, Verification}
+import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
 import com.waz.db.{Dao, Dao2}
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
@@ -53,7 +53,8 @@ case class ConversationData(id: ConvId,
                             renameEvent: Instant = Instant.EPOCH,
                             voiceMuted: Boolean = false,
                             hidden: Boolean = false,
-                            verified: Verification = Verification.UNKNOWN) {
+                            verified: Verification = Verification.UNKNOWN,
+                            ephemeral: EphemeralExpiration = EphemeralExpiration.NONE) {
 
   def activeMember = status == ConversationStatus.Active.value
 
@@ -147,7 +148,10 @@ object ConversationData {
       generatedName = 'generatedName, searchKey = decodeOptString('name) map SearchKey,
       unreadCount = 'unreadCount, failedCount = 'failedCount, hasVoice = 'hasVoice, unjoinedCall = 'unjoinedCall,
       missedCallMessage = decodeOptMessageId('missedCallMessage), incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
-      renameEvent = decodeInstant('renameEventTime), voiceMuted = 'voiceMuted, hidden = 'hidden, verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf))
+      renameEvent = decodeInstant('renameEventTime), voiceMuted = 'voiceMuted, hidden = 'hidden,
+      verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
+      ephemeral = EphemeralExpiration.getForMillis(decodeLong('ephemeral))
+    )
   }
 
   implicit lazy val Encoder: JsonEncoder[ConversationData] = new JsonEncoder[ConversationData] {
@@ -177,6 +181,7 @@ object ConversationData {
       o.put("voiceMuted", v.voiceMuted)
       o.put("hidden", v.hidden)
       o.put("trusted", v.verified)
+      o.put("ephemeral", v.ephemeral.milliseconds)
     }
   }
 
@@ -207,10 +212,11 @@ object ConversationData {
     val VoiceMuted    = bool('voice_muted)(_.voiceMuted)
     val Hidden        = bool('hidden)(_.hidden)
     val Verified      = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
+    val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified)
-    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified)
+    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
+    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
 
     import com.waz.model.ConversationData.ConversationType._
 

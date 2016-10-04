@@ -21,7 +21,7 @@ import android.os.Parcel
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.impl._
-import com.waz.api.{IConversation, MessageContent, Verification}
+import com.waz.api.{EphemeralExpiration, IConversation, MessageContent, Verification}
 import com.waz.content.Uris
 import com.waz.model.ConversationData
 import com.waz.service.ZMessaging
@@ -84,6 +84,13 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
   def getMessages: MessagesList = ui.cached(Uris.MessagesUri(id), new MessagesList(id))
 
   def getUsers = ui.cached(Uris.ConvMembersUri(id), new MembersList(id))
+
+  override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
+
+  override def getEphemeralExpiration = data.ephemeral
+
+  override def setEphemeralExpiration(expiration: EphemeralExpiration): Unit =
+    ui.zms.flatMapFuture { _.convsUi.setEphemeral(id, expiration) }
 
   override def isMemberOfConversation: Boolean = data.activeMember
 

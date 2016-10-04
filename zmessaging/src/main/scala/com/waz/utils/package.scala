@@ -33,7 +33,7 @@ import org.threeten.bp.Instant.now
 
 import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
-import scala.collection.SeqView
+import scala.collection.{GenIterable, SeqView}
 import scala.collection.generic.CanBuild
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -43,6 +43,22 @@ import scala.util.{Failure, Success, Try}
 import scala.{PartialFunction => =/>}
 
 package object utils {
+
+  //collection string representation formatted one item per line
+  //TODO make into a macro or compiler plugin etc.
+  //TODO find the general collection name (currently prints specific implementation name, e.g. HashTrieMap instead of Map)
+  def fCol[A](c: GenIterable[A], max: Int = 6) = {
+    val name = c.getClass.getSimpleName
+    val margin = String.format("%1$" + (name.length + 1) + "s", " ")
+    val n = s"\n$margin"
+    val startN = s"${if (c.size > 1) "\n" else ""}"
+    if (c.size <= max + 1) {
+      s"$startN$name(${c.mkString(n)})"
+    } else {
+      s"$startN$name(${c.take(3).mkString(n)}$n...hiding ${c.size - max} elements...$n${c.toVector.takeRight(3).mkString(n)})"
+    }
+  }
+
   def updateListener(body: => Unit) = new UpdateListener {
     def updated() = body
   }

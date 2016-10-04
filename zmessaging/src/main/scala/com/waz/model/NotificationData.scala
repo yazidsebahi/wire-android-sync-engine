@@ -25,7 +25,7 @@ import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class NotificationData(id: String, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant,
+case class NotificationData(id: NotId, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant,
                             localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None,
                             mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
 
@@ -34,14 +34,14 @@ object NotificationData {
   implicit lazy val Decoder: JsonDecoder[NotificationData] = new JsonDecoder[NotificationData] {
     import JsonDecoder._
 
-    override def apply(implicit js: JSONObject): NotificationData = NotificationData('id, 'message, 'conv, 'user,
+    override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id), 'message, 'conv, 'user,
       GcmNotificationCodec.decode('msgType), 'serverTime, decodeISOInstant('timestamp), 'hotKnock, 'userName,
       decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage))
   }
 
   implicit lazy val Encoder: JsonEncoder[NotificationData] = new JsonEncoder[NotificationData] {
     override def apply(v: NotificationData): JSONObject = JsonEncoder { o =>
-      o.put("id", v.id)
+      o.put("id", v.id.str)
       o.put("message", v.msg)
       o.put("conv", v.conv.str)
       o.put("user", v.user.str)
@@ -55,8 +55,8 @@ object NotificationData {
     }
   }
 
-  implicit object NotificationDataDao extends Dao[NotificationData, String] {
-    val Id = text('_id, "PRIMARY KEY")(_.id)
+  implicit object NotificationDataDao extends Dao[NotificationData, NotId] {
+    val Id = id[NotId]('_id, "PRIMARY KEY").apply(_.id)
     val Data = text('data)(JsonEncoder.encodeString(_))
 
     override val idCol = Id

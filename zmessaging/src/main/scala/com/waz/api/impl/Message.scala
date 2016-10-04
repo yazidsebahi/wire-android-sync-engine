@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
 import com.waz.api.MessageContent.{Location, Text}
-import com.waz.api.{IConversation, ImageAssetFactory, UpdateListener}
+import com.waz.api.{EphemeralExpiration, IConversation, ImageAssetFactory, UpdateListener}
 import com.waz.model.GenericContent.{LinkPreview, MsgEdit}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
@@ -88,8 +88,6 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isDeleted: Boolean = data.state == Status.DELETED
 
-  override def isOtr: Boolean = true
-
   override def getTime: Instant = data.time
 
   override def getEditTime: Instant = data.editTime
@@ -102,6 +100,12 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def getBody: String = data.contentString
 
   override def getLocation: Location = data.location.orNull
+
+  override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
+
+  override def getEphemeralExpiration = data.ephemeral
+
+  override def getExpirationTime: Instant = data.expiryTime.getOrElse(Instant.MAX)
 
   override def getImage = getImage(0, 0)
 
@@ -243,7 +247,6 @@ object EmptyMessage extends com.waz.api.Message {
   override def getBody: String = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
   override def getLocalTime: Instant = MessageData.UnknownInstant
   override def getImageWidth: Int = 0
-  override def isOtr: Boolean = false
   override def retry(): Unit = ()
   override def getImage: api.ImageAsset = ImageAsset.Empty
   override def getImage(w: Int, h: Int): api.ImageAsset = ImageAsset.Empty
@@ -281,6 +284,9 @@ object EmptyMessage extends com.waz.api.Message {
   override def getEditTime: Instant = MessageData.UnknownInstant
   override def isEdited: Boolean = false
   override def update(content: Text): Unit = ()
+  override def isEphemeral: Boolean = false
+  override def getEphemeralExpiration = EphemeralExpiration.NONE
+  override def getExpirationTime: Instant = Instant.MAX
 
   override val getParts: Array[Part] = Array.empty
 }

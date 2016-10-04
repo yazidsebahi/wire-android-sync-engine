@@ -193,4 +193,10 @@ public interface IConversation extends UiObservable, Parcelable {
     void clear();
 
     boolean isSelected();
+
+    boolean isEphemeral();
+
+    EphemeralExpiration getEphemeralExpiration();
+
+    void setEphemeralExpiration(EphemeralExpiration expiration);
 }

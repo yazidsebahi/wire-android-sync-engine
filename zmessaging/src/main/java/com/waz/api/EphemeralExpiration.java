@@ -15,12 +15,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.content
+package com.waz.api;
 
-sealed trait ContentChange[K, +V]
+public enum EphemeralExpiration {
 
-object ContentChange {
-  case class Added  [K, V] (id: K, item: V)             extends ContentChange[K, V]
-  case class Updated[K, V] (id: K, prev: V, current: V) extends ContentChange[K, V]
-  case class Removed[K, V] (id: K)                      extends ContentChange[K, V]
+    NONE(0), FIVE_SECONDS(5 * 1000), FIFTEEN_SECONDS(15 * 1000), ONE_MINUTE(60 * 1000), FIFTEEN_MINUTES(15 * 60 * 1000);
+
+    public long milliseconds;
+
+    EphemeralExpiration(long millis) {
+        this.milliseconds = millis;
+    }
+
+    public static EphemeralExpiration getForMillis(long millis) {
+        for (EphemeralExpiration exp : values()) {
+            if (exp.milliseconds >= millis) {
+                return exp;
+            }
+        }
+        return FIFTEEN_MINUTES;
+    }
 }

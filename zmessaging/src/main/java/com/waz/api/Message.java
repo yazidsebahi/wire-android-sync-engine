@@ -131,11 +131,6 @@ public interface Message extends UiObservable, Parcelable {
     boolean isCreateConversation();
 
     /**
-     * @deprecated - all messages are OTR now
-     */
-    boolean isOtr();
-
-    /**
      * Returns whether this message is the first "real" one in a new conversation.
      * This means the first message after a user connection is established, excluding
      * the initial member joins or the connect request message itself, but including knocks.
@@ -178,6 +173,16 @@ public interface Message extends UiObservable, Parcelable {
 
     void like();
     void unlike();
+
+    boolean isEphemeral();
+
+    EphemeralExpiration getEphemeralExpiration();
+
+    /**
+     * Exact time when the message will expire, could be in past if message already expired.
+     * @return Instant.MAX if message is not ephemeral or counter was not yet started.
+     */
+    Instant getExpirationTime();
 
     /**
      * Retry sending a previously failed message.

@@ -29,6 +29,7 @@ import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.threeten.bp.Instant
 
 import scala.collection.generic._
+import scala.concurrent.duration.FiniteDuration
 import scala.language.higherKinds
 
 case class Col[A](name: String, sqlType: String, modifiers: String = "")(implicit translator: DbTranslator[A]) {
@@ -104,8 +105,15 @@ object Col {
   def phoneNumber(name: Symbol, modifiers: String = "") = Col[PhoneNumber](name.name, "TEXT", modifiers)
   def emailAddress(name: Symbol, modifiers: String = "") = Col[EmailAddress](name.name, "TEXT", modifiers)
   def date(name: Symbol, modifiers: String = "") = Col[Date](name.name, "INTEGER", modifiers)
+  def finiteDuration(name: Symbol, modifiers: String = "") = Col[FiniteDuration](name.name, "INTEGER", modifiers)
   def timestamp(name: Symbol, modifiers: String = "") = Col[Instant](name.name, "INTEGER", modifiers)
   def long(name: Symbol, modifiers: String = "") = Col[Long](name.name, "INTEGER", modifiers)
+  def long[A](name: Symbol, enc: A => Long, dec: Long => A) = Col[A](name.name, "INTEGER")(new DbTranslator[A] {
+    override def save(value: A, name: String, values: ContentValues): Unit = values.put(name, java.lang.Long.valueOf(enc(value)))
+    override def bind(value: A, index: Int, stmt: SQLiteProgram): Unit = stmt.bindLong(index, enc(value))
+    override def load(cursor: Cursor, index: Int): A = dec(cursor.getLong(index))
+    override def literal(value: A): String = enc(value).toString
+  })
   def double(name: Symbol, modifiers: String = "") = Col[Double](name.name, "REAL", modifiers)
   def float(name: Symbol, modifiers: String = "") = Col[Float](name.name, "REAL", modifiers)
 
