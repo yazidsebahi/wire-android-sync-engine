@@ -69,15 +69,15 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
   }
 
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
-    val filtered = events.filter(e => conv.cleared.isBefore(e.time.instant))
+    val afterCleared = events.filter(e => conv.cleared.isBefore(e.time.instant))
 
-    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
+    val recalls = afterCleared collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
 
-    val edits = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
+    val edits = afterCleared collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
 
     for {
-      as    <- updateAssets(filtered)
-      msgs  = filtered map { createMessage(conv, _) } filter (_ != MessageData.Empty)
+      as    <- updateAssets(afterCleared)
+      msgs  = afterCleared map { createMessage(conv, _) } filter (_ != MessageData.Empty)
       _     = verbose(s"messages from events: $msgs")
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
