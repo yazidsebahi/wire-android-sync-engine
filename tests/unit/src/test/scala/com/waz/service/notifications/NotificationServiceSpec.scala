@@ -254,5 +254,5 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     }
   }
 
-  def clearNotifications(): Unit = Await.result(service.clearNotifications(), 5.seconds)
+  def clearNotifications(): Unit = service.clearNotifications()
 }

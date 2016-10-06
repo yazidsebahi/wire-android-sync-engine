@@ -124,9 +124,13 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     new AggregatingSignal(timeUpdates, loadAll(), update)
   }
 
-  // remove older notifications when lastRead or uiTime is updated
-  lastReadMap.zip(lastUiVisibleTime.signal).throttle(timeouts.notifications.clearThrottling) {
-    case (lastRead, uiTime) => removeReadNotifications(lastRead, uiTime)
+  // remove notifications once UI is active
+  lastUiVisibleTime.signal.throttle(timeouts.notifications.clearThrottling)(removeNotificationsAfterUiActive)
+
+  // remove notifications read by other devices
+  lastReadMap.throttle(timeouts.notifications.clearThrottling) { lastRead =>
+    verbose(s"remove read notifications: ${fCol(lastRead)})")
+    removeNotifications(n => lastRead.get(n.conv).exists(!_.isBefore(n.serverTime)))
   }
 
   messages.onAdded { addForIncoming(_) }
@@ -187,26 +191,25 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     storage.remove(ids.map(NotId(_)))
   }
 
-  def clearNotifications() =
-    for {
-      _ <- lastUiVisibleTime := Instant.now()
-      // will execute removeReadNotifications as part of this call,
-      // this ensures that it's actually done while wakeLock is acquired by caller
-      lastRead <- lastReadMap.head
-      _ <- removeReadNotifications(lastRead, Instant.now)
-    } yield ()
+  def clearNotifications() = {
+    lastUiVisibleTime := Instant.now()
+    // will execute removeNotifications as part of this call,
+    // this ensures that it's actually done while wakeLock is acquired by caller
+    removeNotificationsAfterUiActive(Instant.now)
+  }
 
-  private def removeReadNotifications(lastRead: Map[ConvId, Instant], uilastVisible: Instant) = {
-    verbose(s"removeRead(lastUiVisibleTime: $uilastVisible, last read for conv: ${fCol(lastRead)})")
+  private def removeNotificationsAfterUiActive(uiLastVisible: Instant) = {
+    verbose(s"remove all notifications after ui is active: $uiLastVisible")
+    removeNotifications(n => uiLastVisible.isAfter(n.localTime)) //will effectively remove all
+  }
 
-    def isRead(n: NotificationData) = lastRead.get(n.conv).exists(!_.isBefore(n.serverTime))
-
+  private def removeNotifications(filter: NotificationData => Boolean): Unit = {
     storage.notifications.head flatMap { data =>
       verbose(s"notifications.head contains: ${fCol(data)}")
       val toRemove = data collect {
-        case (id, n) if isRead(n) || uilastVisible.isAfter(n.localTime) => id
+        case (id, n) if filter(n) => id
       }
-      verbose(s"toRemove on lastRead change: ${fCol(toRemove.toSeq)}")
+      verbose(s"Removing notifications: ${fCol(toRemove.toSeq)}")
       storage.remove(toRemove)
     }
   }
