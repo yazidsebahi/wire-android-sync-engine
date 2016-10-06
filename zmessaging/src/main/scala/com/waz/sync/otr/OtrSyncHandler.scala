@@ -54,14 +54,14 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
     postOtrMessage(conv.id, conv.remoteId, message)
 
-  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] =
+  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None, nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] =
     service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
         postEncryptedMessage(convId, message, recipients = recipients) {
-          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content), ignoreMissing(retry), recipients)
+          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content, nativePush = nativePush), ignoreMissing(retry), recipients)
           case (content, retry) =>
             verbose(s"Message content too big, will post as External. Estimated size: ${content.estimatedSize}")
-            postExternalMessage(otrClient.id, convId, remoteId, message, recipients)
+            postExternalMessage(otrClient.id, convId, remoteId, message, recipients, nativePush)
         }
       case None =>
         successful(Left(internalError("Client is not registered")))
@@ -108,13 +108,13 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 
   private def ignoreMissing(retry: Int) = retry > 1
 
-  private def postExternalMessage(clientId: ClientId, convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = {
+  private def postExternalMessage(clientId: ClientId, convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean): ErrorOrResponse[MessageResponse] = {
     val key = AESKey()
     val (sha, data) = AESUtils.encrypt(key, GenericMessage.toByteArray(message))
 
     CancellableFuture.lift {
       postEncryptedMessage(convId, GenericMessage(Uid(message.messageId), Proto.External(key, sha)), recipients = recipients) { (content, retry) =>
-        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data)), ignoreMissing(retry), recipients)
+        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data), nativePush), ignoreMissing(retry), recipients)
       } map { // that's a bit of a hack, but should be harmless
         case Right(time) => Right(MessageResponse.Success(ClientMismatch(Map.empty, Map.empty, Map.empty, time)))
         case Left(err) => Left(err)
