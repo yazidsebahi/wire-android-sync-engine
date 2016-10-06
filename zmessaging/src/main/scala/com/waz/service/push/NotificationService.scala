@@ -196,16 +196,15 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
       _ <- removeReadNotifications(lastRead, Instant.now)
     } yield ()
 
-  private def removeReadNotifications(lastRead: Map[ConvId, Instant], uiTime: Instant) = {
-    verbose(s"removeRead(lastUiVisibleTime: $uiTime, last read for conv: ${fCol(lastRead)})")
+  private def removeReadNotifications(lastRead: Map[ConvId, Instant], uilastVisible: Instant) = {
+    verbose(s"removeRead(lastUiVisibleTime: $uilastVisible, last read for conv: ${fCol(lastRead)})")
 
-    def isRead(notification: NotificationData) =
-      uiTime.isAfter(notification.localTime) || lastRead.get(notification.conv).exists(!_.isBefore(notification.serverTime))
+    def isRead(n: NotificationData) = lastRead.get(n.conv).exists(!_.isBefore(n.serverTime))
 
     storage.notifications.head flatMap { data =>
       verbose(s"notifications.head contains: ${fCol(data)}")
       val toRemove = data collect {
-        case (id, notification) if isRead(notification) => id
+        case (id, n) if isRead(n) || uilastVisible.isAfter(n.localTime) => id
       }
       verbose(s"toRemove on lastRead change: ${fCol(toRemove.toSeq)}")
       storage.remove(toRemove)
