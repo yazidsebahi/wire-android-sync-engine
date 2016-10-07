@@ -213,6 +213,8 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
   val UnknownInstant = Instant.EPOCH
   val isUserContent = Set(TEXT, TEXT_EMOJI_ONLY, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, RICH_MEDIA, LOCATION)
 
+  val EphemeralMessageTypes = Set(TEXT, TEXT_EMOJI_ONLY, KNOCK, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, RICH_MEDIA, LOCATION)
+
   type MessageState = Message.Status
   import GenericMessage._
 

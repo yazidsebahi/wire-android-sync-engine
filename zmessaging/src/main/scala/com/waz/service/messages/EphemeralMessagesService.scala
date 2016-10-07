@@ -80,7 +80,7 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
 
   // start expiration timer for ephemeral message
   def onMessageRead(id: MessageId) = storage.update(id, { msg =>
-    if (shouldStartTimer(msg)) msg.copy(expiryTime = Some(Instant.now + msg.ephemeral.milliseconds.millis))
+    if (shouldStartTimer(msg)) msg.copy(expiryTime = msg.ephemeral.expiryFromNow())
     else msg
   })
 

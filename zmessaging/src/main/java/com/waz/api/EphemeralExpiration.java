@@ -17,16 +17,39 @@
  */
 package com.waz.api;
 
+import org.threeten.bp.Instant;
+import scala.Option;
+import scala.concurrent.duration.FiniteDuration;
+
+import java.util.concurrent.TimeUnit;
+
 public enum EphemeralExpiration {
 
     NONE(0), FIVE_SECONDS(5 * 1000), FIFTEEN_SECONDS(15 * 1000), ONE_MINUTE(60 * 1000), FIFTEEN_MINUTES(15 * 60 * 1000);
 
     public long milliseconds;
 
+    public FiniteDuration duration() {
+        return new FiniteDuration(milliseconds, TimeUnit.MILLISECONDS);
+    }
+
+    public Option<Instant> expiryFromNow() {
+        return (milliseconds == 0) ? Option.<Instant>empty() : Option.apply(Instant.now().plusMillis(milliseconds));
+    }
+
     EphemeralExpiration(long millis) {
         this.milliseconds = millis;
     }
 
+    /**
+     * Find expiration constant with closes time value.
+     * Expiration timeout is sent as a number of milliseconds,
+     * it's possible that some clients will send some unexpected values.
+     * We don't want to handle arbitrary timeouts (design decision),
+     * so we always use a closest constant.
+     *
+     * Warning: don't round to zero, this would mean: `not ephemeral`.
+     */
     public static EphemeralExpiration getForMillis(long millis) {
         for (EphemeralExpiration exp : values()) {
             if (exp.milliseconds >= millis) {

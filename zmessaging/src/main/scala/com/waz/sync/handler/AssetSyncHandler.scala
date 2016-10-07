@@ -20,6 +20,7 @@ package com.waz.sync.handler
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.api.EphemeralExpiration
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.model._
@@ -76,13 +77,13 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
       }
     }
 
-  def postOtrImageData(convId: RConvId, assetId: AssetId, asset: ImageData): ErrorOr[Option[Date]] =
+  def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, asset: ImageData, recipients: Option[Set[UserId]]): ErrorOr[Option[Date]] =
     if (asset.sent && asset.otrKey.isDefined) {
       warn(s"image asset has already been sent, skipping: $asset")
       successful(Right(None))
     } else {
       convs.convByRemoteId(convId) flatMap {
-        case Some(conv) => withRawImageData(convId, asset)(data => otrSync.postOtrImageData(conv, assetId, asset, data, asset.tag == ImageData.Tag.Medium).mapRight(Some(_)))
+        case Some(conv) => withRawImageData(convId, asset)(data => otrSync.postOtrImageData(conv, assetId, asset, data, exp, asset.tag == ImageData.Tag.Medium, recipients = recipients).mapRight(Some(_)))
         case None       => successful(Left(internalError(s"postOtrImageData($convId, $asset) - no conversation found with given id")))
       }
     }

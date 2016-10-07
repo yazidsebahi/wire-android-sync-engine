@@ -19,6 +19,7 @@ package com.waz.sync
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -54,7 +55,7 @@ trait SyncServiceHandle {
   def postMessage(id: MessageId, conv: ConvId, editTime: Instant): Future[SyncId]
   def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId]
   def postRecalled(conv: ConvId, currentMsgId: MessageId, recalledMsgId: MessageId): Future[SyncId]
-  def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable): Future[SyncId]
+  def postAssetStatus(id: MessageId, conv: ConvId, exp: EphemeralExpiration, status: AssetStatus.Syncable): Future[SyncId]
   def postLiking(id: ConvId, liking: Liking): Future[SyncId]
   def postConnection(user: UserId, name: String, message: String): Future[SyncId]
   def postConnectionStatus(user: UserId, status: ConnectionStatus): Future[SyncId]
@@ -112,7 +113,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postMessage(id: MessageId, conv: ConvId, time: Instant) = addRequest(PostMessage(conv, id, time), timeout = System.currentTimeMillis() + timeouts.messages.sendingTimeout.toMillis, forceRetry = true)
   def postDeleted(conv: ConvId, msg: MessageId) = addRequest(PostDeleted(conv, msg))
   def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId) = addRequest(PostRecalled(conv, msg, recalled))
-  def postAssetStatus(id: MessageId, conv: ConvId, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, status))
+  def postAssetStatus(id: MessageId, conv: ConvId, exp: EphemeralExpiration, status: AssetStatus.Syncable) = addRequest(PostAssetStatus(conv, id, exp, status))
   def postAddressBook(ab: AddressBook) = addRequest(PostAddressBook(ab))
   def postInvitation(i: Invitation) = addRequest(PostInvitation(i))
   def postConnection(user: UserId, name: String, message: String) = addRequest(PostConnection(user, name, message))
@@ -201,15 +202,15 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     implicit val convLock = lock
 
     req match {
-      case PostMessage(convId, messageId, time) => zms.messagesSync.postMessage(convId, messageId, time)
-      case PostAssetStatus(cid, mid, status)    => zms.messagesSync.postAssetStatus(cid, mid, status)
-      case PostConvJoin(convId, u)              => zms.conversationSync.postConversationMemberJoin(convId, u.toSeq)
-      case PostConvLeave(convId, u)             => zms.conversationSync.postConversationMemberLeave(convId, u)
-      case PostConv(convId, u, name)            => zms.conversationSync.postConversation(convId, u, name)
-      case PostConvName(convId, name)           => zms.conversationSync.postConversationName(convId, name)
-      case PostConvState(convId, state)         => zms.conversationSync.postConversationState(convId, state)
-      case PostTypingState(convId, ts)          => zms.typingSync.postTypingState(convId, ts)
-      case PostCleared(convId, time)            => zms.clearedSync.postCleared(convId, time)
+      case PostMessage(convId, messageId, time)   => zms.messagesSync.postMessage(convId, messageId, time)
+      case PostAssetStatus(cid, mid, exp, status) => zms.messagesSync.postAssetStatus(cid, mid, exp, status)
+      case PostConvJoin(convId, u)                => zms.conversationSync.postConversationMemberJoin(convId, u.toSeq)
+      case PostConvLeave(convId, u)               => zms.conversationSync.postConversationMemberLeave(convId, u)
+      case PostConv(convId, u, name)              => zms.conversationSync.postConversation(convId, u, name)
+      case PostConvName(convId, name)             => zms.conversationSync.postConversationName(convId, name)
+      case PostConvState(convId, state)           => zms.conversationSync.postConversationState(convId, state)
+      case PostTypingState(convId, ts)            => zms.typingSync.postTypingState(convId, ts)
+      case PostCleared(convId, time)              => zms.clearedSync.postCleared(convId, time)
     }
   }
 }

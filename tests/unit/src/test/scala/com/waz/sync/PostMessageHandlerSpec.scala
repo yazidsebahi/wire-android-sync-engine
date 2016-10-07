@@ -21,7 +21,7 @@ import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz._
-import com.waz.api.{Message, NetworkMode}
+import com.waz.api.{EphemeralExpiration, Message, NetworkMode}
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
@@ -81,7 +81,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync) {
-      override def postOtrImageData(convId: RConvId, assetId: AssetId, asset: ImageData): Future[Either[ErrorResponse, Option[Date]]] = Future.successful(postImageResult)
+      override def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, asset: ImageData, recipients: Option[Set[UserId]]): Future[Either[ErrorResponse, Option[Date]]] = Future.successful(postImageResult)
     }
 
     insertConv(conv)

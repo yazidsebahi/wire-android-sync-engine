@@ -20,7 +20,7 @@ package com.waz.sync.otr
 import java.util.Date
 
 import com.waz.ZLog._
-import com.waz.api.Verification
+import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
@@ -122,10 +122,10 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-  def postOtrImageData(conv: ConversationData, assetId: AssetId, asset: ImageData, data: LocalData, nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] = {
+  def postOtrImageData(conv: ConversationData, assetId: AssetId, asset: ImageData, data: LocalData, exp: EphemeralExpiration, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] = {
     val key = asset.otrKey.getOrElse(AESKey())
-    def message(sha: Sha256) = GenericMessage(Uid(assetId.str), Proto.ImageAsset(asset.tag, asset.width, asset.height, asset.origWidth, asset.origHeight, asset.mime, asset.size, Some(key), Some(sha)))
-    postAssetData(conv, assetId, key, message, data, nativePush).future flatMap {
+    def message(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(asset.tag, asset.width, asset.height, asset.origWidth, asset.origHeight, asset.mime, asset.size, Some(key), Some(sha)))
+    postAssetData(conv, assetId, key, message, data, nativePush, recipients).future flatMap {
       case Right((AssetKey(Left(id), _, _, sha), time)) =>
         val updated = asset.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
         cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
@@ -139,7 +139,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-  def postAssetData(conv: ConversationData, assetId: AssetId, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
+  def postAssetData(conv: ConversationData, assetId: AssetId, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
     val promise = Promise[Either[ErrorResponse,(AssetKey, Date)]]()
 
     val future = service.clients.getSelfClient flatMap {
@@ -149,7 +149,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
           var imageId = Option.empty[RAssetDataId]
           var assetKey = Option.empty[AssetKey]
           val message = createMsg(sha)
-          postEncryptedMessage(conv.id, message) { (content, retry) =>
+          postEncryptedMessage(conv.id, message, recipients = recipients) { (content, retry) =>
             val meta = new OtrAssetMetadata(otrClient.id, content, nativePush, inline)
             val upload = imageId match {
               case Some(imId) if !inline =>

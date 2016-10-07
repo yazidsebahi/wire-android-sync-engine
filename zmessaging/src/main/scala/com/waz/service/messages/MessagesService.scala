@@ -476,10 +476,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case _ => successful(None)
     }
 
-  def messageSent(convId: ConvId, msg: MessageData) =
-    updateMessageState(convId, msg.id, Message.Status.SENT) andThen {
+  def messageSent(convId: ConvId, msg: MessageData) = {
+    updateMessage(msg.id) { m => m.copy(state = Message.Status.SENT, expiryTime = m.ephemeral.expiryFromNow()) } andThen {
       case Success(Some(m)) => content.messagesStorage.onMessageSent ! m
     }
+  }
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
     updateMessageState(convId, msg.id, Message.Status.FAILED) andThen {

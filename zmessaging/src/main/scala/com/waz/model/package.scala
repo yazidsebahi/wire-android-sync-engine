@@ -19,6 +19,7 @@ package com.waz
 
 import android.util.Base64
 import com.google.protobuf.nano.{CodedInputByteBufferNano, MessageNano}
+import com.waz.api.EphemeralExpiration
 import com.waz.model.nano.Messages
 import com.waz.utils.{JsonDecoder, JsonEncoder, returning}
 import org.json.JSONObject
@@ -40,6 +41,16 @@ package object model {
       returning(new Messages.GenericMessage()) { msg =>
         msg.messageId = id.str
         implicitly[GenericContent[A]].set(msg)(content)
+      }
+
+    def apply[A: EphemeralContent : GenericContent](id: Uid, expiration: EphemeralExpiration, content: A): GenericMessage =
+      returning(new Messages.GenericMessage()) { msg =>
+        msg.messageId = id.str
+        if (expiration == EphemeralExpiration.NONE) {
+          implicitly[GenericContent[A]].set(msg)(content)
+        } else {
+          Ephemeral.set(msg)(Ephemeral(expiration, content))
+        }
       }
 
     def apply(bytes: Array[Byte]): GenericMessage = Messages.GenericMessage.parseFrom(bytes)
@@ -73,14 +84,16 @@ package object model {
 
     object TextMessage {
 
-      def apply(text: String, mentions: Map[UserId, String]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, Nil))(Text)
+      def apply(text: String, mentions: Map[UserId, String]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, Nil))
 
-      def apply(text: String, mentions: Map[UserId, String], links: Seq[LinkPreview]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, links))(Text)
+      def apply(text: String, mentions: Map[UserId, String], links: Seq[LinkPreview]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, links))
 
-      def apply(msg: MessageData): GenericMessage = GenericMessage(Uid(msg.id.str), Text(msg.contentString, msg.content.flatMap(_.mentions).toMap, Nil))(Text)
+      def apply(msg: MessageData): GenericMessage = GenericMessage(msg.id.uid, msg.ephemeral, Text(msg.contentString, msg.content.flatMap(_.mentions).toMap, Nil))
 
       def unapply(msg: GenericMessage): Option[(String, Map[UserId, String], Seq[LinkPreview])] = msg match {
         case GenericMessage(_, Text(content, mentions, links)) =>
+          Some((content, mentions, links))
+        case GenericMessage(_, Ephemeral(_, Text(content, mentions, links))) =>
           Some((content, mentions, links))
         case GenericMessage(_, MsgEdit(_, Text(content, mentions, links))) =>
           Some((content, mentions, links))
