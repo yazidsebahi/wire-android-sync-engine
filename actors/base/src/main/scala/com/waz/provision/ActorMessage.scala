@@ -18,7 +18,7 @@
 package com.waz.provision
 
 import akka.actor.ActorRef
-import com.waz.api.Message
+import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.impl.AccentColor
 import com.waz.model._
 import com.waz.threading.QueueReport
@@ -245,6 +245,8 @@ object ActorMessage {
    * @param remoteId The (remote) conversation id. Note on [[RConvId]]: @see SendText
    */
   case class Typing(remoteId: RConvId) extends ActorMessage
+
+  case class SetEphemeral(remoteId: RConvId, ephemeral: EphemeralExpiration) extends ActorMessage
 
   /**
    * Stop any typing going on in a conversation

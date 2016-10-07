@@ -368,6 +368,11 @@ class DeviceActor(val deviceName: String,
         zmessaging.convsUi.knock(conv.id)
       }
 
+    case SetEphemeral(remoteId, expiration) =>
+      withConv(remoteId) { conv =>
+        zmessaging.convsUi.setEphemeral(conv.id, expiration)
+      }
+
     case Typing(remoteId) =>
       whenConversationExists(remoteId) { conv =>
         conv.getInputStateIndicator.textChanged()
