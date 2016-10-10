@@ -77,6 +77,7 @@ package object model {
         case GM.TEXT_FIELD_NUMBER         => msg.getText
         case GM.LOCATION_FIELD_NUMBER     => msg.getLocation
         case GM.CONFIRMATION_FIELD_NUMBER => msg.getConfirmation
+        case GM.EPHEMERAL_FIELD_NUMBER    => msg.getEphemeral
         case _                            => Unknown
       }
     }
