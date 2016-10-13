@@ -114,6 +114,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
 
+  override def isExpired: Boolean = data.expired
+
   override def getEphemeralExpiration = data.ephemeral
 
   override def getExpirationTime: Instant = data.expiryTime.getOrElse(Instant.MAX)
@@ -296,6 +298,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isEdited: Boolean = false
   override def update(content: Text): Unit = ()
   override def isEphemeral: Boolean = false
+  override def isExpired: Boolean = false
   override def getEphemeralExpiration = EphemeralExpiration.NONE
   override def getExpirationTime: Instant = Instant.MAX
 

@@ -176,6 +176,8 @@ public interface Message extends UiObservable, Parcelable {
 
     boolean isEphemeral();
 
+    boolean isExpired();
+
     EphemeralExpiration getEphemeralExpiration();
 
     /**
