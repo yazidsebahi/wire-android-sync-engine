@@ -53,6 +53,8 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
   private val messages = new LruCache[MessageId, MessageAndLikes](WindowSize * 2)
   private val windowLoader = new WindowLoader(cursor)
 
+  val createTime = Instant.now() //used in UI
+
   override def size = cursor.getCount
 
   val onUpdate = EventStream[MessageId]()
