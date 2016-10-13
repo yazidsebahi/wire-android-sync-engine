@@ -20,7 +20,7 @@ package com.waz.service.messages
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.content.{MessagesStorage, ZmsDatabase}
 import com.waz.model.AssetStatus.{UploadDone, UploadFailed}
-import com.waz.model.GenericContent.{Asset, ImageAsset, Location, Text}
+import com.waz.model.GenericContent.{Asset, Ephemeral, ImageAsset, Location, Text}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model._
 import com.waz.sync.SyncServiceHandle
@@ -126,8 +126,8 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
       case MessageData.IsAsset() | Message.Type.ASSET =>
         // check if asset was fully uploaded
         msg.protos.exists {
-          case GenericMessage(_, Asset(_, _, UploadDone(_) | UploadFailed)) => true
-          case GenericMessage(_, ImageAsset(ImageData.Tag.Medium, _, _, _, _, _, _, _, _)) => true
+          case GenericMessage(_, Ephemeral(_, Asset(_, _, UploadDone(_) | UploadFailed))) => true
+          case GenericMessage(_, Ephemeral(_, ImageAsset(ImageData.Tag.Medium, _, _, _, _, _, _, _, _))) => true
           case _ => false
         }
       case _ => true

@@ -94,7 +94,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       }
     }
 
-    scenario("Obfuscate message when timer expires") {
+    scenario("Obfuscate text message when timer expires") {
       val msg = messages.getLastMessage
       msg.getBody shouldEqual "test msg 1"
       zmessaging.messagesStorage.update(msg.data.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
@@ -212,9 +212,10 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     }
 
     scenario("Expired message should also be deleted on sending side") {
-      val ConvMessages(ms) = (auto2 ? GetMessages(conv.data.remoteId)).await()
-      ms.last.tpe should not equal Message.Type.TEXT
-      ms.find(_.id == messageId) shouldBe empty
+      soon {
+        val ConvMessages(ms) = (auto2 ? GetMessages(conv.data.remoteId)).await()
+        ms.find(_.id == messageId) shouldBe empty
+      }
     }
 
     scenario("Receive knock") {
@@ -253,7 +254,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
     scenario("Receive image") {
       val msg = withNewMessage {
-        auto2 ? SendImageData(conv.data.remoteId, IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin_128.png"))) should eventually(be(Successful))
+        auto2 ? SendImageData(conv.data.remoteId, IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))) should eventually(be(Successful))
       }
       msg.getMessageType shouldEqual Message.Type.ASSET
       msg.isEphemeral shouldEqual true
@@ -277,7 +278,9 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       msg.getExpirationTime shouldEqual Instant.MAX
 
       soon {
-        image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe defined // full image received
+        withClue(s"$image, data: ${image.data}") {
+          image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe defined // full image received
+        }
         msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
       }
     }

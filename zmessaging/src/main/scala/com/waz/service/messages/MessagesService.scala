@@ -17,6 +17,8 @@
  */
 package com.waz.service.messages
 
+import java.util.Date
+
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
@@ -87,27 +89,39 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     } yield res
   }
 
-  private def updateAssets(events: Seq[MessageEvent]) = Future.sequence(events.collect {
-    case GenericMessageEvent(_, convId, time, from, GenericMessage(id, asset: Asset)) =>
-      updateAsset(AssetId(id.str), convId, asset, None, time)
+  private def updateAssets(events: Seq[MessageEvent]) = {
 
-    case GenericAssetEvent(_, convId, time, from, GenericMessage(assetId, asset: Asset), dataId, _) =>
-      updateAsset(AssetId(assetId.str), convId, asset, Some(dataId), time)
-
-    case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(assetId, ImageAsset(tag, width, height, origWidth, origHeight, mime, size, None, _)), dataId, data) =>
-      warn(s"got otr asset event without otr key: $msg")
-      val img = ImageData(tag, mime.str, width, height, origWidth, origHeight, size, Some(dataId), sent = true, data64 = data flatMap { arr => LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption })
-      updateImageAsset(AssetId(assetId.str), convId, img)
-
-    case GenericAssetEvent(_, convId, time, from, GenericMessage(assetId, ImageAsset(tag, width, height, origWidth, origHeight, mime, size, Some(key), sha)), dataId, data) =>
-      val img = data.fold {
-        ImageData(tag, mime.str, width, height, origWidth, origHeight, size, Some(dataId), sent = true, otrKey = Some(key), sha256 = sha)
-      } { img =>
-        val data64 = if (sha.forall(_.str == sha2(img))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, img), Base64.DEFAULT)).toOption else None
-        ImageData(tag, mime.str, width, height, origWidth, origHeight, size, Some(dataId), sent = true, otrKey = Some(key), sha256 = sha, data64 = data64)
+    def update(id: Uid, convId: RConvId, time: Date, ct: Any, msg: GenericMessage, dataId: Option[RAssetDataId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
+      ct match {
+        case asset: Asset =>
+          updateAsset(AssetId(id.str), convId, asset, dataId, time) map { Some(_) }
+        case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, None, _) =>
+          warn(s"got otr asset event without otr key: $msg")
+          val img = ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, data64 = data flatMap { arr => LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption })
+          updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
+        case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, Some(key), sha) =>
+          val img = data.fold {
+            ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, otrKey = Some(key), sha256 = sha)
+          } { img =>
+            val data64 = if (sha.forall(_.str == sha2(img))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, img), Base64.DEFAULT)).toOption else None
+            ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, otrKey = Some(key), sha256 = sha, data64 = data64)
+          }
+          updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
+        case Ephemeral(_, c) =>
+          update(id, convId, time, c, msg, dataId, data)
+        case _ =>
+          error(s"unexpected asset message: $msg")
+          Future successful None
       }
-      updateImageAsset(AssetId(assetId.str), convId, img)
-  })
+
+    Future.sequence(events.collect {
+      case GenericMessageEvent(_, convId, time, from, msg @ GenericMessage(id, ct)) =>
+        update(id, convId, time, ct, msg, None, None)
+
+      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(id, ct), dataId, data) =>
+        update(id, convId, time, ct, msg, Some(dataId), data)
+    }) map { _.flatten }
+  }
 
   private def updateLastReadFromOwnMessages(convId: ConvId, msgs: Seq[MessageData]) =
     msgs.reverseIterator.find(_.userId == selfUserId).fold2(Future.successful(None), msg => updateConversationLastRead(convId, msg.time))
