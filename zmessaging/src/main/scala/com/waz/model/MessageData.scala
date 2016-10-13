@@ -56,7 +56,8 @@ case class MessageData(id: MessageId,
                        localTime: Instant = MessageData.UnknownInstant,
                        editTime: Instant = MessageData.UnknownInstant,
                        ephemeral: EphemeralExpiration = EphemeralExpiration.NONE,
-                       expiryTime: Option[Instant] = None // local expiration time
+                       expiryTime: Option[Instant] = None, // local expiration time
+                       expired: Boolean = false
                       ) {
 
   def getContent(index: Int) = {
@@ -207,7 +208,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
   }
 }
 
-object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant, EphemeralExpiration, Option[Instant]) => MessageData) {
+object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant, EphemeralExpiration, Option[Instant], Boolean) => MessageData) {
   val Empty = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""))
   val Deleted = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""), state = Message.Status.DELETED)
   val UnknownInstant = Instant.EPOCH
@@ -237,7 +238,8 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
         Instant.ofEpochMilli(decodeLong('localTime)),
         Instant.ofEpochMilli(decodeLong('editTime)),
         EphemeralExpiration.getForMillis(decodeLong('ephemeral)),
-        decodeOptLong('expiryTime) map Instant.ofEpochMilli
+        decodeOptLong('expiryTime) map Instant.ofEpochMilli,
+        'expired
       )
   }
 
@@ -260,6 +262,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       o.put("editTime", v.localTime.toEpochMilli)
       o.put("ephemeral", v.ephemeral.milliseconds)
       v.expiryTime foreach { t => o.put("expiryTime", t.toEpochMilli) }
+      o.put("expired", v.expired)
     }
   }
 
@@ -312,10 +315,11 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     val EditTime = timestamp('edit_time)(_.editTime)
     val Ephemeral = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
     val ExpiryTime = opt(timestamp('expiry_time))(_.expiryTime)
+    val Expired = bool('expired)(_.expired)
 
     override val idCol = Id
 
-    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime, Ephemeral, ExpiryTime)
+    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime, Ephemeral, ExpiryTime, Expired)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
@@ -323,7 +327,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     }
 
     override def apply(implicit cursor: Cursor): MessageData =
-      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime, Ephemeral, ExpiryTime)
+      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime, Ephemeral, ExpiryTime, Expired)
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(Conv, id)
 
