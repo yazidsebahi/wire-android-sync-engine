@@ -101,6 +101,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
       soon {
         msg.getExpirationTime should be < Instant.now
+        msg.isExpired shouldEqual true
         msg.getBody should not equal "test msg 1"
       }
     }

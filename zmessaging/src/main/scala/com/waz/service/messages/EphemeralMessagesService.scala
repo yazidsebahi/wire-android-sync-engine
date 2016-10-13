@@ -20,7 +20,7 @@ package com.waz.service.messages
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.content.{MessagesStorage, ZmsDatabase}
 import com.waz.model.AssetStatus.{UploadDone, UploadFailed}
-import com.waz.model.GenericContent.{Asset, ImageAsset}
+import com.waz.model.GenericContent.{Asset, ImageAsset, Location, Text}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model._
 import com.waz.sync.SyncServiceHandle
@@ -28,12 +28,16 @@ import com.waz.threading.CancellableFuture
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
+import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.Random
 
 // TODO: obfuscate sent messages when they expire
 class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpdater, storage: MessagesStorage, db: ZmsDatabase, sync: SyncServiceHandle) {
+  import EphemeralMessagesService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
   
@@ -47,11 +51,11 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
   }
 
   storage.onAdded { msgs =>
-    updateNextExpiryTime(msgs.filter(_.userId != selfUserId).flatMap(_.expiryTime))
+    updateNextExpiryTime(msgs.flatMap(_.expiryTime))
   }
 
   storage.onUpdated { updates =>
-    updateNextExpiryTime(updates.filter(_._2.userId != selfUserId).flatMap(_._2.expiryTime))
+    updateNextExpiryTime(updates.flatMap(_._2.expiryTime))
   }
 
   private def updateNextExpiryTime(times: Seq[Instant]) = if (times.nonEmpty) {
@@ -60,21 +64,53 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
   }
 
   private def removeExpired() = Serialized.future(this, "removeExpired") {
+    verbose(s"removeExpired")
     nextExpiryTime ! Instant.MAX
     db.read { implicit db =>
       val time = Instant.now
-      MessageDataDao.findExpiring(selfUserId) acquire { msgs =>
-        val (toRemove, rest) = msgs.toStream.span(_.expiryTime.exists(_ <= time))
+      MessageDataDao.findExpiring() acquire { msgs =>
+        val (expired, rest) = msgs.toStream.span(_.expiryTime.exists(_ <= time))
         rest.headOption.flatMap(_.expiryTime) foreach { time =>
           nextExpiryTime.mutate(_ min time)
         }
-        toRemove.toVector
+        expired.toVector
       }
     } flatMap { expired =>
-      messages.deleteOnUserRequest(expired.map(_.id)) flatMap { _ =>
+      val (toObfuscate, toRemove) = expired.partition(_.userId == selfUserId)
+      for {
+        _ <- messages.deleteOnUserRequest(toRemove.map(_.id))
         // recalling message, this informs the sender that message is already expired
-        Future.traverse(expired) { m => sync.postRecalled(m.convId, MessageId(), m.id) }
-      }
+        _ <- Future.traverse(expired) { m => sync.postRecalled(m.convId, MessageId(), m.id) }
+        _ <- messages.messagesStorage.updateAll2(toObfuscate.map(_.id), obfuscate)
+      } yield ()
+    }
+  }
+
+  private def obfuscate(msg: MessageData): MessageData = {
+    import Message.Type._
+    verbose(s"obfuscate($msg)")
+
+    def obfuscate(text: String) = text.map { c =>
+      if (c.isWhitespace) c else randomChars.next
+    }
+
+    msg.msgType match {
+      case TEXT | TEXT_EMOJI_ONLY =>
+        msg.copy(expired = true, content = Nil, protos = Seq(GenericMessage(msg.id.uid, Text(obfuscate(msg.contentString)))))
+      case RICH_MEDIA =>
+        val content = msg.content map { ct =>
+          ct.copy(content = obfuscate(ct.content), openGraph = None) //TODO: asset and rich media
+        }
+        msg.copy(expired = true, content = content, protos = Seq(GenericMessage(msg.id.uid, Text(obfuscate(msg.contentString))))) // TODO: links
+//      case ASSET =>
+//        ???
+//      case ANY_ASSET =>
+//        ???
+      case LOCATION =>
+        val (name, zoom) = msg.location.fold(("", 14)) { l => (obfuscate(l.getName), l.getZoom) }
+        msg.copy(expired = true, content = Nil, protos = Seq(GenericMessage(msg.id.uid, Location(0, 0, name, zoom))))
+      case _ =>
+        msg.copy(expired = true)
     }
   }
 
@@ -96,5 +132,13 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
         }
       case _ => true
     }
+  }
+}
+
+object EphemeralMessagesService {
+
+  val randomChars = {
+    val cs = ('a' to 'z') ++ ('A' to 'Z')
+    Iterator continually cs(Random.nextInt(cs.size))
   }
 }

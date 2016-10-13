@@ -382,8 +382,8 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def findExpired(time: Instant = Instant.now)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL and ${ExpiryTime.name} <= ${time.toEpochMilli}", null, null, null, s"${ExpiryTime.name} ASC"))
 
-    def findExpiring(selfUserId: UserId)(implicit db: SQLiteDatabase) =
-      iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL AND ${User.name} <> '${selfUserId.str}'", null, null, null, s"${ExpiryTime.name} ASC"))
+    def findExpiring()(implicit db: SQLiteDatabase) =
+      iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL AND ${Expired.name} = 0", null, null, null, s"${ExpiryTime.name} ASC"))
 
     def findEphemeral(conv: ConvId)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Ephemeral.name} IS NOT NULL and ${ExpiryTime.name} IS NULL", null, null, null, s"${Time.name} ASC"))
