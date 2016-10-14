@@ -230,7 +230,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(NotificationInfo(data.msgType, data.msg, data.conv, convName = userName, userName = userName, isGroupConv = false))
+            Future.successful(NotificationInfo(data.msgType, data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false))
           case _ =>
             for {
               msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
@@ -239,7 +239,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.msgType, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
+              NotificationInfo(g.msgType, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
             }
         }
       }
@@ -256,6 +256,7 @@ object NotificationService {
                               userName: Option[String] = None,
                               isGroupConv: Boolean = false,
                               isUserMentioned: Boolean = false,
+                              isEphemeral: Boolean = false,
                               likedContent: Option[LikedContent] = None
   )
 
@@ -287,7 +288,7 @@ object NotificationService {
 
   def notification(msg: MessageData): Option[NotificationData] = {
     mapMessageType(msg.msgType, msg.protos, msg.members, msg.userId).map {
-      tp => NotificationData(NotId(msg.id), msg.contentString, msg.convId, msg.userId, tp, msg.time, msg.localTime, mentions = msg.mentions.keys.toSeq)
+      tp => NotificationData(NotId(msg.id), if (msg.isEphemeral) "" else msg.contentString, msg.convId, msg.userId, tp, msg.time, msg.localTime, ephemeral = msg.isEphemeral, mentions = msg.mentions.keys.toSeq)
     }
   }
 }
