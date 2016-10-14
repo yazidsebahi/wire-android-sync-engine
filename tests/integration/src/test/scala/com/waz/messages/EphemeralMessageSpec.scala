@@ -247,17 +247,6 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       msg.getExpirationTime shouldEqual Instant.MAX
     }
 
-    scenario("Receive hot knock") {
-      val msg = messages.getLastMessage
-      msg.getMessageType shouldEqual Message.Type.KNOCK
-
-      auto2 ? Knock(conv.data.remoteId) should eventually(be(Successful))
-
-      soon {
-        msg.isHotKnock shouldEqual true
-      }
-    }
-
     scenario("Receive link") {
       val msg = withNewMessage {
         auto2 ? SendText(conv.data.remoteId, "link: www.wire.com") should eventually(be(Successful))

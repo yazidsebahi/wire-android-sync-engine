@@ -61,7 +61,6 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
       withDelay {
         msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
         msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.SENT
-        msgs.getLastMessage.isHotKnock shouldEqual false
       }
     }
   }
@@ -84,10 +83,8 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
       withDelay {
         msgs should have size (count + 1)
         msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
-        msgs.getLastMessage.isHotKnock shouldEqual false
         msgs.getLastMessage.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 1000)
         conv.getIncomingKnock should not be null
-        conv.getIncomingKnock.isHotKnock shouldEqual false
         conv.getIncomingKnock.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 1000)
       }
     }
