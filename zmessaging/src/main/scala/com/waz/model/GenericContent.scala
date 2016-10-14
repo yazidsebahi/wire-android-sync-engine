@@ -412,10 +412,8 @@ object GenericContent {
   type Knock = Messages.Knock
   implicit object Knock extends GenericContent[Knock] {
     override def set(msg: GenericMessage) = msg.setKnock
-
-    def apply(hotKnock: Boolean) = returning(new Messages.Knock())(_.hotKnock = hotKnock)
-
-    def unapply(arg: Knock): Option[Boolean] = Some(arg.hotKnock)
+    def apply() = new Messages.Knock()
+    def unapply(arg: Knock): Boolean = true
   }
   implicit object EphemeralKnock extends EphemeralContent[Knock] {
     override def set(eph: Ephemeral): (Knock) => Ephemeral = eph.setKnock

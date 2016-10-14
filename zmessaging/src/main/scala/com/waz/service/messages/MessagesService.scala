@@ -145,7 +145,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case Text(text, mentions, links) =>
         val (tpe, content) = MessageData.messageContent(text, mentions, links)
         MessageData(id, conv.id, tpe, from, content, time = time, localTime = event.localTime.instant, protos = Seq(proto))
-      case Knock(hotKnock) =>
+      case Knock() =>
         MessageData(id, conv.id, Message.Type.KNOCK, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Reaction(_, _) => MessageData.Empty
       case Asset(_, _, UploadCancelled) => MessageData.Empty
@@ -213,24 +213,6 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         warn(s"Unexpected event for addMessage: $event")
         MessageData.Empty
     }
-  }
-
-  def updateKnockToHotKnock(msgId: MessageId) = messagesStorage.update(msgId, { msg =>
-    if (msg.hotKnock) msg
-    else msg.copy(protos = msg.protos :+ GenericMessage(msgId.uid, Knock(true)), localTime = Instant.now)
-  }).mapSome(_._2)
-
-  /**
-   * Return last message if it's KNOCK message added by self user.
-   */
-  def getActiveKnockMessage(convId: ConvId, selfUserId: UserId): Future[Option[MessageData]] = messagesStorage.getLastMessage(convId) map { lastMsg =>
-    lastMsg.filter(m => m.userId == selfUserId && m.msgType == Message.Type.KNOCK && !timeouts.messages.knockExpired(m))
-  }
-
-  def activeKnockMessage(convId: ConvId) = messagesStorage.lastMessage(convId) flatMap {
-    case Some(m) if m.msgType == Message.Type.KNOCK && !timeouts.messages.knockExpired(m) =>
-      Signal.future(users.getSelfUserId.map(_.flatMap { id => Some(m).filter(_.userId == id) }))
-    case _ => Signal.const(Option.empty[MessageData])
   }
 
   def getIncomingMessages = messagesStorage.getIncomingMessages flatMap { msgs =>

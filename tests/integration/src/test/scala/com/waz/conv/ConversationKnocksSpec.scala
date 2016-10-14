@@ -21,7 +21,6 @@ import java.lang.System.currentTimeMillis
 
 import akka.pattern.ask
 import com.waz.api.IncomingMessagesList.KnockListener
-import com.waz.api.InputStateIndicator.KnockState
 import com.waz.api.MessageContent._
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.RConvId
@@ -57,86 +56,13 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
     scenario("send single knock") {
       withDelay { msgs should have size 1 }
 
-      inputState.getKnockState shouldEqual KnockState.NONE
-
       conv.knock()
 
       withDelay {
-        inputState.getKnockState shouldEqual KnockState.KNOCKED
         msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
         msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.SENT
         msgs.getLastMessage.isHotKnock shouldEqual false
       }
-    }
-
-    scenario("send hot knock") {
-      val count = msgs.size
-      val msg = msgs.getLastMessage
-      withDelay {
-        msg.getMessageType shouldEqual ApiMessage.Type.KNOCK
-        msg.isHotKnock shouldEqual false
-        inputState.getKnockState shouldEqual KnockState.KNOCKED
-      }
-
-      var updateCalled = false
-      val listener = new UpdateListener {
-        override def updated(): Unit = updateCalled = true
-      }
-      msg.addUpdateListener(listener)
-
-      conv.knock()
-
-      withDelay {
-        withClue(msgs.map(_.data).mkString(",")) {
-          updateCalled shouldEqual true
-          msg.getMessageType shouldEqual ApiMessage.Type.KNOCK
-          msg.isHotKnock shouldEqual true
-          inputState.getKnockState shouldEqual KnockState.DISABLED
-
-          msgs should have size count
-          msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
-          msgs.getLastMessage.isHotKnock shouldEqual true
-        }
-      }
-    }
-
-    scenario("ignore next knock calls") {
-      val count = msgs.size
-
-      conv.knock()
-      conv.knock()
-      conv.knock()
-
-      Thread.sleep(250)
-      msgs should have size count
-
-      inputState.getKnockState shouldEqual KnockState.DISABLED
-    }
-
-    scenario("send hot knock right away") {
-      val count = msgs.size
-      conv.sendMessage(new Text("divider")) // send message so we can knock again
-      withDelay {
-        msgs should have size (count + 1)
-        inputState.getKnockState shouldEqual KnockState.NONE
-      }
-
-      implicit val ev = EventContext.Global
-
-      conv.knock()
-      conv.knock()
-
-      withDelay {
-        msgs should have size (count + 2)
-        msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
-        msgs.getLastMessage.isHotKnock shouldEqual true
-        inputState.getKnockState shouldEqual KnockState.DISABLED
-      }
-    }
-
-    scenario("Clear knock state after timeout") {
-      inputState.getKnockState shouldEqual KnockState.DISABLED
-      withDelay(inputState.getKnockState shouldEqual KnockState.NONE)(zmessaging.timeouts.messages.knockTimeout + 1.second)
     }
   }
 
@@ -163,23 +89,6 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
         conv.getIncomingKnock should not be null
         conv.getIncomingKnock.isHotKnock shouldEqual false
         conv.getIncomingKnock.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 1000)
-      }
-    }
-
-    scenario("update incoming knock message to hot knock") {
-      val count = msgs.size()
-      auto2 ? Knock(RConvId(self.getUser.getId)) should eventually(be(Successful))
-
-      withDelay {
-        msgs should have size count
-        msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
-        msgs.getLastMessage.isHotKnock shouldEqual true
-        msgs.getLastMessage.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 500)
-        withClue(s"${msgs.getLastMessage.getLocalTime}") {
-          conv.getIncomingKnock should not be null
-        }
-        conv.getIncomingKnock.isHotKnock shouldEqual true
-        conv.getIncomingKnock.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 500)
       }
     }
   }
@@ -227,27 +136,6 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
           knocks.lastOption shouldEqual knock
         }
       }(20.seconds)
-    }
-
-    scenario("notify on switch to hot knock") {
-      val count = knocks.size()
-
-      @volatile var knock = None: Option[ApiMessage]
-      knocks.addKnockListener(new KnockListener {
-        override def onKnock(k: ApiMessage): Unit = knock = Some(k)
-      })
-
-      auto2 ? Knock(RConvId(self.getUser.getId)) should eventually(be(Successful))
-
-      withDelay {
-        withClue(s"knocks: ${knocks.map(m => (m.getMessageType, m.isHotKnock))}") {
-          knocks should have size count
-          knocks.last.isHotKnock shouldEqual true
-          knock should be('defined)
-          knock.map(_.isHotKnock) shouldEqual Some(true)
-          knocks.lastOption shouldEqual knock
-        }
-      }
     }
   }
 }

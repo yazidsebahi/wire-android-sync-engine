@@ -36,15 +36,15 @@ object MessageDataMigration {
     // generates protos for KNOCK msgs, to preserve hot knock info
 
     import Columns.{v68 => src, v69 => dst}
-    val from = TableDesc("Messages", Columns.v68.all)
-    val to = TableDesc("Messages_tmp", Columns.v69.all)
+    val from = TableDesc("Messages", src.all)
+    val to = TableDesc("Messages_tmp", dst.all)
 
     def updateProtos() = {
       withStatement("UPDATE Messages_tmp SET protos = ? WHERE _id = ?") { stmt =>
         forEachRow(db.query("Messages", Array("_id", "hot"), "msg_type = 'Knock'", null, null, null, null)) { c =>
           stmt.clearBindings()
           val id = c.getString(0)
-          val protos = Seq(GenericMessage(Uid(id), Knock(src.HotKnock.load(c, 1))))
+          val protos = Seq(GenericMessage(Uid(id), Knock()))
 
           dst.Protos.bind(protos, 1, stmt)
           stmt.bindString(2, id)

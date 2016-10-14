@@ -28,7 +28,7 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location}
+import com.waz.model.GenericContent.{Asset, ImageAsset, LinkPreview, Location}
 import com.waz.model.GenericMessage.{GenericMessageContent, TextMessage}
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
@@ -74,12 +74,6 @@ case class MessageData(id: MessageId,
   def assetId = AssetId(id.str)
 
   def isLocal = state == Message.Status.DEFAULT || state == Message.Status.PENDING || state == Message.Status.FAILED || state == Message.Status.FAILED_READ
-
-  def hotKnock =
-    msgType == Message.Type.KNOCK && protos.exists {
-      case GenericMessageContent(Knock(true)) => true
-      case _ => false
-    }
 
   def mentions = protos.lastOption match {
     case Some(TextMessage(_, ms, _)) => ms

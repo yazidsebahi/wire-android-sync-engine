@@ -156,7 +156,11 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getNewConversationName: String = data.name.getOrElse("")
 
-  override def isHotKnock: Boolean = data.hotKnock
+  /**
+    * @deprecated hot knocks are no longer supported.
+    *            This method will always return `false`.
+    */
+  override def isHotKnock: Boolean = false
 
   override def isFirstMessage: Boolean = data.firstMessage
 

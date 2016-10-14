@@ -177,7 +177,6 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
         val u = prev.copy(msgType = msg.msgType, time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
         prev.msgType match {
           case Message.Type.RECALLED => prev // ignore updates to already recalled message
-          case Message.Type.KNOCK => u.copy(localTime = if (msg.hotKnock && !prev.hotKnock) msg.localTime else prev.localTime)
           case _ => u
         }
       }

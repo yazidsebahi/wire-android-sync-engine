@@ -126,15 +126,14 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       }
     }
 
-    scenario("Send hot-knock") {
+    scenario("Send another knock") {
       val count = messages.size
       conv.knock()
 
       soon {
-        messages should have size count
+        messages should have size (count + 1)
         val msg = messages.getLastMessage
         msg.getMessageType shouldEqual Message.Type.KNOCK
-        msg.isHotKnock shouldEqual true
         assertEphemeralSent(msg)
       }
     }

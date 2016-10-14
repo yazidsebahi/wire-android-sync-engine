@@ -55,7 +55,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
 
   lazy val incomingMessages = storage {
-    MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.knockTimeout.toMillis)(_)
+    MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis)(_)
   } map { new IncomingMessages(userId, _, timeouts) }
 
   def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] =
@@ -230,7 +230,7 @@ class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: 
 
   private val messagesSource = new SourceSignal[SortedMap[(Long, MessageId), MessageData]](Some(initial.map(m => (m.localTime.toEpochMilli, m.id) -> m)(breakOut)))
 
-  def sinceTime = System.currentTimeMillis - timeouts.messages.knockTimeout.toMillis
+  def sinceTime = System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis
 
   val messages = messagesSource map { msgs =>
     val time = sinceTime

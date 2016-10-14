@@ -154,13 +154,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
       withConvFromStore { _ should not(beArchived) }
     }
 
-    scenario("On receiving a hot knock, an archived conversation stays archived") {
-      archive()
-      hotKnock()
-      delay()
-      withConvFromStore { _ should not(beArchived) }
-    }
-
     scenario("On receiving a call, an archived conversation is unarchived") {
       archive()
       incomingCall()
@@ -223,12 +216,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
       withConvFromStore { _ should not(beArchived) }
     }
 
-    scenario("On receiving a hot knock, a muted archived conversation is unarchived") {
-      archiveAndMute()
-      hotKnock()
-      withConvFromStore { _ should not(beArchived) }
-    }
-
     scenario("On receiving a generic knock, a muted archived conversation is unarchived") {
       archiveAndMute()
       genericKnock()
@@ -284,13 +271,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
       withConvFromStore { _ should beArchived }
     }
 
-    scenario("On receiving an old hot knock, an unmuted archived conversation stays archived") {
-      archive()
-      hotKnock(old = true)
-      delay()
-      withConvFromStore { _ should beArchived }
-    }
-
     scenario("If an unmuted conversation was renamed before archiving, it stays archived") {
       archive()
       renameConv(old = true)
@@ -333,9 +313,8 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   def renameConv(old: Boolean = false): Unit = service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, date(old), user1.id, ""))
 
-  def knock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(false))))
-  def hotKnock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock(true))))
-  def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock(false))))
+  def knock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock())))
+  def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock())))
 
   def sendTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, "hello"))
   def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))

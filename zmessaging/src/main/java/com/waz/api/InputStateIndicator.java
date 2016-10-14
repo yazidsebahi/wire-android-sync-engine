@@ -19,12 +19,18 @@ package com.waz.api;
 
 public interface InputStateIndicator extends UiObservable {
 
+    /**
+     * @deprecated - hot knocks are no longer supported, so this is useless.
+     */
     enum KnockState {
         NONE,       // user can knock
         KNOCKED,    // user just knocked, next knock() will cause hot knock
         DISABLED    // user hot knocked, knocking is now disabled
     }
 
+    /**
+     * @deprecated - hot knocks are no longer supported, so this is useless.
+     */
     KnockState getKnockState();
 
     UsersList getTypingUsers();
