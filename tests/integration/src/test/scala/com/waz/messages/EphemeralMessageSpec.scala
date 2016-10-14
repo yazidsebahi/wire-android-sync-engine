@@ -157,6 +157,26 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         msg.getMessageType shouldEqual Message.Type.ANY_ASSET
       }
     }
+
+    scenario("Send location") {
+      sendMessage(new MessageContent.Location(50f, 20f, "location", 13)) { msg =>
+        msg.getMessageType shouldEqual Message.Type.LOCATION
+      }
+    }
+
+    scenario("Obfuscate location when timer expires") {
+      val msg = messages.getLastMessage
+      msg.getMessageType shouldEqual Message.Type.LOCATION
+      zmessaging.messagesStorage.update(msg.data.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
+
+      soon {
+        msg.getExpirationTime should be < Instant.now
+        msg.isExpired shouldEqual true
+        msg.getLocation.getLatitude shouldEqual 0f
+        msg.getLocation.getLongitude shouldEqual 0f
+        msg.getLocation.getName should not be "location"
+      }
+    }
   }
 
   scenario("init remote") {
@@ -332,6 +352,18 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE
         msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
       }
+    }
+
+    scenario("Receive location") {
+      val msg = withNewMessage {
+        val Successful(mid) = (auto2 ? SendLocation(conv.data.remoteId, 51f, 20f, "location", 13)).await()
+        messageId = MessageId(mid)
+      }
+      msg.getMessageType shouldEqual Message.Type.LOCATION
+      msg.isEphemeral shouldEqual true
+      msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
+      msg.getExpirationTime shouldEqual Instant.MAX
+      msg.getLocation shouldEqual new MessageContent.Location(51f, 20f, "location", 13)
     }
   }
 }

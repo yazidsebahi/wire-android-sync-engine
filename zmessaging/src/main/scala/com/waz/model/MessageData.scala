@@ -22,14 +22,14 @@ import android.database.DatabaseUtils.queryNumEntries
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.waz.api
-import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.Message.Type._
+import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock, LinkPreview, Location}
-import com.waz.model.GenericMessage.TextMessage
+import com.waz.model.GenericMessage.{GenericMessageContent, TextMessage}
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
 import com.waz.service.media.{MessageContentBuilder, RichMediaContentParser}
@@ -77,7 +77,7 @@ case class MessageData(id: MessageId,
 
   def hotKnock =
     msgType == Message.Type.KNOCK && protos.exists {
-      case GenericMessage(_, Knock(true)) => true
+      case GenericMessageContent(Knock(true)) => true
       case _ => false
     }
 
@@ -89,8 +89,8 @@ case class MessageData(id: MessageId,
   lazy val imageDimensions: Option[Dim2] = msgType match {
     case Message.Type.ASSET =>
       protos.collectFirst {
-        case GenericMessage(_, Asset.WithDimensions(d)) => d
-        case GenericMessage(_, ImageAsset(_, _, _, w, h, _, _, _, _)) => Dim2(w, h)
+        case GenericMessageContent(Asset.WithDimensions(d)) => d
+        case GenericMessageContent(ImageAsset(_, _, _, w, h, _, _, _, _)) => Dim2(w, h)
       } orElse {
         content.headOption.collect {
           case MessageContent(_, _, _, _, Some(_), w, h, _, _) => Dim2(w, h)
@@ -98,14 +98,14 @@ case class MessageData(id: MessageId,
       }
     case _ =>
       protos.reverseIterator.collectFirst {
-        case GenericMessage(_, Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _)) => d
-        case GenericMessage(_, Asset(_, Some(Asset.Preview(_, _, _, _, Some(HasDimensions(d)))), _)) => d
+        case GenericMessageContent(Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _)) => d
+        case GenericMessageContent(Asset(_, Some(Asset.Preview(_, _, _, _, Some(HasDimensions(d)))), _)) => d
       }
   }
 
   lazy val location =
     protos.collectFirst {
-      case GenericMessage(_, Location(lon, lat, descr, zoom)) => new api.MessageContent.Location(lon, lat, descr.getOrElse(""), zoom.getOrElse(14))
+      case GenericMessageContent(Location(lon, lat, descr, zoom)) => new api.MessageContent.Location(lon, lat, descr.getOrElse(""), zoom.getOrElse(14))
     }
 
   /**

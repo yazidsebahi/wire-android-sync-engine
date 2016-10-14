@@ -29,7 +29,7 @@ import com.waz.model.AssetData.UploadKey
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.ImageMetaData
-import com.waz.model.GenericContent.{Knock, MsgEdit}
+import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
@@ -186,11 +186,22 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
           case Left(err) => successful(Left(err))
         }
       case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
+      case LOCATION =>
+        msg.protos.headOption match {
+          case Some(GenericMessage(id, loc: Location)) if msg.isEphemeral =>
+            postMessage(conv, msg.ephemeral, GenericMessage(id, Ephemeral(msg.ephemeral, loc))).map(_.map(_.instant))
+          case Some(proto) =>
+            postMessage(conv, msg.ephemeral, proto).map(_.map(_.instant))
+          case None =>
+            successful(Left(internalError(s"Unexpected location message content: $msg")))
+        }
       case tpe =>
         msg.protos.headOption match {
-          case Some(proto) =>
+          case Some(proto) if !msg.isEphemeral =>
             verbose(s"sending generic message: $proto")
             postMessage(conv, msg.ephemeral, proto).map(_.map(_.instant))
+          case Some(proto) =>
+            successful(Left(internalError(s"Can not send generic ephemeral message: $msg")))
           case None =>
             successful(Left(internalError(s"Unsupported message type in postOtrMessage: $tpe")))
         }

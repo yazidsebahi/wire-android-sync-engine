@@ -102,6 +102,13 @@ package object model {
       }
     }
 
+    object GenericMessageContent {
+      def unapply(msg: GenericMessage): Option[Any] = msg match {
+        case GenericMessage(_, Ephemeral(_, content)) => Some(content)
+        case GenericMessage(_, content)               => Some(content)
+      }
+    }
+
     implicit object JsDecoder extends JsonDecoder[GenericMessage] {
       override def apply(implicit js: JSONObject): GenericMessage = GenericMessage(Base64.decode(js.getString("proto"), Base64.DEFAULT))
     }
