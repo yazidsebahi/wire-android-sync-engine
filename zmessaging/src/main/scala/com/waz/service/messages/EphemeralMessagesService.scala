@@ -101,7 +101,8 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
         val content = msg.content map { ct =>
           ct.copy(content = obfuscate(ct.content), openGraph = None) //TODO: asset and rich media
         }
-        msg.copy(expired = true, content = content, protos = Seq(GenericMessage(msg.id.uid, Text(obfuscate(msg.contentString))))) // TODO: links
+        msg.copy(expired = true, content = content, protos = Seq(GenericMessage(msg.id.uid, Text(obfuscate(msg.contentString))))) // TODO: obfuscate links
+      // TODO: delete assets, should be enough to replace remote id
 //      case ASSET =>
 //        ???
 //      case ANY_ASSET =>
@@ -122,6 +123,7 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
 
   private def shouldStartTimer(msg: MessageData) = {
     if (msg.ephemeral == EphemeralExpiration.NONE || msg.expiryTime.isDefined) false // timer already started
+    else if (msg.userId == selfUserId) false // timer for own messages is started in MessagesService.messageSent
     else msg.msgType match {
       case MessageData.IsAsset() | Message.Type.ASSET =>
         // check if asset was fully uploaded
