@@ -21,9 +21,9 @@ import java.io.ByteArrayInputStream
 
 import com.waz.api._
 import com.waz.provision.ActorMessage.{ConvMessages, _}
-import com.waz.testutils._
 import com.waz.utils._
 import org.scalatest._
+import com.waz.testutils._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.concurrent.ScalaFutures
@@ -68,10 +68,21 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     messages.getLastMessage
   }
 
+  scenario("init remote") {
+    auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
+    auto2 ? AwaitSyncCompleted should eventually(be(Successful))
+    soon {
+      val ConvMessages(ms) = (auto2 ? GetMessages(conv.data.remoteId)).await()
+      ms should not be empty
+    }
+  }
+
   feature("Sending") {
 
+    var messageId = MessageId()
+
     def assertEphemeralSent(msg: Message) = {
-      msg.getMessageStatus shouldEqual Message.Status.SENT
+      Set(Message.Status.SENT, Message.Status.DELIVERED) should contain (msg.getMessageStatus)
       msg.isEphemeral shouldEqual true
       msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
       val time = msg.getExpirationTime
@@ -97,13 +108,32 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     scenario("Obfuscate text message when timer expires") {
       val msg = messages.getLastMessage
       msg.getBody shouldEqual "test msg 1"
+      messageId = msg.data.id
+
       zmessaging.messagesStorage.update(msg.data.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
 
       soon {
         msg.getExpirationTime should be < Instant.now
         msg.isExpired shouldEqual true
         msg.getBody should not equal "test msg 1"
+        msg.data.id shouldEqual messageId
       }
+
+      // message still exists on receiver side
+      val ConvMessages(ms) = (auto2 ? GetMessages(conv.data.remoteId)).await()
+      ms.find(_.id == messageId) shouldBe defined
+    }
+
+    scenario("Delete message when it's read on receiver side") {
+      val count = messages.size
+      val msg = messages.getLastMessage
+
+      auto2 ? MarkEphemeralRead(conv.data.remoteId, msg.data.id) should eventually(be(Successful))
+
+      soon {
+        msg.isDeleted shouldEqual true
+        messages.size shouldEqual (count - 1)
+      }(patience(10.seconds))
     }
 
     scenario("Send link") {
@@ -176,11 +206,6 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         msg.getLocation.getName should not be "location"
       }
     }
-  }
-
-  scenario("init remote") {
-    auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
-    auto2 ? AwaitSyncCompleted should eventually(be(Successful))
   }
 
   feature("Receiving") {

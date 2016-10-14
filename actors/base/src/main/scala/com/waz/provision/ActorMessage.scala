@@ -248,6 +248,8 @@ object ActorMessage {
 
   case class SetEphemeral(remoteId: RConvId, ephemeral: EphemeralExpiration) extends ActorMessage
 
+  case class MarkEphemeralRead(convId: RConvId, msgId: MessageId) extends ActorMessage
+
   /**
    * Stop any typing going on in a conversation
    * @param remoteId The (remote) conversation id. Note on [[RConvId]]: @see SendText

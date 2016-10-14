@@ -110,7 +110,6 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         case Ephemeral(_, c) =>
           update(id, convId, time, c, msg, dataId, data)
         case _ =>
-          error(s"unexpected asset message: $msg")
           Future successful None
       }
 
@@ -235,7 +234,9 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case Some(msg) if msg.isEphemeral && convId.str == userId.str =>
         // ephemeral messages will be recalled by receiver in 1-1 conv (once msg expires)
         content.deleteOnUserRequest(Seq(msgId)) map { _ => None }
-      case _ => Future successful None
+      case msg =>
+        warn(s"can not recall $msg, requeast by $userId")
+        Future successful None
     }
 
   def applyMessageEdit(convId: ConvId, userId: UserId, time: Instant, gm: GenericMessage) = Serialized.future("applyMessageEdit", convId) {
