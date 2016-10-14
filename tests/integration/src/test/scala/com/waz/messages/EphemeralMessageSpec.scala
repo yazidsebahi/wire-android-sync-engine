@@ -272,11 +272,6 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         override def updated(): Unit = image = msg.getImage
       })
 
-      awaitUi(100.millis)
-
-      image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe empty // image not yet uploaded
-      msg.getExpirationTime shouldEqual Instant.MAX
-
       soon {
         withClue(s"$image, data: ${image.data}") {
           image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe defined // full image received
