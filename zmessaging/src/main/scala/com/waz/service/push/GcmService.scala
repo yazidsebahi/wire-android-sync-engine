@@ -30,7 +30,7 @@ import com.waz.utils._
 import com.waz.utils.events.{EventContext, Signal}
 import org.threeten.bp.Instant
 
-import scala.collection.breakOut
+import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
 class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVale: KeyValueStorage, convsContent: ConversationsContentUpdater,

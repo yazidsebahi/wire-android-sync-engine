@@ -46,11 +46,10 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
       Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
   }
 
-  //TODO bring back timing and reset in case GCM is broken
   // true if websocket should be active,
-  val wsActive = lifecycleActive.flatMap {
-    case false if gcmService.gcmAvailable => gcmService.notificationsToProcess //if there is a notification to be processed, open websocket
-    case _ => Signal const true //Lifecycle active or no play services available, need web socket
+  val wsActive = lifecycleActive map {
+    case false if gcmService.gcmAvailable => false
+    case _ => true //Lifecycle active or no play services available, need web socket
   }
 
   val client = wsActive map {

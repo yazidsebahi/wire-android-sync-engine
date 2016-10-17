@@ -32,6 +32,7 @@ import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
+import scala.concurrent.duration._
 
 import scala.concurrent.{Future, Promise}
 
@@ -87,12 +88,18 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
   webSocket.connected {
     case true =>
       debug("onConnected")
-      syncHistoryOnConnect()
+      syncHistory()
       connectedPushPromise.trySuccess(self)
     case false =>
       debug("onDisconnected")
       connectedPushPromise.tryFailure(new Exception("onDisconnected"))
       connectedPushPromise = Promise()
+  }
+
+  //no need to sync history on GCM if websocket is connected
+  webSocket.connected.zip(gcmService.notificationsToProcess.throttle(1.second)).on(dispatcher) {
+    case (false, true) => syncHistory()
+    case _ => //do nothing
   }
 
   def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
@@ -115,14 +122,15 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
       }
     }
   }.map {
-    _ => gcmService.notificationsToProcess ! false //Finished loading notifications, allow websocket to close
+          //FIXME handle failure
+    _ => gcmService.notificationsToProcess ! false //Finished loading notifications
   }}
 
-  private def syncHistoryOnConnect(): Unit =
-    lastNotification.lastNotificationId() map {
+  private def syncHistory() =
+    lastNotification.lastNotificationId() flatMap {
       case None =>
         debug("no last notification Id on connect, will schedule slow sync")
-        signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
+        Future.successful(signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis()))
       case Some(LastNotificationIdService.NoNotificationsId) =>
         verbose(s"no last notification available, will try loading all notifications")
         loadNotifications(None)
@@ -132,7 +140,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     }
 
 
-  private def loadNotifications(lastId: Option[Uid]): Future[Unit] =
+  private def loadNotifications(lastId: Option[Uid]) =
     client.loadNotifications(lastId, clientId, pageSize = EventsClient.PageSize).flatMap {
       case Left(error) =>
         warn(s"/notifications failed with error: $error, will schedule slow sync")
@@ -185,7 +193,7 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
     }
   }
 
-  def updateLastIdOnNotification(id: Uid, processing: Future[Unit]): Unit = {
+  def updateLastIdOnNotification(id: Uid, processing: Future[Any]): Unit = {
     fetchLast.cancel()
     processing.onSuccess {
       case _ =>
