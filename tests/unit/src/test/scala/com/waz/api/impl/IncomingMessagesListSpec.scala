@@ -63,17 +63,14 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
       }
     }
 
-    scenario("Update knock to hotknock in incoming messages list") {
+    scenario("Add knock message to incoming messages list") {
       val msgId = MessageId()
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), GenericMessage(msgId.uid, Knock(false))).withCurrentLocalTime()
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), GenericMessage(msgId.uid, Knock())).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
-      val event1 = GenericMessageEvent(Uid(), conv.remoteId, new Date, event.from, GenericMessage(msgId.uid, Knock(true))).withCurrentLocalTime()
-      withUpdate(msgsSignal) { service.dispatch(event1) }
       withDelay {
         val msgs = incoming
         msgs should have size 2
-        msgs.last.localTime shouldEqual event1.localTime.instant
-        msgs.last.hotKnock shouldEqual true
+        msgs.last.localTime shouldEqual event.localTime.instant
       }
     }
 
@@ -151,7 +148,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Don't call listeners if received old messages") {
-      val time = Instant.now - service.timeouts.messages.knockTimeout - 10.millis
+      val time = Instant.now - service.timeouts.messages.incomingTimeout - 10.millis
       loadMessages(List(md(time), md(time + 1.milli))) should be(empty)
     }
   }

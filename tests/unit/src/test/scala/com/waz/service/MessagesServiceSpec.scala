@@ -322,7 +322,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(false)))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock()))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -330,7 +330,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         val msgs = listMessages(conv.id)
         msgs should have size 1
-        msgs.last.hotKnock shouldEqual false
       }
     }
 
@@ -339,7 +338,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val conv = addGroup()
       val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
 
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(false)))
+      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock()))
       event.localTime = new Date
 
       messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
@@ -348,60 +347,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       withDelay {
         val msgs = listMessages(conv.id)
         msgs should have size 1
-        msgs.last.hotKnock shouldEqual false
-      }
-    }
-
-    scenario("Update local knock message on hot knock event") {
-      val conv = addGroup()
-      val msg = Await.result(messages.addKnockMessage(conv.id, selfId), timeout)
-
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(false)))
-      event.localTime = new Date
-
-      messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
-
-      withDelay {
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.last.hotKnock shouldEqual false
-      }
-
-      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, selfId, GenericMessage(msg.id.uid, Knock(true)))
-      event2.localTime = new Date
-
-      messages.processEvents(conv, Seq(event2.withCurrentLocalTime()))
-
-      withDelay {
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.last.hotKnock shouldEqual true
-      }
-    }
-
-    scenario("update knock to hotknock for incoming events") {
-      val conv = addGroup()
-      val user = UserId()
-      val msgId = MessageId()
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId.uid, Knock(false)))
-
-      messages.processEvents(conv, Seq(event.withCurrentLocalTime()))
-
-      withDelay {
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.last.hotKnock shouldEqual false
-      }
-
-      val event2 = GenericMessageEvent(Uid(), conv.remoteId, new Date, user, GenericMessage(msgId.uid, Knock(true)))
-      event2.localTime = new Date
-
-      messages.processEvents(conv, Seq(event2.withCurrentLocalTime()))
-
-      withDelay {
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.last.hotKnock shouldEqual true
       }
     }
   }
@@ -631,7 +576,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       incoming { _ => updateCount += 1}
 
       withDelay(updateCount shouldEqual 1)
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock(false))).withCurrentLocalTime())
+      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock())).withCurrentLocalTime())
 
       withDelay {
         updateCount shouldEqual 2
@@ -642,36 +587,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         val msgs = listMessages(conv.id)
         msgs should have size 1
         msgs.head.msgType shouldEqual Message.Type.KNOCK
-        msgs.head.hotKnock shouldEqual false
-      }
-    }
-
-    scenario("receive hotknock") {
-      val user1 = UserDataDao.insertOrReplace(UserData("test"))
-      val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
-
-      @volatile var updateCount = 0
-      val incoming = messagesStorage.getIncomingMessages
-      incoming { _ => updateCount += 1 }
-
-      withDelay(updateCount shouldEqual 1)
-
-      val msgId = MessageId()
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId.uid, Knock(false))).withCurrentLocalTime())
-
-      withDelay {
-        updateCount should be > 1
-      }
-      val count = updateCount
-
-      service.dispatch(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(msgId.uid, Knock(true))).withCurrentLocalTime())
-
-      withDelay {
-        updateCount should be > count
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.head.msgType shouldEqual Message.Type.KNOCK
-        msgs.head.hotKnock shouldEqual true
       }
     }
   }

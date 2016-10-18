@@ -72,7 +72,18 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
     updateParts()
     notifyChanged()
     convId ! data.convId
+    notifyEphemeralRead()
   }
+
+
+  override def addUpdateListener(listener: UpdateListener): Unit = {
+    super.addUpdateListener(listener)
+    notifyEphemeralRead()
+  }
+
+  private def notifyEphemeralRead() =
+    if (data.ephemeral != EphemeralExpiration.NONE && data.expiryTime.isEmpty && getListenersCount > 0)
+      context.zms { _.ephemeral.onMessageRead(id) }
 
   private def updateParts(): Unit = parts = data.content.zipWithIndex.map { case (c, index) => new MessagePart(c, data, index) } (breakOut)
 
@@ -102,6 +113,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def getLocation: Location = data.location.orNull
 
   override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
+
+  override def isExpired: Boolean = data.expired
 
   override def getEphemeralExpiration = data.ephemeral
 
@@ -143,7 +156,11 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def getNewConversationName: String = data.name.getOrElse("")
 
-  override def isHotKnock: Boolean = data.hotKnock
+  /**
+    * @deprecated hot knocks are no longer supported.
+    *            This method will always return `false`.
+    */
+  override def isHotKnock: Boolean = false
 
   override def isFirstMessage: Boolean = data.firstMessage
 
@@ -285,6 +302,7 @@ object EmptyMessage extends com.waz.api.Message {
   override def isEdited: Boolean = false
   override def update(content: Text): Unit = ()
   override def isEphemeral: Boolean = false
+  override def isExpired: Boolean = false
   override def getEphemeralExpiration = EphemeralExpiration.NONE
   override def getExpirationTime: Instant = Instant.MAX
 

@@ -361,21 +361,12 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   def findGroupConversations(prefix: SearchKey, limit: Int): Future[Seq[ConversationData]] =
     withSelfUserFuture(id => convStorage.search(prefix, id)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))
 
-  def knock(id: ConvId): Future[Option[MessageData]] = withSelfUserFuture { selfUserId =>
-    Serialized.future("knock", id) {
-      getActiveKnockMessage(id, selfUserId) flatMap {
-        case Some(msg) if msg.hotKnock => CancellableFuture.successful(None) // ignore - hot knock not expired
-        case Some(msg) => // change to hot knock
-          sync.postMessage(msg.id, id, msg.editTime)
-          updateKnockToHotKnock(msg.id)
-        case _ =>
-          addKnockMessage(id, selfUserId) map { msg =>
-            sync.postMessage(msg.id, id, msg.editTime)
-            Some(msg)
-          }
-      }
-    }
-  }
+  def knock(id: ConvId): Future[Option[MessageData]] =
+    for {
+      msg <- addKnockMessage(id, selfUserId)
+      _   <- sync.postMessage(msg.id, id, msg.editTime)
+    } yield
+      Some(msg)
 
   def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]] = {
     updateConversationLastRead(convId, msg.time) map {

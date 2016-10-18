@@ -114,7 +114,7 @@ object ImageData {
 
   object Tag {
     val Preview = "preview"
-    var Medium = "medium"
+    val Medium = "medium"
     val MediumPreview = "mediumPreview" // for still video or gif preview
     val SmallProfile = "smallProfile"
   }

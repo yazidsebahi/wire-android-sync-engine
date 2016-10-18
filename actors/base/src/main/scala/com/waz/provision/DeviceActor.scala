@@ -368,6 +368,17 @@ class DeviceActor(val deviceName: String,
         zmessaging.convsUi.knock(conv.id)
       }
 
+    case SetEphemeral(remoteId, expiration) =>
+      withConv(remoteId) { conv =>
+        zmessaging.convsUi.setEphemeral(conv.id, expiration)
+      }
+
+    case MarkEphemeralRead(convId, messageId) =>
+      zmessaging.ephemeral.onMessageRead(messageId) map {
+        case Some(_) => Successful
+        case None    => Failed(s"message not found with id: $messageId")
+      }
+
     case Typing(remoteId) =>
       whenConversationExists(remoteId) { conv =>
         conv.getInputStateIndicator.textChanged()

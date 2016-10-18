@@ -46,8 +46,6 @@ import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
-import scala.util.{Success, Try}
-import scala.{PartialFunction => =/>}
 
 class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
                  cryptoBox: CryptoBoxService, members: MembersStorage, convs: ConversationsContentUpdater,
@@ -75,18 +73,10 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
         val batched = if (ph) collectEvents(clientId, batch) else Future.successful(batch)
         transform(remaining, accu :+ batched)
       }
-    sequence(transform(events, Vector.empty)).map(_.flatten) andThen checkForErrorsAndSendAutomaticResponseToRecoverCryptoSession
+    sequence(transform(events, Vector.empty)).map(_.flatten)
   }
 
   private lazy val isOtrEvent: Event => Boolean = PartialFunction.cond(_) { case _: OtrEvent => true }
-
-  private lazy val checkForErrorsAndSendAutomaticResponseToRecoverCryptoSession: Try[Vector[Event]] =/> Unit = {
-    case Success(events) if metadata.internalBuild =>
-      val errors = events collect {
-        case OtrErrorEvent(_, conv, _, _, err: DecryptionError) => (conv, err)
-      }
-      if (errors.nonEmpty) sendSessionRecovery(errors.groupBy(_._1).mapValues(_.map(_._2)))
-  }
 
   private def collectEvents(clientId: ClientId, events: Vector[Event]): Future[Vector[Event]] =
     Future.traverse(events) {
@@ -184,20 +174,6 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
       verbose(s"decrypted data len: ${plain.length}")
       GenericMessage(plain)
     }
-
-  // Try sending a message to clients from which we just got a decryption error.
-  // This is very ugly solution and will lead to infinite msg sending loops if msgs continue to fail o both ends
-  // It should only be used in internal build
-  private def sendSessionRecovery(errors: Map[RConvId, Seq[DecryptionError]]) = Future.traverse(errors) {
-    case (convId, errs) =>
-      convs.processConvWithRemoteId(convId, retryAsync = false) { conv =>
-        Future.traverse(errs.groupBy(_.from)) { case (user, es) =>
-          Future.traverse(es) { err =>
-            sync.postSessionReset(conv.id, user, err.sender)
-          }
-        }
-      }
-  }
 
   def encryptTargetedMessage(user: UserId, client: ClientId, msg: GenericMessage): Future[Option[OtrClient.EncryptedContent]] = {
     val msgData = GenericMessage.toByteArray(msg)

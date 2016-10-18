@@ -157,7 +157,7 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
 
     scenario("Migrate to protobuf model in 69") {
       implicit val db = loadDb("/db/zmessaging_60.db")
-      dbHelper.onUpgrade(db, 60, 71)
+      dbHelper.onUpgrade(db, 60, ZMessagingDB.DbVersion)
 
       val msgs = MessageDataDao.list
       msgs should have size 994
@@ -168,7 +168,7 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
 
     scenario("Add message editTime column in 71") {
       implicit val db = loadDb("/db/zmessaging_60.db")
-      dbHelper.onUpgrade(db, 60, 71)
+      dbHelper.onUpgrade(db, 60, ZMessagingDB.DbVersion)
 
       val msgs = MessageDataDao.list
       msgs should have size 994

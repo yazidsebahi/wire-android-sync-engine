@@ -137,7 +137,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       case Some(updated) =>
         storage.onUploadFailed ! updated
         messages.get(MessageId(id.str)) flatMap {
-          case Some(m) => sync.postAssetStatus(m.id, m.convId, status)
+          case Some(m) => sync.postAssetStatus(m.id, m.convId, m.ephemeral, status)
           case None =>
             warn(s"No message found for asset upload: $id")
             Future.successful(())

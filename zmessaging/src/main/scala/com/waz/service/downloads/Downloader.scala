@@ -36,8 +36,8 @@ import com.waz.sync.client.AssetClient
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.EventStream
-import com.waz.znet.Response.ResponseBodyDecoder
-import com.waz.znet.ResponseConsumer.FileConsumer
+import com.waz.znet.Response.{DefaultResponseBodyDecoder, ResponseBodyDecoder}
+import com.waz.znet.ResponseConsumer.{FileConsumer, JsonConsumer}
 import com.waz.znet.{FileResponse, Request}
 
 import scala.concurrent._
@@ -96,7 +96,10 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
 }
 
 class AssetBodyDecoder(cache: CacheService, key: Option[AESKey] = None, sha: Option[Sha256] = None) extends ResponseBodyDecoder {
-  override def apply(contentType: String, contentLength: Long) = new AssetDataConsumer(contentType, cache, key, sha)
+  override def apply(contentType: String, contentLength: Long) = contentType match {
+    case DefaultResponseBodyDecoder.JsonContent() => new JsonConsumer(contentLength)
+    case _ => new AssetDataConsumer(contentType, cache, key, sha)
+  }
 }
 
 /**

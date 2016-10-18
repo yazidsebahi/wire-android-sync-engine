@@ -17,6 +17,7 @@
  */
 package com.waz.model.sync
 
+import com.waz.api.EphemeralExpiration
 import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.{SearchQuery, _}
@@ -162,7 +163,7 @@ object SyncRequest {
     override val mergeKey = (cmd, convId, msg, recalledId)
   }
 
-  case class PostAssetStatus(convId: ConvId, messageId: MessageId, status: AssetStatus.Syncable) extends RequestForConversation(Cmd.PostAssetStatus) with SerialExecutionWithinConversation {
+  case class PostAssetStatus(convId: ConvId, messageId: MessageId, exp: EphemeralExpiration, status: AssetStatus.Syncable) extends RequestForConversation(Cmd.PostAssetStatus) with SerialExecutionWithinConversation {
     override val mergeKey = (cmd, convId, messageId)
     override def merge(req: SyncRequest) = mergeHelper[PostAssetStatus](req)(Merged(_))
   }
@@ -297,7 +298,7 @@ object SyncRequest {
         case Cmd.PostMessage           => PostMessage(convId, messageId, 'time)
         case Cmd.PostDeleted           => PostDeleted(convId, messageId)
         case Cmd.PostRecalled          => PostRecalled(convId, messageId, decodeId[MessageId]('recalled))
-        case Cmd.PostAssetStatus       => PostAssetStatus(convId, messageId, JsonDecoder[AssetStatus.Syncable]('status))
+        case Cmd.PostAssetStatus       => PostAssetStatus(convId, messageId, EphemeralExpiration.getForMillis('ephemeral), JsonDecoder[AssetStatus.Syncable]('status))
         case Cmd.PostConvJoin          => PostConvJoin(convId, users)
         case Cmd.PostConvLeave         => PostConvLeave(convId, userId)
         case Cmd.PostConnection        => PostConnection(userId, 'name, 'message)
@@ -377,8 +378,9 @@ object SyncRequest {
         case PostCleared(_, time) =>
           o.put("time", time.toEpochMilli)
 
-        case PostAssetStatus(_, mid, status) =>
+        case PostAssetStatus(_, mid, exp, status) =>
           putId("message", mid)
+          o.put("ephemeral", exp.milliseconds)
           o.put("status", JsonEncoder.encode(status))
 
         case PostSelf(info) => o.put("user", JsonEncoder.encode(info))

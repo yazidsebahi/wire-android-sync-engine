@@ -34,5 +34,7 @@ class ListenerList[A <: AnyRef] {
     })
   }
 
+  def size = listeners.size
+
   private def nonEmptyListeners = if (listeners.exists(_.get eq null)) listeners.filter(_.get ne null) else listeners
 }

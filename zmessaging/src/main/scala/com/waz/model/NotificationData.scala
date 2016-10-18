@@ -26,7 +26,7 @@ import org.json.JSONObject
 import org.threeten.bp.Instant
 
 case class NotificationData(id: NotId, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant,
-                            localTime: Instant = Instant.now, hotKnock: Boolean = false, userName: Option[String] = None,
+                            localTime: Instant = Instant.now, userName: Option[String] = None, ephemeral: Boolean = false,
                             mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
 
 object NotificationData {
@@ -35,7 +35,7 @@ object NotificationData {
     import JsonDecoder._
 
     override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id), 'message, 'conv, 'user,
-      GcmNotificationCodec.decode('msgType), 'serverTime, decodeISOInstant('timestamp), 'hotKnock, 'userName,
+      GcmNotificationCodec.decode('msgType), 'serverTime, decodeISOInstant('timestamp), 'userName, 'ephemeral,
       decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage))
   }
 
@@ -48,7 +48,7 @@ object NotificationData {
       o.put("msgType", GcmNotificationCodec.encode(v.msgType))
       o.put("timestamp", JsonEncoder.encodeISOInstant(v.localTime))
       o.put("serverTime", v.serverTime.toEpochMilli)
-      o.put("hotKnock", v.hotKnock)
+      o.put("ephemeral", v.ephemeral)
       v.userName foreach (o.put("userName", _))
       if (v.mentions.nonEmpty) o.put("mentions", JsonEncoder.arrString(v.mentions.map(_.str)))
       v.referencedMessage foreach (o.put("referencedMessage", _))

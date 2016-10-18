@@ -17,10 +17,7 @@
  */
 package com.waz.service
 
-import com.waz.model.MessageData
-
 import scala.concurrent.duration._
-import com.waz.utils._
 
 /** This class enables us to shorten timeouts in testing.
   */
@@ -36,8 +33,7 @@ class Timeouts {
   class Messages {
     def lastReadPostDelay = 15.seconds
     def sendingTimeout = 30.seconds
-    def knockTimeout = 30.seconds
-    def knockExpired(msg: MessageData) = knockTimeout.elapsedSince(msg.localTime)
+    def incomingTimeout = 30.seconds
   }
 
   class Contacts {

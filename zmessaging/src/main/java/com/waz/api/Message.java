@@ -108,6 +108,10 @@ public interface Message extends UiObservable, Parcelable {
 
     boolean isDeleted();
     boolean isEmpty();
+
+    /**
+     * @deprecated - will always return false, hot knocks are no longer supported
+     */
     boolean isHotKnock();
 
     /***
@@ -175,6 +179,8 @@ public interface Message extends UiObservable, Parcelable {
     void unlike();
 
     boolean isEphemeral();
+
+    boolean isExpired();
 
     EphemeralExpiration getEphemeralExpiration();
 

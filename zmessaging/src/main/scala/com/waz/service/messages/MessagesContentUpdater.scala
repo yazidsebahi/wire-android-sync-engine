@@ -19,7 +19,7 @@ package com.waz.service.messages
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.api.Message
+import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.Message.Status
 import com.waz.content._
 import com.waz.model._
@@ -62,11 +62,19 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
     }
 
   def addLocalMessage(msg: MessageData, state: Status = Status.PENDING) = Serialized.future("add local message", msg.convId) {
+
+    def expiration =
+      if (MessageData.EphemeralMessageTypes(msg.msgType))
+        convs.get(msg.convId) map { _.fold(EphemeralExpiration.NONE)(_.ephemeral) }
+      else Future successful EphemeralExpiration.NONE
+
     verbose(s"addLocalMessage: $msg")
-    nextLocalTime(msg.convId) flatMap { time =>
-      verbose(s"adding message to storage: $time")
-      messagesStorage.addMessage(msg.copy(state = state, time = time, localTime = Instant.now))
-    }
+    for {
+      time <- nextLocalTime(msg.convId)
+      _ = verbose(s"adding message to storage: $time")
+      exp <- expiration
+      res <- messagesStorage.addMessage(msg.copy(state = state, time = time, localTime = Instant.now, ephemeral = exp))
+    } yield res
   }
 
   def addLocalSentMessage(msg: MessageData) = Serialized.future("add local message", msg.convId) {
@@ -169,7 +177,6 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
         val u = prev.copy(msgType = msg.msgType, time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
         prev.msgType match {
           case Message.Type.RECALLED => prev // ignore updates to already recalled message
-          case Message.Type.KNOCK => u.copy(localTime = if (msg.hotKnock && !prev.hotKnock) msg.localTime else prev.localTime)
           case _ => u
         }
       }

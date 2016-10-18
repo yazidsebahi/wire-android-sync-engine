@@ -133,5 +133,15 @@ public interface MessageContent {
             result = 31 * result + zoom;
             return result;
         }
+
+        @Override
+        public String toString() {
+            return "Location{" +
+                    "longitude=" + longitude +
+                    ", latitude=" + latitude +
+                    ", name='" + name + '\'' +
+                    ", zoom=" + zoom +
+                    '}';
+        }
     }
 }

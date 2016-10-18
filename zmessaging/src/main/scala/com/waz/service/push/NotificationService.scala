@@ -124,9 +124,13 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     new AggregatingSignal(timeUpdates, loadAll(), update)
   }
 
-  // remove older notifications when lastRead or uiTime is updated
-  lastReadMap.zip(lastUiVisibleTime.signal).throttle(timeouts.notifications.clearThrottling) {
-    case (lastRead, uiTime) => removeReadNotifications(lastRead, uiTime)
+  // remove notifications once UI is active
+  lastUiVisibleTime.signal.throttle(timeouts.notifications.clearThrottling)(removeNotificationsAfterUiActive)
+
+  // remove notifications read by other devices
+  lastReadMap.throttle(timeouts.notifications.clearThrottling) { lastRead =>
+    verbose(s"remove read notifications: ${fCol(lastRead)})")
+    removeNotifications(n => lastRead.get(n.conv).exists(!_.isBefore(n.serverTime)))
   }
 
   messages.onAdded { addForIncoming(_) }
@@ -187,27 +191,25 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     storage.remove(ids.map(NotId(_)))
   }
 
-  def clearNotifications() =
-    for {
-      _ <- lastUiVisibleTime := Instant.now()
-      // will execute removeReadNotifications as part of this call,
-      // this ensures that it's actually done while wakeLock is acquired by caller
-      lastRead <- lastReadMap.head
-      _ <- removeReadNotifications(lastRead, Instant.now)
-    } yield ()
+  def clearNotifications() = {
+    lastUiVisibleTime := Instant.now()
+    // will execute removeNotifications as part of this call,
+    // this ensures that it's actually done while wakeLock is acquired by caller
+    removeNotificationsAfterUiActive(Instant.now)
+  }
 
-  private def removeReadNotifications(lastRead: Map[ConvId, Instant], uiTime: Instant) = {
-    verbose(s"removeRead(lastUiVisibleTime: $uiTime, last read for conv: ${fCol(lastRead)})")
+  private def removeNotificationsAfterUiActive(uiLastVisible: Instant) = {
+    verbose(s"remove all notifications after ui is active: $uiLastVisible")
+    removeNotifications(n => uiLastVisible.isAfter(n.localTime)) //will effectively remove all
+  }
 
-    def isRead(notification: NotificationData) =
-      uiTime.isAfter(notification.localTime) || lastRead.get(notification.conv).exists(!_.isBefore(notification.serverTime))
-
+  private def removeNotifications(filter: NotificationData => Boolean): Unit = {
     storage.notifications.head flatMap { data =>
       verbose(s"notifications.head contains: ${fCol(data)}")
       val toRemove = data collect {
-        case (id, notification) if isRead(notification) => id
+        case (id, n) if filter(n) => id
       }
-      verbose(s"toRemove on lastRead change: ${fCol(toRemove.toSeq)}")
+      verbose(s"Removing notifications: ${fCol(toRemove.toSeq)}")
       storage.remove(toRemove)
     }
   }
@@ -228,7 +230,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(NotificationInfo(data.msgType, data.msg, data.hotKnock, data.conv, convName = userName, userName = userName, isGroupConv = false))
+            Future.successful(NotificationInfo(data.msgType, data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false))
           case _ =>
             for {
               msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
@@ -237,7 +239,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.msgType, g.msg, g.hotKnock, g.conv, convName = conv.map(_.displayName), userName = userName, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
+              NotificationInfo(g.msgType, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
             }
         }
       }
@@ -249,14 +251,14 @@ object NotificationService {
 
   case class NotificationInfo(tpe: NotificationType,
                               message: String,
-                              isPing: Boolean,
                               convId: ConvId,
                               convName: Option[String] = None,
                               userName: Option[String] = None,
                               isGroupConv: Boolean = false,
                               isUserMentioned: Boolean = false,
+                              isEphemeral: Boolean = false,
                               likedContent: Option[LikedContent] = None
-                             )
+  )
 
   def mapMessageType(mTpe: Message.Type, protos: Seq[GenericMessage], members: Set[UserId], sender: UserId) = {
     import Message.Type._
@@ -286,7 +288,7 @@ object NotificationService {
 
   def notification(msg: MessageData): Option[NotificationData] = {
     mapMessageType(msg.msgType, msg.protos, msg.members, msg.userId).map {
-      tp => NotificationData(NotId(msg.id), msg.contentString, msg.convId, msg.userId, tp, msg.time, msg.localTime, mentions = msg.mentions.keys.toSeq, hotKnock = msg.hotKnock)
+      tp => NotificationData(NotId(msg.id), if (msg.isEphemeral) "" else msg.contentString, msg.convId, msg.userId, tp, msg.time, msg.localTime, ephemeral = msg.isEphemeral, mentions = msg.mentions.keys.toSeq)
     }
   }
 }

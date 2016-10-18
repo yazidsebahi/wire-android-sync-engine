@@ -42,7 +42,7 @@ class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingM
     messages = data.flatMap(m => (0 until math.max(1, m.content.size)).map((m, _))).toArray
     notifyChanged()
 
-    lastMessageTime = lastMessageTime max (Instant.now - context.global.timeouts.messages.knockTimeout)
+    lastMessageTime = lastMessageTime max (Instant.now - context.global.timeouts.messages.incomingTimeout)
     messages.filter(_._1.localTime isAfter lastMessageTime) foreach {
       case (msg, seq) =>
         verbose(s"calling listeners for new message: $msg")

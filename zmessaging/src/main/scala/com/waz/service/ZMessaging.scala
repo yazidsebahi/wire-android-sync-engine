@@ -221,7 +221,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val callLog                               = wire[CallLogService]
   lazy val recordAndPlay                         = wire[RecordAndPlayService]
   lazy val receipts                              = wire[ReceiptService]
-
+  lazy val ephemeral                             = wire[EphemeralMessagesService]
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -287,6 +287,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
     // services listening for storage updates
     richmedia
+    ephemeral
 
     tempFiles
     recordAndPlay

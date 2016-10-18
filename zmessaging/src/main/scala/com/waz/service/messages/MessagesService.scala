@@ -17,6 +17,8 @@
  */
 package com.waz.service.messages
 
+import java.util.Date
+
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
@@ -69,15 +71,15 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
   }
 
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
-    val filtered = events.filter(e => conv.cleared.isBefore(e.time.instant))
+    val afterCleared = events.filter(e => conv.cleared.isBefore(e.time.instant))
 
-    val recalls = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
+    val recalls = afterCleared collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
 
-    val edits = filtered collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
+    val edits = afterCleared collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
 
     for {
-      as    <- updateAssets(filtered)
-      msgs  = filtered map { createMessage(conv, _) } filter (_ != MessageData.Empty)
+      as    <- updateAssets(afterCleared)
+      msgs  = afterCleared map { createMessage(conv, _) } filter (_ != MessageData.Empty)
       _     = verbose(s"messages from events: $msgs")
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
@@ -87,27 +89,38 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     } yield res
   }
 
-  private def updateAssets(events: Seq[MessageEvent]) = Future.sequence(events.collect {
-    case GenericMessageEvent(_, convId, time, from, GenericMessage(id, asset: Asset)) =>
-      updateAsset(AssetId(id.str), convId, asset, None, time)
+  private def updateAssets(events: Seq[MessageEvent]) = {
 
-    case GenericAssetEvent(_, convId, time, from, GenericMessage(assetId, asset: Asset), dataId, _) =>
-      updateAsset(AssetId(assetId.str), convId, asset, Some(dataId), time)
-
-    case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(assetId, ImageAsset(tag, width, height, origWidth, origHeight, mime, size, None, _)), dataId, data) =>
-      warn(s"got otr asset event without otr key: $msg")
-      val img = ImageData(tag, mime.str, width, height, origWidth, origHeight, size, Some(dataId), sent = true, data64 = data flatMap { arr => LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption })
-      updateImageAsset(AssetId(assetId.str), convId, img)
-
-    case GenericAssetEvent(_, convId, time, from, GenericMessage(assetId, ImageAsset(tag, width, height, origWidth, origHeight, mime, size, Some(key), sha)), dataId, data) =>
-      val img = data.fold {
-        ImageData(tag, mime.str, width, height, origWidth, origHeight, size, Some(dataId), sent = true, otrKey = Some(key), sha256 = sha)
-      } { img =>
-        val data64 = if (sha.forall(_.str == sha2(img))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, img), Base64.DEFAULT)).toOption else None
-        ImageData(tag, mime.str, width, height, origWidth, origHeight, size, Some(dataId), sent = true, otrKey = Some(key), sha256 = sha, data64 = data64)
+    def update(id: Uid, convId: RConvId, time: Date, ct: Any, msg: GenericMessage, dataId: Option[RAssetDataId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
+      ct match {
+        case asset: Asset =>
+          updateAsset(AssetId(id.str), convId, asset, dataId, time) map { Some(_) }
+        case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, None, _) =>
+          warn(s"got otr asset event without otr key: $msg")
+          val img = ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, data64 = data flatMap { arr => LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption })
+          updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
+        case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, Some(key), sha) =>
+          val img = data.fold {
+            ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, otrKey = Some(key), sha256 = sha)
+          } { img =>
+            val data64 = if (sha.forall(_.str == sha2(img))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, img), Base64.DEFAULT)).toOption else None
+            ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, otrKey = Some(key), sha256 = sha, data64 = data64)
+          }
+          updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
+        case Ephemeral(_, c) =>
+          update(id, convId, time, c, msg, dataId, data)
+        case _ =>
+          Future successful None
       }
-      updateImageAsset(AssetId(assetId.str), convId, img)
-  })
+
+    Future.sequence(events.collect {
+      case GenericMessageEvent(_, convId, time, from, msg @ GenericMessage(id, ct)) =>
+        update(id, convId, time, ct, msg, None, None)
+
+      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(id, ct), dataId, data) =>
+        update(id, convId, time, ct, msg, Some(dataId), data)
+    }) map { _.flatten }
+  }
 
   private def updateLastReadFromOwnMessages(convId: ConvId, msgs: Seq[MessageData]) =
     msgs.reverseIterator.find(_.userId == selfUserId).fold2(Future.successful(None), msg => updateConversationLastRead(convId, msg.time))
@@ -127,6 +140,53 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     val id = MessageId.fromUid(event.id)
     val convId = conv.id
 
+    def content(id: MessageId, msgContent: Any, from: UserId, time: Instant, proto: GenericMessage): MessageData = msgContent match {
+      case Text(text, mentions, links) =>
+        val (tpe, content) = MessageData.messageContent(text, mentions, links)
+        MessageData(id, conv.id, tpe, from, content, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case Knock() =>
+        MessageData(id, conv.id, Message.Type.KNOCK, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case Reaction(_, _) => MessageData.Empty
+      case Asset(_, _, UploadCancelled) => MessageData.Empty
+      case Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
+        MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
+        MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case Asset(_, _, _) =>
+        MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case Location(_, _, _, _) =>
+        MessageData(id, convId, Message.Type.LOCATION, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case LastRead(remoteId, timestamp) => MessageData.Empty
+      case Cleared(remoteId, timestamp) => MessageData.Empty
+      case MsgDeleted(_, _) => MessageData.Empty
+      case MsgRecall(_) => MessageData.Empty
+      case MsgEdit(_, _) => MessageData.Empty
+      case Receipt(_) => MessageData.Empty
+      case Ephemeral(expiry, ct) =>
+        content(id, ct, from, time, proto).copy(ephemeral = expiry)
+      case _ =>
+        error(s"unexpected generic message content: $msgContent")
+        // TODO: this message should be processed again after app update, maybe future app version will understand it
+        MessageData(id, conv.id, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+    }
+
+    def assetContent(id: MessageId, ct: Any, from: UserId, time: Instant, msg: GenericMessage): MessageData = ct match {
+      case asset @ Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
+        MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case asset @ Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
+        MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case asset: Asset =>
+        MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case im: ImageAsset =>
+        MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case Ephemeral(expiry, ect) =>
+        assetContent(id, ect, from, time, msg).copy(ephemeral = expiry)
+      case _ =>
+        error(s"unexpected generic asset content: $msg")
+        // TODO: this message should be processed again after app update, maybe future app version will understand it
+        MessageData(id, conv.id, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+    }
+
     event match {
       case ConnectRequestEvent(_, _, time, from, text, recipient, name, email) =>
         MessageData(id, convId, Message.Type.CONNECT_REQUEST, from, MessageData.textContent(text), recipient = Some(recipient), email = email, name = Some(name), time = time.instant, localTime = event.localTime.instant)
@@ -145,71 +205,13 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case OtrErrorEvent(_, _, time, from, otrError) =>
         MessageData (id, conv.id, Message.Type.OTR_ERROR, from, time = time.instant, localTime = event.localTime.instant)
       case GenericMessageEvent(_, _, time, from, proto @ GenericMessage(uid, msgContent)) =>
-        val id = MessageId(uid.str)
-        msgContent match {
-          case Text(text, mentions, links) =>
-            val (tpe, content) = MessageData.messageContent(text, mentions, links)
-            MessageData(id, conv.id, tpe, from, content, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case Knock(hotKnock) =>
-            MessageData(id, conv.id, Message.Type.KNOCK, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case Reaction(_, _) => MessageData.Empty
-          case Asset(_, _, UploadCancelled) => MessageData.Empty
-          case Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
-            MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
-            MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case Asset(_, _, _) =>
-            MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case Location(_, _, _, _) =>
-            MessageData(id, convId, Message.Type.LOCATION, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-          case LastRead(remoteId, timestamp) => MessageData.Empty
-          case Cleared(remoteId, timestamp) => MessageData.Empty
-          case MsgDeleted(_, _) => MessageData.Empty
-          case MsgRecall(_) => MessageData.Empty
-          case MsgEdit(_, _) => MessageData.Empty
-          case Receipt(_) => MessageData.Empty
-          case _ =>
-            error(s"unexpected generic message content: $msgContent")
-            // TODO: this message should be processed again after app update, maybe future app version will understand it
-            MessageData(id, conv.id, Message.Type.UNKNOWN, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(proto))
-        }
-      case GenericAssetEvent(_, _, time, from, msg, dataId, data) =>
-        msg match {
-          case GenericMessage(assetId, asset @ Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _)) =>
-            MessageData(MessageId(assetId.str), convId, Message.Type.VIDEO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
-          case GenericMessage(assetId, asset @ Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _)) =>
-            MessageData(MessageId(assetId.str), convId, Message.Type.AUDIO_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
-          case GenericMessage(assetId, asset: Asset) =>
-            MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
-          case GenericMessage(assetId, im: ImageAsset) =>
-            MessageData(MessageId(assetId.str), convId, Message.Type.ASSET, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
-          case _ =>
-            error(s"unexpected generic asset content: $msg")
-            // TODO: this message should be processed again after app update, maybe future app version will understand it
-            MessageData(id, conv.id, Message.Type.UNKNOWN, from, time = time.instant, localTime = event.localTime.instant, protos = Seq(msg))
-        }
+        content(MessageId(uid.str), msgContent, from, time.instant, proto)
+      case GenericAssetEvent(_, _, time, from, proto @ GenericMessage(uid, msgContent), dataId, data) =>
+        assetContent(MessageId(uid.str), msgContent, from, time.instant, proto)
       case _ =>
         warn(s"Unexpected event for addMessage: $event")
         MessageData.Empty
     }
-  }
-
-  def updateKnockToHotKnock(msgId: MessageId) = messagesStorage.update(msgId, { msg =>
-    if (msg.hotKnock) msg
-    else msg.copy(protos = msg.protos :+ GenericMessage(msgId.uid, Knock(true)), localTime = Instant.now)
-  }).mapSome(_._2)
-
-  /**
-   * Return last message if it's KNOCK message added by self user.
-   */
-  def getActiveKnockMessage(convId: ConvId, selfUserId: UserId): Future[Option[MessageData]] = messagesStorage.getLastMessage(convId) map { lastMsg =>
-    lastMsg.filter(m => m.userId == selfUserId && m.msgType == Message.Type.KNOCK && !timeouts.messages.knockExpired(m))
-  }
-
-  def activeKnockMessage(convId: ConvId) = messagesStorage.lastMessage(convId) flatMap {
-    case Some(m) if m.msgType == Message.Type.KNOCK && !timeouts.messages.knockExpired(m) =>
-      Signal.future(users.getSelfUserId.map(_.flatMap { id => Some(m).filter(_.userId == id) }))
-    case _ => Signal.const(Option.empty[MessageData])
   }
 
   def getIncomingMessages = messagesStorage.getIncomingMessages flatMap { msgs =>
@@ -229,7 +231,12 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           if (userId == selfUserId) Future successful Some(recall) // don't save system message for self user
           else content.addMessage(recall)
         }
-      case _ => Future successful None
+      case Some(msg) if msg.isEphemeral && convId.str == userId.str =>
+        // ephemeral messages will be recalled by receiver in 1-1 conv (once msg expires)
+        content.deleteOnUserRequest(Seq(msgId)) map { _ => None }
+      case msg =>
+        warn(s"can not recall $msg, requeast by $userId")
+        Future successful None
     }
 
   def applyMessageEdit(convId: ConvId, userId: UserId, time: Instant, gm: GenericMessage) = Serialized.future("applyMessageEdit", convId) {
@@ -466,10 +473,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case _ => successful(None)
     }
 
-  def messageSent(convId: ConvId, msg: MessageData) =
-    updateMessageState(convId, msg.id, Message.Status.SENT) andThen {
+  def messageSent(convId: ConvId, msg: MessageData) = {
+    updateMessage(msg.id) { m => m.copy(state = Message.Status.SENT, expiryTime = m.ephemeral.expiryFromNow()) } andThen {
       case Success(Some(m)) => content.messagesStorage.onMessageSent ! m
     }
+  }
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
     updateMessageState(convId, msg.id, Message.Status.FAILED) andThen {

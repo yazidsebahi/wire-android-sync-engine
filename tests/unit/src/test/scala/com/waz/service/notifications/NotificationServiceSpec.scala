@@ -84,7 +84,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.CONNECT_REQUEST, "hello", false, _, Some("other user"), Some("other user"), false, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.CONNECT_REQUEST, "hello", _, Some("other user"), Some("other user"), false, _, _, _)) => true
         }
       }
     }
@@ -95,7 +95,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.CONTACT_JOIN, _, _, _, _, _, false, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.CONTACT_JOIN, _, _, _, _, false, _, _, _)) => true
         }
       }
     }
@@ -108,7 +108,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.TEXT, "test name", _, `convId`, _, _, false, true, _)) => true
+          case Seq(NotificationInfo(NotificationType.TEXT, "test name", `convId`, _, _, false, true, _, _)) => true
         }
       }
     }
@@ -121,7 +121,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.ANY_ASSET, _, _, `convId`, _, _, false, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.ANY_ASSET, _, `convId`, _, _, false, _, _, _)) => true
         }
       }
     }
@@ -136,7 +136,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.TEXT, "meep", _, `groupId`, Some("group conv"), _, true, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.TEXT, "meep", `groupId`, Some("group conv"), _, true, _, _, _)) => true
         }
       }
     }
@@ -236,7 +236,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.TEXT, _, _, `groupId`, Some("group conv"), _, true, _, _)) => true
+          case Seq(NotificationInfo(NotificationType.TEXT, _, `groupId`, Some("group conv"), _, true, _, _, _)) => true
         }
       }
     }
@@ -254,5 +254,5 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     }
   }
 
-  def clearNotifications(): Unit = Await.result(service.clearNotifications(), 5.seconds)
+  def clearNotifications(): Unit = service.clearNotifications()
 }

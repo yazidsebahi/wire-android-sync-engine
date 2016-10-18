@@ -124,24 +124,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with EitherValu
 
       withDelay {
         lastKnock should be('defined)
-        lastKnock.map(_.isHotKnock) shouldEqual Some(false)
-
         incoming.last.getMessageType shouldEqual Message.Type.KNOCK
-      }
-    }
-
-    scenario("Call knock listener on hot knock") {
-      awaitUi(3.seconds)
-      val msg = incoming.last
-      msg.getMessageType shouldEqual Message.Type.KNOCK
-
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.knock()))
-
-      withDelay {
-        msg.isHotKnock shouldEqual true
-
-        lastKnock should be('defined) // FIXME doesn't work, sometimes
-        lastKnock.map(_.isHotKnock) shouldEqual Some(true)
       }
     }
   }
