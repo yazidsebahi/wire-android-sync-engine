@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 
 public enum EphemeralExpiration {
 
-    NONE(0), FIVE_SECONDS(5 * 1000), FIFTEEN_SECONDS(15 * 1000), ONE_MINUTE(60 * 1000), FIFTEEN_MINUTES(15 * 60 * 1000);
+    NONE(0), FIVE_SECONDS(5 * 1000), FIFTEEN_SECONDS(15 * 1000), THIRTY_SECONDS(30 * 1000), ONE_MINUTE(60 * 1000), FIVE_MINUTES(5 * 60 * 1000);
 
     public long milliseconds;
 
@@ -56,6 +56,6 @@ public enum EphemeralExpiration {
                 return exp;
             }
         }
-        return FIFTEEN_MINUTES;
+        return FIVE_MINUTES;
     }
 }
