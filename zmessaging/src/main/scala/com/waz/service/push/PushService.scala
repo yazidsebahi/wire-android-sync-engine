@@ -176,7 +176,7 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
 
   def lastNotificationId() = Future(lastNotificationIdPref()).flatten // future and flatten ensure that there is no race with onNotification
 
-  signals.pushConnected.filter(_ == false).on(dispatcher)(_ => fetchLast.cancel())
+  signals.pushConnected.onChanged.filter(_ == false).on(dispatcher)(_ => fetchLast.cancel())
 
   signals.onSlowSyncNeeded.on(dispatcher) { _ =>
     verbose(s"onSlowSync()")
