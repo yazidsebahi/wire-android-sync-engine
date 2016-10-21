@@ -34,22 +34,30 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.util.control.NonFatal
 
-class EventsClient(netClient: ZNetClient)  {
+class EventsClient(netClient: ZNetClient) {
+
   import Threading.Implicits.Background
   import com.waz.sync.client.EventsClient._
 
   val onNotificationsPageLoaded = new SourceStream[LoadNotificationsResponse]
 
-  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOr[Option[Uid]] = {
-    def createFailureOrSuccessResponse(status: Status, notifications: Vector[PushNotification]) =
-      LoadNotificationsResponse(notifications, lastIdWasFound = !isFirstPage || status.isSuccess)
+  var currentRequest: ErrorOr[(Option[Uid], Boolean)] = Future.successful(Right(Option.empty[Uid], false))
 
-    netClient.chainedFutureWithErrorHandling("loadNotifications", Request.Get(notificationsPath(since, client, pageSize))) {
-      case Response(status, PagedNotificationsResponse((notifications, hasMore)), _) =>
-        onNotificationsPageLoaded ! createFailureOrSuccessResponse(status, notifications)
-        if (!hasMore) Future.successful(Right(notifications.lastOption map (_.id)))
-        else loadNotifications(since = notifications.lastOption.map(_.id), client, pageSize, isFirstPage = false)
+  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOr[Option[Uid]] = {
+
+    def loadNextPage(since: Option[Uid], isFirstPage: Boolean): ErrorOr[(Option[Uid], Boolean)] = {
+      netClient.chainedFutureWithErrorHandling("loadNotifications", Request.Get(notificationsPath(since, client, pageSize))) {
+        case Response(status, PagedNotificationsResponse((notifications, hasMore)), _) =>
+
+          onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = !isFirstPage || status.isSuccess)
+
+          if (hasMore) loadNextPage(since = notifications.lastOption.map(_.id), isFirstPage = false)
+          else Future.successful(Right(notifications.lastOption map (_.id), false))
+      }
     }
+
+    currentRequest = if (currentRequest.isCompleted) loadNextPage(since, isFirstPage = true) else currentRequest
+    currentRequest.map(_.right.map(_._1))
   }
 
   def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] =
@@ -59,7 +67,7 @@ class EventsClient(netClient: ZNetClient)  {
       case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
         warn(s"Error response to loadLastNotification: ${ErrorResponse(code, msg, label)}")
         Left(ErrorResponse(code, msg, label))
-      case resp @ Response(_, _, _) =>
+      case resp@Response(_, _, _) =>
         error(s"Unexpected response to loadLastNotifications: $resp")
         Left(ErrorResponse(resp.status.status, "unexpected", "internal-error"))
 
@@ -80,7 +88,11 @@ case class PushNotification(id: Uid, events: Seq[Event], transient: Boolean = fa
     * BE sends us notifications intended for different device, we can verify that by checking recipient field.
     * Unencrypted events are always considered to belong to us.
     */
-  def hasEventForClient(clientId: ClientId) = events.exists {
+  def hasEventForClient(clientId: ClientId) = events.forall(forUs(clientId, _))
+
+  def eventsForClient(clientId: ClientId) = events.filter(forUs(clientId, _))
+
+  private def forUs(clientId: ClientId, event: Event) = event match {
     case ev: OtrEvent => clientId == ev.recipient
     case _ => true
   }
@@ -97,6 +109,7 @@ case class PushNotification(id: Uid, events: Seq[Event], transient: Boolean = fa
 
 object PushNotification {
   implicit lazy val NotificationDecoder: JsonDecoder[PushNotification] = new JsonDecoder[PushNotification] {
+
     import com.waz.utils.JsonDecoder._
 
     override def apply(implicit js: JSONObject): PushNotification =
@@ -123,7 +136,9 @@ object EventsClient {
         None
     }
   }
+
   object PagedNotificationsResponse {
+
     import com.waz.utils.JsonDecoder._
 
     def unapply(response: ResponseContent): Option[(Vector[PushNotification], Boolean)] = try response match {
@@ -136,4 +151,5 @@ object EventsClient {
         None
     }
   }
+
 }

@@ -32,9 +32,11 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
 
+import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 
-class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService) { self =>
+class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
+  self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val tag: LogTag = logTagFor[PushService]
   private implicit val ec = EventContext.Global
@@ -45,14 +47,13 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
 
   var connectedPushPromise = Promise[PushService]()
 
-  webSocket.connected { signals.pushConnected ! _ }
+  webSocket.connected {
+    signals.pushConnected ! _
+  }
 
-  client.onNotificationsPageLoaded.on(dispatcher) { notifications =>
-    // XXX: we will process all available history notifications even for the case that last id was not found,
-    //      maybe this would be enough for some conversations and we would not need to sync so much
-    processHistoryEvents(notifications.notifications, new Date)
-
-    if (notifications.lastIdWasFound) debug("got missing notifications, great")
+  client.onNotificationsPageLoaded.on(dispatcher) { resp =>
+    onPushNotifications(resp.notifications)
+    if (resp.lastIdWasFound) debug(s"Loaded page of ${resp.notifications.size} notifications")
     else {
       info(s"server couldn't provide all missing notifications, will schedule slow sync, after processing available events")
       signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis(), lostHistory = true)
@@ -72,9 +73,9 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         ws.onMessage { content =>
           verbose(s"got websocket message: $content")
           content match {
-            case NotificationsResponse(notifications @ _*) =>
+            case NotificationsResponse(notifications@_*) =>
               debug(s"got notifications from data: $content")
-              notifications.foreach(onPushNotification)
+              onPushNotifications(notifications)
             case resp =>
               error(s"unexpected push response: $resp")
           }
@@ -89,7 +90,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
   webSocket.connected {
     case true =>
       debug("onConnected")
-      syncHistoryOnConnect()
+      syncHistory()
       connectedPushPromise.trySuccess(self)
     case false =>
       debug("onDisconnected")
@@ -97,27 +98,51 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
       connectedPushPromise = Promise()
   }
 
-  def onPushNotification(notification: PushNotification): Unit = {
-    debug(s"gotPushNotification: $notification")
+  //no need to sync history on GCM if websocket is connected
+  webSocket.connected.flatMap {
+    case false => gcmService.notificationsToProcess
+    case _ => Signal.empty[Boolean]
+  }.throttle(1.second).on(dispatcher) {
+    case true =>
+      verbose("Sync history in response to gcm notification")
+      syncHistory()
+    case _=>
+  }
 
-    val localTime = new Date
-    notification.events foreach { ev =>
-      ev.localTime = localTime
-      verbose(s"event: $ev")
-    }
-    if (notification.hasEventForClient(clientId)) {
-      val f = wakeLock { pipeline(notification.events) }
-      if (!notification.transient) lastNotification.updateLastIdOnNotification(notification.id, f)
-    } else {
-      verbose(s"received notification intended for other client: $notification")
+  def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
+
+  private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
+    debug(s"gotPushNotifications: $allNs")
+
+    val ns = allNs.filter(_.hasEventForClient(clientId))
+
+    ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n =>
+      lastNotification.updateLastIdOnNotification(n.id, processNotifications(ns))
     }
   }
 
-  private def syncHistoryOnConnect(): Unit =
-    lastNotification.lastNotificationId() map {
+  private def processNotifications(notifications: Seq[PushNotification]) = wakeLock {
+    pipeline {
+      returning(notifications.flatMap(_.eventsForClient(clientId))) {
+        _.foreach { ev =>
+          verbose(s"event: $ev")
+          returning(new Date) { d =>
+            ev.notificationsFetchTime = d
+            ev.localTime = d
+          }
+        }
+      }
+    }.map {
+      //FIXME handle failure
+      _ => gcmService.notificationsToProcess ! false //Finished loading notifications
+    }
+  }
+
+  private def syncHistory() =
+    lastNotification.lastNotificationId() flatMap {
       case None =>
         debug("no last notification Id on connect, will schedule slow sync")
-        signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
+        Future.successful(signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis()))
       case Some(LastNotificationIdService.NoNotificationsId) =>
         verbose(s"no last notification available, will try loading all notifications")
         loadNotifications(None)
@@ -126,28 +151,21 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         loadNotifications(Some(id))
     }
 
-  private def loadNotifications(lastId: Option[Uid]): Future[Unit] =
-    client.loadNotifications(lastId, clientId, pageSize = EventsClient.PageSize) map {
+
+  private def loadNotifications(lastId: Option[Uid]) =
+    client.loadNotifications(lastId, clientId, pageSize = EventsClient.PageSize).flatMap {
       case Left(error) =>
         warn(s"/notifications failed with error: $error, will schedule slow sync")
-        signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
-
-      case Right(updatedLastId) =>
-        verbose(s"notifications loaded, last id: $updatedLastId")
-        // update last notification id once all events are processed
-        // (the results themselves will be handled by the event stream)
-        lastNotification.updateLastIdOnHistorySynced(updatedLastId.orElse(lastId))
+        Future.successful(signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis()))
+      case _ => Future.successful(()) //notifications results handled by event stream due to paging
     }
-
-  private def processHistoryEvents(notifications: Seq[PushNotification], fetchTime: Date) = {
-    val events = notifications.flatMap(_.events)
-    events.foreach(_.notificationsFetchTime = fetchTime)
-    pipeline(events)
-  }
 }
 
 object PushService {
-  case class SlowSyncRequest(time: Long, lostHistory: Boolean = false) // lostHistory is set if there were lost notifications, meaning that some messages might be lost
+
+  case class SlowSyncRequest(time: Long, lostHistory: Boolean = false)
+
+  // lostHistory is set if there were lost notifications, meaning that some messages might be lost
 }
 
 class PushServiceSignals {
@@ -156,85 +174,48 @@ class PushServiceSignals {
 }
 
 /**
- * Keeps track of last received notifications and updates lastNotificationId preference accordingly.
- * New notifications are ignored as long as historical events are not processed.
- * Last id is fetched from backend whenever slow sync is requested.
- */
+  * Keeps track of last received notifications and updates lastNotificationId preference accordingly.
+  * Last id is fetched from backend whenever slow sync is requested.
+  */
 class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
-  import LastNotificationIdService.State._
+
   import LastNotificationIdService._
 
   private implicit val logTag = logTagFor[LastNotificationIdService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "LastNotificationIdService")
   private implicit val ec = EventContext.Global
+
   import keyValueService._
 
-  private var state: State = Disconnected
-  private var freshNotificationId = Option.empty[Uid]
   private var fetchLast = CancellableFuture.successful(())
 
-  val lastNotificationIdPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
+  private[push] val idPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
 
-  def lastNotificationId() = Future(lastNotificationIdPref()).flatten // future and flatten ensure that there is no race with onNotification
+  def lastNotificationId() = Future(idPref()).flatten // future and flatten ensure that there is no race with onNotification
 
-  private[service] def currentState = Future { state }
-
-  signals.pushConnected.on(dispatcher) { connected =>
-    if (connected) {
-      verbose(s"onConnected() in state: $state")
-      state = Waiting
-      freshNotificationId = None
-    } else {
-      verbose(s"onDisconnected() in state: $state")
-      fetchLast.cancel()
-      state = Disconnected
-    }
-  }
+  signals.pushConnected.onChanged.filter(_ == false).on(dispatcher)(_ => fetchLast.cancel())
 
   signals.onSlowSyncNeeded.on(dispatcher) { _ =>
-    verbose(s"onSlowSync() in state: $state")
-    if (state == Waiting) state = Running
-    freshNotificationId foreach { id =>
-      lastNotificationIdPref := Some(id)
-      verbose(s"updated pref on slow sync request: $id")
-    }
-    freshNotificationId = None
-
+    verbose(s"onSlowSync()")
     fetchLast = client.loadLastNotification(clientId) map {
       case Right(Some(notification)) =>
-        verbose(s"fetched last notification: $notification in state: $state")
-        if (state == Running && freshNotificationId.isEmpty) {
-          lastNotificationIdPref := Some(notification.id)
-          verbose(s"updated pref from backend on slow sync: ${notification.id}")
-        }
+        verbose(s"fetched last notification: $notification")
+        idPref := Some(notification.id)
+        verbose(s"updated pref from backend on slow sync: ${notification.id}")
       case Right(None) =>
-        verbose(s"no last notification available on backend, in state: $state")
-        if (state == Running && freshNotificationId.isEmpty) {
-          lastNotificationIdPref := Some(NoNotificationsId)
-        }
+        verbose(s"no last notification available on backend")
+        idPref := Some(NoNotificationsId)
       case Left(error) =>
         warn(s"/notifications/last failed with error: $error")
     }
   }
 
-  def updateLastIdOnHistorySynced(id: Option[Uid]) = Future {
-    verbose(s"onHistorySynced($id) in state: $state")
-    if (state == Waiting) {
-      state = Running
-      lastNotificationIdPref := freshNotificationId.orElse(id).orElse(Some(NoNotificationsId))
-      verbose(s"updated pref on history synced: $id, fresh: $freshNotificationId")
-    }
-  }
-
-  def updateLastIdOnNotification(id: Uid, processed: Future[Any]): Unit = {
-    verbose(s"onNotification($id) in state: $state")
-    freshNotificationId = Some(id)
+  def updateLastIdOnNotification(id: Uid, processing: Future[Any]): Unit = {
     fetchLast.cancel()
-    processed.onSuccess {
-      case _ => if (state == Running && freshNotificationId.contains(id)) {
-        lastNotificationIdPref := freshNotificationId
-        verbose(s"updated pref on fresh notification: $id")
-      }
+    processing.onSuccess {
+      case _ =>
+        idPref := Some(id)
+        verbose(s"updated last id: $id")
     }
   }
 }
@@ -242,11 +223,4 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
 object LastNotificationIdService {
   val LastNotificationIdKey = "last_notification_id"
   val NoNotificationsId = Uid(0, 0)
-
-  sealed trait State
-  object State {
-    case object Disconnected extends State
-    case object Waiting extends State
-    case object Running extends State // webSocket is connected and historical notifications are synced
-  }
 }

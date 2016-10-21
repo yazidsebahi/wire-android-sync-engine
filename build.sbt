@@ -7,14 +7,14 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "83"
+val MajorVersion = "84"
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
   val buildNumber = sys.env.get("BUILD_NUMBER")
   val master = jobName.exists(_.endsWith("-master"))
   val buildNumberString = buildNumber.fold("-SNAPSHOT")("." + _)
-  if (master) MajorVersion + ".2" + buildNumberString // hotfix release
+  if (master) MajorVersion + ".0" + buildNumberString // hotfix release
   else MajorVersion + buildNumberString
 }
 
@@ -182,6 +182,7 @@ lazy val testutils = project.in(file("tests") / "utils")
     exportJars := false,
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "2.2.6",
+      "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",
       "com.wire" %% "robotest" % "0.7" exclude("org.scalatest", "scalatest"),
       "com.drewnoakes" % "metadata-extractor" % "2.8.1",
       "org.robolectric" % "android-all" % RobolectricVersion,

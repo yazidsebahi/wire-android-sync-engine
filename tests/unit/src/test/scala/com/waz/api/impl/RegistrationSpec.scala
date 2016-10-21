@@ -91,7 +91,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, Signal const GcmState(true, true), backend, clientId, timeouts) {
+          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, gcm) {
             override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("/"), zNetClient.auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }

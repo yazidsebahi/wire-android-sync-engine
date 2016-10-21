@@ -19,7 +19,8 @@ package com.waz.utils
 
 import android.content.Context
 import android.os.PowerManager
-import com.waz.ZLog.LogTag
+import com.waz.ZLog
+import com.waz.ZLog.{LogTag, verbose}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.EventContext.Implicits.global
@@ -37,8 +38,12 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
   protected val count = Signal[Int]()
 
   count {
-    case 0 if wakeLock.isHeld => wakeLock.release()
-    case 1 if !wakeLock.isHeld => wakeLock.acquire()
+    case 0 if wakeLock.isHeld =>
+      verbose("releasing wakelock")
+      wakeLock.release()
+    case 1 if !wakeLock.isHeld =>
+      verbose("acquiring wakelock")
+      wakeLock.acquire()
     case _ =>
   }
 

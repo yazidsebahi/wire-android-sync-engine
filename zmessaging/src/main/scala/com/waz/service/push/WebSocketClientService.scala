@@ -19,19 +19,18 @@ package com.waz.service.push
 
 import android.content.Context
 import android.net.Uri
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import ImplicitTag._
 import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
 import com.waz.service._
-import com.waz.service.push.GcmService.GcmState
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.znet.{WebSocketClient, ZNetClient}
 
 import scala.concurrent.Future
 
-class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, gcmState: Signal[GcmState], backend: BackendConfig, clientId: ClientId, timeouts: Timeouts) {
+class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts, gcmService: IGcmService) {
   import LifecycleState._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -48,9 +47,9 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   }
 
   // true if websocket should be active,
-  val wsActive = gcmState flatMap {
-    case st if st.active => lifecycleActive // GCM is working, so we only need to use websocket when UI is active
-    case _               => lifecycle.loggedIn // GCM is not active, keep websocket whenever user is logged in
+  val wsActive = lifecycleActive map {
+    case false if gcmService.gcmAvailable => false
+    case _ => true //Lifecycle active or no play services available, need web socket
   }
 
   val client = wsActive map {
