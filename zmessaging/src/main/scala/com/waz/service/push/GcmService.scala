@@ -24,6 +24,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.push.GcmGlobalService.GcmRegistration
+import com.waz.service.push.GcmService.GcmState
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.utils._
@@ -33,8 +34,15 @@ import org.threeten.bp.Instant
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
-class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVale: KeyValueStorage, convsContent: ConversationsContentUpdater,
-                 eventsClient: EventsClient, eventPipeline: EventPipeline, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) {
+trait IGcmService {
+
+  def gcmAvailable: Boolean
+
+  def addNotificationToProcess(n: PushNotification): Future[Any]
+}
+
+class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVal: KeyValueStorage, convsContent: ConversationsContentUpdater,
+                 eventsClient: EventsClient, eventPipeline: EventPipeline, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) extends IGcmService {
   import GcmService._
   implicit val dispatcher = gcmGlobalService.dispatcher
 
@@ -42,13 +50,13 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   val notificationsToProcess = Signal(false)
 
-  val gcmAvailable = gcmGlobalService.gcmAvailable
+  override val gcmAvailable = gcmGlobalService.gcmAvailable
 
-  val lastReceivedConvEventTime = keyVale.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
-  val lastFetchedConvEventTime = keyVale.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
-  val lastFetchedLocalTime = keyVale.keyValuePref[Instant]("last_fetched_local_time", Instant.EPOCH)
-  val lastRegistrationTime = keyVale.keyValuePref[Instant]("gcm_registration_time", Instant.EPOCH)
-  val registrationRetryCount = keyVale.keyValuePref[Int]("gcm_registration_retry_count", 0)
+  val lastReceivedConvEventTime = keyVal.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
+  val lastFetchedConvEventTime = keyVal.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
+  val lastFetchedLocalTime = keyVal.keyValuePref[Instant]("last_fetched_local_time", Instant.EPOCH)
+  val lastRegistrationTime = keyVal.keyValuePref[Instant]("gcm_registration_time", Instant.EPOCH)
+  val registrationRetryCount = keyVal.keyValuePref[Int]("gcm_registration_retry_count", 0)
 
   /**
     * Current GCM state, true if we are receiving notifications on it.
@@ -157,7 +165,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
       case None => Future.successful(None)
     }
 
-  def addNotificationToProcess(n: PushNotification): Future[Any] = {
+  override def addNotificationToProcess(n: PushNotification): Future[Any] = {
     val time = n.lastConvEventTime
     if (time != Instant.EPOCH) lastReceivedConvEventTime := time
 

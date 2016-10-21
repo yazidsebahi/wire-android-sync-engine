@@ -33,7 +33,7 @@ import com.waz.service
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
 import com.waz.service.push.GcmService.GcmState
-import com.waz.service.push.PushService
+import com.waz.service.push.{GcmService, PushService}
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -72,9 +72,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val otrClient: OtrClient = new MockedOtrClient(account.netClient)
   }
 
-  class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends {
-    val mockGcmState = Signal(GcmState(true, true))
-  } with ZMessaging(clientId, userModule) {
+  class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends ZMessaging(clientId, userModule) {
 
     override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: MediaManagerService = new MockedMediaManagerService(context, prefs)
@@ -97,7 +95,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
     }
     override lazy val eventsClient       = new EventsClient(zNetClient) {
-      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOr[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
+      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOr[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
       override def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] = suite.loadLastNotification()
     }
     override lazy val voiceClient        = new VoiceChannelClient(zNetClient) {
@@ -125,7 +123,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, mockGcmState, global.backend, clientId, timeouts) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
 
       override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
         override def close() = dispatcher {

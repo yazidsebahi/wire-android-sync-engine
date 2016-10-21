@@ -56,12 +56,12 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
     }
 
-    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, mockGcmState, global.backend, clientId, timeouts) {
+    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
       override val connected = wsConnected
     }
 
     override lazy val eventsClient: EventsClient = new EventsClient(zNetClient) {
-      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = false) = {
+      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int) = {
         requestedSince = since
         CancellableFuture.delayed(clientDelay)(test.notifications.right map (_ .map { n =>
           onNotificationsPageLoaded ! n
@@ -98,7 +98,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       wsConnected ! true
       withDelay { lastNotificationId should be ('defined) }
       val id = Uid()
-      service.onPushNotifications(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), new Date, UserId(), Nil))))
+      service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), new Date, UserId(), Nil))))
       withDelay { lastNotificationId shouldEqual Some(id) }
     }
 
@@ -106,7 +106,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       lastNotificationId = None
       wsConnected ! true
       withDelay { lastNotificationId should be ('defined) }
-      service.onPushNotifications(PushNotification(Uid(), Nil, transient = true))
+      service.onPushNotification(PushNotification(Uid(), Nil, transient = true))
       awaitUi(1.second)
       lastNotificationId shouldEqual Some(lastId)
     }
@@ -115,7 +115,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       lastNotificationId = None
       wsConnected ! true
       withDelay { lastNotificationId should be ('defined) }
-      service.onPushNotifications(PushNotification(Uid(), Seq(OtrMessageEvent(Uid(), RConvId(), new Date, UserId(), ClientId(), ClientId(), Array.empty))))
+      service.onPushNotification(PushNotification(Uid(), Seq(OtrMessageEvent(Uid(), RConvId(), new Date, UserId(), ClientId(), ClientId(), Array.empty))))
       awaitUi(1.second)
       lastNotificationId shouldEqual Some(lastId)
     }

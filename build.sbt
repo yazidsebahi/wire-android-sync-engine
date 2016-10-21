@@ -182,6 +182,7 @@ lazy val testutils = project.in(file("tests") / "utils")
     exportJars := false,
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "2.2.6",
+      "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",
       "com.wire" %% "robotest" % "0.7" exclude("org.scalatest", "scalatest"),
       "com.drewnoakes" % "metadata-extractor" % "2.8.1",
       "org.robolectric" % "android-all" % RobolectricVersion,

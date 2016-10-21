@@ -216,4 +216,5 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       |    "name":"some name"
       |  }
       |}""".stripMargin
+
 }
