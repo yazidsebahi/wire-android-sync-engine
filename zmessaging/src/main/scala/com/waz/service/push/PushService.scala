@@ -99,9 +99,14 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
   }
 
   //no need to sync history on GCM if websocket is connected
-  webSocket.connected.zip(gcmService.notificationsToProcess.throttle(1.second)).on(dispatcher) {
-    case (false, true) => syncHistory()
-    case _ => //do nothing
+  webSocket.connected.flatMap {
+    case false => gcmService.notificationsToProcess
+    case _ => Signal.empty[Boolean]
+  }.throttle(1.second).on(dispatcher) {
+    case true =>
+      verbose("Sync history in response to gcm notification")
+      syncHistory()
+    case _=>
   }
 
   def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
@@ -112,7 +117,6 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     val ns = allNs.filter(_.hasEventForClient(clientId))
 
     ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n =>
-      verbose(s"will update with not $n when processing finished")
       lastNotification.updateLastIdOnNotification(n.id, processNotifications(ns))
     }
   }
