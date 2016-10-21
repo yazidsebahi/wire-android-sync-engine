@@ -38,7 +38,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse notifications response") {
     val json = new JSONObject(Source.fromInputStream(getClass.getResourceAsStream("/events/notifications.json")).getLines().mkString("\n"))
     JsonObjectResponse(json) match {
-      case PagedNotificationsResponse((notifications, false)) => info(s"found notifications: $notifications")
+      case PagedNotificationsResponse((notifications, false)) => //info(s"found notifications: $notifications")
         notifications foreach { n => n.transient shouldEqual false }
       case _ => fail(s"notifications parsing failed for: $json")
     }
@@ -47,7 +47,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse notifications response 1") {
     val json = new JSONObject(Source.fromInputStream(getClass.getResourceAsStream("/events/notifications1.json")).getLines().mkString("\n"))
     JsonObjectResponse(json) match {
-      case PagedNotificationsResponse((notifications, true)) => info(s"found notifications: $notifications")
+      case PagedNotificationsResponse((notifications, true)) => //info(s"found notifications: $notifications")
       case _ => fail(s"notifications parsing failed for: $json")
     }
   }
@@ -55,7 +55,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse notifications response 3") {
     val json = new JSONObject("""{"id":"a0f2b5b2-798d-4fba-8147-32b3dd519e76","payload":[{"time":"2014-05-12T17:13:55.213Z","data":{"last_event_time":"2014-05-12T17:13:52.119Z","id":"3347c16e-08dc-4203-8a68-053c1bd1bd1c","last_event":"1.8001080027b41a72","name":"conn1","type":3,"members":{"others":[],"self":{"id":"bbd6cd39-e5d0-48f5-8da4-a4632a2a2e6a","muted_time":null,"last_read":null,"archived":null,"muted":null,"status":0,"status_ref":"0.0","status_time":"2014-05-12T17:13:53.119Z"}},"creator":"bbd6cd39-e5d0-48f5-8da4-a4632a2a2e6a"},"conversation":"3347c16e-08dc-4203-8a68-053c1bd1bd1c","from":"bbd6cd39-e5d0-48f5-8da4-a4632a2a2e6a","type":"conversation.create"}]}""")
     JsonObjectResponse(json) match {
-      case NotificationsResponse(notification) => info(s"found notification: $notification")
+      case NotificationsResponse(notification) => //info(s"found notification: $notification")
       case _ => fail(s"notifications parsing failed for: $json")
     }
   }
@@ -81,7 +81,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse voice channel deactivate event") {
     val json = new JSONObject("""{"id":"5.800122000a5ba6c8","time":"2014-09-30T10:41:52.542Z","data":{"reason":"completed"},"conversation":"2e42d328-dc40-4fdf-abad-891b0e94d96a","from":"5400e48e-ec36-4507-bdd7-d08bfb0448de","type":"conversation.voice-channel-deactivate"}""")
     Event.EventDecoder(json) match {
-      case e @ VoiceChannelDeactivateEvent(uid, convId, time, from, Some("completed")) => info(s"got event: $e")
+      case e @ VoiceChannelDeactivateEvent(uid, convId, time, from, Some("completed")) => //info(s"got event: $e")
       case e => fail(s"unexpected event: $e")
     }
   }
