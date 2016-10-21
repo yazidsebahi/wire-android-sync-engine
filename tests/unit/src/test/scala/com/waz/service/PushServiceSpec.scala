@@ -31,6 +31,7 @@ import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.EventContext.Implicits.{global => evc}
 import com.waz.utils.events.Signal
+import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 
 import scala.concurrent.Await
@@ -42,6 +43,8 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   val wsConnected = Signal(false)
   var lastNotification = Option.empty[PushNotification]
   var notifications: Either[ErrorResponse, Vector[LoadNotificationsResponse]] = _
+
+  ShadowLog.stream = System.out
 
   var clientDelay = Duration.Zero
   var requestedSince = None: Option[Uid]

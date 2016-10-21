@@ -17,7 +17,6 @@
  */
 package com.waz.service.push
 
-import java.util
 import java.util.Date
 
 import android.content.Context
@@ -32,11 +31,12 @@ import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
-import scala.concurrent.duration._
 
+import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 
-class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) { self =>
+class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
+  self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val tag: LogTag = logTagFor[PushService]
   private implicit val ec = EventContext.Global
@@ -47,7 +47,9 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
 
   var connectedPushPromise = Promise[PushService]()
 
-  webSocket.connected { signals.pushConnected ! _ }
+  webSocket.connected {
+    signals.pushConnected ! _
+  }
 
   client.onNotificationsPageLoaded.on(dispatcher) { resp =>
     onPushNotifications(resp.notifications)
@@ -71,7 +73,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         ws.onMessage { content =>
           verbose(s"got websocket message: $content")
           content match {
-            case NotificationsResponse(notifications @ _*) =>
+            case NotificationsResponse(notifications@_*) =>
               debug(s"got notifications from data: $content")
               onPushNotifications(notifications)
             case resp =>
@@ -104,27 +106,33 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
 
   def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
 
-  private def onPushNotifications(ns: Seq[PushNotification]): Unit = if (ns.nonEmpty) {
-    debug(s"gotPushNotifications: $ns")
+  private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
+    debug(s"gotPushNotifications: $allNs")
+
+    val ns = allNs.filter(_.hasEventForClient(clientId))
+
     ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n =>
+      verbose(s"will update with not $n when processing finished")
       lastNotification.updateLastIdOnNotification(n.id, processNotifications(ns))
     }
   }
 
-  private def processNotifications(notifications: Seq[PushNotification]) = wakeLock { pipeline {
-    returning(notifications.flatMap(_.eventsForClient(clientId))) {
-      _.foreach { ev =>
-        verbose(s"event: $ev")
-        returning(new Date) { d =>
-          ev.notificationsFetchTime = d
-          ev.localTime = d
+  private def processNotifications(notifications: Seq[PushNotification]) = wakeLock {
+    pipeline {
+      returning(notifications.flatMap(_.eventsForClient(clientId))) {
+        _.foreach { ev =>
+          verbose(s"event: $ev")
+          returning(new Date) { d =>
+            ev.notificationsFetchTime = d
+            ev.localTime = d
+          }
         }
       }
+    }.map {
+      //FIXME handle failure
+      _ => gcmService.notificationsToProcess ! false //Finished loading notifications
     }
-  }.map {
-          //FIXME handle failure
-    _ => gcmService.notificationsToProcess ! false //Finished loading notifications
-  }}
+  }
 
   private def syncHistory() =
     lastNotification.lastNotificationId() flatMap {
@@ -150,7 +158,10 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
 }
 
 object PushService {
-  case class SlowSyncRequest(time: Long, lostHistory: Boolean = false) // lostHistory is set if there were lost notifications, meaning that some messages might be lost
+
+  case class SlowSyncRequest(time: Long, lostHistory: Boolean = false)
+
+  // lostHistory is set if there were lost notifications, meaning that some messages might be lost
 }
 
 class PushServiceSignals {
@@ -159,15 +170,17 @@ class PushServiceSignals {
 }
 
 /**
- * Keeps track of last received notifications and updates lastNotificationId preference accordingly.
- * Last id is fetched from backend whenever slow sync is requested.
- */
+  * Keeps track of last received notifications and updates lastNotificationId preference accordingly.
+  * Last id is fetched from backend whenever slow sync is requested.
+  */
 class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
+
   import LastNotificationIdService._
 
   private implicit val logTag = logTagFor[LastNotificationIdService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "LastNotificationIdService")
   private implicit val ec = EventContext.Global
+
   import keyValueService._
 
   private var fetchLast = CancellableFuture.successful(())
