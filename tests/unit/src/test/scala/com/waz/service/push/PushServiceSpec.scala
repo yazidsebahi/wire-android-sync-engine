@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service
+package com.waz.service.push
 
 import java.util.Date
 
@@ -23,7 +23,7 @@ import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.push.WebSocketClientService
+import com.waz.service.Timeouts
 import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.MockZMessaging
@@ -31,20 +31,18 @@ import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.EventContext.Implicits.{global => evc}
 import com.waz.utils.events.Signal
-import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
+class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
+  test =>
 
   val lastId = Uid()
   val wsConnected = Signal(false)
   var lastNotification = Option.empty[PushNotification]
   var notifications: Either[ErrorResponse, Vector[LoadNotificationsResponse]] = _
-
-  ShadowLog.stream = System.out
 
   var clientDelay = Duration.Zero
   var requestedSince = None: Option[Uid]
@@ -55,6 +53,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     override def timeouts: Timeouts = new Timeouts {
       override val webSocket: WebSocket = new WebSocket {
         override def inactivityTimeout: Timeout = 250.millis
+
         override def connectionTimeout: Timeout = 250.millis
       }
     }
@@ -66,11 +65,12 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     override lazy val eventsClient: EventsClient = new EventsClient(zNetClient) {
       override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int) = {
         requestedSince = since
-        CancellableFuture.delayed(clientDelay)(test.notifications.right map (_ .map { n =>
+        CancellableFuture.delayed(clientDelay)(test.notifications.right map (_.map { n =>
           onNotificationsPageLoaded ! n
           n.notifications.lastOption map (_.id)
-        } .last)) .future
+        }.last)).future
       }
+
       override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(clientDelay)(Right(lastNotification))
     }
 
@@ -93,22 +93,29 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   }
 
   def lastNotificationId = Await.result(service.lastNotification.lastNotificationId(), 5.seconds)
-  def lastNotificationId_=(id: Option[Uid]) = Await.result(service.lastNotification.lastNotificationIdPref := id, 5.seconds)
+
+  def lastNotificationId_=(id: Option[Uid]) = Await.result(service.lastNotification.idPref := id, 5.seconds)
 
   feature("last notification Id") {
 
     scenario("store last notification Id on new event") {
       wsConnected ! true
-      withDelay { lastNotificationId should be ('defined) }
+      withDelay {
+        lastNotificationId should be('defined)
+      }
       val id = Uid()
       service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(Uid(), RConvId(), new Date, UserId(), Nil))))
-      withDelay { lastNotificationId shouldEqual Some(id) }
+      withDelay {
+        lastNotificationId shouldEqual Some(id)
+      }
     }
 
     scenario("don't store id on transient notification") {
       lastNotificationId = None
       wsConnected ! true
-      withDelay { lastNotificationId should be ('defined) }
+      withDelay {
+        lastNotificationId should be('defined)
+      }
       service.onPushNotification(PushNotification(Uid(), Nil, transient = true))
       awaitUi(1.second)
       lastNotificationId shouldEqual Some(lastId)
@@ -117,7 +124,9 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     scenario("don't update id on otr notification not intended for us") {
       lastNotificationId = None
       wsConnected ! true
-      withDelay { lastNotificationId should be ('defined) }
+      withDelay {
+        lastNotificationId should be('defined)
+      }
       service.onPushNotification(PushNotification(Uid(), Seq(OtrMessageEvent(Uid(), RConvId(), new Date, UserId(), ClientId(), ClientId(), Array.empty))))
       awaitUi(1.second)
       lastNotificationId shouldEqual Some(lastId)

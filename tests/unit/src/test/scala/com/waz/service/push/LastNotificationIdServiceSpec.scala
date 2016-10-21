@@ -29,6 +29,7 @@ import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
+import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
@@ -50,32 +51,7 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
 
   var lastNotificationResponse = Option(PushNotification(Uid(), Nil))
 
-  scenario("Don't update pref when disconnected") {
-//    service.currentState should eventually(be(Disconnected))
-    service.updateLastIdOnNotification(Uid(), Future.successful(()))
-    awaitUi(200.millis)
-    service.lastNotificationId() should eventually(be('empty))
-  }
-
-  scenario("Switch to Waiting on connect") {
-    wsConnected ! true
-//    service.currentState should eventually(be(Waiting))
-  }
-
-  scenario("Don't update pref when waiting") {
-    service.updateLastIdOnNotification(Uid(2, 2), Future.successful(()))
-    awaitUi(200.millis)
-    service.lastNotificationId() should eventually(be('empty))
-  }
-
-  scenario("Switch to default and update pref to fresh notification once history is synced") {
-//    service.updateLastIdOnHistorySynced(Some(Uid(1, 1))).futureValue
-    awaitUi(100.millis)
-    service.lastNotificationId() should eventually(be(Some(Uid(2, 2))))
-//    service.currentState should eventually(be(Running))
-  }
-
-  scenario("Update pref on fresh notification in default state") {
+  scenario("Update pref on fresh notification") {
     service.updateLastIdOnNotification(Uid(3, 3), Future.successful(()))
     service.updateLastIdOnNotification(Uid(4, 4), Future.successful(()))
     withDelay(service.lastNotificationId() should eventually(be(Some(Uid(4, 4)))))
@@ -100,24 +76,18 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
     service.updateLastIdOnNotification(Uid(4, 4), p2.future)
     p1.trySuccess(())
     awaitUi(200.millis)
-    service.lastNotificationId() should eventually(be(Some(Uid(2, 2))))
+    service.lastNotificationId() should eventually(be(Some(Uid(3, 3))))
     p2.trySuccess(())
     awaitUi(100.millis)
     service.lastNotificationId() should eventually(be(Some(Uid(4, 4))))
   }
 
-  scenario("Switch state on disconnect") {
-    wsConnected ! false
-//    service.currentState should eventually(be(Disconnected))
-  }
-
-  scenario("Switch from waiting to default on slow sync and fetch last notification from backend") {
+  scenario("Fetch last notification from backend on slow sync") {
     lastNotificationResponse = Some(PushNotification(Uid(6, 6), Nil))
     wsConnected ! true
     pushSignals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis())
     withDelay {
       service.lastNotificationId() should eventually(be(Some(Uid(6, 6))))
-//      service.currentState should eventually(be(Running))
     }
   }
 
@@ -138,14 +108,5 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
     service.updateLastIdOnNotification(Uid(9, 9), Future.successful(()))
     awaitUi(200.millis)
     service.lastNotificationId() should eventually(be(Some(Uid(9, 9))))
-//    service.currentState should eventually(be(Running))
-  }
-
-  scenario("Update pref to last historical id if no fresh notification is received") {
-    wsConnected ! false
-    wsConnected ! true
-//    service.updateLastIdOnHistorySynced(Some(Uid(12, 12))).futureValue
-    service.lastNotificationId() should eventually(be(Some(Uid(12, 12))))
-//    service.currentState should eventually(be(Running))
   }
 }

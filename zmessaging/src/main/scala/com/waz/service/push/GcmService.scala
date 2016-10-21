@@ -24,26 +24,24 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.push.GcmGlobalService.GcmRegistration
-import com.waz.service.push.GcmService.GcmState
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.utils._
 import com.waz.utils.events.{EventContext, Signal}
 import org.threeten.bp.Instant
 
-import scala.collection.{breakOut, mutable}
+import scala.collection.breakOut
 import scala.concurrent.Future
 
 trait IGcmService {
-
   def gcmAvailable: Boolean
-
-  def addNotificationToProcess(n: PushNotification): Future[Any]
 }
 
 class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVal: KeyValueStorage, convsContent: ConversationsContentUpdater,
                  eventsClient: EventsClient, eventPipeline: EventPipeline, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) extends IGcmService {
+
   import GcmService._
+
   implicit val dispatcher = gcmGlobalService.dispatcher
 
   private implicit val ev = EventContext.Global
@@ -76,8 +74,8 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     GcmState(lastFetched <= lastReceived, localFetchTime <= lastRegistered)
   }
 
-  eventsClient.onNotificationsPageLoaded.map(_.notifications.flatMap(_.events).collect{ case ce: ConversationEvent => ce })
-    .filter(_.nonEmpty).on(dispatcher) (updateFetchedTimes)
+  eventsClient.onNotificationsPageLoaded.map(_.notifications.flatMap(_.events).collect { case ce: ConversationEvent => ce })
+    .filter(_.nonEmpty).on(dispatcher)(updateFetchedTimes)
 
   private def updateFetchedTimes(ces: Vector[ConversationEvent]) = {
     Future.traverse(ces.groupBy(_.convId)) { case (convId, evs) =>
@@ -128,7 +126,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   def ensureGcmRegistered(): Future[Any] =
     gcmGlobalService.getGcmRegistration.future map {
-      case r @ GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
+      case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.registerGcm()
     }
 
@@ -159,13 +157,15 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
       case Some(reg) => post(reg) flatMap {
         case true =>
           lastRegistrationTime := Instant.now
-          gcmGlobalService.updateRegisteredUser(reg.token, accountId).future map { Some(_) }
+          gcmGlobalService.updateRegisteredUser(reg.token, accountId).future map {
+            Some(_)
+          }
         case false => Future.successful(Some(reg))
       }
       case None => Future.successful(None)
     }
 
-  override def addNotificationToProcess(n: PushNotification): Future[Any] = {
+  def addNotificationToProcess(n: PushNotification): Future[Any] = {
     val time = n.lastConvEventTime
     if (time != Instant.EPOCH) lastReceivedConvEventTime := time
 
@@ -180,7 +180,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
   }
 
   private def syncCallStateForConversations(events: Seq[Event]): Unit = {
-    val convs: Set[RConvId] = events .collect { case e: CallStateEvent => e.convId } (breakOut)
+    val convs: Set[RConvId] = events.collect { case e: CallStateEvent => e.convId }(breakOut)
     Future.traverse(convs) { convId =>
       convsContent.processConvWithRemoteId(convId, retryAsync = false) { conv =>
         sync.syncCallState(conv.id, fromFreshNotification = true)
@@ -190,6 +190,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 }
 
 object GcmService {
+
   import scala.concurrent.duration._
 
   val RegistrationRetryBackoff = new ExponentialBackoff(5.minutes, 30.days)
@@ -197,4 +198,5 @@ object GcmService {
   case class GcmState(received: Boolean, justRegistered: Boolean) {
     def active = received || justRegistered
   }
+
 }

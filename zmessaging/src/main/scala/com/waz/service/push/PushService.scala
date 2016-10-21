@@ -185,9 +185,9 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
 
   private var fetchLast = CancellableFuture.successful(())
 
-  val lastNotificationIdPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
+  private[push] val idPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
 
-  def lastNotificationId() = Future(lastNotificationIdPref()).flatten // future and flatten ensure that there is no race with onNotification
+  def lastNotificationId() = Future(idPref()).flatten // future and flatten ensure that there is no race with onNotification
 
   signals.pushConnected.onChanged.filter(_ == false).on(dispatcher)(_ => fetchLast.cancel())
 
@@ -196,11 +196,11 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
     fetchLast = client.loadLastNotification(clientId) map {
       case Right(Some(notification)) =>
         verbose(s"fetched last notification: $notification")
-        lastNotificationIdPref := Some(notification.id)
+        idPref := Some(notification.id)
         verbose(s"updated pref from backend on slow sync: ${notification.id}")
       case Right(None) =>
         verbose(s"no last notification available on backend")
-        lastNotificationIdPref := Some(NoNotificationsId)
+        idPref := Some(NoNotificationsId)
       case Left(error) =>
         warn(s"/notifications/last failed with error: $error")
     }
@@ -210,7 +210,7 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
     fetchLast.cancel()
     processing.onSuccess {
       case _ =>
-        lastNotificationIdPref := Some(id)
+        idPref := Some(id)
         verbose(s"updated last id: $id")
     }
   }

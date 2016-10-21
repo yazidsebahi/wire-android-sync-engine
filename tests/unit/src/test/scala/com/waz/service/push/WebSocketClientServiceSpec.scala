@@ -18,33 +18,24 @@
 package com.waz.service.push
 
 import com.waz.RobolectricUtils
-import com.waz.content.KeyValueStorage.KeyValuePref
-import com.waz.model.{AccountId, Event, RConvId}
 import com.waz.model.otr.ClientId
-import com.waz.service.EventScheduler.Stage.Atomic
 import com.waz.service._
-import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
-import com.waz.service.push.GcmService.GcmState
-import com.waz.sync.client.PushNotification
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.utils.events.Signal
-import com.waz.utils.returning
 import com.waz.znet.ZNetClient.EmptyClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
-import org.threeten.bp.Instant
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WebSocketClientServiceSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig with MockFactory {
+class WebSocketClientServiceSpec extends FeatureSpec with Matchers with RobolectricTests with BeforeAndAfter with RobolectricUtils with ScalaFutures with DefaultPatienceConfig with MockFactory {
 
   val timeout = 250.millis
   val timeouts = new Timeouts {
     override val webSocket: WebSocket = new WebSocket {
       override def inactivityTimeout: Timeout = timeout
+
       override def connectionTimeout: Timeout = timeout
     }
   }
@@ -54,11 +45,9 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
   lazy val prefs = new PreferenceService(context)
   lazy val meta = new MetaDataService(context)
 
-  lazy val gcm = returning(mock[IGcmService]) { m =>
-    (m.gcmAvailable _).expects().returning(false)
-  }
-
+  lazy val gcm = mock[IGcmService]
   lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, BackendConfig.EdgeBackend, ClientId(), timeouts, gcm)
+
 
   feature("active client") {
     lazy val sub = service.client { c => println(s"client changed: $c") }
@@ -87,6 +76,8 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     scenario("client is destroyed after delay when lifecycle is paused") {
       lifecycle.lifecycleState ! LifecycleState.Idle
 
+      (gcm.gcmAvailable _).expects.returning(true).anyNumberOfTimes()
+
       awaitUi(50.millis)
       client shouldBe 'defined
 
@@ -101,7 +92,9 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     @volatile var error = false
 
     scenario("report error when client stays unconnected for 3 seconds") {
-      service.connectionError { error = _ }
+      service.connectionError {
+        error = _
+      }
       lifecycle.lifecycleState ! LifecycleState.UiActive
 
       service.wsActive.currentValue shouldBe 'defined
