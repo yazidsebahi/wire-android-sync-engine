@@ -30,6 +30,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
+import org.threeten.bp.temporal.TemporalUnit
 
 import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
@@ -184,7 +185,7 @@ package object utils {
 
   implicit class RichInstant(val a: bp.Instant) extends AnyVal {
     def javaDate: Date = new Date(a.toEpochMilli)
-    def until(b: bp.Instant): FiniteDuration = (b.toEpochMilli - a.toEpochMilli).millis
+    def until(b: bp.Instant): bp.Duration = bp.Duration.ofMillis(b.toEpochMilli - a.toEpochMilli)
     def -(d: FiniteDuration) = a.minusNanos(d.toNanos)
     def +(d: FiniteDuration) = a.plusNanos(d.toNanos)
     def isAfter(d: Date): Boolean = a.toEpochMilli > d.getTime

@@ -41,7 +41,7 @@ class TrackingService(conversations: ConversationStorage, callLog: CallLogServic
   import TrackingStats._
   import com.waz.threading.Threading.Implicits.Background
 
-  val trackingSignal = Signal.future(userService.selfUserOrFail.logFailure(true)) flatMap { self =>
+  val trackingSignal = Signal.future(userService.selfUserOrFail.logFailure(reportHockey = true)) flatMap { self =>
     val statsSignal = new AggregatingSignal[Op, TrackingStats](statsChanges(self), loadStats(self), (stats, op) => op(stats), stashing = false)
     val botStatsSignal =
       for {

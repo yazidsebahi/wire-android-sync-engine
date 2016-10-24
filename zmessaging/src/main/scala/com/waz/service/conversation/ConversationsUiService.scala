@@ -36,7 +36,7 @@ import com.waz.service.tracking.TrackingEventsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
-import com.waz.utils._
+import com.waz.utils.{RichInstant, _}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
@@ -67,15 +67,15 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     def sendTextMessage(m: String, mentions: Map[UserId, String] = Map.empty) =
       for {
         msg <- addTextMessage(convId, m, mentions)
-        _   <- updateLastRead(msg)
-        _   <- sync.postMessage(msg.id, convId, msg.editTime)
+        _ <- updateLastRead(msg)
+        _ <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def sendLocationMessage(loc: Location) =
       for {
         msg <- addLocationMessage(convId, loc)
-        _   <- updateLastRead(msg)
-        _   <- sync.postMessage(msg.id, convId, msg.editTime)
+        _ <- updateLastRead(msg)
+        _ <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
@@ -87,17 +87,17 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     def createMessageThenImage(assetId: AssetId, img: api.ImageAsset, conv: ConversationData) =
       for {
         msg <- addImageMessage(convId, assetId, img.getWidth, img.getHeight)
-        _   <- updateLastRead(msg)
-        _   <- addImageAsset(assetId, img, conv.remoteId, isSelf = false)
-        _   <- sync.postMessage(msg.id, convId, msg.editTime)
+        _ <- updateLastRead(msg)
+        _ <- addImageAsset(assetId, img, conv.remoteId, isSelf = false)
+        _ <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def createImageThenMessage(img: api.ImageAsset, conv: ConversationData) =
       for {
         data <- addImageAsset(AssetId(), img, conv.remoteId, isSelf = false)
-        msg  <- addImageMessage(convId, data.id, data.width, data.height)
-        _    <- updateLastRead(msg)
-        _    <- sync.postMessage(msg.id, convId, msg.editTime)
+        msg <- addImageMessage(convId, data.id, data.width, data.height)
+        _ <- updateLastRead(msg)
+        _ <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
     def sendAssetMessage(in: AssetForUpload, conv: ConversationData, handler: ErrorHandler): Future[Option[MessageData]] = {
@@ -120,6 +120,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
 
         handler.noWifiAndFileIsLarge(size, net, new api.MessageContent.Asset.Answer {
           override def ok(): Unit = messages.retryMessageSending(convId, message.id)
+
           override def cancel(): Unit =
             messages.content.deleteMessage(message) flatMap { _ =>
               tracking.track(TrackingEvent.assetUploadCancelled(Some(size), mime.str))
@@ -141,23 +142,23 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
               // will mark message as failed and ask user if it should really be sent
               // marking as failed ensures that user has a way to retry even if he doesn't respond to this warning
               // this is possible if app is paused or killed in meantime, we don't want to be left with message in state PENDING without a sync request
-              updateMessageState(convId, message.id, Message.Status.FAILED) .map { _ =>
+              updateMessageState(convId, message.id, Message.Status.FAILED).map { _ =>
                 showLargeFileWarning(s, mime, net, message)
                 false
-              } (Threading.Ui)
+              }(Threading.Ui)
             case _ =>
               Future successful true
           }
       }
 
       for {
-        mime        <- in.mimeType
-        message     <- addAssetMessage(convId, in.id, mime)
-        asset       <- addAsset(in, conv.remoteId)
-        size        <- in.sizeInBytes
-        isOtto      <- TrackingEventsService.isOtto(conv, usersStorage)
-        _           <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, isOtto))
-        shouldSend  <- checkSize(size, mime, message)
+        mime <- in.mimeType
+        message <- addAssetMessage(convId, in.id, mime)
+        asset <- addAsset(in, conv.remoteId)
+        size <- in.sizeInBytes
+        isOtto <- TrackingEventsService.isOtto(conv, usersStorage)
+        _ <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, isOtto, conv.ephemeral))
+        shouldSend <- checkSize(size, mime, message)
         _ <- if (shouldSend) sync.postMessage(message.id, convId, message.editTime) else Future.successful(())
       } yield Some(message)
     }
@@ -172,27 +173,27 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
       case m: api.MessageContent.Image =>
         convById(convId) flatMap {
           case Some(conv) => sendImageMessage(m.getContent, conv)
-          case None       => Future.failed(new IllegalArgumentException(s"No conversation found for $convId"))
+          case None => Future.failed(new IllegalArgumentException(s"No conversation found for $convId"))
         }
       case m: api.MessageContent.Asset =>
         convById(convId) flatMap {
           case Some(conv) =>
             debug(s"send asset message ${m.getContent}")
             m.getContent match {
-              case a @ ContentUriAssetForUpload(_, uri) =>
-                a.mimeType .flatMap {
-                  case m @ Mime.Image() =>
+              case a@ContentUriAssetForUpload(_, uri) =>
+                a.mimeType.flatMap {
+                  case m@Mime.Image() =>
                     for {
                       size <- a.sizeInBytes
                       isOtto <- TrackingEventsService.isOtto(conv, usersStorage)
-                    } tracking.track(TrackingEvent.imageUploadAsAsset(size, m.str, conv.convType, isOtto))
-                    sendImageMessage(ImageAssetFactory.getImageAsset(uri), conv) // XXX: this has to run on UI thread
+                    } tracking.track(TrackingEvent.imageUploadAsAsset(size, m.str, conv.convType, isOtto, conv.ephemeral))
+                    sendImageMessage(ImageAssetFactory.getImageAsset(uri), conv) // XXX: this has to run on UI thread, so we can't make if part of the for-expression
                   case _ =>
                     sendAssetMessage(a, conv, m.getErrorHandler)
-                } (Threading.Ui)
-              case a: AssetForUpload  => sendAssetMessage(a, conv, m.getErrorHandler)
+                }(Threading.Ui)
+              case a: AssetForUpload => sendAssetMessage(a, conv, m.getErrorHandler)
             }
-          case None       =>
+          case None =>
             Future.failed(new IllegalArgumentException(s"No conversation found for $convId"))
         }
       case _ =>
@@ -283,10 +284,12 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     verbose(s"leaveConversation($conv)")
 
     for {
-      updated   <- setConversationStatusInactive(conv)
-      _         <- withSelfUserFuture { removeConversationMember(conv, _) }
-      archived  <- updateConversationArchived(conv, archived = true)
-      _         <- voice.leaveVoiceChannel(conv)
+      updated <- setConversationStatusInactive(conv)
+      _ <- withSelfUserFuture {
+        removeConversationMember(conv, _)
+      }
+      archived <- updateConversationArchived(conv, archived = true)
+      _ <- voice.leaveVoiceChannel(conv)
     } yield archived.map(_._2).orElse(updated.map(_._2))
   }
 
@@ -294,8 +297,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     val isGroup = convById(conv).map(_.exists(_.convType == ConversationType.Group))
     val isActiveMember = members.isActiveMember(conv, user)
     for {
-      p1  <- isGroup
-      p2  <- isActiveMember
+      p1 <- isGroup
+      p2 <- isActiveMember
       res <- if (p1 && p2) f else Future.successful(zero)
     } yield res
   }
@@ -330,24 +333,26 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     }
 
   /**
-   * Creates conversation with already connected user.
-   */
+    * Creates conversation with already connected user.
+    */
   def createOneToOneConversation(toUser: UserId, selfUserId: UserId) =
-    usersStorage.get(toUser).flatMap {
-      case Some(u) if u.connection == ConnectionStatus.Ignored =>
-        createConversationWithMembers(ConvId(toUser.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, toUser, Seq(selfUserId), hidden = true) flatMap { conv =>
-          addMemberJoinMessage(conv.id, toUser, Set(selfUserId)) flatMap { _ =>
-            u.connectionMessage.fold { Future.successful(conv) } { msg =>
-              addConnectRequestMessage(conv.id, toUser, selfUserId, msg, u.name) map  { _ => conv }
-            }
+  usersStorage.get(toUser).flatMap {
+    case Some(u) if u.connection == ConnectionStatus.Ignored =>
+      createConversationWithMembers(ConvId(toUser.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, toUser, Seq(selfUserId), hidden = true) flatMap { conv =>
+        addMemberJoinMessage(conv.id, toUser, Set(selfUserId)) flatMap { _ =>
+          u.connectionMessage.fold {
+            Future.successful(conv)
+          } { msg =>
+            addConnectRequestMessage(conv.id, toUser, selfUserId, msg, u.name) map { _ => conv }
           }
         }
-      case _ =>
-        sync.postConversation(ConvId(toUser.str), Seq(toUser), None)
-        createConversationWithMembers(ConvId(toUser.str), RConvId(), ConversationType.OneToOne, selfUserId, Seq(toUser)) flatMap { conv =>
-          addMemberJoinMessage(conv.id, selfUserId, Set(toUser)) map (_ => conv)
-        }
-    }
+      }
+    case _ =>
+      sync.postConversation(ConvId(toUser.str), Seq(toUser), None)
+      createConversationWithMembers(ConvId(toUser.str), RConvId(), ConversationType.OneToOne, selfUserId, Seq(toUser)) flatMap { conv =>
+        addMemberJoinMessage(conv.id, selfUserId, Set(toUser)) map (_ => conv)
+      }
+  }
 
   def createGroupConversation(id: ConvId, members: Seq[UserId]): Future[ConversationData] = withSelfUserFuture { selfUserId =>
     debug(s"createGroupConversation, id: $id, members: $members")
@@ -364,7 +369,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   def knock(id: ConvId): Future[Option[MessageData]] =
     for {
       msg <- addKnockMessage(id, selfUserId)
-      _   <- sync.postMessage(msg.id, id, msg.editTime)
+      _ <- sync.postMessage(msg.id, id, msg.editTime)
     } yield
       Some(msg)
 

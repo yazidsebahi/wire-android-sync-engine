@@ -18,28 +18,40 @@
 package com.waz.api.impl
 
 import com.waz.api
+import com.waz.api.EphemeralExpiration
 import com.waz.api.KindOfTrackingEvent._
 import org.threeten.bp.Duration
 
 case class TrackingEvent(kind: api.KindOfTrackingEvent, assetSizeInBytes: Option[Long] = None, assetMimeType: Option[String] = None,
-    duration: Option[Duration] = None, convType: Option[api.IConversation.Type] = None, error: Option[api.ErrorResponse] = None,
-    isOtto: Option[Boolean] = None) extends api.TrackingEvent {
+                         duration: Option[Duration] = None, convType: Option[api.IConversation.Type] = None, error: Option[api.ErrorResponse] = None,
+                         isOtto: Option[Boolean] = None, ephemeralExpiration: EphemeralExpiration = EphemeralExpiration.NONE) extends api.TrackingEvent {
   override def getKind = kind
+
   override lazy val getAssetSizeInBytes = Opt(assetSizeInBytes.map(Long.box))
   override lazy val getAssetMimeType = Opt(assetMimeType)
   override lazy val getDuration = Opt(duration)
   override lazy val getConversationType = Opt(convType)
   override lazy val isInConversationWithOtto = Opt(isOtto)
   override lazy val getErrorResponse = Opt(error)
+  override lazy val getEphemeralExpiration = ephemeralExpiration
 }
 
 object TrackingEvent {
-  def assetUploadStarted(size: Option[Long], mime: String, tpe: api.IConversation.Type, isOtto: Boolean) = TrackingEvent(ASSET_UPLOAD_STARTED, size, Some(mime), convType = Some(tpe), isOtto = Some(isOtto))
+  def assetUploadStarted(size: Option[Long], mime: String, tpe: api.IConversation.Type, isOtto: Boolean, exp: EphemeralExpiration) =
+    TrackingEvent(ASSET_UPLOAD_STARTED, size, Some(mime), convType = Some(tpe), isOtto = Some(isOtto), ephemeralExpiration = exp)
+
   def assetUploadSuccessful(size: Long, mime: String, dur: Duration) = TrackingEvent(ASSET_UPLOAD_SUCCESSFUL, Some(size), Some(mime), Some(dur))
+
   def assetUploadCancelled(size: Option[Long], mime: String) = TrackingEvent(ASSET_UPLOAD_CANCELLED, size, Some(mime))
+
   def assetUploadFailed(error: api.ErrorResponse) = TrackingEvent(ASSET_UPLOAD_FAILED, error = Some(error))
+
   def assetDownloadStarted(size: Long) = TrackingEvent(ASSET_DOWNLOAD_STARTED, Some(size))
+
   def assetDownloadSuccessful(size: Long, mime: String) = TrackingEvent(ASSET_DOWNLOAD_SUCCESSFUL, Some(size), Some(mime))
+
   def assetDownloadFailed(size: Long) = TrackingEvent(ASSET_DOWNLOAD_FAILED, Some(size))
-  def imageUploadAsAsset(size: Option[Long], mime: String, tpe: api.IConversation.Type, isOtto: Boolean) = TrackingEvent(IMAGE_UPLOAD_AS_ASSET, size, Some(mime), convType = Some(tpe), isOtto = Some(isOtto))
+
+  def imageUploadAsAsset(size: Option[Long], mime: String, tpe: api.IConversation.Type, isOtto: Boolean, expiration: EphemeralExpiration) =
+    TrackingEvent(IMAGE_UPLOAD_AS_ASSET, size, Some(mime), convType = Some(tpe), isOtto = Some(isOtto), ephemeralExpiration = expiration)
 }
