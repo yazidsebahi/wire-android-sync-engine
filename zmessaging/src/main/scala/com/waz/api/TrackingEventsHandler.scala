@@ -33,4 +33,5 @@ trait TrackingEvent {
   def getConversationType: Opt[IConversation.Type]
   def isInConversationWithOtto: Opt[Boolean]
   def getErrorResponse: Opt[ErrorResponse]
+  def getEphemeralExpiration: EphemeralExpiration
 }

@@ -69,7 +69,7 @@ class ThrottlingSignalSpec extends FeatureSpec with Matchers with Inspectors wit
 
       Await.result(updates, 5.seconds)
       val sorted = received.get.map(_._2).sorted
-      val interval = sorted.zip(sorted.tail).map { case (a, b) => a until b }
+      val interval = sorted.zip(sorted.tail).map { case (a, b) => (a until b).toMillis.millis }
 
       every(interval) should be >= 45.millis
     })
