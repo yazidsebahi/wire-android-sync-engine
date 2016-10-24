@@ -116,8 +116,9 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
 
     val ns = allNs.filter(_.hasEventForClient(clientId))
 
+    val processing = processNotifications(ns) //careful not to inline this - needs to start executing whether transient or not!
     ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n =>
-      lastNotification.updateLastIdOnNotification(n.id, processNotifications(ns))
+      lastNotification.updateLastIdOnNotification(n.id, processing)
     }
   }
 
