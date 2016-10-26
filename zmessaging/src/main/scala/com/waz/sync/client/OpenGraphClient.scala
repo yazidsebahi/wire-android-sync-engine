@@ -130,7 +130,7 @@ object OpenGraphClient {
     val Description = "og:description"
 
     val MetaTag = """<\s*meta\s+[^>]+>""".r
-    val Attribute = """(\w+)\s*=\s*"([^"]+)"""".r
+    val Attribute = """(\w+)\s*=\s*("|')([^("|')]+)("|')""".r
 
     val TitlePattern = """<title[^>]*>(.*)</title>""".r
 
@@ -141,7 +141,7 @@ object OpenGraphClient {
       def htmlTitle = TitlePattern.findFirstMatchIn(body.value).map(_.group(1))
 
       val ogMeta = MetaTag.findAllIn(body.value) .flatMap { meta =>
-        val attrs = Attribute.findAllMatchIn(meta) .map { m => m.group(1).toLowerCase -> m.group(2) } .toMap
+        val attrs = Attribute.findAllMatchIn(meta) .map { m => m.group(1).toLowerCase -> m.group(3) } .toMap
         for {
           name <- attrs.get("property").orElse(attrs.get("name")) if name.toLowerCase.startsWith("og:")
           content <- attrs.get("content")
