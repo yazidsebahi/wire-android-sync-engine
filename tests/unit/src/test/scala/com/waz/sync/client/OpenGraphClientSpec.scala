@@ -63,6 +63,12 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
       info.get.image should not be empty
       info.get.description should not be empty
     }
+
+    scenario("Parse page from Blogger") {
+      val info = OpenGraphDataResponse.unapply(StringResponse(BloggerHeader))
+      info shouldBe defined
+      info.get.title should not be empty
+    }
   }
 
   val WireHtmlHeader =
@@ -257,6 +263,37 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
       |<meta property="al:android:url" content="https://www.instagram.com/p/BICaRJ4hDuW/" />
       |<meta name="medium" content="image" />
       |<meta property="og:type" content="instapp:photo" />
+      |</head>
+    """.stripMargin
+
+
+  val BloggerHeader =
+    """
+      |<!DOCTYPE html>
+      |<html class='v2 detail-page' dir='ltr' itemscope='' itemtype='http://schema.org/Blog' lang='en' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+      |<head>
+      |<title>
+      |Official Blogger Blog: More custom template flexibility
+      |</title>
+      |<meta content='width=device-width, height=device-height, minimum-scale=1.0, initial-scale=1.0, user-scalable=0' name='viewport'/>
+      |<meta content='IE=Edge' http-equiv='X-UA-Compatible'/>
+      |<meta content='article' property='og:type'/>
+      |<meta content='More custom template flexibility' property='og:title'/>
+      |<meta content='en_US' property='og:locale'/>
+      |<meta content='https://blogger.googleblog.com/2016/05/more-custom-template-flexibility.html' property='og:url'/>
+      |<meta content='Official Blogger Blog' property='og:site_name'/>
+      |<!-- Twitter Card properties -->
+      |<meta content='Official Blogger Blog' property='twitter:site'/>
+      |<meta content='More custom template flexibility' property='twitter:title'/>
+      |<meta content='https://lh4.googleusercontent.com/VWNK3317-R03RHjg7wFXk5IzVj0CEUMn3FNIZhJaW5bOeP_8II7zSkzJjXhJh8Rw3MnnOEXBw6fIBzpvOvof0zE18gQriX5BPyOt73Z7AwTvK7M8AUOAuXz0ZqS5e8_juz43dmtS=s72-c' property='twitter:image'/>
+      |<meta content='summary' name='twitter:card'/>
+      |<meta content='@blogger' name='twitter:creator'/>
+      |<link href='https://fonts.googleapis.com/css?family=Roboto:400italic,400,500,500italic,700,700italic' rel='stylesheet' type='text/css'/>
+      |<link href='https://fonts.googleapis.com/icon?family=Material+Icons' rel='stylesheet'/>
+      |<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js' type='text/javascript'></script>
+      |<!-- End -->
+      |<link type='text/css' rel='stylesheet' href='https://www.blogger.com/static/v1/widgets/434580396-css_bundle_v2.css' />
+      |<link type='text/css' rel='stylesheet' href='https://www.blogger.com/dyn-css/authorization.css?targetBlogID=2399953&zx=fb409d02-8bb7-4951-affb-22f5563c8f84' />
       |</head>
     """.stripMargin
 }
