@@ -55,6 +55,14 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
       info.get.title should not be empty
       info.get.image should not be empty
     }
+
+    scenario("Parse title, image and description from Instagram") {
+      val info = OpenGraphDataResponse.unapply(StringResponse(InstagramHeader))
+      info shouldBe defined
+      info.get.title should not be empty
+      info.get.image should not be empty
+      info.get.description should not be empty
+    }
   }
 
   val WireHtmlHeader =
@@ -226,6 +234,29 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
       |<link type="text/css" rel="stylesheet" href="https://static.xx.fbcdn.net/rsrc.php/v2/yK/r/Afr-nAwy4we.css" data-bootloader-hash="2ihRB" data-permanent="1" crossorigin="anonymous">
       |<link type="text/css" rel="stylesheet" href="https://static.xx.fbcdn.net/rsrc.php/v2/yR/r/6A3lwW0Dqhw.css" data-bootloader-hash="TK4Jr" data-permanent="1" crossorigin="anonymous">
       |<script src="https://static.xx.fbcdn.net/rsrc.php/v2/yx/r/rtsCiuA4RET.js" data-bootloader-hash="HCLO2" crossorigin="anonymous"></script><script>require("TimeSlice").guard(function() {(require("ServerJSDefine")).handleDefines([["VideoPlayerAbortLoadingExperiment",[],{"canAbort":false},824],["GroupsProductDetailGating",[],{"tuzi_dialog":null},1461],["MarauderConfig",[],{"app_version":2433342,"gk_enabled":false},31],["PageTransitionsConfig",[],{"reloadOnBootloadError":false},1067],["PageNavigationStageLoggerGK",[],{"gk_check":false},1434],["ErrorSignalConfig",[],{"uri":"https:\/\/error.facebook.com\/common\/scribe_endpoint.php"},319],["ZeroRewriteRules",[],{},1478],["BigPipeExperiments",[],{"preparse_content":"","download_js":"blocked_by_dom_ready","link_images_to_pagelets":false},907],["LSD",[],{"token":"AVowDACV"},323],["ISB",[],{},330],["FbtLogger",[],{"logger":null},288],["FunnelLoggerConfig",[],{"freq":{"WWW_CANVAS_AD_CREATION_FUNNEL":1,"WWW_CANVAS_EDITOR_FUNNEL":1,"WWW_LINK_PICKER_DIALOG_FUNNEL":1,"WWW_MEME_PICKER_DIALOG_FUNNEL":1,"WWW_LEAD_GEN_FORM_CREATION_FUNNEL":1,"WWW_LEAD_GEN_DESKTOP_AD_UNIT_FUNNEL":1,"WWW_CAMPFIRE_COMPOSER_UPSELL_FUNNEL":1,"WWW_RECRUITING_SEARCH_FUNNEL":1,"WWW_EXAMPLE_FUNNEL":1,"WWW_REACTIONS_NUX_FUNNEL":1,"MSITE_EXAMPLE_FUNNEL":10,"WWW_FEED_SHARE_DIALOG_FUNNEL":100,"MSITE_FEED_SHARE_DIALOG_FUNNEL":100,"MSITE_COMMENT_TYPING_FUNNEL":500,"WWW_SEARCH_AWARENESS_LEARNING_NUX_FUNNEL":1,"WWW_CONSTITUENT_TITLE_UPSELL_FUNNEL":1,"MTOUCH_FEED_MISSED_STORIES_FUNNEL":10,"WWW_UFI_SHARE_LINK_FUNNEL":1,"WWW_CMS_SEARCH_FUNNEL":1,"GAMES_QUICKSILVER_FUNNEL":1,"default":1000}},1271],["BootloaderConfig",[],{"maxJsRetries":0,"jsRetries":null,"jsRetryAbortNum":2,"jsRetryAbortTime":5,"payloadEndpointURI":"https:\/\/www.facebook.com\/ajax\/haste-response\/"},329],["CurrentCommunityInitialData",[],{},490],["PhotoSnowliftActionsGating",[],{"ALLOW_MAKE_COVER_PHOTO_BUTTON":false,"ALLOW_MAKE_PROFILE_PICTURE_BUTTON":false},887],["CurrentUserInitialData",[],{"USER_ID":"0","ACCOUNT_ID":"0"},270],["URLFragmentPreludeConfig",[],{"incorporateQuicklingFragment":true,"hashtagRedirect":true},137],["TrackingConfig",[],{"domain":"https:\/\/pixel.facebook.com"},325],["ZeroCategoryHeader",[],{},1127],["ServerNonce",[],{"ServerNonce":"sYkdFn4-ejAUoC-toKbRs7"},141],["CSSLoaderConfig",[],{"timeout":5000,"modulePrefix":"BLCSS:"},619],["InitialServerTime",[],{"serverTime":1467969330000},204],["DTSGInitialData",[],{},258],["SiteData",[],{"revision":2433342,"tier":"","push_phase":"V3","pkg_cohort":"PHASED:DEFAULT","pkg_cohort_key":"__pc","haste_site":"www","be_mode":-1,"be_key":"__be","is_rtl":false,"vip":"2a03:2880:2040:7f83:face:b00c:0:25de"},317],["UserAgentData",[],{"browserArchitecture":"32","browserFullVersion":null,"browserMinorVersion":null,"browserName":"Unknown","browserVersion":null,"deviceName":"Unknown","engineName":"Unknown","engineVersion":null,"platformArchitecture":"32","platformName":"Unknown","platformVersion":null,"platformFullVersion":null},527],["LinkshimHandlerConfig",[],{"supports_meta_referrer":false,"default_meta_referrer_policy":"default","switched_meta_referrer_policy":"origin","render_verification_rate":1000,"link_react_default_hash":"dAQGnCHqX","linkshim_host":"l.facebook.com"},27],["WebSpeedExperiments",[],{"non_blocking_tracker":false,"non_blocking_logger":false},1160],["LinkReactUnsafeHrefConfig",[],{"LinkHrefChecker":null},1182],["BanzaiConfig",[],{"EXPIRY":86400000,"MAX_SIZE":10000,"MAX_WAIT":150000,"RESTORE_WAIT":150000,"blacklist":["time_spent"],"gks":{"boosted_component":true,"boosted_pagelikes":true,"boosted_posts":true,"boosted_website":true,"jslogger":true,"mercury_send_error_logging":true,"pages_client_logging":true,"platform_oauth_client_events":true,"useraction":true,"videos":true,"visibility_tracking":true,"vitals":true,"graphexplorer":true,"gqls_web_logging":true}},7],["ReactGK",[],{"logTopLevelRenders":false,"useCreateElement":true},998],["CoreWarningGK",[],{"forceWarning":false},725],["FbtQTOverrides",[],{"overrides":{"1_65c3391ebe4a1af8364ca4fbb8cb54d1":"Mobile Number or Email:","1_9171ad6e2268759887b1b45d16139587":"Reach Even More People"}},551],["FbtResultGK",[],{"shouldReturnFbtResult":false,"inlineMode":"NO_INLINE"},876],["IntlViewerContext",[],{"GENDER":50331648},772],["IntlPhonologicalRules",[],{"meta":{"\/_B\/":"([.,!?\\s]|^)","\/_E\/":"([.,!?\\s]|$)"},"patterns":{"\/\u0001(.*)('|&#039;)s\u0001(?:'|&#039;)s(.*)\/":"\u0001$1$2s\u0001$3","\/_\u0001([^\u0001]*)\u0001\/":"javascript"}},1496],["WWWBase",[],{"uri":"https:\/\/www.facebook.com\/"},318],["AsyncRequestConfig",[],{"retryOnNetworkError":"1","logAsyncRequest":false},328],["SessionNameConfig",[],{"seed":"1vMH"},757]]);new (require("ServerJS"))().handle({"require":[["TimeSlice"],["markJSEnabled"],["lowerDomain"],["URLFragmentPrelude"],["Primer"],["BigPipe"],["Bootloader"],["TimeSlice","disableHeartbeat",[],[],[]]]});}, "ServerJS define", {"root":true})();</script>
+      |</head>
+    """.stripMargin
+
+  val InstagramHeader =
+    """
+      |<head>
+      |<link rel="canonical" href="https://www.instagram.com/p/BICaRJ4hDuW/" />
+      |<meta content="See this Instagram photo by @meetgarfi • 2,499 likes" name="description" />
+      |<meta property="og:site_name" content="Instagram" />
+      |<meta property="og:title" content="Instagram photo by Garfi - Angry Cat • Jul 19, 2016 at 9:15am UTC" />
+      |<meta property="og:image" content="https://scontent-frt3-1.cdninstagram.com/t51.2885-15/s750x750/sh0.08/e35/13694889_959602174151095_181016288_n.jpg?ig_cache_key=MTI5NzcxNTE3MDY4ODM4Mzg5NA%3D%3D.2" />
+      |<meta property="og:description" content="See this Instagram photo by @meetgarfi • 2,499 likes" />
+      |<meta property="fb:app_id" content="124024574287414" />
+      |<meta property="og:url" content="https://www.instagram.com/p/BICaRJ4hDuW/" />
+      |<meta property="instapp:owner_user_id" content="1523718919" />
+      |<meta property="al:ios:app_name" content="Instagram" />
+      |<meta property="al:ios:app_store_id" content="389801252" />
+      |<meta property="al:ios:url" content="instagram://media?id=1297715170688383894" />
+      |<meta property="al:android:app_name" content="Instagram" />
+      |<meta property="al:android:package" content="com.instagram.android" />
+      |<meta property="al:android:url" content="https://www.instagram.com/p/BICaRJ4hDuW/" />
+      |<meta name="medium" content="image" />
+      |<meta property="og:type" content="instapp:photo" />
       |</head>
     """.stripMargin
 }

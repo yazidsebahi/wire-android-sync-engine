@@ -134,7 +134,7 @@ object OpenGraphClient {
 
     val TitlePattern = """<title[^>]*>(.*)</title>""".r
 
-    val AcceptedTypes = Seq("", "article", "website") // will ignore other types for now
+    val AcceptedTypes = Seq("", "article", "website", "instapp:photo") // will ignore other types for now
 
     def unapply(body: StringResponse): Option[OpenGraphData] = {
 
