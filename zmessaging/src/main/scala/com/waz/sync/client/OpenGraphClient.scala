@@ -131,7 +131,7 @@ object OpenGraphClient {
 
     val PropertyPrefix = """^(og|twitter):(.+)""".r
     val MetaTag = """<\s*meta\s+[^>]+>""".r
-    val Attribute = """(\w+)\s*=\s*("|')([^("|')]+)("|')""".r
+    val Attribute = """(\w+)\s*=\s*("|')([^"']+)("|')""".r
 
     val TitlePattern = """<title[^>]*>(.*)</title>""".r
 
