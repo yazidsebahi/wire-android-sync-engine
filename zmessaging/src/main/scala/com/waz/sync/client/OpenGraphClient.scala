@@ -135,7 +135,9 @@ object OpenGraphClient {
 
     val TitlePattern = """<title[^>]*>(.*)</title>""".r
 
-    val AcceptedTypes = Seq("", "article", "website", "instapp:photo") // will ignore other types for now
+    val BaseTypes = Seq("", "article", "website", "product", "video.movie", "video.tv_show")
+    val KnownSpecificTypes = Seq("instapp:photo", "ebay-objects:item", "tumblr-feed:tumblelog")
+    val AcceptedTypes = BaseTypes ++ KnownSpecificTypes // will ignore other types for now
 
     def unapply(body: StringResponse): Option[OpenGraphData] = {
 
