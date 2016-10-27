@@ -123,12 +123,13 @@ object OpenGraphClient {
   }
 
   object OpenGraphDataResponse {
-    val Title = "og:title"
-    val Image = "og:image"
-    val Type = "og:type"
-    val Url = "og:url"
-    val Description = "og:description"
+    val Title = "title"
+    val Image = "image"
+    val Type = "type"
+    val Url = "url"
+    val Description = "description"
 
+    val PropertyPrefix = """^(og|twitter):(.+)""".r
     val MetaTag = """<\s*meta\s+[^>]+>""".r
     val Attribute = """(\w+)\s*=\s*("|')([^("|')]+)("|')""".r
 
@@ -142,10 +143,12 @@ object OpenGraphClient {
 
       val ogMeta = MetaTag.findAllIn(body.value) .flatMap { meta =>
         val attrs = Attribute.findAllMatchIn(meta) .map { m => m.group(1).toLowerCase -> m.group(3) } .toMap
-        for {
-          name <- attrs.get("property").orElse(attrs.get("name")) if name.toLowerCase.startsWith("og:")
-          content <- attrs.get("content")
-        } yield name.toLowerCase -> content
+        val name = attrs.get("property").orElse(attrs.get("name"))
+        val iter = PropertyPrefix.findAllMatchIn(name.getOrElse("")).map(a => a.group(2).toLowerCase -> attrs.getOrElse("content",""))
+        if (iter.hasNext)
+          Some(iter.next())
+        else
+          None
       } .toMap
 
       if ((ogMeta.contains(Title) || ogMeta.contains(Image)) && ogMeta.get(Type).forall { tpe => AcceptedTypes.contains(tpe.toLowerCase) }) {

@@ -68,6 +68,7 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
       val info = OpenGraphDataResponse.unapply(StringResponse(BloggerHeader))
       info shouldBe defined
       info.get.title should not be empty
+      info.get.image should not be empty
     }
   }
 
