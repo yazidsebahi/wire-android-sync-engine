@@ -25,7 +25,8 @@ import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
 import com.waz.api.MessageContent.{Location, Text}
 import com.waz.api.{EphemeralExpiration, IConversation, ImageAssetFactory, UpdateListener}
-import com.waz.model.GenericContent.{LinkPreview, MsgEdit}
+import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.GenericContent.{Asset => ProtoAsset, LinkPreview, MsgEdit}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
@@ -129,7 +130,10 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
         context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(id, loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
       })
     case _ =>
-      context.images.getImageAsset(data.assetId)
+      data.protos.lastOption.map {
+        case GenericMessage(_, asset @ ProtoAsset(Some(Original(Mime.Image(), _, _, _, _)), _, _)) => context.images.getImageAsset(asset)
+        case _ => context.images.getImageAsset(data.assetId)
+      }.orNull
   }
 
   override def getAsset =
