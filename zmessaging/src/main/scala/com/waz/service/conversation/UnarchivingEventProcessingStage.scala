@@ -61,6 +61,7 @@ object UnarchivingEventProcessingStage {
         case _: Text  => true
         case _: ImageAsset => true
         case _: Knock => true
+        case _: Ephemeral => true
         case _        => false
       }
     case _: UnarchivingEvent => true
