@@ -225,17 +225,20 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
     content.getMessage(msgId) flatMap {
+      case Some(msg) if msg.convId != convId =>
+        error(s"can not recall message belonging to other conversation: $msg, requested by $userId")
+        Future successful None
       case Some(msg) if msg.canRecall(convId, userId) =>
         content.deleteOnUserRequest(Seq(msgId)) flatMap { _ =>
           val recall = MessageData(systemMsgId, convId, Message.Type.RECALLED, time = msg.time, editTime = time max msg.time, userId = userId, state = state, protos = Seq(GenericMessage(systemMsgId.uid, MsgRecall(msgId))))
           if (userId == selfUserId) Future successful Some(recall) // don't save system message for self user
           else content.addMessage(recall)
         }
-      case Some(msg) if msg.isEphemeral && convId.str == userId.str =>
-        // ephemeral messages will be recalled by receiver in 1-1 conv (once msg expires)
+      case Some(msg) if msg.isEphemeral =>
+        // ephemeral message expired on other device, or on receiver side
         content.deleteOnUserRequest(Seq(msgId)) map { _ => None }
       case msg =>
-        warn(s"can not recall $msg, requeast by $userId")
+        warn(s"can not recall $msg, requested by $userId")
         Future successful None
     }
 

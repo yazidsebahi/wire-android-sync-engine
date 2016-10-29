@@ -21,6 +21,7 @@ import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.ClientId
+import com.waz.model.sync.ReceiptType
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.sync._
 import org.threeten.bp.Instant
@@ -63,7 +64,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postInvitation(i: Invitation) = sid
   override def postTypingState(id: ConvId, t: Boolean) = sid
   override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
-  override def postReceipt(conv: ConvId, message: MessageId, user: UserId) = sid
+  override def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType) = sid
 
   override def registerGcm() = sid
   override def deleteGcmToken(token: GcmId) = sid

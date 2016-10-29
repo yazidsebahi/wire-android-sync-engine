@@ -30,6 +30,7 @@ import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.model.sync.ReceiptType
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -80,7 +81,7 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
       for {
         _ <- messages.deleteOnUserRequest(toRemove.map(_.id))
         // recalling message, this informs the sender that message is already expired
-        _ <- Future.traverse(toRemove) { m => sync.postRecalled(m.convId, MessageId(), m.id) }
+        _ <- Future.traverse(toRemove) { m => sync.postReceipt(m.convId, m.id, m.userId, ReceiptType.EphemeralExpired) }
         _ <- messages.messagesStorage.updateAll2(toObfuscate.map(_.id), obfuscate)
       } yield ()
     }

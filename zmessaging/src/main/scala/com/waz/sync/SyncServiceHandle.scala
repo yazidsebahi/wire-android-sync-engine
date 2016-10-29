@@ -70,7 +70,7 @@ trait SyncServiceHandle {
   def postInvitation(i: Invitation): Future[SyncId]
   def postTypingState(id: ConvId, typing: Boolean): Future[SyncId]
   def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: Instant): Future[SyncId]
-  def postReceipt(conv: ConvId, message: MessageId, user: UserId): Future[SyncId]
+  def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId]
 
   def registerGcm(): Future[SyncId]
   def deleteGcmToken(token: GcmId): Future[SyncId]
@@ -128,7 +128,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postLastRead(id: ConvId, time: Instant) = addRequest(PostLastRead(id, time), priority = Priority.Low, delay = timeouts.messages.lastReadPostDelay)
   def postCleared(id: ConvId, time: Instant) = addRequest(PostCleared(id, time))
   def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = addRequest(PostOpenGraphMeta(conv, msg, time), priority = Priority.Low)
-  def postReceipt(conv: ConvId, message: MessageId, user: UserId): Future[SyncId] = addRequest(PostReceipt(conv, message, user), priority = Priority.Optional)
+  def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId] = addRequest(PostReceipt(conv, message, user, tpe), priority = Priority.Optional)
 
   def registerGcm() = addRequest(RegisterGcmToken, priority = Priority.Low, forceRetry = true)
   def deleteGcmToken(token: GcmId) = addRequest(DeleteGcmToken(token), priority = Priority.Low)
@@ -192,7 +192,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostOpenGraphMeta(conv, msg, time)    => zms.openGraphSync.postMessageMeta(conv, msg, time)
     case PostRecalled(convId, msg, recall)     => zms.messagesSync.postRecalled(convId, msg, recall)
     case PostSessionReset(conv, user, client)  => zms.otrSync.postSessionReset(conv, user, client)
-    case PostReceipt(conv, msg, user)          => zms.messagesSync.postReceipt(conv, msg, user)
+    case PostReceipt(conv, msg, user, tpe)     => zms.messagesSync.postReceipt(conv, msg, user, tpe)
   }
 
   override def apply(req: SyncRequest): Future[SyncResult] =

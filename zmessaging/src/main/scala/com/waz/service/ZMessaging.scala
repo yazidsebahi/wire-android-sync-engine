@@ -286,6 +286,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
     // services listening for storage updates
     richmedia
     ephemeral
+    receipts
 
     tempFiles
     recordAndPlay

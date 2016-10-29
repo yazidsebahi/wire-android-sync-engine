@@ -22,6 +22,7 @@ import com.waz.api.Message.Status.DELIVERED
 import com.waz.api.Message.Type._
 import com.waz.content.{ConversationStorage, MessagesStorage}
 import com.waz.model.ConversationData.ConversationType.OneToOne
+import com.waz.model.sync.ReceiptType
 import com.waz.model.{MessageId, UserId}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -40,7 +41,7 @@ class ReceiptService(messages: MessagesStorage, convs: ConversationStorage, sync
     Future.traverse(msgs.iterator.filter(msg => msg.userId != selfUserId && confirmable(msg.msgType))) { msg =>
       convs.get(msg.convId).map(_.filter(_.convType == OneToOne)).flatMapSome { _ =>
         verbose(s"will send receipt for $msg")
-        sync.postReceipt(msg.convId, msg.id, msg.userId)
+        sync.postReceipt(msg.convId, msg.id, msg.userId, ReceiptType.Delivery)
       }
     }.logFailure()
   }
