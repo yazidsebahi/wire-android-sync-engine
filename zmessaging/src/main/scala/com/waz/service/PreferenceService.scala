@@ -35,8 +35,10 @@ class PreferenceService(context: Context) {
   private implicit val dispatcher = preferenceDispatcher
 
   lazy val analyticsEnabledPrefKey = Try(context.getResources.getString(R.string.zms_analytics_preference_key)).getOrElse("PREF_KEY_AVS_METRICS")
-  lazy val autoAnswerCallPrefKey = Try(context.getResources.getString(R.string.zms_auto_answer_key)).getOrElse("PREF_KEY_AUTO_ANSWER_ENABLED")
   lazy val analyticsEnabledPref = uiPreferenceBooleanSignal(analyticsEnabledPrefKey)
+
+  lazy val autoAnswerCallPrefKey = Try(context.getResources.getString(R.string.zms_auto_answer_key)).getOrElse("PREF_KEY_AUTO_ANSWER_ENABLED")
+  lazy val sendWithAssetsV3Key = Try(context.getResources.getString(R.string.zms_assets_v3)).getOrElse("PREF_KEY_SEND_WITH_ASSETS_V3")
 
   lazy val uiPreferences = uiPreferencesFrom(context)
 

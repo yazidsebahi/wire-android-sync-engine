@@ -321,6 +321,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
   }
 
+  //TODO why do we have the withSelfUserFuture here but not in other methods?
   def addAssetMessage(convId: ConvId, assetId: AssetId, mime: Mime): Future[MessageData] = withSelfUserFuture { selfUserId =>
     val tpe = mime match {
       case Mime.Video() => Message.Type.VIDEO_ASSET
