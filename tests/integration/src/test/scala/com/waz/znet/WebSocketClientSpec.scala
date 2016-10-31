@@ -44,7 +44,7 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
 
   override protected lazy val logfileBaseDir: File = new File("target/logcat/integration")
 
-  val backend = BackendConfig.EdgeBackend
+  val backend = BackendConfig.StagingBackend
 
   lazy val globalModule: GlobalModule = new GlobalModule(Robolectric.application, backend) {
     override lazy val clientWrapper: ClientWrapper = TestClientWrapper

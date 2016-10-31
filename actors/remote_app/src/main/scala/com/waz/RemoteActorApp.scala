@@ -43,7 +43,7 @@ object RemoteActorApp extends App {
 
     val processName = args(0)
     val actorRef = args.find(_.startsWith("akka"))
-    val backend = args.map(BackendConfig.byName.get).collectFirst { case Some(b) => b } .getOrElse(BackendConfig.EdgeBackend)
+    val backend = args.map(BackendConfig.byName.get).collectFirst { case Some(b) => b } .getOrElse(BackendConfig.StagingBackend)
     val otrOnly = args.collectFirst {
       case "true" => true
       case "false" => false

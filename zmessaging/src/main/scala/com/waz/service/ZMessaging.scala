@@ -307,13 +307,13 @@ object ZMessaging { self =>
 
   private[waz] var context: Context = _
 
-  private var backend = BackendConfig.DevBackend
+  private var backend = BackendConfig.StagingBackend
 
   def useBackend(conf: BackendConfig) = {
     assert(context == null, "ZMessaging.useBackend should only be called before any ZMessagingApi instance is created, do that only once, asap in Application.onCreate")
     backend = conf
   }
-  def useEdgeBackend(): Unit = useBackend(BackendConfig.EdgeBackend)
+  def useStagingBackend(): Unit = useBackend(BackendConfig.StagingBackend)
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
   private lazy val global: GlobalModule = new GlobalModule(context, backend)

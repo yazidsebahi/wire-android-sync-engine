@@ -50,7 +50,7 @@ class ZNetClient(credentials: CredentialsHandler,
 
   def this(global: GlobalModule, email: String, passwd: String) = this(new BasicCredentials(EmailAddress(email), Some(passwd)), global.client, global.backend, global.loginClient)
   def this(email: String, passwd: String, client: AsyncClient) =
-    this(new BasicCredentials(EmailAddress(email), Some(passwd)), client, BackendConfig.EdgeBackend, new LoginClient(client, BackendConfig.EdgeBackend)) // only used in tests!
+    this(new BasicCredentials(EmailAddress(email), Some(passwd)), client, BackendConfig.StagingBackend, new LoginClient(client, BackendConfig.StagingBackend)) // only used in tests!
 
   import ZNetClient._
   private implicit val logTag: LogTag = logTagFor[ZNetClient]
@@ -228,7 +228,7 @@ object ZNetClient {
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
-  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClient, BackendConfig.EdgeBackend, new LoginClient(new EmptyAsyncClient, BackendConfig.EdgeBackend)) {
+  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClient, BackendConfig.StagingBackend, new LoginClient(new EmptyAsyncClient, BackendConfig.StagingBackend)) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
     override def close(): Future[Unit] = Future.successful({})
   }

@@ -122,7 +122,7 @@ class InvitationClientSpec extends FeatureSpec with Matchers with Inside with Sc
   lazy val registrationClient = new RegistrationClient(new EmptyAsyncClient {
     override def apply(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
       CancellableFuture.successful(nextResponse)
-  }, BackendConfig.EdgeBackend)
+  }, BackendConfig.StagingBackend)
 
   def inviteBy(method: Either[EmailAddress, PhoneNumber]) = invitationClient.postInvitation(Invitation(ContactId("meep"), method, "Meep", "Moop", "Hey!", Some(Locale.GERMANY))).future
 
