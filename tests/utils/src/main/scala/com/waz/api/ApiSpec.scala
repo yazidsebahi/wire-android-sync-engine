@@ -79,7 +79,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   private lazy val eventSpies = new AtomicReference(Vector.empty[Event =/> Unit])
 
-  def testBackend: BackendConfig = BackendConfig.EdgeBackend
+  def testBackend: BackendConfig = BackendConfig.StagingBackend
   lazy val testClient = new AsyncClient(wrapper = TestClientWrapper)
 
   lazy val globalModule: GlobalModule = new ApiSpecGlobal

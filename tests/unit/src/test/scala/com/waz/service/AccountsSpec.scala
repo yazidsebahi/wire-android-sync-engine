@@ -42,7 +42,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
   var loadSelfResponse: Either[ErrorResponse, UserInfo] = _
 
   lazy val global = new MockGlobalModule {
-    override lazy val loginClient: LoginClient = new LoginClient(client, BackendConfig.EdgeBackend) {
+    override lazy val loginClient: LoginClient = new LoginClient(client, BackendConfig.StagingBackend) {
       override def login(userId: AccountId, credentials: Credentials): CancellableFuture[Either[ErrorResponse, (Token, Cookie)]] = {
         loginRequest = Some(credentials)
         CancellableFuture successful loginResponse

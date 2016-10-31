@@ -30,7 +30,6 @@ import com.waz.threading.{CancellableFuture, Threading}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
-import org.threeten.bp.temporal.TemporalUnit
 
 import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}

@@ -49,7 +49,7 @@ class RemoteActorService(context: Context) {
   val otrOnly = preferences.uiPreferenceBooleanSignal("otrOnly", false)
   val background = preferences.uiPreferenceBooleanSignal("background", false)
   val name = preferences.uiPreferenceStringSignal("name", s"$MANUFACTURER $MODEL")
-  val backendPref = preferences.uiPreferenceStringSignal("env", BackendConfig.EdgeBackend.environment)
+  val backendPref = preferences.uiPreferenceStringSignal("env", BackendConfig.StagingBackend.environment)
 
   val backend = backendPref.signal map BackendConfig.byName
 
