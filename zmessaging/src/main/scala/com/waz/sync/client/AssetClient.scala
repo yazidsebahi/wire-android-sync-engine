@@ -132,10 +132,11 @@ object AssetClient {
     if (ignoreMissing) s"/conversations/$conv/otr/assets/$asset?ignore_missing=true"
     else s"/conversations/$conv/otr/assets/$asset"
 
+  //TODO remove asset v2 when transition period is over
   def getAssetPath(conv: RConvId, asset: AssetKey): String = (asset.remoteId, asset.otrKey) match {
+    case (Right(key), _)          => getAssetPathV3(key) // put asset v3 as priority
     case (Left(id), AESKey.Empty) => getAssetPath(conv, id)
     case (Left(id), _)            => getOtrAssetPath(conv, id)
-    case (Right(key), _)          => getAssetPathV3(key)
   }
 
   def getAssetPathV3(asset: RemoteKey) = s"$AssetsV3Path/${asset.str}"

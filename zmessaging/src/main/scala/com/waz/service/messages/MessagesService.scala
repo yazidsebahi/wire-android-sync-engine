@@ -316,6 +316,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     addLocalMessage(MessageData(id, convId, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id.uid, content))))
   }
 
+  //TODO why do we put a proto in here when we have sent any yet? - compare with addAssetMessage
   def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = {
     val id = MessageId(assetId.str)
     addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
