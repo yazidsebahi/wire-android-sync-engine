@@ -131,7 +131,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
       })
     case _ =>
       data.protos.lastOption.map {
-        case GenericMessage(_, asset @ ProtoAsset(Some(Original(Mime.Image(), _, _, _, _)), _, _)) => context.images.getImageAsset(asset)
+        //TODO figure out how to update the protos (with size) properly after creating an image - sent images aren't rendered properly and receiver side has to scale them up...
+        case GenericMessage(_, asset @ ProtoAsset(Some(Original(Mime.Image(), size, _, _, _)), _, _)) if size > 0 => context.images.getImageAsset(asset)
         case _ => context.images.getImageAsset(data.assetId)
       }.orNull
   }
