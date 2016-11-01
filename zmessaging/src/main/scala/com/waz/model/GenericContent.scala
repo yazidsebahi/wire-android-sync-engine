@@ -25,6 +25,7 @@ import com.waz.api.EphemeralExpiration
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.nano.Messages
+import com.waz.model.nano.Messages.Asset.RemoteData
 import com.waz.model.nano.Messages.MessageEdit
 import com.waz.utils._
 import org.json.JSONObject

@@ -67,7 +67,7 @@ object AssetData {
   }
 }
 
-
+//TODO tidy up image data - do I need remoteKey??
 case class ImageData(tag: String,
                      mime: String,
                      width: Int,

@@ -60,6 +60,20 @@ case class MessageData(id: MessageId,
                        expired: Boolean = false
                       ) {
 
+  override def toString: String =
+    s"""
+       |MessageData:
+       | id:            $id
+       | convId:        $convId
+       | msgType:       $msgType
+       | userId:        $userId
+       | protos:        ${protos.toString().replace("\n", "")}
+       | localTime:     $localTime
+       | other fields:  $content, $firstMessage, $members, $recipient, $email, $name, $state, $time, $editTime, $ephemeral, $expiryTime, $expired
+       |
+    """.stripMargin
+
+
   def getContent(index: Int) = {
     if (index == 0) content.headOption.getOrElse(MessageContent.Empty)
     else content.drop(index).headOption.getOrElse(MessageContent.Empty)
@@ -122,9 +136,6 @@ case class MessageData(id: MessageId,
   def hasSameContentType(m: MessageData) = {
     msgType == m.msgType && content.zip(m.content).forall { case (c, c1) => c.tpe == c1.tpe && c.openGraph.isDefined == c1.openGraph.isDefined } // openGraph may affect message type
   }
-
-  override def toString: String =
-    s"MessageData($id, $convId, $msgType, $userId, $content, protos len: ${protos.length}, $firstMessage, $members, $recipient, $email, $name, $state, $time, local: $localTime, edit: $editTime)"
 }
 
 case class MessageContent(

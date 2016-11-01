@@ -24,6 +24,7 @@ import com.waz.api.EphemeralExpiration
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.model._
+import com.waz.service.PreferenceService
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
 import com.waz.service.images.ImageLoader
@@ -39,9 +40,10 @@ import scala.concurrent.Future.{failed, successful}
 import scala.util.control.NoStackTrace
 
 class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,
-                       assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler) {
+                       assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler, prefs: PreferenceService) {
 
   import Threading.Implicits.Background
+
   private implicit val logTag: LogTag = logTagFor[AssetSyncHandler]
 
   private[handler] def withImageAsset[A](id: AssetId)(f: ImageAssetData => Future[A]): Future[A] =
@@ -77,14 +79,16 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
       }
     }
 
-  def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, asset: ImageData, recipients: Option[Set[UserId]]): ErrorOr[Option[Date]] =
-    if (asset.sent && asset.otrKey.isDefined) {
-      warn(s"image asset has already been sent, skipping: $asset")
+  def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, im: ImageData, recipients: Option[Set[UserId]]): ErrorOr[Option[Date]] =
+    if (im.sent && im.otrKey.isDefined) {
+      warn(s"image asset has already been sent, skipping: $im")
       successful(Right(None))
     } else {
       convs.convByRemoteId(convId) flatMap {
-        case Some(conv) => withRawImageData(convId, asset)(data => otrSync.postOtrImageData(conv, assetId, asset, data, exp, asset.tag == ImageData.Tag.Medium, recipients = recipients).mapRight(Some(_)))
-        case None       => successful(Left(internalError(s"postOtrImageData($convId, $asset) - no conversation found with given id")))
+        case Some(conv) => withRawImageData(convId, im) { data =>
+          otrSync.postOtrImageData(conv, assetId, im, data, exp, im.tag == ImageData.Tag.Medium, recipients = recipients).mapRight(Some(_))
+        }
+        case None => successful(Left(internalError(s"postOtrImageData($convId, $im) - no conversation found with given id")))
       }
     }
 
@@ -96,7 +100,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
           successful(SyncResult.Success)
         } else withRawImageData(convId, im)(data => postImageData(convId, asset.id, im, data, im.tag == ImageData.Tag.Medium))
       } map { results =>
-        results.collectFirst { case error: SyncResult.Failure => error } .getOrElse(SyncResult.Success)
+        results.collectFirst { case error: SyncResult.Failure => error }.getOrElse(SyncResult.Success)
       }
     }
 
@@ -106,8 +110,8 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
 
     // save just posted data under new cacheKey, so we don't need to download it when image is accessed
     def updateImageCache(sent: ImageData) =
-      if (sent.data64.isDefined) successful(())
-      else cache.addStream(sent.cacheKey, data.inputStream)
+    if (sent.data64.isDefined) successful(())
+    else cache.addStream(sent.cacheKey, data.inputStream)
 
     client.postImageAssetData(asset, assetId, convId, data, nativePush).future flatMap {
       case Right(image) =>
