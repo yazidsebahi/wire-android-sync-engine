@@ -31,8 +31,6 @@ import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
-
-import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 
 class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
@@ -101,12 +99,13 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
   //no need to sync history on GCM if websocket is connected
   webSocket.connected.flatMap {
     case false => gcmService.notificationsToProcess
-    case _ => Signal.empty[Boolean]
-  }.throttle(1.second).on(dispatcher) {
-    case true =>
-      verbose("Sync history in response to gcm notification")
-      syncHistory()
-    case _=>
+    case _ => Signal.empty[Set[Uid]]
+  }.on(dispatcher) {
+    notifications =>
+      if (notifications.nonEmpty){
+        verbose("Sync history in response to gcm notification")
+        syncHistory()
+      }
   }
 
   def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
@@ -134,8 +133,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         }
       }
     }.map {
-      //FIXME handle failure
-      _ => gcmService.notificationsToProcess ! false //Finished loading notifications
+      _ => gcmService.notificationsToProcess mutate (_.filter(notificationId => !notifications.exists(_.id.equals(notificationId))))
     }
   }
 
