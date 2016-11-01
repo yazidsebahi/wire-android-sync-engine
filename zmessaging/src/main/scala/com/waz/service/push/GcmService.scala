@@ -46,7 +46,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   private implicit val ev = EventContext.Global
 
-  val notificationsToProcess = Signal(false)
+  val notificationsToProcess = Signal(Set[Uid]())
 
   override val gcmAvailable = gcmGlobalService.gcmAvailable
 
@@ -175,7 +175,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
         verbose(s"addNotification: $n")
         // call state events can not be directly dispatched like the other events because they might be stale
         syncCallStateForConversations(n.events.collect { case e: CallStateEvent => e }.map(_.withCurrentLocalTime()))
-        Future.successful(notificationsToProcess ! true)
+        Future.successful(notificationsToProcess.mutate(_ + n.id))
     }
   }
 
