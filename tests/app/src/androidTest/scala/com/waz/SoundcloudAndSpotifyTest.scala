@@ -32,7 +32,7 @@ implicit val timeout: Timeout = Timeout(5.seconds)
 
   @Before def setUp(): Unit = {
     Threading.AssertsEnabled = false
-    ZMessaging.useEdgeBackend()
+    ZMessaging.useStagingBackend()
     api = ZMessagingApiFactory.getInstance(context)
     api.onCreate(context)
     api.onResume()

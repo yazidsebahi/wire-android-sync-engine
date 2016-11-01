@@ -42,7 +42,7 @@ class MainActivity extends Activity with ActivityEventContext {
 
   lazy val service = getApplication.asInstanceOf[ActorsApplication].remoteActor
 
-  val backends = Array(BackendConfig.EdgeBackend, BackendConfig.DevBackend, BackendConfig.ProdBackend)
+  val backends = Array(BackendConfig.StagingBackend, BackendConfig.ProdBackend)
 
   override def onCreate(savedInstanceState: Bundle) = {
     super.onCreate(savedInstanceState)

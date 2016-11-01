@@ -21,17 +21,16 @@ import com.waz.service.push.GcmGlobalService.GcmSenderId
 
 case class BackendConfig(baseUrl: String, pushUrl: String, gcmSenderId: GcmSenderId, environment: String) {
   import BackendConfig._
-  if (gcmSenderId != devSenderId && gcmSenderId != edgeSenderId && gcmSenderId != prodSenderId) throw new IllegalArgumentException(s"Unknown sender id: $gcmSenderId")
+  if (gcmSenderId != stagingSenderId && gcmSenderId != prodSenderId) throw new IllegalArgumentException(s"Unknown sender id: $gcmSenderId")
 }
 
 object BackendConfig {
-  val Seq(devSenderId, edgeSenderId, prodSenderId) = Seq("723990470614", "258787940529", "782078216207") map GcmSenderId
+  val Seq(stagingSenderId, prodSenderId) = Seq("723990470614", "782078216207") map GcmSenderId
 
-  val DevBackend = BackendConfig("https://staging-nginz-https.zinfra.io", "https://staging-nginz-ssl.zinfra.io/await", devSenderId, "staging")
-  val EdgeBackend = BackendConfig("https://edge-nginz-https.zinfra.io", "https://edge-nginz-ssl.zinfra.io/await", edgeSenderId, "edge")
+  val StagingBackend = BackendConfig("https://staging-nginz-https.zinfra.io", "https://staging-nginz-ssl.zinfra.io/await", stagingSenderId, "staging")
   val ProdBackend = BackendConfig("https://prod-nginz-https.wire.com", "https://prod-nginz-ssl.wire.com/await", prodSenderId, "prod")
 
-  lazy val byName = Seq(DevBackend, EdgeBackend, ProdBackend).map(b => b.environment -> b).toMap
+  lazy val byName = Seq(StagingBackend, ProdBackend).map(b => b.environment -> b).toMap
 
-  def apply(baseUrl: String): BackendConfig = BackendConfig(baseUrl, "", edgeSenderId, "") // XXX only use for testing!
+  def apply(baseUrl: String): BackendConfig = BackendConfig(baseUrl, "", stagingSenderId, "") // XXX only use for testing!
 }

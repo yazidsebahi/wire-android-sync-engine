@@ -120,7 +120,7 @@ object SharedSettings {
         """package com.waz.build
           |import com.waz.service._
           |object InternalCredentials {
-          |  def backend(backend: BackendConfig) = if (backend == BackendConfig.DevBackend) ("wire-staging", %s) else ("wire-edge", %s)
+          |  def backend(backend: BackendConfig) = ("wire-staging", %s)
           |  def email = ("%s", "%s")
           |}
         """.stripMargin.format("\"\"\"" + (internalBackend in Test).value.staging + "\"\"\"", "\"\"\"" + (internalBackend in Test).value.edge + "\"\"\"", (emailTestUser in Test).value.email, (emailTestUser in Test).value.password)

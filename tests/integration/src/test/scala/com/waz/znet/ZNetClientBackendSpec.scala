@@ -38,7 +38,7 @@ class ZNetClientBackendSpec extends FeatureSpec with Matchers with ProvisionedSu
     new ZNetClient(provisionedEmail(s"auto$i"), s"auto${i}_pass", new AsyncClient(wrapper = TestClientWrapper))
   }
 
-  lazy val globalModule = new GlobalModule(Robolectric.application, BackendConfig.EdgeBackend) {
+  lazy val globalModule = new GlobalModule(Robolectric.application, BackendConfig.StagingBackend) {
     override lazy val clientWrapper: ClientWrapper = TestClientWrapper
   }
 

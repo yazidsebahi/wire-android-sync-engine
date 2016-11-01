@@ -60,7 +60,7 @@ import scala.util.Random
 object DeviceActor {
   def props(deviceName: String,
             application: Context,
-            backend: BackendConfig = BackendConfig.EdgeBackend,
+            backend: BackendConfig = BackendConfig.StagingBackend,
             otrOnly: Boolean = false,
             wrapper: ClientWrapper) =
   Props(new DeviceActor(deviceName, application, backend, otrOnly, wrapper)).withDispatcher("ui-dispatcher")
@@ -68,7 +68,7 @@ object DeviceActor {
 
 class DeviceActor(val deviceName: String,
                   val application: Context,
-                  backend: BackendConfig = BackendConfig.EdgeBackend,
+                  backend: BackendConfig = BackendConfig.StagingBackend,
                   otrOnly: Boolean = false,
                   wrapper: ClientWrapper) extends Actor with ActorLogging {
 
