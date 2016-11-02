@@ -68,20 +68,20 @@ object AssetData {
 }
 
 //TODO tidy up image data - do I need remoteKey??
-case class ImageData(tag: String,
-                     mime: String,
-                     width: Int,
-                     height: Int,
-                     origWidth: Int,
-                     origHeight: Int,
-                     size: Int = 0, // byte size of binary image data
-                     remoteId: Option[RAssetDataId] = None,
-                     data64: Option[String] = None, // image data in base64 format
-                     sent: Boolean = false,
-                     url: Option[String] = None,
-                     proxyPath: Option[String] = None, // path to wire proxy
-                     otrKey: Option[AESKey] = None, // otr symmetric encryption key
-                     sha256: Option[Sha256] = None
+case class ImageData(tag:         String,
+                     mime:        String,
+                     width:       Int,
+                     height:      Int,
+                     origWidth:   Int,
+                     origHeight:  Int,
+                     size:        Int = 0, // byte size of binary image data
+                     remoteId:    Option[RAssetDataId] = None,
+                     data64:      Option[String] = None, // image data in base64 format
+                     sent:        Boolean = false,
+                     url:         Option[String] = None,
+                     proxyPath:   Option[String] = None, // path to wire proxy
+                     otrKey:      Option[AESKey] = None, // otr symmetric encryption key
+                     sha256:      Option[Sha256] = None
                     ) {
 
   import ImageData._
@@ -103,6 +103,7 @@ object ImageData {
 
   private implicit val logTag: LogTag = logTagFor(ImageData)
 
+  //TODO how likely am I to get conflicting cache keys with v3 assets?
   def cacheKey(remoteId: Option[RAssetDataId], url: Option[String] = None) = s"image-data://${remoteId.getOrElse("")}/${url.getOrElse("")}"
 
   def apply(prev: Proto.Asset.Preview, id: Option[RAssetDataId]): ImageData = prev match {
@@ -236,9 +237,18 @@ object AssetKey extends ((Either[RAssetDataId, RemoteKey], Option[AssetToken], A
   }
 }
 
-case class AnyAssetData(id: AssetId, convId: RConvId, mimeType: Mime, sizeInBytes: Long, name: Option[String],
-    metaData: Option[AssetMetaData], preview: Option[AssetPreviewData], source: Option[Uri],
-    originalMimeType: Option[Mime], status: AssetStatus, lastUpdate: Instant) extends AssetData {
+case class AnyAssetData(id:               AssetId,
+                        convId:           RConvId,
+                        mimeType:         Mime,
+                        sizeInBytes:      Long,
+                        name:             Option[String],
+                        metaData:         Option[AssetMetaData],
+                        preview:          Option[AssetPreviewData],
+                        source:           Option[Uri],
+                        originalMimeType: Option[Mime],
+                        status:           AssetStatus,
+                        lastUpdate:       Instant
+                       ) extends AssetData {
 
   override def assetType: AssetType = AssetType.Any
   def cacheKey = status.key.fold2(id.str, _.remoteId.fold(_.str, _.str))
