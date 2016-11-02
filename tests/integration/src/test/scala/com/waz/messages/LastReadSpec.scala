@@ -63,7 +63,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
     override def zmessaging(clientId: ClientId, userModule: UserModule): ZMessaging = new ApiZMessaging(clientId, userModule) {
 
 
-      override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
+      override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
         override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] = {
           if (convId.str == self.str)
             message match {

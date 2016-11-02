@@ -72,7 +72,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
 
-    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
+    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
       override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean) = postMessageResponse
     }
 
@@ -80,7 +80,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       override def updateNetworkMode(): Unit = ()
     }
 
-    override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync) {
+    override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync, prefs) {
       override def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, asset: ImageData, recipients: Option[Set[UserId]]): Future[Either[ErrorResponse, Option[Date]]] = Future.successful(postImageResult)
     }
 
