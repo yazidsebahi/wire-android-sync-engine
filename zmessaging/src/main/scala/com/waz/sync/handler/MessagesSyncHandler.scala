@@ -280,13 +280,19 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                     val assetKey = AssetKey(Right(remKey), token, key, sha)
                     def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadDone(assetKey)))
 
-                    for {
-                      rcps <- recipients(conv, msg.ephemeral)
-                      instant <- otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcps).collect { case Right(date) => date.instant }
-                      _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = instant))
-                      _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
-                      _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                    } yield Some(instant)
+                    recipients(conv, msg.ephemeral) flatMap { rcs =>
+                      otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcs) flatMap {
+                        case Left(err) =>
+                          warn(s"posting asset generic message failed: $err for msg: $msg")
+                          Future.successful(None)
+                        case Right(date) =>
+                          for {
+                            _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = date.instant))
+                            _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
+                            _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
+                          } yield Some(date.instant)
+                      }
+                    }
 
                   case Left(er) => Future.successful(None)
                 })
@@ -343,14 +349,20 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                   }
                   GenericMessage(msg.id.uid, msg.ephemeral, as)
                 }
-                for {
-                  rcps <- recipients(conv, msg.ephemeral)
-                  post <- otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcps).mapRight (_.instant)
-                  instant <- post.right
-                  Some(updated) <- assets.storage.updateAsset(asset.id, a => a.copy(status = UploadDone(ak), lastUpdate = instant))
-                  _ <- cache.addStream(updated.cacheKey, data.inputStream, updated.mimeType, updated.name, length = data.length)
-                  _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                } yield post
+
+                recipients(conv, msg.ephemeral) flatMap { rcs =>
+                  otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcs) flatMap {
+                    case Left(err) =>
+                      warn(s"posting asset generic message failed: $err for msg: $msg")
+                      Future.successful(Left(err))
+                    case Right(date) =>
+                      for {
+                        Some(updated) <- assets.storage.updateAsset(asset.id, a => a.copy(status = UploadDone(ak), lastUpdate = date.instant))
+                        _ <- cache.addStream(updated.cacheKey, data.inputStream, updated.mimeType, updated.name, length = data.length)
+                        _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
+                      } yield Right(date.instant)
+                  }
+                }
               case Left(er) => Future.successful(Left(er))
             })
           } else {
