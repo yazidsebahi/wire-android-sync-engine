@@ -152,6 +152,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case Asset(Some(Original(Mime.Image(), _, _, _, _)), _, _) =>
+        MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(_, _, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Location(_, _, _, _) =>
@@ -175,9 +177,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case asset @ Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case asset @ Asset(Some(Original(Mime.Image(), _, _, _, _)), _, _) =>
+        MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case asset: Asset =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case im: ImageAsset =>
+      case im: ImageAsset => //deprecated - only used by clients sending assetsV2
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Ephemeral(expiry, ect) =>
         assetContent(id, ect, from, time, msg).copy(ephemeral = expiry)
@@ -312,11 +316,13 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     addLocalMessage(MessageData(id, convId, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id.uid, content))))
   }
 
+  //TODO why do we put a proto in here when we have sent any yet? - compare with addAssetMessage
   def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = {
     val id = MessageId(assetId.str)
     addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
   }
 
+  //TODO why do we have the withSelfUserFuture here but not in other methods?
   def addAssetMessage(convId: ConvId, assetId: AssetId, mime: Mime): Future[MessageData] = withSelfUserFuture { selfUserId =>
     val tpe = mime match {
       case Mime.Video() => Message.Type.VIDEO_ASSET
