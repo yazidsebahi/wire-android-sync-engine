@@ -169,7 +169,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
           case None => Future successful Right(None)
           case Some((data, im)) =>
             val aes = AESKey()
-            otrService.encryptAssetData(AssetId(uri.toString), aes, data) flatMap {
+            otrService.encryptAssetData(aes, data) flatMap {
               case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default, public = true).future map {
                 case Left(err) => Left(err)
                 case Right(UploadResponse(key, _, token)) =>

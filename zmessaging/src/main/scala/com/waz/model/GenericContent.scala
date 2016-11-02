@@ -25,7 +25,7 @@ import com.waz.api.EphemeralExpiration
 import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.nano.Messages
-import com.waz.model.nano.Messages.Asset.RemoteData
+import com.waz.model.nano.Messages.Asset.{ImageMetaData, RemoteData}
 import com.waz.model.nano.Messages.MessageEdit
 import com.waz.utils._
 import org.json.JSONObject
@@ -178,16 +178,25 @@ object GenericContent {
     type Preview = Messages.Asset.Preview
     object Preview {
 
-      def apply(mime: Mime, size: Long, key: AESKey, sha: Sha256): Messages.Asset.Preview = returning(new Messages.Asset.Preview()) { p =>
+      //TODO tidy up apply methods for preview
+      def apply(mime: Mime, size: Long, assetKey: AssetKey): Messages.Asset.Preview = returning(new Messages.Asset.Preview()) { p =>
         p.mimeType = mime.str
         p.size = size
         p.remote = new Messages.Asset.RemoteData
-        p.remote.otrKey = key.bytes
-        p.remote.sha256 = sha.bytes
+
+        val remId = assetKey.remoteId
+        p.remote.assetId = if (remId.isRight) remId.right.get.str else ""
+        p.remote.assetToken = assetKey.token.map(_.str).getOrElse("")
+        p.remote.otrKey = assetKey.otrKey.bytes
+        p.remote.sha256 = assetKey.sha256.bytes
       }
 
       def apply(mime: Mime, size: Long, key: AESKey, sha: Sha256, metaData: Messages.Asset.ImageMetaData): Messages.Asset.Preview =
-        returning(apply(mime, size, key, sha)) { _.setImage(metaData) }
+        apply(mime, size, metaData, AssetKey(Left(RAssetDataId.Empty), None, key, sha))
+
+      def apply(mime: Mime, size: Long, metaData: ImageMetaData, assetKey: AssetKey):  Messages.Asset.Preview = {
+        returning(apply(mime, size, assetKey)) { _.setImage(metaData) }
+      }
 
       def apply(image: ImageData, key: AESKey, sha: Sha256): Messages.Asset.Preview =
         apply(Mime(image.mime), image.size, key, sha, ImageMetaData(Some(image.tag), image.width, image.height))

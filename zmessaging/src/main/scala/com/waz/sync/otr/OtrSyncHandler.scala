@@ -131,7 +131,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     val key = im.otrKey.getOrElse(AESKey())
     //TODO tidy up - and remove v2 once transition period is over
     if (prefs.sendWithV3)
-      uploadAssetDataV3(assetId, key, data).flatMap {
+      uploadAssetDataV3(key, data).flatMap {
         case Right((UploadResponse(remKey, _, token), sha)) =>
 
           val assetKey = AssetKey(Right(remKey), token, key, sha)
@@ -149,7 +149,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
       }
     else {
       def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
-      postAssetData(conv, assetId, key, proto, data, nativePush, recipients).future flatMap {
+      postAssetData(conv, key, proto, data, nativePush, recipients).future flatMap {
         case Right((AssetKey(Left(id), _, _, sha), time)) =>
           val updated = im.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
           cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
@@ -164,9 +164,9 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-  def uploadAssetDataV3(assetId: AssetId, key: AESKey, data: LocalData): Future[Either[ErrorResponse, (UploadResponse, Sha256)]] = {
+  def uploadAssetDataV3(key: AESKey, data: LocalData): Future[Either[ErrorResponse, (UploadResponse, Sha256)]] = {
     service.clients.getSelfClient.flatMap {
-      case Some(otrClient) => service.encryptAssetData(assetId, key, data) flatMap {
+      case Some(otrClient) => service.encryptAssetData(key, data) flatMap {
         case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
           case Right(resp) => Right(resp, sha)
           case Left(err) => Left(err)
@@ -176,12 +176,12 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-  def postAssetData(conv: ConversationData, assetId: AssetId, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
+  def postAssetData(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
     val promise = Promise[Either[ErrorResponse, (AssetKey, Date)]]()
 
     val future = service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
-        service.encryptAssetData(assetId, key, data) flatMap { case (sha, encrypted) =>
+        service.encryptAssetData(key, data) flatMap { case (sha, encrypted) =>
           val inline = encrypted.length < MaxInlineSize
           var imageId = Option.empty[RAssetDataId]
           var assetKey = Option.empty[AssetKey]

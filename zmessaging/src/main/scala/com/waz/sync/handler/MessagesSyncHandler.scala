@@ -274,11 +274,11 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             case Some(data) =>
               val key = img.otrKey.getOrElse(AESKey())
               if (prefs.sendWithV3) {
-                CancellableFuture.lift(otrSync.uploadAssetDataV3(asset.id, key, data).flatMap {
+                CancellableFuture.lift(otrSync.uploadAssetDataV3(key, data).flatMap {
                   case Right((UploadResponse(remKey, _, token), sha)) =>
                     val preview = img.copy(otrKey = Some(key), sha256 = Some(sha))
                     val assetKey = AssetKey(Right(remKey), token, key, sha)
-                    def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadDone(assetKey)))
+                    def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, ImageMetaData(Some(tag), w, h), assetKey), UploadInProgress))
 
                     recipients(conv, msg.ephemeral) flatMap { rcs =>
                       otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcs) flatMap {
@@ -300,7 +300,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                 //TODO remove v2 implementation when transition is over
                 def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadInProgress))
                 CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
-                  otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = false, rcs) flatMap {
+                  otrSync.postAssetData(conv, key, proto, data, nativePush = false, rcs) flatMap {
                     case Left(err) =>
                       warn(s"postAssetData failed: $err for msg: $msg")
                       CancellableFuture successful None
@@ -336,12 +336,13 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
           val key = AESKey()
 
           if (prefs.sendWithV3) {
-            CancellableFuture.lift(otrSync.uploadAssetDataV3(asset.id, key, data).flatMap {
+            CancellableFuture.lift(otrSync.uploadAssetDataV3(key, data).flatMap {
               case Right((UploadResponse(remKey, _, token), sha)) =>
 
                 val ak = AssetKey(Right(remKey), token, key, sha)
                 def proto(sha: Sha256) = {
                   val as = asset.preview match {
+                      //TODO when would this case be met?
                     case Some(AssetPreviewData.Image(img@ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
                       Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(ak))
                     case _ =>
@@ -378,7 +379,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             }
 
             CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
-              otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = true, rcs) flatMap {
+              otrSync.postAssetData(conv, key, proto, data, nativePush = true, rcs) flatMap {
                 case Left(err) =>
                   warn(s"postAssetData failed: $err for msg: $msg")
                   CancellableFuture successful Left(err)
