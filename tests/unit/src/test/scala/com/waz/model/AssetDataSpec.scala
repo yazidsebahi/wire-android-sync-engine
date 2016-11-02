@@ -107,7 +107,7 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
     }
 
     scenario("Add preview") {
-      val preview = Preview(Mime("image/jpeg"), 50L, AESKey(), Sha256("sha"))
+      val preview = Preview(Mime("image/jpeg"), 50L, AssetKey(Left(RAssetDataId.Empty), None, AESKey(), Sha256("sha")))
       val dataId = RAssetDataId()
       val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, preview), Some(dataId), Instant.ofEpochMilli(101)))
       updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, Some(Image(ImageData("preview", "image/jpeg", 0, 0, 0, 0, 50, Some(dataId), None, true, None, None, Some(AESKey(preview.remote.otrKey)), Some(Sha256(preview.remote.sha256))))), None, None, AssetStatus.UploadInProgress, Instant.ofEpochMilli(101))
