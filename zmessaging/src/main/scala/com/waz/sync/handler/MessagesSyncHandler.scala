@@ -281,7 +281,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                     def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadDone(assetKey)))
 
                     for {
-                      instant <- otrSync.postOtrMessage(conv, proto(sha)).collect { case Right(date) => date.instant }
+                      rcps <- recipients(conv, msg.ephemeral)
+                      instant <- otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcps).collect { case Right(date) => date.instant }
                       _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = instant))
                       _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
                       _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
@@ -290,6 +291,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                   case Left(er) => Future.successful(None)
                 })
               } else {
+                //TODO remove v2 implementation when transition is over
                 def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadInProgress))
                 CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
                   otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = false, rcs) flatMap {
@@ -311,12 +313,13 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                   }
                 }
               }
-            case Some(asset@AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Loudness(levels)), _, _, AssetStatus.MetaDataSent, _)) =>
-              postAssetOriginal(asset, AssetStatus.PreviewSent).map(_.toOption(resp => error(s"sending audio overview failed: $resp")))
-            case _ =>
-              verbose(s"No preview found for asset, ignoring")
-              CancellableFuture successful None
           }
+          case Some(asset@AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Loudness(levels)), _, _, AssetStatus.MetaDataSent, _)) =>
+            postAssetOriginal(asset, AssetStatus.PreviewSent).map(_.toOption(resp => error(s"sending audio overview failed: $resp")))
+          case _ =>
+            verbose(s"No preview found for asset, ignoring")
+            CancellableFuture successful None
+
       }
 
     def postAssetData(): ErrorOrResponse[Instant] =
@@ -327,7 +330,6 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
           val key = AESKey()
 
           if (prefs.sendWithV3) {
-
             CancellableFuture.lift(otrSync.uploadAssetDataV3(asset.id, key, data).flatMap {
               case Right((UploadResponse(remKey, _, token), sha)) =>
 
@@ -341,19 +343,18 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                   }
                   GenericMessage(msg.id.uid, msg.ephemeral, as)
                 }
-                val post = otrSync.postOtrMessage(conv, proto(sha)).mapRight (_.instant)
-
                 for {
-                  instant <- post.collect { case Right(i) => i}
+                  rcps <- recipients(conv, msg.ephemeral)
+                  post <- otrSync.postOtrMessage(conv.id, conv.remoteId, proto(sha), rcps).mapRight (_.instant)
+                  instant <- post.right
                   Some(updated) <- assets.storage.updateAsset(asset.id, a => a.copy(status = UploadDone(ak), lastUpdate = instant))
                   _ <- cache.addStream(updated.cacheKey, data.inputStream, updated.mimeType, updated.name, length = data.length)
                   _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                } ()
-                post
+                } yield post
               case Left(er) => Future.successful(Left(er))
             })
           } else {
-
+            //TODO remove v2 implementation when transition is over
             def proto(sha: Sha256) = {
               val as = asset.preview match {
                 case Some(AssetPreviewData.Image(img@ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
