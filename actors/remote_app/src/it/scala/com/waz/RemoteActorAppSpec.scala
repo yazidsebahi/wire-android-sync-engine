@@ -36,7 +36,7 @@ class RemoteActorAppSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     import scala.sys.process._
     val serialized = Serialization.serializedActorPath(coordinatorActor)
 
-    val cmd = s"java -jar ${appJar.getAbsolutePath} remote_actor $serialized edge true"
+    val cmd = s"java -jar ${appJar.getAbsolutePath} remote_actor $serialized staging true"
     val outputFile = new File(s"target/logcat/RemoteActorAppSpec_remote")
     outputFile.getParentFile.mkdirs()
     val printWriter = new PrintWriter(outputFile)

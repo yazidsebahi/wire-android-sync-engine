@@ -14,7 +14,7 @@ import scala.util.matching.Regex
 object SharedSettings {
 
   case class EmailTestUser(email: String, password: String)
-  case class InternalBackendPasswords(edge: String, staging: String)
+  case class InternalBackendPasswords(staging: String)
 
   val avsVersion = "2.8.61"
   val audioVersion = "1.195.0"
@@ -123,7 +123,7 @@ object SharedSettings {
           |  def backend(backend: BackendConfig) = ("wire-staging", %s)
           |  def email = ("%s", "%s")
           |}
-        """.stripMargin.format("\"\"\"" + (internalBackend in Test).value.staging + "\"\"\"", "\"\"\"" + (internalBackend in Test).value.edge + "\"\"\"", (emailTestUser in Test).value.email, (emailTestUser in Test).value.password)
+        """.stripMargin.format("\"\"\"" + (internalBackend in Test).value.staging + "\"\"\"", (emailTestUser in Test).value.email, (emailTestUser in Test).value.password)
       IO.write(file, content)
       Seq(file)
     }
