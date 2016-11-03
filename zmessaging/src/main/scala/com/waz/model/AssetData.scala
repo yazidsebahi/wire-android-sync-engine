@@ -32,9 +32,26 @@ import org.threeten.bp.Instant
 
 import scala.util.Try
 
-trait AssetData {
-  def id: AssetId
-  def assetType: AssetType
+case class AssetData (id:           AssetId, //TODO make independent of message id
+                      assetKey:     Option[AssetKey],
+                      mime:         Mime,
+                      sizeInBytes:  Long,
+                      name:         Option[String],
+                      preview:      Option[AssetData],
+                      metaData:     Option[AssetMetaData], //TODO can I move AssetMetaData into AssetData?
+                      url:          Option[String], //TODO what's this for?
+                      proxyPath:    Option[String], //TODO what's this for?
+                     //TODO remove v2 attributes when transition period is over
+                      convId:       Option[ConvId],
+                      data64:       Option[String],
+                      sent:         Option[Boolean]
+                     ) {
+  lazy val data = data64.flatMap(data => LoggedTry(Base64.decode(data, Base64.DEFAULT)).toOption)
+
+  lazy val uri = url map Uri.parse
+
+  lazy val fileExtension = mime.extension
+
 }
 
 object AssetData {

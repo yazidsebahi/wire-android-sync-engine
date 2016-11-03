@@ -83,8 +83,8 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
 
   private def assetImageData(asset: Asset): Option[(Mime, Dim2, AssetKey)] =
     asset match {
-      case Asset(Some(Original(mime@Mime.Image(), _, _, _, _)), _, UploadDone(key)) => Some((mime, Dim2.Empty, key))
       case Asset(Some(Original(mime@Mime.Image(), _, _, Some(AssetMetaData.Image(d, _)), _)), _, UploadDone(key)) => Some((mime, d, key))
+      case Asset(Some(Original(mime@Mime.Image(), _, _, _, _)), _, UploadDone(key)) => Some((mime, Dim2.Empty, key))
       case _ => None
     }
 
