@@ -30,6 +30,7 @@ import org.scalatest.concurrent.ScalaFutures
 import akka.pattern.ask
 import com.waz.api.Message.Part
 import com.waz.api.impl.DoNothingAndProceed
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{AssetId, ImageData, MessageId, Mime}
 import org.threeten.bp.Instant
 
@@ -39,14 +40,23 @@ import scala.concurrent.duration._
 class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers with OptionValues
   with ProvisionedApiSpec with ThreadActorSpec with ScalaFutures with Inspectors with DefaultPatienceConfig {
 
-  override val provisionFile: String = "/two_users_connected.json"
+  override val provisionFile: String = "/three_users_connected.json"
 
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
-  lazy val conv = conversations.head
+  lazy val conv = {
+    withDelay { conversations should not be empty }
+    conversations.find(_.getId == provisionedUserId("auto2").str).get
+  }
+  lazy val group = {
+    withDelay { conversations should not be empty }
+    conversations.find(_.getType == ConversationType.Group).get
+  }
   lazy val messages = conv.getMessages
+  lazy val grpMsgs = group.getMessages
 
   lazy val auto2 = registerDevice("auto2")
+  lazy val auto3 = registerDevice("auto3")
 
   scenario("init") {
     soon {
@@ -68,9 +78,15 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     messages.getLastMessage
   }
 
-  scenario("init remote") {
+  scenario("init remotes") {
     auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
+    auto3 ? Login(provisionedEmail("auto3"), "auto3_pass") should eventually(be(Successful))
     auto2 ? AwaitSyncCompleted should eventually(be(Successful))
+    auto3 ? AwaitSyncCompleted should eventually(be(Successful))
+    soon {
+      val ConvMessages(ms) = (auto2 ? GetMessages(conv.data.remoteId)).await()
+      ms should not be empty
+    }
     soon {
       val ConvMessages(ms) = (auto2 ? GetMessages(conv.data.remoteId)).await()
       ms should not be empty
@@ -306,11 +322,12 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       })
 
       soon {
+        image should not be null
         withClue(s"$image, data: ${image.data}") {
           image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe defined // full image received
         }
         msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
-      }
+      } (DefaultPatience.PatienceConfig(15.seconds))
     }
 
     scenario("Delete asset when timer expires") {
@@ -378,5 +395,9 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       msg.getExpirationTime shouldEqual Instant.MAX
       msg.getLocation shouldEqual new MessageContent.Location(51f, 20f, "location", 13)
     }
+  }
+
+  feature("Group messages") {
+
   }
 }

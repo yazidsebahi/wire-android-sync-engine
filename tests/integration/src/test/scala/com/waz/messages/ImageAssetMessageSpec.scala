@@ -24,7 +24,7 @@ import com.waz.api.MessageContent.Image
 import com.waz.api._
 import com.waz.api.impl.LocalImageAsset
 import com.waz.cache.{CacheEntry, LocalData}
-import com.waz.model.RConvId
+import com.waz.model.{RConvId, UserId}
 import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
 import com.waz.service._
@@ -111,9 +111,9 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
       new ZMessaging(clientId, user) {
         override lazy val assetClient = new AssetClient(zNetClient) {
 
-          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
-            if (metadata.inline) super.postOtrAsset(convId, metadata, data, ignoreMissing)
-            else CancellableFuture.delay(3.seconds) flatMap { _ => super.postOtrAsset(convId, metadata, data, ignoreMissing) } // delay full image request
+          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] = {
+            if (metadata.inline) super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients)
+            else CancellableFuture.delay(3.seconds) flatMap { _ => super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients) } // delay full image request
           }
 
           override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {

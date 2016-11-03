@@ -128,7 +128,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
 
       for (i <- 0 to 10) {
         withClue(i) {
-          Await.result(client.postOtrAsset(c, OtrAssetMetadata(clId, EncryptedContent(Map.empty), nativePush = false), LocalData(file), ignoreMissing = false), 5.seconds) shouldBe 'right
+          Await.result(client.postOtrAsset(c, OtrAssetMetadata(clId, EncryptedContent(Map.empty), nativePush = false), LocalData(file), ignoreMissing = false, recipients = None), 5.seconds) shouldBe 'right
         }
       }
     }

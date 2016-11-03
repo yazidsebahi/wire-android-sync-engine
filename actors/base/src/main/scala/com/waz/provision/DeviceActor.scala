@@ -100,8 +100,11 @@ class DeviceActor(val deviceName: String,
           import Threading.Implicits.Background
 
           override lazy val assetClient = new AssetClient(zNetClient) {
-            override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] =
-              CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap (_ => super.postOtrAsset(convId, metadata, data, ignoreMissing))
+
+            override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] =
+              CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap { _ =>
+                super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients)
+              }
           }
 
           override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
