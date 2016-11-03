@@ -20,34 +20,30 @@ package com.waz.model
 import android.database.Cursor
 import android.net.Uri
 import android.util.Base64
-import com.waz.ZLog._
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetStatus.{DownloadFailed, UploadDone}
-import com.waz.model.GenericContent.Asset.ImageMetaData
-import com.waz.model.otr.SignalingKey
-import com.waz.utils.JsonDecoder.{apply => _, opt => _, _}
+import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
-import org.threeten.bp.Instant
-import com.waz.utils.RichOption
 
-case class AssetData (id:           AssetId               = AssetId(),//TODO make independent of message id - will now be cache key
-                      status:       AssetStatus           = AssetStatus.UploadNotStarted,
-                      mime:         Mime                  = Mime.Unknown,
-                      sizeInBytes:  Long                  = 0L, //will be for metadata only??
-                      name:         Option[String]        = None,
-                      preview:      Option[AssetData]     = None,
-                      metaData:     Option[AssetMetaData] = None, //TODO can I move AssetMetaData into AssetData?
-                      source:       Option[Uri]           = None, //TODO what's this for?
-                      proxyPath:    Option[String]        = None, //TODO what's this for?
+case class AssetData(id: AssetId = AssetId(), //TODO make independent of message id - will now be cache key
+                     status: AssetStatus = AssetStatus.UploadNotStarted,
+                     mime: Mime = Mime.Unknown,
+                     sizeInBytes: Long = 0L, //will be for metadata only??
+                     name: Option[String] = None,
+                     preview: Option[AssetData] = None,
+                     metaData: Option[AssetMetaData] = None, //TODO can I move AssetMetaData into AssetData?
+                     source: Option[Uri] = None, //TODO what's this for?
+                     proxyPath: Option[String] = None, //TODO what's this for?
                      //TODO remove v2 attributes when transition period is over
-                      convId:       Option[RConvId]       = None,
-                      data64:       Option[String]        = None,
-                      sent:         Option[Boolean]       = None
-                     ) {
+                     convId: Option[RConvId] = None,
+                     data64: Option[String] = None,
+                     sent: Option[Boolean] = None
+                    ) {
 
   import AssetData._
+
   override def toString: String =
     s"""
        |AssetData:
@@ -67,9 +63,9 @@ case class AssetData (id:           AssetId               = AssetId(),//TODO mak
   lazy val fileExtension = mime.extension
 
   lazy val assetKey = status match {
-    case UploadDone(k)      => Some(k)
-    case DownloadFailed(k)  => Some(k)
-    case _                  => None
+    case UploadDone(k) => Some(k)
+    case DownloadFailed(k) => Some(k)
+    case _ => None
   }
 
   val isImage = this match {
@@ -93,6 +89,8 @@ case class AssetData (id:           AssetId               = AssetId(),//TODO mak
 
 object AssetData {
 
+  val NewImageAsset = AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0), "full")))
+
   object IsImage {
     def unapply(asset: AssetData): Option[(Dim2, String)] = {
       asset match {
@@ -102,15 +100,29 @@ object AssetData {
     }
   }
 
-  val MaxAllowedAssetSizeInBytes = 26214383L // 25MiB - 32 + 15 (first 16 bytes are AES IV, last 1 (!) to 16 bytes are padding)
-  val MaxAllowedBackendAssetSizeInBytes = 26214400L // 25MiB
+  object HasData {
+    def unapply(asset: AssetData): Option[Array[Byte]] = {
+      asset match {
+        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(data64), _) => asset.data
+        case _ => None
+      }
+    }
+  }
+
+  val MaxAllowedAssetSizeInBytes = 26214383L
+  // 25MiB - 32 + 15 (first 16 bytes are AES IV, last 1 (!) to 16 bytes are padding)
+  val MaxAllowedBackendAssetSizeInBytes = 26214400L
+
+  // 25MiB
 
   case class FetchKey(id: AssetId)
+
   case class UploadKey(id: AssetId)
 
   implicit object AssetDataDao extends Dao[AssetData, AssetId] {
-    val Id = id[AssetId]('_id, "PRIMARY KEY").apply(_.id)
-    val Asset = text('asset_type, "").apply(_ => "") //TODO remove in migration
+    val Id    = id[AssetId]('_id, "PRIMARY KEY").apply(_.id)
+    val Asset = text('asset_type, "").apply(_ => "")
+    //TODO remove in migration
     val Data = text('data)(JsonEncoder.encodeString(_))
 
     override val idCol = Id
@@ -120,7 +132,9 @@ object AssetData {
   }
 
   implicit lazy val AssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
+
     import JsonDecoder._
+
     override def apply(implicit js: JSONObject): AssetData =
       AssetData(
         'id, JsonDecoder[AssetStatus]('status), Mime('mime), 'sizeInBytes, 'name,
@@ -148,6 +162,7 @@ object AssetData {
 }
 
 case class RemoteKey(str: String) extends AnyVal
+
 object RemoteKey {
   val Empty = RemoteKey("empty")
 }
@@ -162,6 +177,7 @@ case class AssetKey(remoteId: Either[RAssetDataId, RemoteKey], token: Option[Ass
 }
 
 object AssetKey extends ((Either[RAssetDataId, RemoteKey], Option[AssetToken], AESKey, Sha256) => AssetKey) {
+
   import JsonDecoder._
 
   implicit lazy val AssetKeyDecoder: JsonDecoder[AssetKey] = new JsonDecoder[AssetKey] {

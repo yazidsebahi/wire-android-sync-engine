@@ -45,6 +45,7 @@ object GenericContent {
   }
 
   type Asset = Messages.Asset
+
   implicit object Asset extends GenericContent[Asset] {
 
     object Original {
@@ -57,10 +58,10 @@ object GenericContent {
             case Some(video: AssetMetaData.Video) => orig.setVideo(VideoMetaData(video))
             case Some(image: AssetMetaData.Image) => orig.setImage(ImageMetaData(image))
             case Some(audio: AssetMetaData.Audio) => orig.setAudio(AudioMetaData(Some(audio), audioPreview))
-            case Some(AssetMetaData.Empty)        =>
-            case None                             => orig.setAudio(AudioMetaData(None, audioPreview))
+            case Some(AssetMetaData.Empty) =>
+            case None => orig.setAudio(AudioMetaData(None, audioPreview))
           }
-          name foreach { orig.name = _ }
+          name foreach {orig.name = _}
         }
 
       def apply(asset: AnyAssetData): Messages.Asset.Original = apply(asset.mimeType, asset.sizeInBytes, asset.name,
@@ -74,6 +75,7 @@ object GenericContent {
     }
 
     object Status {
+
       import Messages.Asset._
 
       def apply(a: Asset, id: Option[RAssetDataId]): AssetStatus =
@@ -94,7 +96,7 @@ object GenericContent {
       }
 
       def apply(image: AssetMetaData.Image) = returning(new Messages.Asset.ImageMetaData) { p =>
-        image.tag foreach { p.tag = _ }
+        image.tag foreach {p.tag = _}
         p.width = image.dimensions.width
         p.height = image.dimensions.height
       }
@@ -176,6 +178,7 @@ object GenericContent {
     }
 
     type Preview = Messages.Asset.Preview
+
     object Preview {
 
       //TODO tidy up apply methods for preview
@@ -194,8 +197,8 @@ object GenericContent {
       def apply(mime: Mime, size: Long, key: AESKey, sha: Sha256, metaData: Messages.Asset.ImageMetaData): Messages.Asset.Preview =
         apply(mime, size, metaData, AssetKey(Left(RAssetDataId.Empty), None, key, sha))
 
-      def apply(mime: Mime, size: Long, metaData: ImageMetaData, assetKey: AssetKey):  Messages.Asset.Preview = {
-        returning(apply(mime, size, assetKey)) { _.setImage(metaData) }
+      def apply(mime: Mime, size: Long, metaData: ImageMetaData, assetKey: AssetKey): Messages.Asset.Preview = {
+        returning(apply(mime, size, assetKey)) {_.setImage(metaData)}
       }
 
       def apply(image: ImageData, key: AESKey, sha: Sha256): Messages.Asset.Preview =
@@ -227,6 +230,24 @@ object GenericContent {
 
     override def set(msg: GenericMessage) = msg.setAsset
 
+    def apply(asset: AssetData): Asset = returning(new Messages.Asset) { a =>
+      a.original = returning(new Messages.Asset.Original) { o =>
+        o.mimeType = asset.mime.str
+        o.size = asset.size
+        asset.metaData match {
+          case Some(video: AssetMetaData.Video) => o.setVideo(VideoMetaData(video))
+          case Some(image: AssetMetaData.Image) => o.setImage(ImageMetaData(image))
+          case Some(audio: AssetMetaData.Audio) => o.setAudio(AudioMetaData(Some(audio), audioPreview))
+          case Some(AssetMetaData.Empty) =>
+          case None => o.setAudio(AudioMetaData(None, audioPreview))
+        }
+        asset.name foreach {o.name = _}
+      }
+      //TODO preview
+      //TODO remote data
+
+    }
+
     def apply(orig: Messages.Asset.Original, uploaded: Messages.Asset.RemoteData): Asset = returning(new Messages.Asset) { a =>
       a.original = orig
       a.setUploaded(uploaded)
@@ -252,14 +273,14 @@ object GenericContent {
       }
 
     def apply(status: AssetStatus): Asset =
-      returning(new Messages.Asset) { setStatus(_, status) }
+      returning(new Messages.Asset) {setStatus(_, status)}
 
     def apply(bytes: Array[Byte]): Asset = Messages.Asset.parseFrom(bytes)
 
     private def setStatus(a: Asset, status: AssetStatus) =
       status match {
         case UploadCancelled => a.setNotUploaded(Messages.Asset.CANCELLED)
-        case UploadFailed    => a.setNotUploaded(Messages.Asset.FAILED)
+        case UploadFailed => a.setNotUploaded(Messages.Asset.FAILED)
         case _ =>
           status.key foreach {
             case AssetKey(Left(_), _, key, sha) => a.setUploaded(Uploaded(key, sha))
@@ -293,18 +314,21 @@ object GenericContent {
         case _ => None
       }
     }
+
   }
+
   implicit object EphemeralAsset extends EphemeralContent[Asset] {
     override def set(eph: Ephemeral): (Asset) => Ephemeral = eph.setAsset
   }
 
   type ImageAsset = Messages.ImageAsset
+
   implicit object ImageAsset extends GenericContent[ImageAsset] {
     override def set(msg: GenericMessage) = msg.setImage
 
     //tag, width, height, origWidth, origHeight, mime, size, Some(key), sha
     def unapply(proto: ImageAsset): Option[(String, Int, Int, Int, Int, Mime, Int, Option[AESKey], Option[Sha256])] =
-      Some((proto.tag, proto.width, proto.height, proto.originalWidth, proto.originalHeight, Mime(proto.mimeType), proto.size, Option(proto.otrKey).map(AESKey(_)), Option(proto.sha256).map(Sha256(_))))
+    Some((proto.tag, proto.width, proto.height, proto.originalWidth, proto.originalHeight, Mime(proto.mimeType), proto.size, Option(proto.otrKey).map(AESKey(_)), Option(proto.sha256).map(Sha256(_))))
 
     def apply(tag: String, width: Int, height: Int, origWidth: Int, origHeight: Int, mime: String, size: Int, key: Option[AESKey], sha: Option[Sha256]): ImageAsset =
       returning(new Messages.ImageAsset) { a =>
@@ -319,11 +343,13 @@ object GenericContent {
         sha foreach { sha => a.sha256 = sha.bytes }
       }
   }
+
   implicit object EphemeralImageAsset extends EphemeralContent[ImageAsset] {
     override def set(eph: Ephemeral): (ImageAsset) => Ephemeral = eph.setImage
   }
 
   type Mention = Messages.Mention
+
   object Mention {
     def apply(user: UserId, name: String) = returning(new Messages.Mention) { m =>
       m.userId = user.str
@@ -332,6 +358,7 @@ object GenericContent {
   }
 
   type LinkPreview = Messages.LinkPreview
+
   object LinkPreview {
 
     trait PreviewMeta[A] {
@@ -339,7 +366,7 @@ object GenericContent {
     }
 
     implicit object TweetMeta extends PreviewMeta[Tweet] {
-      override def apply(preview: LinkPreview, meta: Tweet): LinkPreview = returning(preview) { _.setTweet(meta) }
+      override def apply(preview: LinkPreview, meta: Tweet): LinkPreview = returning(preview) {_.setTweet(meta)}
     }
 
     def apply(uri: Uri, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
@@ -354,7 +381,7 @@ object GenericContent {
         p.title = title
         p.summary = summary
         permanentUrl foreach { u => p.permanentUrl = u.toString }
-        image foreach { p.image = _ }
+        image foreach {p.image = _}
 
         // set article for backward compatibility, we will stop sending it once all platforms switch to using LinkPreview properties
         p.setArticle(article(title, summary, image, permanentUrl))
@@ -366,6 +393,7 @@ object GenericContent {
       }
 
     type Tweet = Messages.Tweet
+
     object Tweet {
 
     }
@@ -374,7 +402,7 @@ object GenericContent {
       p.title = title
       p.summary = summary
       uri foreach { u => p.permanentUrl = u.toString }
-      image foreach { p.image = _ }
+      image foreach {p.image = _}
     }
 
     implicit object JsDecoder extends JsonDecoder[LinkPreview] {
@@ -388,7 +416,7 @@ object GenericContent {
     }
 
     object WithAsset {
-      def unapply(lp: LinkPreview): Option[Asset] = Option(lp.image) orElse { if (lp.hasArticle) Option(lp.getArticle.image) else None }
+      def unapply(lp: LinkPreview): Option[Asset] = Option(lp.image) orElse {if (lp.hasArticle) Option(lp.getArticle.image) else None}
     }
 
     object WithDescription {
@@ -396,9 +424,11 @@ object GenericContent {
         if (lp.hasArticle) Some((lp.getArticle.title, lp.getArticle.summary))
         else Some((lp.title, lp.summary))
     }
+
   }
 
   type Reaction = Messages.Reaction
+
   implicit object Reaction extends GenericContent[Reaction] {
 
     override def set(msg: GenericMessage) = msg.setReaction
@@ -407,7 +437,7 @@ object GenericContent {
 
     def apply(msg: MessageId, action: Liking.Action): Reaction = returning(new Messages.Reaction) { proto =>
       proto.emoji = action match {
-        case Liking.Action.Like   => HeavyBlackHeart
+        case Liking.Action.Like => HeavyBlackHeart
         case Liking.Action.Unlike => ""
       }
       proto.messageId = msg.str
@@ -415,21 +445,24 @@ object GenericContent {
 
     def unapply(proto: Messages.Reaction): Option[(MessageId, Liking.Action)] = Some((MessageId(proto.messageId), proto.emoji match {
       case HeavyBlackHeart => Liking.Action.Like
-      case _               => Liking.Action.Unlike
+      case _ => Liking.Action.Unlike
     }))
   }
 
   type Knock = Messages.Knock
+
   implicit object Knock extends GenericContent[Knock] {
     override def set(msg: GenericMessage) = msg.setKnock
     def apply() = new Messages.Knock()
     def unapply(arg: Knock): Boolean = true
   }
+
   implicit object EphemeralKnock extends EphemeralContent[Knock] {
     override def set(eph: Ephemeral): (Knock) => Ephemeral = eph.setKnock
   }
 
   type Text = Messages.Text
+
   implicit object Text extends GenericContent[Text] {
     override def set(msg: GenericMessage) = msg.setText
 
@@ -446,11 +479,13 @@ object GenericContent {
     def unapply(proto: Text): Option[(String, Map[UserId, String], Seq[LinkPreview])] =
       Some((proto.content, proto.mention.map(m => UserId(m.userId) -> m.userName).toMap, proto.linkPreview.toSeq))
   }
+
   implicit object EphemeralText extends EphemeralContent[Text] {
     override def set(eph: Ephemeral): (Text) => Ephemeral = eph.setText
   }
 
   type MsgEdit = Messages.MessageEdit
+
   implicit object MsgEdit extends GenericContent[MsgEdit] {
     override def set(msg: GenericMessage) = msg.setEdited
 
@@ -469,6 +504,7 @@ object GenericContent {
   }
 
   type Cleared = Messages.Cleared
+
   implicit object Cleared extends GenericContent[Cleared] {
     override def set(msg: GenericMessage) = msg.setCleared
 
@@ -485,6 +521,7 @@ object GenericContent {
   }
 
   type LastRead = Messages.LastRead
+
   implicit object LastRead extends GenericContent[LastRead] {
     override def set(msg: GenericMessage) = msg.setLastRead
 
@@ -498,6 +535,7 @@ object GenericContent {
   }
 
   type MsgDeleted = Messages.MessageHide
+
   implicit object MsgDeleted extends GenericContent[MsgDeleted] {
     override def set(msg: GenericMessage) = msg.setHidden
 
@@ -511,6 +549,7 @@ object GenericContent {
   }
 
   type MsgRecall = Messages.MessageDelete
+
   implicit object MsgRecall extends GenericContent[MsgRecall] {
     override def set(msg: GenericMessage) = msg.setDeleted
 
@@ -522,6 +561,7 @@ object GenericContent {
   }
 
   type Location = Messages.Location
+
   implicit object Location extends GenericContent[Location] {
     override def set(msg: GenericMessage): (Location) => GenericMessage = msg.setLocation
 
@@ -535,11 +575,13 @@ object GenericContent {
     def unapply(l: Location): Option[(Float, Float, Option[String], Option[Int])] =
       Some((l.longitude, l.latitude, Option(l.name).filter(_.nonEmpty), Option(l.zoom).filter(_ != 0)))
   }
+
   implicit object EphemeralLocation extends EphemeralContent[Location] {
     override def set(eph: Ephemeral): (Location) => Ephemeral = eph.setLocation
   }
 
   type Receipt = Messages.Confirmation
+
   implicit object Receipt extends GenericContent[Receipt] {
     override def set(msg: GenericMessage) = msg.setConfirmation
 
@@ -552,6 +594,7 @@ object GenericContent {
   }
 
   type External = Messages.External
+
   implicit object External extends GenericContent[External] {
     override def set(msg: GenericMessage) = msg.setExternal
 
@@ -568,6 +611,7 @@ object GenericContent {
   }
 
   type Ephemeral = Messages.Ephemeral
+
   implicit object Ephemeral extends GenericContent[Ephemeral] {
 
     override def set(msg: GenericMessage): (Ephemeral) => GenericMessage = msg.setEphemeral
@@ -591,6 +635,7 @@ object GenericContent {
   }
 
   case object Unknown
+
   implicit object UnknownContent extends GenericContent[Unknown.type] {
     override def set(msg: GenericMessage) = { _ => msg }
   }
@@ -598,17 +643,21 @@ object GenericContent {
   sealed trait ClientAction {
     val value: Int
   }
+
   implicit object ClientAction extends GenericContent[ClientAction] {
+
     case object SessionReset extends ClientAction {
       override val value: Int = Messages.RESET_SESSION
     }
+
     case class UnknownAction(value: Int) extends ClientAction
 
     def apply(v: Int) = v match {
       case Messages.RESET_SESSION => SessionReset
-      case other                  => UnknownAction(other)
+      case other => UnknownAction(other)
     }
 
     override def set(msg: GenericMessage) = { action => msg.setClientAction(action.value) }
   }
+
 }

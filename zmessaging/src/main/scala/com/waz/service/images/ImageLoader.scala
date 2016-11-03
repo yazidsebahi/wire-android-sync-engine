@@ -263,6 +263,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
 
 object ImageLoader {
 
+  //TODO if orientation could be useful ever to other clients, we might want to merge with AssetMetaData.Image
   case class Metadata(width: Int, height: Int, mimeType: String, orientation: Int = ExifInterface.ORIENTATION_UNDEFINED) {
     def isRotated: Boolean = orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED
 
