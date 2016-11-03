@@ -134,7 +134,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
         //TODO figure out how to update the protos (with size) properly after creating an image - sent images aren't rendered properly and receiver side has to scale them up...
         case GenericMessage(_, asset @ ProtoAsset(Some(Original(Mime.Image(), size, _, _, _)), _, _)) if size > 0 => context.images.getImageAsset(asset)
         case _ => context.images.getImageAsset(data.assetId)
-      }.orNull
+      }.getOrElse(ImageAsset.Empty) // don't return null for message types that should have an image, (null means invalid operation, empty image means `not yet available`)
   }
 
   override def getAsset =
