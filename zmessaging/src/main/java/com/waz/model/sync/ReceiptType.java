@@ -15,23 +15,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.model.sync;
 
-import com.waz.service.call.AvsMetrics
-import org.threeten.bp.Duration
+import java.util.HashMap;
+import java.util.Map;
 
-trait TrackingEventsHandler {
-  def onTrackingEvent(event: TrackingEvent): Unit
-  def onAvsMetricsEvent(avsMetrics: AvsMetrics): Unit
-}
+public enum ReceiptType {
 
-trait TrackingEvent {
-  def getKind: KindOfTrackingEvent
-  def getAssetSizeInBytes: Opt[java.lang.Long]
-  def getAssetMimeType: Opt[String]
-  def getDuration: Opt[Duration]
-  def getConversationType: Opt[IConversation.Type]
-  def isInConversationWithOtto: Opt[Boolean]
-  def getErrorResponse: Opt[ErrorResponse]
-  def getEphemeralExpiration: EphemeralExpiration
+    Delivery("delivery"),
+    EphemeralExpired("ephemeral-expired");
+
+    public final String name;
+
+    ReceiptType(String name) {
+        this.name = name;
+    }
+
+    private static Map<String, ReceiptType> byName = new HashMap<>();
+    static {
+        for (ReceiptType value : ReceiptType.values()) {
+            byName.put(value.name, value);
+        }
+    }
+
+    public static ReceiptType fromName(String name) {
+        ReceiptType result = byName.get(name);
+        return (result == null) ? Delivery : result;
+    }
 }

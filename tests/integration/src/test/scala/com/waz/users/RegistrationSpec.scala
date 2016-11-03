@@ -51,7 +51,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
   lazy val userId = AccountId()
 
-  lazy val client = new RegistrationClient(new AsyncClient(wrapper = TestClientWrapper), BackendConfig.EdgeBackend)
+  lazy val client = new RegistrationClient(new AsyncClient(wrapper = TestClientWrapper), BackendConfig.StagingBackend)
 
   lazy val assetGenerator = zmessaging.assetGenerator
 

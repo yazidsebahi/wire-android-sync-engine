@@ -25,7 +25,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncJob.SyncJobDao
 import com.waz.model.sync.SyncRequest._
-import com.waz.model.sync.{SyncJob, SyncRequest}
+import com.waz.model.sync.{ReceiptType, SyncJob, SyncRequest}
 import com.waz.testutils.Matchers._
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.JsonEncoder._
@@ -110,7 +110,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         PostLastRead(ConvId(), Instant.now),
         PostCleared(ConvId(), Instant.now),
         PostAssetStatus(ConvId(), MessageId(), EphemeralExpiration.FIVE_SECONDS, AssetStatus.UploadCancelled),
-        PostReceipt(ConvId(), MessageId(), UserId())
+        PostReceipt(ConvId(), MessageId(), UserId(), ReceiptType.Delivery)
       ) map { SyncJob(SyncId(), _) }
 
       SyncJobDao.insertOrReplace(requests)

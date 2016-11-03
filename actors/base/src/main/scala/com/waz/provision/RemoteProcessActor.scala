@@ -29,7 +29,7 @@ import scala.concurrent.duration._
 class RemoteProcessActor(application: Context,
                          processName: String,
                          coordinator: Option[ActorRef],
-                         backend: BackendConfig = BackendConfig.EdgeBackend,
+                         backend: BackendConfig = BackendConfig.StagingBackend,
                          otrOnly: Boolean = false,
                          wrapper: ClientWrapper) extends FSM[RemoteProcessActor.State, Option[ActorRef]] with ActorLogging {
 
@@ -85,7 +85,7 @@ object RemoteProcessActor {
   def props(context: Context,
             processName: String,
             mainCoordinatorRef: Option[ActorRef],
-            backend: BackendConfig = BackendConfig.EdgeBackend,
+            backend: BackendConfig = BackendConfig.StagingBackend,
             otrOnly: Boolean = false,
             wrapper: ClientWrapper) =
     Props(new RemoteProcessActor(context, processName, mainCoordinatorRef, backend, otrOnly, wrapper))

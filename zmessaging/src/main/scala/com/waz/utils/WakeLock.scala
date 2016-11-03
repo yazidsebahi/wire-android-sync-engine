@@ -19,7 +19,6 @@ package com.waz.utils
 
 import android.content.Context
 import android.os.PowerManager
-import com.waz.ZLog
 import com.waz.ZLog.{LogTag, verbose}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
