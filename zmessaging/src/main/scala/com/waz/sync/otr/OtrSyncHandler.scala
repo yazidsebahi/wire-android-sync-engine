@@ -26,7 +26,6 @@ import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.ConversationStorage
 import com.waz.model.AssetStatus.UploadDone
-import com.waz.model.GenericContent.Asset.Uploaded
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
