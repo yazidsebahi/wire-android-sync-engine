@@ -38,18 +38,17 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  private val lifecycleActive = lifecycle.lifecycleState.map(s => s == UiActive || s == Active) flatMap {
-    case true   => Signal const true
-    case false  =>
+  // true if websocket should be active,
+  val wsActive = lifecycle.lifecycleState.map {
+    case LifecycleState.Stopped => false
+    case LifecycleState.Idle => !gcmService.gcmAvailable
+    case LifecycleState.Active | LifecycleState.UiActive => true
+  }.flatMap {
+    case true => Signal.const(true)
+    case false =>
       // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
       verbose(s"lifecycle no longer active, should stop the client")
       Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
-  }
-
-  // true if websocket should be active,
-  val wsActive = lifecycleActive map {
-    case false if gcmService.gcmAvailable => false
-    case _ => true //Lifecycle active or no play services available, need web socket
   }
 
   val client = wsActive map {
