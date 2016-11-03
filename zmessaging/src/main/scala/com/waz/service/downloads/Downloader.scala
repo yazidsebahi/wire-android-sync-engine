@@ -82,7 +82,7 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
         client.loadAsset(req) flatMap {
           case Right(entry) =>
             CancellableFuture lift {
-              cache.move(asset.cacheKey, entry, asset.mime, asset.name) map { res =>
+              cache.move(asset.assetId, entry, asset.mime, asset.name) map { res =>
                 onDownloadDone ! asset
                 Some(res)
               }
@@ -120,7 +120,7 @@ class AssetDataConsumer(mime: String, cache: CacheService, key: Option[AESKey], 
 
 class InputStreamAssetLoader(cache: => CacheService) extends Downloader[AssetFromInputStream] {
   def load(asset: AssetFromInputStream, callback: ProgressIndicator.Callback): CancellableFuture[Option[CacheEntry]] =
-    InputStreamAssetLoader.addStreamToCache(cache, asset.cacheKey, asset.stream(), asset.mime, asset.name)
+    InputStreamAssetLoader.addStreamToCache(cache, asset.assetId, asset.stream(), asset.mime, asset.name)
 }
 
 object InputStreamAssetLoader {
@@ -158,11 +158,11 @@ class VideoAssetLoader(context: Context, cache: => CacheService) extends Downloa
 
     VideoTranscoder(context).apply(request.uri, entry.cacheFile, callback) flatMap { _ =>
       verbose(s"loaded video from $request, resulting file size: ${entry.length}")
-      CancellableFuture lift cache.move(request.cacheKey, entry, Mime.Video.MP4, if (request.mime == Mime.Video.MP4) request.name else request.name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map (Some(_))
+      CancellableFuture lift cache.move(request.assetId, entry, Mime.Video.MP4, if (request.mime == Mime.Video.MP4) request.name else request.name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map (Some(_))
     } recoverWith {
       case ex: Exception =>
         HockeyApp.saveException(ex, s"video transcoding failed for uri: ${request.uri}")
-        InputStreamAssetLoader.addStreamToCache(cache, request.cacheKey, AssetLoader.openStream(context, request.uri), request.mime, request.name)
+        InputStreamAssetLoader.addStreamToCache(cache, request.assetId, AssetLoader.openStream(context, request.uri), request.mime, request.name)
     }
   }
 }
@@ -178,7 +178,7 @@ class UnencodedAudioAssetLoader(context: Context, cache: => CacheService, tempFi
 
     returning(transcode(request.uri, entry.cacheFile, callback).flatMap { _ =>
       verbose(s"loaded audio from $request, resulting file size: ${entry.length}")
-      cache.move(request.cacheKey, entry, Mime.Audio.MP4, request.name, cacheLocation = Some(cache.cacheDir)).map(Some(_)).lift
+      cache.move(request.assetId, entry, Mime.Audio.MP4, request.name, cacheLocation = Some(cache.cacheDir)).map(Some(_)).lift
     })(_.onFailure {
       case cause: CancellableFuture.CancelException => verbose(s"audio encoding cancelled: ${request.uri}")
       case cause: Throwable => HockeyApp.saveException(cause, s"audio encoding failed for URI: ${request.uri}")

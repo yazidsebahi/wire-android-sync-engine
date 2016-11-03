@@ -22,28 +22,27 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.Parcelable
 import com.waz.api.impl._
 import com.waz.bitmap.BitmapDecoder
-import com.waz.bitmap.BitmapUtils.Mime
-import com.waz.Control.getOrUpdate
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
 import com.waz.{HockeyApp, api, bitmap}
 
 class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModule) {
+
   import Images._
+
   private implicit val dispatcher = Threading.ImageDispatcher
 
-  val images = new UiCache[AssetId, ImageAsset](lruSize = 20)
+  val images      = new UiCache[AssetId, ImageAsset](lruSize = 20)
   val localImages = new UiCache[AssetId, ImageAsset](lruSize = 5)
-  val zms = ui.zms
+  val zms         = ui.zms
 
   def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
-
-  def getImageAsset(asset: GenericContent.Asset) = new ProtoImageAsset(asset)
 
   def getFilePreview(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
 
@@ -51,11 +50,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
     p.readInt() match {
       case Parcelable.FlagEmpty => ImageAsset.Empty
       case Parcelable.FlagWire => getImageAsset(AssetId(p.readString()))
-      case Parcelable.FlagLocal => getLocalImageAsset(JsonDecoder.decode[ImageAssetData](p.readString()))
-      case Parcelable.FlagProto =>
-        val arr = Array.ofDim[Byte](p.readInt())
-        p.readByteArray(arr)
-        getImageAsset(GenericContent.Asset(arr))
+      case Parcelable.FlagLocal => getLocalImageAsset(JsonDecoder.decode[AssetData](p.readString()))
     }
   }
 
@@ -64,31 +59,24 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      getLocalImageAsset(ImageAssetData(uri))
+      getLocalImageAsset(AssetData(source = Some(uri)))
     }
   }
 
-  def getLocalImageAsset(data: ImageAssetData) = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
+  def getLocalImageAsset(data: AssetData) = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
 
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     else {
-      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
+      val asset = new AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0), "full"))) {
         override lazy val data: Option[Array[Byte]] = Some(bytes)
       }
-      new LocalImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(im)))
+      new LocalImageAsset(asset)
     }
   }
 
-  def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
-    if (bytes == null || bytes.isEmpty) ImageAsset.Empty
-    else {
-      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
-        override lazy val data: Option[Array[Byte]] = Some(bytes)
-      }
-      returning(new LocalImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(im))))(_.setMirrored(true))
-    }
-  }
+  def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =
+    returning(createImageAssetFrom(bytes))(_.setMirrored(true))
 
   def getOrCreateImageAssetFromResourceId(resourceId: Int): api.ImageAsset =
     getOrCreateUriImageAsset(Uri.parse(s"${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.getPackageName}/$resourceId"))

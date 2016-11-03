@@ -49,7 +49,7 @@ object AssetMetaData {
           o.put("duration", duration.toMillis)
         case Image(dimensions, tag) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
-          tag.foreach(o.put("tag", _))
+          o.put("tag", tag)
       }
     }
   }
@@ -64,7 +64,7 @@ object AssetMetaData {
       case 'audio =>
         Audio(Duration.ofMillis('duration))
       case 'image =>
-        Image(JsonDecoder[Dim2]('dimensions), decodeOptString('tag))
+        Image(JsonDecoder[Dim2]('dimensions), decodeString('tag))
       case other =>
         throw new IllegalArgumentException(s"unsupported meta data type: $other")
     }
@@ -85,7 +85,7 @@ object AssetMetaData {
   }
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
-  case class Image(dimensions: Dim2, tag: Option[String]) extends AssetMetaData('image) with HasDimensions
+  case class Image(dimensions: Dim2, tag: String = "") extends AssetMetaData('image) with HasDimensions
   case class Audio(duration: Duration) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
 
@@ -128,7 +128,7 @@ object AssetMetaData {
   }
 
   object Image {
-    val Empty = Image(Dim2.Empty, None)
+    val Empty = Image(Dim2.Empty)
 
     def apply(file: File): Option[Image] = apply(new FileInputStream(file))
 
@@ -139,7 +139,7 @@ object AssetMetaData {
       opts.inJustDecodeBounds = true
       BitmapFactory.decodeStream(is, null, opts)
       if (opts.outWidth == 0 && opts.outHeight == 0) None
-      else Some(Image(Dim2(opts.outWidth, opts.outHeight), None))
+      else Some(Image(Dim2(opts.outWidth, opts.outHeight)))
     }
   }
 }

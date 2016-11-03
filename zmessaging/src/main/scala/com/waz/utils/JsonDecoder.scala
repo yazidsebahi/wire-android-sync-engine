@@ -30,6 +30,7 @@ import org.threeten.bp.{Duration, Instant}
 import scala.collection.generic._
 import scala.language.{higherKinds, implicitConversions}
 import scala.reflect.ClassTag
+import scala.util.Try
 
 trait JsonDecoder[A] { self =>
   def apply(implicit js: JSONObject): A
@@ -115,6 +116,8 @@ object JsonDecoder {
   implicit def decodeDuration(s: Symbol)(implicit js: JSONObject): Duration = Duration.ofMillis(js.getLong(s.name))
   implicit def decodeLocale(s: Symbol)(implicit js: JSONObject): Option[Locale] = withDefault(s, None, o => Locales.bcp47.localeFor(o.getString(s.name)))
   implicit def decodeUid(s: Symbol)(implicit js: JSONObject): Uid = Uid(js.getString(s.name))
+
+  implicit def decodeOptObject(s: Symbol)(implicit js: JSONObject): Option[JSONObject] = Try(js.getJSONObject(s.name)).toOption
   implicit def decodeOptString(s: Symbol)(implicit js: JSONObject): Option[String] = if (js.has(s.name)) { if(js.isNull(s.name)) Some("") else Some(js.getString(s.name)) } else None
   implicit def decodeOptInt(s: Symbol)(implicit js: JSONObject): Option[Int] = opt(s, _.getInt(s.name))
   implicit def decodeOptLong(s: Symbol)(implicit js: JSONObject): Option[Long] = opt(s, _.getLong(s.name))

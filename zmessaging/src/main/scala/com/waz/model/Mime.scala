@@ -54,7 +54,13 @@ object Mime {
   }
 
   object Image {
-    val PNG = Mime("image/png")
+    val Gif     = Mime("image/gif")
+    val Jpg     = Mime("image/jpeg")
+    val Png     = Mime("image/png")
+    val WebP    = Mime("image/webp")
+    val Bmp     = Mime("image/bmp")
+    val Tiff    = Mime("image/tiff")
+    val Unknown = Mime("image/*")
 
     def unapply(mime: Mime): Boolean = mime.str.startsWith("image/")
   }

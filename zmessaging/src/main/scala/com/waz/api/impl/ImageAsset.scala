@@ -23,14 +23,11 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
-import com.google.protobuf.nano.MessageNano
 import com.waz.ZLog._
 import com.waz.api.ImageAsset.{BitmapCallback, SaveCallback}
 import com.waz.api.LoadHandle
 import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.bitmap.BitmapUtils
-import com.waz.bitmap.BitmapUtils.Mime
-import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService.BitmapRequest._
@@ -50,16 +47,9 @@ import scala.util.{Failure, Success, Try}
 class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with SavingToGallery with UiObservable with SignalLoading {
   private implicit val tag: LogTag = logTagFor[ImageAsset]
 
-  var data = ImageAssetData.Empty
+  var data = AssetData()
 
-  protected def signal(zms: ZMessaging) =
-    zms.assetsStorage.signal(id) map {
-      case im: ImageAssetData => im
-      case AnyAssetData(_, conv, _, _, _, _, Some(AssetPreviewData.Image(preview)), _, _, _, _) => ImageAssetData(id, conv, Seq(preview))
-      case _ => ImageAssetData.Empty
-    }
-
-  addLoader(signal) { im =>
+  addLoader(_.assetsStorage.signal(id)) { im =>
     if (this.data != im) {
       this.data = im
       notifyChanged()
@@ -68,16 +58,16 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 
   override def getId: String = id.str
 
-  override def getWidth: Int = data.versions.lastOption.fold(0)(_.origWidth)
+  override def getWidth: Int = data.dimensions.width
 
-  override def getHeight: Int = data.versions.lastOption.fold(0)(_.origHeight)
+  override def getHeight: Int = data.dimensions.height
 
   protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
     BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.imageCache) }, callback)
 
   override def isEmpty: Boolean = false
 
-  override def getMimeType: String = data.versions.lastOption.fold(Mime.Jpg)(_.mime)
+  override def getMimeType: String = data.mime.str
 
   override def saveImageToGallery(callback: SaveCallback): Unit = ui.zms { zms =>
     zms.imageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
@@ -98,13 +88,13 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
   override def toString = s"ImageAsset($data)"
 }
 
-class LocalImageAsset(img: ImageAssetData)(implicit ui: UiModule) extends ImageAsset(img.id) with DisableSignalLoading {
+class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(img.id) with DisableSignalLoading {
   data = img
 
   override def addLoader[A, B <: A](signal: (ZMessaging) => Signal[B], defaultValue: A)(onLoaded: (A) => Unit)(implicit ui: UiModule) = null
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
-    new BitmapLoadHandle( {
+    new BitmapLoadHandle({
       case None => BitmapSignal(data, req, ui.globalImageLoader, ui.imageCache)
       case Some(zms) => BitmapSignal(data, req, zms.imageLoader, ui.imageCache)
     }, callback)
@@ -130,10 +120,12 @@ class LocalImageAsset(img: ImageAssetData)(implicit ui: UiModule) extends ImageA
 
 class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) with DisableSignalLoading {
   private implicit val tag: LogTag = logTagFor[LocalBitmapAsset]
+
   import Threading.Implicits.Background
+
   verbose(s"creating asset from bitmap, orientation: $orientation")
 
-  val mime = BitmapUtils.getMime(bitmap)
+  val mime   = Mime(BitmapUtils.getMime(bitmap))
   val (w, h) = if (ImageLoader.Metadata.shouldSwapDimens(orientation)) (bitmap.getHeight, bitmap.getWidth) else (bitmap.getWidth, bitmap.getHeight)
 
   val imageData = Future {
@@ -143,21 +135,26 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
     verbose(s"compressing $id")
     val before = System.nanoTime
     val bos = new ByteArrayOutputStream(65536)
-    val format = BitmapUtils.getCompressFormat(mime)
+    val format = BitmapUtils.getCompressFormat(mime.str)
     img.compress(format, 85, bos)
     val bytes = bos.toByteArray
     val duration = (System.nanoTime - before) / 1e6d
     debug(s"compression took: $duration ms (${img.getWidth} x ${img.getHeight}, ${img.getByteCount} bytes -> ${bytes.length} bytes, ${img.getConfig}, $mime, $format)")
     bytes
-  } (Threading.ImageDispatcher)
+  }(Threading.ImageDispatcher)
 
-  data = ImageAssetData(id, RConvId(), Seq(new ImageData("full", mime, w, h, w, h, 0, Some(RAssetDataId())) {
+  data = new AssetData(
+    id,
+    mime = mime,
+    metaData = Some(AssetMetaData.Image(Dim2(w, h), "full"))
+  ) {
     override lazy val data: Option[Array[Byte]] = {
       verbose(s"data requested, compress completed: ${imageData.isCompleted}")(tag)
       // XXX: this is ugly, but will only be accessed from bg thread and very rarely, so we should be fine with that hack
       LoggedTry(Await.result(imageData, 15.seconds))(tag).toOption
     }
-  }))
+  }
+
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     verbose(s"get bitmap")
@@ -167,7 +164,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
   override def saveImageToGallery(callback: SaveCallback): Unit =
     imageData.map { _ =>
       ui.globalImageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
-    } .recoverWithLog()
+    }.recoverWithLog()
 
   override def writeToParcel(p: Parcel, flags: Int): Unit = {
     p.writeInt(Parcelable.FlagLocal)
@@ -181,12 +178,11 @@ object ImageAsset {
   object Parcelable {
     val FlagEmpty = 0
     val FlagLocal = 1
-    val FlagWire = 2
-    val FlagProto = 3
+    val FlagWire  = 2
   }
 
   object Empty extends com.waz.api.ImageAsset with UiFlags with UiObservable {
-    override def getId: String = ImageAssetData.Empty.id.str
+    override def getId: String = AssetData().id.str
     override def getHeight: Int = 0
     override def getWidth: Int = 0
     override def isEmpty = true
@@ -197,7 +193,7 @@ object ImageAsset {
     override def getRoundBitmap(width: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
     override def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
     override def saveImageToGallery(): Unit = ()
-    override def saveImageToGallery(callback: SaveCallback): Unit = { callback.imageSavingFailed(new Exception("Empty ImageAsset - can not be saved.")) }
+    override def saveImageToGallery(callback: SaveCallback): Unit = {callback.imageSavingFailed(new Exception("Empty ImageAsset - can not be saved."))}
 
     override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeInt(Parcelable.FlagEmpty)
   }
@@ -211,8 +207,9 @@ object ImageAsset {
     private var prev = Option.empty[(WeakReference[Bitmap], Boolean, Int)]
 
     private var loader = Option(addLoaderOpt(signal) {
-      case res @ BitmapLoaded(bitmap, preview, etag) =>
-        if (prev.forall(p => !p._1.get.contains(bitmap) || p._2 != preview || p._3 != etag)) { // make sure that callback is not called twice with the same image, UI doesn't like that
+      case res@BitmapLoaded(bitmap, preview, etag) =>
+        if (prev.forall(p => !p._1.get.contains(bitmap) || p._2 != preview || p._3 != etag)) {
+          // make sure that callback is not called twice with the same image, UI doesn't like that
           prev = Some((new WeakReference(bitmap), preview, etag))
           callback.onBitmapLoaded(bitmap, preview)
         }
@@ -240,6 +237,7 @@ object ImageAsset {
     def apply(signal: ZMessaging => Signal[BitmapResult], callback: BitmapCallback)(implicit ui: UiModule) =
       new BitmapLoadHandle(_.fold2(Signal.const(BitmapResult.Empty), signal), callback)
   }
+
 }
 
 trait UiFlags {
@@ -248,7 +246,8 @@ trait UiFlags {
   def setMirrored(mirrored: Boolean): Unit = this.mirrored = mirrored
 }
 
-trait BitmapLoading { self: com.waz.api.ImageAsset with UiFlags =>
+trait BitmapLoading {
+  self: com.waz.api.ImageAsset with UiFlags =>
 
   protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle
 
@@ -263,7 +262,8 @@ trait BitmapLoading { self: com.waz.api.ImageAsset with UiFlags =>
   override def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle = getBitmap(Round(width, borderWidth, borderColor), callback)
 }
 
-trait SavingToGallery { self: com.waz.api.ImageAsset =>
+trait SavingToGallery {
+  self: com.waz.api.ImageAsset =>
   private implicit val tag: LogTag = logTagFor[ImageAsset]
 
   override def saveImageToGallery(): Unit = saveImageToGallery(new SaveCallback {
@@ -282,36 +282,3 @@ trait SavingToGallery { self: com.waz.api.ImageAsset =>
   }
 }
 
-class ProtoImageAsset(data: GenericContent.Asset)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with SavingToGallery with UiObservable {
-
-  override def getId = data match {
-    case GenericContent.Asset(_, _, UploadDone(key)) => key.assetId.str
-    case _ => data.hashCode().toHexString
-  }
-
-  lazy val dimens = data match {
-    case GenericContent.Asset.WithDimensions(d) => d
-    case _ => Dim2.Empty
-  }
-
-  override def getWidth = dimens.width
-
-  override def getHeight = dimens.height
-
-  override def isEmpty = false
-
-  override def getMimeType = Option(data.original).fold("")(_.mimeType)
-
-  override def writeToParcel(dest: Parcel, flags: Int) = {
-    dest.writeInt(Parcelable.FlagProto)
-    val arr = MessageNano.toByteArray(data)
-    dest.writeInt(arr.length)
-    dest.writeByteArray(arr)
-  }
-
-  override protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
-    BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.imageCache) }, callback)
-
-  override def saveImageToGallery(callback: SaveCallback) =
-    ui.zms { _.imageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui) }
-}

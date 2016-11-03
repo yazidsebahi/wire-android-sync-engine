@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.cache.CacheStorage.EntryCache
 import com.waz.content.Database
-import com.waz.model.Uid
+import com.waz.model.{AssetId, Uid}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.{Fixed, Relative}
 import com.waz.utils.{CachedStorage, SerialProcessingQueue, TrimmingLruCache}
@@ -32,7 +32,7 @@ import com.waz.utils.{CachedStorage, SerialProcessingQueue, TrimmingLruCache}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class CacheStorage(storage: Database, context: Context) extends CachedStorage[String, CacheEntryData](new EntryCache(context), storage)(CacheEntryDao, "CacheStorage") {
+class CacheStorage(storage: Database, context: Context) extends CachedStorage[AssetId, CacheEntryData](new EntryCache(context), storage)(CacheEntryDao, "CacheStorage") {
   import com.waz.cache.CacheStorage._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -51,7 +51,7 @@ class CacheStorage(storage: Database, context: Context) extends CachedStorage[St
     } (Threading.IO)
   }, "CacheFileCleanupQueue")
 
-  override def get(key: String): Future[Option[CacheEntryData]] = {
+  override def get(key: AssetId): Future[Option[CacheEntryData]] = {
     super.get(key) map {
       case Some(entry) if expired(entry) || dataMissing(entry) =>
         super.remove(entry.key)
@@ -70,7 +70,7 @@ class CacheStorage(storage: Database, context: Context) extends CachedStorage[St
     if (entry.lastUsed < time - LastUsedUpdateThrottling) updateInternal(entry.key, _.copy(lastUsed = time))(entry)
   }
 
-  override def remove(key: String): Future[Unit] = {
+  override def remove(key: AssetId): Future[Unit] = {
     get(key) flatMap {
       case Some(entry) =>
         cleanup(entry)
@@ -96,7 +96,7 @@ object CacheStorage {
 
   def entryFile(cacheDir: File, uid: Uid) = new File(cacheDir, uid.str.take(2) + File.separator + uid.str)
 
-  class EntryCache(context: Context) extends TrimmingLruCache[String, Option[CacheEntryData]](context, Fixed(1024 * 1024) min Relative(.05f)) {
-    override def sizeOf(key: String, value: Option[CacheEntryData]): Int = value.flatMap(_.data).fold(0)(_.length) + key.length + value.flatMap(_.path).fold(0)(_.getPath.length) + 56 // data plus some object overhead
+  class EntryCache(context: Context) extends TrimmingLruCache[AssetId, Option[CacheEntryData]](context, Fixed(1024 * 1024) min Relative(.05f)) {
+    override def sizeOf(key: AssetId, value: Option[CacheEntryData]): Int = value.flatMap(_.data).fold(0)(_.length) + key.str.length + value.flatMap(_.path).fold(0)(_.getPath.length) + 56 // data plus some object overhead
   }
 }

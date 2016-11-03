@@ -34,7 +34,7 @@ class MemoryImageCache(val context: Context) {
    * In memory image cache.
    */
   private val lru = new TrimmingLruCache[Key, Entry](context, CacheSize(total => math.max(5 * 1024 * 1024, (total - 30 * 1024 * 1024) / 2))) {
-    override def sizeOf(key: Key, value: Entry): Int = value.size
+    override def sizeOf(id: Key, value: Entry): Int = value.size
   }
 
   def get(id: AssetId, tag: String): Option[Bitmap] =
@@ -44,7 +44,7 @@ class MemoryImageCache(val context: Context) {
     }
 
   def add(id: AssetId, tag: String, bitmap: Bitmap): Unit = if (bitmap != null && bitmap != Images.EmptyBitmap) {
-    lru.put(Key(id, tag), new BitmapEntry(bitmap))
+    lru.put(Key(id, tag), BitmapEntry(bitmap))
   }
 
   def remove(id: AssetId, tag: String): Unit = lru.remove(Key(id, tag))

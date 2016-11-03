@@ -26,25 +26,24 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.db.DbTranslator.FileTranslator
-import com.waz.model.{AESKey, Mime, Uid}
+import com.waz.model.{AESKey, AssetId, Mime, Uid}
 import com.waz.utils.returning
 
-case class CacheEntryData(
-  key: String,
-  data: Option[Array[Byte]] = None,
-  lastUsed: Long = currentTimeMillis(),
-  timeout: Long = CacheService.DefaultExpiryTime.toMillis,
-  path: Option[File] = None,
-  encKey: Option[AESKey] = None,
-  fileName: Option[String] = None,
-  mimeType: Mime = Mime.Unknown,
-  fileId: Uid = Uid(),
-  length: Option[Long] = None)
+case class CacheEntryData(key: AssetId,
+                          data: Option[Array[Byte]] = None,
+                          lastUsed: Long = currentTimeMillis(),
+                          timeout: Long = CacheService.DefaultExpiryTime.toMillis,
+                          path: Option[File] = None,
+                          encKey: Option[AESKey] = None,
+                          fileName: Option[String] = None,
+                          mimeType: Mime = Mime.Unknown,
+                          fileId: Uid = Uid(),
+                          length: Option[Long] = None)
 
 object CacheEntryData {
 
   implicit object CacheEntryDao extends Dao[CacheEntryData, String] with CacheEntryDataUpgrades {
-    val Key = text('key, "PRIMARY KEY")(_.key)
+    val Key = uid('key, "PRIMARY KEY")(d => com.waz.model.Uid(d.key.str))
     val Uid = uid('file)(_.fileId)
     val Data = opt(blob('data))(_.data)
     val LastUsed = long('lastUsed)(_.lastUsed)
@@ -59,7 +58,7 @@ object CacheEntryData {
     override val table = Table("CacheEntry", Key, Uid, Data, LastUsed, Timeout, EncKey, Path, MimeType, Name, Length)
 
     override def apply(implicit cursor: Cursor): CacheEntryData =
-      new CacheEntryData(Key, Data, LastUsed, Timeout, Path, EncKey, Name, MimeType, Uid, Length)
+      new CacheEntryData(AssetId(Key.str), Data, LastUsed, Timeout, Path, EncKey, Name, MimeType, Uid, Length)
 
     def getByKey(key: String)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
 

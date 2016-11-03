@@ -36,7 +36,7 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
   import com.waz.threading.Threading.Implicits.Background
 
   def getAssetData(asset: AssetRequest): CancellableFuture[Option[LocalData]] =
-    CancellableFuture.lift(cache.getEntry(asset.cacheKey)) flatMap {
+    CancellableFuture.lift(cache.getEntry(asset.assetId)) flatMap {
       case Some(entry) => CancellableFuture successful Some(entry)
       case None        => downloadAssetData(asset)
     }

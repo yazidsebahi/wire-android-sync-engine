@@ -24,7 +24,7 @@ import com.waz.model.{Mime, _}
 import com.waz.znet.Request
 
 sealed trait DownloadRequest {
-  val cacheKey: String
+  val assetId: AssetId
 }
 
 object DownloadRequest {
@@ -34,9 +34,9 @@ object DownloadRequest {
     val name: Option[String]
   }
 
-  case class CachedAssetRequest(cacheKey: String, mime: Mime, name: Option[String]) extends AssetRequest
+  case class CachedAssetRequest(assetId: AssetId, mime: Mime, name: Option[String]) extends AssetRequest
 
-  case class LocalAssetRequest(cacheKey: String, uri: Uri, mime: Mime, name: Option[String]) extends AssetRequest
+  case class LocalAssetRequest(assetId: AssetId, uri: Uri, mime: Mime, name: Option[String]) extends AssetRequest
 
   sealed trait ExternalAssetRequest extends AssetRequest {
     def request: Request[Unit]
@@ -45,29 +45,20 @@ object DownloadRequest {
     override val name: Option[String] = None
   }
 
-  sealed trait WireAssetRequest extends AssetRequest {
-    val convId: RConvId
-    val key: AssetKey
-  }
+  case class WireAssetRequest(assetId: AssetId, key: AssetKey, mime: Mime, convId: Option[RConvId] = None, name: Option[String] = None) extends AssetRequest
 
-  case class ImageAssetRequest(cacheKey: String, convId: RConvId, key: AssetKey, mime: Mime) extends WireAssetRequest {
-    override val name: Option[String] = None
-  }
+  case class AssetFromInputStream(assetId: AssetId, stream: () => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 
-  case class AnyAssetRequest(cacheKey: String, assetId: AssetId, convId: RConvId, key: AssetKey, mime: Mime, name: Option[String]) extends WireAssetRequest
+  case class VideoAsset(assetId: AssetId, uri: Uri, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 
-  case class AssetFromInputStream(cacheKey: String, stream: () => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
+  case class UnencodedAudioAsset(assetId: AssetId, uri: Uri, name: Option[String]) extends DownloadRequest
 
-  case class VideoAsset(cacheKey: String, uri: Uri, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
-
-  case class UnencodedAudioAsset(cacheKey: String, uri: Uri, name: Option[String]) extends DownloadRequest
-
-  case class External(cacheKey: String, uri: Uri) extends ExternalAssetRequest {
+  case class External(assetId: AssetId, uri: Uri) extends ExternalAssetRequest {
     override def request: Request[Unit] = Request[Unit](absoluteUri = Some(uri), requiresAuthentication = false)
   }
 
   // external asset downloaded from wire proxy, path is relative to our proxy endpoint
-  case class Proxied(cacheKey: String, path: String) extends ExternalAssetRequest {
+  case class Proxied(assetId: AssetId, path: String) extends ExternalAssetRequest {
     override def request: Request[Unit] = Request.Get(path)
   }
 }

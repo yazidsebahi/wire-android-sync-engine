@@ -49,7 +49,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
   lazy val downloader = new service.downloads.DownloaderService(testContext, global.cache, global.prefs, global.network)
 
   implicit lazy val assetDownloader = new AssetDownloader(null, null) {
-    override def load(req: AssetRequest, callback: Callback) = downloads(req.cacheKey).apply(callback)
+    override def load(req: AssetRequest, callback: Callback) = downloads(req.assetId).apply(callback)
   }
 
   after {
@@ -142,7 +142,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
       var ps = Seq.empty[ProgressData]
 
-      downloader.getDownloadState(d.req.cacheKey) { progress =>
+      downloader.getDownloadState(d.req.assetId) { progress =>
         ps = ps :+ progress
       } (EventContext.Global)
 
@@ -205,7 +205,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       case _ => false
     })
 
-    downloads(req.cacheKey) = this
+    downloads(req.assetId) = this
 
     override def apply(cb: ProgressCallback): CancellableFuture[Option[CacheEntry]] = {
       assert(!started, "Download should be started only once")
