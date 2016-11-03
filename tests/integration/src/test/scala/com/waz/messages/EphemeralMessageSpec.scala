@@ -67,15 +67,15 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     conv.setEphemeralExpiration(EphemeralExpiration.FIVE_SECONDS)
   }
 
-  def withNewMessage(body: => Unit): Message = {
-    val count = messages.size
+  def withNewMessage(body: => Unit)(implicit msgs: MessagesList = messages): Message = {
+    val count = msgs.size
 
     body
 
     soon {
-      messages should have size (count + 1)
+      msgs should have size (count + 1)
     }
-    messages.getLastMessage
+    msgs.getLastMessage
   }
 
   scenario("init remotes") {
@@ -93,18 +93,18 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     }
   }
 
+  def assertEphemeralSent(msg: Message) = {
+    Set(Message.Status.SENT, Message.Status.DELIVERED) should contain (msg.getMessageStatus)
+    msg.isEphemeral shouldEqual true
+    msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
+    val time = msg.getExpirationTime
+    time should be > Instant.now
+    time should be < (Instant.now + msg.getEphemeralExpiration.duration)
+  }
+
   feature("Sending") {
 
     var messageId = MessageId()
-
-    def assertEphemeralSent(msg: Message) = {
-      Set(Message.Status.SENT, Message.Status.DELIVERED) should contain (msg.getMessageStatus)
-      msg.isEphemeral shouldEqual true
-      msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-      val time = msg.getExpirationTime
-      time should be > Instant.now
-      time should be < (Instant.now + msg.getEphemeralExpiration.duration)
-    }
 
     def sendMessage(content: MessageContent)(assert: Message => Unit)(implicit p: PatienceConfig) = {
       val msg = withNewMessage(conv.sendMessage(content))
@@ -323,6 +323,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
       soon {
         image should not be null
+        image.isEmpty shouldEqual false
         withClue(s"$image, data: ${image.data}") {
           image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe defined // full image received
         }
@@ -399,5 +400,52 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
   feature("Group messages") {
 
+    var messageId = MessageId()
+
+    scenario("Set group ephemeral") {
+      group.setEphemeralExpiration(EphemeralExpiration.FIVE_SECONDS)
+    }
+
+    def sendMessage(content: MessageContent)(assert: Message => Unit)(implicit p: PatienceConfig) = {
+      val msg = withNewMessage(group.sendMessage(content))(grpMsgs)
+      soon {
+        assertEphemeralSent(msg)
+        assert(msg)
+      }
+    }
+
+    scenario("Send text message") {
+      sendMessage(new MessageContent.Text("test msg 1")) { msg =>
+        msg.getMessageType shouldEqual Message.Type.TEXT
+        msg.getBody shouldEqual "test msg 1"
+      }
+    }
+
+    scenario("Delete message when it's read by one of receivers") {
+      val count = grpMsgs.size
+      val msg = grpMsgs.getLastMessage
+      messageId = msg.data.id
+
+      auto2 ? MarkEphemeralRead(group.data.remoteId, msg.data.id) should eventually(be(Successful))
+
+      soon {
+        msg.isDeleted shouldEqual true
+        grpMsgs.size shouldEqual (count - 1)
+      }(patience(10.seconds))
+    }
+
+    scenario("Message should not be deleted on third client") {
+      awaitUi(3.seconds)
+      val ConvMessages(ms) = (auto3 ? GetMessages(group.data.remoteId)).await()
+      ms.find(_.id == messageId) shouldBe defined
+    }
+
+    scenario("Delete message on third client when it expires") {
+      auto3 ? MarkEphemeralRead(group.data.remoteId, messageId) should eventually(be(Successful))
+      soon {
+        val ConvMessages(ms) = (auto3 ? GetMessages(group.data.remoteId)).await()
+        ms.find(_.id == messageId) shouldBe empty
+      }
+    }
   }
 }
