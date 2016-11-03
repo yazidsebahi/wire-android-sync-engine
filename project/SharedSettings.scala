@@ -14,7 +14,7 @@ import scala.util.matching.Regex
 object SharedSettings {
 
   case class EmailTestUser(email: String, password: String)
-  case class InternalBackendPasswords(edge: String, staging: String)
+  case class InternalBackendPasswords(staging: String)
 
   val avsVersion = "2.8.61"
   val audioVersion = "1.195.0"
