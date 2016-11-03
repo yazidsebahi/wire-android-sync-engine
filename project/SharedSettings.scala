@@ -123,7 +123,7 @@ object SharedSettings {
           |  def backend(backend: BackendConfig) = ("wire-staging", %s)
           |  def email = ("%s", "%s")
           |}
-        """.stripMargin.format("\"\"\"" + (internalBackend in Test).value.staging + "\"\"\"", "\"\"\"" + (internalBackend in Test).value.edge + "\"\"\"", (emailTestUser in Test).value.email, (emailTestUser in Test).value.password)
+        """.stripMargin.format("\"\"\"" + (internalBackend in Test).value.staging + "\"\"\"", (emailTestUser in Test).value.email, (emailTestUser in Test).value.password)
       IO.write(file, content)
       Seq(file)
     }
