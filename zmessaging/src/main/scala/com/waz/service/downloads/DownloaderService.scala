@@ -75,8 +75,6 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
     case None => Signal(ProgressData.Unknown)
   }
 
-  def cancel(req: DownloadRequest): Future[Unit] = cancel(req.assetId)
-
   def cancel(key: AssetId): Future[Unit] = Future {
     verbose(s"cancel($key)")
     downloads.remove(key) foreach { _.cancel() }

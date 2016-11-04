@@ -25,15 +25,12 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.LocalData
 import com.waz.content.{ConversationStorage, MessagesStorage}
-import com.waz.model.AssetStatus.UploadDone
-import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
 import com.waz.service.otr.OtrService
 import com.waz.sync.SyncResult
-import com.waz.sync.client.AssetClient.UploadResponse
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
@@ -160,12 +157,10 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
         imageGenerator.generateWireAsset(uri).map(Some(_)).recover { case _: Throwable => None }.future flatMap {
           case Some(asset @ AssetData.HasData(data)) =>
             val aes = AESKey()
-            otrService.encryptAssetData(aes, LocalData(data)) flatMap {
-              case (sha, encrypted) => assetClient.uploadAssetV3(encrypted, Mime.Default, public = true).future map {
-                case Left(err) => Left(err)
-                case Right(UploadResponse(remKey, _, token)) =>
-                  Right(Some(asset.copy(status = AssetStatus.UploadDone(AssetKey(Right(remKey), token, aes, sha)))))
-              }
+            otrSync.uploadAssetDataV3(LocalData(data), Some(aes)).map {
+              case Right(assetKey) =>
+                Right(Some(asset.copy(status = AssetStatus.UploadDone(assetKey))))
+              case Left(err) => Left(err)
             }
           case _ => Future successful Right(None)
         }
@@ -176,7 +171,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       uploadImage map {
         case Left(error) => Left(error)
         case Right(imageAsset) =>
-          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, Asset(imageAsset), meta.permanentUrl))
+          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
       }
   }
 }

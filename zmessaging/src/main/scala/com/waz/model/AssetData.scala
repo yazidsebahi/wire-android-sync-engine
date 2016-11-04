@@ -32,7 +32,7 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
                      mime:        Mime                  = Mime.Unknown,
                      sizeInBytes: Long                  = 0L, //will be for metadata only??
                      name:        Option[String]        = None,
-                     preview:     Option[AssetData]     = None,
+                     previewId:   Option[AssetId]       = None,
                      metaData:    Option[AssetMetaData] = None, //TODO can I move AssetMetaData into AssetData?
                      source:      Option[Uri]           = None,
                      proxyPath:   Option[String]        = None,
@@ -50,7 +50,7 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
        | status:        $status
        | mime:          $mime
        | sizeInBytes:   $sizeInBytes
-       | preview:       (${preview.foreach(p => s"${p.id}, ${p.status}, ${p.mime}, ${p.sizeInBytes}")})
+       | preview:       $previewId
        | other fields:  $name, $metaData, $source, $proxyPath, $convId, $data64
        |
     """.stripMargin
@@ -108,6 +108,15 @@ object AssetData {
     }
   }
 
+  object HasPreview {
+    def unapply(asset: AssetData): Option[AssetId] = {
+      asset match {
+        case AssetData(_, _, _, _, _, pId, _, _, _, _, _) => pId
+        case _ => None
+      }
+    }
+  }
+
   val MaxAllowedAssetSizeInBytes = 26214383L
   // 25MiB - 32 + 15 (first 16 bytes are AES IV, last 1 (!) to 16 bytes are padding)
   val MaxAllowedBackendAssetSizeInBytes = 26214400L
@@ -137,7 +146,7 @@ object AssetData {
     override def apply(implicit js: JSONObject): AssetData =
       AssetData(
         'id, JsonDecoder[AssetStatus]('status), Mime('mime), 'sizeInBytes, 'name,
-        decodeOptObject('preview).map(apply(_)), opt[AssetMetaData]('metaData), decodeOptString('source).map(Uri.parse),
+        'preview, opt[AssetMetaData]('metaData), decodeOptString('source).map(Uri.parse),
         'proxyPath, 'convId, 'data64
       )
   }
@@ -149,7 +158,7 @@ object AssetData {
       o.put("mime", data.mime.str)
       o.put("sizeInBytes", data.sizeInBytes)
       data.name.foreach(o.put("name", _))
-      data.preview.foreach(p => o.put("preview", apply(p)))
+      data.previewId.foreach(p => o.put("preview", p.str))
       data.metaData.foreach(md => o.put("metaData", JsonEncoder.encode(md)))
       data.source.foreach(u => o.put("source", u.toString))
       data.proxyPath.foreach(o.put("proxyPath", _))

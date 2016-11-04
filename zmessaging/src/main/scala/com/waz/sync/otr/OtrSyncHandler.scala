@@ -125,57 +125,63 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-  def postOtrImageData(conv: ConversationData, assetId: AssetId, im: ImageData, data: LocalData, exp: EphemeralExpiration, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] = {
 
-    val key = im.otrKey.getOrElse(AESKey())
-    //TODO tidy up - and remove v2 once transition period is over
-    if (prefs.sendWithV3)
-      uploadAssetDataV3(key, data).flatMap {
-        case Right((UploadResponse(remKey, _, token), sha)) =>
+//  def postOtrImageData(conv: ConversationData, assetId: AssetId, im: ImageData, data: LocalData, exp: EphemeralExpiration, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] = {
+//
+//    val key = im.otrKey.getOrElse(AESKey())
+//    //TODO tidy up - and remove v2 once transition period is over
+//    if (prefs.sendWithV3)
+//      uploadAssetDataV3(key, data).flatMap {
+//        case Right((UploadResponse(remKey, _, token), sha)) =>
+//
+//          val assetKey = AssetKey(Right(remKey), token, key, sha)
+//          def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.Asset(Proto.Asset.Original(Mime(im.mime), im.size, None, Some(AssetMetaData.Image(Dim2(im.width, im.height), Some(im.tag))), None), UploadDone(assetKey)))
+//
+//          //TODO copy remoteKey to ImageData??
+//          val updated = im.copy(otrKey = Some(key), sha256 = Some(sha), sent = true)
+//          for {
+//            post <- postOtrMessage(conv.id, conv.remoteId, proto(sha), recipients).mapRight(d => d)
+//            _ <- cache.addStream(updated.cacheKey, data.inputStream)
+//            _ <- assets.updateImageAsset(assetId, conv.remoteId, updated)
+//          } yield post
+//
+//        case Left(er) => Future.successful(Left(er))
+//      }
+//    else {
+//      def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
+//      postAssetDataV2(conv, key, proto, data, nativePush, recipients).future flatMap {
+//        case Right((AssetKey(Left(id), _, _, sha), time)) =>
+//          val updated = im.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
+//          cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
+//            assets.updateImageAsset(assetId, conv.remoteId, updated).map { data =>
+//              verbose(s"OTR image uploaded: $data")
+//              Right(time)
+//            }
+//          }
+//        case Right((k, _)) => Future successful Left(ErrorResponse.internalError(s"Unexpected asset key: $k")) // FIXME
+//        case Left(err) => Future successful Left(err)
+//      }
+//    }
+//  }
 
-          val assetKey = AssetKey(Right(remKey), token, key, sha)
-          def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.Asset(Proto.Asset.Original(Mime(im.mime), im.size, None, Some(AssetMetaData.Image(Dim2(im.width, im.height), Some(im.tag))), None), UploadDone(assetKey)))
-
-          //TODO copy remoteKey to ImageData??
-          val updated = im.copy(otrKey = Some(key), sha256 = Some(sha), sent = true)
-          for {
-            post <- postOtrMessage(conv.id, conv.remoteId, proto(sha), recipients).mapRight(d => d)
-            _ <- cache.addStream(updated.cacheKey, data.inputStream)
-            _ <- assets.updateImageAsset(assetId, conv.remoteId, updated)
-          } yield post
-
-        case Left(er) => Future.successful(Left(er))
-      }
-    else {
-      def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
-      postAssetData(conv, key, proto, data, nativePush, recipients).future flatMap {
-        case Right((AssetKey(Left(id), _, _, sha), time)) =>
-          val updated = im.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
-          cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
-            assets.updateImageAsset(assetId, conv.remoteId, updated).map { data =>
-              verbose(s"OTR image uploaded: $data")
-              Right(time)
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey]): Future[Either[ErrorResponse, AssetKey]] =
+    service.clients.getSelfClient.flatMap {
+      case Some(otrClient) =>
+        key match {
+          case Some(k) => service.encryptAssetData(k, data) flatMap {
+            case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
+              case Right(UploadResponse(rId, _, token)) => Right(AssetKey(rId, token, key))
+              case Left(err) => Left(err)
             }
           }
-        case Right((k, _)) => Future successful Left(ErrorResponse.internalError(s"Unexpected asset key: $k")) // FIXME
-        case Left(err) => Future successful Left(err)
-      }
-    }
-  }
-
-  def uploadAssetDataV3(key: AESKey, data: LocalData): Future[Either[ErrorResponse, (UploadResponse, Sha256)]] = {
-    service.clients.getSelfClient.flatMap {
-      case Some(otrClient) => service.encryptAssetData(key, data) flatMap {
-        case (sha, encrypted) => assetClient.uploadAssetV3(encrypted, Mime.Default).map {
-          case Right(resp) => Right(resp, sha)
-          case Left(err) => Left(err)
+          case _ =>
+            //TODO handle uploading non-encrypted/public assets v3 (profile pictures)
+            Future.successful(Right(AssetKey(RAssetId())))
         }
-      }
       case None => successful(Left(internalError("Client is not registered")))
     }
-  }
 
-  def postAssetData(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
+  def postAssetDataV2(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
     val promise = Promise[Either[ErrorResponse, (AssetKey, Date)]]()
 
     val future = service.clients.getSelfClient flatMap {
@@ -199,7 +205,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                 assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry), recipients) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
-                    assetKey = Some(AssetKey(Left(id), None, key, sha))
+                    assetKey = Some(AssetKey(id, None, Some(key), Some(sha)))
                     Right(msgResponse)
                   case Left(err) =>
                     Left(err)

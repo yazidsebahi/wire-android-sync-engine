@@ -91,7 +91,9 @@ class AssetClient(netClient: ZNetClient) {
     case Response(HttpStatus(Status.PreconditionFailed, _), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Failure(mismatch))
   }
 
-  def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
+  def postAssetV2(local: AssetData)
+
+  def uploadAssetV3(local: AssetData, data: LocalData, mime: Mime, public: Boolean = false, key: Option[AESKey], sha: Sha256, retention: Retention = Retention.Persistent): ErrorOrResponse[AssetData] = {
     val meta = JsonEncoder { o =>
       o.put("public", public)
       o.put("retention", retention.value)
@@ -99,9 +101,9 @@ class AssetClient(netClient: ZNetClient) {
     val content = new MultipartRequestContent(Seq(new JsonPart(meta), new AssetDataPart(data, mime.str)), "multipart/mixed")
 
     netClient.withErrorHandling("uploadAsset", Request.Post(AssetsV3Path, content)) {
-      case Response(SuccessHttpStatus(), UploadResponseExtractor(asset), _) =>
-        debug(s"uploadAsset completed with resp: $asset")
-        asset
+      case Response(SuccessHttpStatus(), UploadResponseExtractor(UploadResponse(rId, expires, token)), _) =>
+        debug(s"uploadAsset completed with resp: RAsstId($rId), expires: $expires, $token")
+        local.copy(status = AssetStatus.UploadDone(AssetKey(rId, token, key, Some(sha))))
     }
   }
 }

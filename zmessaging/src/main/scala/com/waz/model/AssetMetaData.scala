@@ -84,9 +84,12 @@ object AssetMetaData {
     def unapply(meta: HasDimensions): Option[Dim2] = Some(meta.dimensions)
   }
 
+  //TODO get loudness levels working again from old PreviewData stuff...
+  case class Loudness(levels: Vector[Float])
+
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
   case class Image(dimensions: Dim2, tag: String = "") extends AssetMetaData('image) with HasDimensions
-  case class Audio(duration: Duration) extends AssetMetaData('audio) with HasDuration
+  case class Audio(duration: Duration, loudness: Loudness) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
 
   object Video {

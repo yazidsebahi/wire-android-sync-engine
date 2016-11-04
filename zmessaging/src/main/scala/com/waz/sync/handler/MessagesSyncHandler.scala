@@ -284,7 +284,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                           Future.successful(None)
                         case Right(date) =>
                           for {
-                            _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = date.instant))
+                            _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, previewId = Some(AssetPreviewData.Image(preview)), lastUpdate = date.instant))
                             _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
                             _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
                           } yield Some(date.instant)
@@ -297,7 +297,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                 //TODO remove v2 implementation when transition is over
                 def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadInProgress))
                 CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
-                  otrSync.postAssetData(conv, key, proto, data, nativePush = false, rcs) flatMap {
+                  otrSync.postAssetDataV2(conv, key, proto, data, nativePush = false, rcs) flatMap {
                     case Left(err) =>
                       warn(s"postAssetData failed: $err for msg: $msg")
                       CancellableFuture successful None
@@ -305,7 +305,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                       val preview = img.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha))
                       CancellableFuture lift {
                         for {
-                          _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = time.instant))
+                          _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, previewId = Some(AssetPreviewData.Image(preview)), lastUpdate = time.instant))
                           _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
                           _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
                         } yield Some(time.instant)
@@ -376,7 +376,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             }
 
             CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
-              otrSync.postAssetData(conv, key, proto, data, nativePush = true, rcs) flatMap {
+              otrSync.postAssetDataV2(conv, key, proto, data, nativePush = true, rcs) flatMap {
                 case Left(err) =>
                   warn(s"postAssetData failed: $err for msg: $msg")
                   CancellableFuture successful Left(err)

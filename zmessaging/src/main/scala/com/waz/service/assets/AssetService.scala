@@ -39,7 +39,7 @@ import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, Upl
 import com.waz.model.ErrorData.AssetError
 import com.waz.model.GenericContent.Asset
 import com.waz.model._
-import com.waz.service.ErrorsService
+import com.waz.service.{ErrorsService, PreferenceService}
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads._
@@ -60,19 +60,20 @@ import scala.util.Random
 class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
     loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
     permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-    metaService: MetaDataService, previewService: PreviewService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService) {
+    metaService: MetaDataService, previewService: PreviewService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
+    prefs: PreferenceService) {
 
   import AssetService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
   assetDownloader.onDownloadDone {
-    case AnyAssetRequest(_, id, _, _, _, _) => markDownloadDone(id)
+    case WireAssetRequest(id, _, _, _, _) => markDownloadDone(id)
     case _ =>
   }
 
   assetDownloader.onDownloadFailed {
-    case (AnyAssetRequest(_, id, _, _, _, _), _) => markDownloadFailed(id)
+    case (WireAssetRequest(id, _, _, _, _), _) => markDownloadFailed(id)
     case _ =>
   }
 
@@ -88,45 +89,33 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     case AssetError(ms) => Future.traverse(ms) { messages.delete }
   }
 
-  def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AnyAssetData, api.AssetStatus)] {
-    case asset @ AnyAssetData(_, _, _, _, _, meta, _, _, _, AssetStatus(status, Some(_)), _) =>
-      cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
+  def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
+    case asset @ AssetData(_, AssetStatus(status, Some(_)), _, _, _, _, meta, _, _, _, _) =>
+      cache.cacheStorage.optSignal(id).map(_.isDefined) flatMap {
         case true  =>
           verbose(s"asset in state DOWNLOAD_DONE, meta: $meta")
           if (meta.isEmpty) metaService.getAssetMetadata(id) // asset downloaded but has no metadata, let's update
           Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
         case false =>
-          downloader.getDownloadState(asset.cacheKey).map(_.state) map {
+          downloader.getDownloadState(id).map(_.state) map {
             case State.RUNNING    => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS)
             case State.COMPLETED  => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS) // reporting asset in progress since it should be added to cache before we change the state
             case _                => (asset, status)
           }
       }
-    case asset @ AnyAssetData(_, _, _, _, _, _, _, _, _, st, _) => Signal const (asset, st.status)
-    case _ => Signal.empty[(AnyAssetData, api.AssetStatus)]
+    case asset @ AssetData(_, st, _, _, _, _, _, _, _, _, _) => Signal const (asset, st.status)
+    case _ => Signal.empty[(AssetData, api.AssetStatus)]
   }
 
-  def downloadProgress(id: AssetId) = storage.signal(id) flatMap {
-    case asset: AnyAssetData =>
-      downloader.getDownloadState(asset.cacheKey)
-    case _ =>
-      // TODO: support image asset progress
-      Signal const ProgressData.Unknown
-  }
+  def downloadProgress(id: AssetId) = downloader.getDownloadState(id)
 
-  def cancelDownload(id: AssetId) = storage.get(id) flatMap {
-    case Some(asset: AnyAssetData) => downloader.cancel(asset.loadRequest)
-    case asset =>
-      verbose(s"cancel not supported for asset: $asset")
-      // TODO: support image asset
-      successful(())
-  }
+  def cancelDownload(id: AssetId) = downloader.cancel(id)
 
   def uploadProgress(id: AssetId) = Signal const ProgressData.Indefinite // TODO
 
   def cancelUpload(id: AssetId, msg: MessageId): Future[Unit] =
     for {
-      _ <- downloader.cancel(id.str)
+      _ <- downloader.cancel(id)
       _ <- Cancellable.cancel(FetchKey(id))
       _ <- Cancellable.cancel(UploadKey(id))
       _ <- markUploadFailed(id, UploadCancelled)
@@ -146,57 +135,55 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         Future.successful(())
     }
 
-  def updateAsset(id: AssetId, convId: RConvId, asset: Asset, dataId: Option[RAssetId], time: Date): Future[AssetData] =
-    storage.updateOrCreate(id, {
-      case data @ AnyAssetData(`id`, `convId`, _, _, _, _, _, _, _, _, _) => data.updated(AnyAssetData(id, convId, asset, dataId, time.instant))
-      case data =>
-        HockeyApp.saveException(new Exception(s"Unexpected asset data in updateAsset()"), s"data: $data, asset: $id, conv: $convId")
-        data
-    }, AnyAssetData(id, convId, asset, dataId, time.instant))
+//  def updateAsset(id: AssetId, convId: RConvId, asset: Asset, dataId: Option[RAssetId], time: Date): Future[AssetData] =
+//    storage.updateOrCreate(id, {
+//      case data @ AnyAssetData(`id`, `convId`, _, _, _, _, _, _, _, _, _) => data.updated(AnyAssetData(id, convId, asset, dataId, time.instant))
+//      case data =>
+//        HockeyApp.saveException(new Exception(s"Unexpected asset data in updateAsset()"), s"data: $data, asset: $id, conv: $convId")
+//        data
+//    }, AssetData(id, convId, asset, dataId, time.instant))
 
-  def updateImageAsset(asset: ImageAssetData): Future[AssetData] = storage.insert(asset)
+//  def updateImageAsset(id: AssetId, convId: RConvId, image: ImageData): Future[AssetData] = {
+//    storage.updateOrCreate(id, {
+//      case im @ ImageAssetData(`id`, _, _) => im.updated(image).copy(convId = convId)
+//      case data =>
+//        HockeyApp.saveException(new Exception(s"Unexpected asset data in updateImageAsset()"), s"data: $data, asset: $id, conv: $convId")
+//        data
+//    }, ImageAssetData(id, convId, Seq(image)))
+//  }
 
-  def updateImageAsset(id: AssetId, convId: RConvId, image: ImageData): Future[AssetData] = {
-    storage.updateOrCreate(id, {
-      case im @ ImageAssetData(`id`, _, _) => im.updated(image).copy(convId = convId)
-      case data =>
-        HockeyApp.saveException(new Exception(s"Unexpected asset data in updateImageAsset()"), s"data: $data, asset: $id, conv: $convId")
-        data
-    }, ImageAssetData(id, convId, Seq(image)))
-  }
+//  def updateImageAssets(data: Seq[ImageAssetData]) =
+//    storage.updateOrCreateAll(data.map(d => d.id -> { (_: Option[AssetData]) => d })(collection.breakOut))
 
-  def updateImageAssets(data: Seq[ImageAssetData]) =
-    storage.updateOrCreateAll(data.map(d => d.id -> { (_: Option[AssetData]) => d })(collection.breakOut))
-
-  def addImageAsset(assetId: AssetId, image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[ImageAssetData] = {
-    image match {
-      case im: com.waz.api.impl.ImageAsset if im.data.versions.nonEmpty =>
-        val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
-        generator.generateWireAsset(assetId, im.data.versions.last, convId, isSelf).future.flatMap { data =>
-          updateImageAssets(Seq(data)) map (_ => data)
-        } andThen { case _ => ref set null }
-      case _ =>
-        failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
-    }
-  }
+//  def addImageAsset(assetId: AssetId, image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[ImageAssetData] = {
+//    image match {
+//      case im: com.waz.api.impl.ImageAsset if im.data.versions.nonEmpty =>
+//        val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
+//        generator.generateWireAsset(assetId, im.data.versions.last, convId, isSelf).future.flatMap { data =>
+//          updateImageAssets(Seq(data)) map (_ => data)
+//        } andThen { case _ => ref set null }
+//      case _ =>
+//        failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
+//    }
+//  }
 
   def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {
       case None => CancellableFuture successful None
-      case Some(a @ AnyAssetData(_, convId, mime, _, name, _,_, _, _, UploadDone(key), _)) =>
-        loader.getAssetData(AnyAssetRequest(a.cacheKey, id, convId, key, mime, name))
-      case Some(a @ AnyAssetData(_, _, mime, _, name, _, _, Some(uri), originalMime, _, _)) =>
-        loader.getAssetData(LocalAssetRequest(a.cacheKey, uri, originalMime.getOrElse(mime), name)) map { res =>
+      case Some(a @ AssetData(_, UploadDone(key), mime, _, name, _, _, _, _, convId, _)) =>
+        loader.getAssetData(WireAssetRequest(id, key, convId, mime, name))
+      case Some(a @ AssetData(_, _, mime, _, name, _, _, Some(uri), originalMime, _, _)) =>
+        loader.getAssetData(LocalAssetRequest(id, uri, mime, name)) map { res =>
           if (res.isEmpty) errors.addAssetFileNotFoundError(id)
           res
         }
-      case Some(a: AnyAssetData) =>
-        CancellableFuture lift cache.getEntry(a.cacheKey)
-      case _ => CancellableFuture successful None // TODO: should we support image assets in here?
+      case Some(a: AssetData) =>
+        CancellableFuture lift cache.getEntry(id)
+      case _ => CancellableFuture successful None
     }
 
-  def assetDataOrSource(asset: AnyAssetData): CancellableFuture[Option[Either[LocalData, Uri]]] =
-    CancellableFuture lift cache.getEntry(asset.cacheKey) flatMap {
+  def assetDataOrSource(asset: AssetData): CancellableFuture[Option[Either[LocalData, Uri]]] =
+    CancellableFuture lift cache.getEntry(asset.id) flatMap {
       case Some(entry) => CancellableFuture successful Some(Left(entry))
       case None =>
         asset.source match {
@@ -215,7 +202,16 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         mime  <- a.mimeType
         size  <- a.sizeInBytes
         name  <- a.name
-        asset <- storage.insert(AnyAssetData(id, conv, mime, size.getOrElse(0), name, uri, Instant.EPOCH, originalMimeType, metaData))
+        asset <- storage.insert(
+          AssetData(
+            id,
+            mime = mime,
+            sizeInBytes = size.getOrElse(0),
+            name = name,
+            metaData = metaData,
+            source = Some(uri),
+            convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
+          ))
       } yield {
         verbose(s"asset added: $asset")
         // metadata and preview will be needed in UI, let's start generating them already
@@ -234,8 +230,8 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       case _ =>
 
         def fetchAssetData(mime: Mime, name: Option[String]) = (a match {
-          case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(a.id.str, data, Mime.Video.MP4, if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
-          case _                             => downloader.download(AssetFromInputStream(a.id.str, () => a.openDataStream(context), mime, name))(streamLoader)
+          case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(a.id, data, Mime.Video.MP4, if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
+          case _                             => downloader.download(AssetFromInputStream(a.id, () => a.openDataStream(context), mime, name))(streamLoader)
         }).flatMap {
           case Some(entry) => CancellableFuture.successful(entry)
           case None        =>
@@ -243,17 +239,23 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
             CancellableFuture.failed(new NoSuchElementException("no cache entry after download"))
         }
 
-        def fetchAsset(m: Mime, n: Option[String], asset: AnyAssetData) = for {
+        def fetchAsset(m: Mime, n: Option[String], asset: AssetData) = for {
           entry    <- fetchAssetData(m, n)
-          (mime, name) = entry match {
+          (mimeType, nm) = entry match {
             case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(n))
             case _ => (m, n)
           }
-          meta     <- metaService.loadMetaData(mime, entry)
+          meta     <- metaService.loadMetaData(mimeType, entry)
           _        =  verbose(s"meta data for ${a.id}: $meta")
-          preview  <- previewService.loadPreview(a.id, mime, entry)
-          _        =  verbose(s"preview for ${a.id}: $preview")
-          updated  <- CancellableFuture lift storage.updateAsset(asset.id, _.copy(metaData = meta, mimeType = mime, name = name, preview = preview, sizeInBytes = entry.length))
+          prev  <- previewService.loadPreview(a.id, mimeType, entry)
+          _        =  verbose(s"preview for ${a.id}: $prev")
+          updated  <- CancellableFuture lift storage.updateAsset(asset.id,
+            _.copy(
+              metaData = meta,
+              mime = mimeType,
+              name = nm,
+              previewId = prev.map(_.id),
+              sizeInBytes = entry.length))
         } yield updated
 
         for {

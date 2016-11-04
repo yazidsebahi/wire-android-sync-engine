@@ -210,8 +210,8 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
 
   private def downloadImageData(asset: AssetData, convId: Option[RConvId]): CancellableFuture[Option[LocalData]] = {
     val req = (asset.status, asset.source, asset.proxyPath) match {
-      case (UploadDone(ak), _, _) => Some(WireAssetRequest(asset.id, ak, asset.mime, convId))
-      case (DownloadFailed(ak), _, _) => Some(WireAssetRequest(asset.id, ak, asset.mime, convId))
+      case (UploadDone(ak), _, _) => Some(WireAssetRequest(asset.id, ak, convId, asset.mime))
+      case (DownloadFailed(ak), _, _) => Some(WireAssetRequest(asset.id, ak, convId, asset.mime))
       case (_, Some(uri), _) => Some(External(asset.id, uri))
       case (_, None, Some(path)) => Some(Proxied(asset.id, path))
       case (_, None, None) => None
