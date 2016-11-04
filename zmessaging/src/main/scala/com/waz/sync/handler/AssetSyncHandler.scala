@@ -34,6 +34,7 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.znet.ZNetClient._
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.Future.{failed, successful}
@@ -46,38 +47,21 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
 
   private implicit val logTag: LogTag = logTagFor[AssetSyncHandler]
 
-  private[handler] def withImageAsset[A](id: AssetId)(f: ImageAssetData => Future[A]): Future[A] =
-    assets.storage.getImageAsset(id) flatMap {
-      case Some(asset) => f(asset)
-      case None => failed(new SyncException(s"withImageAsset($id) - no image asset data found"))
-    }
+  def postAsset(assetId: AssetId, conv: Option[ConversationData]): ErrorOr[Option[Instant]] = {
+    assets.storage.get(assetId) flatMap {
+      case Some(asset) =>
+        if (asset.assetKey.isDefined) { //TODO check this
+          warn(s"asset has already been uploaded, skipping: $asset")
+          successful(Right(None))
+        }
 
-  private[handler] def withImageAsset[A](convId: RConvId, id: AssetId)(f: ImageAssetData => Future[A]): Future[A] =
-    withImageAsset(id) { asset =>
-      if (asset.convId == convId) f(asset)
-      else assets.updateImageAsset(asset.copy(convId = convId)) flatMap { a => f(a.asInstanceOf[ImageAssetData]) }
-    }
 
-  private[handler] def withRawImageData[A](convId: RConvId, asset: ImageData)(f: LocalData => Future[A]): Future[A] =
-    imageLoader.loadRawImageData(asset, convId).future flatMap {
-      case Some(data) => f(data)
-      case None => failed(new SyncException(s"No local data found for image asset: $asset"))
+        successful(Right(None))
+      case None => failed(new SyncException(s"postAsset($assetId) - no asset data found"))
     }
+  }
 
-  private[handler] def withRawAssetData[A](convId: RConvId, asset: ImageData)(f: LocalData => Future[A]): Future[A] =
-    imageLoader.loadRawImageData(asset, convId).future flatMap {
-      case Some(data) => f(data)
-      case None => failed(new SyncException(s"No local data found for image asset: $asset"))
-    }
 
-  private[handler] def withImageAssetVersion[A](id: AssetId, tag: String)(f: (ImageAssetData, ImageData) => Future[A]): Future[A] =
-    withImageAsset(id) { asset =>
-      asset.versions.find(_.tag == tag).fold {
-        failed[A](new SyncException(s"postImageAssetVersion($id, $tag) - no image data found with given tag: $asset"))
-      } { image =>
-        f(asset, image)
-      }
-    }
 
   def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, im: ImageData, recipients: Option[Set[UserId]]): ErrorOr[Option[Date]] =
     if (im.sent && im.otrKey.isDefined) {

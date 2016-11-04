@@ -55,7 +55,7 @@ class AssetClient(netClient: ZNetClient) {
       case Left(err) => CancellableFuture successful Left(err)
     }
 
-  def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean = true): ErrorOrResponse[ImageData] = {
+  def postImageAssetData(image: AssetData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean = true): ErrorOrResponse[AssetData] = {
     val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(image, assetId, nativePush)), new AssetDataPart(data, image.mime)), "multipart/mixed")
 
     netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(convId), content)) {
@@ -138,7 +138,7 @@ object AssetClient {
   }
 
   //TODO remove asset v2 when transition period is over
-  def getAssetPath(conv: RConvId, asset: AssetKey): String = (asset.remoteId, asset.otrKey) match {
+  def getAssetPath(asset: AssetKey, conv: Option[RConvId]): String = (asset.remoteId, asset.otrKey) match {
     case (Right(key), _)          => getAssetPathV3(key) // put asset v3 as priority
     case (Left(id), AESKey.Empty) => getAssetPath(conv, id)
     case (Left(id), _)            => getOtrAssetPath(conv, id)

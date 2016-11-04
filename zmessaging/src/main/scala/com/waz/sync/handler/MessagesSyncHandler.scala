@@ -103,11 +103,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
 
   def postMessage(convId: ConvId, id: MessageId, editTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
-    def isPartiallySent(msg: MessageData) = assets.storage.getImageAsset(msg.assetId) map {_.exists(_.versions.exists(_.sent))}
 
-    def shouldGiveUpSending(msg: MessageData) = isPartiallySent(msg) map { partiallySent =>
-      !partiallySent && (network.isOfflineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time))
-    }
+    def shouldGiveUpSending(msg: MessageData) = network.isOfflineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time)
 
     storage.getMessage(id) flatMap { message =>
       message.fold(successful(None: Option[ConversationData]))(msg => convs.convById(msg.convId)) map { conv =>
@@ -129,12 +126,12 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
               verbose(s"postMessage($msg) was cancelled")
               msgContent.updateMessage(id)(_.copy(state = Message.Status.FAILED_READ)) map { _ => res }
             case res@SyncResult.Failure(error, shouldRetry) =>
-              shouldGiveUpSending(msg) flatMap { shouldGiveUp =>
-                warn(s"postMessage failed with res: $res, shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}, msg.localTime: ${msg.localTime}")
-                if (!shouldRetry || shouldGiveUp)
-                  service.messageDeliveryFailed(conv.id, msg, error.getOrElse(internalError(s"shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}"))).map(_ => SyncResult.Failure(error, shouldRetry = false))
-                else successful(res)
-              }
+              val shouldGiveUp = shouldGiveUpSending(msg)
+              warn(s"postMessage failed with res: $res, shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}, msg.localTime: ${msg.localTime}")
+              if (!shouldRetry || shouldGiveUp)
+                service.messageDeliveryFailed(conv.id, msg, error.getOrElse(internalError(s"shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}"))).map(_ => SyncResult.Failure(error, shouldRetry = false))
+              else successful(res)
+
           }
       case (Some(msg), None) =>
         HockeyApp.saveException(new Exception("postMessage failed, couldn't find conversation for msg"), s"msg: $msg")

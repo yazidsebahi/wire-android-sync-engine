@@ -27,19 +27,18 @@ import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
 
-case class AssetData(id: AssetId = AssetId(), //TODO make independent of message id - will now be cache key
-                     status: AssetStatus = AssetStatus.UploadNotStarted,
-                     mime: Mime = Mime.Unknown,
-                     sizeInBytes: Long = 0L, //will be for metadata only??
-                     name: Option[String] = None,
-                     preview: Option[AssetData] = None,
-                     metaData: Option[AssetMetaData] = None, //TODO can I move AssetMetaData into AssetData?
-                     source: Option[Uri] = None, //TODO what's this for?
-                     proxyPath: Option[String] = None, //TODO what's this for?
+case class AssetData(id:          AssetId               = AssetId(), //TODO make independent of message id - will now be cache key
+                     status:      AssetStatus           = AssetStatus.UploadNotStarted,
+                     mime:        Mime                  = Mime.Unknown,
+                     sizeInBytes: Long                  = 0L, //will be for metadata only??
+                     name:        Option[String]        = None,
+                     preview:     Option[AssetData]     = None,
+                     metaData:    Option[AssetMetaData] = None, //TODO can I move AssetMetaData into AssetData?
+                     source:      Option[Uri]           = None, //TODO what's this for?
+                     proxyPath:   Option[String]        = None, //TODO what's this for?
                      //TODO remove v2 attributes when transition period is over
-                     convId: Option[RConvId] = None,
-                     data64: Option[String] = None,
-                     sent: Option[Boolean] = None
+                     convId:      Option[RConvId]       = None,
+                     data64:      Option[String]        = None //TODO remove data from asset
                     ) {
 
   import AssetData._
@@ -52,7 +51,7 @@ case class AssetData(id: AssetId = AssetId(), //TODO make independent of message
        | mime:          $mime
        | sizeInBytes:   $sizeInBytes
        | preview:       (${preview.foreach(p => s"${p.id}, ${p.status}, ${p.mime}, ${p.sizeInBytes}")})
-       | other fields:  $name, $metaData, $source, $proxyPath, $convId, $data64, $sent
+       | other fields:  $name, $metaData, $source, $proxyPath, $convId, $data64
        |
     """.stripMargin
 
@@ -94,7 +93,7 @@ object AssetData {
   object IsImage {
     def unapply(asset: AssetData): Option[(Dim2, String)] = {
       asset match {
-        case AssetData(_, _, _, _, _, _, Some(AssetMetaData.Image(dims, tag)), _, _, _, _, _) => Some((dims, tag))
+        case AssetData(_, _, _, _, _, _, Some(AssetMetaData.Image(dims, tag)), _, _, _, _) => Some((dims, tag))
         case _ => None
       }
     }
@@ -103,7 +102,7 @@ object AssetData {
   object HasData {
     def unapply(asset: AssetData): Option[Array[Byte]] = {
       asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(data64), _) => asset.data
+        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(data64)) => asset.data
         case _ => None
       }
     }
@@ -139,7 +138,7 @@ object AssetData {
       AssetData(
         'id, JsonDecoder[AssetStatus]('status), Mime('mime), 'sizeInBytes, 'name,
         decodeOptObject('preview).map(apply(_)), opt[AssetMetaData]('metaData), decodeOptString('source).map(Uri.parse),
-        'proxyPath, 'convId, 'data64, 'sent
+        'proxyPath, 'convId, 'data64
       )
   }
 
@@ -156,7 +155,6 @@ object AssetData {
       data.proxyPath.foreach(o.put("proxyPath", _))
       data.convId.foreach(id => o.put("convId", id.str))
       data.data64.foreach(o.put("data64", _))
-      data.sent.foreach(o.put("sent", _))
     }
   }
 }
