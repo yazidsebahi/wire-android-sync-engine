@@ -18,8 +18,6 @@
 package com.waz.service.assets
 
 import java.io._
-import java.util.Date
-import java.util.concurrent.atomic.AtomicReference
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -35,25 +33,23 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content._
 import com.waz.model.AssetData.{FetchKey, UploadKey}
 import com.waz.model.AssetStatus.Order._
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
+import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ErrorData.AssetError
-import com.waz.model.GenericContent.Asset
 import com.waz.model._
-import com.waz.service.{ErrorsService, PreferenceService}
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads._
 import com.waz.service.images.ImageAssetGenerator
+import com.waz.service.{ErrorsService, PreferenceService}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
-import com.waz.{HockeyApp, PermissionsService, api}
-import org.threeten.bp.Instant
+import com.waz.{PermissionsService, api}
 
 import scala.collection.breakOut
 import scala.concurrent.Future
-import scala.concurrent.Future.{failed, successful}
+import scala.concurrent.Future.successful
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -262,7 +258,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
           m        <- a.mimeType
           size     <- a.sizeInBytes
           n        <- a.name
-          asset    =  AnyAssetData(a.id, conv, m, size.getOrElse(0), n, None, None, None, None, UploadNotStarted, Instant.EPOCH)
+          asset    = AssetData(a.id, mime = m, sizeInBytes = size.getOrElse(0), name = n, convId = if (prefs.sendWithV3) None else Some(conv)) //TODO turn off v2 toggling after transition period
           _        <- storage.insert(asset)
           updated  <- Cancellable(FetchKey(a.id))(fetchAsset(m, n, asset)).future
         } yield
@@ -270,18 +266,18 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     }
   }
 
-  def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.withDownloadFailed())
+  def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.downloadFailed())
 
-  def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.clearDownloadState())
+  def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.downloadDone())
 
   def getAssetUri(id: AssetId): CancellableFuture[Option[Uri]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
-      case Some(a: AnyAssetData) =>
+      case Some(a: AssetData) =>
         loader.getAssetData(a.loadRequest) flatMap {
           case Some(entry: CacheEntry) =>
             CancellableFuture successful Some(CacheUri(entry.data, context))
           case Some(data) =>
-            CancellableFuture lift cache.addStream(Uid().str, data.inputStream, a.mimeType, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e => Some(CacheUri(e.data, context)) }
+            CancellableFuture lift cache.addStream(a.id, data.inputStream, a.mime, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e => Some(CacheUri(e.data, context)) }
           case None =>
             CancellableFuture successful None
         }
@@ -290,15 +286,15 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         CancellableFuture successful None
     }
 
-  def saveAssetToDownloads(id: AssetId): Future[Option[File]] = storage.getAsset(id).flatMapOpt(saveAssetToDownloads)
+  def saveAssetToDownloads(id: AssetId): Future[Option[File]] = storage.get(id).flatMapOpt(saveAssetToDownloads)
 
-  def saveAssetToDownloads(asset: AnyAssetData): Future[Option[File]] = {
+  def saveAssetToDownloads(asset: AssetData): Future[Option[File]] = {
 
     def nextFileName(baseName: String, retry: Int) =
       if (retry == 0) baseName else s"${retry}_$baseName"
 
     def getTargetFile(dir: File): Option[File] = {
-      val baseName = asset.name.getOrElse("wire_downloaded_file." + asset.mimeType.extension) // XXX: should get default file name form resources
+      val baseName = asset.name.getOrElse("wire_downloaded_file." + asset.mime.extension) // XXX: should get default file name form resources
       // prepend a number to the name to get unique file name,
       // will try sequential numbers from 0 - 10 first, and then fallback to random ones
       // will give up after 100 tries

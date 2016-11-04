@@ -23,6 +23,7 @@ import android.util.Base64
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetStatus.{DownloadFailed, UploadDone}
+import com.waz.service.downloads.DownloadRequest.{CachedAssetRequest, WireAssetRequest}
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
@@ -65,6 +66,16 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
     case UploadDone(k) => Some(k)
     case DownloadFailed(k) => Some(k)
     case _ => None
+  }
+
+  def downloadFailed() = copy(status = status.key.fold(status)(DownloadFailed))
+
+  //When download is finished, return to upload complete
+  def downloadDone() = copy(status = status.key.fold(status)(UploadDone))
+
+  def loadRequest = status match {
+    case AssetStatus(_, Some(key)) => WireAssetRequest(id, key, convId, mime, name)
+    case _ => CachedAssetRequest(id, mime, name)
   }
 
   val isImage = this match {
