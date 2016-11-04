@@ -22,6 +22,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.AssetsStorage
+import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.AssetMetaData.Empty
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, Threading}
@@ -60,7 +61,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
     def load(entry: CacheEntry) = {
       mime match {
         case Mime.Video() => AssetMetaData.Video(entry.cacheFile).map { _.fold({msg => error(msg); None}, Some(_)) }
-        case Mime.Audio() => AssetMetaData.Audio(entry.cacheFile)
+        case Mime.Audio() => AssetMetaData.Audio(context, CacheUri(entry.data, context))
         case Mime.Image() => Future { AssetMetaData.Image(entry.cacheFile) } (Threading.IO)
         case _ => Future successful Some(Empty)
       }

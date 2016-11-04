@@ -26,7 +26,8 @@ import android.media.{MediaCodec, MediaExtractor, MediaFormat}
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.bitmap.video.{MediaCodecHelper, TrackDecoder}
-import com.waz.model.{AssetPreviewData, Mime}
+import com.waz.model.AssetMetaData.Loudness
+import com.waz.model.Mime
 import com.waz.threading.CancellableFuture.{CancelException, DefaultCancelException}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, returning}
@@ -40,11 +41,11 @@ case class AudioLevels(context: Context) {
   import AudioLevels._
   import Threading.Implicits.Background
 
-  def createAudioOverview(content: Uri, mime: Mime, numBars: Int = 100): CancellableFuture[Option[AssetPreviewData.Loudness]] =
+  def createAudioOverview(content: Uri, mime: Mime, numBars: Int = 100): CancellableFuture[Option[Loudness]] =
     if (mime == Mime.Audio.PCM) createPCMAudioOverview(content, numBars)
     else createOtherAudioOverview(content, numBars)
 
-  private def createPCMAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[AssetPreviewData.Loudness]] =
+  private def createPCMAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[Loudness]] =
     ContentURIs.queryContentUriMetaData(context, content).map(_.size).lift.flatMap {
       case None =>
         warn(s"cannot generate preview: no length available for $content")
@@ -67,7 +68,7 @@ case class AudioLevels(context: Context) {
             loudnessOverview(numBars, rmsOfBuffers) // select RMS peaks and convert to an intuitive scale
           }
 
-          overview.acquire(levels => Some(AssetPreviewData.Loudness(levels)))
+          overview.acquire(levels => Some(Loudness(levels)))
         }(Threading.BlockingIO).recover {
           case c: CancelException => throw c
           case NonFatal(cause) =>
@@ -76,14 +77,14 @@ case class AudioLevels(context: Context) {
         })(_.onCancelled(cancelRequested.set(true)))
     }
 
-  private def createOtherAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[AssetPreviewData.Loudness]] = {
+  private def createOtherAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[Loudness]] = {
     val cancelRequested = new AtomicBoolean
     returning(CancellableFuture {
       val overview = for {
         extractor <- Managed(new MediaExtractor)
         trackInfo  = extractAudioTrackInfo(extractor, content)
         helper    <- Managed(new MediaCodecHelper(audioDecoder(trackInfo)))
-        _          = helper.codec.start
+        _          = helper.codec.start()
         decoder    = new TrackDecoder(extractor, helper)
       } yield {
         val estimatedBucketSize = round((trackInfo.samples / numBars.toDouble) * trackInfo.channels.toDouble)
@@ -97,7 +98,7 @@ case class AudioLevels(context: Context) {
         loudnessOverview(numBars, rmsOfBuffers) // select RMS peaks and convert to an intuitive scale
       }
 
-      overview.acquire(levels => Some(AssetPreviewData.Loudness(levels)))
+      overview.acquire(levels => Some(Loudness(levels)))
     }(Threading.BlockingIO).recover {
       case c: CancelException => throw c
       case NonFatal(cause) =>

@@ -25,7 +25,7 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.service.assets.MetaDataRetriever
+import com.waz.service.assets.{AudioLevels, MetaDataRetriever}
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp
@@ -45,8 +45,9 @@ object AssetMetaData {
         case Video(dimensions, duration) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
           o.put("duration", duration.toMillis)
-        case Audio(duration) =>
+        case Audio(duration, loudness) =>
           o.put("duration", duration.toMillis)
+          loudness.foreach(l => o.put("levels", JsonEncoder.arrNum(l.levels)))
         case Image(dimensions, tag) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
           o.put("tag", tag)
@@ -62,7 +63,8 @@ object AssetMetaData {
       case 'video =>
         Video(opt[Dim2]('dimensions).getOrElse(Dim2(0, 0)), Duration.ofMillis('duration))
       case 'audio =>
-        Audio(Duration.ofMillis('duration))
+        Audio(Duration.ofMillis('duration),
+          Try(JsonDecoder.array[Float]('levels)((arr, i) => arr.getDouble(i).toFloat)).toOption.map(Loudness))
       case 'image =>
         Image(JsonDecoder[Dim2]('dimensions), decodeString('tag))
       case other =>
@@ -84,7 +86,6 @@ object AssetMetaData {
     def unapply(meta: HasDimensions): Option[Dim2] = Some(meta.dimensions)
   }
 
-  //TODO get loudness levels working again from old PreviewData stuff...
   case class Loudness(levels: Vector[Float])
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
@@ -95,9 +96,9 @@ object AssetMetaData {
   object Video {
     private implicit val Tag: LogTag = "AssetMetaData.Video"
 
-    def apply(file: File): Future[Either[String, Video]] = MetaDataRetriever(file)(apply(_))
+    def apply(file: File): Future[Either[String, Video]] = MetaDataRetriever(file)(apply)
 
-    def apply(context: Context, uri: Uri): Future[Either[String, Video]] = MetaDataRetriever(context, uri)(apply(_))
+    def apply(context: Context, uri: Uri): Future[Either[String, Video]] = MetaDataRetriever(context, uri)(apply)
 
     def apply(retriever: MediaMetadataRetriever): Either[String, Video] = {
       def retrieve[A](k: Int, tag: String, convert: String => A) =
@@ -120,14 +121,14 @@ object AssetMetaData {
   object Audio {
     private implicit val Tag: LogTag = "AssetMetaData.Audio"
 
-    def apply(file: File): Future[Option[Audio]] = MetaDataRetriever(file)(apply(_))
+    def apply(context: Context, uri: Uri): Future[Option[Audio]] = MetaDataRetriever(context, uri)(apply(context, uri, _))
 
-    def apply(context: Context, uri: Uri): Future[Option[Audio]] = MetaDataRetriever(context, uri)(apply(_))
-
-    def apply(retriever: MediaMetadataRetriever): Option[Audio] = for {
+    def apply(context: Context, uri: Uri, retriever: MediaMetadataRetriever): Option[Audio] = for {
       duration <- Option(retriever.extractMetadata(METADATA_KEY_DURATION))
       millis <- LoggedTry(bp.Duration.ofMillis(duration.toLong)).toOption
-    } yield Audio(millis)
+      mime <- Option(retriever.extractMetadata(METADATA_KEY_MIMETYPE))
+      loudness <- AudioLevels(context).createAudioOverview(uri, Mime(mime))
+    } yield Audio(millis, loudness)
   }
 
   object Image {
