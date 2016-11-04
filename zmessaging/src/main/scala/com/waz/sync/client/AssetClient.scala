@@ -24,8 +24,9 @@ import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
-import com.waz.model.{Mime, _}
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.otr.ClientId
+import com.waz.model.{Mime, _}
 import com.waz.sync.client.OtrClient._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder.{apply => _, _}
@@ -65,7 +66,7 @@ class AssetClient(netClient: ZNetClient) {
             netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(cId), content)) {
               case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
                 debug(s"postImageAssetData completed with resp: $rId")
-                a.copy
+                asset.copy(status = UploadDone(AssetKey(rId)))
             }
           case None => CancellableFuture.failed(new Exception("Not a v2 asset"))
         }
@@ -109,7 +110,7 @@ object AssetClient {
   private implicit val logTag: LogTag = logTagFor[AssetClient]
   implicit val DefaultExpiryTime: Expiration = 1.hour
 
-  val AssetsV3Path                = "/assets/v3"
+  val AssetsV3Path = "/assets/v3"
 
   sealed abstract class Retention(val value: String)
   object Retention {
@@ -118,7 +119,7 @@ object AssetClient {
     case object Volatile extends Retention("volatile")
   }
 
-  case class UploadResponse(key: RAssetId, expires: Option[Instant], token: Option[AssetToken])
+  case class UploadResponse(rId: RAssetId, expires: Option[Instant], token: Option[AssetToken])
 
   case object UploadResponse {
 
@@ -147,11 +148,10 @@ object AssetClient {
   }
 
   //TODO remove asset v2 when transition period is over
-  def getAssetPath(rId: RAssetId, otrKey: Option[AESKey], conv: Option[RConvId]): Option[String] = (conv, otrKey) match {
-    case (None, _)          => Some(s"/assets/v3/${rId.str}")
-    case (Some(c), None)    => Some(s"/conversations/${c.str}/assets/${rId.str}")
-    case (Some(c), Some(_)) => Some(s"/conversations/${c.str}/otr/assets/${rId.str}")
-    case _ => None
+  def getAssetPath(rId: RAssetId, otrKey: Option[AESKey], conv: Option[RConvId]): String = (conv, otrKey) match {
+    case (None, _)          => s"/assets/v3/${rId.str}"
+    case (Some(c), None)    => s"/conversations/${c.str}/assets/${rId.str}"
+    case (Some(c), Some(_)) => s"/conversations/${c.str}/otr/assets/${rId.str}"
   }
 
   def imageMetadata(asset: AssetData, nativePush: Boolean) = JsonEncoder { o =>

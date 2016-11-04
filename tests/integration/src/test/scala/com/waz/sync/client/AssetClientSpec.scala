@@ -151,13 +151,13 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
     scenario("Download the asset") {
       asset should not be null
 
-      val res = zmessaging.assetLoader.getAssetData(new ImageAssetRequest(asset.key.str, RConvId(), AssetKey(Right(asset.key), asset.token, AESKey.Empty, Sha256.Empty), Mime.Image.PNG)).future.futureValue
+      val res = zmessaging.assetLoader.getAssetData(new ImageAssetRequest(asset.rId.str, RConvId(), AssetKey(Right(asset.rId), asset.token, AESKey.Empty, Sha256.Empty), Mime.Image.PNG)).future.futureValue
       res shouldBe defined
       IoUtils.toByteArray(res.get.inputStream).toSeq shouldEqual image.toSeq
     }
 
     scenario("Load asset using ProtoBitmapSignal") {
-      val proto = GenericContent.Asset(Original(Mime.Image.PNG, image.length, None, Some(AssetMetaData.Image(Dim2(480, 492), None))), UploadDone(AssetKey(Right(asset.key), asset.token, AESKey.Empty, Sha256.Empty)))
+      val proto = GenericContent.Asset(Original(Mime.Image.PNG, image.length, None, Some(AssetMetaData.Image(Dim2(480, 492), None))), UploadDone(AssetKey(Right(asset.rId), asset.token, AESKey.Empty, Sha256.Empty)))
 
       val signal = BitmapSignal(proto, BitmapRequest.Regular(600), zmessaging.imageLoader, zmessaging.imageCache)
       var results = Seq.empty[BitmapResult]

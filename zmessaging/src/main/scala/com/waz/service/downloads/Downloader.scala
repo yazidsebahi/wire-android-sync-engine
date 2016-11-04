@@ -64,10 +64,10 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
 
   private def httpRequest(asset: AssetRequest, callback: Callback): Option[Request[Unit]] = asset match {
     case wa: WireAssetRequest =>
-      val path = AssetClient.getAssetPath(wa.key, wa.convId)
+      val path = AssetClient.getAssetPath(wa.key.remoteId, wa.key.otrKey, wa.convId)
       val headers = wa.key.token.fold(Map.empty[String, String])(t => Map("Asset-Token" -> t.str))
-      val decoder = new AssetBodyDecoder(cache, Option(wa.key.otrKey).filter(_ != AESKey.Empty), Option(wa.key.sha256).filter(_ != Sha256.Empty))
-      Some(new Request[Unit](Request.GetMethod, path, downloadCallback = Some(callback), decoder = Some(decoder), headers = headers))
+      val decoder = new AssetBodyDecoder(cache, wa.key.otrKey.filter(_ != AESKey.Empty), wa.key.sha256.filter(_ != Sha256.Empty))
+      Some(new Request[Unit](Request.GetMethod, Some(path), downloadCallback = Some(callback), decoder = Some(decoder), headers = headers))
     case req: ExternalAssetRequest =>
       Some(req.request.copy(downloadCallback = Some(callback), decoder = Some(new AssetBodyDecoder(cache))))
     case LocalAssetRequest(_, _, _, _) => None
@@ -126,7 +126,7 @@ class InputStreamAssetLoader(cache: => CacheService) extends Downloader[AssetFro
 object InputStreamAssetLoader {
   import Threading.Implicits.Background
 
-  def addStreamToCache(cache: CacheService, key: String, stream: => InputStream, mime: Mime, name: Option[String]) = {
+  def addStreamToCache(cache: CacheService, key: AssetId, stream: => InputStream, mime: Mime, name: Option[String]) = {
     val promise = Promise[Option[CacheEntry]]
     val cancelled = new AtomicBoolean(false)
 

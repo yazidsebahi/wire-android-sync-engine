@@ -34,10 +34,10 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
                      name:        Option[String]        = None,
                      preview:     Option[AssetData]     = None,
                      metaData:    Option[AssetMetaData] = None, //TODO can I move AssetMetaData into AssetData?
-                     source:      Option[Uri]           = None, //TODO what's this for?
-                     proxyPath:   Option[String]        = None, //TODO what's this for?
+                     source:      Option[Uri]           = None,
+                     proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
-                     convId:      Option[RConvId]       = None,
+                     convId:      Option[RConvId]       = None, //TODO remove
                      data64:      Option[String]        = None //TODO remove data from asset
                     ) {
 

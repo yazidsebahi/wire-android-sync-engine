@@ -166,7 +166,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   def uploadAssetDataV3(key: AESKey, data: LocalData): Future[Either[ErrorResponse, (UploadResponse, Sha256)]] = {
     service.clients.getSelfClient.flatMap {
       case Some(otrClient) => service.encryptAssetData(key, data) flatMap {
-        case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
+        case (sha, encrypted) => assetClient.uploadAssetV3(encrypted, Mime.Default).map {
           case Right(resp) => Right(resp, sha)
           case Left(err) => Left(err)
         }
