@@ -17,12 +17,10 @@
  */
 package com.waz.sync.handler
 
-import java.util.Date
-
 import com.waz.ZLog._
-import com.waz.api.EphemeralExpiration
-import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
+import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.GenericContent.Asset
 import com.waz.model._
 import com.waz.service.PreferenceService
 import com.waz.service.assets.AssetService
@@ -31,10 +29,8 @@ import com.waz.service.images.ImageLoader
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient
 import com.waz.sync.otr.OtrSyncHandler
-import com.waz.threading.Threading
-import com.waz.utils._
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient._
-import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.Future.{failed, successful}
@@ -47,63 +43,65 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
 
   private implicit val logTag: LogTag = logTagFor[AssetSyncHandler]
 
-  def postAsset(assetId: AssetId, conv: Option[ConversationData]): ErrorOr[Option[Instant]] = {
+  def postAsset(assetId: AssetId, nativePush: Boolean = false, recipients: Option[Set[UserId]] = None): ErrorOr[Option[AssetData]] = {
     assets.storage.get(assetId) flatMap {
       case Some(asset) =>
         if (asset.assetKey.isDefined) { //TODO check this
           warn(s"asset has already been uploaded, skipping: $asset")
           successful(Right(None))
         }
-
-
-        successful(Right(None))
+        cache.getEntry(assetId).flatMap {
+          case Some(cacheData) =>
+            val key = AESKey()
+            asset.convId match {
+              case Some(id) if prefs.sendWithV3 => convs.convByRemoteId(id) flatMap {
+                //TODO remove v2 sending after testing
+                case Some(convData) =>
+                  def proto(sha: Sha256): GenericMessage = GenericMessage(Uid(), Asset(asset)) // = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
+                  otrSync.postAssetDataV2(convData, key, proto, cacheData, nativePush, recipients) map {
+                    case Right((ak, date)) => Right(Some(asset.copy(status = UploadDone(ak))))
+                    case Left(err) => Left(err)
+                  }
+              }
+              case _ =>
+                otrSync.uploadAssetDataV3(cacheData, Some(key)) map {
+                  case Right(ak) => Right(Some(asset.copy(status = UploadDone(ak))))
+                  case Left(err) => Left(err)
+                }
+            }
+          case None =>
+            error(s"No cache entry found for asset: $asset")
+            CancellableFuture successful Right(None)
+        }
       case None => failed(new SyncException(s"postAsset($assetId) - no asset data found"))
     }
   }
 
-
-
-  def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, im: ImageData, recipients: Option[Set[UserId]]): ErrorOr[Option[Date]] =
-    if (im.sent && im.otrKey.isDefined) {
-      warn(s"image asset has already been sent, skipping: $im")
-      successful(Right(None))
-    } else {
-      convs.convByRemoteId(convId) flatMap {
-        case Some(conv) => withRawImageData(convId, im) { data =>
-          otrSync.postOtrImageData(conv, assetId, im, data, exp, im.tag == ImageData.Tag.Medium, recipients = recipients).mapRight(Some(_))
-        }
-        case None => successful(Left(internalError(s"postOtrImageData($convId, $im) - no conversation found with given id")))
-      }
-    }
-
   def postSelfImageAsset(convId: RConvId, id: AssetId): Future[SyncResult] =
-    withImageAsset(convId, id) { asset =>
-      Future.traverse(asset.versions) { im =>
-        if (im.sent) {
-          warn(s"image asset has already been sent, skipping: $im")
-          successful(SyncResult.Success)
-        } else withRawImageData(convId, im)(data => postImageData(convId, asset.id, im, data, im.tag == ImageData.Tag.Medium))
-      } map { results =>
-        results.collectFirst { case error: SyncResult.Failure => error }.getOrElse(SyncResult.Success)
-      }
+    (for {
+      asset <- assets.storage.get(id)
+      data <- cache.getEntry(id)
+    } yield (asset, data)) flatMap {
+      case (Some(a), Some(d)) => postImageData(convId, a, d, nativePush = false)
+      case _ => Future.successful(SyncResult.Failure(None))
     }
 
   // plain text asset upload should only be used for self image
-  private[handler] def postImageData(convId: RConvId, assetId: AssetId, asset: ImageData, data: LocalData, nativePush: Boolean = true): Future[SyncResult] = {
-    verbose(s"postImageData($convId, $assetId, $asset, $data)")
+  private[handler] def postImageData(convId: RConvId, asset: AssetData, data: LocalData, nativePush: Boolean = true): Future[SyncResult] = {
+    verbose(s"postImageData($convId, $asset, $data)")
 
     // save just posted data under new cacheKey, so we don't need to download it when image is accessed
-    def updateImageCache(sent: ImageData) =
+    def updateImageCache(sent: AssetData) =
     if (sent.data64.isDefined) successful(())
-    else cache.addStream(sent.cacheKey, data.inputStream)
+    else cache.addStream(sent.id, data.inputStream)
 
-    client.postImageAssetData(asset, assetId, convId, data, nativePush).future flatMap {
-      case Right(image) =>
-        verbose(s"postImageAssetData returned event: $image with local data: $data")
-        assert(image.sent, "sent flag should be set to true by event parser")
+    client.postImageAssetData(asset, data, nativePush).future flatMap {
+      case Right(updated) =>
+        verbose(s"postImageAssetData returned event: $updated with local data: $data")
+        assert(updated.assetKey.isDefined, "sent flag should be set to true by event parser")
         for {
-          _ <- updateImageCache(image)
-          _ <- assets.updateImageAsset(assetId, convId, image)
+          _ <- updateImageCache(updated)
+          _ <- assets.storage.updateAsset(updated.id, _ => updated)
         } yield SyncResult.Success
       case Left(error) =>
         successful(SyncResult(error))
