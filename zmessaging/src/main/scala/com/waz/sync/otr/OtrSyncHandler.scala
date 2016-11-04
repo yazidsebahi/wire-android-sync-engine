@@ -155,12 +155,12 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
               case Some(imId) if !inline =>
                 // asset data has already been uploaded on previous try and we don't need to send it inline, will only resend metadata
                 // see https://github.com/wearezeta/backend-api-docs/wiki/API-Conversations-Assets#upload-otr-retry
-                assetClient.postOtrAssetMetadata(imId, conv.remoteId, meta, ignoreMissing(retry)).map {
+                assetClient.postOtrAssetMetadata(imId, conv.remoteId, meta, ignoreMissing(retry), recipients).map {
                   case Right(OtrAssetResponse(id, msgResp)) => Right(msgResp)
                   case Left(error) => Left(error)
                 }
               case _ =>
-                assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry)) map {
+                assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry), recipients) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
                     assetKey = Some(AssetKey(Left(id), None, key, sha))

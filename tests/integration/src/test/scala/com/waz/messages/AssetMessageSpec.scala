@@ -670,12 +670,12 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       new ApiZMessaging(clientId, user) {
 
         override lazy val assetClient = new AssetClient(zNetClient) {
-          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean): ErrorOrResponse[OtrAssetResponse] = {
+          override def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] = {
             postStarted = true
             postCancelled = false
             beforePostAsset.foreach(_ ())
             beforePostAsset = None
-            returning(super.postOtrAsset(convId, metadata, data, ignoreMissing))(_.onCancelled(postCancelled = true)(Threading.Background))
+            returning(super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients))(_.onCancelled(postCancelled = true)(Threading.Background))
           }
         }
 
