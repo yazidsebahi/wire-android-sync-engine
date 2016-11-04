@@ -89,7 +89,7 @@ object AssetMetaData {
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
   case class Image(dimensions: Dim2, tag: String = "") extends AssetMetaData('image) with HasDimensions
-  case class Audio(duration: Duration, loudness: Loudness) extends AssetMetaData('audio) with HasDuration
+  case class Audio(duration: Duration, loudness: Option[Loudness] = None) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
 
   object Video {

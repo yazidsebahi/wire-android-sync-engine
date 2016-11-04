@@ -33,26 +33,25 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[MetaDataService]
 
-  def getAssetWithMetadata(id: AssetId): CancellableFuture[Option[AnyAssetData]] =
-    getAssetMetadata(id) flatMap { _ => CancellableFuture lift storage.getAsset(id) }
+  def getAssetWithMetadata(id: AssetId): CancellableFuture[Option[AssetData]] =
+    getAssetMetadata(id) flatMap { _ => CancellableFuture lift storage.get(id) }
 
   def getAssetMetadata(id: AssetId): CancellableFuture[Option[AssetMetaData]] =
     CancellableFuture lift storage.get(id) flatMap {
-      case Some(AnyAssetData(_, _, _, _, _, Some(metaData), _, _, _, _, _)) => CancellableFuture successful Some(metaData)
-      case Some(a: AnyAssetData) =>
+      case Some(AssetData.HasMetaData(metaData)) => CancellableFuture successful Some(metaData)
+      case Some(a: AssetData) =>
         for {
           meta <- metaData(a)
-          updated <- CancellableFuture lift storage.updateAsset(id, { asset: AnyAssetData => asset.copy(metaData = asset.metaData.orElse(meta)) })
-        } yield
-          updated.flatMap(_.metaData).orElse(meta)
+          updated <- CancellableFuture lift storage.updateAsset(id, _.copy(metaData = meta))
+        } yield updated.flatMap(_.metaData).orElse(meta)
       case _ =>
         CancellableFuture successful None
     }
 
-  private def metaData(asset: AnyAssetData): CancellableFuture[Option[AssetMetaData]] =
+  private def metaData(asset: AssetData): CancellableFuture[Option[AssetMetaData]] =
     assets.assetDataOrSource(asset) flatMap {
-      case Some(Left(entry)) => loadMetaData(asset.mimeType, entry)
-      case Some(Right(uri)) => loadMetaData(asset.mimeType, uri)
+      case Some(Left(entry)) => loadMetaData(asset.mime, entry)
+      case Some(Right(uri)) => loadMetaData(asset.mime, uri)
       case None => CancellableFuture successful None
     }
 
@@ -72,7 +71,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
       case _ =>
         warn("loading metadata from stream (encrypted cache, or generic local data) this is slow, please avoid that")
         for {
-          entry <- CancellableFuture lift cache.addStream(Uid().str, data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
+          entry <- CancellableFuture lift cache.addStream(AssetId(), data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
           res <- CancellableFuture lift load(entry)
         } yield {
           entry.delete()

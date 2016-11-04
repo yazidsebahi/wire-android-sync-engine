@@ -108,6 +108,15 @@ object AssetData {
     }
   }
 
+  object HasMetaData {
+    def unapply(asset: AssetData): Option[AssetMetaData] = {
+      asset match {
+        case AssetData(_, _, _, _, _, _, metaData, _, _, _, _) => metaData
+        case _ => None
+      }
+    }
+  }
+
   object HasPreview {
     def unapply(asset: AssetData): Option[AssetId] = {
       asset match {
