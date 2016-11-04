@@ -22,16 +22,14 @@ import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
 import com.waz.api.EphemeralExpiration
-import com.waz.model.AssetMetaData.HasDimensions
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
+import com.waz.model.AssetMetaData.Loudness
+import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
 import com.waz.model.nano.Messages
-import com.waz.model.nano.Messages.Asset.ImageMetaData
 import com.waz.model.nano.Messages.MessageEdit
 import com.waz.utils._
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
-import scala.PartialFunction.condOpt
 import scala.collection.breakOut
 
 trait GenericContent[-T] {
@@ -48,254 +46,144 @@ object GenericContent {
 
   implicit object Asset extends GenericContent[Asset] {
 
+    type Original = Messages.Asset.Original
     object Original {
 
-      def apply(mime: Mime, size: Long, name: Option[String], meta: Option[AssetMetaData] = None, audioPreview: Option[AssetPreviewData.Loudness] = None): Messages.Asset.Original =
-        returning(new Messages.Asset.Original()) { orig =>
-          orig.mimeType = mime.str
-          orig.size = size
-          meta match {
-            case Some(video: AssetMetaData.Video) => orig.setVideo(VideoMetaData(video))
-            case Some(image: AssetMetaData.Image) => orig.setImage(ImageMetaData(image))
-            case Some(audio: AssetMetaData.Audio) => orig.setAudio(AudioMetaData(Some(audio), audioPreview))
+      def apply(asset: AssetData): Original =
+        returning(new Messages.Asset.Original) { o =>
+          o.mimeType = asset.mime.str
+          o.size = asset.size
+          asset.name foreach {o.name = _}
+          asset.metaData match {
+            case Some(video: AssetMetaData.Video) => o.setVideo(VideoMetaData(video))
+            case Some(image: AssetMetaData.Image) => o.setImage(ImageMetaData(image))
+            case Some(audio: AssetMetaData.Audio) => o.setAudio(AudioMetaData(audio))
             case Some(AssetMetaData.Empty) =>
-            case None => orig.setAudio(AudioMetaData(None, audioPreview))
           }
-          name foreach {orig.name = _}
+          //TODO giphy source and caption
         }
 
-      def apply(asset: AnyAssetData): Messages.Asset.Original = apply(asset.mimeType, asset.sizeInBytes, asset.name,
-        asset.metaData, asset.preview.collect { case l: AssetPreviewData.Loudness => l })
-
-      def unapply(proto: Messages.Asset.Original): Option[(Mime, Long, Option[String], Option[AssetMetaData], Option[AssetPreviewData.Loudness])] = {
-        val name = Option(proto.name).filter(_.nonEmpty)
-        val mime = Option(proto.mimeType).filter(_.nonEmpty).fold(name.map(Mime.fromFileName).getOrElse(Mime.Unknown))(Mime(_))
-        Some((mime, proto.size, name, MetaData(proto), AudioMetaData.loudness(proto)))
+      def unapply(proto: Original): Option[(Mime, Long, Option[String], Option[AssetMetaData])] = Option(proto) map { orig =>
+        (
+          Option(orig.mimeType).filter(_.nonEmpty).map(Mime(_)).getOrElse(Mime.Unknown),
+          orig.size,
+          Option(orig.name).filter(_.nonEmpty),
+          orig.getMetaDataCase match {
+            case Messages.Asset.Original.IMAGE_FIELD_NUMBER => ImageMetaData.unapply(orig.getImage)
+            case Messages.Asset.Original.VIDEO_FIELD_NUMBER => VideoMetaData.unapply(orig.getVideo)
+            case Messages.Asset.Original.AUDIO_FIELD_NUMBER => AudioMetaData.unapply(orig.getAudio)
+            case _ => None
+          }
+          )
       }
     }
 
-    object Status {
-
-      import Messages.Asset._
-
-      def apply(a: Asset, id: Option[RAssetId]): AssetStatus =
-        (a.getStatusCase, a.getUploaded, a.getNotUploaded, id) match {
-          case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(_, token, aes, sha), _, Some(id)) => UploadDone(AssetKey(Left(id), token, aes, sha))
-          case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(Some(key), token, aes, sha), _, None) => UploadDone(AssetKey(Right(key), token, aes, sha))
-          case (NOT_UPLOADED_FIELD_NUMBER, _, CANCELLED, _) => UploadCancelled
-          case (NOT_UPLOADED_FIELD_NUMBER, _, FAILED, _) => UploadFailed
-          case _ => UploadInProgress
-        }
-    }
-
+    type ImageMetaData = Messages.Asset.ImageMetaData
     object ImageMetaData {
-      def apply(tag: Option[String], width: Int, height: Int) = returning(new Messages.Asset.ImageMetaData) { p =>
-        tag.foreach(p.tag = _)
-        p.width = width
-        p.height = height
+      def apply(md: AssetMetaData.Image): ImageMetaData = returning(new Messages.Asset.ImageMetaData) { p =>
+        p.tag = md.tag
+        p.width = md.dimensions.width
+        p.height = md.dimensions.height
       }
 
-      def apply(image: AssetMetaData.Image) = returning(new Messages.Asset.ImageMetaData) { p =>
-        image.tag foreach {p.tag = _}
-        p.width = image.dimensions.width
-        p.height = image.dimensions.height
-      }
-
-      def apply(p: Messages.Asset.Preview): Option[AssetMetaData.Image] = p.getMetaDataCase match {
-        case Messages.Asset.Preview.IMAGE_FIELD_NUMBER => unapply(p.getImage)
-        case _ => None
-      }
-
-      def apply(p: Messages.Asset.Original): Option[AssetMetaData.Image] = p.getMetaDataCase match {
-        case Messages.Asset.Original.IMAGE_FIELD_NUMBER => unapply(p.getImage)
-        case _ => None
-      }
-
-      def unapply(proto: Messages.Asset.ImageMetaData): Option[AssetMetaData.Image] =
-        Some(AssetMetaData.Image(Dim2(proto.width, proto.height), Option(proto.tag).filter(_.nonEmpty)))
+      def unapply(proto: ImageMetaData): Option[AssetMetaData.Image] =
+        Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
     }
 
+    type VideoMetaData = Messages.Asset.VideoMetaData
     object VideoMetaData {
-      def apply(md: AssetMetaData.Video) = returning(new Messages.Asset.VideoMetaData) { p =>
+      def apply(md: AssetMetaData.Video): VideoMetaData = returning(new Messages.Asset.VideoMetaData) { p =>
         p.width = md.dimensions.width
         p.height = md.dimensions.height
         p.durationInMillis = md.duration.toMillis
       }
 
-      def apply(p: Messages.Asset.Original): Option[Messages.Asset.VideoMetaData] = p.getMetaDataCase match {
-        case Messages.Asset.Original.VIDEO_FIELD_NUMBER => Option(p.getVideo)
-        case _ => None
-      }
-
-      def unapply(proto: Messages.Asset.VideoMetaData): Option[AssetMetaData.Video] =
+      def unapply(proto: VideoMetaData): Option[AssetMetaData.Video] =
         Some(AssetMetaData.Video(Dim2(proto.width, proto.height), Duration.ofMillis(proto.durationInMillis)))
     }
 
+    type AudioMetaData = Messages.Asset.AudioMetaData
     object AudioMetaData {
-      def apply(mmd: Option[AssetMetaData.Audio], ml: Option[AssetPreviewData.Loudness]) = returning(new Messages.Asset.AudioMetaData) { p =>
-        mmd.foreach(md => p.durationInMillis = md.duration.toMillis)
-        ml.foreach(l => p.normalizedLoudness = bytify(l.levels))
+      def apply(md: AssetMetaData.Audio): AudioMetaData = returning(new Messages.Asset.AudioMetaData) { p =>
+        p.durationInMillis = md.duration.toMillis
+        md.loudness.foreach(l => p.normalizedLoudness = bytify(l.levels))
       }
 
-      def apply(p: Messages.Asset.Original): Option[AssetMetaData.Audio] = p.getMetaDataCase match {
-        case Messages.Asset.Original.AUDIO_FIELD_NUMBER => unapply(p.getAudio)
-        case _ => None
-      }
-
-      def loudness(original: Messages.Asset.Original): Option[AssetPreviewData.Loudness] =
-        original.getMetaDataCase match {
-          case Messages.Asset.Original.AUDIO_FIELD_NUMBER =>
-            Option(original.getAudio.normalizedLoudness).filter(_.nonEmpty).map(arr => AssetPreviewData.Loudness(floatify(arr)))
-          case _ =>
-            None
-        }
-
-      def unapply(p: Messages.Asset.AudioMetaData): Option[AssetMetaData.Audio] =
-        if (p.durationInMillis <= 0) None
-        else Some(AssetMetaData.Audio(Duration.ofMillis(p.durationInMillis)))
+      def unapply(p: AudioMetaData): Option[AssetMetaData.Audio] =
+        Some(AssetMetaData.Audio(Duration.ofMillis(p.durationInMillis), Some(Loudness(floatify(p.normalizedLoudness)))))
 
       def bytify(ls: Iterable[Float]): Array[Byte] = ls.map(l => (l * 255f).toByte)(breakOut)
       def floatify(bs: Array[Byte]): Vector[Float] = bs.map(b => (b & 255) / 255f)(breakOut)
     }
 
-    object MetaData {
-      def image(md: AssetMetaData): Option[Messages.Asset.ImageMetaData] = condOpt(md) { case i: AssetMetaData.Image => ImageMetaData(i.tag, i.dimensions.width, i.dimensions.height) }
-      def video(md: AssetMetaData): Option[Messages.Asset.VideoMetaData] = condOpt(md) { case v: AssetMetaData.Video => VideoMetaData(v) }
-
-      def apply(proto: Messages.Asset): Option[AssetMetaData] = Option(proto.original).flatMap(apply)
-
-      def apply(original: Messages.Asset.Original): Option[AssetMetaData] =
-        original.getMetaDataCase match {
-          case Messages.Asset.Original.IMAGE_FIELD_NUMBER =>
-            ImageMetaData.unapply(original.getImage)
-          case Messages.Asset.Original.VIDEO_FIELD_NUMBER =>
-            VideoMetaData.unapply(original.getVideo)
-          case Messages.Asset.Original.AUDIO_FIELD_NUMBER =>
-            AudioMetaData.unapply(original.getAudio)
-          case _ =>
-            None
-        }
-    }
-
     type Preview = Messages.Asset.Preview
-
     object Preview {
 
-      //TODO tidy up apply methods for preview
-      def apply(mime: Mime, size: Long, assetKey: AssetKey): Messages.Asset.Preview = returning(new Messages.Asset.Preview()) { p =>
-        p.mimeType = mime.str
-        p.size = size
-        p.remote = new Messages.Asset.RemoteData
+      def apply(preview: AssetData): Preview = returning(new Messages.Asset.Preview()) { p =>
+        p.mimeType = preview.mime.str
+        p.size = preview.size
 
-        val remId = assetKey.remoteId
-        p.remote.assetId = if (remId.isRight) remId.right.get.str else ""
-        p.remote.assetToken = assetKey.token.map(_.str).getOrElse("")
-        p.remote.otrKey = assetKey.otrKey.bytes
-        p.remote.sha256 = assetKey.sha256.bytes
+        //remote
+        preview.assetKey.foreach(ak => p.remote = RemoteData.apply(ak))
+
+        //image meta
+        preview.metaData.foreach {
+          case meta@AssetMetaData.Image(_, _) => p.setImage(ImageMetaData(meta))
+          case _ => //other meta data types not supported
+        }
       }
 
-      def apply(mime: Mime, size: Long, key: AESKey, sha: Sha256, metaData: Messages.Asset.ImageMetaData): Messages.Asset.Preview =
-        apply(mime, size, metaData, AssetKey(Left(RAssetId.Empty), None, key, sha))
-
-      def apply(mime: Mime, size: Long, metaData: ImageMetaData, assetKey: AssetKey): Messages.Asset.Preview = {
-        returning(apply(mime, size, assetKey)) {_.setImage(metaData)}
+      def unapply(preview: Preview): Option[AssetData] = Option(preview) map { prev =>
+        AssetData(
+          mime = Mime(prev.mimeType),
+          status = RemoteData.unapply(prev.remote).map(AssetStatus.UploadDone).getOrElse(UploadNotStarted),
+          sizeInBytes = prev.size,
+          metaData = Option(prev.getImage).flatMap(ImageMetaData.unapply)
+        )
       }
-
-      def apply(image: ImageData, key: AESKey, sha: Sha256): Messages.Asset.Preview =
-        apply(Mime(image.mime), image.size, key, sha, ImageMetaData(Some(image.tag), image.width, image.height))
-
-      def unapply(prev: Messages.Asset.Preview): Option[(Mime, Long, AESKey, Sha256, Option[AssetMetaData.Image])] =
-        Some((Mime(prev.mimeType), prev.size, AESKey(prev.remote.otrKey), Sha256(prev.remote.sha256), ImageMetaData(prev)))
     }
 
-    object Uploaded {
-      def unapply(u: Messages.Asset.RemoteData): Option[(Option[RemoteKey], Option[AssetToken], AESKey, Sha256)] =
-        if (u.otrKey == null || u.sha256 == null) None
-        else Some((Option(u.assetId).map(RemoteKey(_)), Option(u.assetToken).filter(_.nonEmpty).map(AssetToken(_)), AESKey(u.otrKey), Sha256(u.sha256)))
+    type RemoteData = Messages.Asset.RemoteData
 
-      def apply(key: AESKey, sha: Sha256) =
-        returning(new Messages.Asset.RemoteData) { s =>
-          s.otrKey = key.bytes
-          s.sha256 = sha.bytes
+    object RemoteData {
+      def apply(ak: AssetKey): RemoteData =
+        returning(new Messages.Asset.RemoteData) { rData =>
+          rData.assetId = ak.remoteId.str
+          ak.token.foreach(t => rData.assetToken = t.str)
+          ak.otrKey.foreach(s => rData.otrKey = s.bytes)
+          ak.sha256.foreach(s => rData.sha256 = s.bytes)
         }
 
-      def apply(id: RemoteKey, token: Option[AssetToken], key: AESKey, sha: Sha256) =
-        returning(new Messages.Asset.RemoteData) { s =>
-          s.assetId = id.str
-          token foreach { t => s.assetToken = t.str }
-          s.otrKey = key.bytes
-          s.sha256 = sha.bytes
-        }
+      //TODO make AssetKey.remoteId optional...
+      def unapply(remoteData: RemoteData): Option[AssetKey] = Option(remoteData) map { rData =>
+        AssetKey(
+          RAssetId(rData.assetId),
+          Option(rData.assetToken).filter(_.nonEmpty).map(AssetToken),
+          Some(AESKey(rData.otrKey)).filter(_ != AESKey.Empty),
+          Some(Sha256(rData.sha256)).filter(_ != Sha256.Empty))
+      }
     }
+
 
     override def set(msg: GenericMessage) = msg.setAsset
 
-    def apply(asset: AssetData): Asset = returning(new Messages.Asset) { a =>
-      a.original = returning(new Messages.Asset.Original) { o =>
-        o.mimeType = asset.mime.str
-        o.size = asset.size
-        asset.metaData match {
-          case Some(video: AssetMetaData.Video) => o.setVideo(VideoMetaData(video))
-          case Some(image: AssetMetaData.Image) => o.setImage(ImageMetaData(image))
-          case Some(audio: AssetMetaData.Audio) => o.setAudio(AudioMetaData(Some(audio), audioPreview))
-          case Some(AssetMetaData.Empty) =>
-          case None => o.setAudio(AudioMetaData(None, audioPreview))
-        }
-        asset.name foreach {o.name = _}
-      }
-      //TODO preview
-      //TODO remote data
-
-    }
-
-    def apply(orig: Messages.Asset.Original, uploaded: Messages.Asset.RemoteData): Asset = returning(new Messages.Asset) { a =>
-      a.original = orig
-      a.setUploaded(uploaded)
-    }
-
-    def apply(mime: Mime, size: Long, name: Option[String], key: AESKey, sha: Sha256): Asset =
-      apply(Original(mime, size, name), UploadDone(AssetKey(Left(RAssetId()), None, key, sha)))
-
-    def apply(orig: Messages.Asset.Original): Asset = returning(new Messages.Asset) { a =>
-      a.original = orig
-    }
-
-    def apply(orig: Messages.Asset.Original, preview: Preview, status: AssetStatus = AssetStatus.UploadInProgress): Asset = returning(new Messages.Asset) { a =>
-      a.original = orig
-      a.preview = preview
-      setStatus(a, status)
-    }
-
-    def apply(orig: Messages.Asset.Original, status: AssetStatus): Asset =
-      returning(new Messages.Asset) { a =>
-        a.original = orig
-        setStatus(a, status)
-      }
-
-    def apply(status: AssetStatus): Asset =
-      returning(new Messages.Asset) {setStatus(_, status)}
-
-    def apply(bytes: Array[Byte]): Asset = Messages.Asset.parseFrom(bytes)
-
-    private def setStatus(a: Asset, status: AssetStatus) =
-      status match {
-        case UploadCancelled => a.setNotUploaded(Messages.Asset.CANCELLED)
-        case UploadFailed => a.setNotUploaded(Messages.Asset.FAILED)
+    def apply(asset: AssetData, preview: Option[AssetData] = None): Asset = returning(new Messages.Asset) { proto =>
+      proto.original = Original(asset)
+      preview.foreach(p => proto.preview = Preview(p))
+      asset.status match {
+        case UploadCancelled => proto.setNotUploaded(Messages.Asset.CANCELLED)
+        case UploadFailed => proto.setNotUploaded(Messages.Asset.FAILED)
+        case UploadDone(ak) => proto.setUploaded(RemoteData(ak))
+        case DownloadFailed(ak) => proto.setUploaded(RemoteData(ak))
         case _ =>
-          status.key foreach {
-            case AssetKey(Left(_), _, key, sha) => a.setUploaded(Uploaded(key, sha))
-            case AssetKey(Right(id), token, key, sha) => a.setUploaded(Uploaded(id, token, key, sha))
-          }
       }
+    }
 
-    def unapply(a: Asset): Option[(Option[Messages.Asset.Original], Option[Preview], AssetStatus)] = {
+    def unapply(a: Asset): Option[(AssetData, Option[AssetData])] = {
+      val (mime, size, name, meta) = Original.unapply(a.original).get //TODO can original ever not be there??
+      val preview = Preview.unapply(a.preview)
       val status = a.getStatusCase match {
-        case Messages.Asset.UPLOADED_FIELD_NUMBER =>
-          a.getUploaded match {
-            case Uploaded(id, token, aesKey, sha) =>
-              UploadDone(AssetKey(id.fold2(Left(RAssetId.Empty), Right(_)), token, aesKey, sha)) // XXX: we may not have access to remote asset id in here, so will use empty, need to remember not to use this one
-            case _ => UploadFailed // this will happen if sender didn't include aes key or sha
-          }
+        case Messages.Asset.UPLOADED_FIELD_NUMBER => RemoteData.unapply(a.getUploaded).map(UploadDone).getOrElse(UploadFailed)
         case Messages.Asset.NOT_UPLOADED_FIELD_NUMBER =>
           a.getNotUploaded match {
             case Messages.Asset.CANCELLED => UploadCancelled
@@ -305,14 +193,15 @@ object GenericContent {
         case _ => UploadInProgress
       }
 
-      Some((Option(a.original), Option(a.preview), status))
-    }
-
-    object WithDimensions {
-      def unapply(asset: Asset): Option[Dim2] = asset match {
-        case Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _) => Some(d)
-        case _ => None
-      }
+      val asset = AssetData(
+        mime = mime,
+        sizeInBytes = size,
+        name = name,
+        metaData = meta,
+        status = status,
+        previewId = preview.map(_.id)
+      )
+      Some((asset, preview))
     }
 
   }
