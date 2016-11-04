@@ -49,9 +49,9 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   }
 
   val asset = ImageAssetData(AssetId(), RConvId(), Seq(
-    ImageData("preview", "image/png", 128, 128, 480, 492, imData.length, Some(RAssetDataId())),
-    ImageData("medium", "image/png", 240, 246, 480, 492, mediumFile.length.toInt, Some(RAssetDataId())),
-    ImageData("full", "image/png", 480, 492, 480, 492, fullFile.length.toInt, Some(RAssetDataId()))
+    ImageData("preview", "image/png", 128, 128, 480, 492, imData.length, Some(RAssetId())),
+    ImageData("medium", "image/png", 240, 246, 480, 492, mediumFile.length.toInt, Some(RAssetId())),
+    ImageData("full", "image/png", 480, 492, 480, 492, fullFile.length.toInt, Some(RAssetId()))
   ))
 
   lazy val zms = new MockZMessaging() { self =>

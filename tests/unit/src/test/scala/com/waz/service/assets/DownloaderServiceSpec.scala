@@ -56,8 +56,8 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     ShadowLog.stream = null
   }
 
-  def uri(id: RAssetDataId = RAssetDataId()): Uri =  Uri.parse(s"content://$id")
-  def fakeDownload(id: RAssetDataId = RAssetDataId(), conv: RConvId = RConvId()) = new Download(ImageAssetRequest(id.str, conv, AssetKey(Left(id), None, AESKey.Empty, Sha256.Empty), Mime.Unknown), 100)
+  def uri(id: RAssetId = RAssetId()): Uri =  Uri.parse(s"content://$id")
+  def fakeDownload(id: RAssetId = RAssetId(), conv: RConvId = RConvId()) = new Download(ImageAssetRequest(id.str, conv, AssetKey(Left(id), None, AESKey.Empty, Sha256.Empty), Mime.Unknown), 100)
   
   feature("Throttling") {
 

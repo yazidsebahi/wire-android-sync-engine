@@ -84,7 +84,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     def medium = results.collectFirst { case BitmapLoaded(b, false, _) => b }
   }
 
-  def image(tag: String, w: Int, h: Int, ow: Int, oh: Int, mime: String = Mime.Png, size: Int = 0) = ImageData(tag, mime, w, h, ow, oh, size, Some(RAssetDataId()))
+  def image(tag: String, w: Int, h: Int, ow: Int, oh: Int, mime: String = Mime.Png, size: Int = 0) = ImageData(tag, mime, w, h, ow, oh, size, Some(RAssetId()))
 
   def asset(is: ImageData*) = ImageAssetData(AssetId(), RConvId(), is)
 

@@ -84,12 +84,12 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
   feature("ImageAssetData") {
 
     scenario("Sort image with broken meta-data") {
-      val data = Seq(ImageData("smallProfile", "", 280, 280, 0, 0, remoteId = Some(RAssetDataId())), ImageData("medium", "", 996, 660, 0, 0, remoteId = Some(RAssetDataId())))
+      val data = Seq(ImageData("smallProfile", "", 280, 280, 0, 0, remoteId = Some(RAssetId())), ImageData("medium", "", 996, 660, 0, 0, remoteId = Some(RAssetId())))
       data.sorted shouldEqual data
     }
 
     scenario("sort image with weird file size") {
-      val data = Seq(ImageData("medium", "", 996, 660, 0, 0, 100, remoteId = Some(RAssetDataId())), ImageData("smallProfile", "", 280, 280, 0, 0, 200, remoteId = Some(RAssetDataId())))
+      val data = Seq(ImageData("medium", "", 996, 660, 0, 0, 100, remoteId = Some(RAssetId())), ImageData("smallProfile", "", 280, 280, 0, 0, 200, remoteId = Some(RAssetId())))
       data.sorted.map(_.tag) shouldEqual List("smallProfile", "medium")
     }
   }
@@ -107,17 +107,17 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
     }
 
     scenario("Add preview") {
-      val preview = Preview(Mime("image/jpeg"), 50L, AssetKey(Left(RAssetDataId.Empty), None, AESKey(), Sha256("sha")))
-      val dataId = RAssetDataId()
+      val preview = Preview(Mime("image/jpeg"), 50L, AssetKey(Left(RAssetId.Empty), None, AESKey(), Sha256("sha")))
+      val dataId = RAssetId()
       val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, preview), Some(dataId), Instant.ofEpochMilli(101)))
       updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, Some(Image(ImageData("preview", "image/jpeg", 0, 0, 0, 0, 50, Some(dataId), None, true, None, None, Some(AESKey(preview.remote.otrKey)), Some(Sha256(preview.remote.sha256))))), None, None, AssetStatus.UploadInProgress, Instant.ofEpochMilli(101))
     }
 
     scenario("Asset is uploaded") {
-      val dataId = RAssetDataId()
+      val dataId = RAssetId()
       val key = AESKey()
       val sha = Sha256(AESUtils.randomKey128().bytes)
-      val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha))), Some(dataId), Instant.ofEpochMilli(101)))
+      val updated = asset.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(Left(RAssetId()), None, key, sha))), Some(dataId), Instant.ofEpochMilli(101)))
       updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), Instant.ofEpochMilli(101))
     }
 
@@ -133,10 +133,10 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
 
     scenario("Previously failed asset is re-uploaded") {
       val failed = asset.updated(AnyAssetData(id, conv, Asset(UploadFailed), None, Instant.ofEpochMilli(101)))
-      val dataId = RAssetDataId()
+      val dataId = RAssetId()
       val key = AESKey()
       val sha = Sha256(AESUtils.randomKey128().bytes)
-      val updated = failed.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha))), Some(dataId), Instant.ofEpochMilli(102)))
+      val updated = failed.updated(AnyAssetData(id, conv, Asset(orig, UploadDone(AssetKey(Left(RAssetId()), None, key, sha))), Some(dataId), Instant.ofEpochMilli(102)))
       updated shouldEqual AnyAssetData(id, conv, mime, 100, Some("file.txt"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), Instant.ofEpochMilli(102))
     }
   }

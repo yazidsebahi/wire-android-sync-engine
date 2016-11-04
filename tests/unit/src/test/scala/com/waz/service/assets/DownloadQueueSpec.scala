@@ -30,7 +30,7 @@ import scala.util.Random
 class DownloadQueueSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   scenario("Sort entries according to waiting flag and timestamp") {
-    def key = ImageAssetRequest("", RConvId(), AssetKey(Left(RAssetDataId()), None, AESKey.Empty, Sha256.Empty), Mime.Unknown)
+    def key = ImageAssetRequest("", RConvId(), AssetKey(Left(RAssetId()), None, AESKey.Empty, Sha256.Empty), Mime.Unknown)
 
     val entries = Seq(
       Entry(key, true, 10),

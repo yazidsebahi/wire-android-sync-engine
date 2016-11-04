@@ -172,8 +172,8 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     def addMessage() = {
       val data = Seq(
-        ImageData("preview", "image/jpg", 10, 10, 100, 100, 10, Some(RAssetDataId())),
-        ImageData("medium", "image/jpg", 100, 100, 100, 100, 10, Some(RAssetDataId()))
+        ImageData("preview", "image/jpg", 10, 10, 100, 100, 10, Some(RAssetId())),
+        ImageData("medium", "image/jpg", 100, 100, 100, 100, 10, Some(RAssetId()))
       )
 
       val asset = zms.assetsStorage.insert(ImageAssetData(AssetId(), conv.remoteId, data)).await()

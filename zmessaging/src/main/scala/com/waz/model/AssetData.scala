@@ -159,41 +159,35 @@ object AssetData {
   }
 }
 
-case class RemoteKey(str: String) extends AnyVal
-
-object RemoteKey {
-  val Empty = RemoteKey("empty")
-}
-
 case class AssetToken(str: String) extends AnyVal
 
 object AssetToken extends (String => AssetToken)
 
-case class AssetKey(remoteId: Either[RAssetDataId, RemoteKey], token: Option[AssetToken], otrKey: AESKey, sha256: Sha256) {
-  def cacheKey = remoteId.fold(_.str, _.str)
-  def assetId = AssetId(remoteId.fold(_.str, _.str))
-}
+case class AssetKey(remoteId: RAssetId,
+                    token:    Option[AssetToken]  = None, //public assets don't need
+                    otrKey:   Option[AESKey]      = None, //public assets don't need
+                    sha256:   Option[Sha256]      = None)
 
-object AssetKey extends ((Either[RAssetDataId, RemoteKey], Option[AssetToken], AESKey, Sha256) => AssetKey) {
-
+//TODO what's the difference between RAssetDataId and RemoteKey?
+object AssetKey extends ((RAssetId, Option[AssetToken], Option[AESKey], Option[Sha256]) => AssetKey) {
   import JsonDecoder._
 
   implicit lazy val AssetKeyDecoder: JsonDecoder[AssetKey] = new JsonDecoder[AssetKey] {
-    override def apply(implicit js: JSONObject): AssetKey = {
-      val remoteId = if (js.has("remoteId")) Left(decodeRAssetDataId('remoteId)) else Right(RemoteKey('remoteKey))
-      AssetKey(remoteId, decodeOptString('token).map(AssetToken(_)), AESKey(decodeString('otrKey)), Sha256(decodeString('sha256)))
-    }
+    override def apply(implicit js: JSONObject): AssetKey = AssetKey(
+      //TODO figure out where this gets saved and see if we can remove the if-else
+      if (js.has("remoteId")) decodeRAssetDataId('remoteId) else decodeRAssetDataId('remoteKey),
+      decodeOptString('token).map(AssetToken(_)),
+      decodeOptString('otrKey).map(AESKey(_)),
+      decodeOptString('sha256).map(Sha256(_))
+    )
   }
 
   implicit lazy val AssetKeyEncoder: JsonEncoder[AssetKey] = new JsonEncoder[AssetKey] {
     override def apply(data: AssetKey): JSONObject = JsonEncoder { o =>
-      data.remoteId match {
-        case Left(id) => o.put("remoteId", id.str)
-        case Right(key) => o.put("remoteKey", key.str)
-      }
-      data.token foreach { t => o.put("token", t.str) }
-      o.put("otrKey", data.otrKey.str)
-      o.put("sha256", data.sha256.str)
+      o.put("remoteId", data.remoteId.str)
+      data.token foreach(t => o.put("token", t.str))
+      data.token foreach(k => o.put("otrKey", k.str))
+      data.token foreach(s => o.put("sha256", s.str))
     }
   }
 }

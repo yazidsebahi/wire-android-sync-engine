@@ -49,7 +49,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   var postImageResponse: (ImageData, AssetId, RConvId) => Either[ErrorResponse, ImageData] = { (_, _, _) => Left(ErrorResponse.Cancelled) }
   var postImageRequest = None: Option[(ImageData, RConvId, LocalData)]
 
-  val successImageResponse = { (im: ImageData, asset: AssetId, convId: RConvId) => Right(im.copy(remoteId = Some(RAssetDataId()), sent = true)) }
+  val successImageResponse = { (im: ImageData, asset: AssetId, convId: RConvId) => Right(im.copy(remoteId = Some(RAssetId()), sent = true)) }
 
   lazy val selfUser = UserData("test")
   lazy val conv = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.Group)
@@ -83,7 +83,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     val bos = new ByteArrayOutputStream()
     bitmap.compress(CompressFormat.PNG, 0, bos)
 
-    new ImageData("full", Mime.Unknown, bitmap.getWidth, bitmap.getHeight, bitmap.getWidth, bitmap.getHeight, bos.size(), Some(RAssetDataId())) {
+    new ImageData("full", Mime.Unknown, bitmap.getWidth, bitmap.getHeight, bitmap.getWidth, bitmap.getHeight, bos.size(), Some(RAssetId())) {
       override lazy val data: Option[Array[Byte]] = Some(bos.toByteArray)
     }
   }

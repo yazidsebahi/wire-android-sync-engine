@@ -138,7 +138,7 @@ object Generators {
 
   implicit lazy val arbImageData: Arbitrary[ImageData] = Arbitrary(for {
     tag        <- alphaNumStr
-    remoteId   <- arbitrary[Option[RAssetDataId]]
+    remoteId   <- arbitrary[Option[RAssetId]]
     mime       <- Gen.oneOf(Seq(Mime.Gif, Mime.Jpg, Mime.Png))
     size       <- posNum[Int]
     data       <- arbitrary[Option[Array[Byte]]].map(_.filter(_.nonEmpty).map(bytes => Base64.encodeToString(bytes, Base64.NO_CLOSE | Base64.NO_WRAP | Base64.NO_PADDING)))
@@ -264,17 +264,17 @@ object Generators {
 
   implicit lazy val arbCallSequenceNumber: Arbitrary[CallSequenceNumber] = Arbitrary(choose(2, 999999) map CallSequenceNumber)
 
-  implicit lazy val arbUid: Arbitrary[Uid] = Arbitrary(sideEffect(Uid()))
-  implicit lazy val arbConvId: Arbitrary[ConvId] = Arbitrary(sideEffect(ConvId()))
-  implicit lazy val arbRConvId: Arbitrary[RConvId] = Arbitrary(sideEffect(RConvId()))
-  implicit lazy val arbUserId: Arbitrary[UserId] = Arbitrary(sideEffect(UserId()))
-  implicit lazy val arbRAssetDataId: Arbitrary[RAssetDataId] = Arbitrary(sideEffect(RAssetDataId()))
-  implicit lazy val arbAssetId: Arbitrary[AssetId] = Arbitrary(sideEffect(AssetId()))
-  implicit lazy val arbSyncId: Arbitrary[SyncId] = Arbitrary(sideEffect(SyncId()))
-  implicit lazy val arbGcmId: Arbitrary[GcmId] = Arbitrary(sideEffect(GcmId()))
-  implicit lazy val arbMessageId: Arbitrary[MessageId] = Arbitrary(sideEffect(MessageId()))
+  implicit lazy val arbUid: Arbitrary[Uid]               = Arbitrary(sideEffect(Uid()))
+  implicit lazy val arbConvId: Arbitrary[ConvId]         = Arbitrary(sideEffect(ConvId()))
+  implicit lazy val arbRConvId: Arbitrary[RConvId]       = Arbitrary(sideEffect(RConvId()))
+  implicit lazy val arbUserId: Arbitrary[UserId]         = Arbitrary(sideEffect(UserId()))
+  implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))
+  implicit lazy val arbAssetId: Arbitrary[AssetId]       = Arbitrary(sideEffect(AssetId()))
+  implicit lazy val arbSyncId: Arbitrary[SyncId]         = Arbitrary(sideEffect(SyncId()))
+  implicit lazy val arbGcmId: Arbitrary[GcmId]           = Arbitrary(sideEffect(GcmId()))
+  implicit lazy val arbMessageId: Arbitrary[MessageId]   = Arbitrary(sideEffect(MessageId()))
   implicit lazy val arbTrackingId: Arbitrary[TrackingId] = Arbitrary(sideEffect(TrackingId()))
-  implicit lazy val arbContactId: Arbitrary[ContactId] = Arbitrary(sideEffect(ContactId()))
+  implicit lazy val arbContactId: Arbitrary[ContactId]   = Arbitrary(sideEffect(ContactId()))
   implicit lazy val arbCallSessionId: Arbitrary[CallSessionId] = Arbitrary(sideEffect(CallSessionId()))
   implicit lazy val arbClientId: Arbitrary[ClientId] = Arbitrary(sideEffect(ClientId()))
 

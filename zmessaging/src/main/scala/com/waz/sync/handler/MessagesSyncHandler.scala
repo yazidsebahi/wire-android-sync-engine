@@ -368,9 +368,9 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             def proto(sha: Sha256) = {
               val as = asset.preview match {
                 case Some(AssetPreviewData.Image(img@ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
-                  Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
+                  Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(AssetKey(Left(RAssetId()), None, key, sha)))
                 case _ =>
-                  Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
+                  Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(Left(RAssetId()), None, key, sha)))
               }
               GenericMessage(msg.id.uid, msg.ephemeral, as)
             }

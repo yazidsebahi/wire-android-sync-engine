@@ -62,7 +62,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
 
       val c = ConvId(conversations.get(0).getId)
       val assetId = AssetId()
-      val data = new ImageData("tag", "image/png", 128, 128, 512, 512, imageData.length, Some(RAssetDataId()), Some(Base64.encodeToString(imageData, Base64.NO_WRAP)))
+      val data = new ImageData("tag", "image/png", 128, 128, 512, 512, imageData.length, Some(RAssetId()), Some(Base64.encodeToString(imageData, Base64.NO_WRAP)))
 
       val response = for {
         conv <- zmessaging.convsStorage.get(c)
@@ -112,7 +112,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
 
       for (i <- 0 to 10) {
         withClue(i) {
-          Await.result(client.postImageAssetData(ImageData("test", "image/png", 100, 100, 100, 100, file.length().toInt, Some(RAssetDataId())), AssetId(), c, LocalData(file), nativePush = false), 5.seconds) shouldBe 'right
+          Await.result(client.postImageAssetData(ImageData("test", "image/png", 100, 100, 100, 100, file.length().toInt, Some(RAssetId())), AssetId(), c, LocalData(file), nativePush = false), 5.seconds) shouldBe 'right
         }
       }
     }

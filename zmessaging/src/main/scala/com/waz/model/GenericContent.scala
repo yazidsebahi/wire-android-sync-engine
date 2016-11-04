@@ -78,7 +78,7 @@ object GenericContent {
 
       import Messages.Asset._
 
-      def apply(a: Asset, id: Option[RAssetDataId]): AssetStatus =
+      def apply(a: Asset, id: Option[RAssetId]): AssetStatus =
         (a.getStatusCase, a.getUploaded, a.getNotUploaded, id) match {
           case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(_, token, aes, sha), _, Some(id)) => UploadDone(AssetKey(Left(id), token, aes, sha))
           case (UPLOADED_FIELD_NUMBER, Asset.Uploaded(Some(key), token, aes, sha), _, None) => UploadDone(AssetKey(Right(key), token, aes, sha))
@@ -195,7 +195,7 @@ object GenericContent {
       }
 
       def apply(mime: Mime, size: Long, key: AESKey, sha: Sha256, metaData: Messages.Asset.ImageMetaData): Messages.Asset.Preview =
-        apply(mime, size, metaData, AssetKey(Left(RAssetDataId.Empty), None, key, sha))
+        apply(mime, size, metaData, AssetKey(Left(RAssetId.Empty), None, key, sha))
 
       def apply(mime: Mime, size: Long, metaData: ImageMetaData, assetKey: AssetKey): Messages.Asset.Preview = {
         returning(apply(mime, size, assetKey)) {_.setImage(metaData)}
@@ -254,7 +254,7 @@ object GenericContent {
     }
 
     def apply(mime: Mime, size: Long, name: Option[String], key: AESKey, sha: Sha256): Asset =
-      apply(Original(mime, size, name), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
+      apply(Original(mime, size, name), UploadDone(AssetKey(Left(RAssetId()), None, key, sha)))
 
     def apply(orig: Messages.Asset.Original): Asset = returning(new Messages.Asset) { a =>
       a.original = orig
@@ -293,7 +293,7 @@ object GenericContent {
         case Messages.Asset.UPLOADED_FIELD_NUMBER =>
           a.getUploaded match {
             case Uploaded(id, token, aesKey, sha) =>
-              UploadDone(AssetKey(id.fold2(Left(RAssetDataId.Empty), Right(_)), token, aesKey, sha)) // XXX: we may not have access to remote asset id in here, so will use empty, need to remember not to use this one
+              UploadDone(AssetKey(id.fold2(Left(RAssetId.Empty), Right(_)), token, aesKey, sha)) // XXX: we may not have access to remote asset id in here, so will use empty, need to remember not to use this one
             case _ => UploadFailed // this will happen if sender didn't include aes key or sha
           }
         case Messages.Asset.NOT_UPLOADED_FIELD_NUMBER =>

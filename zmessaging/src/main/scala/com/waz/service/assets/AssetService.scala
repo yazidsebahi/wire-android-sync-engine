@@ -146,7 +146,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         Future.successful(())
     }
 
-  def updateAsset(id: AssetId, convId: RConvId, asset: Asset, dataId: Option[RAssetDataId], time: Date): Future[AssetData] =
+  def updateAsset(id: AssetId, convId: RConvId, asset: Asset, dataId: Option[RAssetId], time: Date): Future[AssetData] =
     storage.updateOrCreate(id, {
       case data @ AnyAssetData(`id`, `convId`, _, _, _, _, _, _, _, _, _) => data.updated(AnyAssetData(id, convId, asset, dataId, time.instant))
       case data =>

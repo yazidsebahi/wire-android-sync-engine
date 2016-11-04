@@ -182,7 +182,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
       case Some(otrClient) =>
         service.encryptAssetData(key, data) flatMap { case (sha, encrypted) =>
           val inline = encrypted.length < MaxInlineSize
-          var imageId = Option.empty[RAssetDataId]
+          var imageId = Option.empty[RAssetId]
           var assetKey = Option.empty[AssetKey]
           val message = createMsg(sha)
           postEncryptedMessage(conv.id, message, recipients = recipients) { (content, retry) =>

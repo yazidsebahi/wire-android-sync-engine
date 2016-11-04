@@ -91,7 +91,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   private def updateAssets(events: Seq[MessageEvent]) = {
 
-    def update(id: Uid, convId: RConvId, time: Date, ct: Any, msg: GenericMessage, dataId: Option[RAssetDataId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
+    def update(id: Uid, convId: RConvId, time: Date, ct: Any, msg: GenericMessage, dataId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
       ct match {
         case asset: Asset =>
           updateAsset(AssetId(id.str), convId, asset, dataId, time) map { Some(_) }

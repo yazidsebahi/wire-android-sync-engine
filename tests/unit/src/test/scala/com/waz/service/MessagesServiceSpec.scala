@@ -142,8 +142,8 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime(),
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetId(), None).withCurrentLocalTime(),
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetId(), None).withCurrentLocalTime()
       )
 
       Await.ready(messages.processEvents(conv, events), timeout)
@@ -156,12 +156,12 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetId(), None).withCurrentLocalTime()
       )
       Await.ready(messages.processEvents(conv, events), timeout)
 
       val events1 = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetId(), None).withCurrentLocalTime()
       )
       Await.ready(messages.processEvents(conv, events1), timeout)
 
@@ -267,7 +267,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("Receive full file asset event") {
       delMessages(convId)
-      val dataId = RAssetDataId()
+      val dataId = RAssetId()
       val key = AESKey()
       val sha = Sha256(AESUtils.randomKey().bytes)
       val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadDone(AssetKey(Left(dataId), None, key, sha))))

@@ -126,7 +126,7 @@ case class IdentityChangedError(from: UserId, sender: ClientId) extends OtrError
 
 case class OtrErrorEvent(id: Uid, convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent with UnarchivingEvent
 
-case class GenericAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetDataId, data: Option[Array[Byte]]) extends MessageEvent with UnarchivingEvent
+case class GenericAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetId, data: Option[Array[Byte]]) extends MessageEvent with UnarchivingEvent
 
 case class TypingEvent(id: Uid, convId: RConvId, time: Date, from: UserId, isTyping: Boolean) extends ConversationEvent
 
@@ -173,7 +173,7 @@ sealed trait OtrEvent extends ConversationEvent {
 }
 case class OtrMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent with ConversationEvent
 
-case class OtrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetDataId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent
+case class OtrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent
 
 case class ConversationState(archived: Option[Boolean] = None, archiveTime: Option[Instant] = None, muted: Option[Boolean] = None, muteTime: Option[Instant] = None)
 
@@ -321,7 +321,7 @@ object ConversationEvent {
       OtrMessageEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), decodeBytes('text), decodeOptString('data) map decodeBytes)
 
     def otrAssetEvent(id: Uid, convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
-      OtrAssetEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), RAssetDataId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
+      OtrAssetEvent(id, convId, time, from, ClientId('sender), ClientId('recipient), RAssetId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
 
     override def apply(implicit js: JSONObject): ConversationEvent = LoggedTry {
 

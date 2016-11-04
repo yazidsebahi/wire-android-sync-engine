@@ -106,17 +106,17 @@ object AssetId extends (String => AssetId) {
   }
 }
 
-case class RAssetDataId(str: String) {
+case class RAssetId(str: String) {
   override def toString: String = str
 }
 
-object RAssetDataId {
-  val Empty = RAssetDataId("empty")
-  def apply(): RAssetDataId = Id.random()
+object RAssetId {
+  val Empty = RAssetId("empty")
+  def apply(): RAssetId = Id.random()
 
-  implicit object Id extends Id[RAssetDataId] {
-    override def random() = RAssetDataId(Uid().toString)
-    override def decode(str: String) = RAssetDataId(str)
+  implicit object Id extends Id[RAssetId] {
+    override def random() = RAssetId(Uid().toString)
+    override def decode(str: String) = RAssetId(str)
   }
 }
 

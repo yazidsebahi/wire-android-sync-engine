@@ -51,7 +51,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   import com.waz.utils.events.EventContext.Implicits.global
 
   var downloadRequest = Seq.empty[DownloadRequest]
-  var downloadResult = Map.empty[RAssetDataId, CacheEntry]
+  var downloadResult = Map.empty[RAssetId, CacheEntry]
 
   lazy val zms = new MockZMessaging() {
     override lazy val downloader = new DownloaderService(context, cache, prefs, network) {
@@ -71,9 +71,9 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   val previewFile = new File(getClass.getResource("/images/penguin_128.png").getFile).getAbsoluteFile
   lazy val previewData = Base64.encodeToString(IoUtils.toByteArray(new FileInputStream(previewFile)), Base64.NO_PADDING | Base64.NO_WRAP | Base64.NO_CLOSE)
 
-  val fullId = RAssetDataId()
-  val mediumId = RAssetDataId()
-  val previewId = RAssetDataId()
+  val fullId = RAssetId()
+  val mediumId = RAssetId()
+  val previewId = RAssetId()
 
   lazy val convId = RConvId()
   lazy val assetData = new ImageAssetData(AssetId(), convId, Seq(
@@ -243,7 +243,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       ExifOrientation(new FileInputStream(file)) shouldEqual ExifInterface.ORIENTATION_TRANSPOSE
       ExifOrientation(new ByteArrayInputStream(bytes)) shouldEqual ExifInterface.ORIENTATION_TRANSPOSE
 
-      val im = ImageData("medium", Mime.Unknown, 0, 0, 0, 0, bytes.length, Some(RAssetDataId()), Some(Base64.encodeToString(bytes, 0)))
+      val im = ImageData("medium", Mime.Unknown, 0, 0, 0, 0, bytes.length, Some(RAssetId()), Some(Base64.encodeToString(bytes, 0)))
       val img = ImageAssetData(AssetId(), RConvId(), Seq(im))
 
       val bmp = Await.result(service.loadBitmap(img, im, Regular(100)), 5.seconds)
