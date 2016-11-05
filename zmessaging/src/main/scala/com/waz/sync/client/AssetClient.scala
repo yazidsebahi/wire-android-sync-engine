@@ -65,7 +65,7 @@ class AssetClient(netClient: ZNetClient) {
             netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(cId), content)) {
               case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
                 debug(s"postImageAssetData completed with resp: $rId")
-                asset.copy(status = UploadDone(AssetKey(rId)))
+                asset.copy(status = UploadDone(AssetKey(Some(rId))))
             }
           case None => CancellableFuture.failed(new Exception("Not a v2 asset"))
         }

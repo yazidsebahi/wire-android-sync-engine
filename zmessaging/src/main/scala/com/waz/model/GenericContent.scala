@@ -73,8 +73,7 @@ object GenericContent {
             case Messages.Asset.Original.VIDEO_FIELD_NUMBER => VideoMetaData.unapply(orig.getVideo)
             case Messages.Asset.Original.AUDIO_FIELD_NUMBER => AudioMetaData.unapply(orig.getAudio)
             case _ => None
-          }
-          )
+          })
       }
     }
 
@@ -118,7 +117,6 @@ object GenericContent {
 
     type Preview = Messages.Asset.Preview
     object Preview {
-
       def apply(preview: AssetData): Preview = returning(new Messages.Asset.Preview()) { p =>
         p.mimeType = preview.mime.str
         p.size = preview.size
@@ -144,20 +142,19 @@ object GenericContent {
     }
 
     type RemoteData = Messages.Asset.RemoteData
-
     object RemoteData {
       def apply(ak: AssetKey): RemoteData =
         returning(new Messages.Asset.RemoteData) { rData =>
-          rData.assetId = ak.remoteId.str
-          ak.token.foreach(t => rData.assetToken = t.str)
-          ak.otrKey.foreach(s => rData.otrKey = s.bytes)
-          ak.sha256.foreach(s => rData.sha256 = s.bytes)
+          ak.remoteId.foreach(v => rData.assetId = v.str)
+          ak.token.foreach(v => rData.assetToken = v.str)
+          ak.otrKey.foreach(v => rData.otrKey = v.bytes)
+          ak.sha256.foreach(v => rData.sha256 = v.bytes)
         }
 
       //TODO make AssetKey.remoteId optional...
       def unapply(remoteData: RemoteData): Option[AssetKey] = Option(remoteData) map { rData =>
         AssetKey(
-          RAssetId(rData.assetId),
+          Option(rData.assetId).filter(_.nonEmpty).map(RAssetId),
           Option(rData.assetToken).filter(_.nonEmpty).map(AssetToken),
           Some(AESKey(rData.otrKey)).filter(_ != AESKey.Empty),
           Some(Sha256(rData.sha256)).filter(_ != Sha256.Empty))
@@ -211,13 +208,16 @@ object GenericContent {
   }
 
   type ImageAsset = Messages.ImageAsset
-
   implicit object ImageAsset extends GenericContent[ImageAsset] {
     override def set(msg: GenericMessage) = msg.setImage
 
-    //tag, width, height, origWidth, origHeight, mime, size, Some(key), sha
-    def unapply(proto: ImageAsset): Option[(String, Int, Int, Int, Int, Mime, Int, Option[AESKey], Option[Sha256])] =
-    Some((proto.tag, proto.width, proto.height, proto.originalWidth, proto.originalHeight, Mime(proto.mimeType), proto.size, Option(proto.otrKey).map(AESKey(_)), Option(proto.sha256).map(Sha256(_))))
+    def unapply(proto: ImageAsset): Option[AssetData] =
+      Some(AssetData(
+        status = UploadDone(AssetKey(otrKey = Option(proto.otrKey).map(AESKey(_)), sha256 = Option(proto.sha256).map(Sha256(_)))),
+        sizeInBytes = proto.size,
+        mime = Mime(proto.mimeType),
+        metaData = Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
+      ))
 
     def apply(tag: String, width: Int, height: Int, origWidth: Int, origHeight: Int, mime: String, size: Int, key: Option[AESKey], sha: Option[Sha256]): ImageAsset =
       returning(new Messages.ImageAsset) { a =>
@@ -231,6 +231,26 @@ object GenericContent {
         key foreach { key => a.otrKey = key.bytes }
         sha foreach { sha => a.sha256 = sha.bytes }
       }
+
+    def apply(asset: AssetData): ImageAsset = returning(new Messages.ImageAsset) { proto =>
+      asset.metaData.foreach {
+        case AssetMetaData.Image(Dim2(w, h), tag) =>
+          proto.tag = tag
+          proto.width = w
+          proto.height = h
+          proto.originalWidth = w
+          proto.originalHeight = h
+        case _ => throw new Exception("Trying to create image proto from non image asset data")
+      }
+      proto.mimeType = asset.mime.str
+      proto.size = asset.size.toInt
+      asset.assetKey.foreach {
+        case AssetKey(_, _, Some(key), Some(sha)) =>
+          proto.otrKey = key.bytes
+          proto.sha256 = sha.bytes
+        case _ =>
+      }
+    }
   }
 
   implicit object EphemeralImageAsset extends EphemeralContent[ImageAsset] {

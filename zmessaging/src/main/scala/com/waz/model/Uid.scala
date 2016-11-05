@@ -110,7 +110,7 @@ case class RAssetId(str: String) {
   override def toString: String = str
 }
 
-object RAssetId {
+object RAssetId extends (String => RAssetId) {
   val Empty = RAssetId("empty")
   def apply(): RAssetId = Id.random()
 
