@@ -161,7 +161,6 @@ object GenericContent {
       }
     }
 
-
     override def set(msg: GenericMessage) = msg.setAsset
 
     def apply(asset: AssetData, preview: Option[AssetData] = None): Asset = returning(new Messages.Asset) { proto =>
@@ -185,9 +184,9 @@ object GenericContent {
           a.getNotUploaded match {
             case Messages.Asset.CANCELLED => UploadCancelled
             case Messages.Asset.FAILED => UploadFailed
-            case _ => UploadInProgress
+            case _ => UploadInProgress()
           }
-        case _ => UploadInProgress
+        case _ => UploadInProgress()
       }
 
       val asset = AssetData(
@@ -218,19 +217,6 @@ object GenericContent {
         mime = Mime(proto.mimeType),
         metaData = Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
       ))
-
-    def apply(tag: String, width: Int, height: Int, origWidth: Int, origHeight: Int, mime: String, size: Int, key: Option[AESKey], sha: Option[Sha256]): ImageAsset =
-      returning(new Messages.ImageAsset) { a =>
-        a.tag = tag
-        a.width = width
-        a.height = height
-        a.originalWidth = origWidth
-        a.originalHeight = origHeight
-        a.mimeType = mime
-        a.size = size
-        key foreach { key => a.otrKey = key.bytes }
-        sha foreach { sha => a.sha256 = sha.bytes }
-      }
 
     def apply(asset: AssetData): ImageAsset = returning(new Messages.ImageAsset) { proto =>
       asset.metaData.foreach {

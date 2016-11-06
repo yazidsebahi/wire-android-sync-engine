@@ -17,8 +17,6 @@
  */
 package com.waz.service.messages
 
-import java.util.Date
-
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
@@ -326,7 +324,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case AssetData.IsAudio()     => Message.Type.AUDIO_ASSET
       case _                       => Message.Type.ANY_ASSET
     }
-    val mid = MessageId()
+    val mid = MessageId(asset.id.str) //TODO Dean: decouple assets from messages
     addLocalMessage(MessageData(mid, convId, tpe, selfUserId, protos = Seq(GenericMessage(mid.uid, Asset(asset)))))
   }
 

@@ -119,10 +119,10 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     } yield ()
 
   def markUploadFailed(id: AssetId, status: AssetStatus.Syncable) =
-    storage.updateAsset(id, { a => if (a.status > UploadInProgress) a else a.copy(status = status) }) flatMap {
+    storage.updateAsset(id, { a => if (a.status > UploadInProgress()) a else a.copy(status = status) }) flatMap {
       case Some(updated) =>
         storage.onUploadFailed ! updated
-        messages.get(MessageId(id.str)) flatMap {
+        messages.get(MessageId(id.str)) flatMap { //TODO Dean: decouple assets from messages
           case Some(m) => sync.postAssetStatus(m.id, m.convId, m.ephemeral, status)
           case None =>
             warn(s"No message found for asset upload: $id")

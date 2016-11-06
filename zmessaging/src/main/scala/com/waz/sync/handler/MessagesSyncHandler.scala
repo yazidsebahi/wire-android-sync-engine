@@ -143,24 +143,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
   }
 
-  private def postMessage(conv: ConversationData, msg: MessageData, reqEditTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
-
-    def postImageMessage() =
-      assetSync.withImageAsset(conv.remoteId, msg.assetId) { asset =>
-        Future.traverse(asset.versions) { im =>
-          recipients(conv, msg.ephemeral) flatMap { rcs =>
-            assetSync.postOtrImageData(conv.remoteId, msg.assetId, msg.ephemeral, im, rcs) map {
-              case Right(time) =>
-                convLock.release()
-                Right(time)
-              case res => res
-            }
-          }
-        }
-      } map { results =>
-        results.find(_.isLeft).getOrElse(results.head)
-      }
-
+  private def postMessage(conv: ConversationData, msg: MessageData, reqEditTime: Instant): Future[SyncResult] = {
 
     def postTextMessage() = {
       val (gm, isEdit) =
@@ -234,18 +217,16 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   private def uploadAsset(conv: ConversationData, msg: MessageData)(implicit convLock: ConvLock): ErrorOrResponse[Instant] = {
     verbose(s"uploadAsset($conv, $msg)")
 
-    // TODO: remove repetitions, and move some staff to AssetSyncHandler, current implementation is a bit ugly,
-
     def postOriginal(): ErrorOrResponse[Instant] =
       assetMeta.getAssetWithMetadata(msg.assetId) flatMap {
-        case None => CancellableFuture successful Left(internalError("no asset found for $msg"))
+        case None => CancellableFuture successful Left(internalError(s"no asset found for $msg"))
         case Some(asset) if asset.status != AssetStatus.UploadNotStarted => CancellableFuture successful Right(msg.time)
         case Some(asset) => postAssetOriginal(asset, AssetStatus.MetaDataSent)
       }
 
-    def postAssetOriginal(asset: AnyAssetData, newStatus: AssetStatus) = {
+    def postAssetOriginal(asset: AssetData, newStatus: AssetStatus) = {
       verbose(s"postOriginal($asset)")
-      val proto = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), UploadInProgress))
+      val proto = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset)))
 
       CancellableFuture lift {
         postMessage(conv, msg.ephemeral, proto) flatMap {
@@ -399,7 +380,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
           CancellableFuture successful Left(internalError(s"asset data missing"))
       }
 
-    CancellableFuture lift assets.storage.getAsset(msg.assetId) flatMap {
+    CancellableFuture lift assets.storage.get(msg.assetId) flatMap {
       case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
       case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
       case Some(asset) =>
@@ -409,7 +390,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             convLock.release()
             for {
               _ <- postPreview()
-              _ <- CancellableFuture lift assets.storage.updateAsset(asset.id, a => a.copy(status = UploadInProgress))
+              _ <- CancellableFuture lift assets.storage.updateAsset(asset.id, a => a.copy(status = UploadInProgress()))
               res <- postAssetData()
             } yield res.fold(Left(_), _ => Right(origTime))
         }

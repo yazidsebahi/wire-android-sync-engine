@@ -21,6 +21,8 @@ import com.waz.api
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.{JSONException, JSONObject}
 
+import scala.util.Try
+
 sealed abstract class AssetStatus(val status: api.AssetStatus, val key: Option[AssetKey] = None)
 object AssetStatus {
   import JsonDecoder._
@@ -32,11 +34,12 @@ object AssetStatus {
   case object UploadNotStarted extends AssetStatus(UPLOAD_NOT_STARTED)
   case object MetaDataSent extends AssetStatus(META_DATA_SENT)
   case object PreviewSent extends AssetStatus(PREVIEW_SENT)
-  case object UploadInProgress extends AssetStatus(UPLOAD_IN_PROGRESS)
-  case class UploadDone(uploaded: AssetKey) extends AssetStatus(UPLOAD_DONE, Some(uploaded))
+  //TODO Dean: after v2 transition, UploadInProgress no longer needs this information
+  case class UploadInProgress(remoteData: Option[AssetKey] = None) extends AssetStatus(UPLOAD_IN_PROGRESS, remoteData)
+  case class UploadDone(remoteData: AssetKey) extends AssetStatus(UPLOAD_DONE, Some(remoteData))
   case object UploadCancelled extends AssetStatus(UPLOAD_CANCELLED) with Sync
   case object UploadFailed extends AssetStatus(UPLOAD_FAILED) with Sync
-  case class DownloadFailed(uploaded: AssetKey) extends AssetStatus(DOWNLOAD_FAILED, Some(uploaded))
+  case class DownloadFailed(remoteData: AssetKey) extends AssetStatus(DOWNLOAD_FAILED, Some(remoteData))
 
   implicit lazy val Order: Ordering[AssetStatus] = Ordering.by(_.status)
 
@@ -47,7 +50,7 @@ object AssetStatus {
       case UPLOAD_NOT_STARTED   => UploadNotStarted
       case META_DATA_SENT       => MetaDataSent
       case PREVIEW_SENT         => PreviewSent
-      case UPLOAD_IN_PROGRESS   => UploadInProgress
+      case UPLOAD_IN_PROGRESS   => UploadInProgress(Try(JsonDecoder[AssetKey]('key)).toOption)
       case UPLOAD_DONE          => UploadDone(JsonDecoder[AssetKey]('key))
       case UPLOAD_CANCELLED     => UploadCancelled
       case UPLOAD_FAILED        => UploadFailed

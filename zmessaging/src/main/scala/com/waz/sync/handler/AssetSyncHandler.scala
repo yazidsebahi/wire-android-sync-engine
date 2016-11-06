@@ -19,7 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.AssetStatus.{UploadDone, UploadInProgress}
 import com.waz.model.GenericContent.Asset
 import com.waz.model._
 import com.waz.service.PreferenceService
@@ -46,7 +46,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
   def postAsset(assetId: AssetId, nativePush: Boolean = false, recipients: Option[Set[UserId]] = None): ErrorOr[Option[AssetData]] = {
     assets.storage.get(assetId) flatMap {
       case Some(asset) =>
-        if (asset.assetKey.isDefined) { //TODO check this
+        if (asset.remoteId.isDefined) { //TODO check this
           warn(s"asset has already been uploaded, skipping: $asset")
           successful(Right(None))
         }
@@ -57,7 +57,10 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
               case Some(id) if prefs.sendWithV3 => convs.convByRemoteId(id) flatMap {
                 //TODO remove v2 sending after testing
                 case Some(convData) =>
-                  def proto(sha: Sha256): GenericMessage = GenericMessage(Uid(), Asset(asset)) // = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
+                  def proto(sha: Sha256): GenericMessage = GenericMessage(Uid(), asset match {
+                    case AssetData.IsImage(_, _) => Proto.ImageAsset(asset.copy(status = UploadInProgress(Some(AssetKey(otrKey = Some(key), sha256 = Some(sha))))))
+                    case _                       => Proto.Asset(asset.copy(status = UploadInProgress(Some(AssetKey(otrKey = Some(key), sha256 = Some(sha))))))
+                  })
                   otrSync.postAssetDataV2(convData, key, proto, cacheData, nativePush, recipients) map {
                     case Right((ak, date)) => Right(Some(asset.copy(status = UploadDone(ak))))
                     case Left(err) => Left(err)

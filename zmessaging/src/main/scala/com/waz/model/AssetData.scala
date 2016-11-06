@@ -22,7 +22,7 @@ import android.net.Uri
 import android.util.Base64
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.AssetStatus.{DownloadFailed, UploadDone}
+import com.waz.model.AssetStatus.{DownloadFailed, UploadDone, UploadInProgress}
 import com.waz.service.downloads.DownloadRequest.{CachedAssetRequest, WireAssetRequest}
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
@@ -64,6 +64,7 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
 
   lazy val assetKey = status match {
     case UploadDone(k) => Some(k)
+    case UploadInProgress(k) => k
     case DownloadFailed(k) => Some(k)
     case _ => None
   }
