@@ -18,6 +18,7 @@
 package com.waz.service.assets
 
 import java.io._
+import java.util.concurrent.atomic.AtomicReference
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -130,13 +131,24 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       case _ =>
         Future.successful(())
     }
-  
+
+  def addImageAsset(assetId: AssetId, image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData] = {
+    image match {
+      case im: com.waz.api.impl.ImageAsset =>
+        val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
+        generator.generateWireAsset(AssetData(id = assetId), if (prefs.sendWithV3) Some(convId) else None, isSelf).future.flatMap { data =>
+          storage.updateAsset(assetId, _ => data) map (_ => data)
+        } andThen { case _ => ref set null }
+      case _ =>
+        Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
+    }
+  }
+
   def updateAsset(rId: RAssetId, newData: AssetData): Future[Option[AssetData]] =
     storage.getByRemoteId(rId).flatMap {
       case Some(cur) => storage.updateAsset(cur.id, _ => newData.copy(id = cur.id))
       case None => storage.insert(newData).map(Some(_)) //was no local data to update, insert the decoded asset data
     }
-
 
   def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {

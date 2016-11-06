@@ -319,20 +319,15 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     addLocalMessage(MessageData(id, convId, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id.uid, content))))
   }
 
-  //TODO why do we put a proto in here when we have sent any yet? - compare with addAssetMessage
-  def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = {
-    val id = MessageId()
-    addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(AssetData(mime = Mime("image/jpeg"), metaData = Some(AssetMetaData.Image(Dim2(width, height), "medium"))))))))
-  }
-
-  //TODO why do we have the withSelfUserFuture here but not in other methods?
-  def addAssetMessage(convId: ConvId, assetId: AssetId, mime: Mime): Future[MessageData] = withSelfUserFuture { selfUserId =>
-    val tpe = mime match {
-      case Mime.Video() => Message.Type.VIDEO_ASSET
-      case Mime.Audio() => Message.Type.AUDIO_ASSET
-      case _            => Message.Type.ANY_ASSET
+  def addAssetMessage(convId: ConvId, asset: AssetData): Future[MessageData] = {
+    val tpe = asset match {
+      case AssetData.IsImage(_, _) => Message.Type.ASSET
+      case AssetData.IsVideo()     => Message.Type.VIDEO_ASSET
+      case AssetData.IsAudio()     => Message.Type.AUDIO_ASSET
+      case _                       => Message.Type.ANY_ASSET
     }
-    addLocalMessage(MessageData(MessageId(assetId.str), convId, tpe, selfUserId))
+    val mid = MessageId()
+    addLocalMessage(MessageData(mid, convId, tpe, selfUserId, protos = Seq(GenericMessage(mid.uid, Asset(asset)))))
   }
 
   def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String) =
