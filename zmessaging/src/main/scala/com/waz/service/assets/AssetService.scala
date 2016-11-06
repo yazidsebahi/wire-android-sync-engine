@@ -130,42 +130,13 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       case _ =>
         Future.successful(())
     }
+  
+  def updateAsset(rId: RAssetId, newData: AssetData): Future[Option[AssetData]] =
+    storage.getByRemoteId(rId).flatMap {
+      case Some(cur) => storage.updateAsset(cur.id, _ => newData.copy(id = cur.id))
+      case None => storage.insert(newData).map(Some(_)) //was no local data to update, insert the decoded asset data
+    }
 
-//  def updateAsset(id: AssetId, convId: RConvId, asset: Asset, dataId: Option[RAssetId], time: Date): Future[AssetData] =
-//    storage.updateOrCreate(id, {
-//      case data @ AnyAssetData(`id`, `convId`, _, _, _, _, _, _, _, _, _) => data.updated(AnyAssetData(id, convId, asset, dataId, time.instant))
-//      case data =>
-//        HockeyApp.saveException(new Exception(s"Unexpected asset data in updateAsset()"), s"data: $data, asset: $id, conv: $convId")
-//        data
-//    }, AssetData(id, convId, asset, dataId, time.instant))
-
-//  def updateImageAsset(id: AssetId, convId: RConvId, image: ImageData): Future[AssetData] = {
-//    storage.updateOrCreate(id, {
-//      case im @ ImageAssetData(`id`, _, _) => im.updated(image).copy(convId = convId)
-//      case data =>
-//        HockeyApp.saveException(new Exception(s"Unexpected asset data in updateImageAsset()"), s"data: $data, asset: $id, conv: $convId")
-//        data
-//    }, ImageAssetData(id, convId, Seq(image)))
-//  }
-
-//  def updateImageAssets(data: Seq[ImageAssetData]) =
-//    storage.updateOrCreateAll(data.map(d => d.id -> { (_: Option[AssetData]) => d })(collection.breakOut))
-
-//  def addImageAsset(assetId: AssetId, image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[ImageAssetData] = {
-//    image match {
-//      case im: com.waz.api.impl.ImageAsset if im.data.versions.nonEmpty =>
-//        val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
-//        generator.generateWireAsset(assetId, im.data.versions.last, convId, isSelf).future.flatMap { data =>
-//          updateImageAssets(Seq(data)) map (_ => data)
-//        } andThen { case _ => ref set null }
-//      case _ =>
-//        failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
-//    }
-//  }
-
-  def findByRemoteData(ak: AssetKey): Future[Option[AssetData]] = {
-    storage.
-  }
 
   def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {

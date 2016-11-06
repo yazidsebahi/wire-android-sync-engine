@@ -26,7 +26,6 @@ import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
@@ -91,36 +90,38 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   private def updateAssets(events: Seq[MessageEvent]) = {
 
-    def update(id: Uid, convId: RConvId, time: Date, ct: Any, msg: GenericMessage, dataId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
-      ct match {
-        case asset: Asset =>
-          updateAsset(AssetId(id.str), convId, asset, dataId, time) map { Some(_) }
-        case ImageAsset(asset @ AssetData.Status(UploadDone(AssetKey(_, _, None, _)))) =>
-          warn(s"got otr asset event without otr key: $msg")
-          assets.storage.updateAsset()
+    def decodeData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[String] = {
+      data.flatMap { arr =>
+        otrKey.fold {
+          warn(s"got otr asset event without otr key: $assetId")
+          LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption
+        } { key =>
+          if (sha.forall(_.str == com.waz.utils.sha2(arr))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, arr), Base64.DEFAULT)).toOption else None
+        }
+      }
+    }
 
-          val img = ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, data64 = data flatMap { arr => LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption })
-          updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
-        case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, Some(key), sha) =>
-          val img = data.fold {
-            ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, otrKey = Some(key), sha256 = sha)
-          } { img =>
-            val data64 = if (sha.forall(_.str == sha2(img))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, img), Base64.DEFAULT)).toOption else None
-            ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, otrKey = Some(key), sha256 = sha, data64 = data64)
-          }
-          updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
-        case Ephemeral(_, c) =>
-          update(id, convId, time, c, msg, dataId, data)
+    //For assets v3, the RAssetId will be contained in the proto content. For v2, it will be passed along with in the GenericAssetEvent
+    //A defined convId marks that the asset is a v2 asset
+    def update(convId: Option[RConvId], ct: Any, v2RId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
+      ct match {
+        case Asset(a@AssetData.Status(UploadDone(AssetKey(Some(rId), _, _, _))), _) => updateAsset(rId, a)
+        case Asset(asset, _) if v2RId.nonEmpty =>
+          updateAsset(v2RId.get, asset.copy(convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
+        case ImageAsset(asset) if v2RId.nonEmpty =>
+          updateAsset(v2RId.get, asset.copy(convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
+        case Ephemeral(_, content) =>
+          update(convId, content, v2RId, data)
         case _ =>
           Future successful None
       }
 
     Future.sequence(events.collect {
-      case GenericMessageEvent(_, convId, time, from, msg @ GenericMessage(id, ct)) =>
-        update(id, convId, time, ct, msg, None, None)
+      case GenericMessageEvent(_, _, time, from, GenericMessage(_, ct)) =>
+        update(None, ct, None, None)
 
-      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(id, ct), dataId, data) =>
-        update(id, convId, time, ct, msg, Some(dataId), data)
+      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(_, ct), dataId, data) =>
+        update(Some(convId), ct, Some(dataId), data)
     }) map { _.flatten }
   }
 
@@ -129,7 +130,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   private def deleteCancelled(as: Seq[AssetData]) = {
     val toRemove = as collect {
-      case AnyAssetData(id, _, _, _, _, _, _, _, _, UploadCancelled, _) => id
+      case a@AssetData.Status(UploadCancelled) => a.id
     }
     if (toRemove.isEmpty) Future.successful(())
     else for {
@@ -181,9 +182,9 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(AssetData.IsImage(_, _), _) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case asset: Asset =>
+      case Asset =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case im: ImageAsset => //deprecated - only used by clients sending assetsV2
+      case ImageAsset => //deprecated - only used by clients sending assetsV2
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Ephemeral(expiry, ect) =>
         assetContent(id, ect, from, time, msg).copy(ephemeral = expiry)

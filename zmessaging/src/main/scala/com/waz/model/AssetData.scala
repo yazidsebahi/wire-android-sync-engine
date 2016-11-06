@@ -69,6 +69,8 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
   }
 
   lazy val remoteId = assetKey.flatMap(_.remoteId)
+  lazy val otrKey = assetKey.flatMap(_.otrKey)
+  lazy val sha = assetKey.flatMap(_.sha256)
 
   def downloadFailed() = copy(status = status.key.fold(status)(DownloadFailed))
 
