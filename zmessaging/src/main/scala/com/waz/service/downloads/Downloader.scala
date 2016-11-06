@@ -64,10 +64,10 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
 
   private def httpRequest(asset: AssetRequest, callback: Callback): Option[Request[Unit]] = asset match {
     case wa: WireAssetRequest =>
-      val path = AssetClient.getAssetPath(wa.key.remoteId.getOrElse(RAssetId.Empty), wa.key.otrKey, wa.convId)
+      val path = AssetClient.getAssetPath(wa.key.remoteId, wa.key.otrKey, wa.convId)
       val headers = wa.key.token.fold(Map.empty[String, String])(t => Map("Asset-Token" -> t.str))
       val decoder = new AssetBodyDecoder(cache, wa.key.otrKey.filter(_ != AESKey.Empty), wa.key.sha256.filter(_ != Sha256.Empty))
-      Some(new Request[Unit](Request.GetMethod, Some(path), downloadCallback = Some(callback), decoder = Some(decoder), headers = headers))
+      Some(new Request[Unit](Request.GetMethod, path, downloadCallback = Some(callback), decoder = Some(decoder), headers = headers))
     case req: ExternalAssetRequest =>
       Some(req.request.copy(downloadCallback = Some(callback), decoder = Some(new AssetBodyDecoder(cache))))
     case LocalAssetRequest(_, _, _, _) => None

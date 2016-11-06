@@ -68,6 +68,8 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
     case _ => None
   }
 
+  lazy val remoteId = assetKey.flatMap(_.remoteId)
+
   def downloadFailed() = copy(status = status.key.fold(status)(DownloadFailed))
 
   //When download is finished, return to upload complete
@@ -78,18 +80,18 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
     case _ => CachedAssetRequest(id, mime, name)
   }
 
-  val isImage = this match {
-    case IsImage(_) => true
-    case _ => false
+  val (isImage, isVideo, isAudio) = this match {
+    case IsImage(_, _) => (true, false, false)
+    case IsVideo()     => (false, true, false)
+    case IsAudio()     => (false, false, true)
+    case _             => (false, false, false)
   }
 
-  //TODO feels untidy for non-image assets
   val tag = this match {
     case IsImage(_, t) => t
     case _ => ""
   }
 
-  //TODO feels untidy for non-image/video assets
   val dimensions = this match {
     case IsImage(dim, _) => dim
     case _ => Dim2(0, 0)
@@ -106,6 +108,24 @@ object AssetData {
       asset match {
         case AssetData(_, _, _, _, _, _, Some(AssetMetaData.Image(dims, tag)), _, _, _, _) => Some((dims, tag))
         case _ => None
+      }
+    }
+  }
+
+  object IsVideo {
+    def unapply(asset: AssetData): Boolean = {
+      asset match {
+        case AssetData(_, _, _, _, _, _, Some(AssetMetaData.Video(_, _)), _, _, _, _) => true
+        case _ => false
+      }
+    }
+  }
+
+  object IsAudio {
+    def unapply(asset: AssetData): Boolean = {
+      asset match {
+        case AssetData(_, _, _, _, _, _, Some(AssetMetaData.Audio(_, _)), _, _, _, _) => true
+        case _ => false
       }
     }
   }
@@ -132,6 +152,15 @@ object AssetData {
     def unapply(asset: AssetData): Option[AssetId] = {
       asset match {
         case AssetData(_, _, _, _, _, pId, _, _, _, _, _) => pId
+        case _ => None
+      }
+    }
+  }
+
+  object Status {
+    def unapply(asset: AssetData): Option[AssetStatus] = {
+      asset match {
+        case AssetData(_, status, _, _, _, _, _, _, _, _, _) => Some(status)
         case _ => None
       }
     }
@@ -192,12 +221,11 @@ case class AssetToken(str: String) extends AnyVal
 
 object AssetToken extends (String => AssetToken)
 
-case class AssetKey(remoteId: Option[RAssetId]    = None,
+case class AssetKey(remoteId: Option[RAssetId]    = None, //v2 assets don't need
                     token:    Option[AssetToken]  = None, //public assets don't need
                     otrKey:   Option[AESKey]      = None, //public assets don't need
                     sha256:   Option[Sha256]      = None)
 
-//TODO what's the difference between RAssetDataId and RemoteKey?
 object AssetKey extends ((Option[RAssetId], Option[AssetToken], Option[AESKey], Option[Sha256]) => AssetKey) {
   import JsonDecoder._
 

@@ -147,10 +147,12 @@ object AssetClient {
   }
 
   //TODO remove asset v2 when transition period is over
-  def getAssetPath(rId: RAssetId, otrKey: Option[AESKey], conv: Option[RConvId]): String = (conv, otrKey) match {
-    case (None, _)          => s"/assets/v3/${rId.str}"
-    case (Some(c), None)    => s"/conversations/${c.str}/assets/${rId.str}"
-    case (Some(c), Some(_)) => s"/conversations/${c.str}/otr/assets/${rId.str}"
+  def getAssetPath(remoteId: Option[RAssetId], otrKey: Option[AESKey], conv: Option[RConvId]): Option[String] = remoteId.map { rId =>
+    (conv, otrKey) match {
+      case (None, _)          => s"/assets/v3/${rId.str}"
+      case (Some(c), None)    => s"/conversations/${c.str}/assets/${rId.str}"
+      case (Some(c), Some(_)) => s"/conversations/${c.str}/otr/assets/${rId.str}"
+    }
   }
 
   def imageMetadata(asset: AssetData, nativePush: Boolean) = JsonEncoder { o =>

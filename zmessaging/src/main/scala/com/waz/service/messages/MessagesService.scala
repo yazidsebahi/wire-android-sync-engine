@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
-import com.waz.model.AssetStatus.UploadCancelled
+import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent._
@@ -95,8 +95,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       ct match {
         case asset: Asset =>
           updateAsset(AssetId(id.str), convId, asset, dataId, time) map { Some(_) }
-        case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, None, _) =>
+        case ImageAsset(asset @ AssetData.Status(UploadDone(AssetKey(_, _, None, _)))) =>
           warn(s"got otr asset event without otr key: $msg")
+          assets.storage.updateAsset()
+
           val img = ImageData(tag, mime.str, width, height, origWidth, origHeight, size, dataId, sent = true, data64 = data flatMap { arr => LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption })
           updateImageAsset(AssetId(id.str), convId, img) map { Some(_) }
         case ImageAsset(tag, width, height, origWidth, origHeight, mime, size, Some(key), sha) =>
@@ -147,14 +149,14 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case Knock() =>
         MessageData(id, conv.id, Message.Type.KNOCK, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Reaction(_, _) => MessageData.Empty
-      case Asset(_, _, UploadCancelled) => MessageData.Empty
-      case Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
+      case Asset(AssetData.Status(UploadCancelled), _) => MessageData.Empty
+      case Asset(AssetData.IsVideo(), _) =>
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
-      case Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
+      case Asset(AssetData.IsAudio(), _) =>
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
-      case Asset(Some(Original(Mime.Image(), _, _, _, _)), _, _) =>
+      case Asset(AssetData.IsImage(_, _), _) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
-      case Asset(_, _, _) =>
+      case Asset(_) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Location(_, _, _, _) =>
         MessageData(id, convId, Message.Type.LOCATION, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
@@ -173,11 +175,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
 
     def assetContent(id: MessageId, ct: Any, from: UserId, time: Instant, msg: GenericMessage): MessageData = ct match {
-      case asset @ Asset(Some(Original(Mime.Video(), _, _, _, _)), _, _) =>
+      case Asset(AssetData.IsVideo(), _) =>
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case asset @ Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, _) =>
+      case Asset(AssetData.IsAudio(), _) =>
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case asset @ Asset(Some(Original(Mime.Image(), _, _, _, _)), _, _) =>
+      case Asset(AssetData.IsImage(_, _), _) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case asset: Asset =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
@@ -318,8 +320,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   //TODO why do we put a proto in here when we have sent any yet? - compare with addAssetMessage
   def addImageMessage(convId: ConvId, assetId: AssetId, width: Int, height: Int) = {
-    val id = MessageId(assetId.str)
-    addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpeg"), 0, None, Some(AssetMetaData.Image(Dim2(width, height), Some(ImageData.Tag.Medium)))))))))
+    val id = MessageId()
+    addLocalMessage(MessageData(id, convId, Message.Type.ASSET, selfUserId, protos = Seq(GenericMessage(id.uid, Asset(AssetData(mime = Mime("image/jpeg"), metaData = Some(AssetMetaData.Image(Dim2(width, height), "medium"))))))))
   }
 
   //TODO why do we have the withSelfUserFuture here but not in other methods?

@@ -163,6 +163,10 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 //    }
 //  }
 
+  def findByRemoteData(ak: AssetKey): Future[Option[AssetData]] = {
+    storage.
+  }
+
   def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {
       case None => CancellableFuture successful None

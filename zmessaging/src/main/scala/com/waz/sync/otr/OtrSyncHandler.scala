@@ -170,13 +170,13 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
         key match {
           case Some(k) => service.encryptAssetData(k, data) flatMap {
             case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
-              case Right(UploadResponse(rId, _, token)) => Right(AssetKey(rId, token, key))
+              case Right(UploadResponse(rId, _, token)) => Right(AssetKey(Some(rId), token, key))
               case Left(err) => Left(err)
             }
           }
           case _ =>
             //TODO handle uploading non-encrypted/public assets v3 (profile pictures)
-            Future.successful(Right(AssetKey(RAssetId())))
+            Future.successful(Right(AssetKey()))
         }
       case None => successful(Left(internalError("Client is not registered")))
     }
@@ -205,7 +205,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                 assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry), recipients) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
-                    assetKey = Some(AssetKey(id, None, Some(key), Some(sha)))
+                    assetKey = Some(AssetKey(Some(id), None, Some(key), Some(sha)))
                     Right(msgResponse)
                   case Left(err) =>
                     Left(err)

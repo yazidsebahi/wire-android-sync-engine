@@ -347,6 +347,7 @@ object ConversationEvent {
         case "conversation.voice-channel-deactivate" => VoiceChannelDeactivateEvent(id, 'conversation, 'time, 'from, data.flatMap(d => decodeOptString('reason)(d)))
         case "conversation.typing" => TypingEvent(id, 'conversation, 'time, 'from, isTyping = data.fold(false)(data => decodeString('status)(data) == "started"))
         case "conversation.otr-message-add" => otrMessageEvent(id, 'conversation, 'time, 'from)(data.get)
+          //TODO remove after v2 transition period is over - no more clients should be sending v2
         case "conversation.otr-asset-add" => otrAssetEvent(id, 'conversation, 'time, 'from)(data.get)
         case _ =>
           error(s"unhandled event: $js")
