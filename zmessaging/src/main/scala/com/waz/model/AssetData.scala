@@ -27,6 +27,7 @@ import com.waz.service.downloads.DownloadRequest.{CachedAssetRequest, WireAssetR
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
+import org.threeten.bp.Duration
 
 case class AssetData(id:          AssetId               = AssetId(), //TODO make independent of message id - will now be cache key
                      status:      AssetStatus           = AssetStatus.UploadNotStarted,
@@ -146,6 +147,15 @@ object AssetData {
     def unapply(asset: AssetData): Option[AssetMetaData] = {
       asset match {
         case AssetData(_, _, _, _, _, _, metaData, _, _, _, _) => metaData
+        case _ => None
+      }
+    }
+  }
+
+  object HasDuration {
+    def unapply(asset: AssetData): Option[Duration] = {
+      asset match {
+        case AssetData(_, _, _, _, _, _, AssetMetaData.HasDuration(duration), _, _, _, _) => Some(duration)
         case _ => None
       }
     }
