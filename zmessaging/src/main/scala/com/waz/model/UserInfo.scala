@@ -19,14 +19,13 @@ package com.waz.model
 
 import com.waz.api.impl.AccentColor
 import com.waz.model.AssetStatus.UploadDone
-import com.waz.utils.{JsonDecoder, JsonEncoder}
+import com.waz.utils.{JsonDecoder, JsonEncoder, returning}
 import com.waz.znet.ContentEncoder
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import org.json
 import org.json.{JSONArray, JSONObject}
-import com.waz.utils.returning
 
-case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
+case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picSmall: Option[AssetData] = None, picMedium: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
 
 object UserInfo {
   import JsonDecoder._
@@ -50,13 +49,16 @@ object UserInfo {
 
     }
 
-    def picture(implicit js: JSONObject): AssetData = {
+    def picture(implicit js: JSONObject): (Option[AssetData], Option[AssetData]) = {
       val pic = js.getJSONArray("picture")
-      if (pic.length() == 0) AssetData()
+      if (pic.length() == 0) (None, None)
       else {
-        val versions = Seq.tabulate(pic.length())(i => imageData(pic.getJSONObject(i)))
         val id = decodeOptString('correlation_id)(pic.getJSONObject(0).getJSONObject("info")).fold(AssetId())(AssetId(_))
-        AssetData(id, status = UploadDone(AssetKey(Some(decodeId[RAssetId]('id)))), versions)
+        val pics = Seq.tabulate(pic.length())(i => imageData(pic.getJSONObject(i)))
+
+        val small = pics.find { case AssetData.IsImage(_, tag) => tag == "smallProfile"; case _ => false }
+        val medium = pics.find { case AssetData.IsImage(_, tag) => tag == "medium"; case _ => false }.map(_.copy(id = id, previewId = small.map(_.id)))
+        (small, medium)
       }
     }
 
@@ -68,34 +70,33 @@ object UserInfo {
         }
       }
 
-      UserInfo('id, 'name, accentId, 'email, 'phone,
-        if (js.has("picture")) Some(picture) else None,
-        decodeOptString('tracking_id) map (TrackingId(_)),
-        deleted = 'deleted
-      )
+      val (small, medium) = if (js.has("picture")) picture else (None, None)
+      UserInfo('id, 'name, accentId, 'email, 'phone, small, medium, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
     }
   }
 
-  def encodeImage(data: AssetData): JSONArray =
+  def encodeImage(assets: Seq[Option[AssetData]]): JSONArray =
     returning(new json.JSONArray()) { arr =>
-      data.versions foreach { im =>
-        arr.put(JsonEncoder { o =>
-          o.put("content_type", im.mime)
-          o.put("content_length", im.size)
-          im.data64.foreach(o.put("data", _))
-          im.remoteId.foreach(id => o.put("id", id.str))
-          o.put("info", JsonEncoder { info =>
-            info.put("tag", im.tag)
-            info.put("width", im.width)
-            info.put("height", im.height)
-            info.put("original_width", im.origWidth)
-            info.put("original_height", im.origHeight)
-            info.put("correlation_id", data.id.str)
-            info.put("nonce", data.id.str)
-            info.put("public", true)
-          })
-        })
-      }
+      assets.collect {
+        //for some reason using IsImage causes a compiler failure - using full unapply instead works
+        case Some(a@AssetData(_, _, _, _, _, _, Some(AssetMetaData.Image(Dim2(w, h), tag)), _, _, _, _)) =>
+          JsonEncoder { o =>
+            o.put("content_type", a.mime.str)
+            o.put("content_length", a.size)
+            a.data64.foreach(o.put("data", _))
+            a.remoteId.foreach(id => o.put("id", id.str))
+            o.put("info", JsonEncoder { info =>
+              info.put("tag", tag)
+              info.put("width", w)
+              info.put("height", h)
+              info.put("original_width", w)
+              info.put("original_height", h)
+              info.put("correlation_id", a.id.str)
+              info.put("nonce", a.id.str)
+              info.put("public", true)
+            })
+          }
+      }.foreach(arr.put)
     }
 
   implicit lazy val Encoder: JsonEncoder[UserInfo] = new JsonEncoder[UserInfo] {
@@ -106,7 +107,7 @@ object UserInfo {
       info.email.foreach(e => o.put("email", e.str))
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
-      info.picture.foreach(pic => o.put("picture", encodeImage(pic)))
+      o.put("picture", encodeImage(Seq(info.picSmall, info.picMedium)))
     }
   }
 
@@ -114,7 +115,7 @@ object UserInfo {
     JsonEncoder { o =>
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
-      info.picture.foreach(pic => o.put("picture", encodeImage(pic)))
+      o.put("picture", encodeImage(Seq(info.picSmall, info.picMedium)))
     }
   }
 }
