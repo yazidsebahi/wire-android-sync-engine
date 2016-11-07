@@ -42,7 +42,7 @@ case class CacheEntryData(key: AssetId,
 
 object CacheEntryData {
 
-  implicit object CacheEntryDao extends Dao[CacheEntryData, String] with CacheEntryDataUpgrades {
+  implicit object CacheEntryDao extends Dao[CacheEntryData, AssetId] with CacheEntryDataUpgrades {
     val Key = uid('key, "PRIMARY KEY")(d => com.waz.model.Uid(d.key.str))
     val Uid = uid('file)(_.fileId)
     val Data = opt(blob('data))(_.data)
@@ -60,9 +60,9 @@ object CacheEntryData {
     override def apply(implicit cursor: Cursor): CacheEntryData =
       new CacheEntryData(AssetId(Key.str), Data, LastUsed, Timeout, Path, EncKey, Name, MimeType, Uid, Length)
 
-    def getByKey(key: String)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
+    def getByKey(key: AssetId)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
 
-    def deleteByKey(key: String)(implicit db: SQLiteDatabase): Int = delete(key)
+    def deleteByKey(key: AssetId)(implicit db: SQLiteDatabase): Int = delete(key)
 
     def findAll(implicit db: SQLiteDatabase): Seq[CacheEntryData] = list
 

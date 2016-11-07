@@ -155,7 +155,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       case None => Future successful Right(None)
       case Some(uri) =>
         imageGenerator.generateWireAsset(uri).map(Some(_)).recover { case _: Throwable => None }.future flatMap {
-          case Some(asset @ AssetData.HasData(data)) =>
+          case Some(asset @ AssetData.WithData(data)) =>
             val aes = AESKey()
             otrSync.uploadAssetDataV3(LocalData(data), Some(aes)).map {
               case Right(assetKey) =>

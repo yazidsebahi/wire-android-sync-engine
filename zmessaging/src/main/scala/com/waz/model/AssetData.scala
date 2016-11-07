@@ -28,6 +28,7 @@ import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
 import org.threeten.bp.Duration
+import com.waz.ZLog.ImplicitTag._
 
 case class AssetData(id:          AssetId               = AssetId(), //TODO make independent of message id - will now be cache key
                      status:      AssetStatus           = AssetStatus.UploadNotStarted,
@@ -134,7 +135,7 @@ object AssetData {
     }
   }
 
-  object HasData {
+  object WithData {
     def unapply(asset: AssetData): Option[Array[Byte]] = {
       asset match {
         case AssetData(_, _, _, _, _, _, _, _, _, _, Some(data64)) => asset.data
@@ -143,7 +144,7 @@ object AssetData {
     }
   }
 
-  object HasMetaData {
+  object WithMetaData {
     def unapply(asset: AssetData): Option[AssetMetaData] = {
       asset match {
         case AssetData(_, _, _, _, _, _, metaData, _, _, _, _) => metaData
@@ -152,7 +153,16 @@ object AssetData {
     }
   }
 
-  object HasDuration {
+  object WithDimensions {
+    def unapply(asset: AssetData): Option[Dim2] = {
+      asset match {
+        case AssetData(_, _, _, _, _, _, AssetMetaData.HasDimensions(dimensions), _, _, _, _) => Some(dimensions)
+        case _ => None
+      }
+    }
+  }
+
+  object WithDuration {
     def unapply(asset: AssetData): Option[Duration] = {
       asset match {
         case AssetData(_, _, _, _, _, _, AssetMetaData.HasDuration(duration), _, _, _, _) => Some(duration)
@@ -161,7 +171,7 @@ object AssetData {
     }
   }
 
-  object HasPreview {
+  object WithPreview {
     def unapply(asset: AssetData): Option[AssetId] = {
       asset match {
         case AssetData(_, _, _, _, _, pId, _, _, _, _, _) => pId
@@ -170,7 +180,7 @@ object AssetData {
     }
   }
 
-  object Status {
+  object WithStatus {
     def unapply(asset: AssetData): Option[AssetStatus] = {
       asset match {
         case AssetData(_, status, _, _, _, _, _, _, _, _, _) => Some(status)

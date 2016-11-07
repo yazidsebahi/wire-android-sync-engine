@@ -18,6 +18,7 @@
 package com.waz.model
 
 import com.waz.api.impl.AccentColor
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.ContentEncoder
 import com.waz.znet.ContentEncoder.JsonContentEncoder
@@ -25,7 +26,7 @@ import org.json
 import org.json.{JSONArray, JSONObject}
 import com.waz.utils.returning
 
-case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[ImageAssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
+case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
 
 object UserInfo {
   import JsonDecoder._
@@ -39,16 +40,23 @@ object UserInfo {
       val id = RAssetId(decodeString('id)(js))
       implicit val info = js.getJSONObject("info")
 
-      ImageData('tag, mime, 'width, 'height, 'original_width, 'original_height, size, Some(id), data.filter(_.nonEmpty), sent = true)
+      AssetData(
+        status = UploadDone(AssetKey(Some(id))),
+        sizeInBytes = size,
+        mime = Mime(mime),
+        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
+        data64 = data
+      )
+
     }
 
-    def picture(implicit js: JSONObject): ImageAssetData = {
+    def picture(implicit js: JSONObject): AssetData = {
       val pic = js.getJSONArray("picture")
-      if (pic.length() == 0) ImageAssetData.Empty
+      if (pic.length() == 0) AssetData()
       else {
         val versions = Seq.tabulate(pic.length())(i => imageData(pic.getJSONObject(i)))
         val id = decodeOptString('correlation_id)(pic.getJSONObject(0).getJSONObject("info")).fold(AssetId())(AssetId(_))
-        ImageAssetData(id, decodeId[RConvId]('id), versions)
+        AssetData(id, status = UploadDone(AssetKey(Some(decodeId[RAssetId]('id)))), versions)
       }
     }
 
@@ -68,7 +76,7 @@ object UserInfo {
     }
   }
 
-  def encodeImage(data: ImageAssetData): JSONArray =
+  def encodeImage(data: AssetData): JSONArray =
     returning(new json.JSONArray()) { arr =>
       data.versions foreach { im =>
         arr.put(JsonEncoder { o =>

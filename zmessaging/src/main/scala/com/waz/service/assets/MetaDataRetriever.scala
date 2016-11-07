@@ -48,4 +48,9 @@ object MetaDataRetriever {
       retriever.setDataSource(context, uri)
       f(retriever)
     }
+
+  def get(context: Context, uri: Uri): Future[MediaMetadataRetriever] = apply { r =>
+    r.setDataSource(context, uri)
+    r
+  }
 }

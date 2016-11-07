@@ -311,7 +311,8 @@ object GenericContent {
     }
 
     object WithAsset {
-      def unapply(lp: LinkPreview): Option[Asset] = Option(lp.image) orElse {if (lp.hasArticle) Option(lp.getArticle.image) else None}
+      def unapply(lp: LinkPreview): Option[AssetData] =
+        (Option(lp.image) orElse {if (lp.hasArticle) Option(lp.getArticle.image) else None}).flatMap { a => Asset.unapply(a).map { case (asset, _) => asset}}
     }
 
     object WithDescription {

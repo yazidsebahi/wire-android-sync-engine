@@ -25,8 +25,7 @@ import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
 import com.waz.api.MessageContent.{Location, Text}
 import com.waz.api.{EphemeralExpiration, IConversation, ImageAssetFactory, UpdateListener}
-import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.{Asset => ProtoAsset, LinkPreview, MsgEdit}
+import com.waz.model.GenericContent.{LinkPreview, MsgEdit}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
@@ -217,13 +216,13 @@ class MessagePart(content: MessageContent, message: MessageData, index: Int)(imp
 
   lazy val image = (content.tpe, content.asset, content.openGraph, linkPreview) match {
     case (Part.Type.ASSET, Some(assetId), _, _) => ui.images.getImageAsset(assetId)
-    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset)
+    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset.id)
     case (Part.Type.WEB_LINK, _, Some(OpenGraphData(_, _, Some(uri), _, _)), None) => ImageAssetFactory.getImageAsset(uri)
     case _ => ImageAsset.Empty
   }
 
   lazy val dimensions = linkPreview match {
-    case Some(LinkPreview.WithAsset(GenericContent.Asset.WithDimensions(d))) => d
+    case Some(LinkPreview.WithAsset(AssetData.WithDimensions(d))) => d
     case _ => Dim2(content.width, content.height)
   }
 

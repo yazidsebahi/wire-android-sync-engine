@@ -94,22 +94,7 @@ case class MessageData(id: MessageId,
     case _ => Map.empty
   }
 
-  lazy val imageDimensions: Option[Dim2] = msgType match {
-    case Message.Type.ASSET =>
-      protos.collectFirst {
-        case GenericMessageContent(Asset.WithDimensions(d)) => d
-        case GenericMessageContent(ImageAsset(_, _, _, w, h, _, _, _, _)) => Dim2(w, h)
-      } orElse {
-        content.headOption.collect {
-          case MessageContent(_, _, _, _, Some(_), w, h, _, _) => Dim2(w, h)
-        }
-      }
-    case _ =>
-      protos.reverseIterator.collectFirst {
-        case GenericMessageContent(Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _)) => d
-        case GenericMessageContent(Asset(_, Some(Asset.Preview(_, _, _, _, Some(HasDimensions(d)))), _)) => d
-      }
-  }
+  lazy val imageDimensions: Option[Dim2] = protos.collectFirst { case GenericMessageContent(AssetData.WithDimensions(d)) => d}
 
   lazy val location =
     protos.collectFirst {

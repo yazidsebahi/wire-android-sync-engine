@@ -80,7 +80,7 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
     else callback.onLoadFailed()
 
   private def durationSignal(zms: ZMessaging): Signal[Duration] = zms.assetsStorage.signal(id) map {
-    case AssetData.HasDuration(duration) => duration
+    case AssetData.WithDuration(duration) => duration
     case _ => Duration.ZERO
   }
 

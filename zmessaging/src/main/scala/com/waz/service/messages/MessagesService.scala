@@ -103,7 +103,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     //A defined convId marks that the asset is a v2 asset
     def update(convId: Option[RConvId], ct: Any, v2RId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] =
       ct match {
-        case Asset(a@AssetData.Status(UploadDone(AssetKey(Some(rId), _, _, _))), _) => updateAsset(rId, a)
+        case Asset(a@AssetData.WithStatus(UploadDone(AssetKey(Some(rId), _, _, _))), _) => updateAsset(rId, a)
         case Asset(asset, _) if v2RId.nonEmpty =>
           updateAsset(v2RId.get, asset.copy(convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
         case ImageAsset(asset) if v2RId.nonEmpty =>
@@ -128,7 +128,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   private def deleteCancelled(as: Seq[AssetData]) = {
     val toRemove = as collect {
-      case a@AssetData.Status(UploadCancelled) => a.id
+      case a@AssetData.WithStatus(UploadCancelled) => a.id
     }
     if (toRemove.isEmpty) Future.successful(())
     else for {
@@ -148,7 +148,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case Knock() =>
         MessageData(id, conv.id, Message.Type.KNOCK, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Reaction(_, _) => MessageData.Empty
-      case Asset(AssetData.Status(UploadCancelled), _) => MessageData.Empty
+      case Asset(AssetData.WithStatus(UploadCancelled), _) => MessageData.Empty
       case Asset(AssetData.IsVideo(), _) =>
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(AssetData.IsAudio(), _) =>

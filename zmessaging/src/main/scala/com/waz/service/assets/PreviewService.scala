@@ -40,7 +40,7 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
   //Be sure to update the previewId on any instances of AssetData this id references
   def getAssetPreview(id: AssetId): CancellableFuture[Option[AssetData]] =
   Serialized(('PreviewService, id))(CancellableFuture lift storage.get(id) flatMap {
-    case Some(asset@AssetData.HasPreview(pId)) => CancellableFuture.lift(storage.get(pId)).flatMap {
+    case Some(asset@AssetData.WithPreview(pId)) => CancellableFuture.lift(storage.get(pId)).flatMap {
       case Some(preview) => CancellableFuture.successful(Some(preview))
       case None => preview(asset)
     }

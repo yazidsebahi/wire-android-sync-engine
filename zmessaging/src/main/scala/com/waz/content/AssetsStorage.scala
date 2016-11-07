@@ -22,7 +22,7 @@ import com.waz.model.AssetData.AssetDataDao
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.events.EventStream
+import com.waz.utils.events.{EventContext, EventStream}
 import com.waz.utils.{CachedStorage, TrimmingLruCache, _}
 
 import scala.collection.mutable
@@ -30,6 +30,7 @@ import scala.concurrent.Future
 
 class AssetsStorage(context: Context, storage: Database) extends CachedStorage[AssetId, AssetData](new TrimmingLruCache(context, Fixed(100)), storage)(AssetDataDao, "AssetsStorage") {
   private implicit val dispatcher = new SerialDispatchQueue(name = "AssetsStorage")
+  import EventContext.Implicits.global
 
   private val remoteMap = new mutable.HashMap[RAssetId, AssetId]()
   private val assetsById = new mutable.HashMap[AssetId, AssetData]()
