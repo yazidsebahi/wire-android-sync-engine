@@ -18,11 +18,12 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.model.AssetStatus.{UploadDone, UploadInProgress}
 import com.waz.model.GenericContent.Asset
 import com.waz.model._
-import com.waz.service.PreferenceService
+import com.waz.service.{ErrorsService, PreferenceService}
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
 import com.waz.service.images.ImageLoader
@@ -37,46 +38,35 @@ import scala.concurrent.Future.{failed, successful}
 import scala.util.control.NoStackTrace
 
 class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,
-                       assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler, prefs: PreferenceService) {
+                       assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler, prefs: PreferenceService, errors: ErrorsService) {
 
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[AssetSyncHandler]
 
-  def postAsset(assetId: AssetId, nativePush: Boolean = false, recipients: Option[Set[UserId]] = None): ErrorOr[Option[AssetData]] = {
-    assets.storage.get(assetId) flatMap {
-      case Some(asset) =>
-        if (asset.remoteId.isDefined) { //TODO check this
-          warn(s"asset has already been uploaded, skipping: $asset")
-          successful(Right(None))
+  def uploadAssetData(assetId: AssetId, convId: ConvId, msgId: MessageId): ErrorOrResponse[Option[AssetData]] = {
+    CancellableFuture.lift(assets.storage.get(assetId).zip(assets.getAssetData(assetId))) flatMap {
+      case (Some(asset), Some(data)) if data.length > AssetData.MaxAllowedAssetSizeInBytes =>
+        CancellableFuture lift errors.addAssetTooLargeError(convId, msgId) map { _ => Left(internalError("asset too large")) }
+      case (Some(asset), _) if asset.remoteId.isDefined =>
+        warn(s"asset has already been uploaded, skipping: $asset")
+        CancellableFuture.successful(Right(None))
+      case (Some(asset), Some(data)) =>
+        val key = AESKey()
+        otrSync.uploadAssetDataV3(data, Some(key)).map {
+          case Right(ak) => Right(Some(asset.copy(status = UploadDone(ak))))
+          case Left(err) => Left(err)
+        }.flatMap {
+          case Right(Some(asset)) =>
+            for {
+              Some(updated) <- CancellableFuture.lift(assets.storage.updateAsset(asset.id, a => asset))
+              _ <- CancellableFuture.lift(cache.addStream(updated.id, data.inputStream, updated.mime, updated.name, length = data.length))
+            } yield Right(Some(updated))
+          case Left(error) => CancellableFuture.successful(Left(error))
         }
-        cache.getEntry(assetId).flatMap {
-          case Some(cacheData) =>
-            val key = AESKey()
-            asset.convId match {
-              case Some(id) if prefs.sendWithV3 => convs.convByRemoteId(id) flatMap {
-                //TODO remove v2 sending after testing
-                case Some(convData) =>
-                  def proto(sha: Sha256): GenericMessage = GenericMessage(Uid(), asset match {
-                    case AssetData.IsImage(_, _) => Proto.ImageAsset(asset.copy(status = UploadInProgress(Some(AssetKey(otrKey = Some(key), sha256 = Some(sha))))))
-                    case _                       => Proto.Asset(asset.copy(status = UploadInProgress(Some(AssetKey(otrKey = Some(key), sha256 = Some(sha))))))
-                  })
-                  otrSync.postAssetDataV2(convData, key, proto, cacheData, nativePush, recipients) map {
-                    case Right((ak, date)) => Right(Some(asset.copy(status = UploadDone(ak))))
-                    case Left(err) => Left(err)
-                  }
-              }
-              case _ =>
-                otrSync.uploadAssetDataV3(cacheData, Some(key)) map {
-                  case Right(ak) => Right(Some(asset.copy(status = UploadDone(ak))))
-                  case Left(err) => Left(err)
-                }
-            }
-          case None =>
-            error(s"No cache entry found for asset: $asset")
-            CancellableFuture successful Right(None)
-        }
-      case None => failed(new SyncException(s"postAsset($assetId) - no asset data found"))
+      case asset =>
+        debug(s"No asset data found in postAssetData, got: $asset")
+        CancellableFuture successful Right(None)
     }
   }
 

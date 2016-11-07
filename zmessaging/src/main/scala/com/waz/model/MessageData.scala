@@ -460,7 +460,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
   object IsAsset {
     def apply(tpe: Message.Type): Boolean = unapply(tpe)
     def unapply(tpe: Message.Type): Boolean = tpe match {
-      case ANY_ASSET | VIDEO_ASSET | AUDIO_ASSET => true
+      case ANY_ASSET | VIDEO_ASSET | AUDIO_ASSET | ASSET => true
       case _ => false
     }
   }
