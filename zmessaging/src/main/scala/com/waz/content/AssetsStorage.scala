@@ -18,6 +18,7 @@
 package com.waz.content
 
 import android.content.Context
+import android.net.Uri
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
@@ -33,22 +34,21 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
   import EventContext.Implicits.global
 
   private val remoteMap = new mutable.HashMap[RAssetId, AssetId]()
+  private val uriMap = new mutable.HashMap[Uri, AssetId]()
   private val assetsById = new mutable.HashMap[AssetId, AssetData]()
 
-  private def addIds(assets: Iterable[AssetData]) = {
-    for {
-      asset <- assets
-      rId <- asset.remoteId
-    } {
+  private def updateLinks(assets: Iterable[AssetData]) = {
+    assets.foreach { asset =>
+      asset.source.foreach(uriMap.put(_, asset.id))
+      asset.remoteId.foreach(remoteMap.put(_, asset.id))
       assetsById.put(asset.id, asset)
-      remoteMap.put(rId, asset.id)
     }
     assetsById
   }
 
-  private val init = find[AssetData, Vector[AssetData]](_ => true, db => AssetDataDao.iterating(AssetDataDao.listCursor(db)), identity) map addIds
+  private val init = find[AssetData, Vector[AssetData]](_ => true, db => AssetDataDao.iterating(AssetDataDao.listCursor(db)), identity) map updateLinks
 
-  onAdded.on(dispatcher)(as => addIds(as))
+  onAdded.on(dispatcher)(as => updateLinks(as))
 
   onUpdated.on(dispatcher) {
     _.foreach { case (prev, cur) =>
@@ -57,10 +57,15 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
       if (prev.remoteId.isEmpty) {
         cur.remoteId.foreach(remoteMap.put(_, cur.id))
       }
+      if (prev.source.isEmpty) {
+        cur.source.foreach(uriMap.put(_, cur.id))
+      }
     }
   }
 
   def getByRemoteId(remoteId: RAssetId): Future[Option[AssetData]] = init map (assetsById => remoteMap.get(remoteId).flatMap(assetsById.get))
+
+  def getByUri(uri: Uri): Future[Option[AssetData]] = init map (assetsById => uriMap.get(uri).flatMap(assetsById.get))
 
   val onUploadFailed = EventStream[AssetData]()
 

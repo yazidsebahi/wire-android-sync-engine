@@ -17,48 +17,84 @@
  */
 package com.waz.service.media
 
-import com.waz.model.{AssetId, ImageAssetData, ImageData, RConvId}
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.warn
+import com.waz.model.{AssetData, AssetId}
+import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.client.GiphyClient
 import com.waz.threading.{CancellableFuture, Threading}
 
-class GiphyService(client: GiphyClient) {
+import scala.concurrent.Future
+
+class GiphyService(client: GiphyClient, assets: AssetService) {
   import Threading.Implicits.Background
-  
-  def getRandomGiphyImage: CancellableFuture[Seq[ImageAssetData]] = {
-    client.loadRandom().map {
-      case Nil => Nil
+
+  //TODO Dean - this is all a bit ugly - It might be better to re-introduce an Image AssetData container type that links previews together
+  implicit lazy val ImageDataOrdering: Ordering[AssetData] = new Ordering[AssetData] {
+    override def compare(x: AssetData, y: AssetData): Int = {
+      if (x.dimensions.width == y.dimensions.width) {
+        if (x.tag == "preview" || y.tag == "medium") -1
+        else if (x.tag == "medium" || y.tag == "preview") 1
+        else Ordering.Int.compare(x.size.toInt, y.size.toInt)
+      } else Ordering.Int.compare(x.dimensions.width, y.dimensions.width)
+    }
+  }
+
+  def getRandomGiphyImage: CancellableFuture[Seq[AssetId]] = {
+    client.loadRandom().flatMap {
+      case Nil => CancellableFuture.successful(Nil)
       case images =>
         val sorted = images.sorted
         val medium = sorted.last
         val preview = sorted.head
-        Seq(ImageAssetData(AssetId(), RConvId(), Seq(preview.copy(origWidth = medium.width, origHeight = medium.height), medium)))
+        CancellableFuture.lift(cacheGiphyResults(Seq((preview, medium))))
     }
   }
 
-  def searchGiphyImage(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[ImageAssetData]] = {
-    client.search(keyword, offset, limit).map {
-      case Nil => Nil
-      case images => images flatMap imageAssetData
+  def searchGiphyImage(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[AssetId]] = {
+    client.search(keyword, offset, limit).flatMap {
+      case Nil => CancellableFuture.successful(Nil)
+      case images => CancellableFuture.lift(cacheGiphyResults(images.flatMap(assetData)))
     }
   }
 
-  def trending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[ImageAssetData]] = {
-    client.loadTrending(offset, limit).map {
-      case Nil => Nil
-      case images => images flatMap imageAssetData
+  def trending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[AssetId]] = {
+    client.loadTrending(offset, limit).flatMap {
+      case Nil => CancellableFuture.successful(Nil)
+      case images => CancellableFuture.lift(cacheGiphyResults(images.flatMap(assetData)))
     }
   }
 
-  private def imageAssetData(is: Seq[ImageData]) = {
-    val previews = is.filter(_.tag == ImageData.Tag.Preview)
-    val gifs = is.filter(i => i.tag != ImageData.Tag.Preview && i.size <= ImageAssetGenerator.MaxGifSize)
+  private def assetData(is: Seq[AssetData]): Seq[(AssetData, AssetData)] = {
+    val previews = is.filter(_.tag == "preview")
+    val gifs = is.filter(i => i.tag != "preview" && i.size <= ImageAssetGenerator.MaxGifSize)
     if (gifs.isEmpty || previews.isEmpty) Nil
     else {
       val medium = gifs.maxBy(_.size)
-      val preview = previews.minBy(_.width).copy(origWidth = medium.width, origHeight = medium.height)
-      val still = previews.find(_.width == medium.width).map(_.copy(tag = ImageData.Tag.MediumPreview, origWidth = medium.width, origHeight = medium.height))
-      Seq(ImageAssetData(AssetId(), RConvId(), Seq(Some(preview), still, Some(medium)).flatten))
+      val preview = previews.minBy(_.dimensions.width)
+      //TODO Dean: reintroduce still versions?
+      //      val still = previews.find(_.dimensions.width == medium.dimensions.width).map(a => a.copy(metaData = Some(AssetMetaData.Image(a.dimensions, "medium"))))
+      Seq((preview, medium.copy(previewId = Some(preview.id))))
     }
   }
+
+  private def cacheGiphyResults(results: Seq[(AssetData, AssetData)]): Future[Seq[AssetId]] = {
+    Future.sequence(results.map { case (prev, medium) => cacheGiphyResult(prev, medium).collect { case Some(id) => id } })
+  }
+
+  private def cacheGiphyResult(preview: AssetData, medium: AssetData): Future[Option[AssetId]] = {
+    Future.sequence(Seq(preview, medium.copy(previewId = Some(preview.id))).map { asset =>
+      (asset.source match {
+        case Some(uri) => assets.storage.getByUri(uri).flatMap {
+          case Some(cur) => assets.storage.updateAsset(cur.id, _ => asset.copy(id = cur.id))
+          case None => assets.storage.insert(asset).map(Some(_))
+        }
+        case None =>
+          warn("Tried to save giphy result that doesn't contain a URI - ignoring")
+          Future successful None
+      }).collect { case Some(saved) => saved.id }
+    }).map(_.lastOption)
+  }
+
 }
