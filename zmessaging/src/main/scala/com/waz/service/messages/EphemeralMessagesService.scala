@@ -129,8 +129,7 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
       case MessageData.IsAsset() | Message.Type.ASSET =>
         // check if asset was fully uploaded
         msg.protos.exists {
-          case GenericMessage(_, Ephemeral(_, Asset(_, _, UploadDone(_) | UploadFailed))) => true
-          case GenericMessage(_, Ephemeral(_, ImageAsset(ImageData.Tag.Medium, _, _, _, _, _, _, _, _))) => true
+          case GenericMessage(_, Ephemeral(_, Asset(AssetData.WithStatus(UploadDone(_) | UploadFailed), _))) => true
           case _ => false
         }
       case _ => true

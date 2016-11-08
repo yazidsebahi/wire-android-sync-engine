@@ -24,7 +24,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.waz.ZLog._
 import com.waz.cache.{CacheEntryData, Expiration}
-import com.waz.model.Uid
+import com.waz.model.{AssetId, Uid}
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
@@ -40,7 +40,7 @@ class WireContentProvider extends ContentProvider {
 
   private def cache = ZMessaging.currentGlobal.cache
 
-  private def getEntry(key: String) = Await.result(cache.getEntry(key), AsyncTimeout)
+  private def getEntry(key: AssetId) = Await.result(cache.getEntry(key), AsyncTimeout)
 
   override def getType(uri: Uri): String = {
     verbose(s"getType($uri)")
@@ -98,17 +98,18 @@ class WireContentProvider extends ContentProvider {
     }
   }
 
-  private def getDecryptedEntry(key: String) =
+  private def getDecryptedEntry(key: AssetId) =
     cache.getEntry(key) flatMap {
       case Some(entry) if entry.data.encKey.isDefined =>
-        cache.getOrElse(key + "#_decr_", cache.addStream(Uid().str, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
+        //TODO Dean: do we need to have different keys for encrypted/unencrypted cache entries?
+        cache.getOrElse(key, cache.addStream(key, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
       case res => CancellableFuture successful res
     }
 
   object CacheUriExtractor {
     val extractor = CacheUri.unapply(getContext) _
 
-    def unapply(uri: Uri): Option[String] = extractor(uri)
+    def unapply(uri: Uri): Option[AssetId] = extractor(uri)
   }
 }
 
@@ -120,19 +121,19 @@ object WireContentProvider {
 
     def builder(context: Context) = Uri.parse(ContentResolver.SCHEME_CONTENT + "://" + context.getPackageName).buildUpon()
 
-    def apply(key: String, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key).build()
+    def apply(key: AssetId, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key.str).build()
 
     def apply(entry: CacheEntryData, context: Context): Uri = {
-      val b = builder(context).appendEncodedPath(Cache).appendPath(entry.key)
+      val b = builder(context).appendEncodedPath(Cache).appendPath(entry.key.str)
       entry.fileName foreach b.appendPath
       b.build()
     }
 
-    def unapply(context: Context)(uri: Uri): Option[String] =
+    def unapply(context: Context)(uri: Uri): Option[AssetId] =
       if (uri.getScheme != ContentResolver.SCHEME_CONTENT || uri.getAuthority != context.getPackageName) None
       else {
         val path = uri.getPathSegments
-        if (path.size() >= 2 && path.get(0) == "cache") Some(path.get(1)) else None
+        if (path.size() >= 2 && path.get(0) == "cache") Some(AssetId(path.get(1))) else None
       }
   }
 }
