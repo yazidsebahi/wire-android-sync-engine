@@ -90,7 +90,7 @@ object BitmapSignal {
   private[images] val signalCache = new WeakMemCache[Any, Signal[BitmapResult]]
 
   def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, imageCache: MemoryImageCache): Signal[BitmapResult] = {
-    if (asset.isImage) Signal(BitmapResult.Empty)
+    if (!asset.isImage) Signal(BitmapResult.Empty)
     else signalCache((asset, req), new AssetBitmapSignal(asset, req, service, imageCache))
   }
 

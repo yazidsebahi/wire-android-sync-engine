@@ -19,6 +19,8 @@ package com.waz.content
 
 import android.content.Context
 import android.net.Uri
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.verbose
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
@@ -38,15 +40,21 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
   private val assetsById = new mutable.HashMap[AssetId, AssetData]()
 
   private def updateLinks(assets: Iterable[AssetData]) = {
+    verbose(s"updating links to assets: $assets")
     assets.foreach { asset =>
       asset.source.foreach(uriMap.put(_, asset.id))
       asset.remoteId.foreach(remoteMap.put(_, asset.id))
       assetsById.put(asset.id, asset)
     }
+    verbose(s"remoteMap: $remoteMap")
+    verbose(s"uriMap: $uriMap")
     assetsById
   }
 
-  private val init = find[AssetData, Vector[AssetData]](_ => true, db => AssetDataDao.iterating(AssetDataDao.listCursor(db)), identity) map updateLinks
+  private val init = {
+    verbose("initialising assets storage")
+    find[AssetData, Vector[AssetData]](_ => true, db => AssetDataDao.iterating(AssetDataDao.listCursor(db)), identity) map updateLinks
+  }
 
   onAdded.on(dispatcher)(as => updateLinks(as))
 

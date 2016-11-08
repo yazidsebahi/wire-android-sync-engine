@@ -54,7 +54,9 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
        | mime:          $mime
        | sizeInBytes:   $sizeInBytes
        | preview:       $previewId
-       | other fields:  $name, $metaData, $source, $proxyPath, $convId, $data64
+       | metaData:      $metaData
+       | convId:        $convId
+       | other fields:  $name, $source, $proxyPath, $data64
        |
     """.stripMargin
 
@@ -101,7 +103,7 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
     case IsImage(dim, _) => dim
     case _ => Dim2(0, 0)
   }
-
+  
 }
 
 object AssetData {
@@ -201,8 +203,8 @@ object AssetData {
 
   implicit object AssetDataDao extends Dao[AssetData, AssetId] {
     val Id    = id[AssetId]('_id, "PRIMARY KEY").apply(_.id)
-    val Asset = text('asset_type, "").apply(_ => "")
     //TODO remove in migration
+    val Asset = text('asset_type, "").apply(_ => "")
     val Data = text('data)(JsonEncoder.encodeString(_))
 
     override val idCol = Id

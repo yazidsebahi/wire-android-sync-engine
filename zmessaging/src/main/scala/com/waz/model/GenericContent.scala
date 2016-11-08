@@ -21,6 +21,8 @@ package com.waz.model
 import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.verbose
 import com.waz.api.EphemeralExpiration
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
@@ -197,6 +199,7 @@ object GenericContent {
         status = status,
         previewId = preview.map(_.id)
       )
+      verbose(s"created asset and preview from proto message: $asset, $preview")
       Some((asset, preview))
     }
 
@@ -210,13 +213,16 @@ object GenericContent {
   implicit object ImageAsset extends GenericContent[ImageAsset] {
     override def set(msg: GenericMessage) = msg.setImage
 
-    def unapply(proto: ImageAsset): Option[AssetData] =
-      Some(AssetData(
+    def unapply(proto: ImageAsset): Option[AssetData] = {
+      val res = Some(AssetData(
         status = UploadDone(AssetKey(otrKey = Option(proto.otrKey).map(AESKey(_)), sha256 = Option(proto.sha256).map(Sha256(_)))),
         sizeInBytes = proto.size,
         mime = Mime(proto.mimeType),
         metaData = Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
       ))
+      verbose(s"created asset from v2 image proto message: $res")
+      res
+    }
 
     def apply(asset: AssetData): ImageAsset = returning(new Messages.ImageAsset) { proto =>
       asset.metaData.foreach {
