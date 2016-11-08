@@ -40,7 +40,8 @@ object UserInfo {
       implicit val info = js.getJSONObject("info")
 
       AssetData(
-        status = UploadDone(AssetKey(Some(id))),
+        status = UploadDone,
+        remoteId = Some(id),
         sizeInBytes = size,
         mime = Mime(mime),
         metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
@@ -79,7 +80,7 @@ object UserInfo {
     returning(new json.JSONArray()) { arr =>
       assets.collect {
         //for some reason using IsImage causes a compiler failure - using full unapply instead works
-        case Some(a@AssetData(_, _, _, _, _, _, Some(AssetMetaData.Image(Dim2(w, h), tag)), _, _, _, _)) =>
+        case Some(a@AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.Image(Dim2(w, h), tag)), _, _, _, _)) =>
           JsonEncoder { o =>
             o.put("content_type", a.mime.str)
             o.put("content_length", a.size)

@@ -45,7 +45,7 @@ object DownloadRequest {
     override val name: Option[String] = None
   }
 
-  case class WireAssetRequest(assetId: AssetId, key: AssetKey, convId: Option[RConvId], mime: Mime, name: Option[String] = None) extends AssetRequest
+  case class WireAssetRequest(assetId: AssetId, remoteData: AssetData.RemoteData, convId: Option[RConvId], mime: Mime, name: Option[String] = None) extends AssetRequest
 
   case class AssetFromInputStream(assetId: AssetId, stream: () => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 

@@ -30,11 +30,9 @@ import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.model.AssetData.IsImage
-import com.waz.model.AssetStatus.{DownloadFailed, UploadDone}
 import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService.BitmapRequest
 import com.waz.service.assets.{AssetLoader, AssetService}
-import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
@@ -62,7 +60,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
 
   def hasCachedData(asset: AssetData): CancellableFuture[Boolean] =
     asset match {
-      case IsImage(_) =>
+      case IsImage(_, _) =>
         CancellableFuture {(asset.data, asset.source)} flatMap {
           case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(true)
           case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(true)
@@ -209,16 +207,9 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
   }
 
   private def downloadImageData(asset: AssetData, convId: Option[RConvId]): CancellableFuture[Option[LocalData]] = {
-    val req = (asset.status, asset.source, asset.proxyPath) match {
-      case (UploadDone(ak), _, _) => Some(WireAssetRequest(asset.id, ak, convId, asset.mime))
-      case (DownloadFailed(ak), _, _) => Some(WireAssetRequest(asset.id, ak, convId, asset.mime))
-      case (_, Some(uri), _) => Some(External(asset.id, uri))
-      case (_, None, Some(path)) => Some(Proxied(asset.id, path))
-      case (_, None, None) => None
-    }
-
+    val req = asset.loadRequest
     verbose(s"downloadImageData($asset, $convId), req: $req")
-    req.fold(CancellableFuture successful Option.empty[LocalData]) {assetLoader.downloadAssetData}
+    assetLoader.downloadAssetData(req)
   }
 
   private def decodeGif(data: LocalData) = Threading.ImageDispatcher {

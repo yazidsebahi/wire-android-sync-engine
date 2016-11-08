@@ -25,6 +25,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.LocalData
 import com.waz.content.{ConversationStorage, MessagesStorage}
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
@@ -158,8 +159,8 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
           case Some(asset @ AssetData.WithData(data)) =>
             val aes = AESKey()
             otrSync.uploadAssetDataV3(LocalData(data), Some(aes)).map {
-              case Right(assetKey) =>
-                Right(Some(asset.copy(status = AssetStatus.UploadDone(assetKey))))
+              case Right(remoteData) =>
+                Right(Some(asset.copy(status = UploadDone).copyWithRemoteData(remoteData)))
               case Left(err) => Left(err)
             }
           case _ => Future successful Right(None)

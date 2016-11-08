@@ -53,7 +53,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
       case (Some(asset), Some(data)) =>
         val key = AESKey()
         otrSync.uploadAssetDataV3(data, Some(key)).map {
-          case Right(ak) => Right(Some(asset.copy(status = UploadDone(ak))))
+          case Right(remoteData) => Right(Some(asset.copy(status = UploadDone).copyWithRemoteData(remoteData)))
           case Left(err) => Left(err)
         }.flatMap {
           case Right(Some(asset)) =>
@@ -90,7 +90,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
     client.postImageAssetData(asset, data, nativePush).future flatMap {
       case Right(updated) =>
         verbose(s"postImageAssetData returned event: $updated with local data: $data")
-        assert(updated.assetKey.isDefined, "sent flag should be set to true by event parser")
+        assert(updated.remoteId.isDefined, "sent flag should be set to true by event parser")
         for {
           _ <- updateImageCache(updated)
           _ <- assets.storage.updateAsset(updated.id, _ => updated)

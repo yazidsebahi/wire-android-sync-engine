@@ -50,7 +50,7 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
         downloader.download(UnencodedAudioAsset(cacheKey, uri, name))(unencodedAudioDownloader)
       case LocalAssetRequest(cacheKey, uri, mime, name) =>
         downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), mime, name))(streamDownloader)
-      case External(cacheKey, uri) if Option(uri.getScheme).forall(! _.startsWith("http")) =>
+      case External(cacheKey, uri) =>
         downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), Mime.Unknown, None))(streamDownloader)
       case _ =>
         downloader.download(asset)(assetDownloader)

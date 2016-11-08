@@ -21,8 +21,6 @@ package com.waz.model
 import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.verbose
 import com.waz.api.EphemeralExpiration
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
@@ -60,9 +58,9 @@ object GenericContent {
             case Some(video: AssetMetaData.Video) => o.setVideo(VideoMetaData(video))
             case Some(image: AssetMetaData.Image) => o.setImage(ImageMetaData(image))
             case Some(audio: AssetMetaData.Audio) => o.setAudio(AudioMetaData(audio))
-            case Some(AssetMetaData.Empty) =>
+            case _ =>
           }
-          //TODO giphy source and caption
+          //TODO Dean giphy source and caption
         }
 
       def unapply(proto: Original): Option[(Mime, Long, Option[String], Option[AssetMetaData])] = Option(proto) map { orig =>
@@ -124,7 +122,7 @@ object GenericContent {
         p.size = preview.size
 
         //remote
-        preview.assetKey.foreach(ak => p.remote = RemoteData.apply(ak))
+        preview.remoteData.foreach(ak => p.remote = RemoteData.apply(ak))
 
         //image meta
         preview.metaData.foreach {
@@ -134,18 +132,23 @@ object GenericContent {
       }
 
       def unapply(preview: Preview): Option[AssetData] = Option(preview) map { prev =>
+        val remoteData = RemoteData.unapply(prev.remote)
         AssetData(
-          mime = Mime(prev.mimeType),
-          status = RemoteData.unapply(prev.remote).map(AssetStatus.UploadDone).getOrElse(UploadNotStarted),
+          mime        = Mime(prev.mimeType),
           sizeInBytes = prev.size,
-          metaData = Option(prev.getImage).flatMap(ImageMetaData.unapply)
+          status      = remoteData.map(_ => UploadDone).getOrElse(UploadNotStarted),
+          remoteId    = remoteData.flatMap(_.remoteId),
+          token       = remoteData.flatMap(_.token),
+          otrKey      = remoteData.flatMap(_.otrKey),
+          sha         = remoteData.flatMap(_.sha256),
+          metaData    = Option(prev.getImage).flatMap(ImageMetaData.unapply)
         )
       }
     }
 
     type RemoteData = Messages.Asset.RemoteData
     object RemoteData {
-      def apply(ak: AssetKey): RemoteData =
+      def apply(ak: AssetData.RemoteData): RemoteData =
         returning(new Messages.Asset.RemoteData) { rData =>
           ak.remoteId.foreach(v => rData.assetId = v.str)
           ak.token.foreach(v => rData.assetToken = v.str)
@@ -154,8 +157,8 @@ object GenericContent {
         }
 
       //TODO make AssetKey.remoteId optional...
-      def unapply(remoteData: RemoteData): Option[AssetKey] = Option(remoteData) map { rData =>
-        AssetKey(
+      def unapply(remoteData: RemoteData): Option[AssetData.RemoteData] = Option(remoteData) map { rData =>
+        AssetData.RemoteData(
           Option(rData.assetId).filter(_.nonEmpty).map(RAssetId),
           Option(rData.assetToken).filter(_.nonEmpty).map(AssetToken),
           Some(AESKey(rData.otrKey)).filter(_ != AESKey.Empty),
@@ -168,11 +171,11 @@ object GenericContent {
     def apply(asset: AssetData, preview: Option[AssetData] = None): Asset = returning(new Messages.Asset) { proto =>
       proto.original = Original(asset)
       preview.foreach(p => proto.preview = Preview(p))
-      asset.status match {
-        case UploadCancelled => proto.setNotUploaded(Messages.Asset.CANCELLED)
-        case UploadFailed => proto.setNotUploaded(Messages.Asset.FAILED)
-        case UploadDone(ak) => proto.setUploaded(RemoteData(ak))
-        case DownloadFailed(ak) => proto.setUploaded(RemoteData(ak))
+      (asset.status, asset.remoteData) match {
+        case (UploadCancelled, _) => proto.setNotUploaded(Messages.Asset.CANCELLED)
+        case (UploadFailed, _) => proto.setNotUploaded(Messages.Asset.FAILED)
+        case (UploadDone, Some(data)) => proto.setUploaded(RemoteData(data))
+        case (DownloadFailed, Some(data)) => proto.setUploaded(RemoteData(data))
         case _ =>
       }
     }
@@ -180,15 +183,16 @@ object GenericContent {
     def unapply(a: Asset): Option[(AssetData, Option[AssetData])] = {
       val (mime, size, name, meta) = Original.unapply(a.original).get //TODO can original ever not be there??
       val preview = Preview.unapply(a.preview)
+      val remoteData = RemoteData.unapply(a.getUploaded)
       val status = a.getStatusCase match {
-        case Messages.Asset.UPLOADED_FIELD_NUMBER => RemoteData.unapply(a.getUploaded).map(UploadDone).getOrElse(UploadFailed)
+        case Messages.Asset.UPLOADED_FIELD_NUMBER => remoteData.map(_ => UploadDone).getOrElse(UploadFailed)
         case Messages.Asset.NOT_UPLOADED_FIELD_NUMBER =>
           a.getNotUploaded match {
             case Messages.Asset.CANCELLED => UploadCancelled
             case Messages.Asset.FAILED => UploadFailed
-            case _ => UploadInProgress()
+            case _ => UploadInProgress
           }
-        case _ => UploadInProgress()
+        case _ => UploadInProgress
       }
 
       val asset = AssetData(
@@ -197,9 +201,12 @@ object GenericContent {
         name = name,
         metaData = meta,
         status = status,
+        remoteId    = remoteData.flatMap(_.remoteId),
+        token       = remoteData.flatMap(_.token),
+        otrKey      = remoteData.flatMap(_.otrKey),
+        sha         = remoteData.flatMap(_.sha256),
         previewId = preview.map(_.id)
       )
-      verbose(s"created asset and preview from proto message: $asset, $preview")
       Some((asset, preview))
     }
 
@@ -214,14 +221,14 @@ object GenericContent {
     override def set(msg: GenericMessage) = msg.setImage
 
     def unapply(proto: ImageAsset): Option[AssetData] = {
-      val res = Some(AssetData(
-        status = UploadDone(AssetKey(otrKey = Option(proto.otrKey).map(AESKey(_)), sha256 = Option(proto.sha256).map(Sha256(_)))),
+      Some(AssetData(
+        status = UploadDone,
+        otrKey = Option(proto.otrKey).map(AESKey(_)),
+        sha = Option(proto.sha256).map(Sha256(_)),
         sizeInBytes = proto.size,
         mime = Mime(proto.mimeType),
         metaData = Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
       ))
-      verbose(s"created asset from v2 image proto message: $res")
-      res
     }
 
     def apply(asset: AssetData): ImageAsset = returning(new Messages.ImageAsset) { proto =>
@@ -236,12 +243,8 @@ object GenericContent {
       }
       proto.mimeType = asset.mime.str
       proto.size = asset.size.toInt
-      asset.assetKey.foreach {
-        case AssetKey(_, _, Some(key), Some(sha)) =>
-          proto.otrKey = key.bytes
-          proto.sha256 = sha.bytes
-        case _ =>
-      }
+      asset.otrKey.foreach(v => proto.otrKey = v.bytes)
+      asset.sha.foreach(v => proto.sha256 = v.bytes)
     }
   }
 

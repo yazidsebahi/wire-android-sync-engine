@@ -34,7 +34,7 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content._
 import com.waz.model.AssetData.{FetchKey, UploadKey}
 import com.waz.model.AssetStatus.Order._
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
+import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ErrorData.AssetError
 import com.waz.model._
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
@@ -87,20 +87,19 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   }
 
   def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
-    case asset @ AssetData(_, AssetStatus(status, Some(_)), _, _, _, _, meta, _, _, _, _) =>
+    case asset @ AssetData.WithStatus(status) =>
       cache.cacheStorage.optSignal(id).map(_.isDefined) flatMap {
         case true  =>
-          verbose(s"asset in state DOWNLOAD_DONE, meta: $meta")
-          if (meta.isEmpty) metaService.getAssetMetadata(id) // asset downloaded but has no metadata, let's update
+          verbose(s"asset in state DOWNLOAD_DONE, meta: ${asset.metaData}")
+          if (asset.metaData.isEmpty) metaService.getAssetMetadata(id) // asset downloaded but has no metadata, let's update
           Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
         case false =>
           downloader.getDownloadState(id).map(_.state) map {
             case State.RUNNING    => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS)
             case State.COMPLETED  => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS) // reporting asset in progress since it should be added to cache before we change the state
-            case _                => (asset, status)
+            case _                => (asset, status.status)
           }
       }
-    case asset @ AssetData(_, st, _, _, _, _, _, _, _, _, _) => Signal const (asset, st.status)
     case _ => Signal.empty[(AssetData, api.AssetStatus)]
   }
 
@@ -119,7 +118,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     } yield ()
 
   def markUploadFailed(id: AssetId, status: AssetStatus.Syncable) =
-    storage.updateAsset(id, { a => if (a.status > UploadInProgress()) a else a.copy(status = status) }) flatMap {
+    storage.updateAsset(id, { a => if (a.status > UploadInProgress) a else a.copy(status = status) }) flatMap {
       case Some(updated) =>
         storage.onUploadFailed ! updated
         messages.get(MessageId(id.str)) flatMap { //TODO Dean: decouple assets from messages
@@ -159,16 +158,10 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {
       case None => CancellableFuture successful None
-      case Some(a @ AssetData(_, UploadDone(key), mime, _, name, _, _, _, _, convId, _)) =>
-        loader.getAssetData(WireAssetRequest(id, key, convId, mime, name))
-      case Some(a @ AssetData(_, _, mime, _, name, _, _, Some(uri), originalMime, _, _)) =>
-        loader.getAssetData(LocalAssetRequest(id, uri, mime, name)) map { res =>
-          if (res.isEmpty) errors.addAssetFileNotFoundError(id)
-          res
-        }
-      case Some(a: AssetData) =>
-        CancellableFuture lift cache.getEntry(id)
-      case _ => CancellableFuture successful None
+      case Some(asset) => loader.getAssetData(asset.loadRequest) map { res =>
+        if (res.isEmpty) errors.addAssetFileNotFoundError(id)
+        res
+      }
     }
 
   def assetDataOrSource(asset: AssetData): CancellableFuture[Option[Either[LocalData, Uri]]] =
@@ -259,9 +252,9 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     }
   }
 
-  def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.downloadFailed())
+  def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))
 
-  def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.downloadDone())
+  def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.copy(status = UploadDone))
 
   def getAssetUri(id: AssetId): CancellableFuture[Option[Uri]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {

@@ -26,6 +26,7 @@ import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.ConversationStorage
 import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
@@ -164,32 +165,32 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 //    }
 //  }
 
-  def uploadAssetDataV3(data: LocalData, key: Option[AESKey]): CancellableFuture[Either[ErrorResponse, AssetKey]] =
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey]): CancellableFuture[Either[ErrorResponse, RemoteData]] =
     CancellableFuture.lift(service.clients.getSelfClient).flatMap {
       case Some(otrClient) =>
         key match {
           case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
             case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
-              case Right(UploadResponse(rId, _, token)) => Right(AssetKey(Some(rId), token, key))
+              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key))
               case Left(err) => Left(err)
             }
           }
           case _ =>
             //TODO Dean: handle uploading non-encrypted/public assets v3 (profile pictures)
-            CancellableFuture.successful(Right(AssetKey()))
+            CancellableFuture.successful(Right(RemoteData()))
         }
       case None => CancellableFuture.successful(Left(internalError("Client is not registered")))
     }
 
-  def postAssetDataV2(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
-    val promise = Promise[Either[ErrorResponse, (AssetKey, Date)]]()
+  def postAssetDataV2(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (RemoteData, Date)]] = {
+    val promise = Promise[Either[ErrorResponse, (RemoteData, Date)]]()
 
     val future = service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
         service.encryptAssetData(key, data) flatMap { case (sha, encrypted) =>
           val inline = encrypted.length < MaxInlineSize
           var imageId = Option.empty[RAssetId]
-          var assetKey = Option.empty[AssetKey]
+          var assetKey = Option.empty[RemoteData]
           val message = createMsg(sha)
           postEncryptedMessage(conv.id, message, recipients = recipients) { (content, retry) =>
             val meta = new OtrAssetMetadata(otrClient.id, content, nativePush, inline)
@@ -205,7 +206,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                 assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry), recipients) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
-                    assetKey = Some(AssetKey(Some(id), None, Some(key), Some(sha)))
+                    assetKey = Some(RemoteData(Some(id), None, Some(key), Some(sha)))
                     Right(msgResponse)
                   case Left(err) =>
                     Left(err)

@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
+import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
@@ -101,31 +101,31 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
     //For assets v3, the RAssetId will be contained in the proto content. For v2, it will be passed along with in the GenericAssetEvent
     //A defined convId marks that the asset is a v2 asset
-    def update(convId: Option[RConvId], ct: Any, v2RId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] = {
+    def update(id: Uid, convId: Option[RConvId], ct: Any, v2RId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] = {
       verbose(s"update asset: convId: $convId, ct: $ct, v2RId: $v2RId, data: $data")
       (ct, v2RId) match {
-        case (Asset(a@AssetData.WithStatus(UploadDone(AssetKey(Some(rId), _, _, _))), _), _) =>
+        case (Asset(a@AssetData.WithRemoteId(rId), _), _) =>
           verbose(s"Received asset v3: $a")
-          updateAsset(rId, a)
+          updateAsset(rId, a.copy(id = AssetId(id.str)))
         case (Asset(asset, _), Some(rId)) =>
           verbose(s"Received asset v2, but not image!: $asset")
-          updateAsset(rId, asset.copy(convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
+          updateAsset(rId, asset.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
         case (ImageAsset(asset), Some(rId)) =>
           verbose(s"Received asset v2: $asset")
-          updateAsset(rId, asset.copy(convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
+          updateAsset(rId, asset.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
         case (Ephemeral(_, content), _)=>
-          update(convId, content, v2RId, data)
+          update(id, convId, content, v2RId, data)
         case _ =>
           Future successful None
       }
     }
 
     Future.sequence(events.collect {
-      case GenericMessageEvent(_, _, time, from, GenericMessage(_, ct)) =>
-        update(None, ct, None, None)
+      case GenericMessageEvent(_, _, time, from, GenericMessage(id, ct)) =>
+        update(id, None, ct, None, None)
 
-      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(_, ct), dataId, data) =>
-        update(Some(convId), ct, Some(dataId), data)
+      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(id, ct), dataId, data) =>
+        update(id, Some(convId), ct, Some(dataId), data)
     }) map { _.flatten }
   }
 
@@ -161,7 +161,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(AssetData.IsImage(_, _), _) | ImageAsset(AssetData.IsImage(_, _)) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
-      case Asset(_) =>
+      case Asset(_, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Location(_, _, _, _) =>
         MessageData(id, convId, Message.Type.LOCATION, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
