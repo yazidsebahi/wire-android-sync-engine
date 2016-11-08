@@ -204,7 +204,8 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def record(key: AssetMediaKey, maxAllowedDuration: FiniteDuration): Future[(Instant, Future[RecordingResult])] = {
     def record(): Future[Next] = withAudioFocus() {
-      cache.createForFile(unencodedCacheKey(key.id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
+      //TODO Dean - probably should introduce a CacheKey type so I can have multiple versions of an asset in the cache
+      cache.createForFile(key.id, Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
         val promisedAsset = Promise[RecordingResult]
         withCleanupOnFailure {
           val start = Instant.now
@@ -299,7 +300,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def applyAudioEffect(effect: AudioEffect, pcmFile: File): Future[AudioAssetForUpload] = {
     val id = AssetId()
-    cache.createForFile(unencodedCacheKey(id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
+    cache.createForFile(id, Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
       withCleanupOnFailure {
         val fx = new AVSEffect
         try {

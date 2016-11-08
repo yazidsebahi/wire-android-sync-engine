@@ -56,15 +56,19 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
     case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _)) =>
       assetSync.postSelfImageAsset(RConvId(id.str), assetId) flatMap {
         case SyncResult.Success =>
-          assets.getImageAsset(assetId) flatMap { asset =>
-            updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = asset)))
+          assets.get(assetId) flatMap {
+            //TODO Dean - this is a bit untidy. Should rethink how I store and get preview
+            case Some(asset) if asset.previewId.isDefined => assets.get(asset.previewId.get).flatMap { small =>
+              updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picMedium = Some(asset), picSmall = small)))
+            }
+            case asset => updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picMedium = asset)))
           }
         case failure =>
           error(s"self picture post asset $assetId failed: $failure")
           Future.successful(failure)
       }
     case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _)) =>
-      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Some(ImageAssetData.Empty))))
+      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picMedium = None)))
     case _ => Future.successful(SyncResult.failed())
   }
 

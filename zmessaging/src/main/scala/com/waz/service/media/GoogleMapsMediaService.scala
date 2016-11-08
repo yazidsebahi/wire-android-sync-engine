@@ -39,7 +39,7 @@ object GoogleMapsMediaService {
 
     val mediumPath = GoogleMapsClient.getStaticMapPath(location, mapWidth, mapHeight)
 
-    //TODO see if preview is still needed?
-    AssetData(mime = Mime.Image.Png, metaData = Some(AssetMetaData.Image(Dim2(mapWidth, mapHeight), "medium")), proxyPath = Some(mediumPath), sent = Option(true))
+    //TODO Dean see if preview is still needed?
+    AssetData(mime = Mime.Image.Png, metaData = Some(AssetMetaData.Image(Dim2(mapWidth, mapHeight), "medium")), proxyPath = Some(mediumPath))
   }
 }

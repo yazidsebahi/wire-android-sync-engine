@@ -32,6 +32,7 @@ import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
 import com.waz.cache.LocalData
 import com.waz.content.{Database, GlobalDatabase}
+import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
@@ -108,9 +109,9 @@ class DeviceActor(val deviceName: String,
           }
 
           override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
-            override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetPreviewData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
-            override def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetPreviewData]] = pf.applyOrElse(mime, super.loadPreview(id, _: Mime, uri))
-            lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetPreviewData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetPreviewData.Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))) }
+            override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
+            override def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetData]] = pf.applyOrElse(mime, super.loadPreview(id, _: Mime, uri))
+            lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetData(metaData = Some(AssetMetaData.Audio(Duration.Zero, Some(Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))))))) }
           }
         }
     }

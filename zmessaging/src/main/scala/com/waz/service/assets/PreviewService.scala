@@ -46,7 +46,7 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
     }
     case Some(asset) => CancellableFuture.lift(
         for {
-          pData <- preview(asset)
+          pData <- preview(asset).future
           updated <- storage.updateAsset(asset.id, _.copy(previewId = pData.map(_.id)))
         } yield pData)
     case None => CancellableFuture.failed(new Exception(s"No asset data found for id: $id"))

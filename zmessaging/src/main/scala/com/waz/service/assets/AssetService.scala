@@ -144,6 +144,9 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     }
   }
 
+  def updateAssets(data: Seq[AssetData]) =
+    storage.updateOrCreateAll(data.map(d => d.id -> { (_: Option[AssetData]) => d })(collection.breakOut))
+
   def updateAsset(rId: RAssetId, newData: AssetData): Future[Option[AssetData]] =
     storage.getByRemoteId(rId).flatMap {
       case Some(cur) => storage.updateAsset(cur.id, _ => newData.copy(id = cur.id))

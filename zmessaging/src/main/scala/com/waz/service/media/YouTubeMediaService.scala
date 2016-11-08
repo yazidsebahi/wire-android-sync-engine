@@ -41,7 +41,7 @@ class YouTubeMediaService(client: YouTubeClient, assets: AssetService) {
         client.loadVideo(vId) flatMap {
           case Right(MediaWithImages(media, images)) =>
             verbose(s"got youtube track: $media, images: $images")
-            assets.updateImageAssets(images.to[Vector]) map { _ =>
+            assets.updateAssets(images.to[Vector]) map { _ =>
               Right(content.copy(tpe = Message.Part.Type.YOUTUBE, richMedia = Some(media)))
             }
 

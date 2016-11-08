@@ -20,13 +20,12 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.model.AssetStatus.{UploadDone, UploadInProgress}
-import com.waz.model.GenericContent.Asset
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
-import com.waz.service.{ErrorsService, PreferenceService}
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
 import com.waz.service.images.ImageLoader
+import com.waz.service.{ErrorsService, PreferenceService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -34,7 +33,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient._
 
 import scala.concurrent.Future
-import scala.concurrent.Future.{failed, successful}
+import scala.concurrent.Future.successful
 import scala.util.control.NoStackTrace
 
 class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,

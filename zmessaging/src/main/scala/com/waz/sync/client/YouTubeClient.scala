@@ -20,7 +20,7 @@ package com.waz.sync.client
 import com.waz.ZLog._
 import com.waz.api.MediaProvider
 import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
-import com.waz.model.ImageAssetData
+import com.waz.model.AssetData
 import com.waz.model.messages.media._
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -50,7 +50,7 @@ class YouTubeClient(netClient: ZNetClient) {
         pl.copy(media = pl.media.copy(tracks = tracks), images = pl.images ++ images) }
     }
 
-  private def loadPlaylistItems(id: String): ErrorOr[(Vector[TrackData], Set[ImageAssetData])] =
+  private def loadPlaylistItems(id: String): ErrorOr[(Vector[TrackData], Set[AssetData])] =
     netClient.withFutureErrorHandling("loadPlaylistItems", requestById("playlistItems", id, idName = "playlistId", limit = Some(50))) {
       case Response(SuccessHttpStatus(), PlaylistItemsResponse((tracks, images)), _) => (tracks, images)
     }
@@ -126,7 +126,7 @@ object YouTubeClient {
   }
 
   object PlaylistItemsResponse {
-    def unapply(response: ResponseContent): Option[(Vector[TrackData], Set[ImageAssetData])] = parse[TrackData](response, "youtube#playlistItemListResponse")(TrackDecoder)
+    def unapply(response: ResponseContent): Option[(Vector[TrackData], Set[AssetData])] = parse[TrackData](response, "youtube#playlistItemListResponse")(TrackDecoder)
 
     lazy val TrackDecoder: JsonDecoder[MediaWithImages[TrackData]] = new JsonDecoder[MediaWithImages[TrackData]] {
       override def apply(implicit js: JSONObject): MediaWithImages[TrackData] = {
@@ -149,7 +149,7 @@ object YouTubeClient {
     }
   }
 
-  private def parse[T <: MediaAssetData](response: ResponseContent, kind: String)(implicit dec: JsonDecoder[MediaWithImages[T]]): Option[(Vector[T], Set[ImageAssetData])] = try {
+  private def parse[T <: MediaAssetData](response: ResponseContent, kind: String)(implicit dec: JsonDecoder[MediaWithImages[T]]): Option[(Vector[T], Set[AssetData])] = try {
     response match {
       case JsonObjectResponse(js) if Option(js.optString("kind")).contains(kind) && js.has("items") =>
         Some(MediaAssetData.extractImageAssets(arrayColl[MediaWithImages[T], Vector](js.getJSONArray("items"))))

@@ -55,14 +55,11 @@ class UsersClient(netClient: ZNetClient) {
 
   def loadSelf(): ErrorOrResponse[UserInfo] =
     netClient.withErrorHandling("loadSelf", Request.Get(SelfPath)) {
-      case Response(SuccessHttpStatus(), UserResponseExtractor(user), _) =>
-        // FIXME: this is a hack, to prevent this load from overriding locally set picture,
-        // this will break syncing if we remove image on other device
-        if (user.picture.contains(ImageAssetData.Empty)) user.copy(picture = None) else user
+      case Response(SuccessHttpStatus(), UserResponseExtractor(user), _) => user
     }
 
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = {
-    debug(s"updateSelf: $info, picture: ${info.picture}")
+    debug(s"updateSelf: $info, picture: ${info.picMedium}")
     netClient.updateWithErrorHandling("updateSelf", Request.Put(SelfPath, info))
   }
 

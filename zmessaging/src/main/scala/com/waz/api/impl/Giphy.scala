@@ -19,7 +19,7 @@ package com.waz.api.impl
 
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.model.{AssetData, AssetId}
+import com.waz.model.AssetId
 import com.waz.service.media.GiphyService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.UiModule

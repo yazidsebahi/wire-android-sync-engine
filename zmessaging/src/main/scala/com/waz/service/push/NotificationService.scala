@@ -25,10 +25,8 @@ import com.waz.api.Message
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
 import com.waz.content._
-import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.{Asset, LastRead}
+import com.waz.model.GenericContent.LastRead
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service._
@@ -270,13 +268,7 @@ object NotificationService {
       case LOCATION     => Some(NotificationType.LOCATION)
       case RENAME       => Some(NotificationType.RENAME)
       case MISSED_CALL  => Some(NotificationType.MISSED_CALL)
-      case ANY_ASSET    =>
-        protos.lastOption match {
-          case Some(GenericMessage(_, Asset(Some(Original(Mime.Video(), _, _, _, _)), _, UploadDone(_)))) => Some(NotificationType.VIDEO_ASSET)
-          case Some(GenericMessage(_, Asset(Some(Original(Mime.Audio(), _, _, _, _)), _, UploadDone(_)))) => Some(NotificationType.AUDIO_ASSET)
-          case Some(GenericMessage(_, Asset(_, _, UploadDone(_)))) => Some(NotificationType.ANY_ASSET)
-          case _ => None
-        }
+      case ANY_ASSET    => Some(NotificationType.ANY_ASSET)
       case AUDIO_ASSET  => Some(NotificationType.AUDIO_ASSET)
       case VIDEO_ASSET  => Some(NotificationType.VIDEO_ASSET)
       case MEMBER_JOIN  =>

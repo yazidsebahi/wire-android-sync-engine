@@ -115,7 +115,7 @@ object Matchers {
 
   implicit class ImageAssetSyntax(val im: ImageAsset) extends AnyVal {
     def shouldBeAnAnimatedGif: Bitmap = {
-      (im.data.versions should not be empty).soon
+      (im.data.previewId should not be empty).soon
       val promisedMoreThanTwoUpdates = Promise[Bitmap]
 
       @volatile var count = 0

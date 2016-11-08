@@ -20,13 +20,10 @@ package com.waz.service.images
 import android.graphics.Bitmap
 import com.waz.ZLog._
 import com.waz.bitmap
+import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.gif.{Gif, GifAnimator}
-import com.waz.bitmap.{BitmapPolka, BitmapUtils}
 import com.waz.cache.LocalData
 import com.waz.model.{AssetData, AssetId, Mime}
-import com.waz.model.AssetStatus.UploadDone
-import com.waz.model.GenericContent.Asset
-import com.waz.service.assets.AssetService
 import com.waz.service.assets.AssetService.BitmapRequest._
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
 import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}

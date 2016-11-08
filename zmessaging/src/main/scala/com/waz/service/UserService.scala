@@ -187,7 +187,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
       case _ => Future.successful(())
     }
 
-  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateImageAssets(users.flatMap(_.picture.filter(_.nonEmpty)))
+  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picMedium) ++ users.flatMap(_.picSmall))
 
   def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
     debug(s"update synced users: $users, service: $this")
