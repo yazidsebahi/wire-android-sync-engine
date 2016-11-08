@@ -28,6 +28,7 @@ import com.waz.utils.{LoggedTry, returning}
 
 import scala.util.Try
 
+//TODO Dean - we have two metadata services - can they be combined somehow?
 class MetaDataService(context: Context) {
   private implicit val logTag: LogTag = logTagFor[MetaDataService]
 

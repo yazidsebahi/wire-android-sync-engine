@@ -17,8 +17,8 @@
  */
 package com.waz.model.messages.media
 
+import android.net.Uri
 import com.waz.api.{KindOfMedia, MediaProvider, Message}
-import com.waz.bitmap.BitmapUtils
 import com.waz.model._
 import org.threeten.bp.{Duration, Instant}
 
@@ -64,7 +64,7 @@ case class ArtistData(name: String, avatar: Option[AssetId])
 object MediaAssetData {
   import com.waz.utils._
 
-  case class MediaWithImages[+T <: MediaAssetData](media: T, images: Set[ImageAssetData])
+  case class MediaWithImages[+T <: MediaAssetData](media: T, images: Set[AssetData])
 
   case class Thumbnail(tag: String, url: String, width: Int, height: Int)
 
@@ -90,13 +90,15 @@ object MediaAssetData {
     case MediaProvider.YOUTUBE => "youtube"
   }
 
-  def imageAsset(thumbs: Vector[Thumbnail]): ImageAssetData = {
+  def imageAsset(thumbs: Vector[Thumbnail]): AssetData = {
     val orig = thumbs.lastOption
 
-    ImageAssetData(AssetId(), RConvId.Empty, thumbs map { thumb =>
-      ImageData(thumb.tag, BitmapUtils.Mime.Jpg, thumb.width, thumb.height, orig map (_.width) getOrElse 0, orig map (_.height) getOrElse 0, sent = true, url = Some(thumb.url))
-    })
+    //TODO Dean: currently not passing any previews along - figure out a way to do this - see giphy
+    AssetData(
+      mime = Mime.Image.Jpg,
+      metaData = orig.map(o => AssetMetaData.Image(Dim2(o.width, o.height), o.tag)),
+      source = orig.map(o => Uri.parse(o.url)))
   }
 
-  def extractImageAssets[T <: MediaAssetData](src: Vector[MediaWithImages[T]]) = src.foldLeft((Vector.empty[T], Set.empty[ImageAssetData])) { case ((tracks, images), MediaWithImages(track, image)) => (tracks :+ track, images ++ image) }
+  def extractImageAssets[T <: MediaAssetData](src: Vector[MediaWithImages[T]]) = src.foldLeft((Vector.empty[T], Set.empty[AssetData])) { case ((tracks, images), MediaWithImages(track, image)) => (tracks :+ track, images ++ image) }
 }
