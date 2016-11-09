@@ -18,7 +18,8 @@
 package com.waz.service.images
 
 import android.graphics.Bitmap
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.{verbose, warn}
 import com.waz.bitmap
 import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.gif.{Gif, GifAnimator}
@@ -85,8 +86,6 @@ abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
 }
 
 object BitmapSignal {
-  private implicit val tag: LogTag = logTagFor[BitmapSignal]
-
   private[images] val signalCache = new WeakMemCache[Any, Signal[BitmapResult]]
 
   def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, imageCache: MemoryImageCache): Signal[BitmapResult] = {
@@ -174,7 +173,7 @@ object BitmapSignal {
   }
 
   class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends BitmapLoader(req, imageLoader, imageCache) {
-
+    verbose(s"created with asset: $asset")
     override def id = asset.id
     override def tag = asset.tag
 
@@ -185,7 +184,10 @@ object BitmapSignal {
       case e: Throwable => None
     }
 
-    override def load() = imageLoader.loadBitmap(asset, req)
+    override def load() = {
+      verbose(s"load $asset")
+      imageLoader.loadBitmap(asset, req)
+    }
   }
 
   class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
@@ -197,7 +199,12 @@ object BitmapSignal {
     }.recover {
       case e: Throwable => None
     }
-    override def load() = imageLoader.loadGif(asset)
+
+    override def load() = {
+      verbose(s"load gif: $asset")
+      imageLoader.loadGif(asset)
+    }
+
     override def process(gif: Gif, signal: BitmapSignal) = {
       if (gif.frames.length <= 1) {
         val loader = new AssetBitmapLoader(asset, req, imageLoader, imageCache)

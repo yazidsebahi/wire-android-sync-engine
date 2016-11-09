@@ -23,6 +23,7 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ImageAsset.{BitmapCallback, SaveCallback}
 import com.waz.api.LoadHandle
@@ -45,7 +46,6 @@ import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
 
 class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with SavingToGallery with UiObservable with SignalLoading {
-  private implicit val tag: LogTag = logTagFor[ImageAsset]
 
   var data = AssetData()
 
@@ -62,8 +62,10 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 
   override def getHeight: Int = data.dimensions.height
 
-  protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
+  protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
+    verbose(s"getBitmap for asset: $data")
     BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.imageCache) }, callback)
+  }
 
   override def isEmpty: Boolean = false
 
@@ -119,7 +121,6 @@ class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(
 }
 
 class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) with DisableSignalLoading {
-  private implicit val tag: LogTag = logTagFor[LocalBitmapAsset]
 
   import Threading.Implicits.Background
 
@@ -173,7 +174,6 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
 }
 
 object ImageAsset {
-  implicit val tag: LogTag = logTagFor[ImageAsset]
 
   object Parcelable {
     val FlagEmpty = 0
@@ -264,7 +264,6 @@ trait BitmapLoading {
 
 trait SavingToGallery {
   self: com.waz.api.ImageAsset =>
-  private implicit val tag: LogTag = logTagFor[ImageAsset]
 
   override def saveImageToGallery(): Unit = saveImageToGallery(new SaveCallback {
     override def imageSavingFailed(ex: Exception): Unit = ()

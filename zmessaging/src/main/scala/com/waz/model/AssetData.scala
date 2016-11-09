@@ -20,6 +20,8 @@ package com.waz.model
 import android.database.Cursor
 import android.net.Uri
 import android.util.Base64
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.verbose
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.service.downloads.DownloadRequest._
@@ -49,6 +51,7 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
 
   import AssetData._
 
+  //TODO Dean - otrKey and sha are printing as AESKey(AESKey(kdjfl)) - is this going to corrupt data?
   override def toString: String =
     s"""
        |AssetData:
@@ -78,12 +81,16 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
     case _ => Some(RemoteData(remoteId, token, otrKey, sha))
   }
 
-  def loadRequest = (remoteData, source, proxyPath) match {
-    case (Some(rData), _, _)                                                        => WireAssetRequest(id, rData, convId, mime)
-    case (_, Some(uri), _) if Option(uri.getScheme).forall(! _.startsWith("http"))  => External(id, uri)
-    case (_, Some(uri), _)                                                          => LocalAssetRequest(id, uri, mime, name)
-    case (_, None, Some(path))                                                      => Proxied(id, path)
-    case _                                                                          => CachedAssetRequest(id, mime, name)
+  def loadRequest = {
+    val req = (remoteData, source, proxyPath) match {
+      case (Some(rData), _, _)                                                        => WireAssetRequest(id, rData, convId, mime)
+      case (_, Some(uri), _) if Option(uri.getScheme).forall(! _.startsWith("http"))  => External(id, uri)
+      case (_, Some(uri), _)                                                          => LocalAssetRequest(id, uri, mime, name)
+      case (_, None, Some(path))                                                      => Proxied(id, path)
+      case _                                                                          => CachedAssetRequest(id, mime, name)
+    }
+    verbose(s"loadRequest returning: $req")
+    req
   }
 
   val (isImage, isVideo, isAudio) = this match {
@@ -238,21 +245,21 @@ object AssetData {
 
   implicit lazy val AssetDataEncoder: JsonEncoder[AssetData] = new JsonEncoder[AssetData] {
     override def apply(data: AssetData): JSONObject = JsonEncoder { o =>
-      o.put("id", data.id.str)
-      o.put("mime", data.mime.str)
-      o.put("sizeInBytes", data.sizeInBytes)
-      o.put("status", JsonEncoder.encode(data.status))
-      data.remoteId.foreach(o.put("remoteId", _))
-      data.token.foreach(o.put("token", _))
-      data.otrKey.foreach(o.put("otrKey", _))
-      data.sha.foreach(o.put("sha256", _))
-      data.name.foreach(o.put("name", _))
-      data.previewId.foreach(p => o.put("preview", p.str))
-      data.metaData.foreach(md => o.put("metaData", JsonEncoder.encode(md)))
-      data.source.foreach(u => o.put("source", u.toString))
-      data.proxyPath.foreach(o.put("proxyPath", _))
-      data.convId.foreach(id => o.put("convId", id.str))
-      data.data64.foreach(o.put("data64", _))
+      o.put("id",           data.id.str)
+      o.put("mime",         data.mime.str)
+      o.put("sizeInBytes",  data.sizeInBytes)
+      o.put("status",       JsonEncoder.encode(data.status))
+      data.remoteId   foreach (v => o.put("remoteId",   v.str))
+      data.token      foreach (v => o.put("token",      v.str))
+      data.otrKey     foreach (v => o.put("otrKey",     v.str))
+      data.sha        foreach (v => o.put("sha256",     v.str))
+      data.name       foreach (v => o.put("name",       v))
+      data.previewId  foreach (v => o.put("preview",    v.str))
+      data.metaData   foreach (v => o.put("metaData",   JsonEncoder.encode(v)))
+      data.source     foreach (v => o.put("source",     v.toString))
+      data.proxyPath  foreach (v => o.put("proxyPath",  v))
+      data.convId     foreach (v => o.put("convId",     v.str))
+      data.data64     foreach (v => o.put("data64",     v))
     }
   }
 }
