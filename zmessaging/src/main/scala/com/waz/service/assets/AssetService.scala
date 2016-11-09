@@ -121,7 +121,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     storage.updateAsset(id, { a => if (a.status > UploadInProgress) a else a.copy(status = status) }) flatMap {
       case Some(updated) =>
         storage.onUploadFailed ! updated
-        messages.get(MessageId(id.str)) flatMap { //TODO Dean: decouple assets from messages
+        messages.get(MessageId(id.str)) flatMap {
           case Some(m) => sync.postAssetStatus(m.id, m.convId, m.ephemeral, status)
           case None =>
             warn(s"No message found for asset upload: $id")
@@ -135,7 +135,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     image match {
       case im: com.waz.api.impl.ImageAsset =>
         val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
-        generator.generateWireAsset(AssetData(id = assetId), if (prefs.sendWithV3) Some(convId) else None, isSelf).future.flatMap { data =>
+        generator.generateWireAsset(AssetData.NewImageAsset.copy(id = assetId, convId = if (prefs.sendWithV3) Some(convId) else None), isSelf).future.flatMap { data =>
           storage.updateAsset(assetId, _ => data) map (_ => data)
         } andThen { case _ => ref set null }
       case _ =>
@@ -169,7 +169,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def addAsset(a: AssetForUpload, conv: RConvId): Future[AssetData] = {
     def addAssetFromUri(id: AssetId, uri: Uri, originalMimeType: Option[Mime], metaData: Option[AssetMetaData]) = {
-      // it's enough to create AnyAssetData with input uri, everything else can be updated lazily
+      // it's enough to create AssetData with input uri, everything else can be updated lazily
       verbose(s"addAsset from uri: $uri")
       for {
         mime  <- a.mimeType

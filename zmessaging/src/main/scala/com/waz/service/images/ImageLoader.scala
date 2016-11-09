@@ -102,15 +102,16 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
 
   def loadRawCachedData(asset: AssetData) = ifIsImage(asset)((_, _) => loadLocalData(asset))
 
-  def loadRawImageData(asset: AssetData, convId: Option[RConvId] = None) = ifIsImage(asset) { (_, _) =>
+  def loadRawImageData(asset: AssetData) = ifIsImage(asset) { (_, _) =>
+    verbose(s"loadRawImageData: assetId: $asset")
     loadLocalData(asset) flatMap {
-      case None => downloadImageData(asset, convId)
+      case None => downloadImageData(asset)
       case Some(data) => CancellableFuture.successful(Some(data))
     }
   }
 
   def saveImageToGallery(asset: AssetData): Future[Option[Uri]] = ifIsImage(asset) { (_, _) =>
-    loadRawImageData(asset, asset.convId).future flatMap {
+    loadRawImageData(asset).future flatMap {
       case Some(data) =>
         saveImageToGallery(data, asset.mime)
       case None =>
@@ -135,7 +136,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
     )
 
   private def downloadAndDecode[A](asset: AssetData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[A] =
-    downloadAndDecode[A](loadLocalData(asset), downloadImageData(asset, asset.convId), decode, asset)
+    downloadAndDecode[A](loadLocalData(asset), downloadImageData(asset), decode, asset)
 
   private def downloadAndDecode[A](load: => CancellableFuture[Option[LocalData]], download: => CancellableFuture[Option[LocalData]], decode: LocalData => CancellableFuture[A], im: Any): CancellableFuture[A] = {
 
@@ -196,7 +197,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
     }
 
   private def loadLocalData(asset: AssetData): CancellableFuture[Option[LocalData]] = {
-    verbose(s"loadLocalData")
+    verbose(s"loadLocalData: ${asset.id}, url: ${asset.source}")
 
     // wrapped in future to ensure that img.data is accessed from background thread, this is needed for local image assets (especially the one generated from bitmap), see: Images
     CancellableFuture {(asset.data, asset.source)} flatMap {
@@ -206,9 +207,9 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
     }
   }
 
-  private def downloadImageData(asset: AssetData, convId: Option[RConvId]): CancellableFuture[Option[LocalData]] = {
+  private def downloadImageData(asset: AssetData): CancellableFuture[Option[LocalData]] = {
     val req = asset.loadRequest
-    verbose(s"downloadImageData($asset, $convId), req: $req")
+    verbose(s"downloadImageData($asset), req: $req")
     assetLoader.downloadAssetData(req)
   }
 

@@ -152,7 +152,7 @@ object AssetData {
                         sha256:   Option[Sha256]      = None
                        )
 
-  val NewImageAsset = AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0), "full")))
+  val NewImageAsset = AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0))))
 
   object IsImage {
     def unapply(asset: AssetData): Option[(Dim2, String)] = {
