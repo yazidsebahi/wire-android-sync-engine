@@ -67,7 +67,6 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
        | metaData:      $metaData
        | convId:        $convId
        | other fields:  $name, $source, $proxyPath, $data64
-       |
     """.stripMargin
 
   lazy val data = data64.flatMap(data => LoggedTry(Base64.decode(data, Base64.DEFAULT)).toOption)
@@ -170,7 +169,7 @@ object AssetData {
   object WithDimensions {
     def unapply(asset: AssetData): Option[Dim2] = {
       asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, AssetMetaData.HasDimensions(dimensions), _, _, _, _) => Some(dimensions)
+        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.HasDimensions(dimensions)), _, _, _, _) => Some(dimensions)
         case _ => None
       }
     }
@@ -179,7 +178,7 @@ object AssetData {
   object WithDuration {
     def unapply(asset: AssetData): Option[Duration] = {
       asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, AssetMetaData.HasDuration(duration), _, _, _, _) => Some(duration)
+        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.HasDuration(duration)), _, _, _, _) => Some(duration)
         case _ => None
       }
     }

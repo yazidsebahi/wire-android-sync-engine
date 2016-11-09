@@ -89,8 +89,14 @@ object BitmapSignal {
   private[images] val signalCache = new WeakMemCache[Any, Signal[BitmapResult]]
 
   def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, imageCache: MemoryImageCache): Signal[BitmapResult] = {
-    if (!asset.isImage) Signal(BitmapResult.Empty)
-    else signalCache((asset, req), new AssetBitmapSignal(asset, req, service, imageCache))
+    if (!asset.isImage) {
+      warn(s"Asset: $asset is not an image")
+      Signal(BitmapResult.Empty)
+    }
+    else {
+      verbose(s"storing asset $asset and request $req in signal cache: $signalCache")
+      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, imageCache))
+    }
   }
 
   sealed trait Loader {

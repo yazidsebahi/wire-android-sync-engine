@@ -102,6 +102,7 @@ package object model {
       }
     }
 
+    //TODO Dean: this can lead to some very tricky problems - try to get around the Any...
     object GenericMessageContent {
       def unapply(msg: GenericMessage): Option[Any] = msg match {
         case GenericMessage(_, Ephemeral(_, content)) => Some(content)
