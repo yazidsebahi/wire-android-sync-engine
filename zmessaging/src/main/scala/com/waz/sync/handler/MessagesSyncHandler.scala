@@ -252,6 +252,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                 case Right(None) => CancellableFuture successful Right(None)
                 case Left(err) => CancellableFuture successful Left(err)
               }
+              case None => CancellableFuture successful Right(None)
             }.flatMap { //send asset
               case Right(prev) =>
                 assetSync.uploadAssetData(asset.id, conv.id, msg.id).flatMap {

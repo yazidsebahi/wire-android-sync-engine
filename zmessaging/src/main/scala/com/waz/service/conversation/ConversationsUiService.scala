@@ -82,7 +82,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
       verbose(s"sendImageMessage($img, $conv)")
       for {
-        data <- addImageAsset(AssetId(img.getId), img, conv.remoteId, isSelf = false)
+        data <- addImageAsset(img, conv.remoteId, isSelf = false)
         msg <- addAssetMessage(convId, data)
         _ <- updateLastRead(msg)
         _ <- sync.postMessage(msg.id, convId, msg.editTime)

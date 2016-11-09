@@ -44,8 +44,6 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
 
-  def getFilePreview(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
-
   def getImageAsset(p: Parcel): api.ImageAsset = {
     p.readInt() match {
       case Parcelable.FlagEmpty => ImageAsset.Empty

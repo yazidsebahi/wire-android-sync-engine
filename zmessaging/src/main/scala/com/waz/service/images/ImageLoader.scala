@@ -241,14 +241,14 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
       Metadata(data).withOrientation(if (mirror) Metadata.mirrored(o) else o)
     }
 
-  private def withMemoryCache(asset: AssetId, tag: String, minWidth: Int)(loader: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
-    imageCache.get(asset, tag) match {
+  private def withMemoryCache(assetId: AssetId, tag: String, minWidth: Int)(loader: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
+    imageCache.get(assetId, tag) match {
       case Some(image) if image.getWidth >= minWidth => // cache could contain smaller version, will need to reload in that case
-        verbose(s"getBitmap($asset, $minWidth) - got from cache: $image (${image.getWidth}, ${image.getHeight})")
+        verbose(s"getBitmap(${MemoryImageCache.Key(assetId, tag)}, $minWidth) - got from cache: $image (${image.getWidth}, ${image.getHeight})")
         CancellableFuture.successful(image)
       case _ =>
         loader map (returning(_) {
-          imageCache.add(asset, tag, _)
+          imageCache.add(assetId, tag, _)
         })
     }
 }

@@ -71,7 +71,8 @@ object UserInfo {
         }
       }
 
-      val (small, medium) = if (js.has("picture")) picture else (None, None)
+//      val (small, medium) = if (js.has("picture")) picture else (None, None)
+      val (small, medium) = (None, None) //TODO Dean - re-enable loading of user pics - causing too many logs right now...
       UserInfo('id, 'name, accentId, 'email, 'phone, small, medium, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
     }
   }

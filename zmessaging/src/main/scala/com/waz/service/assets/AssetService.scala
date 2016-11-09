@@ -28,7 +28,7 @@ import com.waz.ZLog._
 import com.waz.api.Permission
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.ProgressData
-import com.waz.api.impl.{AssetForUpload, AudioAssetForUpload, ContentUriAssetForUpload, TranscodedVideoAsset}
+import com.waz.api.impl._
 import com.waz.cache.{CacheEntry, CacheService, Expiration, LocalData}
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content._
@@ -131,15 +131,21 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         Future.successful(())
     }
 
-  def addImageAsset(assetId: AssetId, image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData] = {
-    image match {
-      case im: com.waz.api.impl.ImageAsset =>
+  def addImageAsset(image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData] = {
+    val convIdOpt = if (prefs.sendWithV3) None else Some(convId) //TODO Dean remove sending with v2 after testing
+    val asset = image match {
+      case img: LocalImageAsset => Some(img.data.copy(convId = convIdOpt))
+      case _: ImageAsset => Some(AssetData.NewImageAsset.copy(id = AssetId(image.getId), convId = convIdOpt))
+      case _ => None
+    }
+
+    asset match {
+      case Some(asset) =>
         val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
-        generator.generateWireAsset(AssetData.NewImageAsset.copy(id = assetId, convId = if (prefs.sendWithV3) Some(convId) else None), isSelf).future.flatMap { data =>
-          storage.updateAsset(assetId, _ => data) map (_ => data)
+        generator.generateWireAsset(asset, isSelf).future.flatMap { data =>
+          storage.updateOrCreateAsset(data) map (_ => data)
         } andThen { case _ => ref set null }
-      case _ =>
-        Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
+      case _ => Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
     }
   }
 

@@ -160,7 +160,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     updateSelfAndSync(_.copy(picture = None), _ => sync.postSelfPicture(None))
 
   def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Option[UserData]] =
-    assets.addImageAsset(AssetId(), image, RConvId(selfUserId.str), isSelf = true) flatMap { asset =>
+    assets.addImageAsset(image, RConvId(selfUserId.str), isSelf = true) flatMap { asset =>
       updateAndSync(selfUserId, _.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
     }
 

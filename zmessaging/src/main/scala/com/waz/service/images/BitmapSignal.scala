@@ -131,7 +131,7 @@ object BitmapSignal {
       case e: Throwable => None
     }
 
-    override def load(): CancellableFuture[Data] = imageLoader.loadRawImageData(asset, asset.convId) flatMap {
+    override def load(): CancellableFuture[Data] = imageLoader.loadRawImageData(asset) flatMap {
       case Some(data) => detectMime(data) flatMap {
         case Mime.Image.Gif => gifLoader.load() map (Right(_))
         case _ => bitmapLoader.load() map (Left(_))
