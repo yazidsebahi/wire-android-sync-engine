@@ -19,7 +19,7 @@ package com.waz.service.images
 
 import android.graphics.Bitmap
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{verbose, warn}
+import com.waz.ZLog.warn
 import com.waz.bitmap
 import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.gif.{Gif, GifAnimator}
@@ -90,13 +90,10 @@ object BitmapSignal {
 
   def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, imageCache: MemoryImageCache): Signal[BitmapResult] = {
     if (!asset.isImage) {
-      warn(s"Asset: $asset is not an image")
+      warn(s"asset is not an image: $asset ")
       Signal(BitmapResult.Empty)
     }
-    else {
-      verbose(s"storing asset $asset and request $req in signal cache: $signalCache")
-      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, imageCache))
-    }
+    else signalCache((asset, req), new AssetBitmapSignal(asset, req, service, imageCache))
   }
 
   sealed trait Loader {
@@ -179,7 +176,6 @@ object BitmapSignal {
   }
 
   class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends BitmapLoader(req, imageLoader, imageCache) {
-    verbose(s"created with asset: $asset")
     override def id = asset.id
     override def tag = asset.tag
 
@@ -190,10 +186,7 @@ object BitmapSignal {
       case e: Throwable => None
     }
 
-    override def load() = {
-      verbose(s"load $asset")
-      imageLoader.loadBitmap(asset, req)
-    }
+    override def load() = imageLoader.loadBitmap(asset, req)
   }
 
   class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
@@ -206,10 +199,7 @@ object BitmapSignal {
       case e: Throwable => None
     }
 
-    override def load() = {
-      verbose(s"load gif: $asset")
-      imageLoader.loadGif(asset)
-    }
+    override def load() = imageLoader.loadGif(asset)
 
     override def process(gif: Gif, signal: BitmapSignal) = {
       if (gif.frames.length <= 1) {

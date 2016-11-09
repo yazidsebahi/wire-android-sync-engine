@@ -62,13 +62,15 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
     }
   }
 
-  def getLocalImageAsset(data: AssetData) = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
+  def getLocalImageAsset(data: AssetData) = {
+    val res = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
+    verbose(s"local images contains: ${localImages.items.size} images")
+    res
+  }
 
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
-    else {
-      new LocalImageAsset(AssetData.NewImageAsset().copy(data64 = Some(Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.NO_PADDING))))
-    }
+    else getLocalImageAsset(AssetData.NewImageAsset().copy(data64 = Some(Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.NO_PADDING))))
   }
 
   def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =

@@ -62,10 +62,9 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 
   override def getHeight: Int = data.dimensions.height
 
-  protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
-    verbose(s"getBitmap for asset: $data")
+  protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
     BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.imageCache) }, callback)
-  }
+
 
   override def isEmpty: Boolean = false
 
@@ -91,7 +90,6 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 }
 
 class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(img.id) with DisableSignalLoading {
-  verbose(s"created with data: $img")
   data = img
 
   override def addLoader[A, B <: A](signal: (ZMessaging) => Signal[B], defaultValue: A)(onLoaded: (A) => Unit)(implicit ui: UiModule) = null

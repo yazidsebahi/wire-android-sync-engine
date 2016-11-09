@@ -34,13 +34,13 @@ import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
 //TODO sending from camera doesn't work
+//TODO gallery images are blocking adapter
 //TODO audio messages don't play
 //TODO video messages don't render
 //TODO profile pictures - get back to normal
 //TODO Giphy loading
 //TODO Test souncloud/spotify/youtube/linkpreviews/locations
 //TODO send in v2 flag?
-//TODO gallery images are blocking adapter
 
 case class AssetData(id:          AssetId               = AssetId(),
                      mime:        Mime                  = Mime.Unknown,

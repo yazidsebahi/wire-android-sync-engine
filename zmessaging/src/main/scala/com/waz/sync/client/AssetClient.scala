@@ -58,7 +58,7 @@ class AssetClient(netClient: ZNetClient) {
 
   def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true): ErrorOrResponse[AssetData] = {
     asset match {
-      case AssetData.IsImage(_) =>
+      case AssetData.IsImage(_, _) =>
         val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
         asset.convId match {
           case Some(cId) =>
