@@ -108,6 +108,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         case (Asset(a@AssetData.WithRemoteId(rId), _), _) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset v3: $asset")
+          //need to merge parts of message as they can come individually
           assets.storage.updateOrCreateAsset(asset)
         case (Asset(a, _), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(a.id, a.otrKey, a.sha, data))
@@ -156,6 +157,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     val id = MessageId.fromUid(event.id)
     val convId = conv.id
 
+    //v3 assets go here
     def content(id: MessageId, msgContent: Any, from: UserId, time: Instant, proto: GenericMessage): MessageData = msgContent match {
       case Text(text, mentions, links) =>
         val (tpe, content) = MessageData.messageContent(text, mentions, links)
@@ -188,6 +190,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, conv.id, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
     }
 
+    //v2 assets go here
     def assetContent(id: MessageId, ct: Any, from: UserId, time: Instant, msg: GenericMessage): MessageData = ct match {
       case Asset(AssetData.IsVideo(), _) =>
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
@@ -195,7 +198,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(AssetData.IsImage(_, _), _) | ImageAsset(AssetData.IsImage(_, _)) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case Asset =>
+      case Asset(_, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Ephemeral(expiry, ect) =>
         assetContent(id, ect, from, time, msg).copy(ephemeral = expiry)

@@ -82,5 +82,5 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
     case (_, updated) => Some(updated)
   }
 
-  def updateOrCreateAsset(asset: AssetData) = updateOrCreate(asset.id, _ => asset, asset).map(Some(_))
+  def updateOrCreateAsset(asset: AssetData) = updateOrCreate(asset.id, cur => cur.merge(asset), asset).map(Some(_))
 }

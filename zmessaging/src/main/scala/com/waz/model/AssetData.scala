@@ -24,6 +24,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.verbose
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
@@ -116,6 +117,28 @@ case class AssetData(id:          AssetId               = AssetId(), //TODO make
       otrKey    = remoteData.otrKey,
       sha       = remoteData.sha256
     )
+  }
+
+  //useful for receiving parts of an asset message. Note, THIS keeps the ID and only merges non-defined properties
+  def merge(that: AssetData): AssetData = {
+    val res = this.copy(
+      mime        = if (this.mime == Mime.Unknown)  that.mime         else mime,
+      sizeInBytes = if (this.sizeInBytes == 0)      that.sizeInBytes  else sizeInBytes,
+      remoteId    = if (this.remoteId.isEmpty)      that.remoteId     else remoteId,
+      token       = if (this.token.isEmpty)         that.token        else token,
+      otrKey      = if (this.otrKey.isEmpty)        that.otrKey       else otrKey,
+      sha         = if (this.sha.isEmpty)           that.sha          else sha,
+      name        = if (this.name.isEmpty)          that.name         else name,
+      previewId   = if (this.previewId.isEmpty)     that.previewId    else previewId,
+      metaData    = if (this.metaData.isEmpty)      that.metaData     else metaData,
+      proxyPath   = if (this.proxyPath.isEmpty)     that.proxyPath    else proxyPath,
+      source      = if (this.source.isEmpty)        that.source       else source,
+      convId      = if (this.convId.isEmpty)        that.convId       else convId,
+      data64      = if (this.data64.isEmpty)        that.data64       else data64
+      //TODO giphy source and caption
+    )
+    //After merging the two asset data objects, update the resulting status if we now have remote data
+    res.copy(status = res.remoteData.fold(res.status)(_ => UploadDone))
   }
 
 }

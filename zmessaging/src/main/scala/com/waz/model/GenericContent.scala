@@ -181,7 +181,8 @@ object GenericContent {
     }
 
     def unapply(a: Asset): Option[(AssetData, Option[AssetData])] = {
-      val (mime, size, name, meta) = Original.unapply(a.original).get //TODO Dean - can original ever not be there??
+      //TODO Dean - think of better way to handle when only one part of asset proto appears without original
+      val (mime, size, name, meta) = Original.unapply(a.original).getOrElse(Mime.Unknown, 0L, None, None)
       val preview = Preview.unapply(a.preview)
       val remoteData = RemoteData.unapply(a.getUploaded)
       val status = a.getStatusCase match {
