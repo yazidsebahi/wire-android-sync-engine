@@ -39,11 +39,30 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   private implicit val dispatcher = Threading.ImageDispatcher
 
-  val images      = new UiCache[AssetId, ImageAsset](lruSize = 20)
-  val localImages = new UiCache[AssetId, ImageAsset](lruSize = 5)
+  val images      = new UiCache[AssetId, ImageAsset](lruSize = 15)//enough for search or message stream
+  val fileImages  = new UiCache[Uri,     ImageAsset](lruSize = 15)//enough for gallery or giphy
   val zms         = ui.zms
 
-  def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
+  def getImageAsset(id: AssetId): ImageAsset = cacheImageAsset(id, new ImageAsset(id))
+
+  def getLocalImageAsset(data: AssetData) = cacheImageAsset(data.id, new LocalImageAsset(data))
+
+  def getOrCreateUriImageAsset(uri: Uri): api.ImageAsset = {
+    if (uri == null || uri.toString == "null") {
+      HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
+      ImageAsset.Empty
+    } else {
+      val res = getOrUpdate(fileImages)(uri, new LocalImageAsset(AssetData.NewImageAsset().copy(source = Some(uri))))
+      verbose(s"fileImages: ${fileImages.sizeString}")
+      res
+    }
+  }
+
+  private def cacheImageAsset(id: AssetId, img: ImageAsset) = {
+    val res = getOrUpdate(images)(id, img)
+    verbose(s"images: ${images.sizeString}")
+    res
+  }
 
   def getImageAsset(p: Parcel): api.ImageAsset = {
     p.readInt() match {
@@ -53,24 +72,10 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
     }
   }
 
-  def getOrCreateUriImageAsset(uri: Uri): api.ImageAsset = {
-    if (uri == null || uri.toString == "null") {
-      HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
-      ImageAsset.Empty
-    } else {
-      getLocalImageAsset(AssetData.NewImageAsset().copy(source = Some(uri)))
-    }
-  }
-
-  def getLocalImageAsset(data: AssetData) = {
-    val res = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
-    verbose(s"local images contains: ${localImages.items.size} images")
-    res
-  }
-
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
-    else getLocalImageAsset(AssetData.NewImageAsset().copy(data64 = Some(Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.NO_PADDING))))
+    //Don't cache assets from bytes
+    new LocalImageAsset(AssetData.NewImageAsset().copy(data64 = Some(Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.NO_PADDING))))
   }
 
   def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =
@@ -81,6 +86,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getOrCreateImageAssetFrom(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL): api.ImageAsset = {
     if (bitmap == null || bitmap == com.waz.bitmap.EmptyBitmap) ImageAsset.Empty
+    //Don't cache assets from bitmaps
     else new LocalBitmapAsset(bitmap, orientation)
   }
 }

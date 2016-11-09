@@ -62,7 +62,6 @@ case class AssetData(id:          AssetId               = AssetId(),
 
   import AssetData._
 
-  //TODO Dean - otrKey and sha are printing as AESKey(AESKey(kdjfl)) - is this going to corrupt data?
   override def toString: String =
     s"""
        |AssetData:

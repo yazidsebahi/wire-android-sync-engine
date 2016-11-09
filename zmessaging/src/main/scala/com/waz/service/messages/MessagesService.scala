@@ -50,7 +50,6 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
   private implicit val logTag: LogTag = logTagFor[MessagesService]
   private implicit val ec = EventContext.Global
 
-  import assets._
   import content._
   import convs._
   import users._
@@ -108,7 +107,6 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         case (Asset(a@AssetData.WithRemoteId(rId), _), _) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset v3: $asset")
-          //need to merge parts of message as they can come individually
           assets.storage.updateOrCreateAsset(asset)
         case (Asset(a, _), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(a.id, a.otrKey, a.sha, data))

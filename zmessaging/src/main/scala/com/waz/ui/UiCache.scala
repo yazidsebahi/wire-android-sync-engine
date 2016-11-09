@@ -43,6 +43,8 @@ class UiCache[Key, A <: AnyRef](lruSize: Int = 0)(implicit ui: UiModule) extends
     Option(getOrNull(k))
   }
 
+  def sizeString = s"lru: ${lru.size}, items: ${items.size}"
+
   def getOrNull(k: Key): A = {
     dropQueue()
     if (lruSize > 0) {

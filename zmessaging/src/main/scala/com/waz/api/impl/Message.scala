@@ -125,8 +125,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   override def getImage(w: Int, h: Int) = data.msgType match {
     case Type.LOCATION =>
       data.location.fold2(ImageAsset.Empty, { loc =>
-        val id = AssetId(s"${data.assetId.str}_${w}_$h") // use dimensions in id, to avoid caching images with different sizes
-        context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(id, loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
+        context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(AssetId(data.assetId.str), loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
       })
     case _ => context.images.getImageAsset(data.assetId)
   }
