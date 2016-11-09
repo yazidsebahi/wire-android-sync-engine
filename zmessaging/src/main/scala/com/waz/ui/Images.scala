@@ -22,6 +22,7 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
+import android.util.Base64
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.Parcelable
@@ -66,10 +67,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     else {
-      val asset = new AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0), "full"))) {
-        override lazy val data: Option[Array[Byte]] = Some(bytes)
-      }
-      new LocalImageAsset(asset)
+      new LocalImageAsset(AssetData.NewImageAsset().copy(data64 = Some(Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.NO_PADDING))))
     }
   }
 
