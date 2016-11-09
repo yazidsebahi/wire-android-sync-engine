@@ -181,7 +181,7 @@ object GenericContent {
     }
 
     def unapply(a: Asset): Option[(AssetData, Option[AssetData])] = {
-      val (mime, size, name, meta) = Original.unapply(a.original).get //TODO can original ever not be there??
+      val (mime, size, name, meta) = Original.unapply(a.original).get //TODO Dean - can original ever not be there??
       val preview = Preview.unapply(a.preview)
       val remoteData = RemoteData.unapply(a.getUploaded)
       val status = a.getStatusCase match {

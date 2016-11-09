@@ -102,20 +102,29 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     //For assets v3, the RAssetId will be contained in the proto content. For v2, it will be passed along with in the GenericAssetEvent
     //A defined convId marks that the asset is a v2 asset
     def update(id: Uid, convId: Option[RConvId], ct: Any, v2RId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] = {
-      verbose(s"update asset: convId: $convId, ct: $ct, v2RId: $v2RId, data: $data")
+      verbose(s"update asset for event: $id, convId: $convId, ct: $ct, v2RId: $v2RId, data: $data")
+
       (ct, v2RId) match {
         case (Asset(a@AssetData.WithRemoteId(rId), _), _) =>
-          verbose(s"Received asset v3: $a")
-          updateAsset(rId, a.copy(id = AssetId(id.str)))
-        case (Asset(asset, _), Some(rId)) =>
-          verbose(s"Received asset v2, but not image!: $asset")
-          updateAsset(rId, asset.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
-        case (ImageAsset(asset), Some(rId)) =>
-          verbose(s"Received asset v2: $asset")
-          updateAsset(rId, asset.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(asset.id, asset.otrKey, asset.sha, data)))
+          val asset = a.copy(id = AssetId(id.str))
+          verbose(s"Received asset v3: $asset")
+          assets.storage.updateOrCreateAsset(asset)
+        case (Asset(a, _), Some(rId)) =>
+          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(a.id, a.otrKey, a.sha, data))
+          verbose(s"Received asset v2 non-image: $asset")
+          assets.storage.updateOrCreateAsset(asset)
+        case (ImageAsset(a), Some(rId)) =>
+          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(a.id, a.otrKey, a.sha, data))
+          verbose(s"Received asset v2 image: $asset")
+          assets.storage.updateOrCreateAsset(asset)
+        case (Asset(a, _), _ ) =>
+          val asset = a.copy(id = AssetId(id.str))
+          verbose(s"Received asset without remote data - we will expect another update: $asset")
+          assets.storage.updateOrCreateAsset(asset)
         case (Ephemeral(_, content), _)=>
           update(id, convId, content, v2RId, data)
-        case _ =>
+        case res =>
+          warn(s"Unexpected asset update: $res")
           Future successful None
       }
     }

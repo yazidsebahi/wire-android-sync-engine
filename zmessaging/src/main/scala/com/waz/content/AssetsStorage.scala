@@ -71,6 +71,7 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
     }
   }
 
+  //TODO Dean - remove this: it's no longer useful since we can receive assets that don't yet have remote data
   def getByRemoteId(remoteId: RAssetId): Future[Option[AssetData]] = init map (assetsById => remoteMap.get(remoteId).flatMap(assetsById.get))
 
   def getByUri(uri: Uri): Future[Option[AssetData]] = init map (assetsById => uriMap.get(uri).flatMap(assetsById.get))
@@ -80,4 +81,6 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
   def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]] = update(id, updater).mapOpt {
     case (_, updated) => Some(updated)
   }
+
+  def updateOrCreateAsset(asset: AssetData) = updateOrCreate(asset.id, _ => asset, asset).map(Some(_))
 }

@@ -146,15 +146,6 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   def updateAssets(data: Seq[AssetData]) =
     storage.updateOrCreateAll(data.map(d => d.id -> { (_: Option[AssetData]) => d })(collection.breakOut))
 
-  def updateAsset(rId: RAssetId, newData: AssetData): Future[Option[AssetData]] =
-    storage.getByRemoteId(rId).flatMap { cur =>
-      verbose(s"Updating asset by RemoteId: current: $cur with new data: $newData")
-      cur match {
-        case Some(cur) => storage.updateAsset(cur.id, _ => newData.copy(id = cur.id))
-        case None => storage.insert(newData).map(Some(_)) //was no local data to update, insert the decoded asset data
-      }
-    }
-
   def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {
       case None => CancellableFuture successful None
