@@ -57,7 +57,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      getLocalImageAsset(AssetData.NewImageAsset.copy(source = Some(uri)))
+      getLocalImageAsset(AssetData.NewImageAsset().copy(source = Some(uri)))
     }
   }
 

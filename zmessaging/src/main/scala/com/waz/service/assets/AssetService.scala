@@ -135,7 +135,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     val convIdOpt = if (prefs.sendWithV3) None else Some(convId) //TODO Dean remove sending with v2 after testing
     val asset = image match {
       case img: LocalImageAsset => Some(img.data.copy(convId = convIdOpt))
-      case _: ImageAsset => Some(AssetData.NewImageAsset.copy(id = AssetId(image.getId), convId = convIdOpt))
+      case _: ImageAsset => Some(AssetData.NewImageAsset(AssetId(image.getId)).copy(convId = convIdOpt))
       case _ => None
     }
 

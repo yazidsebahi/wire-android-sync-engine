@@ -32,7 +32,17 @@ import org.json.JSONObject
 import org.threeten.bp.Duration
 import com.waz.ZLog.ImplicitTag._
 
-case class AssetData(id:          AssetId               = AssetId(), //TODO make independent of message id - will now be cache key
+//Things still borked:
+//TODO audio messages don't play
+//TODO video messages don't render
+//TODO send in v2 flag?
+//TODO sending from camera doesn't work
+//TODO profile pictures - get back to normal
+//TODO Giphy loading
+//TODO Test souncloud/spotify/youtube/linkpreviews/locations
+//TODO gallery images are blocking adapter
+
+case class AssetData(id:          AssetId               = AssetId(),
                      mime:        Mime                  = Mime.Unknown,
                      sizeInBytes: Long                  = 0L, //will be for metadata only??
                      status:      AssetStatus           = AssetStatus.UploadNotStarted,
@@ -152,7 +162,8 @@ object AssetData {
                         sha256:   Option[Sha256]      = None
                        )
 
-  val NewImageAsset = AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0))))
+  //needs to be def to create new id each time
+  def NewImageAsset(id: AssetId = AssetId()) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0))))
 
   object IsImage {
     def unapply(asset: AssetData): Option[(Dim2, String)] = {

@@ -58,7 +58,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
   }
 
   def generateWireAsset(uri: Uri): CancellableFuture[AssetData] = {
-    val asset = AssetData.NewImageAsset.copy(source = Some(uri))
+    val asset = AssetData.NewImageAsset().copy(source = Some(uri))
     loader.loadRawImageData(asset) flatMap {
       case Some(data) =>
         loader.getImageMetadata(data) flatMap { meta => generateAssetData(asset.id, Left(data), meta, ImageOptions) }
