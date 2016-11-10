@@ -24,7 +24,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.waz.ZLog._
 import com.waz.cache.{CacheEntryData, Expiration}
-import com.waz.model.AssetId
+import com.waz.model.{AssetId, CacheKey}
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
@@ -40,7 +40,7 @@ class WireContentProvider extends ContentProvider {
 
   private def cache = ZMessaging.currentGlobal.cache
 
-  private def getEntry(key: AssetId) = Await.result(cache.getEntry(key), AsyncTimeout)
+  private def getEntry(key: CacheKey) = Await.result(cache.getEntry(key), AsyncTimeout)
 
   override def getType(uri: Uri): String = {
     verbose(s"getType($uri)")
@@ -98,18 +98,17 @@ class WireContentProvider extends ContentProvider {
     }
   }
 
-  private def getDecryptedEntry(key: AssetId) =
+  private def getDecryptedEntry(key: CacheKey) =
     cache.getEntry(key) flatMap {
       case Some(entry) if entry.data.encKey.isDefined =>
-        //TODO Dean: do we need to have different keys for encrypted/unencrypted cache entries?
-        cache.getOrElse(key, cache.addStream(key, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
+        cache.getOrElse(CacheKey.decrypted(key), cache.addStream(key, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
       case res => CancellableFuture successful res
     }
 
   object CacheUriExtractor {
     val extractor = CacheUri.unapply(getContext) _
 
-    def unapply(uri: Uri): Option[AssetId] = extractor(uri)
+    def unapply(uri: Uri): Option[CacheKey] = extractor(uri)
   }
 }
 
@@ -121,7 +120,7 @@ object WireContentProvider {
 
     def builder(context: Context) = Uri.parse(ContentResolver.SCHEME_CONTENT + "://" + context.getPackageName).buildUpon()
 
-    def apply(key: AssetId, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key.str).build()
+    def apply(key: CacheKey, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key.str).build()
 
     def apply(entry: CacheEntryData, context: Context): Uri = {
       val b = builder(context).appendEncodedPath(Cache).appendPath(entry.key.str)
@@ -129,11 +128,11 @@ object WireContentProvider {
       b.build()
     }
 
-    def unapply(context: Context)(uri: Uri): Option[AssetId] =
+    def unapply(context: Context)(uri: Uri): Option[CacheKey] =
       if (uri.getScheme != ContentResolver.SCHEME_CONTENT || uri.getAuthority != context.getPackageName) None
       else {
         val path = uri.getPathSegments
-        if (path.size() >= 2 && path.get(0) == "cache") Some(AssetId(path.get(1))) else None
+        if (path.size() >= 2 && path.get(0) == "cache") Some(CacheKey(path.get(1))) else None
       }
   }
 }

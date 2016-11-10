@@ -237,7 +237,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
     def encryptBytes() = {
       val bos = new ByteArrayOutputStream()
       val mac = AESUtils.encrypt(key, data.inputStream, bos)
-      cache.addData(AssetId(), bos.toByteArray) map { (mac, _) }
+      cache.addData(CacheKey(), bos.toByteArray) map { (mac, _) }
     }
 
     data.byteArray.fold(encryptFile()){ _ => encryptBytes() }

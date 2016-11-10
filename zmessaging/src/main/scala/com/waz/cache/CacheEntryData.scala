@@ -26,10 +26,10 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.db.DbTranslator.FileTranslator
-import com.waz.model.{AESKey, AssetId, Mime, Uid}
+import com.waz.model._
 import com.waz.utils.returning
 
-case class CacheEntryData(key: AssetId,
+case class CacheEntryData(key: CacheKey,
                           data: Option[Array[Byte]] = None,
                           lastUsed: Long = currentTimeMillis(),
                           timeout: Long = CacheService.DefaultExpiryTime.toMillis,
@@ -42,8 +42,8 @@ case class CacheEntryData(key: AssetId,
 
 object CacheEntryData {
 
-  implicit object CacheEntryDao extends Dao[CacheEntryData, AssetId] with CacheEntryDataUpgrades {
-    val Key = id[AssetId]('key, "PRIMARY KEY").apply(_.key)
+  implicit object CacheEntryDao extends Dao[CacheEntryData, CacheKey] with CacheEntryDataUpgrades {
+    val Key = id[CacheKey]('key, "PRIMARY KEY").apply(_.key)
     val Uid = uid('file)(_.fileId)
     val Data = opt(blob('data))(_.data)
     val LastUsed = long('lastUsed)(_.lastUsed)
@@ -60,9 +60,9 @@ object CacheEntryData {
     override def apply(implicit cursor: Cursor): CacheEntryData =
       new CacheEntryData(Key, Data, LastUsed, Timeout, Path, EncKey, Name, MimeType, Uid, Length)
 
-    def getByKey(key: AssetId)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
+    def getByKey(key: CacheKey)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
 
-    def deleteByKey(key: AssetId)(implicit db: SQLiteDatabase): Int = delete(key)
+    def deleteByKey(key: CacheKey)(implicit db: SQLiteDatabase): Int = delete(key)
 
     def findAll(implicit db: SQLiteDatabase): Seq[CacheEntryData] = list
 

@@ -59,7 +59,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
           case Right(Some(asset)) =>
             for {
               Some(updated) <- CancellableFuture.lift(assets.storage.updateAsset(asset.id, a => asset))
-              _ <- CancellableFuture.lift(cache.addStream(updated.id, data.inputStream, updated.mime, updated.name, length = data.length))
+              _ <- CancellableFuture.lift(cache.addStream(updated.cacheKey, data.inputStream, updated.mime, updated.name, length = data.length))
             } yield Right(Some(updated))
           case Left(error) => CancellableFuture.successful(Left(error))
         }
@@ -72,7 +72,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
   def postSelfImageAsset(convId: RConvId, id: AssetId): Future[SyncResult] =
     (for {
       asset <- assets.storage.get(id)
-      data <- cache.getEntry(id)
+      data <- cache.getEntry(CacheKey.fromAssetId(id))
     } yield (asset, data)) flatMap {
       case (Some(a), Some(d)) => postImageData(convId, a, d, nativePush = false)
       case _ => Future.successful(SyncResult.Failure(None))
@@ -85,7 +85,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
     // save just posted data under new cacheKey, so we don't need to download it when image is accessed
     def updateImageCache(sent: AssetData) =
     if (sent.data64.isDefined) successful(())
-    else cache.addStream(sent.id, data.inputStream)
+    else cache.addStream(sent.cacheKey, data.inputStream)
 
     client.postImageAssetData(asset, data, nativePush).future flatMap {
       case Right(updated) =>

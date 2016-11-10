@@ -51,7 +51,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      val res = getOrUpdate(fileImages)(uri, new LocalImageAsset(AssetData.NewImageAsset().copy(source = Some(uri))))
+      val res = getOrUpdate(fileImages)(uri, new LocalImageAsset(AssetData.newImageAsset().copy(source = Some(uri))))
       verbose(s"fileImages: ${fileImages.sizeString}")
       res
     }
@@ -73,8 +73,8 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
-    //Don't cache assets from bytes
-    new LocalImageAsset(AssetData.NewImageAsset().copy(data = Some(bytes)))
+    //Created with camera, so don't cache since if the user cancels or sends, the image asset won't be needed again
+    new LocalImageAsset(AssetData.newImageAsset().copy(sizeInBytes = bytes.length, data = Some(bytes)))
   }
 
   def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =

@@ -19,6 +19,12 @@ package com.waz.cache
 
 import java.io._
 
+import com.waz.ZLog._
+import com.waz.model.CacheKey
+import com.waz.utils.IoUtils
+
+import scala.concurrent.{ExecutionContext, Future}
+
 /**
  * Common interface to access locally available data.
  * Unifies access to file, in memory byte array and cache entry.
@@ -64,4 +70,45 @@ object LocalData {
     override def inputStream: InputStream = new ByteArrayInputStream(bytes)
     override def length: Int = bytes.length
   }
+}
+
+//Basically masks a CacheEntryData so that it can be treated like any other form of LocalData
+class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalData {
+  private implicit val logTag: LogTag = logTagFor[CacheEntry]
+
+  override def inputStream: InputStream =
+    content.fold[InputStream](CacheService.inputStream(data.encKey, new FileInputStream(cacheFile)))(new ByteArrayInputStream(_))
+
+  override def length: Int = content.map(_.length.toLong).orElse(data.length).getOrElse(cacheFile.length).toInt
+
+  override def file = content.fold(Option(cacheFile))(_ => None)
+
+  override def byteArray = content
+
+  def content = data.data
+
+  // direct access to this file is not advised, it's content will be encrypted when on external storage, it's better to use stream api
+  private[waz] def cacheFile = service.entryFile(data.path.getOrElse(service.cacheDir), data.fileId)
+
+  def outputStream = {
+    cacheFile.getParentFile.mkdirs()
+    CacheService.outputStream(data.encKey, new FileOutputStream(cacheFile))
+  }
+
+  def copyDataToFile() = {
+    content foreach { data =>
+      IoUtils.copy(new ByteArrayInputStream(data), outputStream)
+    }
+    cacheFile
+  }
+
+  override def delete(): Unit = service.remove(this)
+
+  override def toString: LogTag = s"CacheEntry($data)"
+
+  def updatedWithLength(len: Long)(implicit ec: ExecutionContext): Future[CacheEntry] = service.cacheStorage.insert(data.copy(length = Some(len))).map(d => new CacheEntry(d, service))
+}
+
+object CacheEntry {
+  def unapply(entry: CacheEntry): Option[(CacheKey, Option[Array[Byte]], File)] = Some((entry.data.key, entry.content, entry.cacheFile))
 }

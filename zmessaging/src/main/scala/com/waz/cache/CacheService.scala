@@ -25,7 +25,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.Database
-import com.waz.model.{AESKey, AssetId, Mime, Uid}
+import com.waz.model._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.crypto.AESUtils
@@ -34,54 +34,6 @@ import com.waz.utils.{IoUtils, returning}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
-class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalData {
-  private implicit val logTag: LogTag = logTagFor[CacheEntry]
-
-  override def inputStream: InputStream =
-    content.fold[InputStream](CacheService.inputStream(data.encKey, new FileInputStream(cacheFile)))(new ByteArrayInputStream(_))
-
-  override def length: Int = content.map(_.length.toLong).orElse(data.length).getOrElse(cacheFile.length).toInt
-
-  override def file = content.fold(Option(cacheFile))(_ => None)
-
-  override def byteArray = content
-
-  def content = data.data
-
-  // direct access to this file is not advised, it's content will be encrypted when on external storage, it's better to use stream api
-  private[waz] def cacheFile = service.entryFile(data.path.getOrElse(service.cacheDir), data.fileId)
-
-  def outputStream = {
-    cacheFile.getParentFile.mkdirs()
-    CacheService.outputStream(data.encKey, new FileOutputStream(cacheFile))
-  }
-
-  def copyDataToFile() = {
-    content foreach { data =>
-      IoUtils.copy(new ByteArrayInputStream(data), outputStream)
-    }
-    cacheFile
-  }
-
-  override def delete(): Unit = service.remove(this)
-
-  override def toString: LogTag = s"CacheEntry($data)"
-
-  def updatedWithLength(len: Long)(implicit ec: ExecutionContext): Future[CacheEntry] = service.cacheStorage.insert(data.copy(length = Some(len))).map(d => new CacheEntry(d, service))
-}
-
-object CacheEntry {
-  def unapply(entry: CacheEntry): Option[(AssetId, Option[Array[Byte]], File)] = Some((entry.data.key, entry.content, entry.cacheFile))
-}
-
-case class Expiration(timeout: Long)
-
-object Expiration {
-  import scala.language.implicitConversions
-
-  implicit def in(d: Duration) : Expiration = if (d.isFinite()) Expiration(d.toMillis) else Expiration(1000L * 3600L * 24L * 365L * 1000L) // 1000 years (don't use Long.MaxValue due to overflow dangers)
-}
 
 class CacheService(context: Context, storage: Database) {
   import CacheService._
@@ -92,19 +44,19 @@ class CacheService(context: Context, storage: Database) {
   // create new cache entry for file, return the entry immediately
   def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
     val location = if (key.isEmpty) Some(intCacheDir) else extCacheDir.orElse(Some(intCacheDir))  // use internal storage for unencrypted files
-    val entry = CacheEntryData(AssetId(), None, timeout = timeout.timeout, path = location, encKey = key)
+    val entry = CacheEntryData(CacheKey(), None, timeout = timeout.timeout, path = location, encKey = key)
     cacheStorage.insert(entry)
     entry.path foreach { entryFile(_, entry.fileId).getParentFile.mkdirs() }
     new CacheEntry(entry, this)
   }
 
-  def createForFile(key: AssetId = AssetId(),  mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Option[Long] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
+  def createForFile(key: CacheKey = CacheKey(), mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Option[Long] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
     add(CacheEntryData(key, None, timeout = timeout.timeout, mimeType = mime, fileName = name, path = cacheLocation.orElse(Some(intCacheDir)), length = length)) // use internal storage for this files as those won't be encrypted
 
-  def addData(key: AssetId, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
+  def addData(key: CacheKey, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
     add(CacheEntryData(key, Some(data), timeout = timeout.timeout))
 
-  def addStream[A](key: AssetId, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+  def addStream[A](key: CacheKey, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
     if (length > 0 && length <= CacheService.DataThreshold) {
       Future(IoUtils.toByteArray(in))(execution).flatMap(addData(key, _))
     } else {
@@ -119,7 +71,7 @@ class CacheService(context: Context, storage: Database) {
       }
     }
 
-  def addFile(key: AssetId, src: File, moveFile: Boolean = false, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+  def addFile(key: CacheKey, src: File, moveFile: Boolean = false, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
     addStreamToStorage(IoUtils.copy(new FileInputStream(src), _), cacheLocation) match {
       case Success((fileId, path, encKey, len)) =>
         if (moveFile) src.delete()
@@ -152,7 +104,7 @@ class CacheService(context: Context, storage: Database) {
     }
   }
 
-  def move(key: AssetId, entry: LocalData, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
+  def move(key: CacheKey, entry: LocalData, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
     verbose(s"move($key, $entry)")
 
     def copy() = addStream(key, entry.inputStream, mime, name, cacheLocation, entry.length)
@@ -188,17 +140,17 @@ class CacheService(context: Context, storage: Database) {
   def intCacheDir: File = context.getCacheDir
   def cacheDir: File = extCacheDir.getOrElse(intCacheDir)
 
-  def getEntry(key: AssetId): Future[Option[CacheEntry]] = cacheStorage.get(key) map {
+  def getEntry(key: CacheKey): Future[Option[CacheEntry]] = cacheStorage.get(key) map {
     case Some(e) => Some(new CacheEntry(e, this))
     case None => None
   }
 
-  def getOrElse(key: AssetId, default: => Future[CacheEntry]) = getEntry(key) flatMap {
+  def getOrElse(key: CacheKey, default: => Future[CacheEntry]) = getEntry(key) flatMap {
     case Some(entry) => Future successful entry
     case _ => default
   }
 
-  def remove(key: AssetId): Future[Unit] = cacheStorage.remove(key)
+  def remove(key: CacheKey): Future[Unit] = cacheStorage.remove(key)
 
   def remove(entry: CacheEntry): Future[Unit] = {
     verbose(s"remove($entry)")
@@ -220,7 +172,7 @@ class CacheService(context: Context, storage: Database) {
   private[cache] def entryFile(path: File, fileId: Uid) = CacheStorage.entryFile(path, fileId)
 
   // util method to perform local data processing with caching
-  def processWithCaching(cacheKey: AssetId, process: (InputStream, OutputStream) => Unit, data: LocalData): Future[LocalData] = {
+  def processWithCaching(cacheKey: CacheKey, process: (InputStream, OutputStream) => Unit, data: LocalData): Future[LocalData] = {
     def processedByteData = Future {
       val bos = new ByteArrayOutputStream()
       process(data.inputStream, bos)
@@ -251,4 +203,12 @@ object CacheService {
   def outputStream(key: Option[AESKey], os: OutputStream) = key.fold(os) { AESUtils.outputStream(_, os) }
 
   def inputStream(key: Option[AESKey], is: InputStream) = key.fold(is) { AESUtils.inputStream(_, is) }
+}
+
+case class Expiration(timeout: Long)
+
+object Expiration {
+  import scala.language.implicitConversions
+
+  implicit def in(d: Duration) : Expiration = if (d.isFinite()) Expiration(d.toMillis) else Expiration(1000L * 3600L * 24L * 365L * 1000L) // 1000 years (don't use Long.MaxValue due to overflow dangers)
 }

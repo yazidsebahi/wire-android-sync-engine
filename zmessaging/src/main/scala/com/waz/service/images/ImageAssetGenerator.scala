@@ -58,7 +58,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
   }
 
   def generateWireAsset(uri: Uri): CancellableFuture[AssetData] = {
-    val asset = AssetData.NewImageAsset().copy(source = Some(uri))
+    val asset = AssetData.newImageAsset().copy(source = Some(uri))
     loader.loadRawImageData(asset) flatMap {
       case Some(data) =>
         loader.getImageMetadata(data) flatMap { meta => generateAssetData(asset.id, Left(data), meta, ImageOptions) }
@@ -78,7 +78,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
         val size = file.length
         verbose(s"final image, size: $size, meta: $m")
         val data = if (size > 2 * 1024) None else Some(IoUtils.toByteArray(file.inputStream))
-        data foreach { _ => cache.remove(assetId) } // no need to cache preview images
+        data foreach { _ => cache.remove(CacheKey.fromAssetId(assetId)) } // no need to cache preview images
 
         AssetData(
           assetId,
@@ -124,7 +124,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
 
     if (options.shouldScaleOriginalSize(meta.width, meta.height)) generateScaled()
     else input.fold(
-      local => cache.addStream(id, local.inputStream, cacheLocation = Some(saveDir)).map((_, meta)).lift,
+      local => cache.addStream(CacheKey.fromAssetId(id), local.inputStream, cacheLocation = Some(saveDir)).map((_, meta)).lift,
       image => save(image))
   }
 
@@ -133,7 +133,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     else Bitmap.CompressFormat.JPEG
 
   private def saveImage(id: AssetId, image: Bitmap, mime: String, options: CompressionOptions): CancellableFuture[(CacheEntry, Metadata)] =
-    cache.createForFile(id, cacheLocation = Some(saveDir)).flatMap(saveImage(_, image, mime, options)).lift
+    cache.createForFile(CacheKey.fromAssetId(id), cacheLocation = Some(saveDir)).flatMap(saveImage(_, image, mime, options)).lift
 
   private def saveImage(file: CacheEntry, image: Bitmap, mime: String, options: CompressionOptions): Future[(CacheEntry, Metadata)] = {
     val format = saveFormat(mime, options.forceLossy)

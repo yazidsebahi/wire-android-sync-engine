@@ -42,7 +42,7 @@ import com.waz.{PermissionsService, bitmap}
 
 import scala.concurrent.Future
 
-class ImageLoader(val context: Context, cache: CacheService, val imageCache: MemoryImageCache,
+class ImageLoader(val context: Context, fileCache: CacheService, val imageCache: MemoryImageCache,
                   bitmapLoader: BitmapDecoder, permissions: PermissionsService, assetLoader: AssetLoader) {
 
   import Threading.Implicits.Background
@@ -64,7 +64,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
         CancellableFuture {(asset.data, asset.source)} flatMap {
           case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(true)
           case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(true)
-          case _ => CancellableFuture lift cache.getEntry(asset.id).map(_.isDefined)
+          case _ => CancellableFuture lift fileCache.getEntry(asset.cacheKey).map(_.isDefined)
         }
       case _ => CancellableFuture successful false
     }
@@ -210,7 +210,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
         CancellableFuture.successful(Some(LocalData(assetLoader.openStream(uri), -1)))
       case _ =>
         verbose(s"asset: ${asset.id} contained no data or a url, trying cached storage")
-        CancellableFuture lift cache.getEntry(asset.id)
+        CancellableFuture lift fileCache.getEntry(asset.cacheKey)
     }
   }
 

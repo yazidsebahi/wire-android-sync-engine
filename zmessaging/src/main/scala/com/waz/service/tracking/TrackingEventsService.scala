@@ -43,19 +43,19 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
   private lazy val handler = handlerFactory.getTrackingEventsHandler
 
   downloader.onDownloadStarting {
-    case WireAssetRequest(id, _, _, _, _) =>
+    case WireAssetRequest(_, id, _, _, _, _) =>
       assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
     case _ => // ignore
   }
 
   downloader.onDownloadDone {
-    case WireAssetRequest(id, _, _, mime, _) =>
+    case WireAssetRequest(_, id, _, _, mime, _) =>
       assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
     case _ => // ignore
   }
 
   downloader.onDownloadFailed {
-    case (WireAssetRequest(id, _, _, _, _), err) if err.code != ErrorResponse.CancelledCode =>
+    case (WireAssetRequest(_, id, _, _, _, _), err) if err.code != ErrorResponse.CancelledCode =>
       assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
     case _ => // ignore
   }

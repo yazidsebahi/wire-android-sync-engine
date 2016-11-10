@@ -65,12 +65,12 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   import com.waz.utils.events.EventContext.Implicits.global
 
   assetDownloader.onDownloadDone {
-    case WireAssetRequest(id, _, _, _, _) => markDownloadDone(id)
+    case WireAssetRequest(_, id, _, _, _, _) => markDownloadDone(id)
     case _ =>
   }
 
   assetDownloader.onDownloadFailed {
-    case (WireAssetRequest(id, _, _, _, _), _) => markDownloadFailed(id)
+    case (WireAssetRequest(_, id, _, _, _, _), _) => markDownloadFailed(id)
     case _ =>
   }
 
@@ -88,13 +88,13 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
     case asset @ AssetData.WithStatus(status) =>
-      cache.cacheStorage.optSignal(id).map(_.isDefined) flatMap {
+      cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
         case true  =>
           verbose(s"asset in state DOWNLOAD_DONE, meta: ${asset.metaData}")
           if (asset.metaData.isEmpty) metaService.getAssetMetadata(id) // asset downloaded but has no metadata, let's update
           Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
         case false =>
-          downloader.getDownloadState(id).map(_.state) map {
+          downloader.getDownloadState(asset.cacheKey).map(_.state) map {
             case State.RUNNING    => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS)
             case State.COMPLETED  => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS) // reporting asset in progress since it should be added to cache before we change the state
             case _                => (asset, status.status)
@@ -103,15 +103,19 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     case _ => Signal.empty[(AssetData, api.AssetStatus)]
   }
 
-  def downloadProgress(id: AssetId) = downloader.getDownloadState(id)
+  def downloadProgress(id: AssetId) = storage.signal(id) flatMap ( asset => downloader.getDownloadState(asset.cacheKey) )
 
-  def cancelDownload(id: AssetId) = downloader.cancel(id)
+  def cancelDownload(id: AssetId) = storage.get(id) flatMap {
+    case Some(asset) => downloader.cancel(asset.cacheKey)
+    case _ => Future successful (())
+  }
 
   def uploadProgress(id: AssetId) = Signal const ProgressData.Indefinite // TODO
 
   def cancelUpload(id: AssetId, msg: MessageId): Future[Unit] =
     for {
-      _ <- downloader.cancel(id)
+      Some(asset) <- storage.get(id)
+      _ <- downloader.cancel(asset.cacheKey)
       _ <- Cancellable.cancel(FetchKey(id))
       _ <- Cancellable.cancel(UploadKey(id))
       _ <- markUploadFailed(id, UploadCancelled)
@@ -158,7 +162,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     }
 
   def assetDataOrSource(asset: AssetData): CancellableFuture[Option[Either[LocalData, Uri]]] =
-    CancellableFuture lift cache.getEntry(asset.id) flatMap {
+    CancellableFuture lift cache.getEntry(asset.cacheKey) flatMap {
       case Some(entry) => CancellableFuture successful Some(Left(entry))
       case None =>
         asset.source match {
@@ -205,8 +209,8 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       case _ =>
 
         def fetchAssetData(mime: Mime, name: Option[String]) = (a match {
-          case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(a.id, data, Mime.Video.MP4, if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
-          case _                             => downloader.download(AssetFromInputStream(a.id, () => a.openDataStream(context), mime, name))(streamLoader)
+          case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(CacheKey(a.cacheKey), data, Mime.Video.MP4, if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
+          case _                             => downloader.download(AssetFromInputStream(CacheKey(a.cacheKey), () => a.openDataStream(context), mime, name))(streamLoader)
         }).flatMap {
           case Some(entry) => CancellableFuture.successful(entry)
           case None        =>
@@ -256,7 +260,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
           case Some(entry: CacheEntry) =>
             CancellableFuture successful Some(CacheUri(entry.data, context))
           case Some(data) =>
-            CancellableFuture lift cache.addStream(a.id, data.inputStream, a.mime, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e => Some(CacheUri(e.data, context)) }
+            CancellableFuture lift cache.addStream(a.cacheKey, data.inputStream, a.mime, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e => Some(CacheUri(e.data, context)) }
           case None =>
             CancellableFuture successful None
         }

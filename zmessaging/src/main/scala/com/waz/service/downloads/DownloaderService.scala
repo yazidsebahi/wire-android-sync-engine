@@ -24,7 +24,7 @@ import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
-import com.waz.model.AssetId
+import com.waz.model.CacheKey
 import com.waz.service.{NetworkModeService, PreferenceService}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -53,8 +53,8 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
   private implicit val dispatcher = new SerialDispatchQueue(name = "DownloaderService")
   private implicit val ev = EventContext.Global
 
-  private val downloads = new mutable.HashMap[AssetId, DownloadEntry]()
-  private val active = new mutable.HashSet[AssetId]
+  private val downloads = new mutable.HashMap[CacheKey, DownloadEntry]()
+  private val active = new mutable.HashSet[CacheKey]
   private val queue = new DownloadQueue
 
   private val onAdded = EventStream[DownloadEntry]()
@@ -67,15 +67,15 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 
   downloadEnabled.disableAutowiring()
 
-  def getDownload(key: AssetId): Signal[Option[DownloadEntry]] =
-    new AggregatingSignal[DownloadEntry, Option[DownloadEntry]](onAdded.filter(_.req.assetId == key), Future(downloads.get(key)), { (_, added) => Some(added) })
+  def getDownload(key: CacheKey): Signal[Option[DownloadEntry]] =
+    new AggregatingSignal[DownloadEntry, Option[DownloadEntry]](onAdded.filter(_.req.cacheKey == key), Future(downloads.get(key)), { (_, added) => Some(added) })
 
-  def getDownloadState(key: AssetId): Signal[ProgressData] = getDownload(key) flatMap {
+  def getDownloadState(key: CacheKey): Signal[ProgressData] = getDownload(key) flatMap {
     case Some(download) => download.state
     case None => Signal(ProgressData.Unknown)
   }
 
-  def cancel(key: AssetId): Future[Unit] = Future {
+  def cancel(key: CacheKey): Future[Unit] = Future {
     verbose(s"cancel($key)")
     downloads.remove(key) foreach { _.cancel() }
     active.remove(key)
@@ -100,9 +100,9 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 
     def createEntry = returning(new DownloadEntry(req, loader.load(req, _))) { onAdded ! _ }
 
-    returning(downloads.getOrElseUpdate(req.assetId, createEntry)) { entry =>
+    returning(downloads.getOrElseUpdate(req.cacheKey, createEntry)) { entry =>
       entry.listenersCount += 1
-      if (!active(req.assetId)) {
+      if (!active(req.cacheKey)) {
         entry.force = entry.force || force
         entry.time = System.currentTimeMillis()
         entry.expiration = Expiration(entry.expiration.timeout max expires.timeout)
@@ -113,9 +113,9 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
   }
 
   private def onListenerCancelled(req: DownloadRequest) = Future {
-    downloads.get(req.assetId) foreach { entry =>
+    downloads.get(req.cacheKey) foreach { entry =>
       entry.listenersCount -= 1
-      if (entry.listenersCount == 0 && !active(req.assetId))
+      if (entry.listenersCount == 0 && !active(req.cacheKey))
         queue.put(req, uiWaiting = false, entry.time)
     }
   }
@@ -123,21 +123,21 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
   private def checkQueue(): Unit = {
     verbose(s"checkQueue(), active: $active")
 
-    def shouldStartNext = queue.peek().flatMap(req => downloads.get(req.assetId)).fold(false) { entry =>
+    def shouldStartNext = queue.peek().flatMap(req => downloads.get(req.cacheKey)).fold(false) { entry =>
       entry.listenersCount > 0 && active.size < MaxConcurrentDownloads || active.size < MaxBackgroundDownloads
     }
 
     while(shouldStartNext) {
       queue.poll() foreach { req =>
-        downloads.get(req.assetId).fold(error(s"no download entry found for: $req")) { entry =>
+        downloads.get(req.cacheKey).fold(error(s"no download entry found for: $req")) { entry =>
           verbose(s"starting download for $entry")
-          if (active(req.assetId)) error(s"entry was already active: $entry")
-          active += req.assetId
+          if (active(req.cacheKey)) error(s"entry was already active: $entry")
+          active += req.cacheKey
           doDownload(entry) onComplete { res =>
             verbose(s"download complete for: $req, result: $res")
             entry.promise.tryComplete(res)
-            downloads -= req.assetId
-            active -= req.assetId
+            downloads -= req.cacheKey
+            active -= req.cacheKey
             checkQueue()
           }
         }
@@ -156,8 +156,8 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
     def done(state: State) = {
       verbose(s"done($state), $download")
       download.state ! ProgressData(0, 0, state)
-      downloads.remove(download.req.assetId)
-      active -= download.req.assetId
+      downloads.remove(download.req.cacheKey)
+      active -= download.req.cacheKey
       checkQueue()
     }
 
@@ -171,7 +171,7 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
         case Success(None) => done(State.FAILED)
         case Failure(ex: CancelException) =>
           download.state ! ProgressData(0, 0, State.CANCELLED)
-          active -= download.req.assetId
+          active -= download.req.cacheKey
           queue.put(download.req, uiWaiting = false, download.time)
           checkQueue()
         case Failure(ex) =>

@@ -179,7 +179,7 @@ object ImageAsset {
   }
 
   object Empty extends com.waz.api.ImageAsset with UiFlags with UiObservable {
-    override def getId: String = AssetData().id.str
+    override def getId: String = AssetData.Empty.id.str
     override def getHeight: Int = 0
     override def getWidth: Int = 0
     override def isEmpty = true

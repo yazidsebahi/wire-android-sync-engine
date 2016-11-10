@@ -33,7 +33,6 @@ import org.threeten.bp.Duration
 import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
-//TODO sending from camera doesn't work
 //TODO audio messages don't play
 //TODO video messages don't render
 //TODO profile pictures - get back to normal
@@ -91,13 +90,19 @@ case class AssetData(id:          AssetId               = AssetId(),
     case _ => Some(RemoteData(remoteId, token, otrKey, sha))
   }
 
+  lazy val cacheKey = {
+    val key = CacheKey(proxyPath.orElse(source.map(_.toString)).getOrElse(id.str))
+    verbose(s"created cache key: $key for asset: $id")
+    key
+  }
+
   def loadRequest = {
     val req = (remoteData, source, proxyPath) match {
-      case (Some(rData), _, _)                                                        => WireAssetRequest(id, rData, convId, mime)
-      case (_, Some(uri), _) if Option(uri.getScheme).forall(! _.startsWith("http"))  => External(id, uri)
-      case (_, Some(uri), _)                                                          => LocalAssetRequest(id, uri, mime, name)
-      case (_, None, Some(path))                                                      => Proxied(id, path)
-      case _                                                                          => CachedAssetRequest(id, mime, name)
+      case (Some(rData), _, _)                                                        => WireAssetRequest(cacheKey, id, rData, convId, mime)
+      case (_, Some(uri), _) if Option(uri.getScheme).forall(! _.startsWith("http"))  => External(cacheKey, uri)
+      case (_, Some(uri), _)                                                          => LocalAssetRequest(cacheKey, uri, mime, name)
+      case (_, None, Some(path))                                                      => Proxied(cacheKey, path)
+      case _                                                                          => CachedAssetRequest(cacheKey, mime, name)
     }
     verbose(s"loadRequest returning: $req")
     req
@@ -165,32 +170,28 @@ object AssetData {
                        )
 
   //needs to be def to create new id each time
-  def NewImageAsset(id: AssetId = AssetId()) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0))))
+  def newImageAsset(id: AssetId = AssetId()) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0))))
+
+  val Empty = AssetData()
 
   object IsImage {
-    def unapply(asset: AssetData): Option[(Dim2, String)] = {
-      asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.Image(dims, tag)), _, _, _, _) => Some((dims, tag))
-        case _ => None
-      }
+    def unapply(asset: AssetData): Option[(Dim2, String)] = asset.metaData match {
+      case Some(AssetMetaData.Image(dims, tag)) => Some((dims, tag))
+      case _ => None
     }
   }
 
   object IsVideo {
-    def unapply(asset: AssetData): Boolean = {
-      asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.Video(_, _)), _, _, _, _) => true
-        case _ => false
-      }
+    def unapply(asset: AssetData): Boolean = asset.metaData match {
+      case Some(AssetMetaData.Video(_, _)) => true
+      case _ => false
     }
   }
 
   object IsAudio {
-    def unapply(asset: AssetData): Boolean = {
-      asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.Audio(_, _)), _, _, _, _) => true
-        case _ => false
-      }
+    def unapply(asset: AssetData): Boolean = asset.metaData match {
+      case Some(AssetMetaData.Audio(_, _)) => true
+      case _ => false
     }
   }
 
@@ -203,20 +204,16 @@ object AssetData {
   }
 
   object WithDimensions {
-    def unapply(asset: AssetData): Option[Dim2] = {
-      asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.HasDimensions(dimensions)), _, _, _, _) => Some(dimensions)
-        case _ => None
-      }
+    def unapply(asset: AssetData): Option[Dim2] = asset.metaData match {
+      case Some(AssetMetaData.HasDimensions(dimensions)) => Some(dimensions)
+      case _ => None
     }
   }
 
   object WithDuration {
-    def unapply(asset: AssetData): Option[Duration] = {
-      asset match {
-        case AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.HasDuration(duration)), _, _, _, _) => Some(duration)
-        case _ => None
-      }
+    def unapply(asset: AssetData): Option[Duration] = asset.metaData match {
+      case Some(AssetMetaData.HasDuration(duration)) => Some(duration)
+      case _ => None
     }
   }
 
@@ -255,9 +252,7 @@ object AssetData {
   }
 
   implicit lazy val AssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
-
     import JsonDecoder._
-
     override def apply(implicit js: JSONObject): AssetData =
       AssetData(
         'id,

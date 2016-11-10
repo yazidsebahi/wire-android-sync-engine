@@ -72,7 +72,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
       case _ =>
         warn("loading metadata from stream (encrypted cache, or generic local data) this is slow, please avoid that")
         for {
-          entry <- CancellableFuture lift cache.addStream(AssetId(), data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
+          entry <- CancellableFuture lift cache.addStream(CacheKey(), data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
           res <- CancellableFuture lift load(entry)
         } yield {
           entry.delete()

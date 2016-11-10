@@ -30,7 +30,7 @@ import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
 import com.waz.audioeffect.{AudioEffect => AVSEffect}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
-import com.waz.model.{AssetId, ErrorData, Mime, Uid}
+import com.waz.model._
 import com.waz.service.assets.AudioLevels.peakLoudness
 import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.service.{ErrorsService, ZmsLifecycle}
@@ -204,8 +204,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def record(key: AssetMediaKey, maxAllowedDuration: FiniteDuration): Future[(Instant, Future[RecordingResult])] = {
     def record(): Future[Next] = withAudioFocus() {
-      //TODO Dean - probably should introduce a CacheKey type so I can have multiple versions of an asset in the cache
-      cache.createForFile(key.id, Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
+      cache.createForFile(CacheKey.unencoded(key.id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
         val promisedAsset = Promise[RecordingResult]
         withCleanupOnFailure {
           val start = Instant.now
@@ -300,7 +299,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def applyAudioEffect(effect: AudioEffect, pcmFile: File): Future[AudioAssetForUpload] = {
     val id = AssetId()
-    cache.createForFile(id, Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
+    cache.createForFile(CacheKey.unencoded(id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
       withCleanupOnFailure {
         val fx = new AVSEffect
         try {
@@ -445,6 +444,4 @@ object GlobalRecordAndPlayService {
 
   val tickInterval = 30.millis
   val recordingExpiration = Expiration in 7.days
-
-  def unencodedCacheKey(id: AssetId) = s"${id.str}-unencoded"
 }
