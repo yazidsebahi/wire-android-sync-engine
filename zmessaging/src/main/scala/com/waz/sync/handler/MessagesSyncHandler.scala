@@ -54,9 +54,8 @@ import scala.concurrent.Future.successful
 class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
                           client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
                           assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
-                          sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService,
-                          assetMeta: com.waz.service.assets.MetaDataService, assetPreview: PreviewService, cache: CacheService,
-                          members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
+                          sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService, assetPreview: PreviewService,
+                          cache: CacheService, members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
 
@@ -227,7 +226,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
 
     def postOriginal(): ErrorOrResponse[Instant] =
-      assetMeta.getAssetWithMetadata(msg.assetId) flatMap {
+      CancellableFuture.lift(assets.storage.get(msg.assetId)) flatMap {
         case None => CancellableFuture successful Left(internalError(s"no asset found for $msg"))
         case Some(asset) if asset.status != AssetStatus.UploadNotStarted => CancellableFuture successful Right(msg.time)
         case Some(asset) => postAssetMessage(asset.copy(status = AssetStatus.MetaDataSent), None)

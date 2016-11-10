@@ -89,6 +89,7 @@ class WireContentProvider extends ContentProvider {
     verbose(s"openFile($uri, $mode)")
     uri match {
       case CacheUriExtractor(key) =>
+        verbose(s"CacheUriExtractor: $key")
         Await.result(getDecryptedEntry(key), AsyncTimeout) match {
           case Some(entry) => ParcelFileDescriptor.open(entry.copyDataToFile(), ParcelFileDescriptor.MODE_READ_ONLY)
           case None => super.openFile(uri, mode)

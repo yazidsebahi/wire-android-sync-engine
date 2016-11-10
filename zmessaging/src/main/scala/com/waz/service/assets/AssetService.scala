@@ -91,7 +91,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
         case true  =>
           verbose(s"asset in state DOWNLOAD_DONE, meta: ${asset.metaData}")
-          if (asset.metaData.isEmpty) metaService.getAssetMetadata(id) // asset downloaded but has no metadata, let's update
+          if (asset.metaData.isEmpty) metaService.updateMetaData(id) // asset downloaded but has no metadata, let's update
           Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
         case false =>
           downloader.getDownloadState(asset.cacheKey).map(_.state) map {
@@ -177,7 +177,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     def addAssetFromUri(id: AssetId, uri: Uri, originalMimeType: Option[Mime], metaData: Option[AssetMetaData]) = {
       // it's enough to create AssetData with input uri, everything else can be updated lazily
       verbose(s"addAsset from uri: $uri")
-      for {
+      (for {
         mime  <- a.mimeType
         size  <- a.sizeInBytes
         name  <- a.name
@@ -187,15 +187,27 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
             mime = mime,
             sizeInBytes = size.getOrElse(0),
             name = name,
-            metaData = metaData,
             source = Some(uri),
             convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
           ))
-      } yield {
-        verbose(s"asset added: $asset")
-        // metadata and preview will be needed in UI, let's start generating them already
-        metaService.getAssetMetadata(id) flatMap { _ => previewService.getAssetPreview(id) }
-        asset
+      } yield asset).flatMap { asset =>
+
+        val processMeta = metaService.updateMetaData(asset.id)
+        val processPreview = previewService.getAssetPreview(id)
+
+        (for {
+          meta <- processMeta
+          prev <- processPreview
+        } yield {
+          verbose(s"asset added: $asset")
+          asset.copy(
+            metaData = meta,
+            previewId = prev.map(_.id)
+          )
+        }).recover { case ex =>
+          warn(s"Failed to process meta or preview data, asset added anyway: $asset", ex)
+          asset
+        }
       }
     }
 
@@ -255,12 +267,22 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def getAssetUri(id: AssetId): CancellableFuture[Option[Uri]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
+      case Some(a@AssetData.WithSource(uri)) => CancellableFuture.successful(Some(uri))
       case Some(a: AssetData) =>
+        verbose(s"getAssetUri for: $a")
         loader.getAssetData(a.loadRequest) flatMap {
           case Some(entry: CacheEntry) =>
-            CancellableFuture successful Some(CacheUri(entry.data, context))
+            CancellableFuture successful {
+              val uri = Some(CacheUri(entry.data, context))
+              verbose(s"Got uri: $uri for asset: ${a.id}")
+              uri
+            }
           case Some(data) =>
-            CancellableFuture lift cache.addStream(a.cacheKey, data.inputStream, a.mime, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e => Some(CacheUri(e.data, context)) }
+            CancellableFuture lift cache.addStream(a.cacheKey, data.inputStream, a.mime, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e =>
+              val uri = Some(CacheUri(e.data, context))
+              verbose(s"Got uri: $uri for asset: ${a.id}")
+              uri
+            }
           case None =>
             CancellableFuture successful None
         }

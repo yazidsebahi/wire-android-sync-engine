@@ -113,9 +113,10 @@ case class CacheKey(str: String) {
 object CacheKey extends (String => CacheKey) {
   def apply(): CacheKey = Id.random()
 
-  def decrypted(key: CacheKey) = CacheKey(s"${key.str}#_decr_")
+  //any appended strings should be url friendly
+  def decrypted(key: CacheKey) = CacheKey(s"${key.str}_decr_")
   def fromAssetId(id: AssetId) = CacheKey(s"${id.str}")
-  def unencoded(id: AssetId) = CacheKey(s"${id.str}#_unencoded_")
+  def unencoded(id: AssetId) = CacheKey(s"${id.str}_unencoded_")
 
   implicit object Id extends Id[CacheKey] {
     override def random() = CacheKey(Uid().toString)

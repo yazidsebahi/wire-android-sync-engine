@@ -53,10 +53,13 @@ class PreviewService(context: Context, cache: CacheService, storage: AssetsStora
   })
 
   private def preview(a: AssetData): CancellableFuture[Option[AssetData]] =
-    assets.assetDataOrSource(a) flatMap {
+    assets.assetDataOrSource(a).flatMap {
       case Some(Left(entry)) => loadPreview(a.id, a.mime, entry)
       case Some(Right(uri)) => loadPreview(a.id, a.mime, uri)
       case _ => CancellableFuture successful None
+    }.flatMap {
+      case Some(pData) => CancellableFuture.lift(storage.insert(pData).map(Some(_)))
+      case _ => CancellableFuture.successful(None)
     }
 
   def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetData]] = (mime, data) match {

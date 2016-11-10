@@ -34,15 +34,13 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[MetaDataService]
 
-  def getAssetWithMetadata(id: AssetId): CancellableFuture[Option[AssetData]] =
-    getAssetMetadata(id) flatMap { _ => CancellableFuture lift storage.get(id) }
-
-  def getAssetMetadata(id: AssetId): CancellableFuture[Option[AssetMetaData]] =
+  //calculate and override assets current metadata - used when adding assets where the metadata is incomplete
+  def updateMetaData(id: AssetId): CancellableFuture[Option[AssetMetaData]] =
     CancellableFuture lift storage.get(id) flatMap {
-      case Some(AssetData.WithMetaData(metaData)) => CancellableFuture successful Some(metaData)
-      case Some(a: AssetData) =>
+      case Some(asset) =>
+        verbose(s"updating meta data for: $id")
         for {
-          meta <- metaData(a)
+          meta <- metaData(asset)
           updated <- CancellableFuture lift storage.updateAsset(id, _.copy(metaData = meta))
         } yield updated.flatMap(_.metaData).orElse(meta)
       case _ =>

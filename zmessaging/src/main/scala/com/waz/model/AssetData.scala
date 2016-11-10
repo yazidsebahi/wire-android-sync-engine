@@ -34,11 +34,14 @@ import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
 //TODO audio messages don't play
+//TODO audio message meta data doens't get updated if already set (for loudness)
 //TODO video messages don't render
 //TODO profile pictures - get back to normal
 //TODO Giphy loading
+//TODO remove in-memory holding of asset meta data
 //TODO Test souncloud/spotify/youtube/linkpreviews/locations
 //TODO send in v2 flag?
+//TODO wipe assets table and re-read messages for upgrade
 
 case class AssetData(id:          AssetId               = AssetId(),
                      mime:        Mime                  = Mime.Unknown,
@@ -90,8 +93,13 @@ case class AssetData(id:          AssetId               = AssetId(),
     case _ => Some(RemoteData(remoteId, token, otrKey, sha))
   }
 
+  //TODO Dean: cache keys for images and cachekeys for other assets are handled a bit differently. Fix that
+  // We need the url as part of the cache key for images since they can be stored on the device and loaded over and over again
+  // The WireContentProvider, however, expects Audio messages NOT to be stored as a url in the cache, as it tries to pick the url
+  // apart and then find the cached entry based on the id. I should see if I can remove that.
   lazy val cacheKey = {
-    val key = CacheKey(proxyPath.orElse(source.map(_.toString)).getOrElse(id.str))
+    val key = if (isAudio) CacheKey.fromAssetId(id)
+    else CacheKey(proxyPath.orElse(source.map(_.toString)).getOrElse(id.str))
     verbose(s"created cache key: $key for asset: $id")
     key
   }
@@ -175,6 +183,7 @@ object AssetData {
   val Empty = AssetData()
 
   object IsImage {
+    //TODO Dean - incorporate mime data in check?
     def unapply(asset: AssetData): Option[(Dim2, String)] = asset.metaData match {
       case Some(AssetMetaData.Image(dims, tag)) => Some((dims, tag))
       case _ => None
@@ -182,25 +191,21 @@ object AssetData {
   }
 
   object IsVideo {
-    def unapply(asset: AssetData): Boolean = asset.metaData match {
+    def unapply(asset: AssetData): Boolean = Mime.Video.unapply(asset.mime) || (asset.metaData match {
       case Some(AssetMetaData.Video(_, _)) => true
       case _ => false
-    }
+    })
   }
 
   object IsAudio {
-    def unapply(asset: AssetData): Boolean = asset.metaData match {
+    def unapply(asset: AssetData): Boolean = Mime.Audio.unapply(asset.mime) || (asset.metaData match {
       case Some(AssetMetaData.Audio(_, _)) => true
       case _ => false
-    }
+    })
   }
 
   object WithData {
     def unapply(asset: AssetData): Option[Array[Byte]] = asset.data
-  }
-
-  object WithMetaData {
-    def unapply(asset: AssetData): Option[AssetMetaData] = asset.metaData
   }
 
   object WithDimensions {
@@ -227,6 +232,10 @@ object AssetData {
 
   object WithStatus {
     def unapply(asset: AssetData): Option[AssetStatus] = Some(asset.status)
+  }
+
+  object WithSource {
+    def unapply(asset: AssetData): Option[Uri] = asset.source
   }
 
   val MaxAllowedAssetSizeInBytes = 26214383L
@@ -259,7 +268,7 @@ object AssetData {
         Mime('mime),
         'sizeInBytes,
         JsonDecoder[AssetStatus]('status),
-        if (js.has("remoteId")) Some(decodeRAssetDataId('remoteId)) else Some(decodeRAssetDataId('remoteKey)),
+        if (js.has("remoteId")) Some(decodeRAssetDataId('remoteId)) else None,
         decodeOptString('token).map(AssetToken(_)),
         decodeOptString('otrKey).map(AESKey(_)),
         decodeOptString('sha256).map(Sha256(_)),
@@ -269,7 +278,7 @@ object AssetData {
         decodeOptString('source).map(Uri.parse),
         'proxyPath,
         'convId,
-        decodeOptString('source).map(decodeData)
+        decodeOptString('data).map(decodeData)
       )
   }
 

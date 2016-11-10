@@ -36,7 +36,7 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
   import Asset._
   import com.waz.threading.Threading.Implicits.Ui
 
-  protected var asset = AssetData()
+  protected var asset = AssetData.Empty
   protected var status = api.AssetStatus.UPLOAD_NOT_STARTED
 
   addLoader(_.assets.assetSignal(id)) {
@@ -96,7 +96,7 @@ object Asset {
   private implicit val logTag: LogTag = logTagFor[Asset]
 
   object Empty extends BaseAsset {
-    protected override def asset = AssetData()
+    protected override def asset = AssetData.Empty
     override def getId: String = asset.id.str
     override def isEmpty: Boolean = true
     override def getDuration: Duration = Duration.ZERO
