@@ -84,17 +84,18 @@ class GiphyService(client: GiphyClient, assets: AssetService) {
   }
 
   private def cacheGiphyResult(preview: AssetData, medium: AssetData): Future[Option[AssetId]] = {
-    Future.sequence(Seq(preview, medium.copy(previewId = Some(preview.id))).map { asset =>
-      (asset.source match {
-        case Some(uri) => assets.storage.getByUri(uri).flatMap {
-          case Some(cur) => assets.storage.updateAsset(cur.id, _ => asset.copy(id = cur.id))
-          case None => assets.storage.insert(asset).map(Some(_))
-        }
-        case None =>
-          warn("Tried to save giphy result that doesn't contain a URI - ignoring")
-          Future successful None
-      }).collect { case Some(saved) => saved.id }
-    }).map(_.lastOption)
+    Future.successful(None) //TODO Dean - fix giphy
+//    Future.sequence(Seq(preview, medium.copy(previewId = Some(preview.id))).map { asset =>
+//      (asset.source match {
+//        case Some(uri) => assets.storage.getByUri(uri).flatMap {
+//          case Some(cur) => assets.storage.updateAsset(cur.id, _ => asset.copy(id = cur.id))
+//          case None => assets.storage.insert(asset).map(Some(_))
+//        }
+//        case None =>
+//          warn("Tried to save giphy result that doesn't contain a URI - ignoring")
+//          Future successful None
+//      }).collect { case Some(saved) => saved.id }
+//    }).map(_.lastOption)
   }
 
 }
