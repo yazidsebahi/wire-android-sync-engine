@@ -39,15 +39,15 @@ import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
-
 import scala.concurrent.duration._
+
 import scala.concurrent.{Await, Future}
 import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
 
 class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with SavingToGallery with UiObservable with SignalLoading {
 
-  var data = AssetData()
+  var data = AssetData.Empty
 
   addLoader(_.assetsStorage.signal(id)) { im =>
     if (this.data != im) {
@@ -119,7 +119,7 @@ class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(
   override def toString = s"LocalImageAsset($data)"
 }
 
-class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) with DisableSignalLoading {
+class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) {
 
   import Threading.Implicits.Background
 
@@ -143,18 +143,16 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
     bytes
   }(Threading.ImageDispatcher)
 
-  data = new AssetData(
+  data = AssetData(
     id,
     mime = mime,
-    metaData = Some(AssetMetaData.Image(Dim2(w, h), "full"))
-  ) {
-    override lazy val data: Option[Array[Byte]] = {
-      verbose(s"data requested, compress completed: ${imageData.isCompleted}")(tag)
+    metaData = Some(AssetMetaData.Image(Dim2(w, h), "full")),
+    data = {
+      verbose(s"data requested, compress completed: ${imageData.isCompleted}")
       // XXX: this is ugly, but will only be accessed from bg thread and very rarely, so we should be fine with that hack
-      LoggedTry(Await.result(imageData, 15.seconds))(tag).toOption
+      LoggedTry(Await.result(imageData, 15.seconds)).toOption
     }
-  }
-
+  )
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     verbose(s"get bitmap")

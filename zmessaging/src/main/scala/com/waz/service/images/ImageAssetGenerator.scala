@@ -77,15 +77,15 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       case (file, m) =>
         val size = file.length
         verbose(s"final image, size: $size, meta: $m")
-        val data64 = if (size > 2 * 1024) None else Some(Base64.encodeToString(IoUtils.toByteArray(file.inputStream), Base64.NO_WRAP | Base64.NO_PADDING))
-        data64 foreach { _ => cache.remove(assetId) } // no need to cache preview images
+        val data = if (size > 2 * 1024) None else Some(IoUtils.toByteArray(file.inputStream))
+        data foreach { _ => cache.remove(assetId) } // no need to cache preview images
 
         AssetData(
           assetId,
           mime = com.waz.model.Mime(m.mimeType),
           sizeInBytes = size,
           metaData = Some(AssetMetaData.Image(Dim2(m.width, m.height))),
-          data64 = data64
+          data = data //TODO Dean - I don't think we need this anymore
         )
     }
   }

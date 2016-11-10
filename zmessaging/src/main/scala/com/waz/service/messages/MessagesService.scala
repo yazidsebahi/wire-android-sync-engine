@@ -17,7 +17,6 @@
  */
 package com.waz.service.messages
 
-import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
@@ -87,13 +86,13 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   private def updateAssets(events: Seq[MessageEvent]) = {
 
-    def decodeData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[String] = {
+    def decryptData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = {
       data.flatMap { arr =>
-        otrKey.fold {
+        otrKey.map { key =>
+          if (sha.forall(_.str == com.waz.utils.sha2(arr))) LoggedTry(AESUtils.decrypt(key, arr)).toOption else None
+        }.getOrElse {
           warn(s"got otr asset event without otr key: $assetId")
-          LoggedTry(Base64.encodeToString(arr, Base64.DEFAULT)).toOption
-        } { key =>
-          if (sha.forall(_.str == com.waz.utils.sha2(arr))) LoggedTry(Base64.encodeToString(AESUtils.decrypt(key, arr), Base64.DEFAULT)).toOption else None
+          Some(arr)
         }
       }.filter(_.nonEmpty)
     }
@@ -109,11 +108,11 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           verbose(s"Received asset v3: $asset")
           assets.storage.updateOrCreateAsset(asset)
         case (Asset(a, _), Some(rId)) =>
-          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(a.id, a.otrKey, a.sha, data))
+          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 non-image: $asset")
           assets.storage.updateOrCreateAsset(asset)
         case (ImageAsset(a), Some(rId)) =>
-          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data64 = decodeData(a.id, a.otrKey, a.sha, data))
+          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 image: $asset")
           assets.storage.updateOrCreateAsset(asset)
         case (Asset(a, _), _ ) =>

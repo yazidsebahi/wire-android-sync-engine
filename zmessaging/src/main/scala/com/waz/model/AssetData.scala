@@ -34,7 +34,6 @@ import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
 //TODO sending from camera doesn't work
-//TODO gallery images are blocking adapter
 //TODO audio messages don't play
 //TODO video messages don't render
 //TODO profile pictures - get back to normal
@@ -57,7 +56,7 @@ case class AssetData(id:          AssetId               = AssetId(),
                      proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
                      convId:      Option[RConvId]       = None, //TODO remove
-                     data64:      Option[String]        = None //TODO remove data from asset
+                     data:        Option[Array[Byte]]   = None //TODO remove data from asset
                     ) {
 
   import AssetData._
@@ -76,12 +75,14 @@ case class AssetData(id:          AssetId               = AssetId(),
        | preview:       $previewId
        | metaData:      $metaData
        | convId:        $convId
-       | other fields:  $name, $source, $proxyPath, $data64
+       | data (length): ${data.size}
+       | other fields:  $name, $source, $proxyPath
     """.stripMargin
 
-  lazy val data = data64.flatMap(data => LoggedTry(Base64.decode(data, Base64.DEFAULT)).toOption)
-
   lazy val size = data.fold(sizeInBytes)(_.length)
+
+  //be careful when accessing - can be expensive
+  lazy val data64 = data.map(Base64.encodeToString(_, Base64.NO_WRAP | Base64.NO_PADDING))
 
   lazy val fileExtension = mime.extension
 
@@ -143,7 +144,7 @@ case class AssetData(id:          AssetId               = AssetId(),
       proxyPath   = if (this.proxyPath.isEmpty)     that.proxyPath    else proxyPath,
       source      = if (this.source.isEmpty)        that.source       else source,
       convId      = if (this.convId.isEmpty)        that.convId       else convId,
-      data64      = if (this.data64.isEmpty)        that.data64       else data64
+      data        = if (this.data.isEmpty)          that.data         else data
       //TODO giphy source and caption
     )
     //After merging the two asset data objects, update the resulting status if we now have remote data
@@ -153,6 +154,8 @@ case class AssetData(id:          AssetId               = AssetId(),
 }
 
 object AssetData {
+
+  def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
 
   //simplify handling remote data from asset data
   case class RemoteData(remoteId: Option[RAssetId]    = None,
@@ -271,7 +274,7 @@ object AssetData {
         decodeOptString('source).map(Uri.parse),
         'proxyPath,
         'convId,
-        'data64
+        decodeOptString('source).map(decodeData)
       )
   }
 

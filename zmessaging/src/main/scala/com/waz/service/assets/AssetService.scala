@@ -133,20 +133,16 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def addImageAsset(image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData] = {
     val convIdOpt = if (prefs.sendWithV3) None else Some(convId) //TODO Dean remove sending with v2 after testing
-    val asset = image match {
-      case img: LocalImageAsset => Some(img.data.copy(convId = convIdOpt))
-      case _: ImageAsset => Some(AssetData.NewImageAsset(AssetId(image.getId)).copy(convId = convIdOpt))
-      case _ => None
-    }
-
-    asset match {
-      case Some(asset) =>
-        val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
-        generator.generateWireAsset(asset, isSelf).future.flatMap { data =>
-          storage.updateOrCreateAsset(data) map (_ => data)
-        } andThen { case _ => ref set null }
-      case _ => Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
-    }
+    image match {
+        case img: ImageAsset =>
+          val asset = img.data.copy(convId = convIdOpt)
+          verbose(s"addImageAsset: $asset")
+          val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
+          generator.generateWireAsset(asset, isSelf).future.flatMap { data =>
+            storage.updateOrCreateAsset(data) map (_ => data)
+          } andThen { case _ => ref set null }
+        case _ => Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
+      }
   }
 
   def updateAssets(data: Seq[AssetData]) =

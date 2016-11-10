@@ -17,6 +17,7 @@
  */
 package com.waz.model
 
+import android.util.Base64
 import com.waz.api.impl.AccentColor
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.utils.{JsonDecoder, JsonEncoder, returning}
@@ -45,7 +46,7 @@ object UserInfo {
         sizeInBytes = size,
         mime = Mime(mime),
         metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
-        data64 = data
+        data = data.map(AssetData.decodeData)
       )
 
     }

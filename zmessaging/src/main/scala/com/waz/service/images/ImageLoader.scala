@@ -70,6 +70,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
     }
 
   def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { (dims, tag) =>
+    verbose(s"load cached bitmap for: ${asset.id}")
     withMemoryCache(asset.id, tag, if (dims.width == 0) req.width else req.width min dims.width) {
       loadLocalAndDecode(asset)(decodeBitmap(asset.id, tag, req, _)) map {
         case Some(bmp) => bmp
@@ -201,9 +202,15 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
 
     // wrapped in future to ensure that img.data is accessed from background thread, this is needed for local image assets (especially the one generated from bitmap), see: Images
     CancellableFuture {(asset.data, asset.source)} flatMap {
-      case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(Some(LocalData(data)))
-      case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(Some(LocalData(assetLoader.openStream(uri), -1)))
-      case _ => CancellableFuture lift cache.getEntry(asset.id)
+      case (Some(data), _) if data.nonEmpty =>
+        verbose(s"asset: ${asset.id} contained data already")
+        CancellableFuture.successful(Some(LocalData(data)))
+      case (_, Some(uri)) if isLocalUri(uri) =>
+        verbose(s"asset: ${asset.id} contained no data, but had a url")
+        CancellableFuture.successful(Some(LocalData(assetLoader.openStream(uri), -1)))
+      case _ =>
+        verbose(s"asset: ${asset.id} contained no data or a url, trying cached storage")
+        CancellableFuture lift cache.getEntry(asset.id)
     }
   }
 
@@ -248,6 +255,7 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
         CancellableFuture.successful(image)
       case _ =>
         loader map (returning(_) {
+          verbose(s"adding asset to memory cache: $assetId, $tag")
           imageCache.add(assetId, tag, _)
         })
     }

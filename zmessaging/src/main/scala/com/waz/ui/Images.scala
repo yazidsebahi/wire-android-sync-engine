@@ -22,12 +22,11 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
-import android.util.Base64
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.Parcelable
 import com.waz.api.impl._
-import com.waz.bitmap.BitmapDecoder
+import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
@@ -75,7 +74,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     //Don't cache assets from bytes
-    new LocalImageAsset(AssetData.NewImageAsset().copy(data64 = Some(Base64.encodeToString(bytes, Base64.NO_WRAP | Base64.NO_PADDING))))
+    new LocalImageAsset(AssetData.NewImageAsset().copy(data = Some(bytes)))
   }
 
   def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =
@@ -86,7 +85,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getOrCreateImageAssetFrom(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL): api.ImageAsset = {
     if (bitmap == null || bitmap == com.waz.bitmap.EmptyBitmap) ImageAsset.Empty
-    //Don't cache assets from bitmaps
+    //Created with sketch, so don't cache since if the user cancels or sends, the image asset won't be needed again
     else new LocalBitmapAsset(bitmap, orientation)
   }
 }
