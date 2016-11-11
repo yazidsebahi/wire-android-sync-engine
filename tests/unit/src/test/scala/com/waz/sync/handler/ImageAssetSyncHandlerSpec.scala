@@ -26,6 +26,7 @@ import com.waz._
 import com.waz.api.impl.ErrorResponse
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.cache._
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.ZMessaging
@@ -46,10 +47,10 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
 
-  var postImageResponse: (ImageData, AssetId, RConvId) => Either[ErrorResponse, ImageData] = { (_, _, _) => Left(ErrorResponse.Cancelled) }
-  var postImageRequest = None: Option[(ImageData, RConvId, LocalData)]
+  var postImageResponse: (AssetData, RConvId) => Either[ErrorResponse, RAssetId] = { (_, _) => Left(ErrorResponse.Cancelled) }
+  var postImageRequest = None: Option[(AssetData, RConvId, LocalData)]
 
-  val successImageResponse = { (im: ImageData, asset: AssetId, convId: RConvId) => Right(im.copy(remoteId = Some(RAssetId()), sent = true)) }
+  val successImageResponse = { (asset: AssetData, convId: RConvId) => Right(RAssetId()) }
 
   lazy val selfUser = UserData("test")
   lazy val conv = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.Group)
@@ -60,9 +61,9 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     usersStorage.insert(selfUser)
 
     override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {
-      override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean) = {
-        postImageRequest = Some((image, convId, data))
-        CancellableFuture.successful(postImageResponse(image, assetId, convId))
+      override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId) = {
+        postImageRequest = Some((asset, convId, data))
+        CancellableFuture.successful(postImageResponse(asset, convId))
       }
     }
   }
@@ -76,34 +77,26 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   }
 
   def generateImageAsset(resource: String = "/images/penguin_128.png") = {
-    Await.result(service.assetGenerator.generateWireAsset(AssetId(), imageAssetFor(BitmapFactory.decodeStream(getClass.getResourceAsStream(resource))), RConvId(), profilePicture = false), 15.seconds)
+    Await.result(service.assetGenerator.generateWireAsset(dataFromBitmap(resource), profilePicture = false), 15.seconds)
   }
 
-  def imageAssetFor(bitmap: Bitmap): ImageData = {
+  def dataFromBitmap(resource: String = "/images/penguin_128.png"): AssetData = {
+    val bitmap = BitmapFactory.decodeStream(getClass.getResourceAsStream(resource))
     val bos = new ByteArrayOutputStream()
     bitmap.compress(CompressFormat.PNG, 0, bos)
 
-    new ImageData("full", Mime.Unknown, bitmap.getWidth, bitmap.getHeight, bitmap.getWidth, bitmap.getHeight, bos.size(), Some(RAssetId())) {
-      override lazy val data: Option[Array[Byte]] = Some(bos.toByteArray)
-    }
-  }
-
-  scenario("post preview image data") {
-    val Seq(preview, _) = generateImageAsset().versions
-    postImageResponse = successImageResponse
-
-    val res = Await.result(service.assetSync.postImageData(conv.remoteId, AssetId(), preview, LocalData(preview.data.get)), 3.seconds)
-    res shouldEqual SyncResult.Success
-
-    postImageRequest.map(_._1) shouldEqual Some(preview)
+    AssetData(
+      sizeInBytes = bos.size(),
+      metaData = Some(Image(Dim2(bitmap.getWidth, bitmap.getHeight), "medium")),
+      remoteId = Some(RAssetId()),
+      data = Some(bos.toByteArray)
+    )
   }
 
   scenario("post full image data") {
     val asset = generateImageAsset()
-    Await.ready(service.assets.updateImageAsset(asset), 1.second)
-    asset.versions should have size 2
-    val im = asset.versions(1)
-    val file = Await.result(cache.getEntry(im.cacheKey), 10.seconds).value.cacheFile
+    Await.ready(service.assets.storage.mergeOrCreateAsset(asset), 1.second)
+    val file = Await.result(cache.getEntry(asset.cacheKey), 10.seconds).value.cacheFile
 
     file should exist
 
@@ -111,23 +104,19 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     info(asset.toString)
 
     postImageResponse = successImageResponse
-    val res = Await.result(handler.postImageData(conv.remoteId, asset.id, im, LocalData(file)), 1.second)
+    val res = Await.result(handler.postImageData(conv.remoteId, asset, LocalData(file)), 1.second)
     res shouldEqual SyncResult.Success
 
-    postImageRequest shouldEqual Some((im, conv.remoteId, LocalData(file)))
+    postImageRequest shouldEqual Some((asset, conv.remoteId, LocalData(file)))
     file should exist // file should still exist after syncing (it will be cleaned by normal cache cleanup
 
-    val updated = Await.result(service.assetsStorage.getImageAsset(asset.id), 5.seconds).get
+    val updated = Await.result(service.assetsStorage.get(asset.id), 5.seconds).get
     updated.convId shouldEqual conv.remoteId
-    updated.versions should have size 2
-    val im1 = updated.versions(1)
-    im1 should not be im
-    im1 shouldEqual im.copy(remoteId = im1.remoteId, sent = true)
 
-    val entry = Await.result(cache.getEntry(im1.cacheKey), 1.second)
+    val entry = Await.result(cache.getEntry(asset.cacheKey), 1.second)
     entry should be('defined)
     entry.get.cacheFile should exist
-    IoUtils.toByteArray(entry.get.inputStream) should have size im.size
-    entry.get.cacheFile.length().toInt shouldEqual (im.size +- 32)
+    IoUtils.toByteArray(entry.get.inputStream) should have size asset.size
+    entry.get.cacheFile.length().toInt shouldEqual (asset.size +- 32)
   }
 }

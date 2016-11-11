@@ -18,13 +18,14 @@
 package com.waz.service.images
 
 import com.waz.service.images.ImageAssetGenerator.SmallProfileOptions
-import org.scalatest.{BeforeAndAfter, Matchers, FeatureSpec}
+import com.waz.ui.MemoryImageCache.BitmapRequest
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalacheck.Gen
 
 class CompressionOptionsSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks {
 
-  val opts = CompressionOptions(310 * 1024, 1448, 45, forceLossy = false, cropToSquare = false, "medium")
+  val opts = CompressionOptions(310 * 1024, 1448, 45, forceLossy = false, cropToSquare = false, BitmapRequest.Regular())
 
   val sizeGen = Gen.choose(5, 50000)
 

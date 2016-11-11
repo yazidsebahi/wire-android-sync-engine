@@ -25,6 +25,7 @@ import java.lang.System.currentTimeMillis
 
 import scala.concurrent.duration._
 import CacheEntryData.CacheEntryDao
+import com.waz.model.CacheKey
 import com.waz.testutils._
 
 class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
@@ -36,7 +37,7 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
 
   val timeout = 1.hour.toMillis
 
-  def mkEntry(name: String) = CacheEntryData(name, data = Some("Bar".getBytes), path = None, timeout = timeout)
+  def mkEntry(name: String) = CacheEntryData(CacheKey(name), data = Some("Bar".getBytes), path = None, timeout = timeout)
   def mkExpiredEntry(name: String) = mkEntry(name).copy(lastUsed = currentTimeMillis() - 90.minutes.toMillis, timeout = timeout)
 
   before {
@@ -51,13 +52,13 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
     scenario("insert cacheEntry with data and load it") {
       val entry = mkEntry("foo")
       insertOrReplace(entry)
-      getByKey("foo") shouldEqual Some(entry)
+      getByKey(CacheKey("foo")) shouldEqual Some(entry)
     }
 
     scenario("insert cacheEntry with stream and load it") {
-      val entry = CacheEntryData("foo", path = None)
+      val entry = CacheEntryData(CacheKey("foo"), path = None)
       insertOrReplace(entry)
-      getByKey("foo") shouldEqual Some(entry)
+      getByKey(CacheKey("foo")) shouldEqual Some(entry)
     }
 
     scenario("insert cacheEntry and find it by key") {
@@ -70,8 +71,8 @@ class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
       val entry = mkEntry("foo")
       insertOrReplace(entry)
 
-      deleteByKey("key")
-      getByKey("key") should be(None)
+      deleteByKey(CacheKey("key"))
+      getByKey(CacheKey("key")) should be(None)
     }
 
     scenario("delete by key") {

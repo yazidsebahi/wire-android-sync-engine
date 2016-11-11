@@ -21,9 +21,10 @@ import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.CacheEntry
+import com.waz.model.AssetData.RemoteData
 import com.waz.model.{Mime, _}
 import com.waz.service.downloads.AssetDownloader
-import com.waz.service.downloads.DownloadRequest.{AssetRequest, ImageAssetRequest}
+import com.waz.service.downloads.DownloadRequest.{AssetRequest, WireAssetRequest}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockGlobalModule
 import com.waz.threading.CancellableFuture
@@ -42,14 +43,14 @@ import scala.util.Failure
 
 class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
-  lazy val downloads = new mutable.HashMap[String, ProgressCallback => CancellableFuture[Option[CacheEntry]]]
+  lazy val downloads = new mutable.HashMap[CacheKey, ProgressCallback => CancellableFuture[Option[CacheEntry]]]
 
   lazy val global = new MockGlobalModule()
 
   lazy val downloader = new service.downloads.DownloaderService(testContext, global.cache, global.prefs, global.network)
 
   implicit lazy val assetDownloader = new AssetDownloader(null, null) {
-    override def load(req: AssetRequest, callback: Callback) = downloads(req.assetId).apply(callback)
+    override def load(req: AssetRequest, callback: Callback) = downloads(req.cacheKey).apply(callback)
   }
 
   after {
@@ -57,7 +58,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
   }
 
   def uri(id: RAssetId = RAssetId()): Uri =  Uri.parse(s"content://$id")
-  def fakeDownload(id: RAssetId = RAssetId(), conv: RConvId = RConvId()) = new Download(ImageAssetRequest(id.str, conv, AssetKey(Left(id), None, AESKey.Empty, Sha256.Empty), Mime.Unknown), 100)
+  def fakeDownload(id: RAssetId = RAssetId(), conv: RConvId = RConvId()) = new Download(WireAssetRequest(CacheKey(), AssetId(), RemoteData(Some(id), None, None, None), Some(conv), Mime.Unknown), 100)
   
   feature("Throttling") {
 
@@ -142,7 +143,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
       var ps = Seq.empty[ProgressData]
 
-      downloader.getDownloadState(d.req.assetId) { progress =>
+      downloader.getDownloadState(d.req.cacheKey) { progress =>
         ps = ps :+ progress
       } (EventContext.Global)
 
@@ -169,7 +170,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Cancel ongoing download") {
       val d = fakeDownload()
       val f = downloader.download(d.req)
-      downloader.cancel(d.req)
+      downloader.cancel(d.req.cacheKey)
 
       intercept[CancelException] {
         f.await()
@@ -182,7 +183,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       val ds = Seq.fill(10)(fakeDownload())
       val fs = ds map { d => downloader.download(d.req) }
 
-      ds.reverse.foreach { d => downloader.cancel(d.req) }
+      ds.reverse.foreach { d => downloader.cancel(d.req.cacheKey) }
 
       fs foreach { f =>
         intercept[CancelException] {
@@ -205,7 +206,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       case _ => false
     })
 
-    downloads(req.assetId) = this
+    downloads(req.cacheKey) = this
 
     override def apply(cb: ProgressCallback): CancellableFuture[Option[CacheEntry]] = {
       assert(!started, "Download should be started only once")

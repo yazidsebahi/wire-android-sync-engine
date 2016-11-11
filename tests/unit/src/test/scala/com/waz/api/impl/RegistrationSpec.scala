@@ -26,14 +26,13 @@ import com.waz.client.RegistrationClient
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
-import com.waz.service.push.GcmService.GcmState
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccounts, MockGlobalModule, MockUiModule, MockZMessagingFactory}
 import com.waz.threading.CancellableFuture
 import com.waz.ui.UiModule
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.EventContext
 import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
@@ -211,12 +210,12 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
       withDelay {
         Option(self.getUser).flatMap(_.data.picture) shouldBe defined
         self.getPicture should not be empty
-        imageAsset.data should not be empty
+        imageAsset.data should not be AssetData.Empty
       }
 
-      val asset = api.zmessaging.flatMap(_.get.assetsStorage.getImageAsset(imageAsset.data.id)).await()
+      val asset = api.zmessaging.flatMap(_.get.assetsStorage.get(imageAsset.data.id)).await()
       asset should be('defined)
-      asset.map(_.convId.str) shouldEqual Some(selfUserId.str)
+      asset.flatMap(_.convId).map(_.str) shouldEqual Some(selfUserId.str)
 
       idle(500.millis)
       self.isLoggedIn shouldEqual true

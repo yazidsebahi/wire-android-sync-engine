@@ -21,13 +21,14 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
 import com.waz.model.{AssetData, AssetId}
 import com.waz.service.assets.AssetService
+import com.waz.model.AssetData
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.client.GiphyClient
 import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future
 
-class GiphyService(client: GiphyClient, assets: AssetService) {
+class GiphyService(client: GiphyClient) {
   import Threading.Implicits.Background
 
   //TODO Dean - this is all a bit ugly - It might be better to re-introduce an Image AssetData container type that links previews together

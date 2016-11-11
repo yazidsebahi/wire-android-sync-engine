@@ -134,14 +134,22 @@ object GiphyClient {
       a.copy(metaData = Some(AssetMetaData.Image(a.dimensions, tag)))
     }
 
-    override def decode(js: JSONObject) = js.getJSONObject("meta").getInt("status") match {
-      case 200 => LoggedTry {
-        JsonDecoder.array(js.getJSONArray("data"), { (arr, index) =>
-          val images = arr.getJSONObject(index).getJSONObject("images")
-          images.keys().asInstanceOf[java.util.Iterator[String]].asScala.flatMap(size => parseImage(if (size.endsWith("_still")) "preview" else "medium", images.getJSONObject(size))).toVector
-        })
-      } .toOption
-      case _ => None
+    override def decode(js: JSONObject) = {
+      js.getJSONObject("meta").getInt("status") match {
+        case 200 => LoggedTry {
+          JsonDecoder.array(js.getJSONArray("data"), { (arr, index) =>
+            val images = arr.getJSONObject(index).getJSONObject("images")
+
+            val assets = Seq("original_still", "original").flatMap { key =>
+              parseImage(if (key.endsWith("_still")) "preview" else "medium", images.getJSONObject(key))
+            }
+
+            val preview = assets.headOption
+            (preview, assets.lastOption.map(_.copy(previewId = preview.map(_.id))).getOrElse(AssetData.Empty))
+          })
+        } .toOption
+        case _ => None
+      }
     }
   }
 }

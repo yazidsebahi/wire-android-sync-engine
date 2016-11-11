@@ -59,7 +59,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
   def image = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))).asInstanceOf[LocalImageAsset]
 
-  lazy val assets = Await.result(assetGenerator.generateWireAsset(AssetId(), image.data.versions.last, RConvId(userId.str), profilePicture = true), 1.second)
+  lazy val assets = Await.result(assetGenerator.generateWireAsset(image.data, profilePicture = true), 1.second)
 
   lazy val search = api.search()
 

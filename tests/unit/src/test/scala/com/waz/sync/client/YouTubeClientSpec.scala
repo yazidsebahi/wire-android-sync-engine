@@ -17,8 +17,11 @@
  */
 package com.waz.sync.client
 
+import android.net.Uri
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
+import com.waz.model.{AssetData, Dim2}
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
@@ -51,13 +54,14 @@ class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
         TrackData(MediaProvider.YOUTUBE, "HOW TO FIGHT A BABY", Some(ArtistData("Gavin McInnes", None)), "https://www.youtube.com/watch?v=mTWfqi3-3qU", Some(assetId), None, true, Some("https://www.youtube.com/watch?v=mTWfqi3-3qU"), None, _), img)) if img.exists(_.id == assetId) => ()
       })
 
-      val images = TrackResponse.unapply(sampleTrackResponse).value.images.headOption.value.versions
-      images.map(img => (img.tag, img.url.value, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
-        ("default", "https://i.ytimg.com/vi/mTWfqi3-3qU/default.jpg", 120, 90),
-        ("medium", "https://i.ytimg.com/vi/mTWfqi3-3qU/mqdefault.jpg", 320, 180),
-        ("high", "https://i.ytimg.com/vi/mTWfqi3-3qU/hqdefault.jpg", 480, 360),
-        ("standard", "https://i.ytimg.com/vi/mTWfqi3-3qU/sddefault.jpg", 640, 480),
-        ("maxres", "https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg", 1280, 720))
+      val image = TrackResponse.unapply(sampleTrackResponse).value.images.headOption.value
+      image shouldEqual AssetData(metaData = Some(Image(Dim2(1280, 720), "maxres")), source = Some(Uri.parse("https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg")))
+//      image.map(img => (img.tag, img.url.value, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
+//        ("default", "https://i.ytimg.com/vi/mTWfqi3-3qU/default.jpg", 120, 90),
+//        ("medium", "https://i.ytimg.com/vi/mTWfqi3-3qU/mqdefault.jpg", 320, 180),
+//        ("high", "https://i.ytimg.com/vi/mTWfqi3-3qU/hqdefault.jpg", 480, 360),
+//        ("standard", "https://i.ytimg.com/vi/mTWfqi3-3qU/sddefault.jpg", 640, 480),
+//        ("maxres", "https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg", 1280, 720))
     }
 
     scenario("parse 'no video found' snippet response") {
@@ -97,12 +101,15 @@ class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
       } yield asset
 
       withClue(assetOfFirstTrack) {
-        assetOfFirstTrack.value.versions.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
-          ("default", 120, 90),
-          ("medium", 320, 180),
-          ("high", 480, 360),
-          ("standard", 640, 480),
-          ("maxres", 1280, 720))
+
+
+        assetOfFirstTrack.value shouldEqual AssetData(metaData = Some(Image(Dim2(1280, 720), "maxres")), source = Some(Uri.parse("https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg")))
+//        assetOfFirstTrack.value.versions.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
+//          ("default", 120, 90),
+//          ("medium", 320, 180),
+//          ("high", 480, 360),
+//          ("standard", 640, 480),
+//          ("maxres", 1280, 720))
       }
     }
   }

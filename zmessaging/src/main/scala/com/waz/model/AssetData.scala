@@ -33,9 +33,8 @@ import org.threeten.bp.Duration
 import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
-//TODO audio messages don't play
-//TODO audio message meta data doens't get updated if already set (for loudness)
-//TODO video messages don't render
+//TODO audio messages don't play - something wrong with WireContentProvider
+//TODO video messages don't show preview
 //TODO profile pictures - get back to normal
 //TODO Giphy loading
 //TODO remove in-memory holding of asset meta data
@@ -132,6 +131,9 @@ case class AssetData(id:          AssetId               = AssetId(),
     case IsImage(dim, _) => dim
     case _ => Dim2(0, 0)
   }
+
+  val width = dimensions.width
+  val height = dimensions.height
 
   def copyWithRemoteData(remoteData: RemoteData) = {
     copy(
@@ -300,6 +302,14 @@ object AssetData {
       data.convId     foreach (v => o.put("convId",     v.str))
       data.data64     foreach (v => o.put("data64",     v))
     }
+  }
+
+  //TODO Dean - do we still need image tags?
+  object Tag {
+    val SmallProfile = "smallProfile"
+    val Medium = "medium"
+    val MediumPreview = "mediumPreview"
+    val Preview = "preview"
   }
 }
 

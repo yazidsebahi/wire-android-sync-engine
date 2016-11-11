@@ -22,6 +22,7 @@ import java.util.Date
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.NotificationsHandler.NotificationType
+import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Asset, MsgEdit, MsgRecall, Text}
@@ -116,8 +117,8 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Process any asset event") {
       val userId = UserId(oneToOneConv.id.str)
       val convId = oneToOneConv.id
-      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(UploadCancelled))).withCurrentLocalTime()), 5.seconds) // this should not generate a notification
-      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(UploadDone(AssetKey(Left(RAssetId()), None, AESKey(), Sha256("sha"))))), RAssetId(), None).withCurrentLocalTime()), 5.seconds)
+      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(AssetData(status = UploadCancelled)))).withCurrentLocalTime()), 5.seconds) // this should not generate a notification
+      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(AssetData().copyWithRemoteData(RemoteData(Some(RAssetId()), None, Some(AESKey()), Some(Sha256("sha")))))), RAssetId(), None).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {

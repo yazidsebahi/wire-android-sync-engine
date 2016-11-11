@@ -21,12 +21,11 @@ import java.util.Date
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz._
-import com.waz.api.{EphemeralExpiration, Message, NetworkMode}
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.{Message, NetworkMode}
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset
-import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.{Mime, _}
 import com.waz.service._
 import com.waz.sync.client.MessagesClient.OtrMessage
@@ -39,6 +38,7 @@ import com.waz.testutils.MockZMessaging
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.EventContext
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
@@ -58,7 +58,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   type PostMessageReq = (RConvId, OtrMessage, Boolean)
 
   var postMessageResponse: Future[Either[ErrorResponse, Date]] = _
-  var postImageResult: Either[ErrorResponse, Option[Date]] = _
+  var postImageResult: Either[ErrorResponse, Option[AssetData]] = _
 
   def handler = zms.messagesSync
   def storage = zms.storage.db
@@ -81,7 +81,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync, prefs) {
-      override def postOtrImageData(convId: RConvId, assetId: AssetId, exp: EphemeralExpiration, asset: ImageData, recipients: Option[Set[UserId]]): Future[Either[ErrorResponse, Option[Date]]] = Future.successful(postImageResult)
+      override def uploadAssetData(assetId: AssetId, public: Boolean): ErrorOrResponse[Option[AssetData]] = CancellableFuture successful postImageResult
     }
 
     insertConv(conv)
@@ -97,7 +97,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   before {
     zms.network.networkMode ! NetworkMode.WIFI
     postMessageResponse = Future.successful(Left(ErrorResponse(500, "", "")))
-    postImageResult = Right(Some(new Date))
+    postImageResult = Right(Some(AssetData.Empty))
   }
 
   after {
@@ -171,22 +171,16 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   feature("Post image message") {
 
     def addMessage() = {
-      val data = Seq(
-        ImageData("preview", "image/jpg", 10, 10, 100, 100, 10, Some(RAssetId())),
-        ImageData("medium", "image/jpg", 100, 100, 100, 100, 10, Some(RAssetId()))
-      )
+      val asset: AssetData = AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg"), remoteId = Some(RAssetId()))
+      val updated: AssetData = Await.result(zms.assetsStorage.insert(asset), 15.seconds)
+      val id = MessageId(updated.id.str)
+      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id.uid, Asset(updated))), time = Instant.now))
 
-      val asset = zms.assetsStorage.insert(ImageAssetData(AssetId(), conv.remoteId, data)).await()
-      val preview = data(0)
-      val medium = data(1)
-      val id = MessageId(asset.id.str)
-      val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id.uid, Asset(Original(Mime("image/jpg"), 0, None, Some(Image(Dim2(100, 100), Some("medium"))))))), time = Instant.now))
-
-      (msg, asset, preview, medium)
+      (msg, updated)
     }
 
     scenario("Post image successfully") {
-      val (msg, asset, preview, medium) = addMessage()
+      val (msg, asset) = addMessage()
 
       postImageResult = Right(None)
 
@@ -195,7 +189,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Post image fails completely due to server error") {
-      val (msg, asset, preview, medium) = addMessage()
+      val (msg, asset) = addMessage()
 
       postImageResult = Left(ErrorResponse(500, "", ""))
 
@@ -205,7 +199,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     scenario("Post image fails completely due to server error when offline") {
       zms.network.networkMode ! NetworkMode.OFFLINE
-      val (msg, _, _, _) = addMessage()
+      val (msg, _) = addMessage()
       postImageResult = Left(ErrorResponse(500, "", ""))
 
       Await.result(handler.postMessage(conv.id, msg.id, Instant.EPOCH), 1.second) shouldEqual SyncResult.Failure(Some(ErrorResponse(500, "", "")), shouldRetry = false)
@@ -213,7 +207,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Post image fails completely due to client error") {
-      val (msg, asset, preview, medium) = addMessage()
+      val (msg, asset) = addMessage()
 
       postImageResult = Left(ErrorResponse(400, "", ""))
 
@@ -222,7 +216,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Post image fails completely due to server error after timeout") {
-      val (msg, asset, preview, medium) = addMessage()
+      val (msg, asset) = addMessage()
       zms.messagesContent.updateMessage(msg.id) { _.copy(time = now - sendingTimeout - 1.milli) } .await()
 
       postImageResult = Left(ErrorResponse(500, "", ""))
@@ -232,7 +226,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Post image fails partially due to server error after timeout") {
-      val (msg, asset, preview, medium) = addMessage()
+      val (msg, asset) = addMessage()
       addLocalMessage(msg.copy(localTime = now - sendingTimeout - 1.milli))
 
       postImageResult = Left(ErrorResponse(500, "", ""))
@@ -242,7 +236,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("Post image fails partially due to client error after timeout") {
-      val (msg, asset, preview, medium) = addMessage()
+      val (msg, asset) = addMessage()
       addLocalMessage(msg.copy(localTime = now - sendingTimeout - 1.milli))
 
       postImageResult = Left(ErrorResponse(400, "", ""))

@@ -42,8 +42,8 @@ class PreferenceService(context: Context) {
 
   lazy val uiPreferences = uiPreferencesFrom(context)
 
-  def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //true by default for production
-
+  def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //false by default for production
+  
   lazy val preferences = preferencesFrom(context)
 
   def withPreferences[A](body: SharedPreferences => A, prefs: => SharedPreferences = preferences): CancellableFuture[A] = dispatcher(body(prefs))
