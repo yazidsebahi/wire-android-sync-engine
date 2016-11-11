@@ -36,23 +36,26 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
   import com.waz.threading.Threading.Implicits.Background
 
   def getAssetData(request: AssetRequest): CancellableFuture[Option[LocalData]] =
-    CancellableFuture.lift(cache.getEntry(request.cacheKey)) flatMap {
-      case Some(entry) => CancellableFuture successful Some(entry)
-      case None        => downloadAssetData(request)
+    request match {
+      case CachedAssetRequest(cacheKey, mime@Mime.Audio.PCM, name) =>
+        downloader.download(UnencodedAudioAsset(cacheKey, name))(unencodedAudioDownloader)
+      case _ =>
+        CancellableFuture.lift(cache.getEntry(request.cacheKey)) flatMap {
+          case Some(entry) => CancellableFuture successful Some(entry)
+          case None        => downloadAssetData(request)
+        }
     }
+
 
   def downloadAssetData(req: AssetRequest): CancellableFuture[Option[LocalData]] = {
     ZLog.verbose(s"download asset with req: $req")
     req match {
-      case CachedAssetRequest(_, _, _) => CancellableFuture successful None
       case LocalAssetRequest(cacheKey, uri, mime@Mime.Video(), name) =>
         downloader.download(VideoAsset(cacheKey, uri, mime, name))(videoDownloader)
-      case LocalAssetRequest(cacheKey, uri, mime@Mime.Audio.PCM, name) =>
-        downloader.download(UnencodedAudioAsset(cacheKey, uri, name))(unencodedAudioDownloader)
       case LocalAssetRequest(cacheKey, uri, mime, name) =>
         downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), mime, name))(streamDownloader)
-      case _ =>
-        downloader.download(req)(assetDownloader)
+      case CachedAssetRequest(_, _, _) => CancellableFuture successful None
+      case _ => downloader.download(req)(assetDownloader)
     }
   }
 

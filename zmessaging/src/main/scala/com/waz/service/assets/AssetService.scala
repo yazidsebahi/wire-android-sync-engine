@@ -174,91 +174,64 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
 
   def addAsset(a: AssetForUpload, conv: RConvId): Future[AssetData] = {
-    def addAssetFromUri(id: AssetId, uri: Uri, originalMimeType: Option[Mime], metaData: Option[AssetMetaData]) = {
-      // it's enough to create AssetData with input uri, everything else can be updated lazily
-      verbose(s"addAsset from uri: $uri")
-      (for {
-        mime  <- a.mimeType
-        size  <- a.sizeInBytes
-        name  <- a.name
-        asset <- storage.insert(
-          AssetData(
-            id,
-            mime = mime,
-            sizeInBytes = size.getOrElse(0),
-            name = name,
-            source = Some(uri),
-            convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
-          ))
-      } yield asset).flatMap { asset =>
 
-        val processMeta = metaService.updateMetaData(asset.id)
-        val processPreview = previewService.getAssetPreview(id)
+    val uri = a match {
+      case ContentUriAssetForUpload(_, uri) => Some(uri)
+      case _ => None
+    }
 
-        (for {
-          meta <- processMeta
-          prev <- processPreview
-        } yield {
-          verbose(s"asset added: $asset")
-          asset.copy(
-            metaData = meta,
-            previewId = prev.map(_.id)
-          )
-        }).recover { case ex =>
-          warn(s"Failed to process meta or preview data, asset added anyway: $asset", ex)
-          asset
-        }
+    def cachedData(asset: AssetData) = (a match {
+      case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(a.cacheKey, data, Mime.Video.MP4, if (asset.mime == Mime.Video.MP4) asset.name else asset.name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
+      case _                             => loader.getAssetData(asset.loadRequest)
+    }).flatMap {
+      case Some(entry) => CancellableFuture.successful(entry)
+      case None        =>
+        errors.addAssetFileNotFoundError(a.id)
+        CancellableFuture.failed(new NoSuchElementException("no cache entry after download"))
+    }
+
+    def previewAndMetaData(asset: AssetData) = for {
+      entry    <- cachedData(asset)
+      (mimeType, nm) = entry match {
+        case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(asset.name))
+        case _ => (asset.mime, asset.name)
       }
-    }
+      meta     <- metaService.loadMetaData(mimeType, entry).recover {
+        case ex =>
+          warn(s"failed to get metadata for asset: ${asset.id}", ex)
+          None
+      }
+      _        =  verbose(s"meta data for ${a.id}: $meta")
+      prev  <- previewService.loadPreview(a.id, mimeType, entry).recover {
+        case ex =>
+        warn(s"failed to get preview for asset: ${asset.id}", ex)
+        None
+      }
+      _        =  verbose(s"preview for ${a.id}: $prev")
+      updated  <- CancellableFuture lift storage.updateAsset(asset.id,
+        _.copy(
+          metaData = meta,
+          mime = mimeType,
+          name = nm,
+          previewId = prev.map(_.id),
+          sizeInBytes = entry.length))
+    } yield updated
 
-    a match {
-      case ContentUriAssetForUpload(id, uri) =>
-        addAssetFromUri(id, uri, None, None)
-
-      case AudioAssetForUpload(id, entry, duration, _) =>
-        addAssetFromUri(id, CacheUri(entry.data, context), Some(Mime.Audio.PCM), Some(AssetMetaData.Audio(duration)))
-
-      case _ =>
-
-        def fetchAssetData(mime: Mime, name: Option[String]) = (a match {
-          case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(CacheKey(a.cacheKey), data, Mime.Video.MP4, if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
-          case _                             => downloader.download(AssetFromInputStream(CacheKey(a.cacheKey), () => a.openDataStream(context), mime, name))(streamLoader)
-        }).flatMap {
-          case Some(entry) => CancellableFuture.successful(entry)
-          case None        =>
-            errors.addAssetFileNotFoundError(a.id)
-            CancellableFuture.failed(new NoSuchElementException("no cache entry after download"))
-        }
-
-        def fetchAsset(m: Mime, n: Option[String], asset: AssetData) = for {
-          entry    <- fetchAssetData(m, n)
-          (mimeType, nm) = entry match {
-            case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(n))
-            case _ => (m, n)
-          }
-          meta     <- metaService.loadMetaData(mimeType, entry)
-          _        =  verbose(s"meta data for ${a.id}: $meta")
-          prev  <- previewService.loadPreview(a.id, mimeType, entry)
-          _        =  verbose(s"preview for ${a.id}: $prev")
-          updated  <- CancellableFuture lift storage.updateAsset(asset.id,
-            _.copy(
-              metaData = meta,
-              mime = mimeType,
-              name = nm,
-              previewId = prev.map(_.id),
-              sizeInBytes = entry.length))
-        } yield updated
-
-        for {
-          m        <- a.mimeType
-          size     <- a.sizeInBytes
-          n        <- a.name
-          asset    = AssetData(a.id, mime = m, sizeInBytes = size.getOrElse(0), name = n, convId = if (prefs.sendWithV3) None else Some(conv)) //TODO turn off v2 toggling after transition period
-          _        <- storage.insert(asset)
-          updated  <- Cancellable(FetchKey(a.id))(fetchAsset(m, n, asset)).future
-        } yield
-          updated.getOrElse(asset)
-    }
+    for {
+      m        <- a.mimeType
+      size     <- a.sizeInBytes
+      n        <- a.name
+      asset    <- storage.insert(AssetData(
+        a.id,
+        mime = m,
+        sizeInBytes = size.getOrElse(0),
+        name = n,
+        source = uri,
+        convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
+      ))
+      updated  <- Cancellable(FetchKey(a.id))(previewAndMetaData(asset)).future
+    } yield
+      updated.getOrElse(asset)
   }
 
   def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))
@@ -267,9 +240,6 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def getAssetUri(id: AssetId): CancellableFuture[Option[Uri]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
-//      case Some(a@AssetData.WithSource(uri)) =>
-//        verbose(s"Got uri: $uri. Asset: ${a.id} had it already in storage")
-//        CancellableFuture.successful(Some(uri))
       case Some(a: AssetData) =>
         verbose(s"getAssetUri for: $a")
         loader.getAssetData(a.loadRequest) flatMap {

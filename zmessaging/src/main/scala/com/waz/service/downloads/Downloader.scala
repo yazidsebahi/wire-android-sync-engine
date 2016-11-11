@@ -28,6 +28,7 @@ import com.waz.api.impl.ProgressIndicator._
 import com.waz.api.impl.{ErrorResponse, ProgressIndicator}
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.cache.{CacheEntry, CacheService}
+import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.{Mime, _}
 import com.waz.service.TempFileService
 import com.waz.service.assets.{AssetLoader, AudioTranscoder}
@@ -175,13 +176,14 @@ class UnencodedAudioAssetLoader(context: Context, cache: => CacheService, tempFi
 
   override def load(request: UnencodedAudioAsset, callback: Callback): CancellableFuture[Option[CacheEntry]] = {
     val entry = cache.createManagedFile()
+    val uri = CacheUri(request.cacheKey, context)
 
-    returning(transcode(request.uri, entry.cacheFile, callback).flatMap { _ =>
+    returning(transcode(uri, entry.cacheFile, callback).flatMap { _ =>
       verbose(s"loaded audio from $request, resulting file size: ${entry.length}")
       cache.move(request.cacheKey, entry, Mime.Audio.MP4, request.name, cacheLocation = Some(cache.cacheDir)).map(Some(_)).lift
     })(_.onFailure {
-      case cause: CancellableFuture.CancelException => verbose(s"audio encoding cancelled: ${request.uri}")
-      case cause: Throwable => HockeyApp.saveException(cause, s"audio encoding failed for URI: ${request.uri}")
+      case cause: CancellableFuture.CancelException => verbose(s"audio encoding cancelled: $uri")
+      case cause: Throwable => HockeyApp.saveException(cause, s"audio encoding failed for URI: $uri")
     })
   }
 }

@@ -37,6 +37,8 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
   //calculate and override assets current metadata - used when adding assets where the metadata is incomplete
   def updateMetaData(id: AssetId): CancellableFuture[Option[AssetMetaData]] =
     CancellableFuture lift storage.get(id) flatMap {
+      //TODO Dean - this prevents the audio data from ever being updated with loudness levels
+      case Some(AssetData.WithMetaData(md)) => CancellableFuture.successful(Some(md))
       case Some(asset) =>
         verbose(s"updating meta data for: $id")
         for {
@@ -59,7 +61,10 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
     def load(entry: CacheEntry) = {
       mime match {
         case Mime.Video() => AssetMetaData.Video(entry.cacheFile).map { _.fold({msg => error(msg); None}, Some(_)) }
-        case Mime.Audio() => AssetMetaData.Audio(context, CacheUri(entry.data, context))
+        case Mime.Audio() =>
+          val audioUrl = CacheUri(entry.data, context)
+            verbose(s"loading meta data from service, for audio, creating url : $audioUrl")
+          AssetMetaData.Audio(context, audioUrl)
         case Mime.Image() => Future { AssetMetaData.Image(entry.cacheFile) } (Threading.IO)
         case _ => Future successful Some(Empty)
       }
@@ -82,7 +87,9 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
   def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = CancellableFuture lift {
     mime match {
       case Mime.Video() => AssetMetaData.Video(context, uri).map(_.fold({msg => error(msg); None}, Some(_)))
-      case Mime.Audio() => AssetMetaData.Audio(context, uri)
+      case Mime.Audio() =>
+        verbose(s"load meta data with uri: $uri")
+        AssetMetaData.Audio(context, uri)
       case Mime.Image() => Future { AssetMetaData.Image(context, uri) } (Threading.BlockingIO)
       case _ => Future successful Some(Empty)
     }

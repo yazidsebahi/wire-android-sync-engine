@@ -110,7 +110,6 @@ class DeviceActor(val deviceName: String,
 
           override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
             override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
-            override def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetData]] = pf.applyOrElse(mime, super.loadPreview(id, _: Mime, uri))
             lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetData(metaData = Some(AssetMetaData.Audio(Duration.Zero, Some(Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))))))) }
           }
         }

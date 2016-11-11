@@ -91,8 +91,13 @@ class WireContentProvider extends ContentProvider {
       case CacheUriExtractor(key) =>
         verbose(s"CacheUriExtractor: $key")
         Await.result(getDecryptedEntry(key), AsyncTimeout) match {
-          case Some(entry) => ParcelFileDescriptor.open(entry.copyDataToFile(), ParcelFileDescriptor.MODE_READ_ONLY)
-          case None => super.openFile(uri, mode)
+          case Some(entry) =>
+            val file = entry.copyDataToFile()
+            verbose(s"found entry, copying data to file: ${file.getAbsolutePath}. Data contains: ${entry.length} bytes")
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+          case None =>
+            verbose(s"no cache entry found, attempting to open uri: $uri")
+            super.openFile(uri, mode)
         }
       case _ =>
         super.openFile(uri, mode)
@@ -102,8 +107,11 @@ class WireContentProvider extends ContentProvider {
   private def getDecryptedEntry(key: CacheKey) =
     cache.getEntry(key) flatMap {
       case Some(entry) if entry.data.encKey.isDefined =>
+        verbose("getDecryptedEntry: entry was decrypted")
         cache.getOrElse(CacheKey.decrypted(key), cache.addStream(key, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
-      case res => CancellableFuture successful res
+      case res =>
+        verbose("getDecryptedEntry: entry was NOT decrypted")
+        CancellableFuture successful res
     }
 
   object CacheUriExtractor {

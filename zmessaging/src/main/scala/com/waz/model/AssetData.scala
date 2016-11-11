@@ -186,6 +186,10 @@ object AssetData {
 
   val Empty = AssetData()
 
+  object WithMetaData {
+    def unapply(asset: AssetData): Option[AssetMetaData] = asset.metaData
+  }
+
   object IsImage {
     //TODO Dean - incorporate mime data in check?
     def unapply(asset: AssetData): Option[(Dim2, String)] = asset.metaData match {

@@ -37,40 +37,12 @@ import scala.util.Try
 class PreviewService(context: Context, cache: CacheService, storage: AssetsStorage, assets: => AssetService, generator: ImageAssetGenerator) {
   import com.waz.threading.Threading.Implicits.Background
 
-  //Be sure to update the previewId on any instances of AssetData this id references
-  def getAssetPreview(id: AssetId): CancellableFuture[Option[AssetData]] =
-  Serialized(('PreviewService, id))(CancellableFuture lift storage.get(id) flatMap {
-    case Some(asset@AssetData.WithPreview(pId)) => CancellableFuture.lift(storage.get(pId)).flatMap {
-      case Some(preview) => CancellableFuture.successful(Some(preview))
-      case None => preview(asset)
-    }
-    case Some(asset) => CancellableFuture.lift(
-        for {
-          pData <- preview(asset).future
-          updated <- storage.updateAsset(asset.id, _.copy(previewId = pData.map(_.id)))
-        } yield pData)
-    case None => CancellableFuture.failed(new Exception(s"No asset data found for id: $id"))
-  })
-
-  private def preview(a: AssetData): CancellableFuture[Option[AssetData]] =
-    assets.assetDataOrSource(a).flatMap {
-      case Some(Left(entry)) => loadPreview(a.id, a.mime, entry)
-      case Some(Right(uri)) => loadPreview(a.id, a.mime, uri)
-      case _ => CancellableFuture successful None
-    }.flatMap {
-      case Some(pData) => CancellableFuture.lift(storage.insert(pData).map(Some(_)))
-      case _ => CancellableFuture.successful(None)
-    }
-
   def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetData]] = (mime, data) match {
     case (Mime.Video(), entry: CacheEntry) if entry.data.encKey.isEmpty =>
-      CancellableFuture lift MetaDataRetriever(entry.cacheFile)(loadPreview) flatMap { createVideoPreview(id, _) }
-    case _ => CancellableFuture successful None
-  }
-
-  def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetData]] = mime match {
-    case Mime.Video() =>
-      CancellableFuture lift MetaDataRetriever(context, uri)(loadPreview) flatMap { createVideoPreview(id, _) }
+      CancellableFuture.lift(for {
+        Some(prev) <- MetaDataRetriever(entry.cacheFile)(loadPreview) flatMap { createVideoPreview(id, _) }
+        updated <- storage.updateOrCreateAsset(prev)
+      } yield updated)
     case _ => CancellableFuture successful None
   }
 

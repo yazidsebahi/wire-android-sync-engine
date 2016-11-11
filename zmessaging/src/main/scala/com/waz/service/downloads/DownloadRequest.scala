@@ -51,7 +51,7 @@ object DownloadRequest {
 
   case class VideoAsset(cacheKey: CacheKey, uri: Uri, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 
-  case class UnencodedAudioAsset(cacheKey: CacheKey, uri: Uri, name: Option[String]) extends DownloadRequest
+  case class UnencodedAudioAsset(cacheKey: CacheKey, name: Option[String]) extends DownloadRequest
 
   case class External(cacheKey: CacheKey, uri: Uri) extends ExternalAssetRequest {
     override def request: Request[Unit] = Request[Unit](absoluteUri = Some(uri), requiresAuthentication = false)

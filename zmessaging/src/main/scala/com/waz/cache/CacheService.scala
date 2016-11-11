@@ -62,6 +62,7 @@ class CacheService(context: Context, storage: Database) {
     } else {
       Future(addStreamToStorage(IoUtils.copy(in, _), cacheLocation))(execution) flatMap {
         case Success((fileId, path, encKey, len)) =>
+          verbose(s"added stream to storage: ${path.getAbsolutePath}, with key: $encKey")
           add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
         case Failure(c: CancelException) =>
           Future.failed(c)
@@ -69,16 +70,6 @@ class CacheService(context: Context, storage: Database) {
           HockeyApp.saveException(e, s"addStream($key) failed")
           Future.failed(e)
       }
-    }
-
-  def addFile(key: CacheKey, src: File, moveFile: Boolean = false, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
-    addStreamToStorage(IoUtils.copy(new FileInputStream(src), _), cacheLocation) match {
-      case Success((fileId, path, encKey, len)) =>
-        if (moveFile) src.delete()
-        add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
-      case Failure(e) =>
-        HockeyApp.saveException(e, s"addFile($key) failed")
-        throw new Exception(s"addFile($key) failed", e)
     }
 
   private def addStreamToStorage(writer: OutputStream => Long, location: Option[File]): Try[(Uid, File, Option[AESKey], Long)] = {
@@ -170,27 +161,6 @@ class CacheService(context: Context, storage: Database) {
   }
 
   private[cache] def entryFile(path: File, fileId: Uid) = CacheStorage.entryFile(path, fileId)
-
-  // util method to perform local data processing with caching
-  def processWithCaching(cacheKey: CacheKey, process: (InputStream, OutputStream) => Unit, data: LocalData): Future[LocalData] = {
-    def processedByteData = Future {
-      val bos = new ByteArrayOutputStream()
-      process(data.inputStream, bos)
-      bos.toByteArray
-    }
-
-    def processedFile = Future {
-      val file = File.createTempFile("temp", ".enc", context.getCacheDir)
-      process(data.inputStream, new BufferedOutputStream(new FileOutputStream(file)))
-      file
-    }
-
-    def saveToCache =
-      if (data.byteArray.isDefined) processedByteData.flatMap { addData(cacheKey, _) }
-      else processedFile.flatMap { addFile(cacheKey, _, moveFile = true) }
-
-    getOrElse(cacheKey, saveToCache)
-  }
 }
 
 object CacheService {

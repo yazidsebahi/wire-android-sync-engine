@@ -26,7 +26,7 @@ import com.waz.api
 import com.waz.api.Asset.LoadCallback
 import com.waz.api.AudioEffect
 import com.waz.cache.CacheEntry
-import com.waz.model.{AssetId, Mime}
+import com.waz.model.{AssetId, CacheKey, Mime}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AudioTranscoder
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, PCMContent}
@@ -45,7 +45,7 @@ abstract class AssetForUpload(val id: AssetId) extends api.AssetForUpload {
   def mimeType: Future[Mime]
   def sizeInBytes: Future[Option[Long]]
 
-  def cacheKey = id.str
+  def cacheKey = CacheKey(id.str)
   def openDataStream(context: Context): InputStream
 }
 object AssetForUpload {
@@ -79,8 +79,8 @@ case class ContentUriAssetForUpload(override val id: AssetId, uri: Uri) extends 
 
 case class AudioAssetForUpload(override val id: AssetId, data: CacheEntry, duration: bp.Duration, fx: (AudioEffect, File) => Future[AudioAssetForUpload]) extends AssetForUpload(id) with api.AudioAssetForUpload {
   override def name         = successful(Some("recording.m4a"))
-  override def sizeInBytes  = successful(Some(AudioTranscoder.estimatedSizeBasedOnBitrate(data.length)))
-  override def mimeType     = successful(Mime.Audio.MP4)
+  override def sizeInBytes  = successful(Some(data.length))
+  override def mimeType     = successful(Mime.Audio.PCM)
   override def openDataStream(context: Context) = data.inputStream
 
   override def getPlaybackControls: api.PlaybackControls = new PlaybackControls(AssetMediaKey(id), PCMContent(data.cacheFile), _ => Signal.const(duration))(ZMessaging.currentUi)
