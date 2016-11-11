@@ -24,7 +24,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.waz.ZLog._
 import com.waz.cache.{CacheEntryData, Expiration}
-import com.waz.model.{AssetId, CacheKey}
+import com.waz.model.CacheKey
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background

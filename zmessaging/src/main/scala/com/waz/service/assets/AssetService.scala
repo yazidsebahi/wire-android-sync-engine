@@ -267,20 +267,22 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def getAssetUri(id: AssetId): CancellableFuture[Option[Uri]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
-      case Some(a@AssetData.WithSource(uri)) => CancellableFuture.successful(Some(uri))
+//      case Some(a@AssetData.WithSource(uri)) =>
+//        verbose(s"Got uri: $uri. Asset: ${a.id} had it already in storage")
+//        CancellableFuture.successful(Some(uri))
       case Some(a: AssetData) =>
         verbose(s"getAssetUri for: $a")
         loader.getAssetData(a.loadRequest) flatMap {
           case Some(entry: CacheEntry) =>
             CancellableFuture successful {
               val uri = Some(CacheUri(entry.data, context))
-              verbose(s"Got uri: $uri for asset: ${a.id}")
+              verbose(s"Created cache entry uri: $uri for asset: ${a.id}")
               uri
             }
           case Some(data) =>
             CancellableFuture lift cache.addStream(a.cacheKey, data.inputStream, a.mime, a.name, Some(cache.intCacheDir))(Expiration.in(12.hours)) map { e =>
               val uri = Some(CacheUri(e.data, context))
-              verbose(s"Got uri: $uri for asset: ${a.id}")
+              verbose(s"Created cache entry, and then uri: $uri for asset: ${a.id}")
               uri
             }
           case None =>

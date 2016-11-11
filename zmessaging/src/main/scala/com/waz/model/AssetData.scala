@@ -22,9 +22,11 @@ import android.net.Uri
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.verbose
+import com.waz.content.WireContentProvider
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetStatus.UploadDone
+import com.waz.service.ZMessaging
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
@@ -44,7 +46,7 @@ import com.waz.ZLog.ImplicitTag._
 
 case class AssetData(id:          AssetId               = AssetId(),
                      mime:        Mime                  = Mime.Unknown,
-                     sizeInBytes: Long                  = 0L, //will be for metadata only??
+                     sizeInBytes: Long                  = 0L,
                      status:      AssetStatus           = AssetStatus.UploadNotStarted,
                      remoteId:    Option[RAssetId]      = None,
                      token:       Option[AssetToken]    = None,
@@ -92,24 +94,19 @@ case class AssetData(id:          AssetId               = AssetId(),
     case _ => Some(RemoteData(remoteId, token, otrKey, sha))
   }
 
-  //TODO Dean: cache keys for images and cachekeys for other assets are handled a bit differently. Fix that
-  // We need the url as part of the cache key for images since they can be stored on the device and loaded over and over again
-  // The WireContentProvider, however, expects Audio messages NOT to be stored as a url in the cache, as it tries to pick the url
-  // apart and then find the cached entry based on the id. I should see if I can remove that.
   lazy val cacheKey = {
-    val key = if (isAudio) CacheKey.fromAssetId(id)
-    else CacheKey(proxyPath.orElse(source.map(_.toString)).getOrElse(id.str))
+    val key = proxyPath.map(CacheKey).orElse(source.map(cacheKeyFrom)).getOrElse(CacheKey(id.str))
     verbose(s"created cache key: $key for asset: $id")
     key
   }
 
   def loadRequest = {
     val req = (remoteData, source, proxyPath) match {
-      case (Some(rData), _, _)                                                        => WireAssetRequest(cacheKey, id, rData, convId, mime)
-      case (_, Some(uri), _) if Option(uri.getScheme).forall(! _.startsWith("http"))  => External(cacheKey, uri)
-      case (_, Some(uri), _)                                                          => LocalAssetRequest(cacheKey, uri, mime, name)
-      case (_, None, Some(path))                                                      => Proxied(cacheKey, path)
-      case _                                                                          => CachedAssetRequest(cacheKey, mime, name)
+      case (Some(rData), _, _)                      => WireAssetRequest(cacheKey, id, rData, convId, mime)
+      case (_, Some(uri), _) if isExternalUri(uri)  => External(cacheKey, uri)
+      case (_, Some(uri), _)                        => LocalAssetRequest(cacheKey, uri, mime, name)
+      case (_, None, Some(path))                    => Proxied(cacheKey, path)
+      case _                                        => CachedAssetRequest(cacheKey, mime, name)
     }
     verbose(s"loadRequest returning: $req")
     req
@@ -171,6 +168,11 @@ case class AssetData(id:          AssetId               = AssetId(),
 object AssetData {
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
+
+  //TODO Dean - bit ugly - need to ensure I don't get a cache key from an external uri
+  def cacheKeyFrom(uri: Uri): CacheKey = WireContentProvider.CacheUri.unapply(ZMessaging.context)(uri).getOrElse(CacheKey(uri.toString))
+
+  def isExternalUri(uri: Uri): Boolean = Option(uri.getScheme).forall(_.startsWith("http"))
 
   //simplify handling remote data from asset data
   case class RemoteData(remoteId: Option[RAssetId]    = None,
