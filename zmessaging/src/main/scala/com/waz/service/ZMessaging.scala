@@ -189,7 +189,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val userSearch                            = wire[UserSearchService]
   lazy val assetGenerator                        = wire[ImageAssetGenerator]
   lazy val assetMetaData                         = wire[com.waz.service.assets.MetaDataService]
-  lazy val assetPreview                          = wire[com.waz.service.assets.PreviewService]
   lazy val assets: AssetService                  = wire[AssetService]
   lazy val users: UserService                    = wire[UserService]
   lazy val conversations: ConversationsService   = wire[ConversationsService]

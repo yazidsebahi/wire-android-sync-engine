@@ -206,7 +206,7 @@ object GenericContent {
         token       = remoteData.flatMap(_.token),
         otrKey      = remoteData.flatMap(_.otrKey),
         sha         = remoteData.flatMap(_.sha256),
-        previewId = preview.map(_.id)
+        previewId   = preview.map(_.id)
       )
       Some((asset, preview))
     }

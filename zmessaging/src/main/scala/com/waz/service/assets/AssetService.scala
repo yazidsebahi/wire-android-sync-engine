@@ -57,7 +57,7 @@ import scala.util.Random
 class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
     loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
     permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-    metaService: MetaDataService, previewService: PreviewService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
+    metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
     prefs: PreferenceService) {
 
   import AssetService._
@@ -91,7 +91,6 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
         case true  =>
           verbose(s"asset in state DOWNLOAD_DONE, meta: ${asset.metaData}")
-          if (asset.metaData.isEmpty) metaService.updateMetaData(id) // asset downloaded but has no metadata, let's update
           Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
         case false =>
           downloader.getDownloadState(asset.cacheKey).map(_.state) map {
@@ -161,57 +160,35 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       }
     }
 
-  def assetDataOrSource(asset: AssetData): CancellableFuture[Option[Either[LocalData, Uri]]] =
-    CancellableFuture lift cache.getEntry(asset.cacheKey) flatMap {
-      case Some(entry) => CancellableFuture successful Some(Left(entry))
-      case None =>
-        asset.source match {
-          case Some(uri) => CancellableFuture successful Some(Right(uri))
-          case None =>
-            getAssetData(asset.id) map { _.map(Left(_)) }
-        }
-    }
-
-
   def addAsset(a: AssetForUpload, conv: RConvId): Future[AssetData] = {
-
     val uri = a match {
       case ContentUriAssetForUpload(_, uri) => Some(uri)
       case _ => None
     }
 
-    def cachedData(asset: AssetData) = (a match {
+    def loadData(asset: AssetData) = (a match {
       case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(a.cacheKey, data, Mime.Video.MP4, if (asset.mime == Mime.Video.MP4) asset.name else asset.name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
-      case _                             => loader.getAssetData(asset.loadRequest)
+      case _                             => loader.getAssetData(asset.loadRequest) //will ensure that PCM audio files get encoded
     }).flatMap {
       case Some(entry) => CancellableFuture.successful(entry)
       case None        =>
         errors.addAssetFileNotFoundError(a.id)
-        CancellableFuture.failed(new NoSuchElementException("no cache entry after download"))
+        CancellableFuture.failed(new NoSuchElementException("no data available after download"))
     }
 
     def previewAndMetaData(asset: AssetData) = for {
-      entry    <- cachedData(asset)
-      (mimeType, nm) = entry match {
+      entry    <- loadData(asset)
+      (mime, nm) = entry match {
         case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(asset.name))
         case _ => (asset.mime, asset.name)
       }
-      meta     <- metaService.loadMetaData(mimeType, entry).recover {
-        case ex =>
-          warn(s"failed to get metadata for asset: ${asset.id}", ex)
-          None
-      }
-      _        =  verbose(s"meta data for ${a.id}: $meta")
-      prev  <- previewService.loadPreview(a.id, mimeType, entry).recover {
-        case ex =>
-        warn(s"failed to get preview for asset: ${asset.id}", ex)
-        None
-      }
-      _        =  verbose(s"preview for ${a.id}: $prev")
+    //TODO Dean - I could have these running in parallel to make message generation quicker. Would then need to wait before sending though
+      meta     <- metaService.loadMetaData(asset, entry)
+      prev     <- metaService.loadPreview(asset, entry)
       updated  <- CancellableFuture lift storage.updateAsset(asset.id,
         _.copy(
           metaData = meta,
-          mime = mimeType,
+          mime = mime,
           name = nm,
           previewId = prev.map(_.id),
           sizeInBytes = entry.length))
@@ -230,8 +207,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
       ))
       updated  <- Cancellable(FetchKey(a.id))(previewAndMetaData(asset)).future
-    } yield
-      updated.getOrElse(asset)
+    } yield returning(updated.getOrElse(asset))(a => verbose(s"created asset: $a"))
   }
 
   def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))

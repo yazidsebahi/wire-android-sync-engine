@@ -39,7 +39,6 @@ import com.waz.ZLog.ImplicitTag._
 //TODO video messages don't show preview
 //TODO profile pictures - get back to normal
 //TODO Giphy loading
-//TODO remove in-memory holding of asset meta data
 //TODO Test souncloud/spotify/youtube/linkpreviews/locations
 //TODO send in v2 flag?
 //TODO wipe assets table and re-read messages for upgrade

@@ -54,8 +54,8 @@ import scala.concurrent.Future.successful
 class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
                           client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
                           assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
-                          sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService, assetPreview: PreviewService,
-                          cache: CacheService, members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
+                          sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService, cache: CacheService,
+                          members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
 

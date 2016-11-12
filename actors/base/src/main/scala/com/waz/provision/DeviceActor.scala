@@ -40,7 +40,6 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
 import com.waz.service.PreferenceService.Pref
 import com.waz.service._
-import com.waz.service.assets.PreviewService
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.CallJoinSpy
@@ -106,11 +105,6 @@ class DeviceActor(val deviceName: String,
               CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap { _ =>
                 super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients)
               }
-          }
-
-          override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
-            override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
-            lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetData(metaData = Some(AssetMetaData.Audio(Duration.Zero, Some(Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))))))) }
           }
         }
     }

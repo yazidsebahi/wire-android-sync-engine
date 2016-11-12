@@ -35,6 +35,7 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
 
   import com.waz.threading.Threading.Implicits.Background
 
+  //TODO Dean - download seems like the wrong name for a lot of what's happening here
   def getAssetData(request: AssetRequest): CancellableFuture[Option[LocalData]] =
     request match {
       case CachedAssetRequest(cacheKey, mime@Mime.Audio.PCM, name) =>
@@ -45,7 +46,6 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
           case None        => downloadAssetData(request)
         }
     }
-
 
   def downloadAssetData(req: AssetRequest): CancellableFuture[Option[LocalData]] = {
     ZLog.verbose(s"download asset with req: $req")
