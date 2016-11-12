@@ -56,19 +56,15 @@ class AssetClient(netClient: ZNetClient) {
       case Left(err) => CancellableFuture successful Left(err)
     }
 
-  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true): ErrorOrResponse[AssetData] = {
+  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
     asset match {
       case AssetData.IsImage(_, _) =>
         val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
-        asset.convId match {
-          case Some(cId) =>
-            netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(cId), content)) {
-              case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
-                debug(s"postImageAssetData completed with resp: $rId")
-                asset.copy(status = UploadDone, remoteId = Some(rId))
-            }
-          case None => CancellableFuture.failed(new Exception("Not a v2 asset"))
-        }
+          netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(convId), content)) {
+            case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
+              debug(s"postImageAssetData completed with resp: $rId")
+              rId
+          }
       case _ => CancellableFuture.failed(new Exception("Tried posting non image data"))
     }
 

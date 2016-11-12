@@ -34,8 +34,8 @@ import org.json.JSONObject
 import org.threeten.bp.Duration
 
 //Things still borked:
-//TODO profile pictures - get back to normal
 //TODO Giphy loading
+//TODO round images aren't loading properly
 //TODO Test souncloud/spotify/youtube/linkpreviews/locations
 //TODO send in v2 flag?
 //TODO wipe assets table and re-read messages for upgrade
@@ -56,7 +56,8 @@ case class AssetData(id:          AssetId               = AssetId(),
                      proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
                      convId:      Option[RConvId]       = None, //will need for a while as v2 is transitioned out
-                     data:        Option[Array[Byte]]   = None //TODO ensure not saved in storage??
+                     data:        Option[Array[Byte]]   = None, //TODO ensure not saved in storage??
+                     v2ProfileId: Option[RAssetId]      = None
                     ) {
 
   import AssetData._
@@ -76,7 +77,7 @@ case class AssetData(id:          AssetId               = AssetId(),
        | metaData:      $metaData
        | convId:        $convId
        | data (length): ${data.size}
-       | other fields:  $name, $source, $proxyPath
+       | other fields:  $name, $source, $proxyPath, $v2ProfileId
     """.stripMargin
 
   lazy val size = data.fold(sizeInBytes)(_.length)
@@ -251,7 +252,7 @@ object AssetData {
         Mime('mime),
         'sizeInBytes,
         JsonDecoder[AssetStatus]('status),
-        if (js.has("remoteId")) Some(decodeRAssetId('remoteId)) else None,
+        decodeOptRAssetId('remoteId),
         decodeOptString('token).map(AssetToken(_)),
         decodeOptString('otrKey).map(AESKey(_)),
         decodeOptString('sha256).map(Sha256(_)),
@@ -261,7 +262,8 @@ object AssetData {
         decodeOptString('source).map(Uri.parse),
         'proxyPath,
         'convId,
-        decodeOptString('data).map(decodeData)
+        decodeOptString('data).map(decodeData),
+        decodeOptRAssetId('v2ProfileId)
       )
   }
 
@@ -271,17 +273,18 @@ object AssetData {
       o.put("mime",         data.mime.str)
       o.put("sizeInBytes",  data.sizeInBytes)
       o.put("status",       JsonEncoder.encode(data.status))
-      data.remoteId   foreach (v => o.put("remoteId",   v.str))
-      data.token      foreach (v => o.put("token",      v.str))
-      data.otrKey     foreach (v => o.put("otrKey",     v.str))
-      data.sha        foreach (v => o.put("sha256",     v.str))
-      data.name       foreach (v => o.put("name",       v))
-      data.previewId  foreach (v => o.put("preview",    v.str))
-      data.metaData   foreach (v => o.put("metaData",   JsonEncoder.encode(v)))
-      data.source     foreach (v => o.put("source",     v.toString))
-      data.proxyPath  foreach (v => o.put("proxyPath",  v))
-      data.convId     foreach (v => o.put("convId",     v.str))
-      data.data64     foreach (v => o.put("data64",     v))
+      data.remoteId     foreach (v => o.put("remoteId",     v.str))
+      data.token        foreach (v => o.put("token",        v.str))
+      data.otrKey       foreach (v => o.put("otrKey",       v.str))
+      data.sha          foreach (v => o.put("sha256",       v.str))
+      data.name         foreach (v => o.put("name",         v))
+      data.previewId    foreach (v => o.put("preview",      v.str))
+      data.metaData     foreach (v => o.put("metaData",     JsonEncoder.encode(v)))
+      data.source       foreach (v => o.put("source",       v.toString))
+      data.proxyPath    foreach (v => o.put("proxyPath",    v))
+      data.convId       foreach (v => o.put("convId",       v.str))
+      data.data64       foreach (v => o.put("data64",       v))
+      data.v2ProfileId  foreach (v => o.put("v2ProfileId",  v))
     }
   }
 

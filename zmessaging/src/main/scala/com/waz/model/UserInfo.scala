@@ -45,7 +45,6 @@ object UserInfo {
         sizeInBytes = size,
         mime = Mime(mime),
         metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
-        convId = Some(RConvId(id.str)),
         data = data.map(AssetData.decodeData)
       )
 
@@ -85,8 +84,9 @@ object UserInfo {
           case _ => None
         }
       }
-      val medium = if (js.has("assets")) asset else if (js.has("picture")) picture else None
-      UserInfo('id, 'name, accentId, 'email, 'phone, medium, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
+      //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists
+      val pic = if (js.has("assets")) asset else if (js.has("picture")) picture else None
+      UserInfo('id, 'name, accentId, 'email, 'phone, pic, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
     }
   }
 
@@ -95,10 +95,10 @@ object UserInfo {
       assets.collect {
         case a@AssetData.IsImage(Dim2(w, h), tag) =>
           JsonEncoder { o =>
+            o.put("id", a.v2ProfileId.map(_.str).getOrElse(""))
             o.put("content_type", a.mime.str)
             o.put("content_length", a.size)
             a.data64.foreach(o.put("data", _))
-            a.remoteId.foreach(id => o.put("id", id.str))
             o.put("info", JsonEncoder { info =>
               info.put("tag", tag)
               info.put("width", w)
@@ -137,9 +137,7 @@ object UserInfo {
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
       o.put("assets", encodeAsset(info.picture.toSeq))
-      //TODO Dean: We will need to re-enable this for the transition period so older clients can still access profile pictures
-      //However, doing so will trigger the current mechanism for re-uploading them to v3, so I need a better way of handling that.
-//      o.put("picture", encodePicture(info.picture.toSeq))
+      o.put("picture", encodePicture(info.picture.toSeq))
     }
   }
 
@@ -147,7 +145,8 @@ object UserInfo {
     JsonEncoder { o =>
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
-      o.put("assets", encodePicture(info.picture.toSeq))
+      o.put("assets", encodeAsset(info.picture.toSeq))
+      o.put("picture", encodePicture(info.picture.toSeq))
     }
   }
 }
