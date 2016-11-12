@@ -67,7 +67,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
       asset.mime match {
         case Mime.Video() if asset.previewId.isEmpty =>
           MetaDataRetriever(entry.cacheFile)(loadPreview).flatMap(createVideoPreview).flatMap {
-            case Some(prev) => storage.updateOrCreateAsset(prev)
+            case Some(prev) => storage.mergeOrCreateAsset(prev)
             case _ =>
               verbose(s"Failed to create video preview for asset: $asset.id")
               Future.successful(None)

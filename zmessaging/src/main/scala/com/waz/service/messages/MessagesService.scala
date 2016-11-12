@@ -106,19 +106,19 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         case (Asset(a@AssetData.WithRemoteId(rId), _), _) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset v3: $asset")
-          assets.storage.updateOrCreateAsset(asset)
+          assets.storage.mergeOrCreateAsset(asset)
         case (Asset(a, _), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 non-image: $asset")
-          assets.storage.updateOrCreateAsset(asset)
+          assets.storage.mergeOrCreateAsset(asset)
         case (ImageAsset(a), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 image: $asset")
-          assets.storage.updateOrCreateAsset(asset)
+          assets.storage.mergeOrCreateAsset(asset)
         case (Asset(a, _), _ ) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset without remote data - we will expect another update: $asset")
-          assets.storage.updateOrCreateAsset(asset)
+          assets.storage.mergeOrCreateAsset(asset)
         case (Ephemeral(_, content), _)=>
           update(id, convId, content, v2RId, data)
         case res =>

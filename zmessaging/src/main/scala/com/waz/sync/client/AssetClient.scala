@@ -193,7 +193,7 @@ object AssetClient {
   case class OtrAssetResponse(assetId: RAssetId, result: MessageResponse)
 
   object PostImageDataResponse {
-    def decodeAssetAddEvent(implicit js: JSONObject) = decodeRAssetDataId('id)(js.getJSONObject("data"))
+    def decodeAssetAddEvent(implicit js: JSONObject) = decodeRAssetId('id)(js.getJSONObject("data"))
 
     def unapply(response: ResponseContent): Option[RAssetId] = try {
       response match {

@@ -69,7 +69,7 @@ case class UserData(
     accent = user.accentId.getOrElse(accent),
     trackingId = user.trackingId.orElse(trackingId),
     searchKey = SearchKey(user.name.getOrElse(name)),
-    picture = user.picMedium.map(_.id),
+    picture = user.picture.map(_.id),
     deleted = user.deleted
   )
 
@@ -145,7 +145,7 @@ object UserData {
       connection = if (entry.connected.getOrElse(false)) ConnectionStatus.Accepted else ConnectionStatus.Unconnected) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =
-    UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.picMedium.map(_.id),
+    UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.picture.map(_.id),
       user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted)
 
   implicit lazy val Decoder: JsonDecoder[UserData] = new JsonDecoder[UserData] {

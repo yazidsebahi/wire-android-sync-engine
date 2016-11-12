@@ -160,7 +160,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
             val aes = AESKey()
             otrSync.uploadAssetDataV3(LocalData(data), Some(aes)).map {
               case Right(remoteData) =>
-                Right(Some(asset.copy(status = UploadDone).copyWithRemoteData(remoteData)))
+                Right(Some(asset.copyWithRemoteData(remoteData)))
               case Left(err) => Left(err)
             }
           case _ => Future successful Right(None)

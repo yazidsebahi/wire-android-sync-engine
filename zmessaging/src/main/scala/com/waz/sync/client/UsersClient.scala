@@ -21,6 +21,7 @@ import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
+import com.waz.sync.handler.AssetSyncHandler
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.{ErrorStatus, SuccessHttpStatus}
@@ -29,7 +30,7 @@ import com.waz.znet.{JsonArrayResponse, JsonObjectResponse, _}
 import org.json.JSONObject
 
 import scala.concurrent.Future
-import scala.util.Try
+import scala.util.{Right, Try}
 
 class UsersClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
@@ -59,7 +60,7 @@ class UsersClient(netClient: ZNetClient) {
     }
 
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = {
-    debug(s"updateSelf: $info, picture: ${info.picMedium}")
+    debug(s"updateSelf: $info, picture: ${info.picture}")
     netClient.updateWithErrorHandling("updateSelf", Request.Put(SelfPath, info))
   }
 

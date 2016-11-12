@@ -238,7 +238,7 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
       _ = verbose(s"image meta: $meta, inSampleSize: $inSample")
       _ = imageCache.reserve(assetId, tag, meta.width / inSample, meta.height / inSample)
       bmp <- bitmapLoader(() => data.inputStream, inSample, meta.orientation)
-      _ = if (bmp == bitmap.EmptyBitmap) throw new Exception("Bitmap decoding failed, got empty bitmap")
+      _ = if (bmp == bitmap.EmptyBitmap) throw new Exception(s"Bitmap decoding failed, got empty bitmap for asset: $assetId")
     } yield bmp
   }
 

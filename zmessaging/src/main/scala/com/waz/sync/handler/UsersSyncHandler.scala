@@ -54,21 +54,20 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
 
   def postSelfPicture(): Future[SyncResult] = userService.getSelfUser flatMap {
     case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _)) =>
-      assetSync.postSelfImageAsset(RConvId(id.str), assetId) flatMap {
-        case SyncResult.Success =>
-          assets.get(assetId) flatMap {
-            //TODO Dean - this is a bit untidy. Should rethink how I store and get preview
-            case Some(asset) if asset.previewId.isDefined => assets.get(asset.previewId.get).flatMap { small =>
-              updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picMedium = Some(asset), picSmall = small)))
-            }
-            case asset => updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picMedium = asset)))
-          }
-        case failure =>
-          error(s"self picture post asset $assetId failed: $failure")
-          Future.successful(failure)
+      //TODO Dean - also need to push to picture v2 until end of transition
+      assetSync.uploadAssetData(assetId, public = true).future flatMap {
+        case Right(uploaded) =>
+          for {
+            asset <- assets.get(assetId)
+            res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = asset)))
+          } yield res
+
+        case Left(err) =>
+          error(s"self picture upload asset $assetId failed: $err")
+          Future.successful(SyncResult.failed())
       }
     case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _)) =>
-      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picMedium = None)))
+      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = None)))
     case _ => Future.successful(SyncResult.failed())
   }
 

@@ -165,19 +165,20 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 //    }
 //  }
 
-  def uploadAssetDataV3(data: LocalData, key: Option[AESKey]): CancellableFuture[Either[ErrorResponse, RemoteData]] =
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]] =
     CancellableFuture.lift(service.clients.getSelfClient).flatMap {
       case Some(otrClient) =>
         key match {
           case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
-            case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
+            case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
               case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key))
               case Left(err) => Left(err)
             }
           }
-          case _ =>
-            //TODO Dean: handle uploading non-encrypted/public assets v3 (profile pictures)
-            CancellableFuture.successful(Right(RemoteData()))
+          case _ => assetClient.uploadAsset(data, mime, public = true).map {
+            case Right(UploadResponse(rId, _, _)) => Right(RemoteData(Some(rId)))
+            case Left(err) => Left(err)
+          }
         }
       case None => CancellableFuture.successful(Left(internalError("Client is not registered")))
     }

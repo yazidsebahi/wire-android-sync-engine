@@ -142,7 +142,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
           verbose(s"addImageAsset: $asset")
           val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
           generator.generateWireAsset(asset, isSelf).future.flatMap { data =>
-            storage.updateOrCreateAsset(data) map (_ => data)
+            storage.mergeOrCreateAsset(data) map (_ => data)
           } andThen { case _ => ref set null }
         case _ => Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
       }

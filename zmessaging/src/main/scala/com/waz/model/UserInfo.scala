@@ -17,7 +17,6 @@
  */
 package com.waz.model
 
-import android.util.Base64
 import com.waz.api.impl.AccentColor
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.utils.{JsonDecoder, JsonEncoder, returning}
@@ -26,7 +25,7 @@ import com.waz.znet.ContentEncoder.JsonContentEncoder
 import org.json
 import org.json.{JSONArray, JSONObject}
 
-case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picSmall: Option[AssetData] = None, picMedium: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
+case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
 
 object UserInfo {
   import JsonDecoder._
@@ -46,21 +45,36 @@ object UserInfo {
         sizeInBytes = size,
         mime = Mime(mime),
         metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
+        convId = Some(RConvId(id.str)),
         data = data.map(AssetData.decodeData)
       )
 
     }
 
-    def picture(implicit js: JSONObject): (Option[AssetData], Option[AssetData]) = {
+    def asset(implicit js: JSONObject): Option[AssetData] = {
+      val assets = js.getJSONArray("assets")
+      if (assets.length() == 0) None
+      else {
+        Seq.tabulate(assets.length())(assets.getJSONObject).map { js =>
+          AssetData(
+            remoteId = decodeOptRAssetId('key)(js),
+            metaData = Some(AssetMetaData.Image(Dim2(0, 0), decodeString('size)(js)))
+          )
+          //TODO Dean - do we want to bring back small pictures for users?
+        }.find { case AssetData.IsImage(_, tag) => tag == "complete"; case _ => false }
+      }
+    }
+
+    def picture(implicit js: JSONObject): Option[AssetData] = {
       val pic = js.getJSONArray("picture")
-      if (pic.length() == 0) (None, None)
+      if (pic.length() == 0) None
       else {
         val id = decodeOptString('correlation_id)(pic.getJSONObject(0).getJSONObject("info")).fold(AssetId())(AssetId(_))
         val pics = Seq.tabulate(pic.length())(i => imageData(pic.getJSONObject(i)))
 
-        val small = pics.find { case AssetData.IsImage(_, tag) => tag == "smallProfile"; case _ => false }
-        val medium = pics.find { case AssetData.IsImage(_, tag) => tag == "medium"; case _ => false }.map(_.copy(id = id, previewId = small.map(_.id)))
-        (small, medium)
+        //TODO Dean - do we want to bring back small pictures for users?
+        val medium = pics.find { case AssetData.IsImage(_, tag) => tag == "medium"; case _ => false }.map(_.copy(id = id))
+        medium
       }
     }
 
@@ -71,18 +85,15 @@ object UserInfo {
           case _ => None
         }
       }
-
-//      val (small, medium) = if (js.has("picture")) picture else (None, None)
-      val (small, medium) = (None, None) //TODO Dean - re-enable loading of user pics - causing too many logs right now...
-      UserInfo('id, 'name, accentId, 'email, 'phone, small, medium, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
+      val medium = if (js.has("assets")) asset else if (js.has("picture")) picture else None
+      UserInfo('id, 'name, accentId, 'email, 'phone, medium, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
     }
   }
 
-  def encodeImage(assets: Seq[Option[AssetData]]): JSONArray =
-    returning(new json.JSONArray()) { arr =>
+  def encodePicture(assets: Seq[AssetData]): JSONArray = {
+    val arr = new json.JSONArray()
       assets.collect {
-        //for some reason using IsImage causes a compiler failure - using full unapply instead works
-        case Some(a@AssetData(_, _, _, _, _, _, _, _, _, _, Some(AssetMetaData.Image(Dim2(w, h), tag)), _, _, _, _)) =>
+        case a@AssetData.IsImage(Dim2(w, h), tag) =>
           JsonEncoder { o =>
             o.put("content_type", a.mime.str)
             o.put("content_length", a.size)
@@ -100,7 +111,22 @@ object UserInfo {
             })
           }
       }.foreach(arr.put)
-    }
+    arr
+  }
+
+
+  def encodeAsset(assets: Seq[AssetData]): JSONArray = {
+    val arr = new json.JSONArray()
+    assets.collect {
+      case AssetData.WithRemoteId(rId) =>
+        JsonEncoder { o =>
+          o.put("size", "complete")
+          o.put("key", rId.str)
+          o.put("type", "image")
+        }
+    }.foreach(arr.put)
+    arr
+  }
 
   implicit lazy val Encoder: JsonEncoder[UserInfo] = new JsonEncoder[UserInfo] {
     override def apply(info: UserInfo): JSONObject = JsonEncoder { o =>
@@ -110,7 +136,10 @@ object UserInfo {
       info.email.foreach(e => o.put("email", e.str))
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
-      o.put("picture", encodeImage(Seq(info.picSmall, info.picMedium)))
+      o.put("assets", encodeAsset(info.picture.toSeq))
+      //TODO Dean: We will need to re-enable this for the transition period so older clients can still access profile pictures
+      //However, doing so will trigger the current mechanism for re-uploading them to v3, so I need a better way of handling that.
+//      o.put("picture", encodePicture(info.picture.toSeq))
     }
   }
 
@@ -118,7 +147,7 @@ object UserInfo {
     JsonEncoder { o =>
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
-      o.put("picture", encodeImage(Seq(info.picSmall, info.picMedium)))
+      o.put("assets", encodePicture(info.picture.toSeq))
     }
   }
 }

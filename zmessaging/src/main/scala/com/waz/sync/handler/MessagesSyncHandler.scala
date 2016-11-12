@@ -242,7 +242,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
             convLock.release()
             //send preview
             CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
-              case Some(prev) => assetSync.uploadAssetData(prev.id, conv.id, msg.id).flatMap {
+              case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
                 case Right(Some(updated)) =>
                   postAssetMessage(asset, Some(updated)).map {
                     case (Right(_)) => Right(Some(updated))
@@ -254,9 +254,11 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
               case None => CancellableFuture successful Right(None)
             }.flatMap { //send asset
               case Right(prev) =>
-                assetSync.uploadAssetData(asset.id, conv.id, msg.id).flatMap {
+                assetSync.uploadAssetData(asset.id).flatMap {
                   case Right(Some(updated)) => postAssetMessage(updated, prev).map(_.fold(Left(_), _ => Right(origTime)))
                   case Right(None) => CancellableFuture successful Right(Instant.EPOCH) //TODO Dean: what's a good default
+                  case Left(err) if err.message.contains(AssetSyncHandler.AssetTooLarge) =>
+                    CancellableFuture.lift(errors.addAssetTooLargeError(conv.id, msg.id).map {_ => Left(err)})
                   case Left(err) => CancellableFuture successful Left(err)
                 }
               case Left(err) => CancellableFuture successful Left(err)

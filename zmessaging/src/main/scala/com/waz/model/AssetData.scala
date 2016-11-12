@@ -32,7 +32,6 @@ import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
 import org.threeten.bp.Duration
-import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
 //TODO profile pictures - get back to normal
@@ -56,8 +55,8 @@ case class AssetData(id:          AssetId               = AssetId(),
                      source:      Option[Uri]           = None,
                      proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
-                     convId:      Option[RConvId]       = None, //TODO remove
-                     data:        Option[Array[Byte]]   = None //TODO remove data from asset
+                     convId:      Option[RConvId]       = None, //will need for a while as v2 is transitioned out
+                     data:        Option[Array[Byte]]   = None //TODO ensure not saved in storage??
                     ) {
 
   import AssetData._
@@ -131,36 +130,14 @@ case class AssetData(id:          AssetId               = AssetId(),
   val height = dimensions.height
 
   def copyWithRemoteData(remoteData: RemoteData) = {
-    copy(
+    val res = copy(
       remoteId  = remoteData.remoteId,
       token     = remoteData.token,
       otrKey    = remoteData.otrKey,
       sha       = remoteData.sha256
     )
-  }
-
-  //useful for receiving parts of an asset message. Note, THIS keeps the ID and only merges non-defined properties
-  def merge(that: AssetData): AssetData = {
-    val res = this.copy(
-      mime        = if (this.mime == Mime.Unknown)  that.mime         else mime,
-      sizeInBytes = if (this.sizeInBytes == 0)      that.sizeInBytes  else sizeInBytes,
-      remoteId    = if (this.remoteId.isEmpty)      that.remoteId     else remoteId,
-      token       = if (this.token.isEmpty)         that.token        else token,
-      otrKey      = if (this.otrKey.isEmpty)        that.otrKey       else otrKey,
-      sha         = if (this.sha.isEmpty)           that.sha          else sha,
-      name        = if (this.name.isEmpty)          that.name         else name,
-      previewId   = if (this.previewId.isEmpty)     that.previewId    else previewId,
-      metaData    = if (this.metaData.isEmpty)      that.metaData     else metaData,
-      proxyPath   = if (this.proxyPath.isEmpty)     that.proxyPath    else proxyPath,
-      source      = if (this.source.isEmpty)        that.source       else source,
-      convId      = if (this.convId.isEmpty)        that.convId       else convId,
-      data        = if (this.data.isEmpty)          that.data         else data
-      //TODO giphy source and caption
-    )
-    //After merging the two asset data objects, update the resulting status if we now have remote data
     res.copy(status = res.remoteData.fold(res.status)(_ => UploadDone))
   }
-
 }
 
 object AssetData {
@@ -256,7 +233,7 @@ object AssetData {
 
   implicit object AssetDataDao extends Dao[AssetData, AssetId] {
     val Id    = id[AssetId]('_id, "PRIMARY KEY").apply(_.id)
-    //TODO remove in migration
+    //TODO Dean: remove in migration
     val Asset = text('asset_type, "").apply(_ => "")
     val Data = text('data)(JsonEncoder.encodeString(_))
 
@@ -274,7 +251,7 @@ object AssetData {
         Mime('mime),
         'sizeInBytes,
         JsonDecoder[AssetStatus]('status),
-        if (js.has("remoteId")) Some(decodeRAssetDataId('remoteId)) else None,
+        if (js.has("remoteId")) Some(decodeRAssetId('remoteId)) else None,
         decodeOptString('token).map(AssetToken(_)),
         decodeOptString('otrKey).map(AESKey(_)),
         decodeOptString('sha256).map(Sha256(_)),

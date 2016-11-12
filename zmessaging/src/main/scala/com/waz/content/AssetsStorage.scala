@@ -20,6 +20,7 @@ package com.waz.content
 import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AssetData.AssetDataDao
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -33,9 +34,34 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
 
   val onUploadFailed = EventStream[AssetData]()
 
+  //allows overwriting of asset data
   def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]] = update(id, updater).mapOpt {
     case (_, updated) => Some(updated)
   }
 
-  def updateOrCreateAsset(asset: AssetData) = updateOrCreate(asset.id, cur => cur.merge(asset), asset).map(Some(_))
+  def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]] = mergeOrCreateAsset(Some(newData))
+  def mergeOrCreateAsset(newData: Option[AssetData]): Future[Option[AssetData]] = newData.map(nd => updateOrCreate(nd.id, cur => merge(cur, nd), nd).map(Some(_))).getOrElse(Future.successful(None))
+
+  //Useful for receiving parts of an asset message or remote data. Note, this only merges non-defined properties, any current data remaining as is.
+  private def merge(cur: AssetData, newData: AssetData): AssetData = {
+    val res = cur.copy(
+      mime        = if (cur.mime == Mime.Unknown)  newData.mime         else cur.mime,
+      sizeInBytes = if (cur.sizeInBytes == 0)      newData.sizeInBytes  else cur.sizeInBytes,
+      remoteId    = if (cur.remoteId.isEmpty)      newData.remoteId     else cur.remoteId,
+      token       = if (cur.token.isEmpty)         newData.token        else cur.token,
+      otrKey      = if (cur.otrKey.isEmpty)        newData.otrKey       else cur.otrKey,
+      sha         = if (cur.sha.isEmpty)           newData.sha          else cur.sha,
+      name        = if (cur.name.isEmpty)          newData.name         else cur.name,
+      previewId   = if (cur.previewId.isEmpty)     newData.previewId    else cur.previewId,
+      metaData    = if (cur.metaData.isEmpty)      newData.metaData     else cur.metaData,
+      proxyPath   = if (cur.proxyPath.isEmpty)     newData.proxyPath    else cur.proxyPath,
+      source      = if (cur.source.isEmpty)        newData.source       else cur.source,
+      convId      = if (cur.convId.isEmpty)        newData.convId       else cur.convId,
+      data        = if (cur.data.isEmpty)          newData.data         else cur.data
+      //TODO Dean: giphy source and caption
+    )
+    //After merging the two asset data objects, update the resulting status if we now have remote data
+    res.copy(status = res.remoteData.fold(res.status)(_ => UploadDone))
+  }
+
 }
