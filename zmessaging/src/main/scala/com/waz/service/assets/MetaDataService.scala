@@ -66,13 +66,14 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
     def load(entry: CacheEntry) = {
       asset.mime match {
         case Mime.Video() if asset.previewId.isEmpty =>
-          MetaDataRetriever(entry.cacheFile)(loadPreview).flatMap(createVideoPreview(asset.id, _)).flatMap {
+          MetaDataRetriever(entry.cacheFile)(loadPreview).flatMap(createVideoPreview).flatMap {
             case Some(prev) => storage.updateOrCreateAsset(prev)
             case _ =>
               verbose(s"Failed to create video preview for asset: $asset.id")
               Future.successful(None)
         }
-        case _ => Future successful None
+        case _ => //possible plans to add previews for other types (images, pdfs etc?)
+          Future successful None
       }
     }.recover {
       case ex =>
@@ -126,8 +127,8 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
 
   private def loadPreview(retriever: MediaMetadataRetriever) = Try(Option(retriever.getFrameAtTime(-1L, OPTION_CLOSEST_SYNC))).toOption.flatten
 
-  private def createVideoPreview(id: AssetId, bitmap: Option[Bitmap]) = bitmap match {
+  private def createVideoPreview(bitmap: Option[Bitmap]) = bitmap match {
     case None => CancellableFuture successful None
-    case Some(b) => generator.generateAssetData(id, Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
+    case Some(b) => generator.generateAssetData(AssetId(), Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
   }
 }

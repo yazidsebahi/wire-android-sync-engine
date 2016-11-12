@@ -35,13 +35,12 @@ import org.threeten.bp.Duration
 import com.waz.ZLog.ImplicitTag._
 
 //Things still borked:
-//TODO audio messages don't play - something wrong with WireContentProvider
-//TODO video messages don't show preview
 //TODO profile pictures - get back to normal
 //TODO Giphy loading
 //TODO Test souncloud/spotify/youtube/linkpreviews/locations
 //TODO send in v2 flag?
 //TODO wipe assets table and re-read messages for upgrade
+//TODO check audio levels with web?
 
 case class AssetData(id:          AssetId               = AssetId(),
                      mime:        Mime                  = Mime.Unknown,

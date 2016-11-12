@@ -49,7 +49,10 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 
   var data = AssetData.Empty
 
-  addLoader(_.assetsStorage.signal(id)) { im =>
+  addLoader(zms => zms.assetsStorage.signal(id).flatMap {
+    case a@AssetData.IsVideo() => a.previewId.map(zms.assetsStorage.signal).getOrElse(Signal.const(AssetData.Empty))
+    case a => Signal.const(a)
+  }) { im =>
     if (this.data != im) {
       this.data = im
       notifyChanged()
