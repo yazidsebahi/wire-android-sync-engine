@@ -118,19 +118,6 @@ object AssetMetaData {
     }
   }
 
-  object Audio {
-    private implicit val Tag: LogTag = "AssetMetaData.Audio"
-
-    def apply(context: Context, uri: Uri)(implicit ec: ExecutionContext): Future[Option[Audio]] =
-      for {
-        retriever <- MetaDataRetriever.get(context, uri)
-        Some(duration) <- Future.successful(Option(retriever.extractMetadata(METADATA_KEY_DURATION)))
-        Some(millis) <- Future.successful(LoggedTry(bp.Duration.ofMillis(duration.toLong)).toOption)
-        Some(mime) <- Future.successful(Option(retriever.extractMetadata(METADATA_KEY_MIMETYPE)))
-        loudness <- AudioLevels(context).createAudioOverview(uri, Mime(mime)).future
-      } yield Some(Audio(millis, loudness))
-  }
-
   object Image {
     val Empty = Image(Dim2.Empty)
 

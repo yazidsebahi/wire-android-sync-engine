@@ -21,20 +21,22 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
+import android.net.Uri
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.AssetsStorage
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.AssetMetaData.Empty
+import com.waz.model.AssetMetaData.{Audio, Empty}
 import com.waz.model._
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.service.images.ImageAssetGenerator._
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.Serialized
+import com.waz.utils.{LoggedTry, Serialized}
+import org.threeten.bp
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -47,7 +49,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
     def load(entry: CacheEntry) = {
       asset.mime match {
         case Mime.Video() => AssetMetaData.Video(entry.cacheFile).map {_.fold({ msg => error(msg); None }, Some(_))}
-        case Mime.Audio() => AssetMetaData.Audio(context, CacheUri(entry.data, context))
+        case Mime.Audio() => audioMetaData(asset, entry)
         case Mime.Image() => Future {AssetMetaData.Image(entry.cacheFile)}(Threading.IO)
         case _ => Future successful Some(Empty)
       }
@@ -94,6 +96,31 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
           entry.delete()
           res
         }
+    }
+  }
+
+  private def audioMetaData(asset: AssetData, entry: CacheEntry)(implicit ec: ExecutionContext): Future[Option[Audio]] = {
+    lazy val loudness = AudioLevels(context).createAudioOverview(CacheUri(entry.data, context), asset.mime)
+      .recover{case _ => warn(s"Failed to genate loudness levels for audio asset: ${asset.id}"); None}.future
+
+    lazy val duration = MetaDataRetriever(entry.cacheFile) { r =>
+      val str = r.extractMetadata(METADATA_KEY_DURATION)
+      LoggedTry(bp.Duration.ofMillis(str.toLong)).toOption
+    }.recover{case _ => warn(s"Failed to extract duration for audio asset: ${asset.id}"); None}
+
+    asset.metaData match {
+      case Some(meta@AssetMetaData.Audio(_, Some(_))) => Future successful Some(meta) //nothing to do
+      case Some(meta@AssetMetaData.Audio(_, _)) => loudness.map { //just generate loudness
+        case Some(l) => Some(AssetMetaData.Audio(meta.duration, Some(l)))
+        case _ => Some(meta)
+      }
+      case _ => for { //no metadata - generate everything
+        l <- loudness
+        d <- duration
+      } yield d match {
+        case Some(d) => Some(AssetMetaData.Audio(d, l))
+        case _ => None
+      }
     }
   }
 
