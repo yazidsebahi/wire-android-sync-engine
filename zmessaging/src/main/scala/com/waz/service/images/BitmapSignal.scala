@@ -25,13 +25,14 @@ import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.gif.{Gif, GifAnimator}
 import com.waz.cache.LocalData
 import com.waz.model.{AssetData, AssetId, Mime}
-import com.waz.service.assets.AssetService.BitmapRequest._
+import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
+import com.waz.ui.MemoryImageCache.BitmapRequest
+import com.waz.ui.MemoryImageCache.BitmapRequest.{Round, Single}
 import com.waz.utils.events.Signal
 import com.waz.utils.{IoUtils, WeakMemCache}
 
@@ -146,7 +147,6 @@ object BitmapSignal {
     override type Data = Bitmap
 
     def id: AssetId
-    def tag: String
 
     override def process(result: Bitmap, signal: BitmapSignal) = {
 
@@ -154,7 +154,7 @@ object BitmapSignal {
         if (result == bitmap.EmptyBitmap) CancellableFuture.successful(result)
         else req match {
           case Round(width, borderWidth, borderColor) =>
-            withCache(s"#round $width $borderWidth $borderColor", width) {
+            withCache(width) {
               Threading.ImageDispatcher {BitmapUtils.createRoundBitmap(result, width, borderWidth, borderColor)}
             }
           case _ =>
@@ -162,10 +162,9 @@ object BitmapSignal {
         }
       }
 
-      def withCache(tagSuffix: String, width: Int)(loader: => CancellableFuture[Bitmap]) = {
-        val t = tag + tagSuffix
-        imageCache.reserve(id, t, width * width * 2)
-        imageCache(id, t, loader)
+      def withCache(width: Int)(loader: => CancellableFuture[Bitmap]) = {
+        imageCache.reserve(id, req, width * width * 2)
+        imageCache(id, req, width, loader)
       }
 
       generateResult map {
@@ -177,7 +176,6 @@ object BitmapSignal {
 
   class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends BitmapLoader(req, imageLoader, imageCache) {
     override def id = asset.id
-    override def tag = asset.tag
 
     override def loadCached() = imageLoader.hasCachedBitmap(asset, req).flatMap {
       case true => imageLoader.loadCachedBitmap(asset, req).map(Some(_))
@@ -207,7 +205,7 @@ object BitmapSignal {
         loader.load() flatMap {loader.process(_, signal)}
       } else {
         var etag = 0 // to make sure signal does not cache dispatched result
-        def reserveFrameMemory() = imageCache.reserve(asset.id, asset.tag, gif.width, gif.height * 2)
+        def reserveFrameMemory() = imageCache.reserve(asset.id, req, gif.width, gif.height * 2)
         def frameLoaded(frame: Bitmap) = signal publish BitmapLoaded(frame, preview = false, {etag += 1; etag})
         new GifAnimator(imageLoader.context, gif, reserveFrameMemory, frameLoaded).run()
       }
@@ -235,7 +233,7 @@ class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: Image
 
   override protected def fullLoader(req: BitmapRequest): Loader =
     req match {
-      case Single(_, _) | Round(_, _, _) | Static(_, _) => new AssetBitmapLoader(asset, req, imageLoader, cache)
+      case Single(_, _) | Round(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, cache)
       case _ =>
         asset.mime match {
           case Mime.Image.Unknown => new MimeCheckLoader(asset, req, imageLoader, cache)

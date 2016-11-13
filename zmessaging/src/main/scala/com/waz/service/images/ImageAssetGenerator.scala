@@ -30,6 +30,8 @@ import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
+import com.waz.ui.MemoryImageCache.BitmapRequest
+import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Single}
 import com.waz.utils._
 
 import scala.concurrent.Future
@@ -96,7 +98,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       val minWidth = if (crop) math.max(w, w * meta.width / meta.height) else w
       val sampleSize = BitmapUtils.computeInSampleSize(minWidth, meta.width)
       val memoryNeeded = (w * h) + (meta.width / sampleSize * meta.height / sampleSize) * 4
-      imageCache.reserve(id, options.tag, memoryNeeded)
+      imageCache.reserve(id, options.req, memoryNeeded)
       input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation), CancellableFuture.successful) map { image =>
         if (crop) {
           verbose(s"cropping to $w")
@@ -118,7 +120,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
 
     def save(image: Bitmap): CancellableFuture[(CacheEntry, Metadata)] = {
-      imageCache.add(id, options.tag, image)
+      imageCache.add(id, options.req, image)
       saveImage(id, image, meta.mimeType, options)
     }
 
@@ -153,16 +155,19 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     verbose(s"recode asset $id with opts: $options")
 
     def load = {
-      imageCache.reserve(id, options.tag, meta.width, if (meta.isRotated) 2 * meta.height else meta.height)
+      imageCache.reserve(id, options.req, meta.width, if (meta.isRotated) 2 * meta.height else meta.height)
       bitmapLoader(() => file.inputStream, 1, meta.orientation)
     }
 
-    imageCache(id, options.tag, load).future.flatMap(saveImage(file, _, Mime.Jpg, options)).lift
+    imageCache(id, options.req, meta.width, load).future.flatMap(saveImage(file, _, Mime.Jpg, options)).lift
   }
 }
 
 object ImageAssetGenerator {
+
+  val PreviewSize = 64
   val SmallProfileSize = 280
+  val MediumSize = 1448
 
   val PreviewCompressionQuality      = 30
   val JpegCompressionQuality         = 75
@@ -173,17 +178,17 @@ object ImageAssetGenerator {
 
   val PreviewRecodeMimes = CompressionOptions.DefaultRecodeMimes + Mime.Gif
 
-  val PreviewOptions = CompressionOptions(1024, 64, PreviewCompressionQuality, forceLossy = true, cropToSquare = false, "preview", PreviewRecodeMimes)
-  val MediumOptions  = CompressionOptions(310 * 1024, 1448, JpegCompressionQuality, forceLossy = false, cropToSquare = false, "medium")
+  val PreviewOptions = CompressionOptions(1024, PreviewSize, PreviewCompressionQuality, forceLossy = true, cropToSquare = false, Single(PreviewSize), PreviewRecodeMimes)
+  val MediumOptions  = CompressionOptions(310 * 1024, MediumSize, JpegCompressionQuality, forceLossy = false, cropToSquare = false, Regular(MediumSize))
 
-  val SmallProfileOptions  = new CompressionOptions(15 * 1024, 280, SmallProfileCompressionQuality, forceLossy = true, cropToSquare = true, "smallProfile", PreviewRecodeMimes)
+  val SmallProfileOptions  = new CompressionOptions(15 * 1024, SmallProfileSize, SmallProfileCompressionQuality, forceLossy = true, cropToSquare = true, Single(SmallProfileSize), PreviewRecodeMimes)
   val MediumProfileOptions = MediumOptions.copy(recodeMimes = PreviewRecodeMimes)
 
   val ImageOptions = MediumOptions
   val SelfOptions  = MediumProfileOptions
 }
 
-case class CompressionOptions(byteCount: Int, dimension: Int, quality: Int, forceLossy: Boolean, cropToSquare: Boolean, tag: String, recodeMimes: Set[String] = CompressionOptions.DefaultRecodeMimes) {
+case class CompressionOptions(byteCount: Int, dimension: Int, quality: Int, forceLossy: Boolean, cropToSquare: Boolean, req: BitmapRequest, recodeMimes: Set[String] = CompressionOptions.DefaultRecodeMimes) {
 
   val maxPixelCount = 1.3 * dimension * dimension
 

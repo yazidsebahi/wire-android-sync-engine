@@ -306,14 +306,4 @@ object AssetService {
     case class LoadingFailed(ex: Throwable) extends BitmapResult
   }
 
-  sealed trait BitmapRequest {
-    val width: Int
-    val mirror: Boolean = false
-  }
-  object BitmapRequest {
-    case class Regular(width: Int, override val mirror: Boolean = false) extends BitmapRequest
-    case class Static(width: Int, override val mirror: Boolean = false) extends BitmapRequest
-    case class Single(width: Int, override val mirror: Boolean = false) extends BitmapRequest
-    case class Round(width: Int, borderWidth: Int = 0, borderColor: Int = 0) extends BitmapRequest
-  }
 }

@@ -31,16 +31,17 @@ import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.bitmap.BitmapUtils
 import com.waz.model._
 import com.waz.service.ZMessaging
-import com.waz.service.assets.AssetService.BitmapRequest._
+import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import com.waz.service.assets.AssetService.{BitmapRequest, BitmapResult}
 import com.waz.service.images.{BitmapSignal, ImageLoader}
 import com.waz.threading.Threading
+import com.waz.ui.MemoryImageCache.BitmapRequest
+import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
-import scala.concurrent.duration._
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.ref.WeakReference
 import scala.util.{Failure, Success, Try}
@@ -131,10 +132,12 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
   val mime   = Mime(BitmapUtils.getMime(bitmap))
   val (w, h) = if (ImageLoader.Metadata.shouldSwapDimens(orientation)) (bitmap.getHeight, bitmap.getWidth) else (bitmap.getWidth, bitmap.getHeight)
 
+  val req = Regular(bitmap.getWidth)
+
   val imageData = Future {
-    ui.imageCache.reserve(id, "full", bitmap.getWidth, bitmap.getHeight)
+    ui.imageCache.reserve(id, req, bitmap.getWidth, bitmap.getHeight)
     val img = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
-    ui.imageCache.add(id, "full", img)
+    ui.imageCache.add(id, req, img)
     verbose(s"compressing $id")
     val before = System.nanoTime
     val bos = new ByteArrayOutputStream(65536)
@@ -188,7 +191,6 @@ object ImageAsset {
     override def isEmpty = true
     override def getMimeType: String = null
     override def getBitmap(width: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
-    override def getStaticBitmap(width: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
     override def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
     override def getRoundBitmap(width: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
     override def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle = EmptyLoadHandle
@@ -252,8 +254,6 @@ trait BitmapLoading {
   protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle
 
   override def getBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Regular(width, mirror = this.mirrored), callback)
-
-  override def getStaticBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Static(width, mirror = this.mirrored), callback)
 
   override def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle = getBitmap(Single(width, mirror = this.mirrored), callback)
 
