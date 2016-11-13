@@ -99,11 +99,12 @@ case class AssetData(id:          AssetId               = AssetId(),
   }
 
   def loadRequest = {
-    val req = (remoteData, source, proxyPath) match {
-      case (Some(rData), _, _)                      => WireAssetRequest(cacheKey, id, rData, convId, mime)
-      case (_, Some(uri), _) if isExternalUri(uri)  => External(cacheKey, uri)
-      case (_, Some(uri), _)                        => LocalAssetRequest(cacheKey, uri, mime, name)
-      case (_, None, Some(path))                    => Proxied(cacheKey, path)
+    val req = (remoteData, v2ProfileId, source, proxyPath) match {
+      case (Some(rData), _, _, _)                      => WireAssetRequest(cacheKey, id, rData, convId, mime)
+      case (_, Some(v2Id), _, _)                       => WireAssetRequest(cacheKey, id, RemoteData(Some(v2Id)), convId, mime)
+      case (_, _, Some(uri), _) if isExternalUri(uri)  => External(cacheKey, uri)
+      case (_, _, Some(uri), _)                        => LocalAssetRequest(cacheKey, uri, mime, name)
+      case (_, _, None, Some(path))                    => Proxied(cacheKey, path)
       case _                                        => CachedAssetRequest(cacheKey, mime, name)
     }
     verbose(s"loadRequest returning: $req")
