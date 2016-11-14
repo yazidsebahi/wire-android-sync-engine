@@ -26,6 +26,7 @@ import com.waz.content.WireContentProvider
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.otr.SignalingKey
 import com.waz.service.ZMessaging
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
@@ -33,9 +34,10 @@ import com.waz.utils._
 import org.json.JSONObject
 import org.threeten.bp.Duration
 
+import scala.util.Try
+
 //Things still borked:
 //TODO send in v2 flag?
-//TODO wipe assets table and re-read messages for upgrade
 //TODO check audio levels with web?
 
 case class AssetData(id:          AssetId               = AssetId(),
@@ -54,7 +56,9 @@ case class AssetData(id:          AssetId               = AssetId(),
                      //TODO remove v2 attributes when transition period is over
                      convId:      Option[RConvId]       = None, //will need for a while as v2 is transitioned out
                      data:        Option[Array[Byte]]   = None, //TODO ensure not saved in storage??
-                     v2ProfileId: Option[RAssetId]      = None
+                     v2ProfileId: Option[RAssetId]      = None,
+                     //TODO remove after v2 transtion period (eases database migration)
+                     assetType:   Option[AssetType]     = None
                     ) {
 
   import AssetData._
@@ -102,7 +106,7 @@ case class AssetData(id:          AssetId               = AssetId(),
       case (_, _, Some(uri), _) if isExternalUri(uri)  => External(cacheKey, uri)
       case (_, _, Some(uri), _)                        => LocalAssetRequest(cacheKey, uri, mime, name)
       case (_, _, None, Some(path))                    => Proxied(cacheKey, path)
-      case _                                        => CachedAssetRequest(cacheKey, mime, name)
+      case _                                           => CachedAssetRequest(cacheKey, mime, name)
     }
     verbose(s"loadRequest returning: $req")
     req
@@ -232,37 +236,20 @@ object AssetData {
 
   implicit object AssetDataDao extends Dao[AssetData, AssetId] {
     val Id    = id[AssetId]('_id, "PRIMARY KEY").apply(_.id)
-    //TODO Dean: remove in migration
-    val Asset = text('asset_type, "").apply(_ => "")
+    val Asset = text[AssetType]('asset_type, _.name, AssetType.valueOf)(_ => AssetType.Empty)
     val Data = text('data)(JsonEncoder.encodeString(_))
 
     override val idCol = Id
     override val table = Table("Assets", Id, Asset, Data)
 
-    override def apply(implicit cursor: Cursor): AssetData = JsonDecoder.decode(Data)(AssetDataDecoder)
-  }
-
-  implicit lazy val AssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
-    import JsonDecoder._
-    override def apply(implicit js: JSONObject): AssetData =
-      AssetData(
-        'id,
-        Mime('mime),
-        'sizeInBytes,
-        JsonDecoder[AssetStatus]('status),
-        decodeOptRAssetId('remoteId),
-        decodeOptString('token).map(AssetToken(_)),
-        decodeOptString('otrKey).map(AESKey(_)),
-        decodeOptString('sha256).map(Sha256(_)),
-        'name,
-        'preview,
-        opt[AssetMetaData]('metaData),
-        decodeOptString('source).map(Uri.parse),
-        'proxyPath,
-        'convId,
-        decodeOptString('data).map(decodeData),
-        decodeOptRAssetId('v2ProfileId)
-      )
+    override def apply(implicit cursor: Cursor): AssetData = {
+      val tpe: AssetType = Asset
+      tpe match {
+        case AssetType.Image => JsonDecoder.decode(Data)(ImageAssetDataDecoder)
+        case AssetType.Any   => JsonDecoder.decode(Data)(AnyAssetDataDecoder)
+        case _               => JsonDecoder.decode(Data)(AssetDataDecoder)
+      }
+    }
   }
 
   implicit lazy val AssetDataEncoder: JsonEncoder[AssetData] = new JsonEncoder[AssetData] {
@@ -286,16 +273,109 @@ object AssetData {
     }
   }
 
-  //TODO Dean - do we still need image tags?
-  object Tag {
-    val SmallProfile = "smallProfile"
-    val Medium = "medium"
-    val MediumPreview = "mediumPreview"
-    val Preview = "preview"
+  lazy val AssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
+    import JsonDecoder._
+    override def apply(implicit js: JSONObject): AssetData =
+      AssetData(
+        'id,
+        Mime('mime),
+        'sizeInBytes,
+        JsonDecoder[AssetStatus]('status),
+        decodeOptRAssetId('remoteId),
+        decodeOptString('token).map(AssetToken(_)),
+        decodeOptString('otrKey).map(AESKey(_)),
+        decodeOptString('sha256).map(Sha256(_)),
+        'name,
+        'preview,
+        opt[AssetMetaData]('metaData),
+        decodeOptString('source).map(Uri.parse),
+        'proxyPath,
+        'convId,
+        decodeOptString('data).map(decodeData),
+        decodeOptRAssetId('v2ProfileId)
+      )
   }
+
+
+  //TODO Dean: remove after v2 transition period
+  //This decoder is used to decode the old ImageAssetData type from SQL storage. We just need enough information to re-download it again
+  lazy val ImageAssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
+    import JsonDecoder._
+    override def apply(implicit js: JSONObject): AssetData = {
+      verbose(s"decoding ImageAssetData: $js")
+      val id = decodeId[AssetId]('id)
+      val convId = decodeOptRConvId('convId)
+
+      Try(js.getJSONArray("versions")).toOption.flatMap { arr =>
+        Seq.tabulate(arr.length())(arr.getJSONObject).map{ obj =>
+          verbose(s"applying ImageDataDecoder to $obj")
+          ImageDataDecoder.apply(obj)
+        }.collect {
+          case a@AssetData.IsImage(_, tag) if tag == "medium" => a.copy(id = id, convId = convId)
+        }.headOption
+      }.getOrElse(AssetData(id, convId = convId))
+    }
+  }
+
+  //TODO Dean: remove after v2 transition period
+  //This decoder is used to decode the old ImageData type from SQL storage. We just need enough information to re-download it again
+  lazy val ImageDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
+    import JsonDecoder._
+    override def apply(implicit js: JSONObject): AssetData = {
+      verbose(s"decoding ImageData: $js")
+      val otrKey = js.opt("otrKey") match {
+        case o: JSONObject => Try(implicitly[JsonDecoder[SignalingKey]].apply(o).encKey).toOption
+        case str: String => Some(AESKey(str))
+        case _ => None
+      }
+
+      AssetData(
+        mime = Mime('mime),
+        sizeInBytes = 'size,
+        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
+        source = decodeOptString('url).map(Uri.parse),
+        proxyPath = decodeOptString('proxyPath)
+      ).copyWithRemoteData(RemoteData('remoteId, None, otrKey, decodeOptString('sha256).map(Sha256(_))))
+    }
+  }
+
+  //TODO Dean: remove after v2 transition period
+  //This decoder is used to decode the old AnyAssetData type from SQL storage. We just need enough information to re-download it again
+  implicit lazy val AnyAssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
+    import JsonDecoder._
+    override def apply(implicit js: JSONObject): AssetData = {
+      verbose(s"decoding AnyAssetData: $js")
+      val remoteData = decodeOptObject('key)(js.getJSONObject("status")).map { key =>
+        val remoteId = decodeOptRAssetId('remoteId)(key).orElse(decodeOptRAssetId('remoteKey)(key))
+        val token = decodeOptString('token)(key).map(AssetToken)
+        val otrKey = decodeOptString('otrKey)(key).map(AESKey(_))
+        val sha = decodeOptString('sha256)(key).map(Sha256(_))
+        RemoteData(remoteId, token, otrKey, sha)
+      }
+
+      val mime = Mime('mimeType)
+      val source = mime match {
+        case Mime.Audio() => None //we don't want the unencoded url stored previously - use id as cache key instead
+        case _ => decodeOptString('source).map(Uri.parse)
+      }
+
+      val asset = AssetData(
+        decodeAssetId('id),
+        mime = mime,
+        sizeInBytes = 'sizeInBytes,
+        name = 'name,
+        convId = decodeOptRConvId('convId),
+        source = source
+      )
+
+      remoteData.map(asset.copyWithRemoteData).getOrElse(asset)
+    }
+  }
+
 }
 
 case class AssetToken(str: String) extends AnyVal
 
 object AssetToken extends (String => AssetToken)
+
 

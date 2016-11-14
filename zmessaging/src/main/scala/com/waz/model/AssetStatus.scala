@@ -32,7 +32,6 @@ object AssetStatus {
   case object UploadNotStarted extends AssetStatus(UPLOAD_NOT_STARTED)
   case object MetaDataSent extends AssetStatus(META_DATA_SENT)
   case object PreviewSent extends AssetStatus(PREVIEW_SENT)
-  //TODO Dean: after v2 transition, UploadInProgress no longer needs this information
   case object UploadInProgress extends AssetStatus(UPLOAD_IN_PROGRESS)
   case object UploadDone extends AssetStatus(UPLOAD_DONE)
   case object UploadCancelled extends AssetStatus(UPLOAD_CANCELLED) with Sync

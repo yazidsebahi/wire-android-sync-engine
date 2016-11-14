@@ -176,24 +176,6 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         CancellableFuture.failed(new NoSuchElementException("no data available after download"))
     }
 
-    def previewAndMetaData(asset: AssetData) = for {
-      entry    <- loadData(asset)
-      (mime, nm) = entry match {
-        case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(asset.name))
-        case _ => (asset.mime, asset.name)
-      }
-    //TODO Dean - I could have these running in parallel to make message generation quicker. Would then need to wait before sending though
-      meta     <- metaService.loadMetaData(asset, entry)
-      prev     <- metaService.loadPreview(asset, entry)
-      updated  <- CancellableFuture lift storage.updateAsset(asset.id,
-        _.copy(
-          metaData = meta,
-          mime = mime,
-          name = nm,
-          previewId = prev.map(_.id),
-          sizeInBytes = entry.length))
-    } yield updated
-
     for {
       m        <- a.mimeType
       size     <- a.sizeInBytes
@@ -206,8 +188,29 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         source = uri,
         convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
       ))
-      updated  <- Cancellable(FetchKey(a.id))(previewAndMetaData(asset)).future
+      entry <- loadData(asset).future
+      //TODO Dean - I could have these running in parallel to make message generation quicker. Would then need to wait before sending though
+      updated  <- Cancellable(FetchKey(a.id))(updatePreviewAndMetaData(asset, entry)).future
     } yield returning(updated.getOrElse(asset))(a => verbose(s"created asset: $a"))
+  }
+
+  private def updatePreviewAndMetaData(asset: AssetData, entry: LocalData): CancellableFuture[Option[AssetData]] = {
+    val (mime, nm) = entry match {
+      case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(asset.name))
+      case _ => (asset.mime, asset.name)
+    }
+
+    for {
+      meta     <- metaService.loadMetaData(asset, entry)
+      prev     <- metaService.loadPreview(asset, entry)
+      updated  <- CancellableFuture lift storage.updateAsset(asset.id,
+        _.copy(
+          metaData = meta,
+          mime = mime,
+          name = nm,
+          previewId = prev.map(_.id),
+          sizeInBytes = entry.length))
+    } yield updated
   }
 
   def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))
@@ -258,6 +261,14 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     def saveAssetData(file: File) =
       loader.getAssetData(asset.loadRequest).future.map {
         case Some(data) =>
+
+          //Trigger updating of meta data for assets generated (and downloaded) from old AnyAssetData type.
+          asset.mime match {
+            case Mime.Video() if asset.metaData.isEmpty || asset.previewId.isEmpty => updatePreviewAndMetaData(asset, data)
+            case Mime.Audio() if asset.metaData.isEmpty => updatePreviewAndMetaData(asset, data)
+            case _ => CancellableFuture.successful(Some(asset))
+          }
+
           IoUtils.copy(data.inputStream, new FileOutputStream(file))
           Some(file)
         case None =>
