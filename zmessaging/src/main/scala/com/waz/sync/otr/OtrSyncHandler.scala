@@ -171,7 +171,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
         key match {
           case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
             case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
-              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key))
+              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha)))
               case Left(err) => Left(err)
             }
           }
