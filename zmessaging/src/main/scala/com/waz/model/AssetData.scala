@@ -34,9 +34,6 @@ import org.json.JSONObject
 import org.threeten.bp.Duration
 
 //Things still borked:
-//TODO Giphy loading
-//TODO round images aren't loading properly
-//TODO Test souncloud/spotify/youtube/linkpreviews/locations
 //TODO send in v2 flag?
 //TODO wipe assets table and re-read messages for upgrade
 //TODO check audio levels with web?

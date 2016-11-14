@@ -26,11 +26,13 @@ import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.Parcelable
 import com.waz.api.impl._
-import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
+import com.waz.bitmap.BitmapDecoder
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
 import com.waz.{HockeyApp, api, bitmap}
+
+import scala.util.Try
 
 class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModule) {
 
@@ -45,6 +47,8 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   def getImageAsset(id: AssetId): ImageAsset = cacheImageAsset(id, new ImageAsset(id))
 
   def getLocalImageAsset(data: AssetData) = cacheImageAsset(data.id, new LocalImageAsset(data))
+
+  def getLocalImageAssetWithPreview(preview: Option[AssetData], data: AssetData) = cacheImageAsset(data.id, new LocalImageAssetWithPreview(preview, data))
 
   def getOrCreateUriImageAsset(uri: Uri): api.ImageAsset = {
     if (uri == null || uri.toString == "null") {
@@ -64,6 +68,10 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       case Parcelable.FlagEmpty => ImageAsset.Empty
       case Parcelable.FlagWire => getImageAsset(AssetId(p.readString()))
       case Parcelable.FlagLocal => getLocalImageAsset(JsonDecoder.decode[AssetData](p.readString()))
+      case Parcelable.FlagLocalWithPreview =>
+        val medium = JsonDecoder.decode[AssetData](p.readString())
+        val preview = Try(JsonDecoder.decode[AssetData](p.readString())).toOption
+        getLocalImageAssetWithPreview(preview, medium)
     }
   }
 

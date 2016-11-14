@@ -123,6 +123,21 @@ class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(
   override def toString = s"LocalImageAsset($data)"
 }
 
+//used for temporary asset data where the medium might be very big (i.e. Giphy). We don't want to always trigger downloading of the medium
+//if the user won't look at it.
+class LocalImageAssetWithPreview(preview: Option[AssetData], medium: AssetData)(implicit ui: UiModule) extends LocalImageAsset(medium) {
+
+  override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = req match {
+      case Single(_, _) => new BitmapLoadHandle(_ => BitmapSignal(preview.getOrElse(medium), req, ui.globalImageLoader, ui.imageCache), callback)
+      case _ => super.getBitmap(req, callback)
+    }
+  override def writeToParcel(p: Parcel, flags: Int): Unit = {
+    p.writeInt(Parcelable.FlagLocalWithPreview)
+    p.writeString(JsonEncoder.encodeString(medium))
+    preview.foreach(v => p.writeString(JsonEncoder.encodeString(v)))
+  }
+}
+
 class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) {
 
   import Threading.Implicits.Background
@@ -182,6 +197,7 @@ object ImageAsset {
     val FlagEmpty = 0
     val FlagLocal = 1
     val FlagWire  = 2
+    val FlagLocalWithPreview  = 3
   }
 
   object Empty extends com.waz.api.ImageAsset with UiFlags with UiObservable {
