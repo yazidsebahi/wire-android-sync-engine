@@ -153,7 +153,7 @@ object BitmapSignal {
       def generateResult: CancellableFuture[Bitmap] = {
         if (result == bitmap.EmptyBitmap) CancellableFuture.successful(result)
         else req match {
-          case Round(width, borderWidth, borderColor) =>
+          case Round(width, borderWidth, borderColor) => //result will be the square bitmap loaded earlier
             withCache(width) {
               Threading.ImageDispatcher {BitmapUtils.createRoundBitmap(result, width, borderWidth, borderColor)}
             }
@@ -177,14 +177,19 @@ object BitmapSignal {
   class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends BitmapLoader(req, imageLoader, imageCache) {
     override def id = asset.id
 
-    override def loadCached() = imageLoader.hasCachedBitmap(asset, req).flatMap {
-      case true => imageLoader.loadCachedBitmap(asset, req).map(Some(_))
+    val initialReq = req match {
+      case Round(w, _, _) => Single(w) //need to pre-load a separate bitmap (with a separate memCache entry) to be used later in generating the round one
+      case req => req
+    }
+
+    override def loadCached() = imageLoader.hasCachedBitmap(asset, initialReq).flatMap {
+      case true => imageLoader.loadCachedBitmap(asset, initialReq).map(Some(_))
       case false => CancellableFuture.successful(None)
     }.recover {
       case e: Throwable => None
     }
 
-    override def load() = imageLoader.loadBitmap(asset, req)
+    override def load() = imageLoader.loadBitmap(asset, initialReq)
   }
 
   class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {

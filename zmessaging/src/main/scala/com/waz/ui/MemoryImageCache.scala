@@ -59,8 +59,11 @@ class MemoryImageCache(val context: Context) {
 
   def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
     get(id, req, imgWidth) match {
-      case Some(bitmap) => CancellableFuture.successful(bitmap)
+      case Some(bitmap) =>
+        verbose(s"found bitmap for req: $req")
+        CancellableFuture.successful(bitmap)
       case None =>
+        verbose(s"no bitmap for req: $req, loading...")
         val future = load
         future.onSuccess {
           case bitmap.EmptyBitmap => // ignore
