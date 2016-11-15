@@ -20,6 +20,7 @@ package com.waz.api;
 import android.os.Parcel;
 import android.os.Parcelable;
 import com.waz.service.ZMessaging$;
+import scala.deprecated;
 
 public interface User extends UiObservable, Parcelable {
 
@@ -43,6 +44,8 @@ public interface User extends UiObservable, Parcelable {
 
     CoreList<OtrClient> getOtrClients();
     Verification getVerified();
+
+    String getUsername();
 
     Parcelable.Creator<User> CREATOR = new Parcelable.Creator<User>() {
         @Override
@@ -78,7 +81,10 @@ public interface User extends UiObservable, Parcelable {
      */
     IConversation getConversation();
 
+    @deprecated
     CommonConnections getCommonConnections();
+
+    int getCommonConnectionsCount();
 
     IConversation acceptConnection();
 

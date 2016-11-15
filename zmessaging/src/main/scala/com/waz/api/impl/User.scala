@@ -141,6 +141,10 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeString(JsonEncoder.encodeString(data))
   override def describeContents(): Int = 0
+
+  override def getUsername: String = "whisker_pants" //TODO: STUB
+
+  override def getCommonConnectionsCount = 0 //TODO: STUB
 }
 
 object User {
@@ -168,6 +172,7 @@ object EmptyUser extends com.waz.api.User {
   override def ignoreConnection(): Unit = ()
   override def getAccent: api.AccentColor = AccentColor()
   override def getCommonConnections = null
+  override def getCommonConnectionsCount = 0
   override def removeUpdateListener(listener: UpdateListener): Unit = ()
   override def addUpdateListener(listener: UpdateListener): Unit = ()
   override def writeToParcel(dest: Parcel, flags: Int): Unit = ()
@@ -179,4 +184,5 @@ object EmptyUser extends com.waz.api.User {
   override def isAutoConnection: Boolean = false
   override def isContact: Boolean = false
   override def getFirstContact: api.ContactDetails = null
+  override def getUsername: String = ""
 }
