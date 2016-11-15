@@ -18,12 +18,12 @@
 package com.waz.api
 
 trait Usernames {
-  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback)
+  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
   def isUsernameValid(username: String) : UsernameValidation
 }
 
 trait UsernamesRequestCallback{
-  def onUsernameRequestResult(username: String, validation: UsernameValidation)
+  def onUsernameRequestResult(username: String, validation: UsernameValidation) : Unit
 }
 
 trait UsernameValidation{
