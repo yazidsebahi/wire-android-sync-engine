@@ -20,6 +20,7 @@ package com.waz.content
 import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AssetData.AssetDataDao
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
@@ -44,6 +45,13 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
 
   //Useful for receiving parts of an asset message or remote data. Note, this only merges non-defined properties, any current data remaining as is.
   private def merge(cur: AssetData, newData: AssetData): AssetData = {
+
+    val metaData = cur.metaData match {
+      case None => newData.metaData
+      case Some(AssetMetaData.Image(dim, tag)) if tag == "" => AssetMetaData.Image(dim, newData.tag)
+      case _ => cur.metaData
+    }
+
     val res = cur.copy(
       mime        = if (cur.mime == Mime.Unknown)  newData.mime         else cur.mime,
       sizeInBytes = if (cur.sizeInBytes == 0)      newData.sizeInBytes  else cur.sizeInBytes,

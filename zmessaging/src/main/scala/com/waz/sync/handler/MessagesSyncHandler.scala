@@ -25,7 +25,7 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
 import com.waz.content.{MembersStorage, MessagesStorage}
-import com.waz.model.AssetData.UploadKey
+import com.waz.model.AssetData.{RemoteData, UploadKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
@@ -232,38 +232,107 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
         case Some(asset) => postAssetMessage(asset.copy(status = AssetStatus.MetaDataSent), None)
       }
 
+
+    def sendWithV2(asset: AssetData) = {
+
+      (asset.mime match {
+        case Mime.Image() => CancellableFuture.successful(Right(msg.time))
+        case _ => postOriginal()
+      }).flatMap {
+        case Left(err) => CancellableFuture successful Left(err)
+        case Right(origTime) =>
+          convLock.release()
+          //send preview
+          CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
+            case Some(prev) =>
+              val key = AESKey()
+              def proto(sha: Sha256) = {
+                asset.mime match {
+                  case Mime.Image() => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.ImageAsset(asset))
+                  case _ => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.Asset(asset.copy(sha = Some(sha)), Some(prev.copyWithRemoteData(RemoteData(otrKey = Some(key), sha256 = Some(sha))))))
+                }
+              }
+
+              (for {
+                rcps <- CancellableFuture lift recipients(conv, msg.ephemeral)
+                Some(data) <- assets.getAssetData(prev.id)
+                res <- otrSync.postAssetDataV2(conv, key, proto, data, recipients = rcps)
+              } yield res).flatMap {
+                case Right((r, date)) =>
+                  val updated = asset.copyWithRemoteData(r)
+                  CancellableFuture lift (for {
+                    _ <- assets.storage.mergeOrCreateAsset(updated)
+                  } yield Right(Some(updated)))
+                case Left(err) => CancellableFuture successful Left(err)
+              }
+            case None => CancellableFuture successful Right(None)
+          }.flatMap { //send asset
+            case Right(prev) =>
+              val key = AESKey()
+              def proto(sha: Sha256) = {
+                val withRemoteData = asset.copyWithRemoteData(RemoteData(otrKey = Some(key), sha256 = Some(sha)))
+                asset.mime match {
+                  case Mime.Image() => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.ImageAsset(withRemoteData))
+                  case _ => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.Asset(withRemoteData, prev.map(_.copy(remoteId = None)))) //don't want to confuse other clients with a remote id
+                }
+              }
+
+              (for {
+                rcps <- CancellableFuture lift recipients(conv, msg.ephemeral)
+                Some(data) <- assets.getAssetData(asset.id)
+                res <- otrSync.postAssetDataV2(conv, key, proto, data, recipients = rcps)
+              } yield res).flatMap {
+                case Right((r@RemoteData(_, _, _, sha), date)) =>
+                  val updated = asset.copyWithRemoteData(r)
+                  CancellableFuture lift (for {
+                    _ <- assets.storage.mergeOrCreateAsset(updated)
+                    _ <- service.content.updateMessage(msg.id)(m => sha.fold(m)(s => m.copy(protos = Seq(proto(s)))))
+                  } yield Right(date.instant))
+                case Left(err) => CancellableFuture successful Left(err)
+              }
+            case Left(err) => CancellableFuture successful Left(err)
+          }
+      }
+    }
+
+    def sendWithV3(asset: AssetData) = {
+      postOriginal() flatMap {
+        case Left(err) => CancellableFuture successful Left(err)
+        case Right(origTime) =>
+          convLock.release()
+          //send preview
+          CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
+            case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
+              case Right(Some(updated)) =>
+                postAssetMessage(asset, Some(updated)).map {
+                  case (Right(_)) => Right(Some(updated))
+                  case (Left(err)) => Left(err)
+                }
+              case Right(None) => CancellableFuture successful Right(None)
+              case Left(err) => CancellableFuture successful Left(err)
+            }
+            case None => CancellableFuture successful Right(None)
+          }.flatMap { //send asset
+            case Right(prev) =>
+              assetSync.uploadAssetData(asset.id).flatMap {
+                case Right(Some(updated)) => postAssetMessage(updated, prev).map(_.fold(Left(_), _ => Right(origTime)))
+                case Right(None) => CancellableFuture successful Right(Instant.EPOCH) //TODO Dean: what's a good default
+                case Left(err) if err.message.contains(AssetSyncHandler.AssetTooLarge) =>
+                  CancellableFuture.lift(errors.addAssetTooLargeError(conv.id, msg.id).map {_ => Left(err)})
+                case Left(err) => CancellableFuture successful Left(err)
+              }
+            case Left(err) => CancellableFuture successful Left(err)
+          }
+      }
+    }
+
     CancellableFuture lift assets.storage.get(msg.assetId) flatMap {
       case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
       case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
       case Some(asset) =>
-        postOriginal() flatMap {
-          case Left(err) => CancellableFuture successful Left(err)
-          case Right(origTime) =>
-            convLock.release()
-            //send preview
-            CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
-              case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
-                case Right(Some(updated)) =>
-                  postAssetMessage(asset, Some(updated)).map {
-                    case (Right(_)) => Right(Some(updated))
-                    case (Left(err)) => Left(err)
-                  }
-                case Right(None) => CancellableFuture successful Right(None)
-                case Left(err) => CancellableFuture successful Left(err)
-              }
-              case None => CancellableFuture successful Right(None)
-            }.flatMap { //send asset
-              case Right(prev) =>
-                assetSync.uploadAssetData(asset.id).flatMap {
-                  case Right(Some(updated)) => postAssetMessage(updated, prev).map(_.fold(Left(_), _ => Right(origTime)))
-                  case Right(None) => CancellableFuture successful Right(Instant.EPOCH) //TODO Dean: what's a good default
-                  case Left(err) if err.message.contains(AssetSyncHandler.AssetTooLarge) =>
-                    CancellableFuture.lift(errors.addAssetTooLargeError(conv.id, msg.id).map {_ => Left(err)})
-                  case Left(err) => CancellableFuture successful Left(err)
-                }
-              case Left(err) => CancellableFuture successful Left(err)
-            }
-        }
+        verbose(s"Sending asset: $asset")
+        if (asset.convId.isDefined) sendWithV2(asset)
+        else sendWithV3(asset)
     }
   }
 

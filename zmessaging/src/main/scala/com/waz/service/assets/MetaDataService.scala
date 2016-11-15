@@ -129,6 +129,6 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
 
   private def createVideoPreview(bitmap: Option[Bitmap]) = bitmap match {
     case None => CancellableFuture successful None
-    case Some(b) => generator.generateAssetData(AssetId(), Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
+    case Some(b) => generator.generateAssetData(AssetData.newImageAsset(AssetId()), Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
   }
 }

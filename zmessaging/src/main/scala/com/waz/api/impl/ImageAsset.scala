@@ -167,7 +167,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
   data = AssetData(
     id,
     mime = mime,
-    metaData = Some(AssetMetaData.Image(Dim2(w, h), "full")),
+    metaData = Some(AssetMetaData.Image(Dim2(w, h), "medium")),
     data = {
       verbose(s"data requested, compress completed: ${imageData.isCompleted}")
       // XXX: this is ugly, but will only be accessed from bg thread and very rarely, so we should be fine with that hack

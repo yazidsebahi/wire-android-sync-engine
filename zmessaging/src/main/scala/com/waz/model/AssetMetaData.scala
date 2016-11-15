@@ -25,13 +25,13 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.ZLog._
-import com.waz.service.assets.{AudioLevels, MetaDataRetriever}
+import com.waz.service.assets.MetaDataRetriever
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp
 import org.threeten.bp.Duration
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 sealed abstract class AssetMetaData(val jsonTypeTag: Symbol)
@@ -89,6 +89,7 @@ object AssetMetaData {
   case class Loudness(levels: Vector[Float])
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
+  //TODO Dean: tag can be removed after v2 transition period
   case class Image(dimensions: Dim2, tag: String = "") extends AssetMetaData('image) with HasDimensions
   case class Audio(duration: Duration, loudness: Option[Loudness] = None) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
@@ -119,6 +120,7 @@ object AssetMetaData {
   }
 
   object Image {
+
     val Empty = Image(Dim2.Empty)
 
     def apply(file: File): Option[Image] = apply(new FileInputStream(file))

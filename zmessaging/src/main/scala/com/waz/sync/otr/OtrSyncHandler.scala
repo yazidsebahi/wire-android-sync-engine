@@ -25,7 +25,6 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.ConversationStorage
-import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -126,45 +125,6 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-
-//  def postOtrImageData(conv: ConversationData, assetId: AssetId, im: ImageData, data: LocalData, exp: EphemeralExpiration, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] = {
-//
-//    val key = im.otrKey.getOrElse(AESKey())
-//    //TODO tidy up - and remove v2 once transition period is over
-//    if (prefs.sendWithV3)
-//      uploadAssetDataV3(key, data).flatMap {
-//        case Right((UploadResponse(remKey, _, token), sha)) =>
-//
-//          val assetKey = AssetKey(Right(remKey), token, key, sha)
-//          def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.Asset(Proto.Asset.Original(Mime(im.mime), im.size, None, Some(AssetMetaData.Image(Dim2(im.width, im.height), Some(im.tag))), None), UploadDone(assetKey)))
-//
-//          //TODO copy remoteKey to ImageData??
-//          val updated = im.copy(otrKey = Some(key), sha256 = Some(sha), sent = true)
-//          for {
-//            post <- postOtrMessage(conv.id, conv.remoteId, proto(sha), recipients).mapRight(d => d)
-//            _ <- cache.addStream(updated.cacheKey, data.inputStream)
-//            _ <- assets.updateImageAsset(assetId, conv.remoteId, updated)
-//          } yield post
-//
-//        case Left(er) => Future.successful(Left(er))
-//      }
-//    else {
-//      def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
-//      postAssetDataV2(conv, key, proto, data, nativePush, recipients).future flatMap {
-//        case Right((AssetKey(Left(id), _, _, sha), time)) =>
-//          val updated = im.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
-//          cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
-//            assets.updateImageAsset(assetId, conv.remoteId, updated).map { data =>
-//              verbose(s"OTR image uploaded: $data")
-//              Right(time)
-//            }
-//          }
-//        case Right((k, _)) => Future successful Left(ErrorResponse.internalError(s"Unexpected asset key: $k")) // FIXME
-//        case Left(err) => Future successful Left(err)
-//      }
-//    }
-//  }
-
   def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]] =
     CancellableFuture.lift(service.clients.getSelfClient).flatMap {
       case Some(otrClient) =>
@@ -193,6 +153,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
           var imageId = Option.empty[RAssetId]
           var assetKey = Option.empty[RemoteData]
           val message = createMsg(sha)
+          verbose(s"Sending message: $message")
           postEncryptedMessage(conv.id, message, recipients = recipients) { (content, retry) =>
             val meta = new OtrAssetMetadata(otrClient.id, content, nativePush, inline)
             val upload = imageId match {
