@@ -21,7 +21,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
-import com.waz.model.AssetMetaData.{HasDimensions, HasDuration}
+import com.waz.model.AssetMetaData.{HasDimensions, HasDuration, Loudness}
 import com.waz.model.{Mime, _}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, Content, MediaKey, UnauthenticatedContent}
@@ -36,7 +36,7 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
   import Asset._
   import com.waz.threading.Threading.Implicits.Ui
 
-  protected var asset = AnyAssetData.Empty
+  protected var asset = AssetData.Empty
   protected var status = api.AssetStatus.UPLOAD_NOT_STARTED
 
   addLoader(_.assets.assetSignal(id)) {
@@ -80,7 +80,7 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
     else callback.onLoadFailed()
 
   private def durationSignal(zms: ZMessaging): Signal[Duration] = zms.assetsStorage.signal(id) map {
-    case AnyAssetData(_, _, _, _, _, Some(HasDuration(duration)), _, _, _, _, _) => duration
+    case AssetData.WithDuration(duration) => duration
     case _ => Duration.ZERO
   }
 
@@ -96,7 +96,7 @@ object Asset {
   private implicit val logTag: LogTag = logTagFor[Asset]
 
   object Empty extends BaseAsset {
-    protected override def asset = AnyAssetData.Empty
+    protected override def asset = AssetData.Empty
     override def getId: String = asset.id.str
     override def isEmpty: Boolean = true
     override def getDuration: Duration = Duration.ZERO
@@ -121,15 +121,15 @@ object Asset {
 }
 
 abstract class BaseAsset extends api.Asset with UiObservable {
-  protected def asset: AnyAssetData
+  protected def asset: AssetData
 
   override def getName: String = asset.name getOrElse ""
-  override def getMimeType: String = asset.mimeType.orDefault.str
-  override def isVideo: Boolean = cond(asset.mimeType.orDefault) { case Mime.Video() => true }
-  override def isAudio: Boolean = cond(asset.mimeType.orDefault) { case Mime.Audio() => true }
+  override def getMimeType: String = asset.mime.orDefault.str
+  override def isVideo: Boolean = cond(asset.mime.orDefault) { case Mime.Video() => true }
+  override def isAudio: Boolean = cond(asset.mime.orDefault) { case Mime.Audio() => true }
   override def getSizeInBytes: Long = asset.sizeInBytes
   override def getStatus: api.AssetStatus = asset.status.status
-  override def getAudioOverview: api.AudioOverview = AudioOverview(asset.preview.collect { case AssetPreviewData.Loudness(levels) => levels })
+  override def getAudioOverview: api.AudioOverview = AudioOverview(asset.metaData.collect { case AssetMetaData.Audio(_, Some(Loudness(levels))) => levels })
 }
 
 class PlaybackControls(key: MediaKey, content: Content, durationSource: ZMessaging => Signal[Duration])(implicit ui: UiModule) extends api.PlaybackControls with UiObservable with SignalLoading {

@@ -30,6 +30,7 @@ import org.threeten.bp.{Duration, Instant}
 import scala.collection.generic._
 import scala.language.{higherKinds, implicitConversions}
 import scala.reflect.ClassTag
+import scala.util.Try
 
 trait JsonDecoder[A] { self =>
   def apply(implicit js: JSONObject): A
@@ -115,6 +116,8 @@ object JsonDecoder {
   implicit def decodeDuration(s: Symbol)(implicit js: JSONObject): Duration = Duration.ofMillis(js.getLong(s.name))
   implicit def decodeLocale(s: Symbol)(implicit js: JSONObject): Option[Locale] = withDefault(s, None, o => Locales.bcp47.localeFor(o.getString(s.name)))
   implicit def decodeUid(s: Symbol)(implicit js: JSONObject): Uid = Uid(js.getString(s.name))
+
+  implicit def decodeOptObject(s: Symbol)(implicit js: JSONObject): Option[JSONObject] = Try(js.getJSONObject(s.name)).toOption
   implicit def decodeOptString(s: Symbol)(implicit js: JSONObject): Option[String] = if (js.has(s.name)) { if(js.isNull(s.name)) Some("") else Some(js.getString(s.name)) } else None
   implicit def decodeOptInt(s: Symbol)(implicit js: JSONObject): Option[Int] = opt(s, _.getInt(s.name))
   implicit def decodeOptLong(s: Symbol)(implicit js: JSONObject): Option[Long] = opt(s, _.getLong(s.name))
@@ -122,6 +125,7 @@ object JsonDecoder {
   implicit def decodeOptFloat(s: Symbol)(implicit js: JSONObject): Option[Float] = opt(s, _.getDouble(s.name).toFloat)
   implicit def decodeOptUid(s: Symbol)(implicit js: JSONObject): Option[Uid] = opt(s, js => Uid(js.getString(s.name)))
   implicit def decodeOptAssetId(s: Symbol)(implicit js: JSONObject): Option[AssetId] = opt(s, js => AssetId(js.getString(s.name)))
+  implicit def decodeOptRAssetId(s: Symbol)(implicit js: JSONObject): Option[RAssetId] = opt(s, js => RAssetId(js.getString(s.name)))
   implicit def decodeOptRConvId(s: Symbol)(implicit js: JSONObject): Option[RConvId] = opt(s, js => RConvId(js.getString(s.name)))
   implicit def decodeOptMessageId(s: Symbol)(implicit js: JSONObject): Option[MessageId] = opt(s, js => MessageId(js.getString(s.name)))
   implicit def decodeOptUtcDate(s: Symbol)(implicit js: JSONObject): Option[Date] = opt(s, decodeUtcDate(s)(_))
@@ -154,7 +158,7 @@ object JsonDecoder {
   implicit def decodeConvId(s: Symbol)(implicit js: JSONObject): ConvId = ConvId(js.getString(s.name))
   implicit def decodeRConvId(s: Symbol)(implicit js: JSONObject): RConvId = RConvId(js.getString(s.name))
   implicit def decodeAssetId(s: Symbol)(implicit js: JSONObject): AssetId = AssetId(js.getString(s.name))
-  implicit def decodeRAssetDataId(s: Symbol)(implicit js: JSONObject): RAssetDataId = RAssetDataId(js.getString(s.name))
+  implicit def decodeRAssetId(s: Symbol)(implicit js: JSONObject): RAssetId = RAssetId(js.getString(s.name))
   implicit def decodeMessageId(s: Symbol)(implicit js: JSONObject): MessageId = MessageId(js.getString(s.name))
 
   implicit def decodeId[A](s: Symbol)(implicit js: JSONObject, id: Id[A]): A = id.decode(js.getString(s.name))

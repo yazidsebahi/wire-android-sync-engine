@@ -24,6 +24,7 @@ import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
+import com.waz.model.CacheKey
 import com.waz.service.{NetworkModeService, PreferenceService}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -52,8 +53,8 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
   private implicit val dispatcher = new SerialDispatchQueue(name = "DownloaderService")
   private implicit val ev = EventContext.Global
 
-  private val downloads = new mutable.HashMap[String, DownloadEntry]()
-  private val active = new mutable.HashSet[String]
+  private val downloads = new mutable.HashMap[CacheKey, DownloadEntry]()
+  private val active = new mutable.HashSet[CacheKey]
   private val queue = new DownloadQueue
 
   private val onAdded = EventStream[DownloadEntry]()
@@ -66,17 +67,15 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 
   downloadEnabled.disableAutowiring()
 
-  def getDownload(key: String): Signal[Option[DownloadEntry]] =
+  def getDownload(key: CacheKey): Signal[Option[DownloadEntry]] =
     new AggregatingSignal[DownloadEntry, Option[DownloadEntry]](onAdded.filter(_.req.cacheKey == key), Future(downloads.get(key)), { (_, added) => Some(added) })
 
-  def getDownloadState(key: String): Signal[ProgressData] = getDownload(key) flatMap {
+  def getDownloadState(key: CacheKey): Signal[ProgressData] = getDownload(key) flatMap {
     case Some(download) => download.state
     case None => Signal(ProgressData.Unknown)
   }
 
-  def cancel(req: DownloadRequest): Future[Unit] = cancel(req.cacheKey)
-
-  def cancel(key: String): Future[Unit] = Future {
+  def cancel(key: CacheKey): Future[Unit] = Future {
     verbose(s"cancel($key)")
     downloads.remove(key) foreach { _.cancel() }
     active.remove(key)

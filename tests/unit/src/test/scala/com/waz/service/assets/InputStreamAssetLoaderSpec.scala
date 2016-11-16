@@ -114,5 +114,5 @@ class InputStreamAssetLoaderSpec extends FeatureSpec with Matchers with OptionVa
 
   lazy val global = new MockGlobalModule()
   lazy val loader = global.streamLoader
-  def request(asset: impl.AssetForUpload) = AssetFromInputStream(asset.id.str, () => asset.openDataStream(global.context))
+  def request(asset: impl.AssetForUpload) = AssetFromInputStream(asset.cacheKey, () => asset.openDataStream(global.context))
 }

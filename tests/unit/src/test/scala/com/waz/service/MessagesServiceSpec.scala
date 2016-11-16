@@ -24,6 +24,8 @@ import com.waz.ZLog.LogTag
 import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.api.impl.ErrorResponse.internalError
+import com.waz.model.AssetData.RemoteData
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
@@ -142,8 +144,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime(),
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
       )
 
       Await.ready(messages.processEvents(conv, events), timeout)
@@ -156,12 +157,12 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("medium", 100, 100, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
       )
       Await.ready(messages.processEvents(conv, events), timeout)
 
       val events1 = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), ImageAsset("preview", 10, 10, 100, 100, "image/jpg", 0, None, None)), RAssetDataId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
       )
       Await.ready(messages.processEvents(conv, events1), timeout)
 
@@ -175,7 +176,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, None), UploadInProgress))).withCurrentLocalTime()
+        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(mime = Mime("text/txt"), sizeInBytes = 100, status = UploadInProgress)))).withCurrentLocalTime()
       )
 
       Await.ready(messages.processEvents(conv, events), timeout)
@@ -186,7 +187,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       msg.msgType shouldEqual Message.Type.ANY_ASSET
 
       Await.ready(messages.processEvents(conv, Seq(
-        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Asset(UploadCancelled))).withCurrentLocalTime()
+        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(status = UploadCancelled)))).withCurrentLocalTime()
       )), timeout)
 
       listMessages(convId) should have size 3
@@ -197,7 +198,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, None), UploadInProgress))).withCurrentLocalTime()
+        GenericMessageEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(mime = Mime("text/txt"), sizeInBytes = 100, status = UploadInProgress)))).withCurrentLocalTime()
       )
 
       messages.processEvents(conv, events).await()
@@ -256,27 +257,27 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("Receive initial file asset event") {
       delMessages(convId)
-      val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadInProgress))
+      val msg = GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(id = assetId, mime = Mime("text/txt"), sizeInBytes = 100, status = UploadInProgress)))
       val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, user2.id, msg)
 
       messages.processEvents(conv, Seq(event)).futureValue
       listMessages(convId) should have size 1
       listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), firstMessage = true, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
-      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, None, AssetStatus.UploadInProgress, event.time.instant))
+      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AssetData(assetId, convId = Some(conv.remoteId), mime = Mime("text/txt"), sizeInBytes = 100L, name = Some("file"), status = AssetStatus.UploadInProgress))
     }
 
     scenario("Receive full file asset event") {
       delMessages(convId)
-      val dataId = RAssetDataId()
-      val key = AESKey()
-      val sha = Sha256(AESUtils.randomKey().bytes)
-      val msg = GenericMessage(Uid(assetId.str), Asset(Original(Mime("text/txt"), 100, Some("file")), UploadDone(AssetKey(Left(dataId), None, key, sha))))
+      val dataId = RAssetId()
+      val key = Some(AESKey())
+      val sha = Some(Sha256(AESUtils.randomKey().bytes))
+      val msg = GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(id = assetId, mime = Mime("text/txt"), sizeInBytes = 100L, name = Some("file")).copyWithRemoteData(RemoteData(Some(dataId), None, key, sha))))
       val event = GenericAssetEvent(Uid(), conv.remoteId, new Date(), user2.id, msg, dataId, None)
 
       messages.processEvents(conv, Seq(event)).futureValue
       listMessages(convId) should have size 1
       listMessages(convId).head shouldEqual MessageData(MessageId(assetId.str), convId, Message.Type.ANY_ASSET, event.from, Nil, protos = Seq(msg), firstMessage = true, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT)
-      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AnyAssetData(assetId, conv.remoteId, Mime("text/txt"), 100, Some("file"), None, None, None, None, AssetStatus.UploadDone(AssetKey(Left(dataId), None, key, sha)), event.time.instant))
+      service.assetsStorage.get(assetId).futureValue shouldEqual Some(AssetData(id = assetId, convId = Some(conv.remoteId), mime = Mime("text/txt"), sizeInBytes = 100L, name = Some("file")).copyWithRemoteData(RemoteData(Some(dataId), None, key, sha)))
     }
   }
 
@@ -510,14 +511,14 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("add asset message") {
       val conv = addGroup()
-      val asset = AssetId()
-      val msg = Await.result(messages.addImageMessage(conv.id, asset, 10, 20), timeout)
+      val asset = AssetData()
+      val msg = Await.result(messages.addAssetMessage(conv.id, asset), timeout)
       msg.convId shouldEqual conv.id
 
       val msgs = listMessages(conv.id)
       msgs should have size 1
       msgs.head shouldEqual msg.copy(firstMessage = true)
-      msgs.head.id shouldEqual MessageId(asset.str)
+      msgs.head.id shouldEqual MessageId(asset.id.str)
     }
   }
 

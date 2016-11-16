@@ -54,7 +54,13 @@ object Mime {
   }
 
   object Image {
-    val PNG = Mime("image/png")
+    val Gif     = Mime("image/gif")
+    val Jpg     = Mime("image/jpeg")
+    val Png     = Mime("image/png")
+    val WebP    = Mime("image/webp")
+    val Bmp     = Mime("image/bmp")
+    val Tiff    = Mime("image/tiff")
+    val Unknown = Mime("image/*")
 
     def unapply(mime: Mime): Boolean = mime.str.startsWith("image/")
   }
@@ -71,7 +77,7 @@ object Mime {
     val WAV = Mime("audio/wav")
     val PCM = Mime("audio/pcm-s16le;rate=44100;channels=1")
 
-    def unapply(mime: Mime): Boolean = supported(mime)
+    def unapply(mime: Mime): Boolean = mime.str.startsWith("audio/")//supported(mime)
 
     val supported = Set(MP3, Mime("audio/mpeg3"), Mime("audio/mpeg"), MP4, Mime("audio/x-m4a"), AAC, `3GPP`, AMR_NB, AMR_WB, Ogg, FLAC, WAV)
   }

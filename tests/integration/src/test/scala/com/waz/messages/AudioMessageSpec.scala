@@ -23,11 +23,12 @@ import akka.pattern.ask
 import com.waz.api._
 import com.waz.api.impl.DoNothingAndProceed
 import com.waz.cache._
+import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.otr.ClientId
 import com.waz.model.{Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
 import com.waz.service
-import com.waz.service.assets.PreviewService
+import com.waz.service.assets.MetaDataService
 import com.waz.service.{UserModule, ZMessagingFactory}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
@@ -111,17 +112,16 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   override val provisionFile: String = "/two_users_connected.json"
 
-  @volatile private var isAudioMessageFromTest = Set.empty[String]
+  @volatile private var isAudioMessageFromTest = Set.empty[CacheKey]
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
     override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
       new ApiZMessaging(clientId, user) {
-        override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
-          override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetPreviewData]] = (mime, data) match {
+        override lazy val assetMetaData = new MetaDataService(context, cache, assetsStorage, assets, assetGenerator) {
+          override def loadMetaData(asset: AssetData, data: LocalData): CancellableFuture[Option[AssetMetaData]] = (asset.mime, data) match {
             case (Mime.Audio(), entry: CacheEntry) if isAudioMessageFromTest(entry.data.key) =>
-              CancellableFuture(Some(AssetPreviewData.Loudness(levels.toVector)))
-            case _ =>
-              super.loadPreview(id, mime, data)
+              CancellableFuture(Some(AssetMetaData.Audio(audioDuration, Some(Loudness(levels.toVector)))))
+            case _ => super.loadMetaData(asset, data)
           }
         }
       }

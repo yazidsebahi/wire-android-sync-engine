@@ -21,7 +21,7 @@ import com.waz.api
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.{JSONException, JSONObject}
 
-sealed abstract class AssetStatus(val status: api.AssetStatus, val key: Option[AssetKey] = None)
+sealed abstract class AssetStatus(val status: api.AssetStatus)
 object AssetStatus {
   import JsonDecoder._
   import api.AssetStatus._
@@ -33,14 +33,14 @@ object AssetStatus {
   case object MetaDataSent extends AssetStatus(META_DATA_SENT)
   case object PreviewSent extends AssetStatus(PREVIEW_SENT)
   case object UploadInProgress extends AssetStatus(UPLOAD_IN_PROGRESS)
-  case class UploadDone(uploaded: AssetKey) extends AssetStatus(UPLOAD_DONE, Some(uploaded))
+  case object UploadDone extends AssetStatus(UPLOAD_DONE)
   case object UploadCancelled extends AssetStatus(UPLOAD_CANCELLED) with Sync
   case object UploadFailed extends AssetStatus(UPLOAD_FAILED) with Sync
-  case class DownloadFailed(uploaded: AssetKey) extends AssetStatus(DOWNLOAD_FAILED, Some(uploaded))
+  case object DownloadFailed extends AssetStatus(DOWNLOAD_FAILED)
 
   implicit lazy val Order: Ordering[AssetStatus] = Ordering.by(_.status)
 
-  def unapply(st: AssetStatus): Option[(api.AssetStatus, Option[AssetKey])] = Some((st.status, st.key))
+  def unapply(st: AssetStatus): Option[api.AssetStatus] = Some(st.status)
 
   implicit lazy val AssetStatusDecoder: JsonDecoder[AssetStatus] = new JsonDecoder[AssetStatus] {
     override def apply(implicit js: JSONObject): AssetStatus = AssetStatusCodec.decode('status) match {
@@ -48,19 +48,18 @@ object AssetStatus {
       case META_DATA_SENT       => MetaDataSent
       case PREVIEW_SENT         => PreviewSent
       case UPLOAD_IN_PROGRESS   => UploadInProgress
-      case UPLOAD_DONE          => UploadDone(JsonDecoder[AssetKey]('key))
+      case UPLOAD_DONE          => UploadDone
       case UPLOAD_CANCELLED     => UploadCancelled
       case UPLOAD_FAILED        => UploadFailed
-      case DOWNLOAD_FAILED      => DownloadFailed(JsonDecoder[AssetKey]('key))
-      case DOWNLOAD_DONE        => UploadDone(JsonDecoder[AssetKey]('key)) // this will never be used in AssetData
-      case DOWNLOAD_IN_PROGRESS => UploadDone(JsonDecoder[AssetKey]('key)) // this will never be used in AssetData
+      case DOWNLOAD_FAILED      => DownloadFailed
+      case DOWNLOAD_DONE        => UploadDone // this will never be used in AssetData
+      case DOWNLOAD_IN_PROGRESS => UploadDone // this will never be used in AssetData
     }
   }
 
   implicit lazy val AssetStatusEncoder: JsonEncoder[AssetStatus] = new JsonEncoder[AssetStatus] {
     override def apply(data: AssetStatus): JSONObject = JsonEncoder { o =>
       o.put("status", AssetStatusCodec.encode(data.status))
-      data.key.foreach(c => o.put("key", JsonEncoder.encode(c)))
     }
   }
 

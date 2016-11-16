@@ -21,6 +21,8 @@ import android.database.Cursor
 import android.database.DatabaseUtils.queryNumEntries
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.Type._
 import com.waz.api.{EphemeralExpiration, Message}
@@ -70,7 +72,6 @@ case class MessageData(id: MessageId,
        | protos:        ${protos.toString().replace("\n", "")}
        | localTime:     $localTime
        | other fields:  $content, $firstMessage, $members, $recipient, $email, $name, $state, $time, $editTime, $ephemeral, $expiryTime, $expired
-       |
     """.stripMargin
 
 
@@ -94,21 +95,15 @@ case class MessageData(id: MessageId,
     case _ => Map.empty
   }
 
-  lazy val imageDimensions: Option[Dim2] = msgType match {
-    case Message.Type.ASSET =>
-      protos.collectFirst {
-        case GenericMessageContent(Asset.WithDimensions(d)) => d
-        case GenericMessageContent(ImageAsset(_, _, _, w, h, _, _, _, _)) => Dim2(w, h)
-      } orElse {
-        content.headOption.collect {
-          case MessageContent(_, _, _, _, Some(_), w, h, _, _) => Dim2(w, h)
-        }
-      }
-    case _ =>
-      protos.reverseIterator.collectFirst {
-        case GenericMessageContent(Asset(Some(Asset.Original(_, _, _, Some(HasDimensions(d)), _)), _, _)) => d
-        case GenericMessageContent(Asset(_, Some(Asset.Preview(_, _, _, _, Some(HasDimensions(d)))), _)) => d
-      }
+  lazy val imageDimensions: Option[Dim2] = {
+    val dims = protos.collectFirst {
+      case GenericMessageContent(Asset(AssetData.WithDimensions(d), _)) => d
+      case GenericMessageContent(ImageAsset(AssetData.WithDimensions(d))) => d
+    } orElse content.headOption.collect {
+      case MessageContent(_, _, _, _, Some(_), w, h, _, _) => Dim2(w, h)
+    }
+    verbose(s"dims $dims from protos: $protos")
+    dims
   }
 
   lazy val location =
@@ -460,7 +455,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
   object IsAsset {
     def apply(tpe: Message.Type): Boolean = unapply(tpe)
     def unapply(tpe: Message.Type): Boolean = tpe match {
-      case ANY_ASSET | VIDEO_ASSET | AUDIO_ASSET => true
+      case ANY_ASSET | VIDEO_ASSET | AUDIO_ASSET | ASSET => true
       case _ => false
     }
   }

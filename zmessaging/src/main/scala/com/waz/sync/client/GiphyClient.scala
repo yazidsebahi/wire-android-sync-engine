@@ -19,15 +19,15 @@ package com.waz.sync.client
 
 import java.net.URLEncoder
 
+import android.net.Uri
 import com.waz.ZLog._
-import com.waz.model.ImageData
+import com.waz.model.{AssetData, AssetMetaData, Dim2, Mime}
 import com.waz.threading.CancellableFuture
-import com.waz.utils.{LoggedTry, JsonDecoder}
+import com.waz.utils.{JsonDecoder, LoggedTry}
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
 import org.json.JSONObject
 
-import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -35,15 +35,15 @@ class GiphyClient(netClient: ZNetClient) {
   import GiphyClient._
   import com.waz.threading.Threading.Implicits.Background
 
-  def loadRandom(): CancellableFuture[Seq[ImageData]] =
+  def loadRandom(): CancellableFuture[(Option[AssetData], AssetData)] =
     netClient(Request.Get(path = RandomGifPath)) map {
       case Response(SuccessHttpStatus(), RandomGiphyResponse(images), _) => images
       case resp =>
         warn(s"unexpected response for load random: $resp")
-        Nil
+        (None, AssetData.Empty)
     }
 
-  def loadTrending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[Seq[ImageData]]] =
+  def loadTrending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[(Option[AssetData], AssetData)]] =
     netClient(Request.Get(path = trendingPath(offset, limit))) map {
       case Response(SuccessHttpStatus(), SearchGiphyResponse(images), _) => images
       case resp =>
@@ -52,7 +52,7 @@ class GiphyClient(netClient: ZNetClient) {
     }
 
 
-  def search(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[Seq[ImageData]]] =
+  def search(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[(Option[AssetData], AssetData)]] =
     netClient(Request.Get(path = searchPath(keyword, offset, limit))) map {
       case Response(SuccessHttpStatus(), SearchGiphyResponse(images), _) => images
       case resp =>
@@ -72,6 +72,16 @@ object GiphyClient {
 
   def trendingPath(offset: Int, limit: Int) = s"$BasePath/trending?offset=$offset&limit=$limit"
 
+  implicit lazy val GiphyAssetOrdering: Ordering[AssetData] = new Ordering[AssetData] {
+    override def compare(x: AssetData, y: AssetData): Int = {
+      if (x.dimensions.width == y.dimensions.width) {
+        if (x.tag == "preview" || y.tag == "medium") -1
+        else if (x.tag == "medium" || y.tag == "preview") 1
+        else Ordering.Int.compare(x.size.toInt, y.size.toInt)
+      } else Ordering.Int.compare(x.dimensions.width, y.dimensions.width)
+    }
+  }
+
   trait GiphyResponse[T] { self =>
 
     def decode(js: JSONObject): Option[T]
@@ -89,49 +99,70 @@ object GiphyClient {
     }
   }
 
-  object RandomGiphyResponse extends GiphyResponse[Seq[ImageData]] {
+  object RandomGiphyResponse extends GiphyResponse[(Option[AssetData], AssetData)] {
 
-    lazy val Decoder: JsonDecoder[Seq[ImageData]] = new JsonDecoder[Seq[ImageData]] {
+    lazy val Decoder: JsonDecoder[(Option[AssetData], AssetData)] = new JsonDecoder[(Option[AssetData], AssetData)] {
       import JsonDecoder._
 
-      override def apply(implicit js: JSONObject): Seq[ImageData] = {
-        Seq(
-          ImageData(ImageData.Tag.Medium, "image/gif", 'image_width, 'image_height, 'image_width, 'image_height, url = 'image_url),
-          ImageData(ImageData.Tag.Medium, "image/gif", 'fixed_height_downsampled_width, 'fixed_height_downsampled_height, 'fixed_height_downsampled_width, 'fixed_height_downsampled_height, url = 'fixed_height_downsampled_url),
-          ImageData(ImageData.Tag.Medium, "image/gif", 'fixed_width_downsampled_width, 'fixed_width_downsampled_height, 'fixed_width_downsampled_width, 'fixed_width_downsampled_height, url = 'fixed_width_downsampled_url),
-          ImageData(ImageData.Tag.Preview, "image/gif", 'fixed_height_small_width, 'fixed_height_small_height, 'fixed_height_small_width, 'fixed_height_small_height, url = 'fixed_height_small_still_url),
-          ImageData(ImageData.Tag.Preview, "image/gif", 'fixed_width_small_width, 'fixed_width_small_height, 'fixed_width_small_width, 'fixed_width_small_height, url = 'fixed_width_small_still_url)
-        )
+      override def apply(implicit js: JSONObject): (Option[AssetData], AssetData) = {
+        val sorted = Seq(
+          ("medium",  'image_width,                     'image_height,                    'image_url),
+          ("medium",  'fixed_height_downsampled_width,  'fixed_height_downsampled_height, 'fixed_height_downsampled_url),
+          ("medium",  'fixed_width_downsampled_width,   'fixed_width_downsampled_height,  'fixed_width_downsampled_url),
+          ("preview", 'fixed_height_small_width,        'fixed_height_small_height,       'fixed_height_small_still_url),
+          ("preview", 'fixed_width_small_width,         'fixed_width_small_height,        'fixed_width_small_still_url)
+        ).map {
+          case (tag, w, h, url) =>
+            AssetData(
+              mime = Mime.Image.Gif,
+              metaData = Some(AssetMetaData.Image(Dim2(decodeInt(w), decodeInt(h)), tag)),
+              source = Some(decodeUri(url))
+            )
+        }.sorted
+
+        val preview = sorted.headOption
+        val medium = sorted.lastOption.map(_.copy(previewId = preview.map(_.id))).getOrElse(AssetData.Empty)
+        (preview, medium)
       }
     }
 
-    override def decode(js: JSONObject): Option[Seq[ImageData]] = js.getJSONObject("meta").getInt("status") match {
+    override def decode(js: JSONObject): Option[(Option[AssetData], AssetData)] = js.getJSONObject("meta").getInt("status") match {
       case 200 => Try(Decoder(js.getJSONObject("data"))).toOption
       case _ => None
     }
   }
 
-  object SearchGiphyResponse extends GiphyResponse[Seq[Seq[ImageData]]] {
+  object SearchGiphyResponse extends GiphyResponse[Seq[(Option[AssetData], AssetData)]] {
 
-    object Decoder extends JsonDecoder[Option[ImageData]] {
+    object Decoder extends JsonDecoder[Option[AssetData]] {
       import JsonDecoder._
 
-      override def apply(implicit js: JSONObject): Option[ImageData] = {
-        val url: Option[String] = 'url
-        url map (url => ImageData("", "image/gif", 'width, 'height, 'width, 'height, 'size, url = Some(url)))
+      override def apply(implicit js: JSONObject): Option[AssetData] = {
+        val uri = decodeOptString('url).map(Uri.parse)
+        uri map (uri => AssetData(mime = Mime.Image.Gif, metaData = Some(AssetMetaData.Image(Dim2('width, 'height))), sizeInBytes = 'size, source = Some(uri)))
       }
     }
 
-    def parseImage(tag: String, data: JSONObject): Option[ImageData] = Decoder(data) map (_.copy(tag = tag))
+    def parseImage(tag: String, data: JSONObject): Option[AssetData] = Decoder(data).map { a =>
+      a.copy(metaData = Some(AssetMetaData.Image(a.dimensions, tag)))
+    }
 
-    override def decode(js: JSONObject) = js.getJSONObject("meta").getInt("status") match {
-      case 200 => LoggedTry {
-        JsonDecoder.array(js.getJSONArray("data"), { (arr, index) =>
-          val images = arr.getJSONObject(index).getJSONObject("images")
-          images.keys().asInstanceOf[java.util.Iterator[String]].asScala.flatMap(size => parseImage(if (size.endsWith("_still")) ImageData.Tag.Preview else ImageData.Tag.Medium, images.getJSONObject(size))).toVector
-        })
-      } .toOption
-      case _ => None
+    override def decode(js: JSONObject) = {
+      js.getJSONObject("meta").getInt("status") match {
+        case 200 => LoggedTry {
+          JsonDecoder.array(js.getJSONArray("data"), { (arr, index) =>
+            val images = arr.getJSONObject(index).getJSONObject("images")
+
+            val assets = Seq("original_still", "original").flatMap { key =>
+              parseImage(if (key.endsWith("_still")) "preview" else "medium", images.getJSONObject(key))
+            }
+
+            val preview = assets.headOption
+            (preview, assets.lastOption.map(_.copy(previewId = preview.map(_.id))).getOrElse(AssetData.Empty))
+          })
+        } .toOption
+        case _ => None
+      }
     }
   }
 }

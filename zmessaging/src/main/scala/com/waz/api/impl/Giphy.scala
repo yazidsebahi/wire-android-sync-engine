@@ -19,7 +19,7 @@ package com.waz.api.impl
 
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.model.ImageAssetData
+import com.waz.model.AssetData
 import com.waz.service.media.GiphyService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.UiModule
@@ -28,36 +28,36 @@ class Giphy(implicit ui: UiModule) extends com.waz.api.Giphy {
   import Threading.Implicits.Background
   private implicit val tag = logTagFor[Giphy]
   
-  override def random() =
-    executeGiphyRequest((g, _, _) => g.getRandomGiphyImage)
+  override def random() = executeGiphyRequest((g, _, _) => g.getRandomGiphyImage)
 
   override def search(searchQuery: String) = executeGiphyRequest(_.searchGiphyImage(searchQuery, _, _))
 
   override def trending() = executeGiphyRequest(_.trending(_, _))
 
-  private def executeGiphyRequest(f: (GiphyService, Int, Int) => CancellableFuture[Seq[ImageAssetData]]): GiphyResults = {
+  private def executeGiphyRequest(f: (GiphyService, Int, Int) => CancellableFuture[Seq[(Option[AssetData], AssetData)]]): GiphyResults = {
     def load(offset: Int) = ui.zms.flatMap(zms => f(zms.giphy, offset, GiphyResults.PageSize)).recover {
       case e: Exception =>
         warn(s"giphy request processing failed", e)
-        Iterable.empty[ImageAssetData]
+        Iterable.empty[(Option[AssetData], AssetData)]
     }
 
     new GiphyResults(load)
   }
 }
 
-class GiphyResults(fetch: Int => CancellableFuture[Iterable[ImageAssetData]])(implicit ui: UiModule) extends com.waz.api.GiphyResults with CoreList[api.ImageAsset] with EventualReadiness {
+class GiphyResults(fetch: Int => CancellableFuture[Iterable[(Option[AssetData], AssetData)]])(implicit ui: UiModule) extends com.waz.api.GiphyResults with CoreList[api.ImageAsset] with EventualReadiness {
   import GiphyResults._
 
-  var images = IndexedSeq.empty[ImageAssetData]
-  var completed = false
+  var images     = IndexedSeq.empty[(Option[AssetData], AssetData)]
+  var completed  = false
   var loadFuture = fetchNextPage()
 
   override def get(position: Int): api.ImageAsset = {
     if (!completed && loadFuture.isCompleted && position + RefreshThreshold >= images.size)
       loadFuture = fetchNextPage()
 
-    ui.images.getLocalImageAsset(images(position))
+    val (preview, data) = images(position)
+    ui.images.getLocalImageAssetWithPreview(preview, data)
   }
 
   private def fetchNextPage() =

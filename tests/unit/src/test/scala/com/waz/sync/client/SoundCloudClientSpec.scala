@@ -18,6 +18,8 @@
 package com.waz.sync.client
 
 import com.waz.api.MediaProvider
+import com.waz.model.AssetMetaData.Image
+import com.waz.model.{AssetData, Dim2}
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
@@ -34,8 +36,9 @@ class SoundCloudClientSpec extends FeatureSpec with Matchers with OptionValues w
         case SoundCloudResponse(MediaWithImages(TrackData(MediaProvider.SOUNDCLOUD, "Jugg feat. Monty", Some(ArtistData("FettyWap1738", Some(_))), "http://soundcloud.com/harlem_fetty/jugg-feat-monty", Some(_), Some(d), true, Some("https://api.soundcloud.com/tracks/224822099/stream"), None, _), assets)) if d == Duration.ofMillis(200350) && assets.size == 2 => true
       })
 
-      val images = SoundCloudResponse.unapply(sampleTrackResponse).value.images.headOption.value.versions
-      images.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(("small", 32, 32), ("large", 100, 100), ("t500x500", 500, 500))
+      val image = SoundCloudResponse.unapply(sampleTrackResponse).value.images.headOption.value
+      image shouldEqual AssetData(metaData = Some(Image(Dim2(500, 500), "t500x500")))
+//      images.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(("small", 32, 32), ("large", 100, 100), ("t500x500", 500, 500))
     }
 
     scenario("parse playlist response") {

@@ -69,11 +69,10 @@ class OtrAssetSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
       val img = msgs.getLastMessage.getImage
       withDelay {
         img.isEmpty shouldEqual false
-        img.data.versions should  have size 2
-        img.data.versions.head.data shouldBe 'defined
+        img.data.data shouldBe 'defined
       }
 
-      val bmp = BitmapFactory.decodeStream(new ByteArrayInputStream(img.data.versions.head.data.get))
+      val bmp = BitmapFactory.decodeStream(new ByteArrayInputStream(img.data.data.get))
       bmp should not be null
       info(s"preview image size: (${bmp.getWidth}, ${bmp.getHeight})")
     }

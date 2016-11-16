@@ -24,8 +24,9 @@ import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
-import com.waz.model.{Mime, _}
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.otr.ClientId
+import com.waz.model.{Mime, _}
 import com.waz.sync.client.OtrClient._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder.{apply => _, _}
@@ -55,14 +56,18 @@ class AssetClient(netClient: ZNetClient) {
       case Left(err) => CancellableFuture successful Left(err)
     }
 
-  def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean = true): ErrorOrResponse[ImageData] = {
-    val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(image, assetId, nativePush)), new AssetDataPart(data, image.mime)), "multipart/mixed")
-
-    netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(convId), content)) {
-      case Response(SuccessHttpStatus(), PostImageDataResponse(asset), _) =>
-        debug(s"postImageAssetData completed with resp: $asset")
-        asset
+  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
+    asset match {
+      case AssetData.IsImage(_, _) =>
+        val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
+          netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(convId), content)) {
+            case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
+              debug(s"postImageAssetData completed with resp: $rId")
+              rId
+          }
+      case _ => CancellableFuture.failed(new Exception("Tried posting non image data"))
     }
+
   }
 
   def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] = {
@@ -70,13 +75,13 @@ class AssetClient(netClient: ZNetClient) {
     val content = new MultipartRequestContent(Seq(new LocalDataPart(LocalData(meta.data), meta.contentType), new AssetDataPart(data, "application/octet-stream")), "multipart/mixed")
 
     verbose(s"postOtrAsset($metadata, data: $data)")
-    netClient.withErrorHandling("postOtrAsset", Request.Post(postOtrAssetPath(convId, ignoreMissing, recipients), content))(otrAssetResponseHandler(h => RAssetDataId(h("Location").getOrElse(""))))
+    netClient.withErrorHandling("postOtrAsset", Request.Post(postOtrAssetPath(convId, ignoreMissing, recipients), content))(otrAssetResponseHandler(h => RAssetId(h("Location").getOrElse(""))))
   }
 
-  def postOtrAssetMetadata(dataId: RAssetDataId, convId: RConvId, metadata: OtrAssetMetadata, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] =
+  def postOtrAssetMetadata(dataId: RAssetId, convId: RConvId, metadata: OtrAssetMetadata, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] =
     netClient.withErrorHandling("postOtrAssetMetadata", Request.Post(postOtrAssetPath(convId, dataId, ignoreMissing, recipients), metadata))(otrAssetResponseHandler(_ => dataId))
 
-  private def otrAssetResponseHandler(assetId: Headers => RAssetDataId): PartialFunction[Response, OtrAssetResponse] = {
+  private def otrAssetResponseHandler(assetId: Headers => RAssetId): PartialFunction[Response, OtrAssetResponse] = {
     case Response(SuccessHttpStatus(), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Success(mismatch))
     case Response(HttpStatus(Status.PreconditionFailed, _), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Failure(mismatch))
   }
@@ -89,9 +94,9 @@ class AssetClient(netClient: ZNetClient) {
     val content = new MultipartRequestContent(Seq(new JsonPart(meta), new AssetDataPart(data, mime.str)), "multipart/mixed")
 
     netClient.withErrorHandling("uploadAsset", Request.Post(AssetsV3Path, content)) {
-      case Response(SuccessHttpStatus(), UploadResponseExtractor(asset), _) =>
-        debug(s"uploadAsset completed with resp: $asset")
-        asset
+      case Response(SuccessHttpStatus(), UploadResponseExtractor(resp), _) =>
+        debug(s"uploadAsset completed with resp: $resp")
+        resp
     }
   }
 }
@@ -109,13 +114,13 @@ object AssetClient {
     case object Volatile extends Retention("volatile")
   }
 
-  case class UploadResponse(key: RemoteKey, expires: Option[Instant], token: Option[AssetToken])
+  case class UploadResponse(rId: RAssetId, expires: Option[Instant], token: Option[AssetToken])
 
   case object UploadResponse {
 
     implicit object Decoder extends JsonDecoder[UploadResponse] {
       import JsonDecoder._
-      override def apply(implicit js: JSONObject): UploadResponse = UploadResponse(RemoteKey('key), decodeOptISOInstant('expires), decodeOptString('token).map(AssetToken))
+      override def apply(implicit js: JSONObject): UploadResponse = UploadResponse(RAssetId('key), decodeOptISOInstant('expires), decodeOptString('token).map(AssetToken))
     }
   }
 
@@ -131,34 +136,37 @@ object AssetClient {
     else recipients.fold(base)(uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
   }
 
-  def postOtrAssetPath(conv: RConvId, asset: RAssetDataId, ignoreMissing: Boolean, recipients: Option[Set[UserId]]) = {
+  def postOtrAssetPath(conv: RConvId, asset: RAssetId, ignoreMissing: Boolean, recipients: Option[Set[UserId]]) = {
     val base = s"/conversations/$conv/otr/assets/$asset"
     if (ignoreMissing) s"$base?ignore_missing=true"
     else recipients.fold(base)(uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
   }
 
   //TODO remove asset v2 when transition period is over
-  def getAssetPath(conv: RConvId, asset: AssetKey): String = (asset.remoteId, asset.otrKey) match {
-    case (Right(key), _)          => getAssetPathV3(key) // put asset v3 as priority
-    case (Left(id), AESKey.Empty) => getAssetPath(conv, id)
-    case (Left(id), _)            => getOtrAssetPath(conv, id)
+  def getAssetPath(remoteId: Option[RAssetId], otrKey: Option[AESKey], conv: Option[RConvId]): Option[String] = remoteId.map { rId =>
+    (conv, otrKey) match {
+      case (None, _)          => s"/assets/v3/${rId.str}"
+      case (Some(c), None)    => s"/conversations/${c.str}/assets/${rId.str}"
+      case (Some(c), Some(_)) => s"/conversations/${c.str}/otr/assets/${rId.str}"
+    }
   }
 
-  def getAssetPathV3(asset: RemoteKey) = s"$AssetsV3Path/${asset.str}"
-  def getAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/$conv/assets/$asset"
-  def getOtrAssetPath(conv: RConvId, asset: RAssetDataId) = s"/conversations/$conv/otr/assets/$asset"
+  def imageMetadata(asset: AssetData, nativePush: Boolean) = JsonEncoder { o =>
+    asset match {
+      case AssetData.IsImage(dim2, tag) =>
+        o.put("width", dim2.width)
+        o.put("height", dim2.height)
+        o.put("original_width", dim2.width)
+        o.put("original_height", dim2.height)
+        o.put("inline", asset.data.fold(false)(_.length < 10000))
+        o.put("public", true)
+        o.put("tag", tag)
+        o.put("correlation_id", asset.id)
+        o.put("nonce", asset.id)
+        o.put("native_push", nativePush)
+      case _ => new JSONObject()
+    }
 
-  def imageMetadata(image: ImageData, assetId: AssetId, nativePush: Boolean) = JsonEncoder { o =>
-    o.put("width", image.width)
-    o.put("height", image.height)
-    o.put("original_width", image.origWidth)
-    o.put("original_height", image.origHeight)
-    o.put("inline", image.data.fold(false)(_.length < 10000))
-    o.put("public", true)
-    o.put("tag", image.tag)
-    o.put("correlation_id", assetId)
-    o.put("nonce", assetId)
-    o.put("native_push", nativePush)
   }
 
   case class OtrAssetMetadata(sender: ClientId, recipients: EncryptedContent, nativePush: Boolean = true, inline: Boolean = false)
@@ -178,22 +186,12 @@ object AssetClient {
     }
   }
 
-  case class OtrAssetResponse(assetId: RAssetDataId, result: MessageResponse)
+  case class OtrAssetResponse(assetId: RAssetId, result: MessageResponse)
 
   object PostImageDataResponse {
-    def decodeAssetAddEvent(implicit js: JSONObject) = {
-      val data = js.getJSONObject("data")
-      val info = data.getJSONObject("info")
-      val mime = decodeString('content_type)(data)
+    def decodeAssetAddEvent(implicit js: JSONObject) = decodeRAssetId('id)(js.getJSONObject("data"))
 
-      def imageData(implicit js: JSONObject) =
-        new ImageData(info.getString("tag"), mime, info.getInt("width"), info.getInt("height"),
-          info.getInt("original_width"), info.getInt("original_height"), 'content_length, decodeOptId[RAssetDataId]('id), decodeOptString('data).filter(_.nonEmpty), sent = true)
-
-      imageData(data)
-    }
-
-    def unapply(response: ResponseContent): Option[ImageData] = try {
+    def unapply(response: ResponseContent): Option[RAssetId] = try {
       response match {
         case JsonObjectResponse(js) =>
           js.optString("type", "") match {

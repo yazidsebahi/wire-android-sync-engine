@@ -24,7 +24,7 @@ import android.net.{ConnectivityManager, NetworkInfo}
 import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConvId, RConvId}
+import com.waz.model.{AssetData, ConvId, RConvId}
 import com.waz.provision._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -192,7 +192,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
       val asset = pics(1).getImage
       withDelay {
-        asset.asInstanceOf[com.waz.api.impl.ImageAsset].data.versions should not be empty
+        asset.asInstanceOf[com.waz.api.impl.ImageAsset].data should not be AssetData.Empty
       }(60.seconds)
 
       withDelay {

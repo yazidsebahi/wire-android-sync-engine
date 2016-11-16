@@ -24,7 +24,6 @@ import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import android.net.Uri
 import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
@@ -39,7 +38,6 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
 import com.waz.service.PreferenceService.Pref
 import com.waz.service._
-import com.waz.service.assets.PreviewService
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.CallJoinSpy
@@ -105,12 +103,6 @@ class DeviceActor(val deviceName: String,
               CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap { _ =>
                 super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients)
               }
-          }
-
-          override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
-            override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetPreviewData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
-            override def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetPreviewData]] = pf.applyOrElse(mime, super.loadPreview(id, _: Mime, uri))
-            lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetPreviewData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetPreviewData.Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))) }
           }
         }
     }
@@ -329,6 +321,19 @@ class DeviceActor(val deviceName: String,
     case SendImageData(remoteId, bytes) =>
       withConv(remoteId) { conv =>
         zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes)))
+      }
+
+      //TODO: Dean remove after v2 transition period
+    case SetAssetToV3 =>
+      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", true) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to send with v3")
+      }
+
+    case SetAssetToV2 =>
+      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", false) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to send with v3")
       }
 
     case SendAsset(remoteId, bytes, mime, name, delay) =>

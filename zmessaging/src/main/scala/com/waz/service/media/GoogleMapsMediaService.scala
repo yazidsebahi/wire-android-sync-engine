@@ -18,7 +18,6 @@
 package com.waz.service.media
 
 import com.waz.ZLog._
-import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.model._
 import com.waz.service.media.RichMediaContentParser.GoogleMapsLocation
 import com.waz.sync.client.GoogleMapsClient
@@ -30,23 +29,17 @@ object GoogleMapsMediaService {
   val ImageDimensions = Dim2(MaxImageWidth, MaxImageWidth * 3 / 4)
   val PreviewWidth = 64
 
-  def mapImageAsset(id: AssetId, loc: com.waz.api.MessageContent.Location, dimensions: Dim2 = ImageDimensions): ImageAssetData =
+  def mapImageAsset(id: AssetId, loc: com.waz.api.MessageContent.Location, dimensions: Dim2 = ImageDimensions): AssetData =
     mapImageAsset(id, GoogleMapsLocation(loc.getLatitude.toString, loc.getLongitude.toString, loc.getZoom.toString), dimensions)
 
-  def mapImageAsset(id: AssetId, location: GoogleMapsLocation, dimensions: Dim2): ImageAssetData = {
+  def mapImageAsset(id: AssetId, location: GoogleMapsLocation, dimensions: Dim2): AssetData = {
 
     val mapWidth = math.min(MaxImageWidth, dimensions.width)
     val mapHeight = mapWidth * dimensions.height / dimensions.width
-    val previewWidth = PreviewWidth
-    val previewHeight = previewWidth * mapHeight / mapWidth
 
-    val Seq(previewPath, mediumPath) = Seq((previewWidth, previewHeight), (mapWidth, mapHeight)) map { case (w, h) =>
-      GoogleMapsClient.getStaticMapPath(location, w, h)
-    }
+    val mediumPath = GoogleMapsClient.getStaticMapPath(location, mapWidth, mapHeight)
 
-    val preview = ImageData(ImageData.Tag.Preview, Mime.Png, previewWidth, previewHeight, mapWidth, mapHeight, sent = true, proxyPath = Some(previewPath))
-    val medium  = ImageData(ImageData.Tag.Medium,  Mime.Png, mapWidth,     mapHeight,     mapWidth, mapHeight, sent = true, proxyPath = Some(mediumPath))
-
-    ImageAssetData(AssetId(), RConvId(), Seq(preview, medium))
+    //TODO Dean see if preview is still needed?
+    AssetData(mime = Mime.Image.Png, metaData = Some(AssetMetaData.Image(Dim2(mapWidth, mapHeight), "medium")), proxyPath = Some(mediumPath))
   }
 }

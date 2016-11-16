@@ -29,162 +29,117 @@ import com.waz.api.Permission
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
-import com.waz.model.AssetStatus.UploadDone
-import com.waz.model.GenericContent.Asset
-import com.waz.model.GenericContent.Asset.Original
+import com.waz.model.AssetData.IsImage
 import com.waz.model.{Mime, _}
-import com.waz.service.assets.AssetService.BitmapRequest
 import com.waz.service.assets.{AssetLoader, AssetService}
-import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
+import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.utils.IoUtils._
 import com.waz.utils.{IoUtils, Serialized, returning}
 import com.waz.{PermissionsService, bitmap}
 
 import scala.concurrent.Future
 
-class ImageLoader(val context: Context, cache: CacheService, val imageCache: MemoryImageCache,
-    bitmapLoader: BitmapDecoder, permissions: PermissionsService, assetLoader: AssetLoader) {
+class ImageLoader(val context: Context, fileCache: CacheService, val imageCache: MemoryImageCache,
+                  bitmapLoader: BitmapDecoder, permissions: PermissionsService, assetLoader: AssetLoader) {
 
   import Threading.Implicits.Background
+
   protected def tag = "User"
   private implicit val logTag: LogTag = s"${logTagFor[ImageLoader]}[$tag]"
 
-  def hasCachedBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Boolean] = {
-    val inMemory = imageCache.get(asset.id, im.tag).exists { bmp => bmp.getWidth >= req.width || (im.width > 0 && bmp.getWidth > im.width) }
-    if (inMemory) CancellableFuture.successful(true)
-    else hasCachedData(asset, im)
+  def hasCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Boolean] = {
+    val res = asset match {
+      case IsImage(dims, tag) => CancellableFuture successful imageCache.get(asset.id, req, dims.width).isDefined
+      case _ => CancellableFuture successful false
+    }
+    verbose(s"Cached bitmap for ${asset.id} with req: $req?: $res")
+    res
   }
 
-  def hasCachedData(asset: ImageAssetData, im: ImageData): CancellableFuture[Boolean] =
-    CancellableFuture { (im.data, im.uri) } flatMap {
-      case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(true)
-      case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(true)
-      case _ => CancellableFuture lift cache.getEntry(im.cacheKey).map(_.isDefined)
-    }
-
-  def loadCachedBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Bitmap] =
-    withMemoryCache(asset.id, im.tag, if (im.width == 0) req.width else req.width min im.width) {
-      loadLocalAndDecode(im)(decodeBitmap(asset.id, im.tag, req, _)) map {
-        case Some(bmp) => bmp
-        case None => throw new Exception(s"No local data for: $im")
-      }
-    }
-
-  def loadBitmap(asset: ImageAssetData, im: ImageData, req: BitmapRequest): CancellableFuture[Bitmap] =
-    Serialized(("loadBitmap", asset.id, im.tag)) {
-      // serialized to avoid cache conflicts, we don't want two same requests running at the same time
-      withMemoryCache(asset.id, im.tag, if (im.width == 0) req.width else req.width min im.width) {
-        downloadAndDecode(asset, im)(decodeBitmap(asset.id, im.tag, req, _))
-      }
-    }
-
-  private def assetImageData(asset: Asset): Option[(Mime, Dim2, AssetKey)] =
+  def hasCachedData(asset: AssetData): CancellableFuture[Boolean] =
     asset match {
-      case Asset(Some(Original(mime@Mime.Image(), _, _, _, _)), _, UploadDone(key)) => Some((mime, Dim2.Empty, key))
-      case Asset(Some(Original(mime@Mime.Image(), _, _, Some(AssetMetaData.Image(d, _)), _)), _, UploadDone(key)) => Some((mime, d, key))
-      case _ => None
-    }
-
-  def hasCachedData(asset: Asset): CancellableFuture[Boolean] =
-    assetImageData(asset) match {
-      case None => CancellableFuture successful false
-      case Some((_, _, key)) =>
-        CancellableFuture lift cache.getEntry(key.cacheKey).map(_.isDefined)
-    }
-
-  def loadCachedBitmap(asset: Asset, req: BitmapRequest): CancellableFuture[Bitmap] =
-    assetImageData(asset) match {
-      case None => CancellableFuture.failed(new Exception(s"Unexpected asset data: $asset"))
-      case Some((mime, dim, key)) =>
-        withMemoryCache(key.assetId, "", if (dim.width == 0) req.width else req.width min dim.width) {
-          loadLocalAndDecode(CancellableFuture lift cache.getEntry(key.cacheKey))(decodeBitmap(key.assetId, "", req, _)) map {
-            case Some(bmp) => bmp
-            case None => throw new Exception(s"No local data for: $asset")
-          }
+      case IsImage(_, _) =>
+        CancellableFuture {(asset.data, asset.source)} flatMap {
+          case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(true)
+          case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(true)
+          case _ => CancellableFuture lift fileCache.getEntry(asset.cacheKey).map(_.isDefined)
         }
+      case _ => CancellableFuture successful false
     }
 
-  def loadBitmap(asset: Asset, req: BitmapRequest): CancellableFuture[Bitmap] =
-    assetImageData(asset) match {
-      case None => CancellableFuture.failed(new Exception(s"Unexpected asset data: $asset"))
-      case Some((mime, dim, key)) =>
-        // serialized to avoid cache conflicts, we don't want two same requests running at the same time
-        Serialized(("loadBitmap", key.cacheKey)) {
-          withMemoryCache(key.assetId, "", if (dim.width == 0) req.width else req.width min dim.width) {
-            def load = CancellableFuture lift cache.getEntry(key.cacheKey)
-            def download = assetLoader.downloadAssetData(ImageAssetRequest(key.cacheKey, RConvId.Empty, key, mime))
-            downloadAndDecode(load, download, decodeBitmap(key.assetId, "", req, _), asset)
-          }
-        }
+  def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
+    verbose(s"load cached bitmap for: ${asset.id} and req: $req")
+    withMemoryCache(asset.id, req, dims.width) {
+      loadLocalAndDecode(asset)(decodeBitmap(asset.id, req, _)) map {
+        case Some(bmp) => bmp
+        case None => throw new Exception(s"No local data for: $asset")
+      }
     }
+  }
 
-  def loadCachedGif(asset: ImageAssetData, im: ImageData): CancellableFuture[Gif] =
-    loadLocalAndDecode(im)(decodeGif) map {
+  def loadBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
+    verbose(s"loadBitmap for ${asset.id} and req: $req")
+    Serialized(("loadBitmap", asset.id)) {
+      // serialized to avoid cache conflicts, we don't want two same requests running at the same time
+      withMemoryCache(asset.id, req, dims.width) {
+        downloadAndDecode(asset)(decodeBitmap(asset.id, req, _))
+      }
+    }
+  }
+
+  def loadCachedGif(asset: AssetData): CancellableFuture[Gif] = ifIsImage(asset) { _ =>
+    loadLocalAndDecode(asset)(decodeGif) map {
       case Some(gif) => gif
-      case None => throw new Exception(s"No local data for: $im")
+      case None => throw new Exception(s"No local data for: $asset")
     }
+  }
 
-  def loadGif(asset: ImageAssetData, im: ImageData): CancellableFuture[Gif] =
-    Serialized(("loadBitmap", asset.id, im.tag)) {
-      downloadAndDecode(asset, im)(decodeGif)
+  def loadGif(asset: AssetData): CancellableFuture[Gif] = ifIsImage(asset) { _ =>
+    Serialized(("loadBitmap", asset.id, tag)) {
+      downloadAndDecode(asset)(decodeGif)
     }
+  }
 
-  def loadRawCachedData(im: ImageData, convId: RConvId) = loadLocalData(im)
+  def loadRawCachedData(asset: AssetData) = ifIsImage(asset)(_ => loadLocalData(asset))
 
-  def loadRawImageData(im: ImageData, convId: RConvId) =
-    loadLocalData(im) flatMap {
-      case None => downloadImageData(im, convId)
+  def loadRawImageData(asset: AssetData) = ifIsImage(asset) { _ =>
+    verbose(s"loadRawImageData: assetId: $asset")
+    loadLocalData(asset) flatMap {
+      case None => downloadImageData(asset)
       case Some(data) => CancellableFuture.successful(Some(data))
     }
+  }
 
-  def loadRawImageData(key: AssetKey, mime: Mime) =
-    CancellableFuture lift cache.getEntry(key.cacheKey) flatMap {
-      case None => assetLoader.downloadAssetData(ImageAssetRequest(key.cacheKey, RConvId.Empty, key, mime))
-      case Some(data) => CancellableFuture.successful(Some(data))
-    }
-
-  def saveImageToGallery(image: ImageAssetData): Future[Option[Uri]] =
-    if (image.versions.isEmpty) Future.successful(None)
-    else loadRawImageData(image.versions.last, image.convId).future flatMap {
+  def saveImageToGallery(asset: AssetData): Future[Option[Uri]] = ifIsImage(asset) { _ =>
+    loadRawImageData(asset).future flatMap {
       case Some(data) =>
-        saveImageToGallery(data, Mime(image.versions.last.mime))
+        saveImageToGallery(data, asset.mime)
       case None =>
-        error(s"No image data found for: $image")
+        error(s"No image data found for: $asset")
         Future.successful(None)
     }
-
-  def saveImageToGallery(image: Asset): Future[Option[Uri]] =
-    image match {
-      case Asset(Some(Original(mime, _, _, _, _)), _, UploadDone(key)) =>
-        loadRawImageData(key, mime).future flatMap {
-          case Some(data) => saveImageToGallery(data, mime)
-          case None =>
-            error(s"No image data found for: $image")
-            Future successful None
-        }
-      case _ => Future successful None
-    }
+  }
 
   private def saveImageToGallery(data: LocalData, mime: Mime) =
-    permissions.requiring(Set(Permission.WRITE_EXTERNAL_STORAGE), delayUntilProviderIsSet = false) (
-      {
-        warn("permission to save image to gallery denied")
-        Future successful None
-      },
-      Future {
-        val newFile = AssetService.saveImageFile(mime)
-        IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
-        val uri = Uri.fromFile(newFile)
-        context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, uri))
-        Some(uri)
-      } (Threading.IO)
+    permissions.requiring(Set(Permission.WRITE_EXTERNAL_STORAGE), delayUntilProviderIsSet = false)(
+    {
+      warn("permission to save image to gallery denied")
+      Future successful None
+    },
+    Future {
+      val newFile = AssetService.saveImageFile(mime)
+      IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
+      val uri = Uri.fromFile(newFile)
+      context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, uri))
+      Some(uri)
+    }(Threading.IO)
     )
 
-  private def downloadAndDecode[A](asset: ImageAssetData, im: ImageData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[A] =
-    downloadAndDecode[A](loadLocalData(im), downloadImageData(im, asset.convId), decode, im)
+  private def downloadAndDecode[A](asset: AssetData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[A] =
+    downloadAndDecode[A](loadLocalData(asset), downloadImageData(asset), decode, asset)
 
   private def downloadAndDecode[A](load: => CancellableFuture[Option[LocalData]], download: => CancellableFuture[Option[LocalData]], decode: LocalData => CancellableFuture[A], im: Any): CancellableFuture[A] = {
 
@@ -216,13 +171,18 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
     }
   }
 
+  private def ifIsImage[A](asset: AssetData)(f: Dim2 => A) = asset match {
+    case IsImage(dims, _) => f(dims)
+    case _ => throw new IllegalArgumentException(s"Asset is not an image: $asset")
+  }
+
   private def isLocalUri(uri: Uri) = uri.getScheme match {
     case ContentResolver.SCHEME_FILE | ContentResolver.SCHEME_ANDROID_RESOURCE => true
     case _ => false
   }
 
-  private def loadLocalAndDecode[A](im: ImageData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[Option[A]] =
-    loadLocalAndDecode(loadLocalData(im))(decode)
+  private def loadLocalAndDecode[A](asset: AssetData)(decode: LocalData => CancellableFuture[A]): CancellableFuture[Option[A]] =
+    loadLocalAndDecode(loadLocalData(asset))(decode)
 
   private def loadLocalAndDecode[A](load: CancellableFuture[Option[LocalData]])(decode: LocalData => CancellableFuture[A]): CancellableFuture[Option[A]] =
     load flatMap {
@@ -239,34 +199,34 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
         CancellableFuture successful None
     }
 
-  private def loadLocalData(img: ImageData): CancellableFuture[Option[LocalData]] = {
-    verbose(s"loadLocalData")
+  private def loadLocalData(asset: AssetData): CancellableFuture[Option[LocalData]] = {
+    verbose(s"loadLocalData: ${asset.id}, url: ${asset.source}")
 
     // wrapped in future to ensure that img.data is accessed from background thread, this is needed for local image assets (especially the one generated from bitmap), see: Images
-    CancellableFuture { (img.data, img.uri) } flatMap {
-      case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(Some(LocalData(data)))
-      case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(Some(LocalData(assetLoader.openStream(uri), -1)))
-      case _ => CancellableFuture lift cache.getEntry(img.cacheKey)
+    CancellableFuture {(asset.data, asset.source)} flatMap {
+      case (Some(data), _) if data.nonEmpty =>
+        verbose(s"asset: ${asset.id} contained data already")
+        CancellableFuture.successful(Some(LocalData(data)))
+      case (_, Some(uri)) if isLocalUri(uri) =>
+        verbose(s"asset: ${asset.id} contained no data, but had a url")
+        CancellableFuture.successful(Some(LocalData(assetLoader.openStream(uri), -1)))
+      case _ =>
+        verbose(s"asset: ${asset.id} contained no data or a url, trying cached storage")
+        CancellableFuture lift fileCache.getEntry(asset.cacheKey)
     }
   }
 
-  private def downloadImageData(img: ImageData, convId: RConvId): CancellableFuture[Option[LocalData]] = {
-    val req = (img.remoteId, img.uri, img.proxyPath) match {
-      case (Some(id), _, _)         => Some(ImageAssetRequest(img.cacheKey, convId, AssetKey(Left(id), None, img.otrKey.getOrElse(AESKey.Empty), img.sha256.getOrElse(Sha256.Empty)), Mime(img.mime)))
-      case (None, Some(uri), _)     => Some(External(img.cacheKey, uri))
-      case (None, None, Some(path)) => Some(Proxied(img.cacheKey, path))
-      case (None, None, None)       => None
-    }
-
-    verbose(s"downloadImageData($img, $convId), req: $req")
-    req.fold(CancellableFuture successful Option.empty[LocalData]) { assetLoader.downloadAssetData }
+  private def downloadImageData(asset: AssetData): CancellableFuture[Option[LocalData]] = {
+    val req = asset.loadRequest
+    verbose(s"downloadImageData($asset), req: $req")
+    assetLoader.downloadAssetData(req)
   }
 
   private def decodeGif(data: LocalData) = Threading.ImageDispatcher {
     data.byteArray.fold(GifReader(data.inputStream))(GifReader(_)).get
   }
 
-  private def decodeBitmap(assetId: AssetId, tag: String, req: BitmapRequest, data: LocalData): CancellableFuture[Bitmap] = {
+  private def decodeBitmap(assetId: AssetId, req: BitmapRequest, data: LocalData): CancellableFuture[Bitmap] = {
 
     def computeInSampleSize(srcWidth: Int, srcHeight: Int): Int = {
       val pixelCount = srcWidth * srcHeight
@@ -278,9 +238,9 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
       meta <- getImageMetadata(data, req.mirror)
       inSample = computeInSampleSize(meta.width, meta.height)
       _ = verbose(s"image meta: $meta, inSampleSize: $inSample")
-      _ = imageCache.reserve(assetId, tag, meta.width / inSample, meta.height / inSample)
+      _ = imageCache.reserve(assetId, req, meta.width / inSample, meta.height / inSample)
       bmp <- bitmapLoader(() => data.inputStream, inSample, meta.orientation)
-      _ = if (bmp == bitmap.EmptyBitmap) throw new Exception("Bitmap decoding failed, got empty bitmap")
+      _ = if (bmp == bitmap.EmptyBitmap) throw new Exception(s"Bitmap decoding failed, got empty bitmap for asset: $assetId")
     } yield bmp
   }
 
@@ -290,20 +250,22 @@ class ImageLoader(val context: Context, cache: CacheService, val imageCache: Mem
       Metadata(data).withOrientation(if (mirror) Metadata.mirrored(o) else o)
     }
 
-  private def withMemoryCache(asset: AssetId, tag: String, minWidth: Int)(loader: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
-    imageCache.get(asset, tag) match {
-      case Some(image) if image.getWidth >= minWidth => // cache could contain smaller version, will need to reload in that case
-        verbose(s"getBitmap($asset, $minWidth) - got from cache: $image (${image.getWidth}, ${image.getHeight})")
+  private def withMemoryCache(assetId: AssetId, req: BitmapRequest, imgWidth: Int)(loader: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
+    imageCache.get(assetId, req, imgWidth) match {
+      case Some(image) =>
+        verbose(s"getBitmap($assetId, $req, $imgWidth) - got from cache: $image (${image.getWidth}, ${image.getHeight})")
         CancellableFuture.successful(image)
       case _ =>
         loader map (returning(_) {
-          imageCache.add(asset, tag, _)
+          verbose(s"adding asset to memory cache: $assetId, $req")
+          imageCache.add(assetId, req, _)
         })
     }
 }
 
 object ImageLoader {
 
+  //TODO if orientation could be useful ever to other clients, we might want to merge with AssetMetaData.Image
   case class Metadata(width: Int, height: Int, mimeType: String, orientation: Int = ExifInterface.ORIENTATION_UNDEFINED) {
     def isRotated: Boolean = orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED
 
@@ -321,7 +283,7 @@ object ImageLoader {
       val opts = new BitmapFactory.Options
       opts.inJustDecodeBounds = true
       opts.inScaled = false
-      withResource(data.inputStream) { BitmapFactory.decodeStream(_, null, opts) }
+      withResource(data.inputStream) {BitmapFactory.decodeStream(_, null, opts)}
       Metadata(opts.outWidth, opts.outHeight, opts.outMimeType)
     }
 
@@ -341,4 +303,5 @@ object ImageLoader {
       case ORIENTATION_TRANSVERSE => ORIENTATION_ROTATE_270
     }
   }
+
 }

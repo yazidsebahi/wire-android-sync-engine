@@ -22,7 +22,7 @@ import java.io.{ByteArrayInputStream, FileInputStream}
 import android.provider.OpenableColumns
 import com.waz.RobolectricUtils
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.Mime
+import com.waz.model.{CacheKey, Mime}
 import com.waz.service.ZMessaging
 import com.waz.testutils.{DefaultPatienceConfig, MockGlobalModule}
 import com.waz.utils.{IoUtils, returning}
@@ -52,7 +52,7 @@ class WireContentProviderSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     val assetData = returning(Array.ofDim[Byte](10000))(Random.nextBytes)
 
-    lazy val entry = cache.addStream("key", new ByteArrayInputStream(assetData), Mime("text/txt"), Some("file.txt"), Some(cache.intCacheDir)).futureValue
+    lazy val entry = cache.addStream(CacheKey("key"), new ByteArrayInputStream(assetData), Mime("text/txt"), Some("file.txt"), Some(cache.intCacheDir)).futureValue
     lazy val uri = CacheUri(entry.data, context)
 
     scenario("Query cache entry metadata") {
@@ -77,7 +77,7 @@ class WireContentProviderSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     scenario("Load from encrypted cache entry") {
-      val entry = cache.addStream("key1", new ByteArrayInputStream(assetData), Mime("text/txt"), Some("file.txt")).futureValue
+      val entry = cache.addStream(CacheKey("key1"), new ByteArrayInputStream(assetData), Mime("text/txt"), Some("file.txt")).futureValue
       entry.data.encKey should be('defined)
       val uri = CacheUri(entry.data, context)
       val c = provider.query(uri, Array(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null, null)

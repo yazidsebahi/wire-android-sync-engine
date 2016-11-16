@@ -55,8 +55,6 @@ trait ImageAsset extends UiObservable with Parcelable {
 
   def getBitmap(width: Int, callback: BitmapCallback): LoadHandle
 
-  def getStaticBitmap(width: Int, callback: BitmapCallback): LoadHandle
-
   /**
    * This Returns bitmap in one go,
    */

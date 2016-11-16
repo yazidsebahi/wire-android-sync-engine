@@ -155,7 +155,7 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
       withDelay {
         self.getPicture.isEmpty shouldEqual false
         zmessaging.assetsStorage.get(AssetId(self.getPicture.getId)) should eventually(beMatching({
-          case Some(ImageAssetData(_, _, Seq(_, ImageData(_, _, _, _, _, _, _, Some(_), _, true, _, _, _, _)))) => true
+          case Some(AssetData.WithRemoteId(_)) => true
         }))
       }
     }

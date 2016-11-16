@@ -186,6 +186,11 @@ object ActorMessage {
     */
   case class SendAsset(remoteId: RConvId, data: Array[Byte], mime: String, fileName: String, delayPost: Boolean = false) extends ActorMessage
 
+  //TODO Dean: Remove after v2 transition period
+  case object SetAssetToV3 extends ActorMessage
+
+  case object SetAssetToV2 extends ActorMessage
+
   /**
     * If the last message in the given conversation is an asset message, try to cancel the upload
     */

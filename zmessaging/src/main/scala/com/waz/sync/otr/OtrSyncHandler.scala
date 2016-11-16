@@ -25,7 +25,7 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.ConversationStorage
-import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
@@ -125,66 +125,35 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     }
   }
 
-  def postOtrImageData(conv: ConversationData, assetId: AssetId, im: ImageData, data: LocalData, exp: EphemeralExpiration, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] = {
-
-    val key = im.otrKey.getOrElse(AESKey())
-    //TODO tidy up - and remove v2 once transition period is over
-    if (prefs.sendWithV3)
-      uploadAssetDataV3(key, data).flatMap {
-        case Right((UploadResponse(remKey, _, token), sha)) =>
-
-          val assetKey = AssetKey(Right(remKey), token, key, sha)
-          def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.Asset(Proto.Asset.Original(Mime(im.mime), im.size, None, Some(AssetMetaData.Image(Dim2(im.width, im.height), Some(im.tag))), None), UploadDone(assetKey)))
-
-          //TODO copy remoteKey to ImageData??
-          val updated = im.copy(otrKey = Some(key), sha256 = Some(sha), sent = true)
-          for {
-            post <- postOtrMessage(conv.id, conv.remoteId, proto(sha), recipients).mapRight(d => d)
-            _ <- cache.addStream(updated.cacheKey, data.inputStream)
-            _ <- assets.updateImageAsset(assetId, conv.remoteId, updated)
-          } yield post
-
-        case Left(er) => Future.successful(Left(er))
-      }
-    else {
-      def proto(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(im.tag, im.width, im.height, im.origWidth, im.origHeight, im.mime, im.size, Some(key), Some(sha)))
-      postAssetData(conv, key, proto, data, nativePush, recipients).future flatMap {
-        case Right((AssetKey(Left(id), _, _, sha), time)) =>
-          val updated = im.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
-          cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
-            assets.updateImageAsset(assetId, conv.remoteId, updated).map { data =>
-              verbose(s"OTR image uploaded: $data")
-              Right(time)
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]] =
+    CancellableFuture.lift(service.clients.getSelfClient).flatMap {
+      case Some(otrClient) =>
+        key match {
+          case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
+            case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
+              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha)))
+              case Left(err) => Left(err)
             }
           }
-        case Right((k, _)) => Future successful Left(ErrorResponse.internalError(s"Unexpected asset key: $k")) // FIXME
-        case Left(err) => Future successful Left(err)
-      }
-    }
-  }
-
-  def uploadAssetDataV3(key: AESKey, data: LocalData): Future[Either[ErrorResponse, (UploadResponse, Sha256)]] = {
-    service.clients.getSelfClient.flatMap {
-      case Some(otrClient) => service.encryptAssetData(key, data) flatMap {
-        case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map {
-          case Right(resp) => Right(resp, sha)
-          case Left(err) => Left(err)
+          case _ => assetClient.uploadAsset(data, mime, public = true).map {
+            case Right(UploadResponse(rId, _, _)) => Right(RemoteData(Some(rId)))
+            case Left(err) => Left(err)
+          }
         }
-      }
-      case None => successful(Left(internalError("Client is not registered")))
+      case None => CancellableFuture.successful(Left(internalError("Client is not registered")))
     }
-  }
 
-  def postAssetData(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
-    val promise = Promise[Either[ErrorResponse, (AssetKey, Date)]]()
+  def postAssetDataV2(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (RemoteData, Date)]] = {
+    val promise = Promise[Either[ErrorResponse, (RemoteData, Date)]]()
 
     val future = service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
         service.encryptAssetData(key, data) flatMap { case (sha, encrypted) =>
           val inline = encrypted.length < MaxInlineSize
-          var imageId = Option.empty[RAssetDataId]
-          var assetKey = Option.empty[AssetKey]
+          var imageId = Option.empty[RAssetId]
+          var assetKey = Option.empty[RemoteData]
           val message = createMsg(sha)
+          verbose(s"Sending message: $message")
           postEncryptedMessage(conv.id, message, recipients = recipients) { (content, retry) =>
             val meta = new OtrAssetMetadata(otrClient.id, content, nativePush, inline)
             val upload = imageId match {
@@ -199,7 +168,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                 assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry), recipients) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
-                    assetKey = Some(AssetKey(Left(id), None, key, sha))
+                    assetKey = Some(RemoteData(Some(id), None, Some(key), Some(sha)))
                     Right(msgResponse)
                   case Left(err) =>
                     Left(err)

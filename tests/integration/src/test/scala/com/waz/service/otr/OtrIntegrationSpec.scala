@@ -221,10 +221,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       }
       val asset = msgs.getLastMessage.getImage
       withDelay {
-        asset.data.versions should have size 2
-        asset.data.versions foreach { im =>
-          im.sent shouldEqual true
-        }
+        asset.data.remoteData shouldBe 'defined
       }
     }
 
@@ -232,15 +229,13 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       awaitUi(1.second)
       val asset = msgs.getLastMessage.getImage
       val asset1 = asset.data.copy(id = AssetId()) // create asset copy to make sure it is not cached
-      zmessaging.assets.updateImageAsset(asset1)
+      zmessaging.assets.storage.updateAsset(asset1.id, _ => asset1)
 
       val a = api.ui.images.getImageAsset(asset1.id)
 
       var preview = Option.empty[Bitmap]
       var full = Option.empty[Bitmap]
       var failed = false
-
-      withDelay(a.data.versions should have size 2)
 
       a.getBitmap(500, new com.waz.api.ImageAsset.BitmapCallback() {
         override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = if(isPreview) preview = Some(b) else full = Some(b)
@@ -270,7 +265,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       val img = msgs.getLastMessage.getImage
       withDelay {
         img.isEmpty shouldEqual false
-        img.data.versions should have size 2
       }
 
       val bitmap = new BitmapSpy(img, 300)
@@ -447,7 +441,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       val img = msgs.getLastMessage.getImage
       withDelay {
         img.isEmpty shouldEqual false
-        img.data.versions should have size 2
       }
 
       val bitmap = new BitmapSpy(img, 300)

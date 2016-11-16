@@ -25,7 +25,7 @@ import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api._
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.{AssetId, Mime}
+import com.waz.model.{AssetId, CacheKey, Mime}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendAsset, Successful}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
@@ -230,7 +230,7 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val auto2 = registerDevice("auto2")
 
   def contentCacheKey(asset: Asset) = {
-    val p = Promise[String]
+    val p = Promise[CacheKey]
     asset.getContentUri(new Asset.LoadCallback[Uri]() {
       override def onLoaded(uri: Uri): Unit = CacheUri.unapply(context)(uri) match {
         case Some(key) => p.success(key)

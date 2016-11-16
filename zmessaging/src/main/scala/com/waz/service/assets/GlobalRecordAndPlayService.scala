@@ -30,7 +30,7 @@ import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
 import com.waz.audioeffect.{AudioEffect => AVSEffect}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
-import com.waz.model.{AssetId, ErrorData, Mime, Uid}
+import com.waz.model._
 import com.waz.service.assets.AudioLevels.peakLoudness
 import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.service.{ErrorsService, ZmsLifecycle}
@@ -204,7 +204,8 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def record(key: AssetMediaKey, maxAllowedDuration: FiniteDuration): Future[(Instant, Future[RecordingResult])] = {
     def record(): Future[Next] = withAudioFocus() {
-      cache.createForFile(unencodedCacheKey(key.id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
+      cache.createForFile(CacheKey.fromAssetId(key.id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration) map { entry =>
+        verbose(s"started recording in entry: $entry")
         val promisedAsset = Promise[RecordingResult]
         withCleanupOnFailure {
           val start = Instant.now
@@ -259,7 +260,10 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
   def stopRecording(key: AssetMediaKey): Future[State] = transitionF {
     case rec @ Recording(recorder, `key`, start, entry, promisedAsset) =>
       recorder.stopRecording() map { cause =>
-        if (entry.cacheFile.exists) promisedAsset.trySuccess(RecordingSuccessful(AudioAssetForUpload(key.id, entry, PCM.durationFromByteCount(entry.length), applyAudioEffect _), cause == PCMRecorder.LengthLimitReached))
+        if (entry.cacheFile.exists) {
+          verbose(s"stop recording: passing asset with data entry: ${entry.data}, is it encrypted?: ${entry.data.encKey} bytes at $key")
+          promisedAsset.trySuccess(RecordingSuccessful(AudioAssetForUpload(key.id, entry, PCM.durationFromByteCount(entry.length), applyAudioEffect _), cause == PCMRecorder.LengthLimitReached))
+        }
         else promisedAsset.tryFailure(new FileNotFoundException(s"audio file does not exist after recording: ${entry}"))
         Next(Idle)
       } andThen {
@@ -299,7 +303,7 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 
   def applyAudioEffect(effect: AudioEffect, pcmFile: File): Future[AudioAssetForUpload] = {
     val id = AssetId()
-    cache.createForFile(unencodedCacheKey(id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
+    cache.createForFile(CacheKey.fromAssetId(id), Mime.Audio.PCM, cacheLocation = Some(saveDir))(recordingExpiration).map { entry =>
       withCleanupOnFailure {
         val fx = new AVSEffect
         try {
@@ -444,6 +448,4 @@ object GlobalRecordAndPlayService {
 
   val tickInterval = 30.millis
   val recordingExpiration = Expiration in 7.days
-
-  def unencodedCacheKey(id: AssetId) = s"${id.str}-unencoded"
 }

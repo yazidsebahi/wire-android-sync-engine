@@ -54,17 +54,22 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
 
   def postSelfPicture(): Future[SyncResult] = userService.getSelfUser flatMap {
     case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _)) =>
-      assetSync.postSelfImageAsset(RConvId(id.str), assetId) flatMap {
-        case SyncResult.Success =>
-          assets.getImageAsset(assetId) flatMap { asset =>
-            updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = asset)))
-          }
-        case failure =>
-          error(s"self picture post asset $assetId failed: $failure")
-          Future.successful(failure)
-      }
+      for {
+        _ <- assetSync.postSelfImageAsset(RConvId(id.str), assetId).recover {case _ => warn("Failed to upload v2 picture")} //TODO Dean: stop posting to v2 after transition period
+        res <- assetSync.uploadAssetData(assetId, public = true).future flatMap {
+          case Right(uploaded) =>
+            for {
+              asset <- assets.get(assetId)
+              res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = asset)))
+            } yield res
+
+          case Left(err) =>
+            error(s"self picture upload asset $assetId failed: $err")
+            Future.successful(SyncResult.failed())
+        }
+      } yield res
     case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _)) =>
-      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Some(ImageAssetData.Empty))))
+      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = None)))
     case _ => Future.successful(SyncResult.failed())
   }
 

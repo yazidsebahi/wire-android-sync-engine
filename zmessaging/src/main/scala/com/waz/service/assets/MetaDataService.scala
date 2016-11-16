@@ -18,61 +18,80 @@
 package com.waz.service.assets
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.AssetsStorage
-import com.waz.model.AssetMetaData.Empty
+import com.waz.content.WireContentProvider.CacheUri
+import com.waz.model.AssetMetaData.{Audio, Empty}
 import com.waz.model._
+import com.waz.service.images.ImageAssetGenerator
+import com.waz.service.images.ImageAssetGenerator._
+import com.waz.service.images.ImageLoader.Metadata
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.{LoggedTry, Serialized}
+import org.threeten.bp
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.Try
 
-class MetaDataService(context: Context, cache: CacheService, storage: AssetsStorage, assets: => AssetService) {
+class MetaDataService(context: Context, cache: CacheService, storage: AssetsStorage, assets: => AssetService,
+                      generator: ImageAssetGenerator) {
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[MetaDataService]
 
-  def getAssetWithMetadata(id: AssetId): CancellableFuture[Option[AnyAssetData]] =
-    getAssetMetadata(id) flatMap { _ => CancellableFuture lift storage.getAsset(id) }
-
-  def getAssetMetadata(id: AssetId): CancellableFuture[Option[AssetMetaData]] =
-    CancellableFuture lift storage.get(id) flatMap {
-      case Some(AnyAssetData(_, _, _, _, _, Some(metaData), _, _, _, _, _)) => CancellableFuture successful Some(metaData)
-      case Some(a: AnyAssetData) =>
-        for {
-          meta <- metaData(a)
-          updated <- CancellableFuture lift storage.updateAsset(id, { asset: AnyAssetData => asset.copy(metaData = asset.metaData.orElse(meta)) })
-        } yield
-          updated.flatMap(_.metaData).orElse(meta)
-      case _ =>
-        CancellableFuture successful None
-    }
-
-  private def metaData(asset: AnyAssetData): CancellableFuture[Option[AssetMetaData]] =
-    assets.assetDataOrSource(asset) flatMap {
-      case Some(Left(entry)) => loadMetaData(asset.mimeType, entry)
-      case Some(Right(uri)) => loadMetaData(asset.mimeType, uri)
-      case None => CancellableFuture successful None
-    }
-
-  def loadMetaData(mime: Mime, data: LocalData): CancellableFuture[Option[AssetMetaData]] = {
-
+  def loadMetaData(asset: AssetData, data: LocalData): CancellableFuture[Option[AssetMetaData]] = {
     def load(entry: CacheEntry) = {
-      mime match {
-        case Mime.Video() => AssetMetaData.Video(entry.cacheFile).map { _.fold({msg => error(msg); None}, Some(_)) }
-        case Mime.Audio() => AssetMetaData.Audio(entry.cacheFile)
-        case Mime.Image() => Future { AssetMetaData.Image(entry.cacheFile) } (Threading.IO)
+      asset.mime match {
+        case Mime.Video() => AssetMetaData.Video(entry.cacheFile).map {_.fold({ msg => error(msg); None }, Some(_))}
+        case Mime.Audio() => audioMetaData(asset, entry)
+        case Mime.Image() => Future {AssetMetaData.Image(entry.cacheFile)}(Threading.IO)
         case _ => Future successful Some(Empty)
       }
+    }.recover {
+      case ex =>
+        warn(s"failed to get metadata for asset: ${asset.id}", ex)
+        None
+    }
+    withCacheEntry(data, load)
+  }
+
+  //generates and stores a preview asset for the given asset data
+  def loadPreview(asset: AssetData, data: LocalData): CancellableFuture[Option[AssetData]] = {
+    def load(entry: CacheEntry) = {
+      asset.mime match {
+        case Mime.Video() if asset.previewId.isEmpty =>
+          MetaDataRetriever(entry.cacheFile)(loadPreview).flatMap(createVideoPreview).flatMap {
+            case Some(prev) => storage.mergeOrCreateAsset(prev)
+            case _ =>
+              verbose(s"Failed to create video preview for asset: $asset.id")
+              Future.successful(None)
+        }
+        case _ => //possible plans to add previews for other types (images, pdfs etc?)
+          Future successful None
+      }
+    }.recover {
+      case ex =>
+        warn(s"failed to get preview for asset: ${asset.id}", ex)
+        None
     }
 
+    //TODO Dean: Why does this need to be serialised?
+    Serialized(('MetaService, asset.id))(withCacheEntry(data, load))
+  }
+
+  private def withCacheEntry[A](data: LocalData, load: CacheEntry => Future[A]): CancellableFuture[A] = {
     data match {
       case entry: CacheEntry if entry.data.encKey.isEmpty => CancellableFuture lift load(entry)
       case _ =>
-        warn("loading metadata from stream (encrypted cache, or generic local data) this is slow, please avoid that")
+        warn("loading data from stream (encrypted cache, or generic local data) this is slow, please avoid that")
         for {
-          entry <- CancellableFuture lift cache.addStream(Uid().str, data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
+          entry <- CancellableFuture lift cache.addStream(CacheKey(), data.inputStream, cacheLocation = Some(cache.intCacheDir))(10.minutes)
           res <- CancellableFuture lift load(entry)
         } yield {
           entry.delete()
@@ -81,12 +100,35 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
     }
   }
 
-  def loadMetaData(mime: Mime, uri: Uri): CancellableFuture[Option[AssetMetaData]] = CancellableFuture lift {
-    mime match {
-      case Mime.Video() => AssetMetaData.Video(context, uri).map(_.fold({msg => error(msg); None}, Some(_)))
-      case Mime.Audio() => AssetMetaData.Audio(context, uri)
-      case Mime.Image() => Future { AssetMetaData.Image(context, uri) } (Threading.BlockingIO)
-      case _ => Future successful Some(Empty)
+  private def audioMetaData(asset: AssetData, entry: CacheEntry)(implicit ec: ExecutionContext): Future[Option[Audio]] = {
+    lazy val loudness = AudioLevels(context).createAudioOverview(CacheUri(entry.data, context), asset.mime)
+      .recover{case _ => warn(s"Failed to genate loudness levels for audio asset: ${asset.id}"); None}.future
+
+    lazy val duration = MetaDataRetriever(entry.cacheFile) { r =>
+      val str = r.extractMetadata(METADATA_KEY_DURATION)
+      LoggedTry(bp.Duration.ofMillis(str.toLong)).toOption
+    }.recover{case _ => warn(s"Failed to extract duration for audio asset: ${asset.id}"); None}
+
+    asset.metaData match {
+      case Some(meta@AssetMetaData.Audio(_, Some(_))) => Future successful Some(meta) //nothing to do
+      case Some(meta@AssetMetaData.Audio(_, _)) => loudness.map { //just generate loudness
+        case Some(l) => Some(AssetMetaData.Audio(meta.duration, Some(l)))
+        case _ => Some(meta)
+      }
+      case _ => for { //no metadata - generate everything
+        l <- loudness
+        d <- duration
+      } yield d match {
+        case Some(d) => Some(AssetMetaData.Audio(d, l))
+        case _ => None
+      }
     }
+  }
+
+  private def loadPreview(retriever: MediaMetadataRetriever) = Try(Option(retriever.getFrameAtTime(-1L, OPTION_CLOSEST_SYNC))).toOption.flatten
+
+  private def createVideoPreview(bitmap: Option[Bitmap]) = bitmap match {
+    case None => CancellableFuture successful None
+    case Some(b) => generator.generateAssetData(AssetData.newImageAsset(AssetId()), Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
   }
 }

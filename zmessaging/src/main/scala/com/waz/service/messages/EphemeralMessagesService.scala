@@ -17,20 +17,20 @@
  */
 package com.waz.service.messages
 
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.content.{MessagesStorage, ZmsDatabase}
 import com.waz.model.AssetStatus.{UploadDone, UploadFailed}
-import com.waz.model.GenericContent.{Asset, Ephemeral, ImageAsset, Location, Text}
+import com.waz.model.GenericContent.{Asset, Ephemeral, Location, Text}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model._
+import com.waz.model.sync.ReceiptType
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
-import com.waz.model.sync.ReceiptType
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -129,8 +129,7 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
       case MessageData.IsAsset() | Message.Type.ASSET =>
         // check if asset was fully uploaded
         msg.protos.exists {
-          case GenericMessage(_, Ephemeral(_, Asset(_, _, UploadDone(_) | UploadFailed))) => true
-          case GenericMessage(_, Ephemeral(_, ImageAsset(ImageData.Tag.Medium, _, _, _, _, _, _, _, _))) => true
+          case GenericMessage(_, Ephemeral(_, Asset(AssetData.WithStatus(UploadDone | UploadFailed), _))) => true
           case _ => false
         }
       case _ => true

@@ -24,7 +24,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.waz.ZLog._
 import com.waz.cache.{CacheEntryData, Expiration}
-import com.waz.model.Uid
+import com.waz.model.CacheKey
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
@@ -40,7 +40,7 @@ class WireContentProvider extends ContentProvider {
 
   private def cache = ZMessaging.currentGlobal.cache
 
-  private def getEntry(key: String) = Await.result(cache.getEntry(key), AsyncTimeout)
+  private def getEntry(key: CacheKey) = Await.result(cache.getEntry(key), AsyncTimeout)
 
   override def getType(uri: Uri): String = {
     verbose(s"getType($uri)")
@@ -89,26 +89,35 @@ class WireContentProvider extends ContentProvider {
     verbose(s"openFile($uri, $mode)")
     uri match {
       case CacheUriExtractor(key) =>
+        verbose(s"CacheUriExtractor: $key")
         Await.result(getDecryptedEntry(key), AsyncTimeout) match {
-          case Some(entry) => ParcelFileDescriptor.open(entry.copyDataToFile(), ParcelFileDescriptor.MODE_READ_ONLY)
-          case None => super.openFile(uri, mode)
+          case Some(entry) =>
+            val file = entry.copyDataToFile()
+            verbose(s"found entry, copying data to file: ${file.getAbsolutePath}. Data contains: ${entry.length} bytes")
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+          case None =>
+            verbose(s"no cache entry found, attempting to open uri: $uri")
+            super.openFile(uri, mode)
         }
       case _ =>
         super.openFile(uri, mode)
     }
   }
 
-  private def getDecryptedEntry(key: String) =
+  private def getDecryptedEntry(key: CacheKey) =
     cache.getEntry(key) flatMap {
       case Some(entry) if entry.data.encKey.isDefined =>
-        cache.getOrElse(key + "#_decr_", cache.addStream(Uid().str, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
-      case res => CancellableFuture successful res
+        verbose("getDecryptedEntry: entry was decrypted")
+        cache.getOrElse(CacheKey.decrypted(key), cache.addStream(key, entry.inputStream, entry.data.mimeType, entry.data.fileName, Some(cache.intCacheDir))(Expiration.in(12.hours))) map (Some(_))
+      case res =>
+        verbose("getDecryptedEntry: entry was NOT decrypted")
+        CancellableFuture successful res
     }
 
   object CacheUriExtractor {
     val extractor = CacheUri.unapply(getContext) _
 
-    def unapply(uri: Uri): Option[String] = extractor(uri)
+    def unapply(uri: Uri): Option[CacheKey] = extractor(uri)
   }
 }
 
@@ -120,19 +129,19 @@ object WireContentProvider {
 
     def builder(context: Context) = Uri.parse(ContentResolver.SCHEME_CONTENT + "://" + context.getPackageName).buildUpon()
 
-    def apply(key: String, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key).build()
+    def apply(key: CacheKey, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key.str).build()
 
     def apply(entry: CacheEntryData, context: Context): Uri = {
-      val b = builder(context).appendEncodedPath(Cache).appendPath(entry.key)
+      val b = builder(context).appendEncodedPath(Cache).appendPath(entry.key.str)
       entry.fileName foreach b.appendPath
       b.build()
     }
 
-    def unapply(context: Context)(uri: Uri): Option[String] =
+    def unapply(context: Context)(uri: Uri): Option[CacheKey] =
       if (uri.getScheme != ContentResolver.SCHEME_CONTENT || uri.getAuthority != context.getPackageName) None
       else {
         val path = uri.getPathSegments
-        if (path.size() >= 2 && path.get(0) == "cache") Some(path.get(1)) else None
+        if (path.size() >= 2 && path.get(0) == "cache") Some(CacheKey(path.get(1))) else None
       }
   }
 }

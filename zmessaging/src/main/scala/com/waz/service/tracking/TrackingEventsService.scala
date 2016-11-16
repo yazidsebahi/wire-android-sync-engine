@@ -24,10 +24,10 @@ import com.waz.api.impl.TrackingEvent._
 import com.waz.api.{TrackingEvent, impl}
 import com.waz.content.{AssetsStorage, MessagesStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType.OneToOne
-import com.waz.model.{AnyAssetData, AssetStatus, ConversationData, UserId}
+import com.waz.model._
 import com.waz.service.call.AvsMetrics
 import com.waz.service.downloads.AssetDownloader
-import com.waz.service.downloads.DownloadRequest.AnyAssetRequest
+import com.waz.service.downloads.DownloadRequest.WireAssetRequest
 import com.waz.threading.Threading
 import com.waz.utils._
 import org.threeten.bp.{Duration, Instant}
@@ -43,26 +43,26 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
   private lazy val handler = handlerFactory.getTrackingEventsHandler
 
   downloader.onDownloadStarting {
-    case AnyAssetRequest(_, id, _, _, mime, _) =>
-      assets.getAsset(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
+    case WireAssetRequest(_, id, _, _, _, _) =>
+      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
     case _ => // ignore
   }
 
   downloader.onDownloadDone {
-    case AnyAssetRequest(_, id, _, _, mime, _) =>
-      assets.getAsset(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
+    case WireAssetRequest(_, id, _, _, mime, _) =>
+      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
     case _ => // ignore
   }
 
   downloader.onDownloadFailed {
-    case (AnyAssetRequest(_, id, _, _, mime, _), err) if err.code != ErrorResponse.CancelledCode =>
-      assets.getAsset(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
+    case (WireAssetRequest(_, id, _, _, _, _), err) if err.code != ErrorResponse.CancelledCode =>
+      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
     case _ => // ignore
   }
 
   messages.onMessageSent {
     case msg if msg.isAssetMessage =>
-      assets.getAsset(msg.assetId).flatMapSome(a => track(assetUploadSuccessful(a.sizeInBytes, a.mimeType.str, Duration.between(msg.localTime, Instant.now))))
+      assets.get(msg.assetId).flatMapSome(a => track(assetUploadSuccessful(a.sizeInBytes, a.mime.str, Duration.between(msg.localTime, Instant.now))))
     case _ =>
   }
 
@@ -72,8 +72,8 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
   }
 
   assets.onUploadFailed {
-    case asset: AnyAssetData if asset.status == AssetStatus.UploadCancelled =>
-      track(assetUploadCancelled(Some(asset.sizeInBytes), asset.mimeType.str))
+    case asset: AssetData if asset.status == AssetStatus.UploadCancelled =>
+      track(assetUploadCancelled(Some(asset.sizeInBytes), asset.mime.str))
     case _ =>
   }
 

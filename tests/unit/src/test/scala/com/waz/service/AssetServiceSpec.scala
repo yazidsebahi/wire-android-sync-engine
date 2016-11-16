@@ -39,7 +39,6 @@ import scala.concurrent.duration._
 
 class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
-  val fullFile = new File(getClass.getResource("/images/penguin.png").getFile).getAbsoluteFile
   val mediumFile = new File(getClass.getResource("/images/penguin_240.png").getFile).getAbsoluteFile
   val imData = {
     val is = getClass.getResourceAsStream("/images/penguin_128.png")
@@ -48,11 +47,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     } finally is.close()
   }
 
-  val asset = ImageAssetData(AssetId(), RConvId(), Seq(
-    ImageData("preview", "image/png", 128, 128, 480, 492, imData.length, Some(RAssetDataId())),
-    ImageData("medium", "image/png", 240, 246, 480, 492, mediumFile.length.toInt, Some(RAssetDataId())),
-    ImageData("full", "image/png", 480, 492, 480, 492, fullFile.length.toInt, Some(RAssetDataId()))
-  ))
+  val asset = AssetData(convId = Some(RConvId()), sizeInBytes = mediumFile.length(), metaData = Some(AssetMetaData.Image(Dim2(240, 246), "medium")), remoteId = Some(RAssetId()))
 
   lazy val zms = new MockZMessaging() { self =>
     override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {
@@ -75,7 +70,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     scenario("Save image to gallery") {
       zms.assetsStorage.insert(asset)
 
-      val entry = Await.result(cacheService.addFile("key", fullFile), 10.seconds)
+      val entry = Await.result(cacheService.addFile(CacheKey("key"), mediumFile), 10.seconds)
       loadImageResult = Right(entry)
 
       val uri = zms.imageLoader.saveImageToGallery(asset).await()(patience(15.seconds))
@@ -85,7 +80,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       val savedFile = new File(uri.get.getPath)
       savedFile should exist
-      savedFile.length() shouldEqual fullFile.length()
+      savedFile.length() shouldEqual mediumFile.length()
     }
   }
 

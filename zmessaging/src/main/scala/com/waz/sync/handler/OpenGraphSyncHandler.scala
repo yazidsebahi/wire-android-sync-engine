@@ -23,16 +23,15 @@ import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
+import com.waz.cache.LocalData
 import com.waz.content.{ConversationStorage, MessagesStorage}
 import com.waz.model.AssetStatus.UploadDone
-import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
 import com.waz.service.otr.OtrService
 import com.waz.sync.SyncResult
-import com.waz.sync.client.AssetClient.UploadResponse
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
@@ -153,29 +152,18 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       *         Right(None) if metadata doesn't include a link or if source image could not be fetched (XXX: in some cases this could be due to network issues or image download setting preventing us from downloading on metered network)
       *         Right(Asset) if upload was successful
       */
-    def uploadImage: Future[Either[ErrorResponse, Option[Asset]]] = meta.image match {
+    def uploadImage: Future[Either[ErrorResponse, Option[AssetData]]] = meta.image match {
       case None => Future successful Right(None)
       case Some(uri) =>
-        val generatedAsset = {
-          val local = ImageAssetData(uri)
-          for {
-            asset <- imageGenerator.generateWireAsset(local.id, local.versions.last, conv, profilePicture = false)
-            im = asset.versions.last
-            data <- imageLoader.loadRawImageData(im, conv)
-          } yield data.map((_, im))
-        }.recover { case _: Throwable => None }
-
-        generatedAsset.future flatMap {
-          case None => Future successful Right(None)
-          case Some((data, im)) =>
+        imageGenerator.generateWireAsset(uri).map(Some(_)).recover { case _: Throwable => None }.future flatMap {
+          case Some(asset @ AssetData.WithData(data)) =>
             val aes = AESKey()
-            otrService.encryptAssetData(aes, data) flatMap {
-              case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default, public = true).future map {
-                case Left(err) => Left(err)
-                case Right(UploadResponse(key, _, token)) =>
-                  Right(Some(Asset(Original(Mime(im.mime), im.size, None, Some(AssetMetaData.Image(Dim2(im.width, im.height), Some(im.tag)))), UploadDone(AssetKey(Right(key), token, aes, sha)))))
-              }
+            otrSync.uploadAssetDataV3(LocalData(data), Some(aes)).map {
+              case Right(remoteData) =>
+                Right(Some(asset.copyWithRemoteData(remoteData)))
+              case Left(err) => Left(err)
             }
+          case _ => Future successful Right(None)
         }
     }
 
@@ -183,8 +171,8 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
     else
       uploadImage map {
         case Left(error) => Left(error)
-        case Right(image) =>
-          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, image, meta.permanentUrl))
+        case Right(imageAsset) =>
+          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
       }
   }
 }

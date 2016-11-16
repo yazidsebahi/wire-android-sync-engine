@@ -21,7 +21,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.ImageAssetData
+import com.waz.model.AssetData
 import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
 import com.waz.model.messages.media.{PlaylistData, ArtistData, TrackData, MediaAssetData}
 import com.waz.service.media.SpotifyMediaService.{AlbumId, PlaylistId, TrackId, SpotifyId}
@@ -177,14 +177,14 @@ object SpotifyClient {
 
   private def decodeArtist(js: JSONObject): ArtistData = ArtistData(name = array[Artist](js.getJSONArray("artists")) map (_.name) mkString ", ", avatar = None)
 
-  private def decodeUser(implicit js: JSONObject): (ArtistData, Option[ImageAssetData]) = {
+  private def decodeUser(implicit js: JSONObject): (ArtistData, Option[AssetData]) = {
     val img = decodeThumbnails(js)
     (ArtistData(name = decodeOptString('display_name) getOrElse 'id, avatar = img map (_.id)), img)
   }
 
-  private def decodeArtwork(js: JSONObject): Option[ImageAssetData] = Option(js.optJSONObject("album")) flatMap decodeThumbnails
+  private def decodeArtwork(js: JSONObject): Option[AssetData] = Option(js.optJSONObject("album")) flatMap decodeThumbnails
 
-  private def decodeThumbnails(js: JSONObject): Option[ImageAssetData] = {
+  private def decodeThumbnails(js: JSONObject): Option[AssetData] = {
     val thumbs = Option(js.optJSONArray("images")) .map (arrayColl[Image, Vector](_)) .getOrElse (Vector.empty) .sortBy(_.width) .zipWithIndex .map { case (img, idx) =>
       Thumbnail(tag = idx.toString, url = img.url, width = img.width, height = img.height)
     }

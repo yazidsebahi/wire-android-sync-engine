@@ -18,39 +18,61 @@
 package com.waz.model
 
 import com.waz.api.impl.AccentColor
+import com.waz.model.AssetStatus.UploadDone
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.ContentEncoder
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import org.json
 import org.json.{JSONArray, JSONObject}
-import com.waz.utils.returning
 
-case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[ImageAssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
+import scala.util.Try
+
+case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
 
 object UserInfo {
   import JsonDecoder._
 
   implicit object Decoder extends JsonDecoder[UserInfo] {
 
-    def imageData(js: JSONObject) = {
+    def imageData(userId: UserId, js: JSONObject) = {
       val mime = decodeString('content_type)(js)
       val size = decodeInt('content_length)(js)
       val data = decodeOptString('data)(js)
-      val id = RAssetDataId(decodeString('id)(js))
+      val id = RAssetId(decodeString('id)(js))
       implicit val info = js.getJSONObject("info")
 
-      ImageData('tag, mime, 'width, 'height, 'original_width, 'original_height, size, Some(id), data.filter(_.nonEmpty), sent = true)
+      AssetData(
+        status = UploadDone,
+        sizeInBytes = size,
+        mime = Mime(mime),
+        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
+        data = data.map(AssetData.decodeData),
+        convId = Some(RConvId(userId.str)), //v2 asset needs user conv for downloading
+        v2ProfileId = Some(id)
+      )
+
     }
 
-    def picture(implicit js: JSONObject): ImageAssetData = {
-      val pic = js.getJSONArray("picture")
-      if (pic.length() == 0) ImageAssetData.Empty
-      else {
-        val versions = Seq.tabulate(pic.length())(i => imageData(pic.getJSONObject(i)))
-        val id = decodeOptString('correlation_id)(pic.getJSONObject(0).getJSONObject("info")).fold(AssetId())(AssetId(_))
-        ImageAssetData(id, decodeId[RConvId]('id), versions)
-      }
+    def getAssets(implicit js: JSONObject): Option[AssetData] = fromArray(js, "assets") flatMap { assets =>
+      Seq.tabulate(assets.length())(assets.getJSONObject).map { js =>
+        AssetData(
+          remoteId = decodeOptRAssetId('key)(js),
+          metaData = Some(AssetMetaData.Image(Dim2(0, 0), decodeString('size)(js)))
+        )
+        //TODO Dean - do we want to bring back small pictures for users?
+      }.find { case AssetData.IsImage(_, tag) => tag == "complete"; case _ => false }
     }
+
+    def getPicture(userId: UserId)(implicit js: JSONObject): Option[AssetData] = fromArray(js, "picture") flatMap { pic =>
+      val id = decodeOptString('correlation_id)(pic.getJSONObject(0).getJSONObject("info")).fold(AssetId())(AssetId(_))
+      val pics = Seq.tabulate(pic.length())(i => imageData(userId, pic.getJSONObject(i)))
+
+      //TODO Dean - do we want to bring back small pictures for users?
+      val medium = pics.find { case AssetData.IsImage(_, tag) => tag == "medium"; case _ => false }.map(_.copy(id = id))
+      medium
+    }
+
+    private def fromArray(js: JSONObject, name: String) = Try(js.getJSONArray(name)).toOption.filter(_.length() > 0)
 
     override def apply(implicit js: JSONObject): UserInfo = {
       val accentId = decodeOptInt('accent_id).orElse {
@@ -59,36 +81,50 @@ object UserInfo {
           case _ => None
         }
       }
-
-      UserInfo('id, 'name, accentId, 'email, 'phone,
-        if (js.has("picture")) Some(picture) else None,
-        decodeOptString('tracking_id) map (TrackingId(_)),
-        deleted = 'deleted
-      )
+      val id = UserId('id)
+      //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists
+      val pic = getAssets.orElse(getPicture(id))
+      UserInfo(id, 'name, accentId, 'email, 'phone, pic, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
     }
   }
 
-  def encodeImage(data: ImageAssetData): JSONArray =
-    returning(new json.JSONArray()) { arr =>
-      data.versions foreach { im =>
-        arr.put(JsonEncoder { o =>
-          o.put("content_type", im.mime)
-          o.put("content_length", im.size)
-          im.data64.foreach(o.put("data", _))
-          im.remoteId.foreach(id => o.put("id", id.str))
-          o.put("info", JsonEncoder { info =>
-            info.put("tag", im.tag)
-            info.put("width", im.width)
-            info.put("height", im.height)
-            info.put("original_width", im.origWidth)
-            info.put("original_height", im.origHeight)
-            info.put("correlation_id", data.id.str)
-            info.put("nonce", data.id.str)
-            info.put("public", true)
-          })
-        })
-      }
-    }
+  def encodePicture(assets: Seq[AssetData]): JSONArray = {
+    val arr = new json.JSONArray()
+      assets.collect {
+        case a@AssetData.IsImage(Dim2(w, h), tag) =>
+          JsonEncoder { o =>
+            o.put("id", a.v2ProfileId.map(_.str).getOrElse(""))
+            o.put("content_type", a.mime.str)
+            o.put("content_length", a.size)
+            a.data64.foreach(o.put("data", _))
+            o.put("info", JsonEncoder { info =>
+              info.put("tag", tag)
+              info.put("width", w)
+              info.put("height", h)
+              info.put("original_width", w)
+              info.put("original_height", h)
+              info.put("correlation_id", a.id.str)
+              info.put("nonce", a.id.str)
+              info.put("public", true)
+            })
+          }
+      }.foreach(arr.put)
+    arr
+  }
+
+
+  def encodeAsset(assets: Seq[AssetData]): JSONArray = {
+    val arr = new json.JSONArray()
+    assets.collect {
+      case AssetData.WithRemoteId(rId) =>
+        JsonEncoder { o =>
+          o.put("size", "complete")
+          o.put("key", rId.str)
+          o.put("type", "image")
+        }
+    }.foreach(arr.put)
+    arr
+  }
 
   implicit lazy val Encoder: JsonEncoder[UserInfo] = new JsonEncoder[UserInfo] {
     override def apply(info: UserInfo): JSONObject = JsonEncoder { o =>
@@ -98,7 +134,8 @@ object UserInfo {
       info.email.foreach(e => o.put("email", e.str))
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
-      info.picture.foreach(pic => o.put("picture", encodeImage(pic)))
+      o.put("assets", encodeAsset(info.picture.toSeq))
+      o.put("picture", encodePicture(info.picture.toSeq))
     }
   }
 
@@ -106,7 +143,8 @@ object UserInfo {
     JsonEncoder { o =>
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
-      info.picture.foreach(pic => o.put("picture", encodeImage(pic)))
+      o.put("assets", encodeAsset(info.picture.toSeq))
+      o.put("picture", encodePicture(info.picture.toSeq))
     }
   }
 }

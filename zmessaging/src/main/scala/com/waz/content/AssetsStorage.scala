@@ -18,9 +18,12 @@
 package com.waz.content
 
 import android.content.Context
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AssetData.AssetDataDao
-import com.waz.model.{AnyAssetData, _}
-import com.waz.threading.Threading
+import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetStatus.UploadDone
+import com.waz.model._
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.EventStream
 import com.waz.utils.{CachedStorage, TrimmingLruCache, _}
@@ -28,25 +31,45 @@ import com.waz.utils.{CachedStorage, TrimmingLruCache, _}
 import scala.concurrent.Future
 
 class AssetsStorage(context: Context, storage: Database) extends CachedStorage[AssetId, AssetData](new TrimmingLruCache(context, Fixed(100)), storage)(AssetDataDao, "AssetsStorage") {
-  import Threading.Implicits.Background
+  private implicit val dispatcher = new SerialDispatchQueue(name = "AssetsStorage")
 
   val onUploadFailed = EventStream[AssetData]()
 
-  def getImageAsset(id: AssetId) = get(id) map {
-    case Some(image: ImageAssetData) => Some(image)
-    case _ => None
+  //allows overwriting of asset data
+  def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]] = update(id, updater).mapOpt {
+    case (_, updated) => Some(updated)
   }
 
-  def getAsset(id: AssetId) = get(id) map {
-    case Some(asset: AnyAssetData) => Some(asset)
-    case _ => None
+  def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]] = mergeOrCreateAsset(Some(newData))
+  def mergeOrCreateAsset(newData: Option[AssetData]): Future[Option[AssetData]] = newData.map(nd => updateOrCreate(nd.id, cur => merge(cur, nd), nd).map(Some(_))).getOrElse(Future.successful(None))
+
+  //Useful for receiving parts of an asset message or remote data. Note, this only merges non-defined properties, any current data remaining as is.
+  private def merge(cur: AssetData, newData: AssetData): AssetData = {
+
+    val metaData = cur.metaData match {
+      case None => newData.metaData
+      case Some(AssetMetaData.Image(dim, tag)) if tag == "" => AssetMetaData.Image(dim, newData.tag)
+      case _ => cur.metaData
+    }
+
+    val res = cur.copy(
+      mime        = if (cur.mime == Mime.Unknown)  newData.mime         else cur.mime,
+      sizeInBytes = if (cur.sizeInBytes == 0)      newData.sizeInBytes  else cur.sizeInBytes,
+      remoteId    = if (cur.remoteId.isEmpty)      newData.remoteId     else cur.remoteId,
+      token       = if (cur.token.isEmpty)         newData.token        else cur.token,
+      otrKey      = if (cur.otrKey.isEmpty)        newData.otrKey       else cur.otrKey,
+      sha         = if (cur.sha.isEmpty)           newData.sha          else cur.sha,
+      name        = if (cur.name.isEmpty)          newData.name         else cur.name,
+      previewId   = if (cur.previewId.isEmpty)     newData.previewId    else cur.previewId,
+      metaData    = if (cur.metaData.isEmpty)      newData.metaData     else cur.metaData,
+      proxyPath   = if (cur.proxyPath.isEmpty)     newData.proxyPath    else cur.proxyPath,
+      source      = if (cur.source.isEmpty)        newData.source       else cur.source,
+      convId      = if (cur.convId.isEmpty)        newData.convId       else cur.convId,
+      data        = if (cur.data.isEmpty)          newData.data         else cur.data
+      //TODO Dean: giphy source and caption
+    )
+    //After merging the two asset data objects, update the resulting status if we now have remote data
+    res.copy(status = res.remoteData.fold(res.status)(_ => UploadDone))
   }
 
-  def updateAsset(id: AssetId, updater: AnyAssetData => AnyAssetData): Future[Option[AnyAssetData]] = update(id, {
-    case a: AnyAssetData => updater(a)
-    case other => other
-  }).mapOpt {
-    case (_, updated: AnyAssetData) => Some(updated)
-    case _ => None
-  }
 }

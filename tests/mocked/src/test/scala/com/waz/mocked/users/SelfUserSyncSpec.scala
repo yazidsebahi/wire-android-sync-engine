@@ -78,21 +78,18 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
     self.setPicture(ImageAssetFactory.getImageAsset(toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
 
     val selfPicture = soon(returning(self.getPicture)(_ should not be empty))
-    def selfPictureData = selfPicture.data.versions
 
     soon {
-      sentUserInfo.value.picture.value.versions(0).remoteId shouldBe Some(RAssetDataId("smallProfile-picture"))
-      sentUserInfo.value.picture.value.versions(1).remoteId shouldBe Some(RAssetDataId("medium-picture"))
-      selfPictureData(0).remoteId shouldBe Some(RAssetDataId("smallProfile-picture"))
-      selfPictureData(1).remoteId shouldBe Some(RAssetDataId("medium-picture"))
+      sentUserInfo.value.picture.value.remoteId shouldBe Some(RAssetId("medium-picture"))
+      selfPicture.data.remoteId shouldBe Some(RAssetId("medium-picture"))
     }
   }
 
-  override def postImageAssetData(image: ImageData, assetId: AssetId, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[ImageData] = {
+  override def postImageAssetData(asset: AssetData, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[RAssetId] = {
     import Threading.Implicits.Background
-    def response(delay: FiniteDuration, id: String) = CancellableFuture.delayed(delay)(Right(image.copy(remoteId = Some(RAssetDataId(id)), data64 = None, sent = true)))
+    def response(delay: FiniteDuration, id: String) = CancellableFuture.delayed(delay)(Right(RAssetId(id)))
 
-    if (image.tag == "medium") response(2.seconds, "medium-picture")
+    if (asset.tag == "medium") response(2.seconds, "medium-picture")
     else response(100.millis, "smallProfile-picture")
   }
 

@@ -21,6 +21,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.GlobalDatabase
+import com.waz.model.CacheKey
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.utils.returning
@@ -42,25 +43,25 @@ class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     scenario("Cache entries where files and data are missing are not loaded.") {
       cache.insert(Seq(withData, withFile, withoutDataOrFile)).await()
 
-      cache.get("withData") should eventually(be('defined))
-      cache.get("withFile") should eventually(be('defined))
-      cache.get("withoutDataOrFile") should eventually(be(None))
+      cache.get(CacheKey("withData")) should eventually(be('defined))
+      cache.get(CacheKey("withFile")) should eventually(be('defined))
+      cache.get(CacheKey("withoutDataOrFile")) should eventually(be(None))
 
-      withDelay { CacheEntryDao.getByKey("withoutDataOrFile") shouldEqual None }
+      withDelay { CacheEntryDao.getByKey(CacheKey("withoutDataOrFile")) shouldEqual None }
     }
 
     scenario("Expired cache entries are not loaded.") {
       val exp = expiredWithFile
       cache.insert(Seq(withData, withFile, expiredWithData, exp)).await()
 
-      cache.get("withData") should eventually(be('defined))
-      cache.get("withFile") should eventually(be('defined))
-      cache.get("expiredWithData") should eventually(be(None))
-      cache.get("expiredWithFile") should eventually(be(None))
+      cache.get(CacheKey("withData")) should eventually(be('defined))
+      cache.get(CacheKey("withFile")) should eventually(be('defined))
+      cache.get(CacheKey("expiredWithData")) should eventually(be(None))
+      cache.get(CacheKey("expiredWithFile")) should eventually(be(None))
 
       withDelay {
-        CacheEntryDao.getByKey("expiredWithData") shouldEqual None
-        CacheEntryDao.getByKey("expiredWithFile") shouldEqual None
+        CacheEntryDao.getByKey(CacheKey("expiredWithData")) shouldEqual None
+        CacheEntryDao.getByKey(CacheKey("expiredWithFile")) shouldEqual None
 
         CacheStorage.entryFile(cacheDir, exp.fileId).exists shouldEqual false
       }
@@ -68,21 +69,21 @@ class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
     scenario("Cache entries with 'infinite' timeout.") {
       import Expiration._
-      cache.insert(CacheEntryData("meep", Some(Array[Byte](1)), lastUsed = 0L, timeout = Duration.Inf.timeout, path = None)).await()
-      cache.get("meep") should eventually(be('defined))
+      cache.insert(CacheEntryData(CacheKey("meep"), Some(Array[Byte](1)), lastUsed = 0L, timeout = Duration.Inf.timeout, path = None)).await()
+      cache.get(CacheKey("meep")) should eventually(be('defined))
     }
   }
 
-  def withoutDataOrFile = CacheEntryData("withoutDataOrFile", path = None)
+  def withoutDataOrFile = CacheEntryData(CacheKey("withoutDataOrFile"), path = None)
 
-  def withData = CacheEntryData("withData", Some(Array[Byte](1, 2, 3)), path = Some(cacheDir))
+  def withData = CacheEntryData(CacheKey("withData"), Some(Array[Byte](1, 2, 3)), path = Some(cacheDir))
 
-  def withFile = returning(CacheEntryData("withFile", None, path = Some(cacheDir))) { entry =>
+  def withFile = returning(CacheEntryData(CacheKey("withFile"), None, path = Some(cacheDir))) { entry =>
     val file = CacheStorage.entryFile(cacheDir, entry.fileId)
     file.getParentFile.mkdirs()
     file.createNewFile()
   }
 
-  def expiredWithData = CacheEntryData("expiredWithData", Some(Array[Byte](1, 2, 3)), lastUsed = 0L, path = None)
-  def expiredWithFile = withFile.copy(key = "expiredWithFile", lastUsed = 0L)
+  def expiredWithData = CacheEntryData(CacheKey("expiredWithData"), Some(Array[Byte](1, 2, 3)), lastUsed = 0L, path = None)
+  def expiredWithFile = withFile.copy(key = CacheKey("expiredWithFile"), lastUsed = 0L)
 }

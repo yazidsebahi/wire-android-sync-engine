@@ -25,8 +25,7 @@ import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
 import com.waz.api.MessageContent.{Location, Text}
 import com.waz.api.{EphemeralExpiration, IConversation, ImageAssetFactory, UpdateListener}
-import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.{Asset => ProtoAsset, LinkPreview, MsgEdit}
+import com.waz.model.GenericContent.{LinkPreview, MsgEdit}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
@@ -129,12 +128,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
         val id = AssetId(s"${data.assetId.str}_${w}_$h") // use dimensions in id, to avoid caching images with different sizes
         context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(id, loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
       })
-    case _ =>
-      data.protos.lastOption.map {
-        //TODO figure out how to update the protos (with size) properly after creating an image - sent images aren't rendered properly and receiver side has to scale them up...
-        case GenericMessage(_, asset @ ProtoAsset(Some(Original(Mime.Image(), size, _, _, _)), _, _)) if size > 0 => context.images.getImageAsset(asset)
-        case _ => context.images.getImageAsset(data.assetId)
-      }.getOrElse(ImageAsset.Empty) // don't return null for message types that should have an image, (null means invalid operation, empty image means `not yet available`)
+    case _ => context.images.getImageAsset(data.assetId)
   }
 
   override def getAsset =
@@ -222,13 +216,13 @@ class MessagePart(content: MessageContent, message: MessageData, index: Int)(imp
 
   lazy val image = (content.tpe, content.asset, content.openGraph, linkPreview) match {
     case (Part.Type.ASSET, Some(assetId), _, _) => ui.images.getImageAsset(assetId)
-    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset)
+    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset.id)
     case (Part.Type.WEB_LINK, _, Some(OpenGraphData(_, _, Some(uri), _, _)), None) => ImageAssetFactory.getImageAsset(uri)
     case _ => ImageAsset.Empty
   }
 
   lazy val dimensions = linkPreview match {
-    case Some(LinkPreview.WithAsset(GenericContent.Asset.WithDimensions(d))) => d
+    case Some(LinkPreview.WithAsset(AssetData.WithDimensions(d))) => d
     case _ => Dim2(content.width, content.height)
   }
 

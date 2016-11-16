@@ -24,9 +24,9 @@ import com.waz.api.impl.AccentColor
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.UserService._
 import com.waz.service.assets.AssetService
+import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -39,7 +39,7 @@ import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
 class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushServiceSignals,
-                  assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle) {
+                  assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) {
 
   private implicit val logTag: LogTag = logTagFor[UserService]
   import Threading.Implicits.Background
@@ -126,7 +126,16 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
 
   def syncSelfNow: Future[Option[UserData]] = Serialized.future("syncSelfNow", selfUserId) {
     usersClient.loadSelf().future.flatMap {
-      case Right(info) => updateSyncedUsers(Seq(info)) map { _.headOption }
+      case Right(info) =>
+        //TODO Dean - remove after v2 transition time
+        info.picture.filter(_.convId.isDefined).fold(Future.successful(())) { asset =>
+            verbose("User has v2 picture - re-uploading as v3")
+            for {
+              _ <- sync.postSelfPicture(Some(asset.id))
+              _ <- assetsStorage.updateAsset(asset.id, _.copy(convId = None)) //mark asset as v3
+              _ <- usersClient.updateSelf(info)
+            } yield (())
+        }.flatMap (_ => updateSyncedUsers(Seq(info)) map { _.headOption })
       case Left(err) =>
         error(s"loadSelf() failed: $err")
         Future.successful(None)
@@ -160,7 +169,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     updateSelfAndSync(_.copy(picture = None), _ => sync.postSelfPicture(None))
 
   def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Option[UserData]] =
-    assets.addImageAsset(AssetId(), image, RConvId(selfUserId.str), isSelf = true) flatMap { asset =>
+    assets.addImageAsset(image, RConvId(selfUserId.str), isSelf = true) flatMap { asset =>
       updateAndSync(selfUserId, _.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
     }
 
@@ -187,7 +196,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
       case _ => Future.successful(())
     }
 
-  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateImageAssets(users.flatMap(_.picture.filter(_.nonEmpty)))
+  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picture) ++ users.flatMap(_.picture))
 
   def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
     debug(s"update synced users: $users, service: $this")

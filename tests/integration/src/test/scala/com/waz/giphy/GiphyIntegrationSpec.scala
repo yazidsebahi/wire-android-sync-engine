@@ -18,7 +18,6 @@
 package com.waz.giphy
 
 import com.waz.api.ProvisionedApiSpec
-import com.waz.model.ImageData.Tag
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{FeatureSpec, Matchers}
@@ -43,7 +42,7 @@ class GiphyIntegrationSpec extends FeatureSpec with Matchers with ProvisionedApi
       (catSearch should (be('ready) and have(size(25)))).soon
 
       val img = catSearch.head
-      img.data.versions.map(_.tag) shouldEqual Seq(Tag.Preview, Tag.MediumPreview, Tag.Medium)
+      img.data.tag shouldEqual "medium"
       img.shouldBeAnAnimatedGif
     }
 
@@ -61,7 +60,7 @@ class GiphyIntegrationSpec extends FeatureSpec with Matchers with ProvisionedApi
       (results should (be('ready) and have(size(25)))).soon
 
       val img = results.head
-      img.data.versions.map(_.tag) shouldEqual Seq(Tag.Preview, Tag.MediumPreview, Tag.Medium)
+      img.data.tag shouldEqual "medium"
       img.shouldBeAnAnimatedGif
     }
 
