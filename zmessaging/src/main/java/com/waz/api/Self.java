@@ -105,4 +105,8 @@ public interface Self extends UiObservable {
     void setPicture(ImageAsset image);
 
     void clearPicture();
+
+    void setUsername(String username, CredentialsUpdateListener listener);
+
+    boolean hasSetUsername();
 }
