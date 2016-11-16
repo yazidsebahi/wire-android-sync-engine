@@ -72,6 +72,16 @@ class CacheService(context: Context, storage: Database) {
       }
     }
 
+  def addFile(key: CacheKey, src: File, moveFile: Boolean = false, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+    addStreamToStorage(IoUtils.copy(new FileInputStream(src), _), cacheLocation) match {
+      case Success((fileId, path, encKey, len)) =>
+        if (moveFile) src.delete()
+        add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
+      case Failure(e) =>
+        HockeyApp.saveException(e, s"addFile($key) failed")
+        throw new Exception(s"addFile($key) failed", e)
+    }
+
   private def addStreamToStorage(writer: OutputStream => Long, location: Option[File]): Try[(Uid, File, Option[AESKey], Long)] = {
     def write(dir: File, enc: Option[AESKey]) = {
       val id = Uid()
