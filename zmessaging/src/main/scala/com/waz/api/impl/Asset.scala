@@ -55,7 +55,7 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
   override def isEmpty: Boolean = false
 
   override def getContentUri(callback: LoadCallback[Uri]): Unit =
-    ui.zms.flatMap(_.assets.getAssetUri(id)).onComplete {
+    ui.zms.flatMap(_.assets.getContentUri(id)).onComplete {
       case Success(Some(uri)) => callback.onLoaded(uri)
       case _ => callback.onLoadFailed()
     }
@@ -73,7 +73,7 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
   override def getHeight: Int = dimensions.height
 
   override def getPlaybackControls(callback: LoadCallback[api.PlaybackControls]): Unit =
-    if (isAudio) ui.zms.flatMap(_.assets.getAssetUri(id)).onComplete {
+    if (isAudio) ui.zms.flatMap(_.assets.getContentUri(id)).onComplete {
       case Success(Some(uri)) => callback.onLoaded(new PlaybackControls(AssetMediaKey(id), UnauthenticatedContent(uri), durationSignal))
       case _ => callback.onLoadFailed()
     }

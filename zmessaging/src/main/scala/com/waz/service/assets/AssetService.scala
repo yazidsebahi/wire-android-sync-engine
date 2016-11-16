@@ -217,10 +217,10 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.copy(status = UploadDone))
 
-  def getAssetUri(id: AssetId): CancellableFuture[Option[Uri]] =
+  def getContentUri(id: AssetId): CancellableFuture[Option[Uri]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
       case Some(a: AssetData) =>
-        verbose(s"getAssetUri for: $a")
+        verbose(s"getContentUri for: $a")
         loader.getAssetData(a.loadRequest) flatMap {
           case Some(entry: CacheEntry) =>
             CancellableFuture successful {
