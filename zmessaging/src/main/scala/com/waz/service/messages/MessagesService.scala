@@ -111,7 +111,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 non-image: $asset")
           assets.storage.mergeOrCreateAsset(asset)
-        case (ImageAsset(a), Some(rId)) =>
+        case (ImageAsset(a@AssetData.IsImage(_, "preview")), _) =>
+          verbose(s"Received image preview for msg: $id. Dropping")
+          Future successful None
+        case (ImageAsset(a@AssetData.IsImage(_, "medium")), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 image: $asset")
           assets.storage.mergeOrCreateAsset(asset)
@@ -193,6 +196,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(AssetData.IsAudio(), _) =>
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case ImageAsset(AssetData.IsImage(_, "preview")) => //ignore previews
+        MessageData.Empty
       case Asset(AssetData.IsImage(_, _), _) | ImageAsset(AssetData.IsImage(_, _)) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(_, _) =>
