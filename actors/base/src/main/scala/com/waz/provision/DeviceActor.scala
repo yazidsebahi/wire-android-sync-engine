@@ -24,7 +24,6 @@ import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import android.net.Uri
 import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
@@ -32,7 +31,6 @@ import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
 import com.waz.cache.LocalData
 import com.waz.content.{Database, GlobalDatabase}
-import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
@@ -323,6 +321,19 @@ class DeviceActor(val deviceName: String,
     case SendImageData(remoteId, bytes) =>
       withConv(remoteId) { conv =>
         zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes)))
+      }
+
+      //TODO: Dean remove after v2 transition period
+    case SetAssetToV3 =>
+      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", true) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to send with v3")
+      }
+
+    case SetAssetToV2 =>
+      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", false) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to send with v3")
       }
 
     case SendAsset(remoteId, bytes, mime, name, delay) =>
