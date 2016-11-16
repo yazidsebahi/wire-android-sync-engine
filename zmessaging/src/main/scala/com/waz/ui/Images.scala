@@ -40,8 +40,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   private implicit val dispatcher = Threading.ImageDispatcher
 
-  val images      = new UiCache[AssetId, ImageAsset](lruSize = 15)//enough for search or message stream
-  val fileImages  = new UiCache[Uri,     ImageAsset](lruSize = 15)//enough for gallery or giphy
+  val images      = new UiCache[AssetId, ImageAsset](lruSize = 15)
   val zms         = ui.zms
 
   def getImageAsset(id: AssetId): ImageAsset = cacheImageAsset(id, new ImageAsset(id))
@@ -55,7 +54,8 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      getOrUpdate(fileImages)(uri, new LocalImageAsset(AssetData.newImageAsset().copy(source = Some(uri))))
+      val asset = AssetData.newImageAsset().copy(source = Some(uri))
+      cacheImageAsset(asset.id, new LocalImageAsset(asset))
     }
   }
 

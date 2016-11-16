@@ -78,7 +78,6 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         _ <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
 
-    //TODO Dean - merge sendImageMessage and sendAssetMessage together
     def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
       verbose(s"sendImageMessage($img, $conv)")
       for {
