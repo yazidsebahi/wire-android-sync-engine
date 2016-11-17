@@ -106,6 +106,8 @@ public interface Self extends UiObservable {
 
     void clearPicture();
 
+    String getUsername();
+
     void setUsername(String username, CredentialsUpdateListener listener);
 
     boolean hasSetUsername();
