@@ -360,10 +360,13 @@ class DeviceActor(val deviceName: String,
     case SendFile(remoteId, path, mime) =>
       withConv(remoteId) { conv =>
         val file = new File(path)
-        val asset = impl.AssetForUpload(AssetId(), Some(file.getName), Mime(mime), Some(file.length)) {
-          _ => new FileInputStream(file)
+        val assetId = AssetId()
+        zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).flatMap { cacheEntry =>
+          val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
+            _ => new FileInputStream(file)
+          }
+          zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
         }
-        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
       }
 
     case AddMembers(remoteId, users@_*) =>

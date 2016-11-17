@@ -46,6 +46,7 @@ abstract class AssetForUpload(val id: AssetId) extends api.AssetForUpload {
   def sizeInBytes: Future[Option[Long]]
 
   def cacheKey = CacheKey(id.str)
+  //TODO: Dean remove unused functions
   def openDataStream(context: Context): InputStream
 }
 object AssetForUpload {
