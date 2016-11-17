@@ -15,18 +15,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.api;
 
-trait Usernames {
-  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
-  def isUsernameValid(username: String) : UsernameValidation
-}
+public enum UsernameValidationError {
+    NONE(0),
+    TOO_LONG(1),
+    TOO_SHORT(2),
+    INVALID_CHARACTERS(3),
+    ALREADY_TAKEN(4);
 
-trait UsernamesRequestCallback{
-  def onUsernameRequestResult(username: String, validation: UsernameValidation) : Unit
-}
-
-trait UsernameValidation{
-  def isValid: Boolean
-  def reason: UsernameValidationError
+    private final int code;
+    UsernameValidationError(int code){
+        this.code = code;
+    }
+    public final int getCode() {
+        return code;
+    }
 }

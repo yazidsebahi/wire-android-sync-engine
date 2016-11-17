@@ -121,4 +121,6 @@ trait ZMessagingApi {
   def getLogging: Logging
 
   def getConnectionIndicator: ConnectionIndicator
+
+  def getUsernames: Usernames
 }

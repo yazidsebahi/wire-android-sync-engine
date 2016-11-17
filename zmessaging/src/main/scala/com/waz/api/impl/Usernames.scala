@@ -18,21 +18,33 @@
 package com.waz.api.impl
 
 import com.waz.api
-import com.waz.api.{UsernameValidation, UsernamesRequestCallback}
+import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback}
 
 class Usernames extends api.Usernames{
   override def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) = {
     //TODO: STUB
     callback.onUsernameRequestResult("", new UsernameValidation {
       override def isValid: Boolean = true
-      override def reason: String = ""
+      override def reason: UsernameValidationError = UsernameValidationError.NONE
     })
   }
   override def isUsernameValid(username: String): UsernameValidation = {
-    //TODO: STUB
-    new UsernameValidation {
-      override def isValid: Boolean = true
-      override def reason: String = ""
+    val MAX_LENGTH = 21
+    val MIN_LENGTH = 2
+    val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){$MIN_LENGTH,$MAX_LENGTH}$$""".r
+
+    if (username.length  > MAX_LENGTH) {
+      return UsernameValidationImpl(isValid = false, UsernameValidationError.TOO_LONG)
+    }
+    if (username.length  < MIN_LENGTH) {
+      return UsernameValidationImpl(isValid = false, UsernameValidationError.TOO_SHORT)
+    }
+    username match {
+      case usernameRegex(_) => UsernameValidationImpl(isValid = true, UsernameValidationError.NONE)
+      case _ => UsernameValidationImpl(isValid = false, UsernameValidationError.INVALID_CHARACTERS)
     }
   }
+}
+
+case class UsernameValidationImpl (isValid: Boolean, reason: UsernameValidationError) extends UsernameValidation {
 }
