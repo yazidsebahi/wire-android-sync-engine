@@ -32,7 +32,7 @@ import com.waz.api.impl._
 import com.waz.cache.{CacheEntry, CacheService, Expiration, LocalData}
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content._
-import com.waz.model.AssetData.{FetchKey, UploadKey}
+import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.Order._
 import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ErrorData.AssetError
@@ -115,8 +115,8 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     for {
       Some(asset) <- storage.get(id)
       _ <- downloader.cancel(asset.cacheKey)
-      _ <- Cancellable.cancel(FetchKey(id))
-      _ <- Cancellable.cancel(UploadKey(id))
+      _ <- AssetProcessing.cancel(ProcessingTaskKey(id))
+      _ <- Cancellable.cancel(UploadTaskKey(id))
       _ <- markUploadFailed(id, UploadCancelled)
     } yield ()
 
@@ -188,10 +188,19 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         source = uri,
         convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
       ))
-      entry <- loadData(asset).future
-      //TODO Dean - I could have these running in parallel to make message generation quicker. Would then need to wait before sending though
-      updated  <- Cancellable(FetchKey(a.id))(updatePreviewAndMetaData(asset, entry)).future
-    } yield returning(updated.getOrElse(asset))(a => verbose(s"created asset: $a"))
+    } yield {
+
+      //trigger calculation of preview and meta data for asset.
+      //Do this in parallel to ensure that the message is created quickly.
+      //pass to asset processing so sending can wait on the result
+      AssetProcessing(ProcessingTaskKey(asset.id)) {
+        for {
+          entry <- loadData(asset)
+          updated <- updatePreviewAndMetaData(asset, entry)
+        } yield updated
+      }
+      returning(asset)(a => verbose(s"created asset: $a"))
+    }
   }
 
   private def updatePreviewAndMetaData(asset: AssetData, entry: LocalData): CancellableFuture[Option[AssetData]] = {
@@ -210,7 +219,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
           name = nm,
           previewId = prev.map(_.id),
           sizeInBytes = entry.length))
-    } yield updated
+    } yield returning(updated)(a => verbose(s"Generated preview and meta data for ${asset.id}"))
   }
 
   def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))
@@ -261,7 +270,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     def saveAssetData(file: File) =
       loader.getAssetData(asset.loadRequest).future.map {
         case Some(data) =>
-
+          //TODO Dean: remove after v2 transition period
           //Trigger updating of meta data for assets generated (and downloaded) from old AnyAssetData type.
           asset.mime match {
             case Mime.Video() if asset.metaData.isEmpty || asset.previewId.isEmpty => updatePreviewAndMetaData(asset, data)

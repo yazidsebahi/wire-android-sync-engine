@@ -25,7 +25,7 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
 import com.waz.content.{MembersStorage, MessagesStorage}
-import com.waz.model.AssetData.{RemoteData, UploadKey}
+import com.waz.model.AssetData.{ProcessingTaskKey, RemoteData, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
@@ -165,7 +165,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     import Message.Type._
 
     def post: ErrorOr[Instant] = msg.msgType match {
-      case MessageData.IsAsset() => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
+      case MessageData.IsAsset() => Cancellable(UploadTaskKey(msg.assetId))(uploadAsset(conv, msg)).future
       case KNOCK => postMessage(conv, msg.ephemeral, GenericMessage(msg.id.uid, msg.ephemeral, Proto.Knock())).map(_.map(_.instant))
       case TEXT | TEXT_EMOJI_ONLY => postTextMessage().map(_.map(_.time))
       case RICH_MEDIA =>
@@ -326,13 +326,16 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       }
     }
 
-    CancellableFuture lift assets.storage.get(msg.assetId) flatMap {
-      case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
-      case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
-      case Some(asset) =>
-        verbose(s"Sending asset: $asset")
-        if (asset.convId.isDefined) sendWithV2(asset)
-        else sendWithV3(asset)
+    //want to wait until asset meta and preview data is loaded before we send any messages
+    AssetProcessing.get(ProcessingTaskKey(msg.assetId)).flatMap { _ =>
+      CancellableFuture lift assets.storage.get(msg.assetId).flatMap {
+        case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
+        case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
+        case Some(asset) =>
+          verbose(s"Sending asset: $asset")
+          if (asset.convId.isDefined) sendWithV2(asset)
+          else sendWithV3(asset)
+      }
     }
   }
 

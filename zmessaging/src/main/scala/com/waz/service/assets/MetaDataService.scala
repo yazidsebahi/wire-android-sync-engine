@@ -21,7 +21,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
@@ -36,7 +35,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{LoggedTry, Serialized}
 import org.threeten.bp
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -100,7 +99,7 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
     }
   }
 
-  private def audioMetaData(asset: AssetData, entry: CacheEntry)(implicit ec: ExecutionContext): Future[Option[Audio]] = {
+  private def audioMetaData(asset: AssetData, entry: CacheEntry): Future[Option[Audio]] = {
     lazy val loudness = AudioLevels(context).createAudioOverview(CacheUri(entry.data, context), asset.mime)
       .recover{case _ => warn(s"Failed to genate loudness levels for audio asset: ${asset.id}"); None}.future
 

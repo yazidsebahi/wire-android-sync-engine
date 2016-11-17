@@ -230,9 +230,9 @@ object AssetData {
 
   // 25MiB
 
-  case class FetchKey(id: AssetId)
+  case class ProcessingTaskKey(id: AssetId)
 
-  case class UploadKey(id: AssetId)
+  case class UploadTaskKey(id: AssetId)
 
   implicit object AssetDataDao extends Dao[AssetData, AssetId] {
     val Id    = id[AssetId]('_id, "PRIMARY KEY").apply(_.id)
