@@ -30,8 +30,6 @@ object AssetStatus {
   type Syncable = AssetStatus with Sync
 
   case object UploadNotStarted extends AssetStatus(UPLOAD_NOT_STARTED)
-  case object MetaDataSent extends AssetStatus(META_DATA_SENT)
-  case object PreviewSent extends AssetStatus(PREVIEW_SENT)
   case object UploadInProgress extends AssetStatus(UPLOAD_IN_PROGRESS)
   case object UploadDone extends AssetStatus(UPLOAD_DONE)
   case object UploadCancelled extends AssetStatus(UPLOAD_CANCELLED) with Sync
@@ -45,8 +43,6 @@ object AssetStatus {
   implicit lazy val AssetStatusDecoder: JsonDecoder[AssetStatus] = new JsonDecoder[AssetStatus] {
     override def apply(implicit js: JSONObject): AssetStatus = AssetStatusCodec.decode('status) match {
       case UPLOAD_NOT_STARTED   => UploadNotStarted
-      case META_DATA_SENT       => MetaDataSent
-      case PREVIEW_SENT         => PreviewSent
       case UPLOAD_IN_PROGRESS   => UploadInProgress
       case UPLOAD_DONE          => UploadDone
       case UPLOAD_CANCELLED     => UploadCancelled
@@ -72,8 +68,6 @@ object AssetStatus {
 
   implicit lazy val AssetStatusCodec: EnumCodec[api.AssetStatus, String] = EnumCodec.injective {
     case UPLOAD_NOT_STARTED   => "NotStarted"
-    case META_DATA_SENT       => "MetaDataSent"
-    case PREVIEW_SENT         => "PreviewSent"
     case UPLOAD_IN_PROGRESS   => "InProgress"
     case UPLOAD_DONE          => "Done"
     case UPLOAD_CANCELLED     => "Cancelled"

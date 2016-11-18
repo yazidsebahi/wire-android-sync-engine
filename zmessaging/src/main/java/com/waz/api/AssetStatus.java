@@ -20,8 +20,6 @@ package com.waz.api;
 // in order of actual status progression!
 public enum AssetStatus {
     UPLOAD_NOT_STARTED,
-    META_DATA_SENT,
-    PREVIEW_SENT,
     UPLOAD_IN_PROGRESS,
     UPLOAD_CANCELLED,
     UPLOAD_FAILED,

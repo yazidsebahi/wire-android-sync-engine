@@ -154,8 +154,7 @@ object Generators {
 
 
   implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(frequency((2, oneOf[AssetStatus](AssetStatus.UploadNotStarted,
-    AssetStatus.MetaDataSent, AssetStatus.PreviewSent, AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed,
-    AssetStatus.UploadDone, AssetStatus.DownloadFailed))))
+    AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed, AssetStatus.UploadDone, AssetStatus.DownloadFailed))))
   implicit lazy val arbSyncableAssetStatus: Arbitrary[AssetStatus.Syncable] = Arbitrary(oneOf(AssetStatus.UploadCancelled, AssetStatus.UploadFailed))
   implicit lazy val arbAssetToken: Arbitrary[AssetToken] = Arbitrary(resultOf(AssetToken))
   implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))

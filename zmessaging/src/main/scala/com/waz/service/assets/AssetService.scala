@@ -34,7 +34,7 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content._
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.Order._
-import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
+import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
 import com.waz.model.ErrorData.AssetError
 import com.waz.model._
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
@@ -87,19 +87,24 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   }
 
   def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
-    case asset @ AssetData.WithStatus(status) =>
-      cache.cacheStorage.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
-        case true  =>
-          verbose(s"asset in state DOWNLOAD_DONE, meta: ${asset.metaData}")
-          Signal const (asset, api.AssetStatus.DOWNLOAD_DONE)
+    case asset @ AssetData.WithStatus(status) => assetStatusSignal(status, asset.cacheKey).map(st => (asset, st))
+    case _ => Signal.empty[(AssetData, api.AssetStatus)]
+  }
+
+  def assetStatusSignal(status: AssetStatus, cacheKey: CacheKey) = status match {
+    case UploadDone => //only if the asset is uploaded, check for a cache entry. Upload state takes precedence over download state
+      cache.cacheStorage.optSignal(cacheKey).map(_.isDefined) flatMap {
+        case true =>
+          verbose(s"uploaded asset also has cache entry, must be downloaded. For key: $cacheKey")
+          Signal const api.AssetStatus.DOWNLOAD_DONE
         case false =>
-          downloader.getDownloadState(asset.cacheKey).map(_.state) map {
-            case State.RUNNING    => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS)
-            case State.COMPLETED  => (asset, api.AssetStatus.DOWNLOAD_IN_PROGRESS) // reporting asset in progress since it should be added to cache before we change the state
-            case _                => (asset, status.status)
+          downloader.getDownloadState(cacheKey).map(_.state) map {
+            case State.RUNNING    => api.AssetStatus.DOWNLOAD_IN_PROGRESS
+            case State.COMPLETED  => api.AssetStatus.DOWNLOAD_IN_PROGRESS // reporting asset in progress since it should be added to cache before we change the state
+            case _                => status.status
           }
       }
-    case _ => Signal.empty[(AssetData, api.AssetStatus)]
+    case _ => Signal const status.status
   }
 
   def downloadProgress(id: AssetId) = storage.signal(id) flatMap ( asset => downloader.getDownloadState(asset.cacheKey) )

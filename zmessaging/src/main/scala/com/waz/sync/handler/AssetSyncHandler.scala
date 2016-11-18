@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.AssetStatus.{UploadDone, UploadInProgress}
 import com.waz.model._
 import com.waz.service.PreferenceService
 import com.waz.service.assets.AssetService
@@ -44,7 +44,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
 
   //for v3
   def uploadAssetData(assetId: AssetId, public: Boolean = false): ErrorOrResponse[Option[AssetData]] = {
-    CancellableFuture.lift(assets.storage.get(assetId).zip(assets.getAssetData(assetId))) flatMap {
+    CancellableFuture.lift(assets.storage.updateAsset(assetId, _.copy(status = UploadInProgress)).zip(assets.getAssetData(assetId))) flatMap {
       case (Some(asset), Some(data)) if data.length > AssetData.MaxAllowedAssetSizeInBytes =>
         CancellableFuture successful Left(internalError(AssetSyncHandler.AssetTooLarge))
       case (Some(asset), _) if asset.remoteId.isDefined =>

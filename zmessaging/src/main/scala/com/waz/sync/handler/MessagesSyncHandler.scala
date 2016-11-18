@@ -225,20 +225,16 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       })
     }
 
-    def postOriginal(): ErrorOrResponse[Instant] =
-      CancellableFuture.lift(assets.storage.get(msg.assetId)) flatMap {
-        case None => CancellableFuture successful Left(internalError(s"no asset found for $msg"))
-        case Some(asset) if asset.status != AssetStatus.UploadNotStarted => CancellableFuture successful Right(msg.time)
-        case Some(asset) =>
-          asset.mime match {
-            case Mime.Image() => CancellableFuture.successful(Right(msg.time))
-            case _ => postAssetMessage(asset.copy(status = AssetStatus.MetaDataSent), None)
-          }
+    //TODO Dean: Update asset status to UploadInProgress after posting original - what about images...?
+    def postOriginal(asset: AssetData): ErrorOrResponse[Instant] =
+      if (asset.status != AssetStatus.UploadNotStarted) CancellableFuture successful Right(msg.time)
+      else asset.mime match {
+        case Mime.Image() => CancellableFuture.successful(Right(msg.time))
+        case _ => postAssetMessage(asset, None)
       }
 
-
     def sendWithV2(asset: AssetData) = {
-      postOriginal().flatMap {
+      postOriginal(asset).flatMap {
         case Left(err) => CancellableFuture successful Left(err)
         case Right(origTime) =>
           convLock.release()
@@ -296,7 +292,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
 
     def sendWithV3(asset: AssetData) = {
-      postOriginal().flatMap {
+      postOriginal(asset).flatMap {
         case Left(err) => CancellableFuture successful Left(err)
         case Right(origTime) =>
           convLock.release()

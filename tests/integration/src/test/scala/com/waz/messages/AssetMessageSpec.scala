@@ -33,7 +33,6 @@ import com.waz.model
 import com.waz.model.AssetData.MaxAllowedAssetSizeInBytes
 import com.waz.model.AssetMetaData.{Audio, Video}
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed}
-import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.otr.ClientId
 import com.waz.model.{GenericContent, Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
@@ -112,7 +111,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getMimeType shouldEqual pdf.mime.str
         asset.getSizeInBytes shouldEqual pdf.size
         asset.getStatus shouldEqual DOWNLOAD_DONE
-        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
       }
       errors shouldBe empty
     }
@@ -141,7 +140,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getSizeInBytes shouldEqual audio.size
         asset.getStatus shouldEqual DOWNLOAD_DONE
         asset.getDuration.getSeconds shouldEqual 4
-        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
         message.getMessageStatus shouldEqual Message.Status.SENT
       }
 
@@ -178,7 +177,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getDuration.getSeconds shouldEqual 3
         asset.getWidth shouldEqual 1080
         asset.getHeight shouldEqual 1920
-        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
         message.getMessageStatus shouldEqual Message.Status.SENT
       }
 
