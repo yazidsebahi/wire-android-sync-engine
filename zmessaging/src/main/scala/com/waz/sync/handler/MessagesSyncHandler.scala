@@ -229,16 +229,16 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
       CancellableFuture.lift(assets.storage.get(msg.assetId)) flatMap {
         case None => CancellableFuture successful Left(internalError(s"no asset found for $msg"))
         case Some(asset) if asset.status != AssetStatus.UploadNotStarted => CancellableFuture successful Right(msg.time)
-        case Some(asset) => postAssetMessage(asset.copy(status = AssetStatus.MetaDataSent), None)
+        case Some(asset) =>
+          asset.mime match {
+            case Mime.Image() => CancellableFuture.successful(Right(msg.time))
+            case _ => postAssetMessage(asset.copy(status = AssetStatus.MetaDataSent), None)
+          }
       }
 
 
     def sendWithV2(asset: AssetData) = {
-
-      (asset.mime match {
-        case Mime.Image() => CancellableFuture.successful(Right(msg.time))
-        case _ => postOriginal()
-      }).flatMap {
+      postOriginal().flatMap {
         case Left(err) => CancellableFuture successful Left(err)
         case Right(origTime) =>
           convLock.release()
@@ -296,7 +296,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
 
     def sendWithV3(asset: AssetData) = {
-      postOriginal() flatMap {
+      postOriginal().flatMap {
         case Left(err) => CancellableFuture successful Left(err)
         case Right(origTime) =>
           convLock.release()
