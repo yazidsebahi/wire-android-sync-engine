@@ -26,7 +26,4 @@ trait UsernamesRequestCallback{
   def onUsernameRequestResult(username: String, validation: UsernameValidation) : Unit
 }
 
-trait UsernameValidation{
-  def isValid: Boolean
-  def reason: UsernameValidationError
-}
+case class UsernameValidation(isValid: Boolean, reason: UsernameValidationError)

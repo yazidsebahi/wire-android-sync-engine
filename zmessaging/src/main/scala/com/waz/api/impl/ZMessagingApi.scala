@@ -220,5 +220,5 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getConnectionIndicator = new ConnectionIndicator()
 
-  override def getUsernames() = new Usernames
+  override def getUsernames = new Usernames
 }

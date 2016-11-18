@@ -20,31 +20,28 @@ package com.waz.api.impl
 import com.waz.api
 import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback}
 
+object Usernames {
+  val MAX_LENGTH = 21
+  val MIN_LENGTH = 2
+}
+
 class Usernames extends api.Usernames{
   override def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) = {
     //TODO: STUB
-    callback.onUsernameRequestResult("", new UsernameValidation {
-      override def isValid: Boolean = true
-      override def reason: UsernameValidationError = UsernameValidationError.NONE
-    })
+    callback.onUsernameRequestResult(username, UsernameValidation(isValid = true, UsernameValidationError.NONE))
   }
   override def isUsernameValid(username: String): UsernameValidation = {
-    val MAX_LENGTH = 21
-    val MIN_LENGTH = 2
-    val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){$MIN_LENGTH,$MAX_LENGTH}$$""".r
+    val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
 
-    if (username.length  > MAX_LENGTH) {
-      return UsernameValidationImpl(isValid = false, UsernameValidationError.TOO_LONG)
+    if (username.length  > Usernames.MAX_LENGTH) {
+      return UsernameValidation(isValid = false, UsernameValidationError.TOO_LONG)
     }
-    if (username.length  < MIN_LENGTH) {
-      return UsernameValidationImpl(isValid = false, UsernameValidationError.TOO_SHORT)
+    if (username.length  < Usernames.MIN_LENGTH) {
+      return UsernameValidation(isValid = false, UsernameValidationError.TOO_SHORT)
     }
     username match {
-      case usernameRegex(_) => UsernameValidationImpl(isValid = true, UsernameValidationError.NONE)
-      case _ => UsernameValidationImpl(isValid = false, UsernameValidationError.INVALID_CHARACTERS)
+      case usernameRegex(_) => UsernameValidation(isValid = true, UsernameValidationError.NONE)
+      case _ => UsernameValidation(isValid = false, UsernameValidationError.INVALID_CHARACTERS)
     }
   }
-}
-
-case class UsernameValidationImpl (isValid: Boolean, reason: UsernameValidationError) extends UsernameValidation {
 }
