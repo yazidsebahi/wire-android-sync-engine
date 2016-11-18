@@ -191,6 +191,8 @@ object ActorMessage {
 
   case object SetAssetToV2 extends ActorMessage
 
+  case class SendGiphy(remoteId: RConvId, searchQuery: String) extends ActorMessage
+
   /**
     * If the last message in the given conversation is an asset message, try to cancel the upload
     */
