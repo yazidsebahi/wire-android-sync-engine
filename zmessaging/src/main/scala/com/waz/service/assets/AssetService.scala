@@ -201,19 +201,19 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
       AssetProcessing(ProcessingTaskKey(asset.id)) {
         for {
           entry <- loadData(asset)
-          updated <- updatePreviewAndMetaData(asset, entry)
+          updated <- updateMetaData(asset, entry)
         } yield updated
       }
       returning(asset)(a => verbose(s"created asset: $a"))
     }
   }
 
-  private def updatePreviewAndMetaData(asset: AssetData, entry: LocalData): CancellableFuture[Option[AssetData]] = {
+  private def updateMetaData(oldAsset: AssetData, entry: LocalData): CancellableFuture[Option[AssetData]] = {
     val (mime, nm) = entry match {
-      case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(asset.name))
-      case _ => (asset.mime, asset.name)
+      case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(oldAsset.name))
+      case _ => (oldAsset.mime, oldAsset.name)
     }
-
+    val asset = oldAsset.copy(mime = mime, name = nm)
     for {
       meta     <- metaService.loadMetaData(asset, entry)
       prev     <- metaService.loadPreview(asset, entry)
@@ -278,8 +278,8 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
           //TODO Dean: remove after v2 transition period
           //Trigger updating of meta data for assets generated (and downloaded) from old AnyAssetData type.
           asset.mime match {
-            case Mime.Video() if asset.metaData.isEmpty || asset.previewId.isEmpty => updatePreviewAndMetaData(asset, data)
-            case Mime.Audio() if asset.metaData.isEmpty => updatePreviewAndMetaData(asset, data)
+            case Mime.Video() if asset.metaData.isEmpty || asset.previewId.isEmpty => updateMetaData(asset, data)
+            case Mime.Audio() if asset.metaData.isEmpty => updateMetaData(asset, data)
             case _ => CancellableFuture.successful(Some(asset))
           }
 

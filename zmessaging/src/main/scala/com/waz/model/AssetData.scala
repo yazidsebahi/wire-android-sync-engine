@@ -36,10 +36,6 @@ import org.threeten.bp.Duration
 
 import scala.util.Try
 
-//Things still borked:
-//TODO send in v2 flag?
-//TODO check audio levels with web?
-
 case class AssetData(id:          AssetId               = AssetId(),
                      mime:        Mime                  = Mime.Unknown,
                      sizeInBytes: Long                  = 0L,
