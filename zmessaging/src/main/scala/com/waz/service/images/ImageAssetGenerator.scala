@@ -58,15 +58,8 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
-  def generateWireAsset(uri: Uri): CancellableFuture[AssetData] = {
-    val asset = AssetData.newImageAsset().copy(source = Some(uri))
-    loader.loadRawImageData(asset) flatMap {
-      case Some(data) =>
-        loader.getImageMetadata(data) flatMap { meta => generateAssetData(asset, Left(data), meta, ImageOptions) }
-      case _ =>
-        CancellableFuture.failed(new IllegalArgumentException(s"ImageAsset could not be added to cache: $asset"))
-    }
-  }
+  def generateWireAsset(uri: Uri): CancellableFuture[AssetData] =
+    generateWireAsset(AssetData.newImageAsset().copy(source = Some(uri)), profilePicture = false)
 
   def generateAssetData(asset: AssetData, input: Either[LocalData, Bitmap], meta: Metadata, co: CompressionOptions): CancellableFuture[AssetData] = {
     generateImageData(asset.id, co, input, meta) flatMap {
