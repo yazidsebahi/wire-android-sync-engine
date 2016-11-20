@@ -52,7 +52,7 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
 
   def hasCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Boolean] = {
     val res = asset match {
-      case IsImage(dims, tag) => CancellableFuture successful imageCache.get(asset.id, req, dims.width).isDefined
+      case a@IsImage() => CancellableFuture successful imageCache.get(asset.id, req, a.width).isDefined
       case _ => CancellableFuture successful false
     }
     verbose(s"Cached bitmap for ${asset.id} with req: $req?: $res")
@@ -61,7 +61,7 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
 
   def hasCachedData(asset: AssetData): CancellableFuture[Boolean] =
     asset match {
-      case IsImage(_, _) =>
+      case IsImage() =>
         CancellableFuture {(asset.data, asset.source)} flatMap {
           case (Some(data), _) if data.nonEmpty => CancellableFuture.successful(true)
           case (_, Some(uri)) if isLocalUri(uri) => CancellableFuture.successful(true)
@@ -172,7 +172,7 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
   }
 
   private def ifIsImage[A](asset: AssetData)(f: Dim2 => A) = asset match {
-    case IsImage(dims, _) => f(dims)
+    case a@IsImage() => f(a.dimensions)
     case _ => throw new IllegalArgumentException(s"Asset is not an image: $asset")
   }
 

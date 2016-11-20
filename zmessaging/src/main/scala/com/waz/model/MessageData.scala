@@ -28,7 +28,6 @@ import com.waz.api.Message.Type._
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.AssetMetaData.HasDimensions
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.GenericContent.{Asset, ImageAsset, LinkPreview, Location}
 import com.waz.model.GenericMessage.{GenericMessageContent, TextMessage}

@@ -24,7 +24,6 @@ import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
-import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.otr.ClientId
 import com.waz.model.{Mime, _}
 import com.waz.sync.client.OtrClient._
@@ -58,7 +57,7 @@ class AssetClient(netClient: ZNetClient) {
 
   def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
     asset match {
-      case AssetData.IsImage(_, _) =>
+      case AssetData.IsImage() =>
         val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
           netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(convId), content)) {
             case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
@@ -153,14 +152,14 @@ object AssetClient {
 
   def imageMetadata(asset: AssetData, nativePush: Boolean) = JsonEncoder { o =>
     asset match {
-      case AssetData.IsImage(dim2, tag) =>
-        o.put("width", dim2.width)
-        o.put("height", dim2.height)
-        o.put("original_width", dim2.width)
-        o.put("original_height", dim2.height)
+      case a@AssetData.IsImage() =>
+        o.put("width", a.width)
+        o.put("height", a.height)
+        o.put("original_width", a.width)
+        o.put("original_height", a.height)
         o.put("inline", asset.data.fold(false)(_.length < 10000))
         o.put("public", true)
-        o.put("tag", tag)
+        o.put("tag", a.tag)
         o.put("correlation_id", asset.id)
         o.put("nonce", asset.id)
         o.put("native_push", nativePush)

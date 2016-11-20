@@ -25,7 +25,6 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.LocalData
 import com.waz.content.{ConversationStorage, MessagesStorage}
-import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._

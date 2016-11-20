@@ -109,19 +109,19 @@ case class AssetData(id:          AssetId               = AssetId(),
   }
 
   val (isImage, isVideo, isAudio) = this match {
-    case IsImage(_, _) => (true, false, false)
-    case IsVideo()     => (false, true, false)
-    case IsAudio()     => (false, false, true)
-    case _             => (false, false, false)
+    case IsImage() => (true, false, false)
+    case IsVideo() => (false, true, false)
+    case IsAudio() => (false, false, true)
+    case _         => (false, false, false)
   }
 
   val tag = this match {
-    case IsImage(_, t) => t
+    case IsImageWithTag(t) => t
     case _ => ""
   }
 
   val dimensions = this match {
-    case IsImage(dim, _) => dim
+    case WithDimensions(dim) => dim
     case _ => Dim2(0, 0)
   }
 
@@ -143,7 +143,6 @@ object AssetData {
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
 
-  //TODO Dean - bit ugly - need to ensure I don't get a cache key from an external uri
   def cacheKeyFrom(uri: Uri): CacheKey = WireContentProvider.CacheUri.unapply(ZMessaging.context)(uri).getOrElse(CacheKey(uri.toString))
 
   def isExternalUri(uri: Uri): Boolean = Option(uri.getScheme).forall(_.startsWith("http"))
@@ -165,11 +164,10 @@ object AssetData {
   }
 
   object IsImage {
-    //TODO Dean - incorporate mime data in check?
-    def unapply(asset: AssetData): Option[(Dim2, String)] = asset.metaData match {
-      case Some(AssetMetaData.Image(dims, tag)) => Some((dims, tag))
-      case _ => None
-    }
+    def unapply(asset: AssetData): Boolean = Mime.Image.unapply(asset.mime) || (asset.metaData match {
+      case Some(AssetMetaData.Image(dims, tag)) => true
+      case _ => false
+    })
   }
 
   object IsVideo {
@@ -193,6 +191,13 @@ object AssetData {
   object WithDimensions {
     def unapply(asset: AssetData): Option[Dim2] = asset.metaData match {
       case Some(AssetMetaData.HasDimensions(dimensions)) => Some(dimensions)
+      case _ => None
+    }
+  }
+
+  object IsImageWithTag {
+    def unapply(asset: AssetData): Option[String] = asset.metaData match {
+      case Some(AssetMetaData.Image(_, tag)) => Some(tag)
       case _ => None
     }
   }
@@ -307,7 +312,7 @@ object AssetData {
           verbose(s"applying ImageDataDecoder to $obj")
           ImageDataDecoder.apply(obj)
         }.collect {
-          case a@AssetData.IsImage(_, tag) if tag == "medium" => a.copy(id = id, convId = convId)
+          case a@AssetData.IsImageWithTag("medium") => a.copy(id = id, convId = convId)
         }.headOption
       }.getOrElse(AssetData(id, convId = convId))
     }

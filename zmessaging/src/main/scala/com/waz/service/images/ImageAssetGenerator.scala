@@ -20,7 +20,6 @@ package com.waz.service.images
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import android.util.Base64
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}

@@ -37,7 +37,7 @@ class GiphyClient(netClient: ZNetClient) {
 
   def loadRandom(): CancellableFuture[(Option[AssetData], AssetData)] =
     netClient(Request.Get(path = RandomGifPath)) map {
-      case Response(SuccessHttpStatus(), RandomGiphyResponse(images), _) => images
+      case Response(SuccessHttpStatus(), RandomGiphyResponse((asset, prev)), _) => (asset, prev)
       case resp =>
         warn(s"unexpected response for load random: $resp")
         (None, AssetData.Empty)

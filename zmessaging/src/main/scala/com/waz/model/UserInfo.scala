@@ -60,7 +60,7 @@ object UserInfo {
           metaData = Some(AssetMetaData.Image(Dim2(0, 0), decodeString('size)(js)))
         )
         //TODO Dean - do we want to bring back small pictures for users?
-      }.find { case AssetData.IsImage(_, tag) => tag == "complete"; case _ => false }
+      }.find { case AssetData.IsImageWithTag("complete") => true; case _ => false }
     }
 
     def getPicture(userId: UserId)(implicit js: JSONObject): Option[AssetData] = fromArray(js, "picture") flatMap { pic =>
@@ -68,7 +68,7 @@ object UserInfo {
       val pics = Seq.tabulate(pic.length())(i => imageData(userId, pic.getJSONObject(i)))
 
       //TODO Dean - do we want to bring back small pictures for users?
-      val medium = pics.find { case AssetData.IsImage(_, tag) => tag == "medium"; case _ => false }.map(_.copy(id = id))
+      val medium = pics.find { case AssetData.IsImageWithTag("medium") => true; case _ => false }.map(_.copy(id = id))
       medium
     }
 
@@ -91,18 +91,18 @@ object UserInfo {
   def encodePicture(assets: Seq[AssetData]): JSONArray = {
     val arr = new json.JSONArray()
       assets.collect {
-        case a@AssetData.IsImage(Dim2(w, h), tag) =>
+        case a@AssetData.IsImage() =>
           JsonEncoder { o =>
             o.put("id", a.v2ProfileId.map(_.str).getOrElse(""))
             o.put("content_type", a.mime.str)
             o.put("content_length", a.size)
             a.data64.foreach(o.put("data", _))
             o.put("info", JsonEncoder { info =>
-              info.put("tag", tag)
-              info.put("width", w)
-              info.put("height", h)
-              info.put("original_width", w)
-              info.put("original_height", h)
+              info.put("tag", a.tag)
+              info.put("width", a.width)
+              info.put("height", a.height)
+              info.put("original_width", a.width)
+              info.put("original_height", a.height)
               info.put("correlation_id", a.id.str)
               info.put("nonce", a.id.str)
               info.put("public", true)

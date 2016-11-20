@@ -34,7 +34,7 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.content._
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.Order._
-import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
+import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ErrorData.AssetError
 import com.waz.model._
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey

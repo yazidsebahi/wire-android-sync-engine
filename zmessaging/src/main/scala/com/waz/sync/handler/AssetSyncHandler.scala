@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.model.AssetStatus.{UploadDone, UploadInProgress}
+import com.waz.model.AssetStatus.UploadInProgress
 import com.waz.model._
 import com.waz.service.PreferenceService
 import com.waz.service.assets.AssetService

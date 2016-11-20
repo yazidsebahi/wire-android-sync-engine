@@ -93,7 +93,6 @@ object MediaAssetData {
   def imageAsset(thumbs: Vector[Thumbnail]): AssetData = {
     val orig = thumbs.lastOption
 
-    //TODO Dean: currently not passing any previews along - figure out a way to do this - see giphy
     AssetData(
       mime = Mime.Image.Jpg,
       metaData = orig.map(o => AssetMetaData.Image(Dim2(o.width, o.height), o.tag)),

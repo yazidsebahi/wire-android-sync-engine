@@ -18,9 +18,7 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AssetData.AssetDataDao
-import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
