@@ -156,7 +156,6 @@ object GenericContent {
           ak.sha256.foreach(v => rData.sha256 = v.bytes)
         }
 
-      //TODO make AssetKey.remoteId optional...
       def unapply(remoteData: RemoteData): Option[AssetData.RemoteData] = Option(remoteData) map { rData =>
         AssetData.RemoteData(
           Option(rData.assetId).filter(_.nonEmpty).map(RAssetId),

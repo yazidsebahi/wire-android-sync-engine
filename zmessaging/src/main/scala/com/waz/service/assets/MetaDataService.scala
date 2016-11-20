@@ -80,7 +80,6 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
         None
     }
 
-    //TODO Dean: Why does this need to be serialised?
     Serialized(('MetaService, asset.id))(withCacheEntry(data, load))
   }
 

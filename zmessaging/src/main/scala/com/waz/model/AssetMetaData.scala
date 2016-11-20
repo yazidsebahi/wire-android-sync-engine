@@ -89,7 +89,6 @@ object AssetMetaData {
   case class Loudness(levels: Vector[Float])
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
-  //TODO Dean: tag can be removed after v2 transition period
   case class Image(dimensions: Dim2, tag: String = "") extends AssetMetaData('image) with HasDimensions
   case class Audio(duration: Duration, loudness: Option[Loudness] = None) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)

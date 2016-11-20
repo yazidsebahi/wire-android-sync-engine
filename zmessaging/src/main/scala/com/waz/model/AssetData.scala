@@ -50,8 +50,8 @@ case class AssetData(id:          AssetId               = AssetId(),
                      source:      Option[Uri]           = None,
                      proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
-                     convId:      Option[RConvId]       = None, //will need for a while as v2 is transitioned out
-                     data:        Option[Array[Byte]]   = None, //TODO ensure not saved in storage??
+                     convId:      Option[RConvId]       = None,
+                     data:        Option[Array[Byte]]   = None,
                      v2ProfileId: Option[RAssetId]      = None,
                      //TODO remove after v2 transtion period (eases database migration)
                      assetType:   Option[AssetType]     = None
