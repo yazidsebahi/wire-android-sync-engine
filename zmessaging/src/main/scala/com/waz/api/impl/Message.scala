@@ -216,7 +216,7 @@ class MessagePart(content: MessageContent, message: MessageData, index: Int)(imp
 
   lazy val image = (content.tpe, content.asset, content.openGraph, linkPreview) match {
     case (Part.Type.ASSET, Some(assetId), _, _) => ui.images.getImageAsset(assetId)
-    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset.id)
+    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(_))) => ui.images.getImageAsset(message.assetId) //TODO Dean: bit ugly, what if we want multiple assets per message?
     case (Part.Type.WEB_LINK, _, Some(OpenGraphData(_, _, Some(uri), _, _)), None) => ImageAssetFactory.getImageAsset(uri)
     case _ => ImageAsset.Empty
   }

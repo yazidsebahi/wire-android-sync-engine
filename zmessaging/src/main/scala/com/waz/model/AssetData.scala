@@ -51,6 +51,7 @@ case class AssetData(id:          AssetId               = AssetId(),
                      proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
                      convId:      Option[RConvId]       = None,
+                     //data only used for temporary caching and legacy reasons - shouldn't be stored in AssetsStorage where possible
                      data:        Option[Array[Byte]]   = None,
                      v2ProfileId: Option[RAssetId]      = None,
                      //TODO remove after v2 transtion period (eases database migration)
@@ -154,8 +155,8 @@ object AssetData {
                         sha256:   Option[Sha256]      = None
                        )
 
-  //needs to be def to create new id each time
-  def newImageAsset(id: AssetId = AssetId()) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0))))
+  //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
+  def newImageAsset(id: AssetId = AssetId()) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), "medium")))
 
   val Empty = AssetData()
 
@@ -182,10 +183,6 @@ object AssetData {
       case Some(AssetMetaData.Audio(_, _)) => true
       case _ => false
     })
-  }
-
-  object WithData {
-    def unapply(asset: AssetData): Option[Array[Byte]] = asset.data
   }
 
   object WithDimensions {

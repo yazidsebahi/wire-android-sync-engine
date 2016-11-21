@@ -58,9 +58,6 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
-  def generateWireAsset(uri: Uri): CancellableFuture[AssetData] =
-    generateWireAsset(AssetData.newImageAsset().copy(source = Some(uri)), profilePicture = false)
-
   def generateAssetData(asset: AssetData, input: Either[LocalData, Bitmap], meta: Metadata, co: CompressionOptions): CancellableFuture[AssetData] = {
     generateImageData(asset.id, co, input, meta) flatMap {
       case (file, m) =>
@@ -71,14 +68,11 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       case (file, m) =>
         val size = file.length
         verbose(s"final image, size: $size, meta: $m")
-        val data = if (size > 2 * 1024) None else Some(IoUtils.toByteArray(file.inputStream))
-        data foreach { _ => cache.remove(CacheKey.fromAssetId(asset.id)) } // no need to cache preview images
 
         asset.copy(
           mime = com.waz.model.Mime(m.mimeType),
           sizeInBytes = size,
-          metaData = Some(AssetMetaData.Image(Dim2(m.width, m.height), "medium")),
-          data = data
+          metaData = Some(AssetMetaData.Image(Dim2(m.width, m.height), "medium"))
         )
     }
   }

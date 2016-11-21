@@ -23,8 +23,7 @@ import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
-import com.waz.cache.LocalData
-import com.waz.content.{ConversationStorage, MessagesStorage}
+import com.waz.content.{AssetsStorage, ConversationStorage, MessagesStorage}
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
@@ -39,7 +38,7 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage, otrService: OtrService, otrSync: OtrSyncHandler, client: OpenGraphClient, imageGenerator: ImageAssetGenerator, imageLoader: ImageLoader, assetClient: AssetClient) {
+class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage, otrService: OtrService, assetSync: AssetSyncHandler, assetsStorage: AssetsStorage, otrSync: OtrSyncHandler, client: OpenGraphClient, imageGenerator: ImageAssetGenerator, imageLoader: ImageLoader, assetClient: AssetClient) {
   import OpenGraphSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
@@ -61,7 +60,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
           updateOpenGraphData(msg) flatMap {
             case Left(errors) => Future successful SyncResult(errors.head)
             case Right(links) =>
-              updateLinkPreviews(conv, msg, links) flatMap {
+              updateLinkPreviews(msg, links) flatMap {
                 case Left(errors) => Future successful SyncResult(errors.head)
                 case Right(TextMessage(_, _, Seq())) =>
                   verbose(s"didn't find any previews in message links: $msg")
@@ -110,7 +109,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
     }
   }
 
-  def updateLinkPreviews(conv: ConversationData, msg: MessageData, links: Seq[MessageContent]) = {
+  def updateLinkPreviews(msg: MessageData, links: Seq[MessageContent]) = {
 
     def createEmptyPreviews(content: String) = {
       var offset = -1
@@ -125,7 +124,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       case Some(TextMessage(content, mentions, ps)) =>
         val previews = if (ps.isEmpty) createEmptyPreviews(content) else ps
 
-        RichFuture.traverseSequential(links zip previews) { case (link, preview) => generatePreview(conv.remoteId, link.openGraph.get, preview) } flatMap { res =>
+        RichFuture.traverseSequential(links zip previews) { case (link, preview) => generatePreview(msg.assetId, link.openGraph.get, preview) } flatMap { res =>
           val errors = res collect { case Left(err) => err }
           val updated = (res zip previews) collect {
             case (Right(p), _) => p
@@ -142,7 +141,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
     }
   }
 
-  def generatePreview(conv: RConvId, meta: OpenGraphData, prev: LinkPreview) = {
+  def generatePreview(assetId: AssetId, meta: OpenGraphData, prev: LinkPreview) = {
 
     /**
       * Generates and uploads link preview image for given open graph metadata.
@@ -154,18 +153,12 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
     def uploadImage: Future[Either[ErrorResponse, Option[AssetData]]] = meta.image match {
       case None => Future successful Right(None)
       case Some(uri) =>
-        imageGenerator.generateWireAsset(uri).map(Some(_)).recover { case _: Throwable => None }.future flatMap {
-          case Some(asset @ AssetData.WithData(data)) =>
-            val aes = AESKey()
-            otrSync.uploadAssetDataV3(LocalData(data), Some(aes)).map {
-              case Right(remoteData) =>
-                Right(Some(asset.copyWithRemoteData(remoteData)))
-              case Left(err) => Left(err)
-            }
-          case _ => Future successful Right(None)
-        }
+        for {
+          Some(asset) <- imageGenerator.generateWireAsset(AssetData.newImageAsset(assetId).copy(source = Some(uri)), profilePicture = false).map(Some(_)).recover { case _: Throwable => None }.future
+          _           <- assetsStorage.mergeOrCreateAsset(asset) //must be in storage for assetsync
+          resp        <- assetSync.uploadAssetData(asset.id).future
+        } yield resp
     }
-
     if (prev.hasArticle) Future successful Right(prev)
     else
       uploadImage map {
