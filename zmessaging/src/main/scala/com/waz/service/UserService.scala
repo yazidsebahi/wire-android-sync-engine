@@ -79,7 +79,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
 
   def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
     sync.syncUsers(id)
-    UserData(id, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName))
+    UserData(id, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName), handle = None)
   })
 
   def getSelfUserId: Future[Option[UserId]] = Future successful Some(selfUserId)

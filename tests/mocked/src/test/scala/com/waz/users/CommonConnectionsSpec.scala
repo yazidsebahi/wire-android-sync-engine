@@ -50,13 +50,13 @@ class CommonConnectionsSpec extends FeatureSpec with Matchers with MockBackend w
   }
 
   override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.successful(Right(Seq(
-    UserSearchEntry(recommended, "test", None, None, 0, Some(false), blocked = false, Relation.Third, Some(10), topCommonConnections)
+    UserSearchEntry(recommended, "test", None, None, 0, Some(false), blocked = false, Relation.Third, Some(10), topCommonConnections, handle = None)
   )))
 
   override def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] = {
     requestedCommon = Some(id)
     CancellableFuture.successful(Right(connections.keys.toSeq.map(id =>
-      UserSearchEntry(id, "test " + id, None, None, 0, Some(true), blocked = false, Relation.First, None, Nil)
+      UserSearchEntry(id, "test " + id, None, None, 0, Some(true), blocked = false, Relation.First, None, Nil, handle = None)
     )))
   }
   

@@ -130,7 +130,7 @@ class Accounts(val global: GlobalModule) {
         login(account, normalized)
       case (normalized, None, None) =>
         verbose(s"matching account not found, creating new account")
-        login(new AccountData(AccountId(), None, "", None), normalized)
+        login(new AccountData(AccountId(), None, "", None, handle = None), normalized)
     }
 
   private def login(account: AccountData, normalized: Credentials) = {

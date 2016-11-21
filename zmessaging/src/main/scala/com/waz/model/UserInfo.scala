@@ -30,7 +30,16 @@ import org.json.{JSONArray, JSONObject}
 
 import scala.util.Try
 
-case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Seq[AssetData] = Seq.empty, trackingId: Option[TrackingId] = None, deleted: Boolean = false) {
+case class UserInfo(id:           UserId,
+                    name:         Option[String]        = None,
+                    accentId:     Option[Int]           = None,
+                    email:        Option[EmailAddress]  = None,
+                    phone:        Option[PhoneNumber]   = None,
+                    picture:      Seq[AssetData]        = Seq.empty,
+                    trackingId:   Option[TrackingId]    = None,
+                    deleted:      Boolean               = false,
+                    handle:       Option[Handle]        = None,
+                    privateMode:  Option[Boolean]       = None) {
   def mediumPicture = picture.collectFirst { case a@AssetData.IsImageWithTag(Medium) => a }
 }
 
@@ -87,7 +96,8 @@ object UserInfo {
       val id = UserId('id)
       //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists.
       val pic = getAssets.orElse(getPicture(id)).toSeq
-      UserInfo(id, 'name, accentId, 'email, 'phone, pic, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
+      val privateMode = decodeOptBoolean('privateMode)
+      UserInfo(id, 'name, accentId, 'email, 'phone, pic, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted, handle = 'handle, privateMode = privateMode)
     }
   }
 

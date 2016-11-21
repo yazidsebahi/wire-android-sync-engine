@@ -39,7 +39,8 @@ import com.waz.znet.AuthenticationManager.{Cookie, Token}
  */
 case class AccountData(id: AccountId, email: Option[EmailAddress], hash: String, phone: Option[PhoneNumber],
                        activated: Boolean = false, cookie: Cookie = None, password: Option[String] = None, accessToken: Option[Token] = None,
-                       userId: Option[UserId] = None, clientId: Option[ClientId] = None, clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN) {
+                       userId: Option[UserId] = None, clientId: Option[ClientId] = None, clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
+                       handle:Option[Handle], privateMode:Boolean = false) {
 
   def authorized(credentials: Credentials) = credentials match {
     case EmailCredentials(e, Some(passwd), _) if email.contains(e) && AccountData.computeHash(id, passwd) == hash =>
@@ -65,12 +66,12 @@ case class AccountData(id: AccountId, email: Option[EmailAddress], hash: String,
   }
 
   def updated(user: UserInfo) =
-    copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), activated = true)
+    copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), activated = true, handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
 
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState) =
     copy(userId = userId orElse this.userId, activated = this.activated | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
 
-  override def toString: String = s"AccountData($id, $email, $phone, $activated, user: $userId, client: $clientId, cookie: ${cookie.map(_ take 10)}, password: ${password.isDefined})"
+  override def toString: String = s"AccountData($id, $handle, $email, $phone, $activated, user: $userId, client: $clientId, cookie: ${cookie.map(_ take 10)}, password: ${password.isDefined})"
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
@@ -89,14 +90,14 @@ case class ConfirmationCode(str: String) extends AnyVal {
 object AccountData {
   private implicit val logTag: LogTag = logTagFor(AccountData)
 
-  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, email = Some(EmailAddress(email)), hash, phone = None)  // used only for testing
+  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
 
   def apply(id: AccountId, credentials: Credentials): AccountData =
-    new AccountData(id, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword)
+    new AccountData(id, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, Some(email), computeHash(id, password), password = Some(password), phone = None)
+    AccountData(id, Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
   }
 
   def computeHash(id: AccountId, password: String) =
@@ -119,11 +120,13 @@ object AccountData {
     val UserId = opt(id[UserId]('user_id)).apply(_.userId)
     val ClientId = opt(id[ClientId]('client_id))(_.clientId)
     val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
+    val Handle = opt(handle('handle))(_.handle)
+    val PrivateMode = bool('private_mode)(_.privateMode)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState)
+    override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode)
 
-    override def apply(implicit cursor: Cursor): AccountData = AccountData(Id, Email, Hash, Phone, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState)
+    override def apply(implicit cursor: Cursor): AccountData = AccountData(Id, Email, Hash, Phone, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode)
 
     def findByEmail(email: EmailAddress)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))

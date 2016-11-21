@@ -57,10 +57,10 @@ class TrackingSpec extends FeatureSpec with Matchers with Inspectors with Before
   lazy val archived: ConversationData = ConversationData(ConvId(), RConvId(), Some("archived conv"), selfUser.id, ConversationType.Group, archived = true)
   lazy val ottoConv = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.OneToOne)
   lazy val annaConv = ConversationData(ConvId(), RConvId(), None, selfUser.id, ConversationType.OneToOne)
-  lazy val otto = UserData(UserId(), "Otto", Some(EmailAddress("welcome+123@wire.com")), None, None, None, 0, SearchKey("Otto"), ConnectionStatus.Accepted, new Date, None, Some(ottoConv.remoteId))
-  lazy val anna = UserData(UserId(), "Anna", Some(EmailAddress("anna@wire.com")), None, None, None, 0, SearchKey("Anna"), ConnectionStatus.Accepted, new Date, None, Some(ottoConv.remoteId))
-  lazy val auto1 = UserData(UserId(), "auto 1", Some(EmailAddress("n@owhe.re")), None, None, None, 0, SearchKey("auto 1"), ConnectionStatus.Accepted, new Date, None, Some(oneToOne.remoteId))
-  lazy val auto2 = UserData(UserId(), "auto 2", Some(EmailAddress("no@whe.re")), None, None, None, 0, SearchKey("auto 2"), ConnectionStatus.Accepted, new Date, None, Some(RConvId()))
+  lazy val otto = UserData(UserId(), "Otto", Some(EmailAddress("welcome+123@wire.com")), None, None, None, 0, SearchKey("Otto"), ConnectionStatus.Accepted, new Date, None, Some(ottoConv.remoteId), handle = Some(Handle.random))
+  lazy val anna = UserData(UserId(), "Anna", Some(EmailAddress("anna@wire.com")), None, None, None, 0, SearchKey("Anna"), ConnectionStatus.Accepted, new Date, None, Some(ottoConv.remoteId), handle = Some(Handle.random))
+  lazy val auto1 = UserData(UserId(), "auto 1", Some(EmailAddress("n@owhe.re")), None, None, None, 0, SearchKey("auto 1"), ConnectionStatus.Accepted, new Date, None, Some(oneToOne.remoteId), handle = Some(Handle.random))
+  lazy val auto2 = UserData(UserId(), "auto 2", Some(EmailAddress("no@whe.re")), None, None, None, 0, SearchKey("auto 2"), ConnectionStatus.Accepted, new Date, None, Some(RConvId()), handle = Some(Handle.random))
 
   lazy val tracking = new TrackingData()(ui)
 

@@ -19,6 +19,10 @@ package com.waz.api.impl
 
 import com.waz.api
 import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback}
+import com.waz.threading.Threading
+
+import scala.concurrent.Future
+import scala.util.Random
 
 object Usernames {
   val MAX_LENGTH = 21
@@ -28,7 +32,16 @@ object Usernames {
 class Usernames extends api.Usernames{
   override def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) = {
     //TODO: STUB
-    callback.onUsernameRequestResult(username, UsernameValidation(isValid = true, UsernameValidationError.NONE))
+    val f : Future[Boolean] = Future {
+      Thread.sleep(2000)
+      Random.nextBoolean()
+    }(Threading.Background)
+
+    f.onComplete({
+      valid =>
+        callback.onUsernameRequestResult(username, UsernameValidation(isValid = valid.getOrElse(true), if (valid.getOrElse(true)) UsernameValidationError.NONE else UsernameValidationError.ALREADY_TAKEN))
+    })(Threading.Ui)
+
   }
   override def isUsernameValid(username: String): UsernameValidation = {
     val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r

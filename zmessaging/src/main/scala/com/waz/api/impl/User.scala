@@ -142,7 +142,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeString(JsonEncoder.encodeString(data))
   override def describeContents(): Int = 0
 
-  override def getUsername: String = "whisker_pants" //TODO: STUB
+  override def getUsername: String = data.handle.fold("")(_.string)
 
   override def getCommonConnectionsCount = 0 //TODO: STUB
 }

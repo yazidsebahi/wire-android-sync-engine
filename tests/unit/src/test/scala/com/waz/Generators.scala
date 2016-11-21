@@ -116,7 +116,8 @@ object Generators {
     relation <- arbitrary[Relation]
     syncTimestamp <- posNum[Long]
     displayName <- arbitrary[String]
-  } yield UserData(id, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, syncTimestamp, displayName))
+    handle <- arbitrary[Option[Handle]]
+  } yield UserData(id, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, syncTimestamp, displayName, handle = handle))
 
   implicit lazy val arbRevision: Arbitrary[Revision] = Arbitrary(resultOf(Revision))
   implicit lazy val arbCaptureDeviceData: Arbitrary[CaptureDeviceData] = Arbitrary(resultOf(CaptureDeviceData))
@@ -314,6 +315,8 @@ object Generators {
   implicit lazy val ArbLocale: Arbitrary[Locale] = Arbitrary(oneOf(availableLocales))
   implicit lazy val ArbGenericToken: Arbitrary[Invitations.GenericToken] = Arbitrary(resultOf(InvitationTokenFactory.genericTokenFromCode _))
   implicit lazy val ArbPersonalToken: Arbitrary[Invitations.PersonalToken] = Arbitrary(resultOf(InvitationTokenFactory.personalTokenFromCode _))
+
+  implicit lazy val arbHandle: Arbitrary[Option[Handle]] = Arbitrary(sideEffect(Some(Handle.random)))
 
   def sideEffect[A](f: => A): Gen[A] = resultOf[Unit, A](_ => f)
 

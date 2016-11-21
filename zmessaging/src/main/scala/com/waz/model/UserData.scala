@@ -34,23 +34,24 @@ import com.waz.utils._
 import org.json.JSONObject
 
 case class UserData(
-                 id: UserId,
-                 name: String,
-                 email: Option[EmailAddress],
-                 phone: Option[PhoneNumber],
-                 trackingId: Option[TrackingId] = None,
-                 picture: Option[AssetId] = None,
-                 accent: Int = 0, // accent color id
-                 searchKey: SearchKey,
-                 connection: ConnectionStatus = ConnectionStatus.Unconnected,
-                 connectionLastUpdated: Date = new Date(0), // server side timestamp of last connection update
-                 connectionMessage: Option[String] = None, // incoming connection request message
-                 conversation: Option[RConvId] = None, // remote conversation id with this contact (one-to-one)
-                 relation: Relation = Relation.Other,
-                 syncTimestamp: Long = 0,
-                 displayName: String = "",
-                 verified: Verification = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
-                 deleted: Boolean = false
+                     id: UserId,
+                     name: String,
+                     email: Option[EmailAddress],
+                     phone: Option[PhoneNumber],
+                     trackingId: Option[TrackingId] = None,
+                     picture: Option[AssetId] = None,
+                     accent: Int = 0, // accent color id
+                     searchKey: SearchKey,
+                     connection: ConnectionStatus = ConnectionStatus.Unconnected,
+                     connectionLastUpdated: Date = new Date(0), // server side timestamp of last connection update
+                     connectionMessage: Option[String] = None, // incoming connection request message
+                     conversation: Option[RConvId] = None, // remote conversation id with this contact (one-to-one)
+                     relation: Relation = Relation.Other,
+                     syncTimestamp: Long = 0,
+                     displayName: String = "",
+                     verified: Verification = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
+                     deleted: Boolean = false,
+                     handle: Option[Handle]
                ) {
 
   def isConnected = ConnectionStatus.isConnected(connection)
@@ -71,7 +72,8 @@ case class UserData(
     trackingId = user.trackingId.orElse(trackingId),
     searchKey = SearchKey(user.name.getOrElse(name)),
     picture = user.mediumPicture.map(_.id),
-    deleted = user.deleted
+    deleted = user.deleted,
+    handle = user.handle.orElse(handle)
   )
 
   def updated(user: UserSearchEntry): UserData = copy(
@@ -136,18 +138,21 @@ object UserData {
   }
 
   // used for testing only
-  def apply(name: String): UserData = UserData(UserId(), name, None, None, searchKey = SearchKey(name))
+  def apply(name: String): UserData = UserData(UserId(), name, None, None, searchKey = SearchKey(name), handle = None)
 
-  def apply(id: UserId, name: String): UserData = UserData(id, name, None, None, searchKey = SearchKey(name))
+  def apply(id: UserId, name: String): UserData = UserData(id, name, None, None, searchKey = SearchKey(name), handle = None)
 
   def apply(entry: UserSearchEntry): UserData =
     UserData(entry.id, entry.name, entry.email, entry.phone, None, None, entry.colorId, SearchKey(entry.name),
       relation = entry.level,
-      connection = if (entry.connected.getOrElse(false)) ConnectionStatus.Accepted else ConnectionStatus.Unconnected) // TODO: improve connection, relation, search level stuff
+      connection = if (entry.connected.getOrElse(false)) ConnectionStatus.Accepted else ConnectionStatus.Unconnected,
+      handle = entry.handle) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =
+
     UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
-      user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted)
+      user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted,
+      handle = user.handle)
 
   implicit lazy val Decoder: JsonDecoder[UserData] = new JsonDecoder[UserData] {
     import JsonDecoder._
@@ -156,7 +161,8 @@ object UserData {
       trackingId = decodeOptId[TrackingId]('trackingId), picture = decodeOptAssetId('assetId), accent = decodeInt('accent), searchKey = SearchKey('name),
       connection = ConnectionStatus('connection), connectionLastUpdated = new Date(decodeLong('connectionLastUpdated)), connectionMessage = decodeOptString('connectionMessage),
       conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation),
-      syncTimestamp = decodeLong('syncTimestamp), 'displayName, Verification.valueOf('verified), deleted = 'deleted)
+      syncTimestamp = decodeLong('syncTimestamp), 'displayName, Verification.valueOf('verified), deleted = 'deleted,
+      handle = decodeOptHandle('handle))
   }
 
   implicit lazy val Encoder: JsonEncoder[UserData] = new JsonEncoder[UserData] {
@@ -177,6 +183,7 @@ object UserData {
       o.put("displayName", v.displayName)
       o.put("verified", v.verified.name)
       o.put("deleted", v.deleted)
+      v.handle foreach(u => o.put("handle", u.string))
     }
   }
 
@@ -198,12 +205,13 @@ object UserData {
     val DisplayName = text('display_name)(_.displayName)
     val Verified = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
     val Deleted = bool('deleted)(_.deleted)
+    val Handle = opt(handle('handle))(_.handle)
 
     override val idCol = Id
     override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted)
 
     override def apply(implicit cursor: Cursor): UserData =
-      new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted)
+      new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
     def get(id: UserId)(implicit db: SQLiteDatabase): Option[UserData] = single(find(Id, id)(db))
 

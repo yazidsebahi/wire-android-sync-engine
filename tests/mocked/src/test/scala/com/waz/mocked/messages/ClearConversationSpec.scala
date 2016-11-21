@@ -70,7 +70,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
     } (10.seconds)
 
     friends.foreach((u, c) => addMessageEvents(c, count = 10, from = u, timeline = Some(SystemTimeline)))
-    searchResults += SearchQuery.TopPeople -> friends.keys.map(id => UserSearchEntry(id, id.str, None, None, 0, Some(true), false, Relation.First))
+    searchResults += SearchQuery.TopPeople -> friends.keys.map(id => UserSearchEntry(id, id.str, None, None, 0, Some(true), false, Relation.First, handle = None))
 
     groups.filterNot(Set(groups keys 4, groups keys 5)).foreach((id, users) => addMessageEvents(id, count = 10, from = users.head, timeline = Some(SystemTimeline)))
   }

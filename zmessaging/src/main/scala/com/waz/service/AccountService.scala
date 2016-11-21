@@ -23,7 +23,7 @@ import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
 import com.waz.content.Preference
 import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model.{UserData, _}
+import com.waz.model.{UserData, Handle$, _}
 import com.waz.model.otr.Client
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
@@ -101,7 +101,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
 
     account.userId foreach { userId =>
       // ensure that self user is present on start
-      storage.usersStorage.updateOrCreate(userId, identity, UserData(userId, "", account.email, account.phone, searchKey = SearchKey(""), connection = UserData.ConnectionStatus.Self))
+      storage.usersStorage.updateOrCreate(userId, identity, UserData(userId, "", account.email, account.phone, searchKey = SearchKey(""), connection = UserData.ConnectionStatus.Self, handle = account.handle))
     }
 
     val selfUserData = accountData.map(_.userId).flatMap {
@@ -242,12 +242,12 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
     case None =>
       Serialized.future(this) {
         accountsStorage.get(id) flatMap {
-          case Some(ad @ AccountData(_, _, _, _, _, None, _, _, _, _, _)) =>
+          case Some(ad @ AccountData(_, _, _, _, _, None, _, _, _, _, _, _, _)) =>
             verbose(s"account data has no cookie, user not logged in: $ad")
             Future successful None
           case Some(acc) =>
             ensureFullyRegistered() flatMap {
-              case Right(a @ AccountData(_, _, _, _, _, _, _, _, Some(_), Some(_), _)) if a.activated =>
+              case Right(a @ AccountData(_, _, _, _, _, _, _, _, Some(_), Some(_), _, _, _)) if a.activated =>
                 zmessaging.filter(_.isDefined).head // wait until loaded
               case _ =>
                 zmessaging.head
@@ -268,6 +268,14 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
           getZMessaging map { _ => Right(()) }
         }
     }
+  def updateHandle(handle: Handle): ErrorOrResponse[Unit] = credentialsClient.updateHandle(handle)
+
+  def updatePrivateMode(privateMode: Boolean): ErrorOrResponse[Unit] =
+    account.userId match {
+      case Some(uId) => usersClient.updateSelf(UserInfo(uId, privateMode = Some(privateMode)))
+      case _ => CancellableFuture(Left(ErrorResponse.internalError("User info hasn't been loaded yet")))
+    }
+
 
   private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")

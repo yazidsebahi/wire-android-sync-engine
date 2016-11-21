@@ -132,18 +132,17 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
 
   override def deleteAccount(): Unit = ui.zms.flatMapFuture(_.users.deleteAccount())
 
+  override def getUsername: String = user.fold("")(_.getUsername)
+
+  override def setUsername(username: String, listener: CredentialsUpdateListener) =  handlingErrors(users.setSelfHandle(Handle(username)), listener)
+  override def hasSetUsername: Boolean = user.fold(false)(_.getUsername.length > 0)
+
+  override def isInPrivateMode: Boolean = data.fold(false)(_.privateMode)
+  override def setPrivateMode(active: Boolean) = users.setSelfPrivateMode(active)
+
   private def handlingErrors[T](request: Future[Either[ErrorResponse, Unit]], listener: CredentialsUpdateListener): Unit = request.onComplete {
     case Success(Right(())) => listener.onUpdated()
     case Success(Left(ErrorResponse(code, message, label))) => listener.onUpdateFailed(code, message, label)
     case Failure(ex) => listener.onUpdateFailed(499, ex.getMessage, "")
   } (Threading.Ui)
-
-  override def getUsername: String = user.fold("")(_.getUsername)
-
-  def setUsername(username: String, listener: CredentialsUpdateListener) = {
-    //TODO: STUB
-    listener.onUpdated()
-  }
-
-  def hasSetUsername: Boolean = false //TODO: STUB
 }

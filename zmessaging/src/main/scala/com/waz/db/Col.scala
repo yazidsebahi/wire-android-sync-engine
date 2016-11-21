@@ -104,6 +104,7 @@ object Col {
   })
   def phoneNumber(name: Symbol, modifiers: String = "") = Col[PhoneNumber](name.name, "TEXT", modifiers)
   def emailAddress(name: Symbol, modifiers: String = "") = Col[EmailAddress](name.name, "TEXT", modifiers)
+  def handle(name: Symbol, modifiers: String = "") = Col[Handle](name.name, "TEXT", modifiers)
   def date(name: Symbol, modifiers: String = "") = Col[Date](name.name, "INTEGER", modifiers)
   def finiteDuration(name: Symbol, modifiers: String = "") = Col[FiniteDuration](name.name, "INTEGER", modifiers)
   def timestamp(name: Symbol, modifiers: String = "") = Col[Instant](name.name, "INTEGER", modifiers)
