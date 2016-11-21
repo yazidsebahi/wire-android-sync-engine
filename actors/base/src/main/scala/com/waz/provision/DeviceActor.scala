@@ -285,6 +285,25 @@ class DeviceActor(val deviceName: String,
         }
       }
 
+    case SendGiphy(convId, searchQuery) =>
+      whenConversationExistsFuture(convId) { conv =>
+        searchQuery match {
+          case "" =>
+            waitUntil(api.getGiphy.random())(_.isReady == true) map { results =>
+              conv.sendMessage(new Text("Via giphy.com"))
+              conv.sendMessage(new Image(results.head))
+              Successful
+            }
+
+          case _ =>
+            waitUntil(api.getGiphy.search(searchQuery))(_.isReady == true) map { results =>
+              conv.sendMessage(new Text("%s · via giphy.com".format(searchQuery)))
+              conv.sendMessage(new Image(results.head))
+              Successful
+            }
+        }
+      }
+
     case RecallMessage(convId, msgId) =>
       withConv(convId) { conv =>
         zmessaging.convsUi.recallMessage(conv.id, msgId)
@@ -578,6 +597,17 @@ class DeviceActor(val deviceName: String,
     Option(remoteId) match {
       case Some(_) =>
         waitUntil(convs)(_ => convExistsById(remoteId)) map { _ =>
+          task(findConvById(remoteId))
+        }
+      case None =>
+        Future(Failed("Conversation remoteId cannot be null"))
+    }
+  }
+
+  def whenConversationExistsFuture(remoteId: RConvId)(task: IConversation => Future[ActorMessage]): Future[Any] = {
+    Option(remoteId) match {
+      case Some(_) =>
+        waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
           task(findConvById(remoteId))
         }
       case None =>
