@@ -83,8 +83,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     val signal = new AssetBitmapSignal(asset, req, loader, imageCache)
     val obs = signal { result => results = results :+ result }
     
-    def preview = results.collectFirst { case BitmapLoaded(b, true, _) => b }
-    def medium = results.collectFirst { case BitmapLoaded(b, false, _) => b }
+    def medium = results.collectFirst { case BitmapLoaded(b, _) => b }
   }
 
   before {
@@ -103,7 +102,6 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     awaitUi(delay)
     withDelay {
       withClue(listener.results.mkString(", ")) {
-        listener.preview.map(b => (b.getWidth, b.getHeight)) shouldEqual preview
         listener.medium.map(b => (b.getWidth, b.getHeight)) shouldEqual full
       }
     }

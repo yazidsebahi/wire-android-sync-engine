@@ -325,8 +325,8 @@ object AssetService {
   sealed trait BitmapResult
   object BitmapResult {
     case object Empty extends BitmapResult
-    case class BitmapLoaded(bitmap: Bitmap, preview: Boolean, etag: Int = 0) extends BitmapResult {
-      override def toString: LogTag = s"BitmapLoaded([${bitmap.getWidth}, ${bitmap.getHeight}], $preview, $etag)"
+    case class BitmapLoaded(bitmap: Bitmap, etag: Int = 0) extends BitmapResult {
+      override def toString: LogTag = s"BitmapLoaded([${bitmap.getWidth}, ${bitmap.getHeight}], $etag)"
     }
     case class LoadingFailed(ex: Throwable) extends BitmapResult
   }

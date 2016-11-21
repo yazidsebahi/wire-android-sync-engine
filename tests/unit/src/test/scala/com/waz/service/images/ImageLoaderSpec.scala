@@ -158,7 +158,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     scenario("Load preview only") {
       assertResults(BitmapRequest.Regular(100)) { results =>
         results should beMatching({
-          case Seq(BitmapLoaded(b, false, _)) if b.getWidth == 128 => true
+          case Seq(BitmapLoaded(b, _)) if b.getWidth == 128 => true
         })
         downloadRequest shouldBe empty
       }
@@ -178,7 +178,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     scenario("Return full from image cache") {
       assertResults(BitmapRequest.Regular(300)) { results =>
         results should beMatching({
-          case Seq(BitmapLoaded(b, false, _)) if b.getWidth == 480 => true
+          case Seq(BitmapLoaded(b, _)) if b.getWidth == 480 => true
         })
         downloadRequest shouldBe empty
       }

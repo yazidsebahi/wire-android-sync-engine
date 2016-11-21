@@ -15,28 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.testutils
+package com.waz.api;
 
-import android.graphics.Bitmap
-import com.waz.api.BitmapCallback.BitmapLoadingFailed
-import com.waz.api.{BitmapCallback, ImageAsset, LoadHandle, UpdateListener}
+import android.graphics.Bitmap;
 
-class BitmapSpy(img: ImageAsset, size: Int = 600) {
-  var failed = false
-  var result = Option.empty[Bitmap]
+public abstract class BitmapCallback {
 
-  private var handle: LoadHandle = _
+    public abstract void onBitmapLoaded(Bitmap bitmap);
+    public void onBitmapLoadingFailed(BitmapLoadingFailed reason) { }
 
-  load()
-
-  img.addUpdateListener(new UpdateListener {
-    override def updated(): Unit = load()
-  })
-
-  private def load() = {
-    handle = img.getBitmap(size, new BitmapCallback {
-      override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = failed = true
-      override def onBitmapLoaded(b: Bitmap): Unit = result = Option(b)
-    })
-  }
+    public enum BitmapLoadingFailed {
+        DOWNLOAD_ON_WIFI_ONLY,
+        DOWNLOAD_FAILED
+    }
 }
+
+

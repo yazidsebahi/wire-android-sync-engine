@@ -169,7 +169,7 @@ object BitmapSignal {
 
       generateResult map {
         case bitmap.EmptyBitmap => signal publish BitmapResult.Empty
-        case bmp => signal publish BitmapLoaded(bmp, preview = false)
+        case bmp => signal publish BitmapLoaded(bmp)
       }
     }
   }
@@ -211,7 +211,7 @@ object BitmapSignal {
       } else {
         var etag = 0 // to make sure signal does not cache dispatched result
         def reserveFrameMemory() = imageCache.reserve(asset.id, req, gif.width, gif.height * 2)
-        def frameLoaded(frame: Bitmap) = signal publish BitmapLoaded(frame, preview = false, {etag += 1; etag})
+        def frameLoaded(frame: Bitmap) = signal publish BitmapLoaded(frame, {etag += 1; etag})
         new GifAnimator(imageLoader.context, gif, reserveFrameMemory, frameLoaded).run()
       }
     }

@@ -169,7 +169,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
       withDelay {
         results should not be empty
         results.last should beMatching({
-          case BitmapResult.BitmapLoaded(bmp, false, _) if bmp.getWidth == 480 => true
+          case BitmapResult.BitmapLoaded(bmp, _) if bmp.getWidth == 480 => true
         })
       }
     }

@@ -17,19 +17,13 @@
  */
 package com.waz.api
 
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Parcelable.Creator
 import android.os.{Parcel, Parcelable}
-import com.waz.api.ImageAsset.{BitmapCallback, SaveCallback}
+import com.waz.api.ImageAsset.SaveCallback
 import com.waz.service.ZMessaging
 
 object ImageAsset {
-
-  trait BitmapCallback {
-    def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit
-    def onBitmapLoadingFailed(): Unit
-  }
 
   trait SaveCallback {
     def imageSaved(uri: Uri): Unit

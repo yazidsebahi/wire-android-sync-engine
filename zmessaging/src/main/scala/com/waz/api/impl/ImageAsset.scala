@@ -25,14 +25,16 @@ import android.net.Uri
 import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.ImageAsset.{BitmapCallback, SaveCallback}
-import com.waz.api.LoadHandle
+import com.waz.api.BitmapCallback.BitmapLoadingFailed.{DOWNLOAD_FAILED, DOWNLOAD_ON_WIFI_ONLY}
+import com.waz.api.ImageAsset.SaveCallback
+import com.waz.api.{BitmapCallback, LoadHandle}
 import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.bitmap.BitmapUtils
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
+import com.waz.service.downloads.DownloaderService.DownloadOnWifiOnlyException
 import com.waz.service.images.{BitmapSignal, ImageLoader}
 import com.waz.threading.Threading
 import com.waz.ui.MemoryImageCache.BitmapRequest
@@ -222,18 +224,21 @@ object ImageAsset {
   }
 
   class BitmapLoadHandle(signal: Option[ZMessaging] => Signal[BitmapResult], callback: BitmapCallback)(implicit ui: UiModule) extends LoadHandle with SignalLoading {
-    private var prev = Option.empty[(WeakReference[Bitmap], Boolean, Int)]
+    private var prev = Option.empty[(WeakReference[Bitmap], Int)]
 
     private var loader = Option(addLoaderOpt(signal) {
-      case res@BitmapLoaded(bitmap, preview, etag) =>
-        if (prev.forall(p => !p._1.get.contains(bitmap) || p._2 != preview || p._3 != etag)) {
+      case res@BitmapLoaded(bitmap, etag) =>
+        if (prev.forall(p => !p._1.get.contains(bitmap) || p._2 != etag)) {
           // make sure that callback is not called twice with the same image, UI doesn't like that
-          prev = Some((new WeakReference(bitmap), preview, etag))
-          callback.onBitmapLoaded(bitmap, preview)
+          prev = Some((new WeakReference(bitmap), etag))
+          callback.onBitmapLoaded(bitmap)
         }
       case LoadingFailed(ex) =>
         warn(s"bitmap loading failed", ex)
-        callback.onBitmapLoadingFailed()
+        callback.onBitmapLoadingFailed(ex match {
+          case DownloadOnWifiOnlyException => DOWNLOAD_ON_WIFI_ONLY
+          case _ => DOWNLOAD_FAILED
+        })
       case BitmapResult.Empty =>
         verbose(s"ignoring empty bitmap")
     })

@@ -19,6 +19,7 @@ package com.waz.service.otr
 
 import akka.pattern.ask
 import android.graphics.{Bitmap, BitmapFactory}
+import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api.Message.Status
 import com.waz.api.MessageContent.Image
 import com.waz.api.OtrClient.DeleteCallback
@@ -233,13 +234,12 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       val a = api.ui.images.getImageAsset(asset1.id)
 
-      var preview = Option.empty[Bitmap]
       var full = Option.empty[Bitmap]
       var failed = false
 
-      a.getBitmap(500, new com.waz.api.ImageAsset.BitmapCallback() {
-        override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = if(isPreview) preview = Some(b) else full = Some(b)
-        override def onBitmapLoadingFailed(): Unit = failed = true
+      a.getBitmap(500, new BitmapCallback() {
+        override def onBitmapLoaded(b: Bitmap): Unit = full = Some(b)
+        override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = failed = true
       })
 
       withDelay {
@@ -247,7 +247,6 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         full should be('defined)
       }
 
-      info(s"preview: ${preview.map(b => (b.getWidth, b.getHeight))}")
       info(s"full: ${full.map(b => (b.getWidth, b.getHeight))}")
     }
 
