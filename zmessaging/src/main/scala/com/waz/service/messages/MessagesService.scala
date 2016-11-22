@@ -100,20 +100,30 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       }.filter(_.nonEmpty)
     }
 
+    //ensure we always save the preview to the same id (GenericContent.Asset.unapply always creates new assets and previews))
+    def saveAssetAndPreview(asset: AssetData, preview: Option[AssetData]) = {
+      assets.storage.mergeOrCreateAsset(asset).flatMap {
+        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.storage.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
+        case _ => Future.successful(Option.empty[AssetData])
+      }
+    }
+
     //For assets v3, the RAssetId will be contained in the proto content. For v2, it will be passed along with in the GenericAssetEvent
-    //A defined convId marks that the asset is a v2 asset
+    //A defined convId marks that the asset is a v2 asset.
     def update(id: Uid, convId: Option[RConvId], ct: Any, v2RId: Option[RAssetId], data: Option[Array[Byte]]): Future[Option[AssetData]] = {
       verbose(s"update asset for event: $id, convId: $convId, ct: $ct, v2RId: $v2RId, data: $data")
 
       (ct, v2RId) match {
-        case (Asset(a@AssetData.WithRemoteId(rId), _), _) =>
+        case (Asset(a@AssetData.WithRemoteId(rId), preview), _) =>
           val asset = a.copy(id = AssetId(id.str))
-          verbose(s"Received asset v3: $asset")
-          assets.storage.mergeOrCreateAsset(asset)
-        case (Asset(a, _), Some(rId)) =>
-          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
-          verbose(s"Received asset v2 non-image: $asset")
-          assets.storage.mergeOrCreateAsset(asset)
+          verbose(s"Received asset v3: $asset with preview: $preview")
+          saveAssetAndPreview(asset, preview)
+        case (Asset(a, p), Some(rId)) =>
+          val forPreview = a.otrKey.isEmpty //For assets containing previews, the second GenericMessage contains remote information about the preview, not the asset
+          val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptData(a.id, a.otrKey, a.sha, data))
+          val preview = p.map(_.copy(remoteId = if (forPreview) Some(rId) else None, convId = convId, data = if (forPreview) decryptData(a.id, a.otrKey, a.sha, data) else None))
+          verbose(s"Received asset v2 non-image (forPreview?: $forPreview): $asset with preview: $preview")
+          saveAssetAndPreview(asset, preview)
         case (ImageAsset(a@AssetData.IsImageWithTag(Preview)), _) =>
           verbose(s"Received image preview for msg: $id. Dropping")
           Future successful None
@@ -121,10 +131,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 image: $asset")
           assets.storage.mergeOrCreateAsset(asset)
-        case (Asset(a, _), _ ) =>
+        case (Asset(a, preview), _ ) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset without remote data - we will expect another update: $asset")
-          assets.storage.mergeOrCreateAsset(asset)
+          saveAssetAndPreview(a, preview)
         case (Ephemeral(_, content), _)=>
           update(id, convId, content, v2RId, data)
         case res =>
