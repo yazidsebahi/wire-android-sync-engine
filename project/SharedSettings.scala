@@ -103,8 +103,8 @@ object SharedSettings {
       Deps.avs,
       Deps.cryptobox,
       "com.wire" % "avs-native" % avsVersion % Native,
-      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2" classifier "darwin-x86_64",
-      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2" classifier "linux-x86_64",
+      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2" % Native classifier "darwin-x86_64",
+      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2" % Native classifier "linux-x86_64",
       Deps.localytics,
       Deps.scalaCheck,
       Deps.wireMock
