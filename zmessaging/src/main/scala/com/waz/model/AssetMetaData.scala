@@ -66,7 +66,7 @@ object AssetMetaData {
         Audio(Duration.ofMillis('duration),
           Try(JsonDecoder.array[Float]('levels)((arr, i) => arr.getDouble(i).toFloat)).toOption.map(Loudness))
       case 'image =>
-        Image(JsonDecoder[Dim2]('dimensions), decodeString('tag))
+        Image(JsonDecoder[Dim2]('dimensions), Image.Tag(decodeString('tag)))
       case other =>
         throw new IllegalArgumentException(s"unsupported meta data type: $other")
     }
@@ -89,7 +89,7 @@ object AssetMetaData {
   case class Loudness(levels: Vector[Float])
 
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
-  case class Image(dimensions: Dim2, tag: String = "") extends AssetMetaData('image) with HasDimensions
+  case class Image(dimensions: Dim2, tag: Image.Tag = Image.Tag.Empty) extends AssetMetaData('image) with HasDimensions
   case class Audio(duration: Duration, loudness: Option[Loudness] = None) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
 
@@ -120,7 +120,41 @@ object AssetMetaData {
 
   object Image {
 
-    val Empty = Image(Dim2.Empty)
+    sealed abstract class Tag(str: String) {
+      override def toString: String = str
+    }
+
+    /**
+      * An implementation note on Image tags:
+      * V2 images often contain both a "preview" and a "medium" version, where we rely on the tag to drop the preview version
+      * V3 images can also contain tags, but no client currently sends a "preview" version, so we don't need to worry.
+      *
+      * V2 profile pictures are stored in the "picture" field of user data with the tags "smallProfile" and "medium". The
+      * Webapp team requires that we always upload a small version of the image, as they don't have their own caching (yet)
+      * V3 profile pictures are stored in the "assets" field of user data with the tags "preview" or "complete". Again we
+      * must upload both for webapp.
+      *
+      * To simplify implementations, I'm going with two internal tags, "preview" and "medium". Depending on where they're
+      * used though, they may be translated into "smallProfile" or "complete"
+      *
+      * TODO Dean: it would be nice to sync up with other clients and steadily introduce a more uniform set of tags
+      */
+
+    object Tag {
+      case object Preview      extends Tag("preview")
+      case object Medium       extends Tag("medium")
+      case object Empty        extends Tag("")
+
+      def apply(tag: String): Tag = tag match {
+        case "preview"      => Preview
+        case "smallProfile" => Preview
+        case "medium"       => Medium
+        case "complete"     => Medium
+        case _              => Empty
+      }
+    }
+
+    val Empty = Image(Dim2.Empty, Tag.Empty)
 
     def apply(file: File): Option[Image] = apply(new FileInputStream(file))
 

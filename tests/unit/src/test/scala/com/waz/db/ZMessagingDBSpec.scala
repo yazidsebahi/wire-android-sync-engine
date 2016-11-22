@@ -25,6 +25,7 @@ import android.net.Uri
 import com.waz.Generators
 import com.waz.api.{KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.MessageData.MessageDataDao
@@ -104,7 +105,7 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
       assets should have size 57
       forAll(assets) { _.isInstanceOf[AssetData] shouldEqual true }
 
-      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), "tag")), source = Some(Uri.parse("url")))
+      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), Medium)), source = Some(Uri.parse("url")))
       val im = AssetDataDao.insertOrReplace(data)
       im shouldEqual data
       AssetDataDao.list should have size 58

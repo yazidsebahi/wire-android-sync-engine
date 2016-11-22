@@ -18,6 +18,9 @@
 package com.waz.model
 
 import com.waz.api.impl.AccentColor
+import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag
+import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.ContentEncoder
@@ -27,7 +30,9 @@ import org.json.{JSONArray, JSONObject}
 
 import scala.util.Try
 
-case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Option[AssetData] = None, trackingId: Option[TrackingId] = None, deleted: Boolean = false)
+case class UserInfo(id: UserId, name: Option[String] = None, accentId: Option[Int] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, picture: Seq[AssetData] = Seq.empty, trackingId: Option[TrackingId] = None, deleted: Boolean = false) {
+  def mediumPicture = picture.collectFirst { case a@AssetData.IsImageWithTag(Medium) => a }
+}
 
 object UserInfo {
   import JsonDecoder._
@@ -45,7 +50,7 @@ object UserInfo {
         status = UploadDone,
         sizeInBytes = size,
         mime = Mime(mime),
-        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
+        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), Image.Tag('tag))),
         data = data.map(AssetData.decodeData),
         convId = Some(RConvId(userId.str)), //v2 asset needs user conv for downloading
         v2ProfileId = Some(id)
@@ -57,19 +62,17 @@ object UserInfo {
       Seq.tabulate(assets.length())(assets.getJSONObject).map { js =>
         AssetData(
           remoteId = decodeOptRAssetId('key)(js),
-          metaData = Some(AssetMetaData.Image(Dim2(0, 0), decodeString('size)(js)))
+          metaData = Some(AssetMetaData.Image(Dim2(0, 0), Image.Tag(decodeString('size)(js))))
         )
-        //TODO Dean - do we want to bring back small pictures for users?
-      }.find { case AssetData.IsImageWithTag("complete") => true; case _ => false }
+      }.collectFirst { case a@AssetData.IsImageWithTag(Tag.Medium) => a } //discard preview
     }
 
     def getPicture(userId: UserId)(implicit js: JSONObject): Option[AssetData] = fromArray(js, "picture") flatMap { pic =>
       val id = decodeOptString('correlation_id)(pic.getJSONObject(0).getJSONObject("info")).fold(AssetId())(AssetId(_))
-      val pics = Seq.tabulate(pic.length())(i => imageData(userId, pic.getJSONObject(i)))
 
-      //TODO Dean - do we want to bring back small pictures for users?
-      val medium = pics.find { case AssetData.IsImageWithTag("medium") => true; case _ => false }.map(_.copy(id = id))
-      medium
+      Seq.tabulate(pic.length())(i => imageData(userId, pic.getJSONObject(i))).collectFirst {
+        case a@AssetData.IsImageWithTag(Medium) => a //discard preview
+      }.map(_.copy(id = id))
     }
 
     private def fromArray(js: JSONObject, name: String) = Try(js.getJSONArray(name)).toOption.filter(_.length() > 0)
@@ -82,28 +85,34 @@ object UserInfo {
         }
       }
       val id = UserId('id)
-      //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists
-      val pic = getAssets.orElse(getPicture(id))
+      //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists.
+      val pic = getAssets.orElse(getPicture(id)).toSeq
       UserInfo(id, 'name, accentId, 'email, 'phone, pic, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted)
     }
   }
 
   def encodePicture(assets: Seq[AssetData]): JSONArray = {
+
+    val medium = assets.collectFirst { case a@AssetData.IsImageWithTag(Medium) => a }
     val arr = new json.JSONArray()
       assets.collect {
         case a@AssetData.IsImage() =>
+          val tag = a.tag match {
+            case Preview => "smallProfile"
+            case Medium => "medium"
+            case _ => ""
+          }
           JsonEncoder { o =>
             o.put("id", a.v2ProfileId.map(_.str).getOrElse(""))
             o.put("content_type", a.mime.str)
             o.put("content_length", a.size)
-            a.data64.foreach(o.put("data", _))
             o.put("info", JsonEncoder { info =>
-              info.put("tag", a.tag)
+              info.put("tag", tag)
               info.put("width", a.width)
               info.put("height", a.height)
-              info.put("original_width", a.width)
-              info.put("original_height", a.height)
-              info.put("correlation_id", a.id.str)
+              info.put("original_width", medium.map(_.width).getOrElse(a.width))
+              info.put("original_height", medium.map(_.height).getOrElse(a.height))
+              info.put("correlation_id", medium.map(_.id.str).getOrElse(a.id.str))
               info.put("nonce", a.id.str)
               info.put("public", true)
             })
@@ -116,9 +125,14 @@ object UserInfo {
   def encodeAsset(assets: Seq[AssetData]): JSONArray = {
     val arr = new json.JSONArray()
     assets.collect {
-      case AssetData.WithRemoteId(rId) =>
+      case a@AssetData.WithRemoteId(rId) =>
+        val size = a.tag match {
+          case Preview => "preview"
+          case Medium => "complete"
+          case _ => ""
+        }
         JsonEncoder { o =>
-          o.put("size", "complete")
+          o.put("size", size)
           o.put("key", rId.str)
           o.put("type", "image")
         }
@@ -134,8 +148,8 @@ object UserInfo {
       info.email.foreach(e => o.put("email", e.str))
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
-      o.put("assets", encodeAsset(info.picture.toSeq))
-      o.put("picture", encodePicture(info.picture.toSeq))
+      o.put("assets", encodeAsset(info.picture))
+      o.put("picture", encodePicture(info.picture))
     }
   }
 
@@ -143,8 +157,8 @@ object UserInfo {
     JsonEncoder { o =>
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
-      o.put("assets", encodeAsset(info.picture.toSeq))
-      o.put("picture", encodePicture(info.picture.toSeq))
+      o.put("assets", encodeAsset(info.picture))
+      o.put("picture", encodePicture(info.picture))
     }
   }
 }

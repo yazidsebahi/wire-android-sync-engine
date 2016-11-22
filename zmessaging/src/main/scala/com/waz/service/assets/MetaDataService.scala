@@ -26,6 +26,7 @@ import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.AssetsStorage
 import com.waz.content.WireContentProvider.CacheUri
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.AssetMetaData.{Audio, Empty}
 import com.waz.model._
 import com.waz.service.images.ImageAssetGenerator
@@ -127,6 +128,6 @@ class MetaDataService(context: Context, cache: CacheService, storage: AssetsStor
 
   private def createVideoPreview(bitmap: Option[Bitmap]) = bitmap match {
     case None => CancellableFuture successful None
-    case Some(b) => generator.generateAssetData(AssetData.newImageAsset(AssetId()), Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
+    case Some(b) => generator.generateAssetData(AssetData.newImageAsset(AssetId(), Medium), Right(b), Metadata(b.getWidth, b.getHeight, BitmapUtils.Mime.Jpg), MediumOptions).map(Some(_))
   }
 }

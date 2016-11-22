@@ -27,6 +27,7 @@ import com.waz.bitmap.ExifOrientation
 import com.waz.cache.{CacheEntry, Expiration}
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
@@ -79,7 +80,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
   lazy val convId = RConvId()
   lazy val req = BitmapRequest.Regular(300)
-  lazy val assetData = new AssetData(convId = Some(convId), mime = Mime.Image.Png, remoteId = Some(mediumId), metaData = Some(Image(Dim2(240, 240), "medium")), sizeInBytes = mediumFile.length())
+  lazy val assetData = new AssetData(convId = Some(convId), mime = Mime.Image.Png, remoteId = Some(mediumId), metaData = Some(Image(Dim2(240, 240), Medium)), sizeInBytes = mediumFile.length())
 
   before {
     Robolectric.application.getResources.getText(R.string.cancel, "") // force resource loading
@@ -239,7 +240,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       ExifOrientation(new FileInputStream(file)) shouldEqual ExifInterface.ORIENTATION_TRANSPOSE
       ExifOrientation(new ByteArrayInputStream(bytes)) shouldEqual ExifInterface.ORIENTATION_TRANSPOSE
 
-      val asset = AssetData(metaData = Some(Image(Dim2(0, 0), "medium")), sizeInBytes = bytes.length, remoteId = Some(RAssetId()), data = Some(bytes), convId = Some(RConvId()))
+      val asset = AssetData(metaData = Some(Image(Dim2(0, 0), Medium)), sizeInBytes = bytes.length, remoteId = Some(RAssetId()), data = Some(bytes), convId = Some(RConvId()))
 
       val bmp = Await.result(service.loadBitmap(asset, Regular(100)), 5.seconds)
       //      TODO: fix ShadowIOBitmap to produce corrent image - this works on device

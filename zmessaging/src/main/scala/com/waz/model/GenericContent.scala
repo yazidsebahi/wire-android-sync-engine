@@ -22,6 +22,7 @@ import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
 import com.waz.api.EphemeralExpiration
+import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress, UploadNotStarted}
 import com.waz.model.nano.Messages
@@ -80,13 +81,13 @@ object GenericContent {
     type ImageMetaData = Messages.Asset.ImageMetaData
     object ImageMetaData {
       def apply(md: AssetMetaData.Image): ImageMetaData = returning(new Messages.Asset.ImageMetaData) { p =>
-        p.tag = md.tag
+        p.tag = md.tag.toString
         p.width = md.dimensions.width
         p.height = md.dimensions.height
       }
 
       def unapply(proto: ImageMetaData): Option[AssetMetaData.Image] =
-        Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
+        Some(AssetMetaData.Image(Dim2(proto.width, proto.height), Tag(proto.tag)))
     }
 
     type VideoMetaData = Messages.Asset.VideoMetaData
@@ -227,14 +228,14 @@ object GenericContent {
         sha = Option(proto.sha256).map(Sha256(_)),
         sizeInBytes = proto.size,
         mime = Mime(proto.mimeType),
-        metaData = Some(AssetMetaData.Image(Dim2(proto.width, proto.height), proto.tag))
+        metaData = Some(AssetMetaData.Image(Dim2(proto.width, proto.height), Tag(proto.tag)))
       ))
     }
 
     def apply(asset: AssetData): ImageAsset = returning(new Messages.ImageAsset) { proto =>
       asset.metaData.foreach {
         case AssetMetaData.Image(Dim2(w, h), tag) =>
-          proto.tag = tag
+          proto.tag = tag.toString
           proto.width = w
           proto.height = h
           proto.originalWidth = w

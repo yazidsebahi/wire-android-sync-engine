@@ -25,6 +25,7 @@ import com.waz.ZLog.verbose
 import com.waz.content.WireContentProvider
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.otr.SignalingKey
 import com.waz.service.ZMessaging
@@ -74,7 +75,7 @@ case class AssetData(id:          AssetId               = AssetId(),
        | preview:       $previewId
        | metaData:      $metaData
        | convId:        $convId
-       | data (length): ${data.size}
+       | data (length): ${data.map(_.length).getOrElse(0)}
        | other fields:  $name, $source, $proxyPath, $v2ProfileId
     """.stripMargin
 
@@ -118,7 +119,7 @@ case class AssetData(id:          AssetId               = AssetId(),
 
   val tag = this match {
     case IsImageWithTag(t) => t
-    case _ => ""
+    case _ => Image.Tag.Empty
   }
 
   val dimensions = this match {
@@ -156,7 +157,7 @@ object AssetData {
                        )
 
   //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
-  def newImageAsset(id: AssetId = AssetId()) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), "medium")))
+  def newImageAsset(id: AssetId = AssetId(), tag: Image.Tag) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), tag)))
 
   val Empty = AssetData()
 
@@ -193,7 +194,7 @@ object AssetData {
   }
 
   object IsImageWithTag {
-    def unapply(asset: AssetData): Option[String] = asset.metaData match {
+    def unapply(asset: AssetData): Option[Image.Tag] = asset.metaData match {
       case Some(AssetMetaData.Image(_, tag)) => Some(tag)
       case _ => None
     }
@@ -309,7 +310,7 @@ object AssetData {
           verbose(s"applying ImageDataDecoder to $obj")
           ImageDataDecoder.apply(obj)
         }.collect {
-          case a@AssetData.IsImageWithTag("medium") => a.copy(id = id, convId = convId)
+          case a@AssetData.IsImageWithTag(Image.Tag.Medium) => a.copy(id = id, convId = convId)
         }.headOption
       }.getOrElse(AssetData(id, convId = convId))
     }
@@ -330,7 +331,7 @@ object AssetData {
       AssetData(
         mime = Mime('mime),
         sizeInBytes = 'size,
-        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), 'tag)),
+        metaData = Some(AssetMetaData.Image(Dim2('width, 'height), Image.Tag('tag))),
         source = decodeOptString('url).map(Uri.parse),
         proxyPath = decodeOptString('proxyPath)
       ).copyWithRemoteData(RemoteData('remoteId, None, otrKey, decodeOptString('sha256).map(Sha256(_))))

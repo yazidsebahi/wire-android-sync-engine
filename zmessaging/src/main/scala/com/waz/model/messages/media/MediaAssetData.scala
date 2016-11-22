@@ -19,6 +19,7 @@ package com.waz.model.messages.media
 
 import android.net.Uri
 import com.waz.api.{KindOfMedia, MediaProvider, Message}
+import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model._
 import org.threeten.bp.{Duration, Instant}
 
@@ -95,7 +96,7 @@ object MediaAssetData {
 
     AssetData(
       mime = Mime.Image.Jpg,
-      metaData = orig.map(o => AssetMetaData.Image(Dim2(o.width, o.height), o.tag)),
+      metaData = orig.map(o => AssetMetaData.Image(Dim2(o.width, o.height), Tag(o.tag))),
       source = orig.map(o => Uri.parse(o.url)))
   }
 

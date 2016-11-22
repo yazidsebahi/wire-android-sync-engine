@@ -19,6 +19,7 @@ package com.waz.sync.client
 
 import com.waz.api.MediaProvider
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.{AssetData, Dim2}
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
@@ -37,7 +38,7 @@ class SoundCloudClientSpec extends FeatureSpec with Matchers with OptionValues w
       })
 
       val image = SoundCloudResponse.unapply(sampleTrackResponse).value.images.headOption.value
-      image shouldEqual AssetData(metaData = Some(Image(Dim2(500, 500), "t500x500")))
+      image shouldEqual AssetData(metaData = Some(Image(Dim2(500, 500), Medium)))
 //      images.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(("small", 32, 32), ("large", 100, 100), ("t500x500", 500, 500))
     }
 

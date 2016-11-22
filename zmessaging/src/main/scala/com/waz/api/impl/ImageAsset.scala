@@ -30,6 +30,7 @@ import com.waz.api.ImageAsset.SaveCallback
 import com.waz.api.{BitmapCallback, LoadHandle}
 import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.bitmap.BitmapUtils
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService.BitmapResult
@@ -169,7 +170,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
   data = AssetData(
     id,
     mime = mime,
-    metaData = Some(AssetMetaData.Image(Dim2(w, h), "medium")),
+    metaData = Some(AssetMetaData.Image(Dim2(w, h), Medium)),
     data = {
       verbose(s"data requested, compress completed: ${imageData.isCompleted}")
       // XXX: this is ugly, but will only be accessed from bg thread and very rarely, so we should be fine with that hack

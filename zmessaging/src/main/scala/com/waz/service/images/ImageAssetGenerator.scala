@@ -19,11 +19,12 @@ package com.waz.service.images
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
+import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Preview
 import com.waz.model._
 import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageLoader.Metadata
@@ -58,6 +59,17 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
+  //used for creating small previews for user profile assets for the web team, based off of some input asset. It will
+  //create a new AssetData representing the preview image
+  def generateSmallProfile(asset: AssetData): CancellableFuture[AssetData] = {
+    loader.loadRawImageData(asset) flatMap {
+      case Some(data) =>
+        loader.getImageMetadata(data) flatMap { meta => generateAssetData(AssetData.newImageAsset(AssetId(), Preview), Left(data), meta, SmallProfileOptions) }
+      case _ =>
+        CancellableFuture.failed(new IllegalArgumentException(s"ImageAsset could not be added to cache: $asset"))
+    }
+  }
+
   def generateAssetData(asset: AssetData, input: Either[LocalData, Bitmap], meta: Metadata, co: CompressionOptions): CancellableFuture[AssetData] = {
     generateImageData(asset.id, co, input, meta) flatMap {
       case (file, m) =>
@@ -72,7 +84,8 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
         asset.copy(
           mime = com.waz.model.Mime(m.mimeType),
           sizeInBytes = size,
-          metaData = Some(AssetMetaData.Image(Dim2(m.width, m.height), "medium"))
+          metaData = Some(AssetMetaData.Image(Dim2(m.width, m.height), asset.tag)),
+          data = None //can remove data as we now have a cached version
         )
     }
   }

@@ -27,6 +27,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.cache._
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.ZMessaging
@@ -87,7 +88,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
     AssetData(
       sizeInBytes = bos.size(),
-      metaData = Some(Image(Dim2(bitmap.getWidth, bitmap.getHeight), "medium")),
+      metaData = Some(Image(Dim2(bitmap.getWidth, bitmap.getHeight), Medium)),
       remoteId = Some(RAssetId()),
       data = Some(bos.toByteArray)
     )

@@ -25,6 +25,7 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
 import com.waz.service.assets.AssetService.BitmapResult
@@ -53,7 +54,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   
   def mockBitmap(im: AssetData) = Some(Bitmap.createBitmap(im.dimensions.width, im.dimensions.height, Bitmap.Config.ARGB_8888))
   def mockDelay(preview: FiniteDuration = Duration.Zero, medium: FiniteDuration = Duration.Zero)(im: AssetData) = im.tag match {
-    case "medium" => medium
+    case Medium => medium
     case _ => preview
   }
 
@@ -110,7 +111,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   feature("Wire asset loading") {
 
     scenario("Load asset with invalid metadata") {
-      checkLoaded(Regular(500), Some((500, 500)), Some((996, 660)))(AssetData(metaData = Some(AssetMetaData.Image(Dim2(996, 660), "medium"))))
+      checkLoaded(Regular(500), Some((500, 500)), Some((996, 660)))(AssetData(metaData = Some(AssetMetaData.Image(Dim2(996, 660), Medium))))
     }
 
     scenario("Request small image when only preview is available") {
@@ -137,7 +138,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
 
     scenario("Only full image available") {
-      checkLoaded(Regular(500), None, Some((512, 512)))(AssetData(metaData = Some(AssetMetaData.Image(Dim2(512, 512), "medium"))))
+      checkLoaded(Regular(500), None, Some((512, 512)))(AssetData(metaData = Some(AssetMetaData.Image(Dim2(512, 512), Medium))))
     }
 
     scenario("Loading full image, then preview") {
@@ -152,7 +153,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     def gif = GifReader(gifStream).get
 
     scenario("Load gif from local source") {
-      lazy val asset = AssetData(AssetId(), metaData = Some(Image(Dim2(0, 0), "medium")), source = Some(Uri.parse("content://test")), convId = Some(RConvId()))
+      lazy val asset = AssetData(AssetId(), metaData = Some(Image(Dim2(0, 0), Medium)), source = Some(Uri.parse("content://test")), convId = Some(RConvId()))
       gifResult = { _ => Some(gif) }
       rawDataResult = { _ => Some(LocalData(gifStream, -1))}
       val listener = new SignalListener(asset, Regular(200))

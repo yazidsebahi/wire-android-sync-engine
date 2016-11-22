@@ -18,6 +18,7 @@
 package com.waz.service.media
 
 import com.waz.ZLog._
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.service.media.RichMediaContentParser.GoogleMapsLocation
 import com.waz.sync.client.GoogleMapsClient
@@ -40,6 +41,6 @@ object GoogleMapsMediaService {
     val mediumPath = GoogleMapsClient.getStaticMapPath(location, mapWidth, mapHeight)
 
     //TODO Dean see if preview is still needed?
-    AssetData(mime = Mime.Image.Png, metaData = Some(AssetMetaData.Image(Dim2(mapWidth, mapHeight), "medium")), proxyPath = Some(mediumPath))
+    AssetData(mime = Mime.Image.Png, metaData = Some(AssetMetaData.Image(Dim2(mapWidth, mapHeight), Medium)), proxyPath = Some(mediumPath))
   }
 }

@@ -80,7 +80,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
     val selfPicture = soon(returning(self.getPicture)(_ should not be empty))
 
     soon {
-      sentUserInfo.value.picture.value.remoteId shouldBe Some(RAssetId("medium-picture"))
+      sentUserInfo.value.picture.head.remoteId shouldBe Some(RAssetId("medium-picture"))
       selfPicture.data.remoteId shouldBe Some(RAssetId("medium-picture"))
     }
   }

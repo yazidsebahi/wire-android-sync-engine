@@ -21,6 +21,9 @@ import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
+import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag
+import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
@@ -111,10 +114,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 non-image: $asset")
           assets.storage.mergeOrCreateAsset(asset)
-        case (ImageAsset(a@AssetData.IsImageWithTag("preview")), _) =>
+        case (ImageAsset(a@AssetData.IsImageWithTag(Preview)), _) =>
           verbose(s"Received image preview for msg: $id. Dropping")
           Future successful None
-        case (ImageAsset(a@AssetData.IsImageWithTag("medium")), Some(rId)) =>
+        case (ImageAsset(a@AssetData.IsImageWithTag(Medium)), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
           verbose(s"Received asset v2 image: $asset")
           assets.storage.mergeOrCreateAsset(asset)
@@ -196,7 +199,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.VIDEO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(AssetData.IsAudio(), _) =>
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
-      case ImageAsset(AssetData.IsImageWithTag("preview")) => //ignore previews
+      case ImageAsset(AssetData.IsImageWithTag(Preview)) => //ignore previews
         MessageData.Empty
       case Asset(AssetData.IsImage(), _) | ImageAsset(AssetData.IsImage()) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))

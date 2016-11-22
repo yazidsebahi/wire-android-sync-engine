@@ -22,6 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
 import com.waz.content.Preference
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.{UserData, _}
 import com.waz.model.otr.Client
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
@@ -278,7 +279,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
           case Right(userInfo) =>
             verbose(s"got self user info: $userInfo")
             for {
-              _ <- storage.assetsStorage.mergeOrCreateAsset(userInfo.picture)
+              _ <- storage.assetsStorage.mergeOrCreateAsset(userInfo.mediumPicture)
               _ <- storage.usersStorage.updateOrCreate(userInfo.id, _.updated(userInfo).copy(syncTimestamp = System.currentTimeMillis()), UserData(userInfo).copy(connection = UserData.ConnectionStatus.Self, syncTimestamp = System.currentTimeMillis()))
               res <- accountsStorage.updateOrCreate(id, _.updated(userInfo), account.updated(userInfo))
             } yield Right(res)

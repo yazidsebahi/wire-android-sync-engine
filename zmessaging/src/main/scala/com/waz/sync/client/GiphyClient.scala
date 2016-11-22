@@ -21,6 +21,8 @@ import java.net.URLEncoder
 
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.model.AssetMetaData.Image.Tag
+import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.{AssetData, AssetMetaData, Dim2, Mime}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.{JsonDecoder, LoggedTry}
@@ -75,8 +77,8 @@ object GiphyClient {
   implicit lazy val GiphyAssetOrdering: Ordering[AssetData] = new Ordering[AssetData] {
     override def compare(x: AssetData, y: AssetData): Int = {
       if (x.dimensions.width == y.dimensions.width) {
-        if (x.tag == "preview" || y.tag == "medium") -1
-        else if (x.tag == "medium" || y.tag == "preview") 1
+        if (x.tag == Preview || y.tag == Medium) -1
+        else if (x.tag == Medium || y.tag == Preview) 1
         else Ordering.Int.compare(x.size.toInt, y.size.toInt)
       } else Ordering.Int.compare(x.dimensions.width, y.dimensions.width)
     }
@@ -115,7 +117,7 @@ object GiphyClient {
           case (tag, w, h, url) =>
             AssetData(
               mime = Mime.Image.Gif,
-              metaData = Some(AssetMetaData.Image(Dim2(decodeInt(w), decodeInt(h)), tag)),
+              metaData = Some(AssetMetaData.Image(Dim2(decodeInt(w), decodeInt(h)), Tag(tag))),
               source = Some(decodeUri(url))
             )
         }.sorted
@@ -143,7 +145,7 @@ object GiphyClient {
       }
     }
 
-    def parseImage(tag: String, data: JSONObject): Option[AssetData] = Decoder(data).map { a =>
+    def parseImage(tag: Tag, data: JSONObject): Option[AssetData] = Decoder(data).map { a =>
       a.copy(metaData = Some(AssetMetaData.Image(a.dimensions, tag)))
     }
 
@@ -154,7 +156,7 @@ object GiphyClient {
             val images = arr.getJSONObject(index).getJSONObject("images")
 
             val assets = Seq("original_still", "original").flatMap { key =>
-              parseImage(if (key.endsWith("_still")) "preview" else "medium", images.getJSONObject(key))
+              parseImage(if (key.endsWith("_still")) Preview else Medium, images.getJSONObject(key))
             }
 
             val preview = assets.headOption

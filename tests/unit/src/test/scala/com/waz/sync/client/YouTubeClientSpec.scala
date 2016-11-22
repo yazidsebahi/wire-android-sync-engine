@@ -22,6 +22,7 @@ import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.{AssetData, Dim2}
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
@@ -55,7 +56,7 @@ class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
       })
 
       val image = TrackResponse.unapply(sampleTrackResponse).value.images.headOption.value
-      image shouldEqual AssetData(metaData = Some(Image(Dim2(1280, 720), "maxres")), source = Some(Uri.parse("https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg")))
+      image shouldEqual AssetData(metaData = Some(Image(Dim2(1280, 720), Medium)), source = Some(Uri.parse("https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg")))
 //      image.map(img => (img.tag, img.url.value, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
 //        ("default", "https://i.ytimg.com/vi/mTWfqi3-3qU/default.jpg", 120, 90),
 //        ("medium", "https://i.ytimg.com/vi/mTWfqi3-3qU/mqdefault.jpg", 320, 180),
@@ -103,7 +104,7 @@ class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
       withClue(assetOfFirstTrack) {
 
 
-        assetOfFirstTrack.value shouldEqual AssetData(metaData = Some(Image(Dim2(1280, 720), "maxres")), source = Some(Uri.parse("https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg")))
+        assetOfFirstTrack.value shouldEqual AssetData(metaData = Some(Image(Dim2(1280, 720), Medium)), source = Some(Uri.parse("https://i.ytimg.com/vi/mTWfqi3-3qU/maxresdefault.jpg")))
 //        assetOfFirstTrack.value.versions.map(img => (img.tag, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
 //          ("default", 120, 90),
 //          ("medium", 320, 180),

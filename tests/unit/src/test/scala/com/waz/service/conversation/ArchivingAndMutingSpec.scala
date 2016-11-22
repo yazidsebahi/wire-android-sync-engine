@@ -21,6 +21,7 @@ import java.util.Date
 
 import com.waz._
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Preview
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
@@ -321,10 +322,10 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
 
   def sendImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), "preview"))))), RAssetId(), None))
+    service.dispatchEvent(GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview))))), RAssetId(), None))
 
   def sendGenericImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), "preview")))))))
+    service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview)))))))
 
   def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(Uid(), conv.remoteId, date(old), user1.id))
   def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), conv.remoteId, date(old), user1.id, Some("missed")))

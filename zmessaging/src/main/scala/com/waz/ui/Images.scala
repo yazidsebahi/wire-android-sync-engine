@@ -27,6 +27,7 @@ import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.Parcelable
 import com.waz.api.impl._
 import com.waz.bitmap.BitmapDecoder
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
@@ -54,7 +55,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      val asset = AssetData.newImageAsset().copy(source = Some(uri))
+      val asset = AssetData.newImageAsset(tag = Medium).copy(source = Some(uri))
       cacheImageAsset(asset.id, new LocalImageAsset(asset))
     }
   }
@@ -78,7 +79,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
     //Created with camera, so don't cache since if the user cancels or sends, the image asset won't be needed again
-    else new LocalImageAsset(AssetData.newImageAsset().copy(sizeInBytes = bytes.length, data = Some(bytes)))
+    else new LocalImageAsset(AssetData.newImageAsset(tag = Medium).copy(sizeInBytes = bytes.length, data = Some(bytes)))
   }
 
   def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =

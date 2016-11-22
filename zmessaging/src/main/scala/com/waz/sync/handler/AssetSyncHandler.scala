@@ -89,7 +89,7 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
         verbose(s"postImageAssetData returned for ${asset.id} with local data: $data")
         for {
           _ <- updateImageCache(asset)
-          _ <- assets.storage.updateAsset(asset.id, _.copy(v2ProfileId = Some(rId))) //store data so it's accessible when we update v2 end point
+          _ <- assets.storage.updateAsset(asset.id, _.copy(v2ProfileId = Some(rId)))
         } yield SyncResult.Success
       case Left(error) =>
         Future.successful(SyncResult(error))

@@ -22,6 +22,7 @@ import java.util.Date
 import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
 import com.waz.content._
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.UserService._
@@ -128,13 +129,15 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     usersClient.loadSelf().future.flatMap {
       case Right(info) =>
         //TODO Dean - remove after v2 transition time
-        info.picture.filter(_.convId.isDefined).fold(Future.successful(())) { asset =>
-            verbose("User has v2 picture - re-uploading as v3")
-            for {
-              _ <- sync.postSelfPicture(Some(asset.id))
-              _ <- assetsStorage.updateAsset(asset.id, _.copy(convId = None)) //mark asset as v3
-              _ <- usersClient.updateSelf(info)
-            } yield (())
+        val v2profilePic = info.mediumPicture.filter(_.convId.isDefined)
+
+        v2profilePic.fold(Future.successful(())){ pic =>
+          verbose("User has v2 picture - re-uploading as v3")
+          for {
+            _ <- sync.postSelfPicture(v2profilePic.map(_.id))
+            _ <- assetsStorage.updateAsset(pic.id, _.copy(convId = None)) //mark assets as v3
+            _ <- usersClient.updateSelf(info).future
+          } yield (())
         }.flatMap (_ => updateSyncedUsers(Seq(info)) map { _.headOption })
       case Left(err) =>
         error(s"loadSelf() failed: $err")

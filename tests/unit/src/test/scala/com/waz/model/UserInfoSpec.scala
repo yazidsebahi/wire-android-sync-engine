@@ -17,6 +17,7 @@
  */
 package com.waz.model
 
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.utils.JsonDecoder
 import com.waz.znet.ContentEncoder.ByteArrayRequestContent
 import org.json.JSONObject
@@ -32,7 +33,7 @@ class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ge
 
     scenario("Encode picture array") {
       val convId = RConvId()
-      val userInfo = UserInfo(UserId(), Some("name"), picture = Some(AssetData(convId = Some(convId), metaData = Some(AssetMetaData.Image(Dim2(10, 10), "tag")), remoteId = Some(RAssetId()))))
+      val userInfo = UserInfo(UserId(), Some("name"), picture = Seq(AssetData(convId = Some(convId), metaData = Some(AssetMetaData.Image(Dim2(10, 10), Medium)), remoteId = Some(RAssetId()))))
       val json = UserInfo.ContentEncoder(userInfo).toString
       info(json)
 
@@ -50,8 +51,8 @@ class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ge
     scenario("Use first correlation Id as assetId in every imageassetdata") { // this is needed because iOS sends images with random correlation_id
 
       val info = JsonDecoder.decode[UserInfo](json)
-      info.picture shouldBe defined
-      val pic = info.picture.get
+      info.picture should not be 'empty
+      val pic = info.picture.head
       pic.id shouldEqual AssetId("308133e9-6fd8-4652-baf4-3db41904e912")
     }
   }

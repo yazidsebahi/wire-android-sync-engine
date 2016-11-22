@@ -23,6 +23,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.impl.{AssetForUpload, ErrorResponse}
 import com.waz.cache.{CacheEntry, CacheService}
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService
@@ -47,7 +48,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     } finally is.close()
   }
 
-  val asset = AssetData(convId = Some(RConvId()), sizeInBytes = mediumFile.length(), metaData = Some(AssetMetaData.Image(Dim2(240, 246), "medium")), remoteId = Some(RAssetId()))
+  val asset = AssetData(convId = Some(RConvId()), sizeInBytes = mediumFile.length(), metaData = Some(AssetMetaData.Image(Dim2(240, 246), Medium)), remoteId = Some(RAssetId()))
 
   lazy val zms = new MockZMessaging() { self =>
     override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {

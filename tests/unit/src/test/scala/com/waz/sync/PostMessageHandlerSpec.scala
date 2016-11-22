@@ -24,6 +24,7 @@ import com.waz._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{Message, NetworkMode}
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset
 import com.waz.model.{Mime, _}
@@ -171,7 +172,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
   feature("Post image message") {
 
     def addMessage() = {
-      val asset: AssetData = AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg"), remoteId = Some(RAssetId()))
+      val asset: AssetData = AssetData(metaData = Some(Image(Dim2(100, 100), Medium)), mime = Mime("image/jpg"), remoteId = Some(RAssetId()))
       val updated: AssetData = Await.result(zms.assetsStorage.insert(asset), 15.seconds)
       val id = MessageId(updated.id.str)
       val msg = addLocalMessage(MessageData(id, conv.id, Message.Type.ASSET, userId, protos = Seq(GenericMessage(id.uid, Asset(updated))), time = Instant.now))

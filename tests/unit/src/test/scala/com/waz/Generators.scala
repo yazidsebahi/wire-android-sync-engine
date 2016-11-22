@@ -24,6 +24,7 @@ import java.util.{Date, Locale}
 
 import android.net.Uri
 import com.waz.api.{InvitationTokenFactory, Invitations}
+import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Text
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
@@ -271,7 +272,7 @@ object Generators {
   } yield MessageAndLikes(msg, ids.toVector, includeSelf))
 
   implicit lazy val arbMetaData: Arbitrary[AssetMetaData] = Arbitrary(oneOf(arbImageMetaData.arbitrary, arbVideoMetaData.arbitrary, arbAudioMetaData.arbitrary))
-  implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- oneOf("medium", "preview")) yield AssetMetaData.Image(d, t))
+  implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- oneOf(Medium, Preview)) yield AssetMetaData.Image(d, t))
   implicit lazy val arbVideoMetaData: Arbitrary[AssetMetaData.Video] = Arbitrary(resultOf(AssetMetaData.Video(_: Dim2, _: Duration)))
   implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(resultOf(AssetMetaData.Audio(_: Duration)))
   implicit lazy val arbDim2: Arbitrary[Dim2] = Arbitrary(for (w <- genDimension; h <- genDimension) yield Dim2(w, h))
@@ -288,7 +289,7 @@ object Generators {
     picture <- arbitrary[Option[AssetData]]
     trackingId <- arbitrary[Option[TrackingId]]
     accent <- arbitrary[Option[Int]]
-  } yield UserInfo(userId, name, accent, email, phone, picture, trackingId))
+  } yield UserInfo(userId, name, accent, email, phone, picture.toSeq, trackingId))
 
   implicit lazy val arbAddressBook: Arbitrary[AddressBook] = Arbitrary(for {
     selfHashes <- arbitrary[Seq[String]] map (_ map sha2)

@@ -19,9 +19,11 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.{AssetsStorage, UsersStorage}
+import com.waz.content.UsersStorage
 import com.waz.model._
 import com.waz.service.UserService
+import com.waz.service.assets.AssetService
+import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.SyncResult
 import com.waz.sync.client.UsersClient
 import com.waz.threading.Threading
@@ -29,7 +31,7 @@ import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 
-class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, usersStorage: UsersStorage, assets: AssetsStorage, usersClient: UsersClient) {
+class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, usersStorage: UsersStorage, assets: AssetService, usersClient: UsersClient, imageGenerator: ImageAssetGenerator) {
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[UsersSyncHandler]
   private implicit val ec = EventContext.Global
@@ -55,21 +57,31 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
   def postSelfPicture(): Future[SyncResult] = userService.getSelfUser flatMap {
     case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _)) =>
       for {
-        _ <- assetSync.postSelfImageAsset(RConvId(id.str), assetId).recover {case _ => warn("Failed to upload v2 picture")} //TODO Dean: stop posting to v2 after transition period
-        res <- assetSync.uploadAssetData(assetId, public = true).future flatMap {
-          case Right(uploaded) =>
-            for {
-              asset <- assets.get(assetId)
-              res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = asset)))
-            } yield res
+        Some(asset) <- assets.storage.get(assetId)
+        preview <- imageGenerator.generateSmallProfile(asset).future
+        _ <- assets.storage.mergeOrCreateAsset(preview) //needs to be in storage for other steps to find it
+        _ <- assetSync.postSelfImageAsset(RConvId(id.str), preview.id).recover {case _ => warn("Failed to upload v2 small picture")} //TODO Dean: stop posting to v2 after transition period
+        _ <- assetSync.postSelfImageAsset(RConvId(id.str), assetId).recover {case _ => warn("Failed to upload v2 medium picture")} //TODO Dean: stop posting to v2 after transition period
+        res <- assetSync.uploadAssetData(preview.id, public = true).future flatMap {
+          case Right(uploadedPreview) =>
+            assetSync.uploadAssetData(assetId, public = true).future flatMap {
+              case Right(uploaded) =>
+                for {
+                  asset <- assets.storage.get(assetId)
+                  res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Seq(uploadedPreview, uploaded).flatten)))
+                } yield res
 
+              case Left(err) =>
+                error(s"self picture upload asset $assetId failed: $err")
+                Future.successful(SyncResult.failed())
+            }
           case Left(err) =>
-            error(s"self picture upload asset $assetId failed: $err")
+            warn(s"Failed to upload small profile picture: $err")
             Future.successful(SyncResult.failed())
         }
       } yield res
     case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _)) =>
-      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = None)))
+      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Seq.empty)))
     case _ => Future.successful(SyncResult.failed())
   }
 

@@ -24,6 +24,7 @@ import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
 import com.waz.content.{AssetsStorage, ConversationStorage, MessagesStorage}
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
@@ -154,7 +155,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       case None => Future successful Right(None)
       case Some(uri) =>
         for {
-          Some(asset) <- imageGenerator.generateWireAsset(AssetData.newImageAsset(assetId).copy(source = Some(uri)), profilePicture = false).map(Some(_)).recover { case _: Throwable => None }.future
+          Some(asset) <- imageGenerator.generateWireAsset(AssetData.newImageAsset(assetId, Medium).copy(source = Some(uri)), profilePicture = false).map(Some(_)).recover { case _: Throwable => None }.future
           _           <- assetsStorage.mergeOrCreateAsset(asset) //must be in storage for assetsync
           resp        <- assetSync.uploadAssetData(asset.id).future
         } yield resp

@@ -26,6 +26,7 @@ import com.waz.api.Message.Status
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
@@ -144,7 +145,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), Medium)), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
       )
 
       Await.ready(messages.processEvents(conv, events), timeout)
@@ -157,12 +158,12 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       val assetId = AssetId()
       val userId = UserId()
       val events = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), Medium)), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
       )
       Await.ready(messages.processEvents(conv, events), timeout)
 
       val events1 = Seq(
-        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), "medium")), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
+        GenericAssetEvent(Uid(), conv.remoteId, new Date(), userId, GenericMessage(Uid(assetId.str), Proto.Asset(AssetData(metaData = Some(Image(Dim2(100, 100), Medium)), mime = Mime("image/jpg")))), RAssetId(), None).withCurrentLocalTime()
       )
       Await.ready(messages.processEvents(conv, events1), timeout)
 
