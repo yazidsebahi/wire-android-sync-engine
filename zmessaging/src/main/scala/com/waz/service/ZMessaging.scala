@@ -47,8 +47,10 @@ import com.waz.utils.Locales
 import com.waz.utils.events.EventContext
 import com.waz.znet.{CredentialsHandler, _}
 import net.hockeyapp.android.Constants
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
+import scala.util.Try
 
 class ZMessagingFactory(global: GlobalModule) {
 
@@ -293,6 +295,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
     reporting.addStateReporter { pw =>
       Future {
         kvStorage foreachCached {
+          case KeyValueData(k, v) if k.contains("time") |
+                                     (Try(v.toLong).toOption.isDefined && v.length == 13) => pw.println(s"$k: ${Instant.ofEpochMilli(Try(v.toLong).getOrElse(0L))}")
           case KeyValueData(k, v) => pw.println(s"$k: $v")
         }
       }
