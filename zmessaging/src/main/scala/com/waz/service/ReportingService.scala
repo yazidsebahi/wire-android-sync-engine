@@ -32,6 +32,7 @@ import com.waz.service.push.GcmGlobalService
 import com.waz.model.{AccountId, Mime}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.{IoUtils, RichFuture}
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -94,6 +95,7 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
   val VersionReporter = Reporter("Wire", { writer =>
     import android.os.Build._
     Future.successful {
+      writer.println(s"time of log: ${Instant.now}")
       writer.println(s"package: ${ZMessaging.context.getPackageName}")
       writer.println(s"app version: ${metadata.appVersion}")
       writer.println(s"zms version: ${ZmsVersion.ZMS_VERSION}")
