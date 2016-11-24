@@ -26,6 +26,7 @@ import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.service.SearchKey
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -69,7 +70,7 @@ case class UserData(
     accent = user.accentId.getOrElse(accent),
     trackingId = user.trackingId.orElse(trackingId),
     searchKey = SearchKey(user.name.getOrElse(name)),
-    picture = if (user.picture.exists(_.isEmpty)) None else user.picture.map(_.id).orElse(picture),
+    picture = user.mediumPicture.map(_.id),
     deleted = user.deleted
   )
 
@@ -145,7 +146,7 @@ object UserData {
       connection = if (entry.connected.getOrElse(false)) ConnectionStatus.Accepted else ConnectionStatus.Unconnected) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =
-    UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.picture.filter(_.nonEmpty).map(_.id),
+    UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
       user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted)
 
   implicit lazy val Decoder: JsonDecoder[UserData] = new JsonDecoder[UserData] {

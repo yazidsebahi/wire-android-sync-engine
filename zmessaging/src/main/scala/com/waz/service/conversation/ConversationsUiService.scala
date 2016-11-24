@@ -80,25 +80,13 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
 
     def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
       verbose(s"sendImageMessage($img, $conv)")
-      if (img.getWidth > 0 && img.getHeight > 0) createMessageThenImage(AssetId(img.getId), img, conv)
-      else createImageThenMessage(img, conv)
+      for {
+        data <- addImageAsset(img, conv.remoteId, isSelf = false)
+        msg <- addAssetMessage(convId, data)
+        _ <- updateLastRead(msg)
+        _ <- sync.postMessage(msg.id, convId, msg.editTime)
+      } yield Some(msg)
     }
-
-    def createMessageThenImage(assetId: AssetId, img: api.ImageAsset, conv: ConversationData) =
-      for {
-        msg <- addImageMessage(convId, assetId, img.getWidth, img.getHeight)
-        _ <- updateLastRead(msg)
-        _ <- addImageAsset(assetId, img, conv.remoteId, isSelf = false)
-        _ <- sync.postMessage(msg.id, convId, msg.editTime)
-      } yield Some(msg)
-
-    def createImageThenMessage(img: api.ImageAsset, conv: ConversationData) =
-      for {
-        data <- addImageAsset(AssetId(), img, conv.remoteId, isSelf = false)
-        msg <- addImageMessage(convId, data.id, data.width, data.height)
-        _ <- updateLastRead(msg)
-        _ <- sync.postMessage(msg.id, convId, msg.editTime)
-      } yield Some(msg)
 
     def sendAssetMessage(in: AssetForUpload, conv: ConversationData, handler: ErrorHandler): Future[Option[MessageData]] = {
 
@@ -153,8 +141,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
 
       for {
         mime <- in.mimeType
-        message <- addAssetMessage(convId, in.id, mime)
         asset <- addAsset(in, conv.remoteId)
+        message <- addAssetMessage(convId, asset)
         size <- in.sizeInBytes
         isOtto <- TrackingEventsService.isOtto(conv, usersStorage)
         _ <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, isOtto, conv.ephemeral))

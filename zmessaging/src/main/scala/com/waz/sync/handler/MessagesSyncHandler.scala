@@ -20,15 +20,14 @@ package com.waz.sync.handler
 import android.content.Context
 import com.waz.HockeyApp
 import com.waz.ZLog._
-import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
+import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
 import com.waz.content.{MembersStorage, MessagesStorage}
-import com.waz.model.AssetData.UploadKey
-import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
+import com.waz.model.AssetData.{ProcessingTaskKey, RemoteData, UploadTaskKey}
+import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.Asset.ImageMetaData
 import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
@@ -44,7 +43,7 @@ import com.waz.sync.queue.ConvLock
 import com.waz.sync.{SyncResult, SyncServiceHandle}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.CancellableFuture.CancelException
-import com.waz.utils._
+import com.waz.utils.{RichFutureEither, _}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import org.threeten.bp.Instant
@@ -53,20 +52,20 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-    client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
-    assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
-    sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService,
-    assetMeta: com.waz.service.assets.MetaDataService, assetPreview: PreviewService, cache: CacheService,
-    members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
+                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
+                          assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
+                          sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService, cache: CacheService,
+                          members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
+
   private implicit val logTag: LogTag = logTagFor[MessagesSyncHandler]
 
   def postDeleted(convId: ConvId, msgId: MessageId): Future[SyncResult] =
     convs.convById(convId) flatMap {
       case Some(conv) =>
         val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
-        otrSync.postOtrMessage(ConvId(users.selfUserId.str), RConvId(users.selfUserId.str), msg) map { _.fold(e => SyncResult(e), _ => SyncResult.Success) }
+        otrSync.postOtrMessage(ConvId(users.selfUserId.str), RConvId(users.selfUserId.str), msg) map {_.fold(e => SyncResult(e), _ => SyncResult.Success)}
       case None =>
         successful(SyncResult(internalError("conversation not found")))
     }
@@ -101,11 +100,8 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     }
 
   def postMessage(convId: ConvId, id: MessageId, editTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
-    def isPartiallySent(msg: MessageData) = assets.storage.getImageAsset(msg.assetId) map { _.exists(_.versions.exists(_.sent)) }
 
-    def shouldGiveUpSending(msg: MessageData) = isPartiallySent(msg) map { partiallySent =>
-      ! partiallySent && (network.isOfflineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time))
-    }
+    def shouldGiveUpSending(msg: MessageData) = network.isOfflineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time)
 
     storage.getMessage(id) flatMap { message =>
       message.fold(successful(None: Option[ConversationData]))(msg => convs.convById(msg.convId)) map { conv =>
@@ -122,17 +118,17 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
               SyncResult.Failure(Some(internalError(e.getMessage)), shouldRetry = false)
           }
           .flatMap {
-            case SyncResult.Success => service.messageSent(conv.id, msg) map (_ => SyncResult.Success )
-            case res @ SyncResult.Failure(Some(ErrorResponse.Cancelled), _) =>
+            case SyncResult.Success => service.messageSent(conv.id, msg) map (_ => SyncResult.Success)
+            case res@SyncResult.Failure(Some(ErrorResponse.Cancelled), _) =>
               verbose(s"postMessage($msg) was cancelled")
               msgContent.updateMessage(id)(_.copy(state = Message.Status.FAILED_READ)) map { _ => res }
-            case res @ SyncResult.Failure(error, shouldRetry) =>
-              shouldGiveUpSending(msg) flatMap { shouldGiveUp =>
-                warn(s"postMessage failed with res: $res, shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}, msg.localTime: ${msg.localTime}")
-                if (!shouldRetry || shouldGiveUp)
-                  service.messageDeliveryFailed(conv.id, msg, error.getOrElse(internalError(s"shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}"))).map(_ => SyncResult.Failure(error, shouldRetry = false))
-                else successful(res)
-              }
+            case res@SyncResult.Failure(error, shouldRetry) =>
+              val shouldGiveUp = shouldGiveUpSending(msg)
+              warn(s"postMessage failed with res: $res, shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}, msg.localTime: ${msg.localTime}")
+              if (!shouldRetry || shouldGiveUp)
+                service.messageDeliveryFailed(conv.id, msg, error.getOrElse(internalError(s"shouldRetry: $shouldRetry, shouldGiveUp: $shouldGiveUp, offline: ${network.isOfflineMode}"))).map(_ => SyncResult.Failure(error, shouldRetry = false))
+              else successful(res)
+
           }
       case (Some(msg), None) =>
         HockeyApp.saveException(new Exception("postMessage failed, couldn't find conversation for msg"), s"msg: $msg")
@@ -146,26 +142,10 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
 
   private def postMessage(conv: ConversationData, msg: MessageData, reqEditTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
 
-    def postImageMessage() =
-      assetSync.withImageAsset(conv.remoteId, msg.assetId) { asset =>
-        Future.traverse(asset.versions) { im =>
-          recipients(conv, msg.ephemeral) flatMap { rcs =>
-            assetSync.postOtrImageData(conv.remoteId, msg.assetId, msg.ephemeral, im, rcs) map {
-              case Right(time) =>
-                convLock.release()
-                Right(time)
-              case res => res
-            }
-          }
-        } map { results =>
-          results.find(_.isLeft).getOrElse(results.head)
-        }
-      }
-
     def postTextMessage() = {
       val (gm, isEdit) =
         msg.protos.lastOption match {
-          case Some(m @ GenericMessage(id, MsgEdit(ref, text))) if reqEditTime != Instant.EPOCH => (m, true) // will send edit only if original message was already sent (reqEditTime > EPOCH)
+          case Some(m@GenericMessage(id, MsgEdit(ref, text))) if reqEditTime != Instant.EPOCH => (m, true) // will send edit only if original message was already sent (reqEditTime > EPOCH)
           case _ => (GenericMessage.TextMessage(msg), false)
         }
 
@@ -185,15 +165,14 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     import Message.Type._
 
     def post: ErrorOr[Instant] = msg.msgType match {
-      case ASSET                    => postImageMessage().map(_.right.map(_.fold(msg.time)(_.instant)))
-      case KNOCK                    => postMessage(conv, msg.ephemeral, GenericMessage(msg.id.uid, msg.ephemeral, Proto.Knock())).map(_.map(_.instant))
-      case TEXT | TEXT_EMOJI_ONLY   => postTextMessage().map(_.map(_.time))
-      case RICH_MEDIA  =>
+      case MessageData.IsAsset() => Cancellable(UploadTaskKey(msg.assetId))(uploadAsset(conv, msg)).future
+      case KNOCK => postMessage(conv, msg.ephemeral, GenericMessage(msg.id.uid, msg.ephemeral, Proto.Knock())).map(_.map(_.instant))
+      case TEXT | TEXT_EMOJI_ONLY => postTextMessage().map(_.map(_.time))
+      case RICH_MEDIA =>
         postTextMessage() flatMap {
           case Right(m) => sync.postOpenGraphData(conv.id, m.id, m.editTime) map { _ => Right(m.time) }
           case Left(err) => successful(Left(err))
         }
-      case MessageData.IsAsset()    => Cancellable(UploadKey(msg.assetId))(uploadAsset(conv, msg)).future
       case LOCATION =>
         msg.protos.headOption match {
           case Some(GenericMessage(id, loc: Location)) if msg.isEphemeral =>
@@ -218,11 +197,11 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
     post flatMap {
       case Right(time) =>
         verbose(s"postOtrMessage($msg) successful $time")
-        messageSent(conv.id, msg, time) map  { _ => SyncResult.Success }
-      case Left(error @ ErrorResponse(Status.Forbidden, _, "unknown-client")) =>
+        messageSent(conv.id, msg, time) map { _ => SyncResult.Success }
+      case Left(error@ErrorResponse(Status.Forbidden, _, "unknown-client")) =>
         verbose(s"postOtrMessage($msg), failed: $error")
         otr.clients.onCurrentClientRemoved() map { _ => SyncResult(error) }
-      case Left(error @ ErrorResponse.Cancelled) =>
+      case Left(error@ErrorResponse.Cancelled) =>
         verbose(s"postOtrMessage($msg) cancelled")
         successful(SyncResult(error))
       case Left(error) =>
@@ -234,124 +213,121 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   private def uploadAsset(conv: ConversationData, msg: MessageData)(implicit convLock: ConvLock): ErrorOrResponse[Instant] = {
     verbose(s"uploadAsset($conv, $msg)")
 
-    // TODO: remove repetitions, and move some staff to AssetSyncHandler, current implementation is a bit ugly,
+    def postAssetMessage(asset: AssetData, preview: Option[AssetData]): ErrorOrResponse[Instant] = {
+      val proto = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(asset, preview))
+      CancellableFuture.lift(postMessage(conv, msg.ephemeral, proto) flatMap {
+        case Right(time) =>
+          verbose(s"posted asset message for: $asset")
+          service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto), time = time.instant)) map { _ => Right(time.instant) }
+        case Left(err) =>
+          warn(s"posting asset message failed: $err")
+          Future successful Left(err)
+      })
+    }
 
-    def postOriginal(): ErrorOrResponse[Instant] =
-      assetMeta.getAssetWithMetadata(msg.assetId) flatMap {
-        case None => CancellableFuture successful Left(internalError("no asset found for $msg"))
-        case Some(asset) if asset.status != AssetStatus.UploadNotStarted => CancellableFuture successful Right(msg.time)
-        case Some(asset) => postAssetOriginal(asset, AssetStatus.MetaDataSent)
-        }
+    //TODO Dean: Update asset status to UploadInProgress after posting original - what about images...?
+    def postOriginal(asset: AssetData): ErrorOrResponse[Instant] =
+      if (asset.status != AssetStatus.UploadNotStarted) CancellableFuture successful Right(msg.time)
+      else asset.mime match {
+        case Mime.Image() => CancellableFuture.successful(Right(msg.time))
+        case _ => postAssetMessage(asset, None)
+      }
 
-    def postAssetOriginal(asset: AnyAssetData, newStatus: AssetStatus) = {
-      verbose(s"postOriginal($asset)")
-      val proto = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), UploadInProgress))
+    def sendWithV2(asset: AssetData) = {
+      postOriginal(asset).flatMap {
+        case Left(err) => CancellableFuture successful Left(err)
+        case Right(origTime) =>
+          convLock.release()
+          //send preview
+          CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
+            case Some(prev) =>
+              val key = AESKey()
+              def proto(sha: Sha256) = {
+                asset.mime match {
+                  case Mime.Image() => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.ImageAsset(asset))
+                  case _ => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.Asset(asset.copy(sha = Some(sha)), Some(prev.copyWithRemoteData(RemoteData(otrKey = Some(key), sha256 = Some(sha))))))
+                }
+              }
 
-      CancellableFuture lift {
-        postMessage(conv, msg.ephemeral, proto) flatMap {
-          case Right(time) =>
-            verbose(s"metadata uploaded: $asset")
-            assets.storage.updateAsset(asset.id, a => a.copy(status = newStatus, lastUpdate = time.instant)) flatMap { _ =>
-              service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto), time = time.instant))
-            } map { _ => Right(time.instant) }
-          case Left(err) =>
-            warn(s"postOriginal failed: $err")
-            successful(Left(err))
-        }
+              (for {
+                rcps <- CancellableFuture lift recipients(conv, msg.ephemeral)
+                Some(data) <- assets.getAssetData(prev.id)
+                res <- otrSync.postAssetDataV2(conv, key, proto, data, recipients = rcps)
+              } yield res).flatMap {
+                case Right((r, date)) => CancellableFuture lift assets.storage.mergeOrCreateAsset(prev.copyWithRemoteData(r)).map(Right(_))
+                case Left(err) => CancellableFuture successful Left(err)
+              }
+            case None => CancellableFuture successful Right(None)
+          }.flatMap { //send asset
+            case Right(prev) =>
+              val key = AESKey()
+              def proto(sha: Sha256) = {
+                val withRemoteData = asset.copyWithRemoteData(RemoteData(otrKey = Some(key), sha256 = Some(sha)))
+                asset.mime match {
+                  case Mime.Image() => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.ImageAsset(withRemoteData))
+                  case _ => GenericMessage(Uid(asset.id.str), msg.ephemeral, Proto.Asset(withRemoteData, prev.map(_.copy(remoteId = None)))) //don't want to confuse other clients with a remote id
+                }
+              }
+
+              (for {
+                rcps <- CancellableFuture lift recipients(conv, msg.ephemeral)
+                Some(data) <- assets.getAssetData(asset.id)
+                res <- otrSync.postAssetDataV2(conv, key, proto, data, recipients = rcps)
+              } yield res).flatMap {
+                case Right((r@RemoteData(_, _, _, sha), date)) =>
+                  val updated = asset.copyWithRemoteData(r)
+                  CancellableFuture lift (for {
+                    _ <- assets.storage.mergeOrCreateAsset(updated)
+                    _ <- service.content.updateMessage(msg.id)(m => sha.fold(m)(s => m.copy(protos = Seq(proto(s)))))
+                  } yield Right(date.instant))
+                case Left(err) => CancellableFuture successful Left(err)
+              }
+            case Left(err) => CancellableFuture successful Left(err)
+          }
       }
     }
 
-    def postPreview(): CancellableFuture[Option[Instant]] =
-      assetPreview.getAssetWithPreview(msg.assetId) flatMap {
-        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Image(img @ ImageData(tag, mime, w, h, _, _, size, _, _, _, _, _, _, _))), _, _, AssetStatus.MetaDataSent, _)) =>
-          CancellableFuture lift cache.getEntry(img.cacheKey) flatMap {
-            case None =>
-              error(s"No cache entry found for asset preview: $img")
-              CancellableFuture successful None
-            case Some(data) =>
-              val key = img.otrKey.getOrElse(AESKey())
-              def proto(sha: Sha256) = GenericMessage(msg.id.uid, msg.ephemeral, Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(Mime(mime), size, key, sha, ImageMetaData(Some(tag), w, h)), UploadInProgress))
-
-              CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
-                otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = false, rcs) flatMap {
-                  case Left(err) =>
-                    warn(s"postAssetData failed: $err for msg: $msg")
-                    CancellableFuture successful None
-                  case Right((AssetKey(Left(id), _, _, sha), time)) =>
-                    val preview = img.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha))
-                    CancellableFuture lift {
-                      for {
-                        _ <- assets.storage.updateAsset(asset.id, a => a.copy(status = AssetStatus.PreviewSent, preview = Some(AssetPreviewData.Image(preview)), lastUpdate = time.instant))
-                        _ <- cache.addStream(preview.cacheKey, data.inputStream, Mime(preview.mime), length = data.length)
-                        _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                      } yield Some(time.instant)
-                    }
-                  case Right((k, _)) =>
-                    error(s"postAssetData unexpected result $k")
-                    CancellableFuture successful None
+    def sendWithV3(asset: AssetData) = {
+      postOriginal(asset).flatMap {
+        case Left(err) => CancellableFuture successful Left(err)
+        case Right(origTime) =>
+          convLock.release()
+          //send preview
+          CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
+            case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
+              case Right(Some(updated)) =>
+                postAssetMessage(asset, Some(updated)).map {
+                  case (Right(_)) => Right(Some(updated))
+                  case (Left(err)) => Left(err)
                 }
+              case Right(None) => CancellableFuture successful Right(None)
+              case Left(err) => CancellableFuture successful Left(err)
+            }
+            case None => CancellableFuture successful Right(None)
+          }.flatMap { //send asset
+            case Right(prev) =>
+              assetSync.uploadAssetData(asset.id).flatMap {
+                case Right(Some(updated)) => postAssetMessage(updated, prev).map(_.fold(Left(_), _ => Right(origTime)))
+                case Right(None) => CancellableFuture successful Right(Instant.EPOCH) //TODO Dean: what's a good default
+                case Left(err) if err.message.contains(AssetSyncHandler.AssetTooLarge) =>
+                  CancellableFuture.lift(errors.addAssetTooLargeError(conv.id, msg.id).map {_ => Left(err)})
+                case Left(err) => CancellableFuture successful Left(err)
               }
+            case Left(err) => CancellableFuture successful Left(err)
           }
-        case Some(asset @ AnyAssetData(_, _, _, _, _, _, Some(AssetPreviewData.Loudness(levels)), _, _, AssetStatus.MetaDataSent, _)) =>
-          postAssetOriginal(asset, AssetStatus.PreviewSent).map(_.toOption(resp => error(s"sending audio overview failed: $resp")))
-        case _ =>
-          verbose(s"No preview found for asset, ignoring")
-          CancellableFuture successful None
       }
+    }
 
-    def postAssetData(): ErrorOrResponse[Instant] =
-      CancellableFuture lift assets.storage.getAsset(msg.assetId).zip(assets.getAssetData(msg.assetId)) flatMap {
-        case (Some(asset), Some(data)) if data.length > AssetData.MaxAllowedAssetSizeInBytes =>
-          CancellableFuture lift errors.addAssetTooLargeError(conv.id, msg.id) map { _ => Left(internalError("asset too large")) }
-        case (Some(asset), Some(data)) =>
-          val key = AESKey()
-
-          def proto(sha: Sha256) = {
-            val as = asset.preview match {
-              case Some(AssetPreviewData.Image(img @ ImageData(_, _, _, _, _, _, _, _, _, _, _, _, Some(k), Some(s)))) =>
-                Proto.Asset(Proto.Asset.Original(asset), Proto.Asset.Preview(img, k, s), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
-              case _ =>
-                Proto.Asset(Proto.Asset.Original(asset), UploadDone(AssetKey(Left(RAssetDataId()), None, key, sha)))
-            }
-            GenericMessage(msg.id.uid, msg.ephemeral, as)
-          }
-
-          CancellableFuture lift recipients(conv, msg.ephemeral) flatMap { rcs =>
-            otrSync.postAssetData(conv, asset.id, key, proto, data, nativePush = true, rcs) flatMap {
-              case Left(err) =>
-                warn(s"postAssetData failed: $err for msg: $msg")
-                CancellableFuture successful Left(err)
-              case Right((ak @ AssetKey(Left(id), _, k, sha), time)) =>
-                CancellableFuture lift {
-                  for {
-                    Some(updated) <- assets.storage.updateAsset(asset.id, a => a.copy(status = UploadDone(ak), lastUpdate = time.instant))
-                    _ <- cache.addStream(updated.cacheKey, data.inputStream, updated.mimeType, updated.name, length = data.length)
-                    _ <- service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto(sha))))
-                  } yield Right(time.instant)
-                }
-              case Right((k, _)) =>
-                CancellableFuture successful Left(internalError(s"postAssetData - unexpected result: $k"))
-            }
-          }
-        case asset =>
-          verbose(s"No asset data found in postAssetData, got: $asset")
-          CancellableFuture successful Left(internalError(s"asset data missing"))
+    //want to wait until asset meta and preview data is loaded before we send any messages
+    AssetProcessing.get(ProcessingTaskKey(msg.assetId)).flatMap { _ =>
+      CancellableFuture lift assets.storage.get(msg.assetId).flatMap {
+        case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
+        case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
+        case Some(asset) =>
+          verbose(s"Sending asset: $asset")
+          if (asset.convId.isDefined) sendWithV2(asset)
+          else sendWithV3(asset)
       }
-
-    CancellableFuture lift assets.storage.getAsset(msg.assetId) flatMap {
-      case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
-      case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
-      case Some(asset) =>
-        postOriginal() flatMap {
-          case Left(err) => CancellableFuture successful Left(err)
-          case Right(origTime) =>
-            convLock.release()
-            for {
-              _   <- postPreview()
-              _   <- CancellableFuture lift assets.storage.updateAsset(asset.id, a => a.copy(status = UploadInProgress))
-              res <- postAssetData()
-            } yield res.fold(Left(_), _ => Right(origTime))
-        }
     }
   }
 
@@ -388,20 +364,20 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
   }
 
   def postAssetStatus(cid: ConvId, mid: MessageId, expiration: EphemeralExpiration, status: Syncable): Future[SyncResult] = {
-    def post(conv: ConversationData, asset: AnyAssetData): ErrorOr[Unit] =
+    def post(conv: ConversationData, asset: AssetData): ErrorOr[Unit] =
       if (asset.status != status) successful(Left(internalError(s"asset $asset should have status $status")))
       else status match {
         case UploadCancelled =>
-          postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(Proto.Asset.Original(asset), UploadCancelled))).flatMapRight(_ => storage.remove(mid))
+          postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(asset))).flatMapRight(_ => storage.remove(mid))
         case UploadFailed =>
-          postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(Proto.Asset.Original(asset), UploadFailed))).mapRight(_ => ())
+          postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(asset))).mapRight(_ => ())
       }
 
     for {
       conv   <- convs.storage.get(cid) or internalError(s"conversation $cid not found")
       msg    <- storage.get(mid) or internalError(s"message $mid not found")
       aid     = msg.right.map(_.assetId)
-      asset  <- aid.flatMapFuture(id => assets.storage.getAsset(id).or(internalError(s"asset $id not found")))
+      asset <- aid.flatMapFuture(id => assets.storage.get(id).or(internalError(s"asset $id not found")))
       result <- conv.flatMapFuture(c => asset.flatMapFuture(a => post(c, a)))
     } yield result.fold(SyncResult(_), _ => SyncResult.Success)
   }

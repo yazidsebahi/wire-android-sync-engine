@@ -226,7 +226,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
       else cs
     }
 
-  def encryptAssetData(id: AssetId, key: AESKey, data: LocalData): Future[(Sha256, LocalData)] = {
+  def encryptAssetData(key: AESKey, data: LocalData): Future[(Sha256, LocalData)] = {
     import Threading.Implicits.Background
 
     def encryptFile() = cache.createForFile(length = Some(sizeWithPaddingAndIV(data.length))) map { entry =>
@@ -237,7 +237,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
     def encryptBytes() = {
       val bos = new ByteArrayOutputStream()
       val mac = AESUtils.encrypt(key, data.inputStream, bos)
-      cache.addData(Uid().str, bos.toByteArray) map { (mac, _) }
+      cache.addData(CacheKey(), bos.toByteArray) map { (mac, _) }
     }
 
     data.byteArray.fold(encryptFile()){ _ => encryptBytes() }

@@ -24,7 +24,6 @@ import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import android.net.Uri
 import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
@@ -39,7 +38,6 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
 import com.waz.service.PreferenceService.Pref
 import com.waz.service._
-import com.waz.service.assets.PreviewService
 import com.waz.sync.client.AssetClient
 import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.CallJoinSpy
@@ -105,12 +103,6 @@ class DeviceActor(val deviceName: String,
               CancellableFuture.delay(if (delayNextAssetPosting.compareAndSet(true, false)) 10.seconds else Duration.Zero) flatMap { _ =>
                 super.postOtrAsset(convId, metadata, data, ignoreMissing, recipients)
               }
-          }
-
-          override lazy val assetPreview = new PreviewService(context, cache, assetsStorage, assets, assetGenerator) {
-            override def loadPreview(id: AssetId, mime: Mime, data: LocalData): CancellableFuture[Option[AssetPreviewData]] =  pf.applyOrElse(mime, super.loadPreview(id, _: Mime, data))
-            override def loadPreview(id: AssetId, mime: Mime, uri: Uri): CancellableFuture[Option[AssetPreviewData]] = pf.applyOrElse(mime, super.loadPreview(id, _: Mime, uri))
-            lazy val pf: PartialFunction[Mime, CancellableFuture[Option[AssetPreviewData]]] = { case Mime.Audio() => CancellableFuture(Some(AssetPreviewData.Loudness(Vector.tabulate(100)(n => math.round((n.toFloat / 99f) * 255f) / 255f)))) }
           }
         }
     }
@@ -293,6 +285,25 @@ class DeviceActor(val deviceName: String,
         }
       }
 
+    case SendGiphy(convId, searchQuery) =>
+      whenConversationExistsFuture(convId) { conv =>
+        searchQuery match {
+          case "" =>
+            waitUntil(api.getGiphy.random())(_.isReady == true) map { results =>
+              conv.sendMessage(new Text("Via giphy.com"))
+              conv.sendMessage(new Image(results.head))
+              Successful
+            }
+
+          case _ =>
+            waitUntil(api.getGiphy.search(searchQuery))(_.isReady == true) map { results =>
+              conv.sendMessage(new Text("%s · via giphy.com".format(searchQuery)))
+              conv.sendMessage(new Image(results.head))
+              Successful
+            }
+        }
+      }
+
     case RecallMessage(convId, msgId) =>
       withConv(convId) { conv =>
         zmessaging.convsUi.recallMessage(conv.id, msgId)
@@ -331,6 +342,19 @@ class DeviceActor(val deviceName: String,
         zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes)))
       }
 
+      //TODO: Dean remove after v2 transition period
+    case SetAssetToV3 =>
+      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", true) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to send with v3")
+      }
+
+    case SetAssetToV2 =>
+      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", false) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to send with v3")
+      }
+
     case SendAsset(remoteId, bytes, mime, name, delay) =>
       getConv(remoteId) flatMap  { conv =>
         delayNextAssetPosting.set(delay)
@@ -355,10 +379,13 @@ class DeviceActor(val deviceName: String,
     case SendFile(remoteId, path, mime) =>
       withConv(remoteId) { conv =>
         val file = new File(path)
-        val asset = impl.AssetForUpload(AssetId(), Some(file.getName), Mime(mime), Some(file.length)) {
-          _ => new FileInputStream(file)
+        val assetId = AssetId()
+        zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).flatMap { cacheEntry =>
+          val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
+            _ => new FileInputStream(file)
+          }
+          zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
         }
-        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
       }
 
     case AddMembers(remoteId, users@_*) =>
@@ -570,6 +597,17 @@ class DeviceActor(val deviceName: String,
     Option(remoteId) match {
       case Some(_) =>
         waitUntil(convs)(_ => convExistsById(remoteId)) map { _ =>
+          task(findConvById(remoteId))
+        }
+      case None =>
+        Future(Failed("Conversation remoteId cannot be null"))
+    }
+  }
+
+  def whenConversationExistsFuture(remoteId: RConvId)(task: IConversation => Future[ActorMessage]): Future[Any] = {
+    Option(remoteId) match {
+      case Some(_) =>
+        waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
           task(findConvById(remoteId))
         }
       case None =>

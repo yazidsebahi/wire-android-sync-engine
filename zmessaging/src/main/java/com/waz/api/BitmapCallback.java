@@ -15,10 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.model;
+package com.waz.api;
 
-public enum AssetType {
-    Image,
-    Any,
-    Empty
+import android.graphics.Bitmap;
+
+public abstract class BitmapCallback {
+
+    public abstract void onBitmapLoaded(Bitmap bitmap);
+    public void onBitmapLoadingFailed(BitmapLoadingFailed reason) { }
+
+    public enum BitmapLoadingFailed {
+        DOWNLOAD_ON_WIFI_ONLY,
+        DOWNLOAD_FAILED
+    }
 }
+
+

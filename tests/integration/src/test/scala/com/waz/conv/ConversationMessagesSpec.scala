@@ -21,10 +21,11 @@ import akka.pattern.ask
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.{ConnectivityManager, NetworkInfo}
+import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConvId, RConvId}
+import com.waz.model.{AssetData, ConvId, RConvId}
 import com.waz.provision._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -184,15 +185,13 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
         }
       }
 
-      val cb = new ImageAsset.BitmapCallback() {
-        def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = ()
-
-        def onBitmapLoadingFailed(): Unit = ()
+      val cb = new BitmapCallback() {
+        def onBitmapLoaded(b: Bitmap): Unit = ()
       }
 
       val asset = pics(1).getImage
       withDelay {
-        asset.asInstanceOf[com.waz.api.impl.ImageAsset].data.versions should not be empty
+        asset.asInstanceOf[com.waz.api.impl.ImageAsset].data should not be AssetData.Empty
       }(60.seconds)
 
       withDelay {

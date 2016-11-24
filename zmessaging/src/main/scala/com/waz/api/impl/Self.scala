@@ -137,4 +137,13 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
     case Success(Left(ErrorResponse(code, message, label))) => listener.onUpdateFailed(code, message, label)
     case Failure(ex) => listener.onUpdateFailed(499, ex.getMessage, "")
   } (Threading.Ui)
+
+  override def getUsername: String = user.fold("")(_.getUsername)
+
+  def setUsername(username: String, listener: CredentialsUpdateListener) = {
+    //TODO: STUB
+    listener.onUpdated()
+  }
+
+  def hasSetUsername: Boolean = false //TODO: STUB
 }

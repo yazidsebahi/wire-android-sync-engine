@@ -29,7 +29,7 @@ import com.waz.znet.{JsonArrayResponse, JsonObjectResponse, _}
 import org.json.JSONObject
 
 import scala.concurrent.Future
-import scala.util.Try
+import scala.util.{Right, Try}
 
 class UsersClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
@@ -55,10 +55,7 @@ class UsersClient(netClient: ZNetClient) {
 
   def loadSelf(): ErrorOrResponse[UserInfo] =
     netClient.withErrorHandling("loadSelf", Request.Get(SelfPath)) {
-      case Response(SuccessHttpStatus(), UserResponseExtractor(user), _) =>
-        // FIXME: this is a hack, to prevent this load from overriding locally set picture,
-        // this will break syncing if we remove image on other device
-        if (user.picture.contains(ImageAssetData.Empty)) user.copy(picture = None) else user
+      case Response(SuccessHttpStatus(), UserResponseExtractor(user), _) => user
     }
 
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = {

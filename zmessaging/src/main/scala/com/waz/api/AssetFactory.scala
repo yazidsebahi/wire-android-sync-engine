@@ -48,7 +48,7 @@ object AssetFactory {
     * Gets an asset from a URI. Only the "content" scheme is supported
     */
   def fromContentUri(uri: Uri): AssetForUpload = {
-    new ContentUriAssetForUpload(AssetId(), uri)
+    ContentUriAssetForUpload(AssetId(), uri)
   }
 
   def videoAsset(uri: Uri, callback: LoadCallback): ProgressIndicator = {
@@ -63,7 +63,7 @@ object AssetFactory {
       entry <- CancellableFuture lift cache.createForFile(mime = Mime.Video.MP4, name = name)
       _ <- VideoTranscoder(context).apply(uri, entry.cacheFile, progress ! _)
     } yield {
-      new TranscodedVideoAsset(if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), entry)
+      TranscodedVideoAsset(if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), entry)
     }
 
     future .onComplete {

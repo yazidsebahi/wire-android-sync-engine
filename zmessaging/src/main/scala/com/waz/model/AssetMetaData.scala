@@ -45,11 +45,12 @@ object AssetMetaData {
         case Video(dimensions, duration) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
           o.put("duration", duration.toMillis)
-        case Audio(duration) =>
+        case Audio(duration, loudness) =>
           o.put("duration", duration.toMillis)
+          loudness.foreach(l => o.put("levels", JsonEncoder.arrNum(l.levels)))
         case Image(dimensions, tag) =>
           o.put("dimensions", JsonEncoder.encode(dimensions))
-          tag.foreach(o.put("tag", _))
+          o.put("tag", tag)
       }
     }
   }
@@ -62,9 +63,10 @@ object AssetMetaData {
       case 'video =>
         Video(opt[Dim2]('dimensions).getOrElse(Dim2(0, 0)), Duration.ofMillis('duration))
       case 'audio =>
-        Audio(Duration.ofMillis('duration))
+        Audio(Duration.ofMillis('duration),
+          Try(JsonDecoder.array[Float]('levels)((arr, i) => arr.getDouble(i).toFloat)).toOption.map(Loudness))
       case 'image =>
-        Image(JsonDecoder[Dim2]('dimensions), decodeOptString('tag))
+        Image(JsonDecoder[Dim2]('dimensions), Image.Tag(decodeString('tag)))
       case other =>
         throw new IllegalArgumentException(s"unsupported meta data type: $other")
     }
@@ -84,17 +86,19 @@ object AssetMetaData {
     def unapply(meta: HasDimensions): Option[Dim2] = Some(meta.dimensions)
   }
 
+  case class Loudness(levels: Vector[Float])
+
   case class Video(dimensions: Dim2, duration: Duration) extends AssetMetaData('video) with HasDimensions with HasDuration
-  case class Image(dimensions: Dim2, tag: Option[String]) extends AssetMetaData('image) with HasDimensions
-  case class Audio(duration: Duration) extends AssetMetaData('audio) with HasDuration
+  case class Image(dimensions: Dim2, tag: Image.Tag = Image.Tag.Empty) extends AssetMetaData('image) with HasDimensions
+  case class Audio(duration: Duration, loudness: Option[Loudness] = None) extends AssetMetaData('audio) with HasDuration
   case object Empty extends AssetMetaData('empty)
 
   object Video {
     private implicit val Tag: LogTag = "AssetMetaData.Video"
 
-    def apply(file: File): Future[Either[String, Video]] = MetaDataRetriever(file)(apply(_))
+    def apply(file: File): Future[Either[String, Video]] = MetaDataRetriever(file)(apply)
 
-    def apply(context: Context, uri: Uri): Future[Either[String, Video]] = MetaDataRetriever(context, uri)(apply(_))
+    def apply(context: Context, uri: Uri): Future[Either[String, Video]] = MetaDataRetriever(context, uri)(apply)
 
     def apply(retriever: MediaMetadataRetriever): Either[String, Video] = {
       def retrieve[A](k: Int, tag: String, convert: String => A) =
@@ -114,21 +118,43 @@ object AssetMetaData {
     }
   }
 
-  object Audio {
-    private implicit val Tag: LogTag = "AssetMetaData.Audio"
-
-    def apply(file: File): Future[Option[Audio]] = MetaDataRetriever(file)(apply(_))
-
-    def apply(context: Context, uri: Uri): Future[Option[Audio]] = MetaDataRetriever(context, uri)(apply(_))
-
-    def apply(retriever: MediaMetadataRetriever): Option[Audio] = for {
-      duration <- Option(retriever.extractMetadata(METADATA_KEY_DURATION))
-      millis <- LoggedTry(bp.Duration.ofMillis(duration.toLong)).toOption
-    } yield Audio(millis)
-  }
-
   object Image {
-    val Empty = Image(Dim2.Empty, None)
+
+    sealed abstract class Tag(str: String) {
+      override def toString: String = str
+    }
+
+    /**
+      * An implementation note on Image tags:
+      * V2 images often contain both a "preview" and a "medium" version, where we rely on the tag to drop the preview version
+      * V3 images can also contain tags, but no client currently sends a "preview" version, so we don't need to worry.
+      *
+      * V2 profile pictures are stored in the "picture" field of user data with the tags "smallProfile" and "medium". The
+      * Webapp team requires that we always upload a small version of the image, as they don't have their own caching (yet)
+      * V3 profile pictures are stored in the "assets" field of user data with the tags "preview" or "complete". Again we
+      * must upload both for webapp.
+      *
+      * To simplify implementations, I'm going with two internal tags, "preview" and "medium". Depending on where they're
+      * used though, they may be translated into "smallProfile" or "complete"
+      *
+      * TODO Dean: it would be nice to sync up with other clients and steadily introduce a more uniform set of tags
+      */
+
+    object Tag {
+      case object Preview      extends Tag("preview")
+      case object Medium       extends Tag("medium")
+      case object Empty        extends Tag("")
+
+      def apply(tag: String): Tag = tag match {
+        case "preview"      => Preview
+        case "smallProfile" => Preview
+        case "medium"       => Medium
+        case "complete"     => Medium
+        case _              => Empty
+      }
+    }
+
+    val Empty = Image(Dim2.Empty, Tag.Empty)
 
     def apply(file: File): Option[Image] = apply(new FileInputStream(file))
 
@@ -139,7 +165,7 @@ object AssetMetaData {
       opts.inJustDecodeBounds = true
       BitmapFactory.decodeStream(is, null, opts)
       if (opts.outWidth == 0 && opts.outHeight == 0) None
-      else Some(Image(Dim2(opts.outWidth, opts.outHeight), None))
+      else Some(Image(Dim2(opts.outWidth, opts.outHeight)))
     }
   }
 }

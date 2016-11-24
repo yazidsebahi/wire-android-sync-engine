@@ -23,7 +23,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.ImageAssetData
+import com.waz.model.AssetData
 import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
 import com.waz.model.messages.media.{ArtistData, MediaAssetData, PlaylistData, TrackData}
 import com.waz.threading.Threading
@@ -118,15 +118,15 @@ object SoundCloudClient {
     }
   }
 
-  private def decodeArtist(js: JSONObject): (Option[ArtistData], Set[ImageAssetData]) = {
+  private def decodeArtist(js: JSONObject): (Option[ArtistData], Set[AssetData]) = {
     Option(js.optJSONObject("user")) map { implicit user =>
       val images = decodeOptString('avatar_url) map decodeThumbnails
 
       (Some(ArtistData(name = 'username, avatar = images map (_.id))), images.toSet)
-    } getOrElse (None, Set.empty[ImageAssetData])
+    } getOrElse (None, Set.empty[AssetData])
   }
 
-  private def decodeThumbnails(url: String): ImageAssetData = {
+  private def decodeThumbnails(url: String): AssetData = {
     def thumb(tag: String, size: Int): Thumbnail = Thumbnail(tag = tag, url = url.replaceFirst("\\-large\\.jpg", s"-$tag.jpg"), width = size, height = size)
 
     MediaAssetData.imageAsset(Vector(thumb("small", 32), thumb("large", 100), thumb("t500x500", 500)))

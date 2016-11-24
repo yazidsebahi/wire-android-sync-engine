@@ -38,7 +38,7 @@ class SoundCloudMediaService(client: SoundCloudClient, assets: AssetService) {
   def updateMedia(msg: MessageData, content: MessageContent): ErrorOr[MessageContent] =
     client.resolve(content.content) map {
       case Right(media) =>
-        assets.updateImageAssets(media.images.to[Vector])
+        assets.updateAssets(media.images.to[Vector])
         Right(content.copy(tpe = Message.Part.Type.SOUNDCLOUD, richMedia = Some(media.media)))
 
       case Left(error) if error.isFatal =>

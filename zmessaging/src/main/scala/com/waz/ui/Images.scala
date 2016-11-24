@@ -22,79 +22,75 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Parcel
+import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.Parcelable
 import com.waz.api.impl._
 import com.waz.bitmap.BitmapDecoder
-import com.waz.bitmap.BitmapUtils.Mime
-import com.waz.Control.getOrUpdate
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, returning}
 import com.waz.{HockeyApp, api, bitmap}
 
+import scala.util.Try
+
 class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModule) {
+
   import Images._
+
   private implicit val dispatcher = Threading.ImageDispatcher
 
-  val images = new UiCache[AssetId, ImageAsset](lruSize = 20)
-  val localImages = new UiCache[AssetId, ImageAsset](lruSize = 5)
-  val zms = ui.zms
+  val images      = new UiCache[AssetId, ImageAsset](lruSize = 15)
+  val zms         = ui.zms
 
-  def getImageAsset(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
+  def getImageAsset(id: AssetId): ImageAsset = cacheImageAsset(id, new ImageAsset(id))
 
-  def getImageAsset(asset: GenericContent.Asset) = new ProtoImageAsset(asset)
+  def getLocalImageAsset(data: AssetData) = cacheImageAsset(data.id, new LocalImageAsset(data))
 
-  def getFilePreview(id: AssetId): ImageAsset = getOrUpdate(images)(id, new ImageAsset(id))
-
-  def getImageAsset(p: Parcel): api.ImageAsset = {
-    p.readInt() match {
-      case Parcelable.FlagEmpty => ImageAsset.Empty
-      case Parcelable.FlagWire => getImageAsset(AssetId(p.readString()))
-      case Parcelable.FlagLocal => getLocalImageAsset(JsonDecoder.decode[ImageAssetData](p.readString()))
-      case Parcelable.FlagProto =>
-        val arr = Array.ofDim[Byte](p.readInt())
-        p.readByteArray(arr)
-        getImageAsset(GenericContent.Asset(arr))
-    }
-  }
+  def getLocalImageAssetWithPreview(preview: Option[AssetData], data: AssetData) = cacheImageAsset(data.id, new LocalImageAssetWithPreview(preview, data))
 
   def getOrCreateUriImageAsset(uri: Uri): api.ImageAsset = {
     if (uri == null || uri.toString == "null") {
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      getLocalImageAsset(ImageAssetData(uri))
+      val asset = AssetData.newImageAsset(tag = Medium).copy(source = Some(uri))
+      cacheImageAsset(asset.id, new LocalImageAsset(asset))
     }
   }
 
-  def getLocalImageAsset(data: ImageAssetData) = getOrUpdate(localImages)(data.id, new LocalImageAsset(data))
+  private def cacheImageAsset(id: AssetId, img: ImageAsset) = {
+    getOrUpdate(images)(id, img)
+  }
+
+  def getImageAsset(p: Parcel): api.ImageAsset = {
+    p.readInt() match {
+      case Parcelable.FlagEmpty => ImageAsset.Empty
+      case Parcelable.FlagWire => getImageAsset(AssetId(p.readString()))
+      case Parcelable.FlagLocal => getLocalImageAsset(JsonDecoder.decode[AssetData](p.readString()))
+      case Parcelable.FlagLocalWithPreview =>
+        val medium = JsonDecoder.decode[AssetData](p.readString())
+        val preview = Try(JsonDecoder.decode[AssetData](p.readString())).toOption
+        getLocalImageAssetWithPreview(preview, medium)
+    }
+  }
 
   def createImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
     if (bytes == null || bytes.isEmpty) ImageAsset.Empty
-    else {
-      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
-        override lazy val data: Option[Array[Byte]] = Some(bytes)
-      }
-      new LocalImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(im)))
-    }
+    //Created with camera, so don't cache since if the user cancels or sends, the image asset won't be needed again
+    else new LocalImageAsset(AssetData.newImageAsset(tag = Medium).copy(sizeInBytes = bytes.length, data = Some(bytes)))
   }
 
-  def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset = {
-    if (bytes == null || bytes.isEmpty) ImageAsset.Empty
-    else {
-      val im = new ImageData("full", Mime.Unknown, 0, 0, 0, 0, 0, Some(RAssetDataId())) {
-        override lazy val data: Option[Array[Byte]] = Some(bytes)
-      }
-      returning(new LocalImageAsset(ImageAssetData(AssetId(), RConvId(), Seq(im))))(_.setMirrored(true))
-    }
-  }
+  def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =
+    returning(createImageAssetFrom(bytes))(_.setMirrored(true))
 
   def getOrCreateImageAssetFromResourceId(resourceId: Int): api.ImageAsset =
     getOrCreateUriImageAsset(Uri.parse(s"${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.getPackageName}/$resourceId"))
 
   def getOrCreateImageAssetFrom(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL): api.ImageAsset = {
     if (bitmap == null || bitmap == com.waz.bitmap.EmptyBitmap) ImageAsset.Empty
+    //Created with sketch, so don't cache since if the user cancels or sends, the image asset won't be needed again
     else new LocalBitmapAsset(bitmap, orientation)
   }
 }

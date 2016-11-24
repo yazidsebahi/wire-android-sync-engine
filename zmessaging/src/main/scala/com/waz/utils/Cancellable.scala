@@ -17,7 +17,9 @@
  */
 package com.waz.utils
 
-import com.waz.ZLog.LogTag
+import com.waz.ZLog.{LogTag, verbose}
+import com.waz.model.AssetData
+import com.waz.model.AssetData.ProcessingTaskKey
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 
 import scala.collection.mutable
@@ -38,6 +40,30 @@ object Cancellable {
   } .flatten
 
   def cancel(key: Any*)(implicit tag: LogTag) = Future {
+    tasks.remove(key).foreach(_.cancel())
+  }
+}
+
+object AssetProcessing {
+  private implicit val dispatcher = new SerialDispatchQueue(name = "AssetProcessing")
+
+  private val tasks = new mutable.HashMap[ProcessingTaskKey, CancellableFuture[Option[AssetData]]]
+
+  def get(key: ProcessingTaskKey) = {
+    import com.waz.ZLog.ImplicitTag._
+    verbose(s"getting processing task for key: $key, has value?: ${tasks.contains(key)}")
+    tasks.getOrElse(key, CancellableFuture successful None)
+  }
+
+  def apply(key: ProcessingTaskKey)(task: CancellableFuture[Option[AssetData]]): CancellableFuture[Option[AssetData]] = dispatcher {
+    import com.waz.ZLog.ImplicitTag._
+    verbose(s"adding processing entry for key: $key")
+    tasks(key) = task
+    task.onComplete { _ => if (tasks.get(key).contains(task)) tasks -= key }
+    task
+  }.flatten
+
+  def cancel(key: ProcessingTaskKey)(implicit tag: LogTag) = Future {
     tasks.remove(key).foreach(_.cancel())
   }
 }

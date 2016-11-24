@@ -181,7 +181,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val auto2 = registerDevice("auto2")
 
   def contentCacheKey(asset: com.waz.api.Asset) = {
-    val p = Promise[String]
+    val p = Promise[CacheKey]
     asset.getContentUri(new com.waz.api.Asset.LoadCallback[Uri]() {
       override def onLoaded(uri: Uri): Unit = CacheUri.unapply(context)(uri) match {
         case Some(key) => p.success(key)
@@ -205,7 +205,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   override lazy val globalModule = new ApiSpecGlobal {
     override lazy val cache = new CacheService(context, storage) {
-      override def addStream[A](key: String, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+      override def addStream[A](key: CacheKey, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
         super.addStream(key, in, mime, name, cacheLocation, length, execution)(timeout).andThen {
           case Success(entry) if isDownloadingFromProvider(key) =>
             val path = entry.cacheFile.getAbsolutePath
@@ -219,7 +219,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
   }
 
-  @volatile private var isDownloadingFromProvider = Set.empty[String]
+  @volatile private var isDownloadingFromProvider = Set.empty[CacheKey]
   @volatile private var postStarted = false
   @volatile private var postCancelled = false
   private val reusableLatch = new ReusableCountDownLatch

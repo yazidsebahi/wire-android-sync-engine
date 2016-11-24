@@ -29,6 +29,7 @@
 
     <string name="zms_analytics_preference_key">PREF_KEY_PRIVACY_ANALYTICS_ENABLED</string>
     <string name="zms_auto_answer_key">PREF_KEY_AUTO_ANSWER_ENABLED</string>
+    <string name="zms_assets_v3">PREF_KEY_SEND_WITH_ASSETS_V3</string>
 
     <!-- contact sharing -->
     <string name="pref_share_contacts_key">PREF_KEY_PRIVACY_CONTACTS</string>

@@ -251,7 +251,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def getUser(id: UserId) = {
-    val u = users.getOrElseUpdate(id, UserInfo(id, Some(Random.nextLong().toHexString), Some(Random.nextInt(5)), Some(EmailAddress("email@test.com")), None, None))
+    val u = users.getOrElseUpdate(id, UserInfo(id, Some(Random.nextLong().toHexString), Some(Random.nextInt(5)), Some(EmailAddress("email@test.com")), None, Seq.empty))
     if (id == selfUserId || connections.get(id).exists(c => UserData.ConnectionStatus.isConnected(c.status))) u
     else u.copy(email = None, phone = None)
   }
@@ -266,7 +266,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   })
 
   override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = {
-    val info = UserInfo(selfUserId, Option(name), accentId, credentials.maybeEmail, credentials.maybePhone, None)
+    val info = UserInfo(selfUserId, Option(name), accentId, credentials.maybeEmail, credentials.maybePhone, Seq.empty)
     users += selfUserId -> info
     CancellableFuture.successful(Right((info, Some("cookie"))))
   }

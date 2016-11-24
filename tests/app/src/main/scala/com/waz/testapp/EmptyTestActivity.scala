@@ -28,7 +28,8 @@ import android.view.View
 import android.view.View.OnClickListener
 import android.widget.{Button, ImageView}
 import com.waz.ZLog._
-import com.waz.api.ImageAsset.BitmapCallback
+import com.waz.api.BitmapCallback
+import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api._
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.model.{AssetMetaData, Mime}
@@ -64,8 +65,8 @@ class EmptyTestActivity extends Activity with ActivityEventContext {
         Option(handle).foreach(_.cancel())
         val asset = ImageAssetFactory.getImageAsset(R.raw.gif_image)
         handle = asset.getBitmap(imageView.getWidth, new BitmapCallback {
-          override def onBitmapLoadingFailed(): Unit = ()
-          override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = imageView.setImageBitmap(b)
+          override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = ()
+          override def onBitmapLoaded(b: Bitmap): Unit = imageView.setImageBitmap(b)
         })
       }
     })

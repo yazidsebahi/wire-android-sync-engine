@@ -128,8 +128,7 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
         val id = AssetId(s"${data.assetId.str}_${w}_$h") // use dimensions in id, to avoid caching images with different sizes
         context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(id, loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
       })
-    case _ =>
-      context.images.getImageAsset(data.assetId)
+    case _ => context.images.getImageAsset(data.assetId)
   }
 
   override def getAsset =
@@ -217,13 +216,13 @@ class MessagePart(content: MessageContent, message: MessageData, index: Int)(imp
 
   lazy val image = (content.tpe, content.asset, content.openGraph, linkPreview) match {
     case (Part.Type.ASSET, Some(assetId), _, _) => ui.images.getImageAsset(assetId)
-    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(asset))) => ui.images.getImageAsset(asset)
+    case (Part.Type.WEB_LINK, _, _, Some(LinkPreview.WithAsset(_))) => ui.images.getImageAsset(message.assetId) //TODO Dean: bit ugly, what if we want multiple assets per message?
     case (Part.Type.WEB_LINK, _, Some(OpenGraphData(_, _, Some(uri), _, _)), None) => ImageAssetFactory.getImageAsset(uri)
     case _ => ImageAsset.Empty
   }
 
   lazy val dimensions = linkPreview match {
-    case Some(LinkPreview.WithAsset(GenericContent.Asset.WithDimensions(d))) => d
+    case Some(LinkPreview.WithAsset(AssetData.WithDimensions(d))) => d
     case _ => Dim2(content.width, content.height)
   }
 

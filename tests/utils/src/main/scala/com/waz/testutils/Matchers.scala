@@ -21,8 +21,8 @@ import java.util.concurrent.TimeoutException
 
 import android.graphics.Bitmap
 import com.waz.RobolectricUtils
-import com.waz.api.ImageAsset.BitmapCallback
-import com.waz.api.{ImageAsset, Message, User}
+import com.waz.api.BitmapCallback.BitmapLoadingFailed
+import com.waz.api._
 import com.waz.model.UserId
 import com.waz.utils.JsonDecoder.{apply => _, _}
 import com.waz.utils.JsonEncoder._
@@ -115,13 +115,13 @@ object Matchers {
 
   implicit class ImageAssetSyntax(val im: ImageAsset) extends AnyVal {
     def shouldBeAnAnimatedGif: Bitmap = {
-      (im.data.versions should not be empty).soon
+      (im.data.previewId should not be empty).soon
       val promisedMoreThanTwoUpdates = Promise[Bitmap]
 
       @volatile var count = 0
       val handle = im.getBitmap(500, new BitmapCallback {
-        override def onBitmapLoadingFailed(): Unit = promisedMoreThanTwoUpdates.tryFailure(new AssertionError("GIF loading failed"))
-        override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = {
+        override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = promisedMoreThanTwoUpdates.tryFailure(new AssertionError(s"GIF loading failed: reason: $reason"))
+        override def onBitmapLoaded(b: Bitmap): Unit = {
           count += 1
           if (count > 2) promisedMoreThanTwoUpdates.trySuccess(b)
         }

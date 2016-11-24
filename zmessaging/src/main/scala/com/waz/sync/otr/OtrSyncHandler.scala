@@ -20,20 +20,21 @@ package com.waz.sync.otr
 import java.util.Date
 
 import com.waz.ZLog._
-import com.waz.api.{EphemeralExpiration, Verification}
+import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.ConversationStorage
+import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.MessagesService
 import com.waz.service.otr.OtrService
-import com.waz.service.{ErrorsService, UserService}
+import com.waz.service.{ErrorsService, PreferenceService, UserService}
 import com.waz.sync.SyncResult
-import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
+import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse, UploadResponse}
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
 import com.waz.sync.client.{AssetClient, MessagesClient, OtrClient}
@@ -47,7 +48,8 @@ import scala.concurrent.{Future, Promise}
 
 class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
                      convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: MessagesService,
-                     errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) {
+                     errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService, prefs: PreferenceService) {
+
   import OtrSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
@@ -71,40 +73,40 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   // when it fails we will try sending empty messages to contacts for which we can not encrypt the message
   // in last try we will use 'ignore_missing' flag
   private def postEncryptedMessage(convId: ConvId, message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty, recipients: Option[Set[UserId]] = None)(f: (EncryptedContent, Int) => ErrorOrResponse[MessageResponse]): Future[Either[ErrorResponse, Date]] =
-    convStorage.get(convId) flatMap {
-      case Some(conv) if conv.verified == Verification.UNVERIFIED =>
-        // refusing to send messages to 'degraded' conversation, UI should show error and ask user to verify devices (or ignore it - which will change state to UNKNOWN)
-        errors.addConvUnverifiedError(convId, MessageId(message.messageId)) map { _ => Left(ErrorResponse.Unverified) }
-      case _ =>
-        service.encryptMessage(convId, message, retry > 0, previous, recipients) flatMap { content =>
-          f(content, retry).future flatMap {
-            case Right(MessageResponse.Success(ClientMismatch(redundant, _, deleted, time))) =>
-              // XXX: we are ignoring redundant clients, we rely on members list to encrypt messages, so if user left the conv then we won't use his clients on next message
-              service.deleteClients(deleted) map { _ => Right(time) }
-            case Right(MessageResponse.Failure(ClientMismatch(redundant, missing, deleted, _))) =>
-              service.deleteClients(deleted) flatMap { _ =>
-                if (retry > 2)
-                  successful(Left(internalError(s"postEncryptedMessage failed with missing clients after several retries: $missing")))
-                else
-                  clientsSyncHandler.syncSessions(missing) flatMap {
-                    case None =>
-                      // XXX: encrypt relies on conv members list, we only add clients for users in conv,
-                      // if members list is broken then we will always end up with missing clients,
-                      // maybe we should update members list in this place ???
-                      postEncryptedMessage(convId, message, retry + 1, content, recipients)(f)
-                    case Some(err) if retry < 3 =>
-                      error(s"syncSessions for missing clients failed: $err")
-                      postEncryptedMessage(convId, message, retry + 1, content, recipients)(f)
-                    case Some(err) =>
-                      successful(Left(err))
-                  }
-              }
-            case Left(err) =>
-              error(s"postOtrMessage failed with error: $err")
-              successful(Left(err))
-          }
+  convStorage.get(convId) flatMap {
+    case Some(conv) if conv.verified == Verification.UNVERIFIED =>
+      // refusing to send messages to 'degraded' conversation, UI should show error and ask user to verify devices (or ignore it - which will change state to UNKNOWN)
+      errors.addConvUnverifiedError(convId, MessageId(message.messageId)) map { _ => Left(ErrorResponse.Unverified) }
+    case _ =>
+      service.encryptMessage(convId, message, retry > 0, previous, recipients) flatMap { content =>
+        f(content, retry).future flatMap {
+          case Right(MessageResponse.Success(ClientMismatch(redundant, _, deleted, time))) =>
+            // XXX: we are ignoring redundant clients, we rely on members list to encrypt messages, so if user left the conv then we won't use his clients on next message
+            service.deleteClients(deleted) map { _ => Right(time) }
+          case Right(MessageResponse.Failure(ClientMismatch(redundant, missing, deleted, _))) =>
+            service.deleteClients(deleted) flatMap { _ =>
+              if (retry > 2)
+                successful(Left(internalError(s"postEncryptedMessage failed with missing clients after several retries: $missing")))
+              else
+                clientsSyncHandler.syncSessions(missing) flatMap {
+                  case None =>
+                    // XXX: encrypt relies on conv members list, we only add clients for users in conv,
+                    // if members list is broken then we will always end up with missing clients,
+                    // maybe we should update members list in this place ???
+                    postEncryptedMessage(convId, message, retry + 1, content, recipients)(f)
+                  case Some(err) if retry < 3 =>
+                    error(s"syncSessions for missing clients failed: $err")
+                    postEncryptedMessage(convId, message, retry + 1, content, recipients)(f)
+                  case Some(err) =>
+                    successful(Left(err))
+                }
+            }
+          case Left(err) =>
+            error(s"postOtrMessage failed with error: $err")
+            successful(Left(err))
         }
-    }
+      }
+  }
 
   private def ignoreMissing(retry: Int) = retry > 1
 
@@ -115,40 +117,43 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     CancellableFuture.lift {
       postEncryptedMessage(convId, GenericMessage(Uid(message.messageId), Proto.External(key, sha)), recipients = recipients) { (content, retry) =>
         msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data), nativePush), ignoreMissing(retry), recipients)
-      } map { // that's a bit of a hack, but should be harmless
+      } map {
+        // that's a bit of a hack, but should be harmless
         case Right(time) => Right(MessageResponse.Success(ClientMismatch(Map.empty, Map.empty, Map.empty, time)))
         case Left(err) => Left(err)
       }
     }
   }
 
-  def postOtrImageData(conv: ConversationData, assetId: AssetId, asset: ImageData, data: LocalData, exp: EphemeralExpiration, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): Future[Either[ErrorResponse, Date]] = {
-    val key = asset.otrKey.getOrElse(AESKey())
-    def message(sha: Sha256) = GenericMessage(Uid(assetId.str), exp, Proto.ImageAsset(asset.tag, asset.width, asset.height, asset.origWidth, asset.origHeight, asset.mime, asset.size, Some(key), Some(sha)))
-    postAssetData(conv, assetId, key, message, data, nativePush, recipients).future flatMap {
-      case Right((AssetKey(Left(id), _, _, sha), time)) =>
-        val updated = asset.copy(remoteId = Some(id), otrKey = Some(key), sha256 = Some(sha), sent = true)
-        cache.addStream(updated.cacheKey, data.inputStream) flatMap { _ =>
-          assets.updateImageAsset(assetId, conv.remoteId, updated) .map { data =>
-            verbose(s"OTR image uploaded: $data")
-            Right(time)
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]] =
+    CancellableFuture.lift(service.clients.getSelfClient).flatMap {
+      case Some(otrClient) =>
+        key match {
+          case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
+            case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
+              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha)))
+              case Left(err) => Left(err)
+            }
+          }
+          case _ => assetClient.uploadAsset(data, mime, public = true).map {
+            case Right(UploadResponse(rId, _, _)) => Right(RemoteData(Some(rId)))
+            case Left(err) => Left(err)
           }
         }
-      case Right((k, _)) => Future successful Left(ErrorResponse.internalError(s"Unexpected asset key: $k")) // FIXME
-      case Left(err) => Future successful Left(err)
+      case None => CancellableFuture.successful(Left(internalError("Client is not registered")))
     }
-  }
 
-  def postAssetData(conv: ConversationData, assetId: AssetId, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (AssetKey, Date)]] = {
-    val promise = Promise[Either[ErrorResponse,(AssetKey, Date)]]()
+  def postAssetDataV2(conv: ConversationData, key: AESKey, createMsg: Sha256 => GenericMessage, data: LocalData, nativePush: Boolean = true, recipients: Option[Set[UserId]] = None): CancellableFuture[Either[ErrorResponse, (RemoteData, Date)]] = {
+    val promise = Promise[Either[ErrorResponse, (RemoteData, Date)]]()
 
     val future = service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
-        service.encryptAssetData(assetId, key, data) flatMap { case (sha, encrypted) =>
+        service.encryptAssetData(key, data) flatMap { case (sha, encrypted) =>
           val inline = encrypted.length < MaxInlineSize
-          var imageId = Option.empty[RAssetDataId]
-          var assetKey = Option.empty[AssetKey]
+          var imageId = Option.empty[RAssetId]
+          var assetKey = Option.empty[RemoteData]
           val message = createMsg(sha)
+          verbose(s"Sending message: $message")
           postEncryptedMessage(conv.id, message, recipients = recipients) { (content, retry) =>
             val meta = new OtrAssetMetadata(otrClient.id, content, nativePush, inline)
             val upload = imageId match {
@@ -163,7 +168,7 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
                 assetClient.postOtrAsset(conv.remoteId, meta, encrypted, ignoreMissing(retry), recipients) map {
                   case Right(OtrAssetResponse(id, msgResponse)) =>
                     imageId = Some(id)
-                    assetKey = Some(AssetKey(Left(id), None, key, sha))
+                    assetKey = Some(RemoteData(Some(id), None, Some(key), Some(sha)))
                     Right(msgResponse)
                   case Left(err) =>
                     Left(err)
@@ -223,6 +228,6 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 object OtrSyncHandler {
   private implicit val tag: LogTag = logTagFor[OtrSyncHandler]
 
-  val MaxInlineSize = 10 * 1024
-  val MaxContentSize = 256 * 1024  // backend accepts 256KB for otr messages, but we would prefer to send less
+  val MaxInlineSize  = 10 * 1024
+  val MaxContentSize = 256 * 1024 // backend accepts 256KB for otr messages, but we would prefer to send less
 }

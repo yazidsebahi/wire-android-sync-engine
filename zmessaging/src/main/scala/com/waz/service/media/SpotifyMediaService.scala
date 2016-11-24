@@ -63,7 +63,7 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue:
   def updateMedia(msg: MessageData, content: MessageContent): ErrorOr[MessageContent] = resolveId(content.content).fold2(Future.successful(Right(content)), { id =>
     spotifyRefreshTokenPref() flatMap (client.getMedia(id, _)) map {
       case Right(media) =>
-        assets.updateImageAssets(media.images.to[Vector])
+        assets.updateAssets(media.images.to[Vector])
         Right(content.copy(tpe = Message.Part.Type.SPOTIFY, richMedia = Some(media.media)))
 
       case Left(error) if error.isFatal =>

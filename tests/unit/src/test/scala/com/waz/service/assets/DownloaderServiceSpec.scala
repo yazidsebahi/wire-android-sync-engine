@@ -21,9 +21,10 @@ import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.CacheEntry
+import com.waz.model.AssetData.RemoteData
 import com.waz.model.{Mime, _}
 import com.waz.service.downloads.AssetDownloader
-import com.waz.service.downloads.DownloadRequest.{AssetRequest, ImageAssetRequest}
+import com.waz.service.downloads.DownloadRequest.{AssetRequest, WireAssetRequest}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockGlobalModule
 import com.waz.threading.CancellableFuture
@@ -42,7 +43,7 @@ import scala.util.Failure
 
 class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
-  lazy val downloads = new mutable.HashMap[String, ProgressCallback => CancellableFuture[Option[CacheEntry]]]
+  lazy val downloads = new mutable.HashMap[CacheKey, ProgressCallback => CancellableFuture[Option[CacheEntry]]]
 
   lazy val global = new MockGlobalModule()
 
@@ -56,8 +57,8 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     ShadowLog.stream = null
   }
 
-  def uri(id: RAssetDataId = RAssetDataId()): Uri =  Uri.parse(s"content://$id")
-  def fakeDownload(id: RAssetDataId = RAssetDataId(), conv: RConvId = RConvId()) = new Download(ImageAssetRequest(id.str, conv, AssetKey(Left(id), None, AESKey.Empty, Sha256.Empty), Mime.Unknown), 100)
+  def uri(id: RAssetId = RAssetId()): Uri =  Uri.parse(s"content://$id")
+  def fakeDownload(id: RAssetId = RAssetId(), conv: RConvId = RConvId()) = new Download(WireAssetRequest(CacheKey(), AssetId(), RemoteData(Some(id), None, None, None), Some(conv), Mime.Unknown), 100)
   
   feature("Throttling") {
 
@@ -169,7 +170,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Cancel ongoing download") {
       val d = fakeDownload()
       val f = downloader.download(d.req)
-      downloader.cancel(d.req)
+      downloader.cancel(d.req.cacheKey)
 
       intercept[CancelException] {
         f.await()
@@ -182,7 +183,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       val ds = Seq.fill(10)(fakeDownload())
       val fs = ds map { d => downloader.download(d.req) }
 
-      ds.reverse.foreach { d => downloader.cancel(d.req) }
+      ds.reverse.foreach { d => downloader.cancel(d.req.cacheKey) }
 
       fs foreach { f =>
         intercept[CancelException] {

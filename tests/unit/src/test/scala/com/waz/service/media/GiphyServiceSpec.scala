@@ -17,8 +17,11 @@
  */
 package com.waz.service.media
 
+import android.net.Uri
 import com.waz.RobolectricUtils
-import com.waz.model.{ImageAssetData, ImageData}
+import com.waz.model.AssetMetaData.Image
+import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
+import com.waz.model.{AssetData, Dim2, Mime}
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.client.GiphyClient
 import com.waz.testutils.Matchers._
@@ -27,26 +30,16 @@ import com.waz.znet.ZNetClient.EmptyClient
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 class GiphyServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
-  var loadRandomResult: Seq[ImageData] = Nil
-  val biggestRandomResult = ImageData("medium", "image/gif", 500, 256, 500, 256, 0, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/giphy.gif"))
-  val smallestRandomResult = ImageData("preview", "image/gif", 100, 51, 100, 51, 0, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100w_s.gif"))
-  val randomResult = Seq(
-    biggestRandomResult,
-    ImageData("medium", "image/gif", 391, 200, 391, 200, 0, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif")),
-    ImageData("medium", "image/gif", 200, 102, 200, 102, 0, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200w_d.gif")),
-    ImageData("preview", "image/gif", 195, 100, 195, 100, 0, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100_s.gif")),
-    smallestRandomResult
-  )
+  var loadRandomResult: (Option[AssetData], AssetData) = (None, AssetData.Empty)
+  val biggestRandomResult = AssetData(metaData = Some(Image(Dim2(500, 256), Medium)), mime = Mime.Image.Gif, source =  Some(Uri.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/giphy.gif")))
+  val smallestRandomResult = AssetData(metaData = Some(Image(Dim2(100, 51), Preview)), mime = Mime.Image.Gif, source =  Some(Uri.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100w_s.gif")))
+  val randomResult = (Some(smallestRandomResult), biggestRandomResult)
 
-  var loadSearchResult: Seq[Seq[ImageData]] = Nil
+  var loadSearchResult: Seq[(Option[AssetData], AssetData)] = Nil
   var keyword: String = ""
-  val biggestSearchResult = ImageData("medium", "image/gif", 391, 200, 391, 200, ImageAssetGenerator.MaxGifSize - 1, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif"))
-  val smallestSearchResult = ImageData("preview", "image/gif", 100, 120, 100, 120, 0, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif"))
-  val searchResult = Seq(Seq(
-    biggestSearchResult,
-    ImageData("medium", "image/gif", 391, 200, 391, 200, ImageAssetGenerator.MaxGifSize + 1, None, None, sent = false, Some("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif")),
-    smallestSearchResult
-  ))
+  val biggestSearchResult = AssetData(sizeInBytes = ImageAssetGenerator.MaxGifSize - 1, metaData = Some(Image(Dim2(391, 200), Medium)), mime = Mime.Image.Gif, source =  Some(Uri.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif")))
+  val smallestSearchResult = AssetData(metaData = Some(Image(Dim2(100, 120), Preview)), mime = Mime.Image.Gif, source =  Some(Uri.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif")))
+  val searchResult = Seq((Some(smallestSearchResult), biggestSearchResult))
 
   lazy val service = new GiphyService(new GiphyClient(new EmptyClient) {
     override def loadRandom() = CancellableFuture.successful(loadRandomResult)
@@ -59,14 +52,13 @@ class GiphyServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   feature("random") {
     scenario("success") {
       loadRandomResult = randomResult
-      val preview = smallestRandomResult.copy(origWidth = 500, origHeight = 256)
       service.getRandomGiphyImage should eventually(beMatching({
-        case Seq(ImageAssetData(_, _, Seq(`preview`, `biggestRandomResult`))) => true
+        case Seq((Some(`smallestRandomResult`), `biggestRandomResult`)) => true
       }))
     }
 
     scenario("failed") {
-      loadRandomResult = Nil
+      loadRandomResult = (None, AssetData.Empty)
       service.getRandomGiphyImage should eventually(be(Nil))
     }
   }
@@ -75,9 +67,8 @@ class GiphyServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     scenario("success") {
       loadSearchResult = searchResult
       val keyword = "test"
-      val preview = smallestSearchResult.copy(origWidth = 391, origHeight = 200)
       service.searchGiphyImage(keyword) should eventually(beMatching({
-        case Seq(ImageAssetData(_, _, Seq(`preview`, `biggestSearchResult`))) => true
+        case Seq((Some(`smallestSearchResult`), `biggestSearchResult`)) => true
       }))
       test.keyword shouldEqual keyword
     }

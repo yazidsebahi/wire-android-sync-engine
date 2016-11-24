@@ -83,7 +83,7 @@ trait ProvisionedSuite extends EmailClientSuite { suite: Suite =>
     info("--- start of provisioning ----------------------------------------------------------------")(logTagFor[ProvisionedSuite])
     val registered = userProvs.values.map(_.register())
 
-    if (registered.exists(_.isLeft)) println(s"register failed for emails: $provisionEmails")
+    if (registered.exists(_.isLeft)) println(s"register failed for emails: $provisionEmails: error message: ${registered.head.left.get}")
     else println(s"registered and verified: $provisionUsers with $provisionEmails")
 
     val (o2o, group) = provisionConvs.partition(_.users.size == 2)

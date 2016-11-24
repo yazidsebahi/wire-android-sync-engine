@@ -15,10 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.model;
+package com.waz.api
 
-public enum AssetType {
-    Image,
-    Any,
-    Empty
+trait Usernames {
+  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
+  def isUsernameValid(username: String) : UsernameValidation
 }
+
+trait UsernamesRequestCallback{
+  def onUsernameRequestResult(username: String, validation: UsernameValidation) : Unit
+}
+
+case class UsernameValidation(isValid: Boolean, reason: UsernameValidationError)

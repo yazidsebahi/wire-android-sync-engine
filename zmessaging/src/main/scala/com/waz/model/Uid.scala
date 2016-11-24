@@ -20,6 +20,7 @@ package com.waz.model
 import java.nio.ByteBuffer
 import java.util.UUID
 
+import android.net.Uri
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
 import com.waz.utils.{JsonDecoder, JsonEncoder}
@@ -106,17 +107,35 @@ object AssetId extends (String => AssetId) {
   }
 }
 
-case class RAssetDataId(str: String) {
+case class CacheKey(str: String) {
   override def toString: String = str
 }
 
-object RAssetDataId {
-  val Empty = RAssetDataId("empty")
-  def apply(): RAssetDataId = Id.random()
+object CacheKey extends (String => CacheKey) {
+  def apply(): CacheKey = Id.random()
 
-  implicit object Id extends Id[RAssetDataId] {
-    override def random() = RAssetDataId(Uid().toString)
-    override def decode(str: String) = RAssetDataId(str)
+  //any appended strings should be url friendly
+  def decrypted(key: CacheKey) = CacheKey(s"${key.str}_decr_")
+  def fromAssetId(id: AssetId) = CacheKey(s"${id.str}")
+  def fromUri(uri: Uri) = CacheKey(uri.toString)
+
+  implicit object Id extends Id[CacheKey] {
+    override def random() = CacheKey(Uid().toString)
+    override def decode(str: String) = CacheKey(str)
+  }
+}
+
+case class RAssetId(str: String) {
+  override def toString: String = str
+}
+
+object RAssetId extends (String => RAssetId) {
+  val Empty = RAssetId("empty")
+  def apply(): RAssetId = Id.random()
+
+  implicit object Id extends Id[RAssetId] {
+    override def random() = RAssetId(Uid().toString)
+    override def decode(str: String) = RAssetId(str)
   }
 }
 

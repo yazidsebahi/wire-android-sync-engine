@@ -30,8 +30,9 @@ import org.scalatest.concurrent.ScalaFutures
 import akka.pattern.ask
 import com.waz.api.Message.Part
 import com.waz.api.impl.DoNothingAndProceed
+import com.waz.model
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{AssetId, ImageData, MessageId, Mime}
+import com.waz.model.{AssetStatus => _, MessageContent => _, _}
 import org.threeten.bp.Instant
 
 import scala.util.Random
@@ -325,7 +326,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         image should not be null
         image.isEmpty shouldEqual false
         withClue(s"$image, data: ${image.data}") {
-          image.data.versions.find(_.tag == ImageData.Tag.Medium) shouldBe defined // full image received
+          image.data shouldNot be theSameInstanceAs AssetData.Empty // full image received
         }
         msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
       } (DefaultPatience.PatienceConfig(15.seconds))

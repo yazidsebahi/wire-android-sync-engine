@@ -18,12 +18,11 @@
 package com.waz.testutils
 
 import android.graphics.Bitmap
-import com.waz.api.ImageAsset.BitmapCallback
-import com.waz.api.{ImageAsset, LoadHandle, UpdateListener}
+import com.waz.api.BitmapCallback.BitmapLoadingFailed
+import com.waz.api.{BitmapCallback, ImageAsset, LoadHandle, UpdateListener}
 
 class BitmapSpy(img: ImageAsset, size: Int = 600) {
   var failed = false
-  var preview = Option.empty[Bitmap]
   var result = Option.empty[Bitmap]
 
   private var handle: LoadHandle = _
@@ -36,11 +35,8 @@ class BitmapSpy(img: ImageAsset, size: Int = 600) {
 
   private def load() = {
     handle = img.getBitmap(size, new BitmapCallback {
-      override def onBitmapLoadingFailed(): Unit = failed = true
-      override def onBitmapLoaded(b: Bitmap, isPreview: Boolean): Unit = {
-        if (isPreview) preview = Option(b)
-        else result = Option(b)
-      }
+      override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = failed = true
+      override def onBitmapLoaded(b: Bitmap): Unit = result = Option(b)
     })
   }
 }

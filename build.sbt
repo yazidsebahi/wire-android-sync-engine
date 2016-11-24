@@ -7,7 +7,7 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "85"
+val MajorVersion = "86"
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -345,7 +345,7 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
       "org.robolectric" % "android-all" % RobolectricVersion,
       Deps.avs,
       "org.threeten" % "threetenbp" % "1.3",
-      "com.wire" % "cryptobox-jni-osx" % cryptoboxVersion,
+      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2",
       Deps.localytics,
       "com.android.support" % "support-v4" % supportLibVersion % Provided,
       "com.google.android.gms" % "play-services-base" % "7.8.0" % Provided exclude("com.android.support", "support-v4"),

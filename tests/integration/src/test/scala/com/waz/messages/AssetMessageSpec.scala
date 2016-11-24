@@ -31,8 +31,8 @@ import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
 import com.waz.cache.LocalData
 import com.waz.model
 import com.waz.model.AssetData.MaxAllowedAssetSizeInBytes
+import com.waz.model.AssetMetaData.{Audio, Video}
 import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadFailed}
-import com.waz.model.GenericContent.Asset.Original
 import com.waz.model.otr.ClientId
 import com.waz.model.{GenericContent, Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
@@ -111,7 +111,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getMimeType shouldEqual pdf.mime.str
         asset.getSizeInBytes shouldEqual pdf.size
         asset.getStatus shouldEqual DOWNLOAD_DONE
-        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
       }
       errors shouldBe empty
     }
@@ -140,12 +140,12 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getSizeInBytes shouldEqual audio.size
         asset.getStatus shouldEqual DOWNLOAD_DONE
         asset.getDuration.getSeconds shouldEqual 4
-        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
         message.getMessageStatus shouldEqual Message.Status.SENT
       }
 
       message.data.protos should beMatching {
-        case Seq(GenericMessage(_, GenericContent.Asset(Some(Original(Mime.Audio.MP4, _, _, Some(AssetMetaData.Audio(d)), None)), None, UploadDone(_)))) if d.getSeconds == 4 => true
+        case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, Some(Audio(d, _)), _, _, _, _, _, _), _))) if d.getSeconds == 4 => true
       }
 
       errors shouldBe empty
@@ -177,12 +177,12 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getDuration.getSeconds shouldEqual 3
         asset.getWidth shouldEqual 1080
         asset.getHeight shouldEqual 1920
-        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, META_DATA_SENT, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
+        spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
         message.getMessageStatus shouldEqual Message.Status.SENT
       }
 
       message.data.protos should beMatching {
-        case Seq(GenericMessage(_, GenericContent.Asset(Some(Original(Mime.Video.MP4, _, _, Some(AssetMetaData.Video(Dim2(1080, 1920), d)), None)), None, UploadDone(_)))) if d.getSeconds == 3 => true
+        case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, Some(Video(Dim2(1080, 1920), d)), _, _, _, _, _, _), _))) if d.getSeconds == 3 => true
       }
 
       errors shouldBe empty
@@ -470,8 +470,8 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         errors should not be empty
         errors.headOption.map(_.getType) shouldEqual Some(ErrorType.CANNOT_SEND_ASSET_TOO_LARGE)
         zmessaging.assetsStorage.get(asset.id).await() match {
-          case Some(a: AnyAssetData) => a.status shouldEqual UploadFailed
-          case a => fail(s"unexpected asset: $a")
+          case Some(asset: AssetData) => asset.status shouldEqual UploadFailed
+          case _ => fail(s"unexpected asset: $asset")
         }
       }
 
@@ -659,7 +659,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
   def beStatusMessage(aid: AssetId, status: model.AssetStatus): Matcher[Sent] =
     be(conv.data.remoteId).compose((_: Sent)._1) and
     be(aid.str).compose((_: Sent)._2.messageId) and
-    beMatching { case GenericMessage(_, GenericContent.Asset(_, _, `status`)) => }.compose((_: Sent)._2) and
+    beMatching { case GenericMessage(_, GenericContent.Asset(AssetData.WithStatus(`status`), _)) => }.compose((_: Sent)._2) and
     be('right).compose((_: Sent)._3)
 
   override val provisionFile: String = "/two_users_connected.json"
@@ -679,7 +679,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
           }
         }
 
-        override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
+        override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
           override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] =
             super.postOtrMessage(convId, remoteId, message).andThen { case Success(r) if r.isRight => otrMessageSyncs :+=(remoteId, message, r) }(Threading.Background)
         }

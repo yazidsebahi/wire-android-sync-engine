@@ -17,48 +17,34 @@
  */
 package com.waz.service.media
 
-import com.waz.model.{AssetId, ImageAssetData, ImageData, RConvId}
+import com.waz.ZLog.ImplicitTag._
+import com.waz.model.AssetData
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.client.GiphyClient
 import com.waz.threading.{CancellableFuture, Threading}
 
 class GiphyService(client: GiphyClient) {
   import Threading.Implicits.Background
-  
-  def getRandomGiphyImage: CancellableFuture[Seq[ImageAssetData]] = {
+
+  def getRandomGiphyImage: CancellableFuture[Seq[(Option[AssetData], AssetData)]] = {
     client.loadRandom().map {
-      case Nil => Nil
-      case images =>
-        val sorted = images.sorted
-        val medium = sorted.last
-        val preview = sorted.head
-        Seq(ImageAssetData(AssetId(), RConvId(), Seq(preview.copy(origWidth = medium.width, origHeight = medium.height), medium)))
+      case (None, data) if data == AssetData.Empty => Nil
+      case (prev, medium) => Seq((prev, medium))
     }
   }
 
-  def searchGiphyImage(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[ImageAssetData]] = {
+  def searchGiphyImage(keyword: String, offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[(Option[AssetData], AssetData)]] = {
     client.search(keyword, offset, limit).map {
       case Nil => Nil
-      case images => images flatMap imageAssetData
+      case images => images.filter{case (prev, med) => med.size <= ImageAssetGenerator.MaxGifSize}
     }
   }
 
-  def trending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[ImageAssetData]] = {
+  def trending(offset: Int = 0, limit: Int = 25): CancellableFuture[Seq[(Option[AssetData], AssetData)]] = {
     client.loadTrending(offset, limit).map {
       case Nil => Nil
-      case images => images flatMap imageAssetData
+      case images => images.filter{case (prev, med) => med.size <= ImageAssetGenerator.MaxGifSize}
     }
   }
 
-  private def imageAssetData(is: Seq[ImageData]) = {
-    val previews = is.filter(_.tag == ImageData.Tag.Preview)
-    val gifs = is.filter(i => i.tag != ImageData.Tag.Preview && i.size <= ImageAssetGenerator.MaxGifSize)
-    if (gifs.isEmpty || previews.isEmpty) Nil
-    else {
-      val medium = gifs.maxBy(_.size)
-      val preview = previews.minBy(_.width).copy(origWidth = medium.width, origHeight = medium.height)
-      val still = previews.find(_.width == medium.width).map(_.copy(tag = ImageData.Tag.MediumPreview, origWidth = medium.width, origHeight = medium.height))
-      Seq(ImageAssetData(AssetId(), RConvId(), Seq(Some(preview), still, Some(medium)).flatten))
-    }
-  }
 }

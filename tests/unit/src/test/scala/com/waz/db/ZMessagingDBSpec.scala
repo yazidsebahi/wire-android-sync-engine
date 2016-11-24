@@ -21,9 +21,11 @@ import android.content.ContentValues
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
+import android.net.Uri
 import com.waz.Generators
 import com.waz.api.{KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.MessageData.MessageDataDao
@@ -101,10 +103,9 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
 
       val assets = AssetDataDao.list
       assets should have size 57
-      forAll(assets) { _.isInstanceOf[ImageAssetData] shouldEqual true }
-      assets.flatMap(_.asInstanceOf[ImageAssetData].versions) should have size 114
+      forAll(assets) { _.isInstanceOf[AssetData] shouldEqual true }
 
-      val data = ImageAssetData(AssetId(), RConvId(), Seq(ImageData("tag", "mime", 12, 13, 14, 15, 10, None, url = Some("url"))))
+      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), Medium)), source = Some(Uri.parse("url")))
       val im = AssetDataDao.insertOrReplace(data)
       im shouldEqual data
       AssetDataDao.list should have size 58
