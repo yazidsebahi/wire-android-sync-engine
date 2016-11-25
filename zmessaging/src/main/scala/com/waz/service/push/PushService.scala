@@ -21,6 +21,8 @@ import java.util.Date
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.api.impl.ErrorResponse
+import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.content.KeyValueStorage
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -31,6 +33,7 @@ import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
+
 import scala.concurrent.{Future, Promise}
 
 class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
@@ -150,21 +153,21 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         loadNotifications(Some(id))
     }
 
-
-  private def loadNotifications(lastId: Option[Uid]) =
+  private def loadNotifications(lastId: Option[Uid]): CancellableFuture[Unit] =
     client.loadNotifications(lastId, clientId, pageSize = EventsClient.PageSize).flatMap {
-      case Left(error) =>
-        warn(s"/notifications failed with error: $error, will schedule slow sync")
-        Future.successful(signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis()))
-      case _ => Future.successful(()) //notifications results handled by event stream due to paging
+      case Left(ErrorResponse(TimeoutCode | ConnectionErrorCode, _, _)) =>
+        warn(s"/notifications failed due to timeout or connection error. Do nothing and wait for next notification")
+        CancellableFuture.successful(())
+      case Left(err) =>
+        warn(s"/notifications failed with unexpected error: $err, will schedule slow sync")
+        CancellableFuture.successful(signals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis()))
+      case _ => CancellableFuture.successful(()) //notifications results handled by event stream due to paging
     }
 }
 
 object PushService {
-
-  case class SlowSyncRequest(time: Long, lostHistory: Boolean = false)
-
   // lostHistory is set if there were lost notifications, meaning that some messages might be lost
+  case class SlowSyncRequest(time: Long, lostHistory: Boolean = false)
 }
 
 class PushServiceSignals {

@@ -68,7 +68,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         CancellableFuture.delayed(clientDelay)(test.notifications.right map (_.map { n =>
           onNotificationsPageLoaded ! n
           n.notifications.lastOption map (_.id)
-        }.last)).future
+        }.last))
       }
 
       override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(clientDelay)(Right(lastNotification))

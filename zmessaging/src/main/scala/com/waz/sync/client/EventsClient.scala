@@ -19,19 +19,20 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConversationEvent, Event, OtrEvent, Uid}
-import com.waz.threading.Threading
-import com.waz.utils.JsonDecoder
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.events.SourceStream
-import com.waz.znet.Response.{ErrorStatus, HttpStatus, Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
+import com.waz.utils.{ExponentialBackoff, JsonDecoder}
+import com.waz.znet.Response.{apply => _, _}
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{JsonObjectResponse, _}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 class EventsClient(netClient: ZNetClient) {
@@ -41,18 +42,26 @@ class EventsClient(netClient: ZNetClient) {
 
   val onNotificationsPageLoaded = new SourceStream[LoadNotificationsResponse]
 
-  var currentRequest: ErrorOr[(Option[Uid], Boolean)] = Future.successful(Right(Option.empty[Uid], false))
+  var currentRequest: ErrorOrResponse[(Option[Uid], Boolean)] = CancellableFuture.successful(Right(Option.empty[Uid], false))
 
-  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOr[Option[Uid]] = {
+  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOrResponse[Option[Uid]] = {
 
-    def loadNextPage(since: Option[Uid], isFirstPage: Boolean): ErrorOr[(Option[Uid], Boolean)] = {
-      netClient.chainedFutureWithErrorHandling("loadNotifications", Request.Get(notificationsPath(since, client, pageSize))) {
+    def loadNextPage(since: Option[Uid], isFirstPage: Boolean, attempts: Int = 0): ErrorOrResponse[(Option[Uid], Boolean)] = {
+      netClient.chainedWithErrorHandling(RequestTag, Request.Get(notificationsPath(since, client, pageSize))) {
+        case Response(ErrorStatus(), ErrorResponse(code@(TimeoutCode|ConnectionErrorCode), msg, label), _) =>
+          if (attempts >= backoff.maxRetries) {
+            CancellableFuture.successful(Left(ErrorResponse(code, msg, label)))
+          } else {
+            warn(s"Request from backend timed out: attempting to load last page (since id: $since) again")
+            CancellableFuture.delay(backoff.delay(attempts))
+              .flatMap(_ => loadNextPage(since, isFirstPage, attempts + 1)) //try last page again
+          }
+
         case Response(status, PagedNotificationsResponse((notifications, hasMore)), _) =>
-
           onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = !isFirstPage || status.isSuccess)
 
           if (hasMore) loadNextPage(since = notifications.lastOption.map(_.id), isFirstPage = false)
-          else Future.successful(Right(notifications.lastOption map (_.id), false))
+          else CancellableFuture.successful(Right(notifications.lastOption map (_.id), false))
       }
     }
 
@@ -62,7 +71,10 @@ class EventsClient(netClient: ZNetClient) {
 
   def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] =
     netClient(Request.Get(lastNotificationPath(client))) map {
-      case Response(SuccessHttpStatus(), NotificationsResponse(notification), _) => Right(Some(notification))
+      case Response(SuccessHttpStatus(), NotificationsResponse(notification), _) =>
+        //This is only triggered on slow sync, so no need to trigger another even if the lastId wasn't found
+        onNotificationsPageLoaded ! LoadNotificationsResponse(Vector(notification), lastIdWasFound = true)
+        Right(Some(notification))
       case Response(HttpStatus(Status.NotFound, _), ErrorResponse(404, _, "not-found"), _) => Right(None)
       case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
         warn(s"Error response to loadLastNotification: ${ErrorResponse(code, msg, label)}")
@@ -72,13 +84,6 @@ class EventsClient(netClient: ZNetClient) {
         Left(ErrorResponse(resp.status.status, "unexpected", "internal-error"))
 
     }
-
-  private def lastNotificationPath(client: ClientId) = Request.query(LastNotificationPath, "client" -> client.str)
-
-  private def notificationsPath(since: Option[Uid], client: ClientId, pageSize: Int) = {
-    val args = Seq("since" -> since, "client" -> Some(client), "size" -> Some(pageSize)) collect { case (key, Some(v)) => key -> v }
-    Request.query(NotificationsPath, args: _*)
-  }
 }
 
 case class PushNotification(id: Uid, events: Seq[Event], transient: Boolean = false) {
@@ -122,6 +127,17 @@ object EventsClient {
   val NotificationsPath = "/notifications"
   val LastNotificationPath = "/notifications/last"
   val PageSize = 1000
+
+  val RequestTag = "loadNotifications"
+
+  def notificationsPath(since: Option[Uid], client: ClientId, pageSize: Int) = {
+    val args = Seq("since" -> since, "client" -> Some(client), "size" -> Some(pageSize)) collect { case (key, Some(v)) => key -> v }
+    Request.query(NotificationsPath, args: _*)
+  }
+
+  def lastNotificationPath(client: ClientId) = Request.query(LastNotificationPath, "client" -> client.str)
+
+  val backoff = new ExponentialBackoff(3.second, 15.seconds)
 
   case class LoadNotificationsResponse(notifications: Vector[PushNotification], lastIdWasFound: Boolean)
 

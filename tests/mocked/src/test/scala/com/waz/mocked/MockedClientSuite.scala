@@ -93,7 +93,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
     }
     override lazy val eventsClient       = new EventsClient(zNetClient) {
-      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOr[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
+      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOrResponse[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
       override def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] = suite.loadLastNotification()
     }
     override lazy val voiceClient        = new VoiceChannelClient(zNetClient) {
@@ -264,7 +264,7 @@ trait MockedClient { test: ApiSpec =>
 
   def loadVersionBlacklist(): ErrorOrResponse[VersionBlacklist] = successful(Right(VersionBlacklist()))
   def loadLastNotification(): ErrorOrResponse[Option[PushNotification]] = successful(Right(None))
-  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOr[Option[Uid]] = Future.successful(Right(since))
+  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOrResponse[Option[Uid]] = CancellableFuture.successful(Right(since))
   def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = successful(Right(Nil))
   def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadConnections(start: Option[UserId], pageSize: Int): ErrorOrResponse[Seq[UserConnectionEvent]] = successful(Right(Nil))
