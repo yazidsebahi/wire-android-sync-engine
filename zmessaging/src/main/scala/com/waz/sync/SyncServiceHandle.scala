@@ -72,7 +72,7 @@ trait SyncServiceHandle {
   def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: Instant): Future[SyncId]
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId]
 
-  def registerGcm(): Future[SyncId]
+  def resetGcm(): Future[SyncId]
   def deleteGcmToken(token: GcmId): Future[SyncId]
 
   def syncSelfClients(): Future[SyncId]
@@ -130,7 +130,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = addRequest(PostOpenGraphMeta(conv, msg, time), priority = Priority.Low)
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId] = addRequest(PostReceipt(conv, message, user, tpe), priority = Priority.Optional)
 
-  def registerGcm() = addRequest(RegisterGcmToken, priority = Priority.Low, forceRetry = true)
+  def resetGcm() = addRequest(ResetGcmToken, priority = Priority.Low, forceRetry = true)
   def deleteGcmToken(token: GcmId) = addRequest(DeleteGcmToken(token), priority = Priority.Low)
 
   def syncSelfClients() = addRequest(SyncSelfClients, priority = Priority.Critical)
@@ -185,7 +185,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostSelfPicture(_)                    => zms.usersSync.postSelfPicture()
     case PostAddressBook(ab)                   => zms.addressbookSync.postAddressBook(ab)
     case PostInvitation(i)                     => zms.invitationSync.postInvitation(i)
-    case RegisterGcmToken                      => zms.gcmSync.registerGcm()
+    case ResetGcmToken                         => zms.gcmSync.resetGcm()
     case PostLiking(convId, liking)            => zms.reactionsSync.postReaction(convId, liking)
     case PostDeleted(convId, msgId)            => zms.messagesSync.postDeleted(convId, msgId)
     case PostLastRead(convId, time)            => zms.lastReadSync.postLastRead(convId, time)
