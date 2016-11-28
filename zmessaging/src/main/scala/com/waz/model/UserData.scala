@@ -81,16 +81,18 @@ case class UserData(
     email = user.email.orElse(email),
     phone = user.phone.orElse(phone),
     searchKey = SearchKey(user.name),
-    relation = user.level)
+    relation = user.level,
+    handle = user.handle.orElse(handle))
 
-  def updated(name: Option[String] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, picture: Option[AssetId] = None, trackingId: Option[String] = None): UserData =
+  def updated(name: Option[String] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, picture: Option[AssetId] = None, trackingId: Option[String] = None, handle: Option[Handle] = None): UserData =
      copy(
        name = name.getOrElse(this.name),
        email = email.orElse(this.email),
        phone = phone.orElse(this.phone),
        accent = accent.fold(this.accent)(_.id),
        picture = picture.orElse(this.picture),
-       searchKey = SearchKey(name.getOrElse(this.name))
+       searchKey = SearchKey(name.getOrElse(this.name)),
+       handle = handle.orElse(this.handle)
      )
 
   def updateConnectionStatus(status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): UserData = {
@@ -149,7 +151,6 @@ object UserData {
       handle = entry.handle) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =
-
     UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
       user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted,
       handle = user.handle)
@@ -208,7 +209,7 @@ object UserData {
     val Handle = opt(handle('handle))(_.handle)
 
     override val idCol = Id
-    override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted)
+    override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
     override def apply(implicit cursor: Cursor): UserData =
       new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)

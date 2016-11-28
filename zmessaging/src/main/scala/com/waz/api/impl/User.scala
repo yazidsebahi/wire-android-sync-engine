@@ -65,8 +65,8 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
     }
   }
 
-  private[waz] def update(name: String = data.name, email: Option[EmailAddress] = data.email, accent: Int = data.accent, phone: Option[PhoneNumber] = data.phone): Unit = {
-    set(data.copy(name = name, email = email, accent = accent, phone = phone))
+  private[waz] def update(name: String = data.name, email: Option[EmailAddress] = data.email, accent: Int = data.accent, phone: Option[PhoneNumber] = data.phone, handle: Option[Handle] = data.handle): Unit = {
+    set(data.copy(name = name, email = email, accent = accent, phone = phone, handle = handle))
   }
 
   private def computeInitials(name: String): String = NameParts.parseFrom(name).initials

@@ -134,7 +134,14 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
 
   override def getUsername: String = user.fold("")(_.getUsername)
 
-  override def setUsername(username: String, listener: CredentialsUpdateListener) =  handlingErrors(users.setSelfHandle(Handle(username)), listener)
+  override def setUsername(username: String, listener: CredentialsUpdateListener) =  handlingErrors(users.setSelfHandle(Handle(username), user), new CredentialsUpdateListener {
+    override def onUpdateFailed(code: Int, message: LogTag, label: LogTag): Unit = listener.onUpdateFailed(code, message, label)
+    override def onUpdated(): Unit = {
+      user.foreach(_.update(handle = Some(Handle(username))))
+      ui.zms(_.users.syncSelfNow)
+      listener.onUpdated()
+    }
+  })
   override def hasSetUsername: Boolean = user.fold(false)(_.getUsername.length > 0)
 
   override def isInPrivateMode: Boolean = data.fold(false)(_.privateMode)

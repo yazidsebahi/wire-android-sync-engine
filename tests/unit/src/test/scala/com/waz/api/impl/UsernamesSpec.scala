@@ -17,10 +17,25 @@
  */
 package com.waz.api.impl
 
+import com.waz.model.EmailAddress
+import com.waz.service.BackendConfig
+import com.waz.znet.{AsyncClient, BasicCredentials, LoginClient, ZNetClient}
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
+import scala.util.Random
+
 class UsernamesSpec extends FeatureSpec with Matchers with RobolectricTests {
-  val usernames = new Usernames
+  val email = "test@test.com"
+  val password = "password"
+  val wireMockPort = 9000 + Random.nextInt(3000)
+
+  val usernames = new Usernames(
+    new ZNetClient(
+      new BasicCredentials(EmailAddress(email), Some(password)),
+      new AsyncClient,
+      BackendConfig("http://localhost:" + wireMockPort),
+      new LoginClient(new AsyncClient, BackendConfig("http://localhost:" + wireMockPort))))
+
   scenario ("Username pokemon_master354 should be valid") {
     usernames.isUsernameValid("pokemon_master354").isValid should be(true)
   }

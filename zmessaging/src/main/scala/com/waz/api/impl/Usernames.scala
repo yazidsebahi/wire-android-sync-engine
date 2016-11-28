@@ -17,44 +17,73 @@
  */
 package com.waz.api.impl
 
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback}
+import com.waz.model.{Handle, UserData}
 import com.waz.threading.Threading
-
-import scala.concurrent.Future
-import scala.util.Random
+import com.waz.utils.JsonDecoder
+import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
+import com.waz.znet._
+import scala.util.Try
+import scala.util.control.NonFatal
 
 object Usernames {
   val MAX_LENGTH = 21
   val MIN_LENGTH = 2
+  val checkMultipleAvailabilityPath = "/users"
+  val checkSingleAvailabilityPath = "/users/handles/"
+  val handlesQuery = "handles"
 }
 
-class Usernames extends api.Usernames{
-  override def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) = {
-    //TODO: STUB
-    val f : Future[Boolean] = Future {
-      Thread.sleep(2000)
-      Random.nextBoolean()
-    }(Threading.Background)
+class Usernames(netClient: ZNetClient) extends api.Usernames{
+  private implicit val tag: LogTag = s"Usernames"
 
-    f.onComplete({
-      valid =>
-        callback.onUsernameRequestResult(username, UsernameValidation(isValid = valid.getOrElse(true), if (valid.getOrElse(true)) UsernameValidationError.NONE else UsernameValidationError.ALREADY_TAKEN))
-    })(Threading.Ui)
-
+  override def areUsernamesAvailable(usernames: Array[String], callback: UsernamesRequestCallback): Unit = {
+    val uri = Request.query(Usernames.checkMultipleAvailabilityPath, (Usernames.handlesQuery, usernames.reduce(_ + "," + _)))
+    netClient.withErrorHandling("areUsernamesAvailable", Request.Get(uri)) {
+      case Response(SuccessHttpStatus(), UsersHandleResponseContent(Seq(unavailableHandles)), headers) =>
+        callback.onUsernameRequestResult(usernames map (u => UsernameValidation(u, if (unavailableHandles.contains(u)) UsernameValidationError.ALREADY_TAKEN else UsernameValidationError.NONE)))
+      case Response(HttpStatus(Status.NotFound, _), _, _) => callback.onUsernameRequestResult(usernames.map(u => UsernameValidation(u, UsernameValidationError.NONE)))
+      case Response(HttpStatus(status, _), _, _) => callback.onRequestFailed(status)
+      case _ => callback.onRequestFailed(499)
+    }(Threading.Ui)
   }
+
+  override def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) = {
+    netClient.withErrorHandling("isUsernameAvailable", Request.Head(Usernames.checkSingleAvailabilityPath + username)) {
+      case Response(SuccessHttpStatus(), _, _) => callback.onUsernameRequestResult(Array(username).map(u => UsernameValidation(u, UsernameValidationError.ALREADY_TAKEN)))
+      case Response(HttpStatus(Status.NotFound, _), _, _) => callback.onUsernameRequestResult(Array(username).map(u => UsernameValidation(u, UsernameValidationError.NONE)))
+      case Response(HttpStatus(status, _), _, _) => callback.onRequestFailed(status)
+      case _ => callback.onRequestFailed(499)
+    }(Threading.Ui)
+  }
+
   override def isUsernameValid(username: String): UsernameValidation = {
     val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
 
     if (username.length  > Usernames.MAX_LENGTH) {
-      return UsernameValidation(isValid = false, UsernameValidationError.TOO_LONG)
+      return UsernameValidation(username = username, UsernameValidationError.TOO_LONG)
     }
     if (username.length  < Usernames.MIN_LENGTH) {
-      return UsernameValidation(isValid = false, UsernameValidationError.TOO_SHORT)
+      return UsernameValidation(username = username, UsernameValidationError.TOO_SHORT)
     }
     username match {
-      case usernameRegex(_) => UsernameValidation(isValid = true, UsernameValidationError.NONE)
-      case _ => UsernameValidation(isValid = false, UsernameValidationError.INVALID_CHARACTERS)
+      case usernameRegex(_) => UsernameValidation(username = username, UsernameValidationError.NONE)
+      case _ => UsernameValidation(username = username, UsernameValidationError.INVALID_CHARACTERS)
+    }
+  }
+}
+
+object UsersHandleResponseContent {
+  def unapply(response: ResponseContent): Option[Seq[String]] = {
+    try {
+      response match {
+        case JsonArrayResponse(js) => Try(JsonDecoder.array[UserData](js).map(user => user.handle.getOrElse(Handle("")).toString)).toOption
+        case _ => None
+      }
+    } catch {
+      case NonFatal(_) =>  None
     }
   }
 }

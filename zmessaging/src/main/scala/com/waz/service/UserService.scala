@@ -165,8 +165,8 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     updateAndSync(selfUserId, updater, sync)
 
   // called from ui to update user
-  def updateSelf(name: Option[String] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None): Future[Option[UserData]] =
-    updateSelfAndSync(_.updated(name, None, phone, accent), data => sync.postSelfUser(UserInfo(data.id, name, accent.map(_.id), phone = phone)))
+  def updateSelf(name: Option[String] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, handle: Option[Handle] = None): Future[Option[UserData]] =
+    updateSelfAndSync(_.updated(name, None, phone, accent, handle = handle), data => sync.postSelfUser(UserInfo(data.id, name, accent.map(_.id), phone = phone, handle = handle)))
 
   def clearSelfPicture(): Future[Option[UserData]] =
     updateSelfAndSync(_.copy(picture = None), _ => sync.postSelfPicture(None))

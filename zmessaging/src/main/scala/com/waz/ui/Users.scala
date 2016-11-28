@@ -69,7 +69,7 @@ class Users(implicit ui: UiModule) {
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
     ui.getAccount flatMap { _.updatePassword(newPassword, currentPassword) }
 
-  def setSelfHandle(handle: Handle) = ui.getAccount flatMap(_.updateHandle(handle))
+  def setSelfHandle(handle: Handle, user: Option[User]) = ui.getAccount flatMap(_.updateHandle(handle))
 
   def setSelfPrivateMode(privateMode: Boolean) = ui.getAccount flatMap(_.updatePrivateMode(privateMode))
 

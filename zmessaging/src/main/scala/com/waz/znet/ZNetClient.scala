@@ -92,7 +92,7 @@ class ZNetClient(credentials: CredentialsHandler,
     withErrorHandling(name, r) { case Response(SuccessHttpStatus(), _, _) => () } (ec)
 
   def withErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
-    apply(r) .map (pf .andThen (Right(_)) .orElse(errorHandling(name)))
+    apply(r) .map (pf .andThen (Right(_)) .orElse(errorHandling(name))) (ec)
 
   def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
     apply(r) .flatMap (pf .orElse (errorHandling(name) andThen CancellableFuture.successful)) (ec)
