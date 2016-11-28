@@ -17,6 +17,7 @@
  */
 package com.waz.service.push
 
+import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.KeyValueStorage
@@ -32,6 +33,7 @@ import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
+import scala.util.control.NoStackTrace
 
 trait IGcmService {
   def gcmAvailable: Boolean
@@ -103,22 +105,19 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     gcmGlobalService.gcmAvailable && loggedIn && !state.active && RegistrationRetryBackoff.delay(retries).elapsedSince(time)
   }
 
+
   gcmState {
     case GcmState(true, _) => registrationRetryCount := 0
     case _ =>
   }
 
-  shouldReRegister {
-    case true =>
-      verbose(s"shouldReRegister == true")
-      for {
-        retries <- registrationRetryCount()
-        _ <- registrationRetryCount := retries + 1
-        _ <- gcmGlobalService.unregister()
-        _ <- ensureGcmRegistered()
-      } yield ()
-
-    case false =>
+  shouldReRegister.zip(registrationRetryCount.signal) {
+    case (true, retries) =>
+      verbose(s"shouldReRegister == true, retryFailLimit: $retryFailLimit")
+      HockeyApp.saveException(new Exception(s"GCM re-registration triggered, will try re-register if number of retries: $retries is greater than: $retryFailLimit") with NoStackTrace, "Reregister GCM triggered")
+      if (retries > retryFailLimit) sync.registerGcm() else Future.successful(None)
+        .flatMap(_ => registrationRetryCount := retries + 1)
+    case (false, _) =>
       verbose(s"shouldReRegister == false")
   }
 
@@ -190,6 +189,13 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 }
 
 object GcmService {
+
+  /**
+    * To prevent over-aggressive re-registering of GCM tokens. The connection to the Google GCM servers can be down for up to 28
+    * minutes before the system realises it needs to re-establish the connection. If we miss a message in this time, and the user
+    * opens the app, we'll incorrectly diagnose this as a bad token and try to re-register it. So we'll give it a few chances.
+    */
+  val retryFailLimit = 3
 
   import scala.concurrent.duration._
 
