@@ -114,10 +114,19 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       verbose(s"update asset for event: $id, convId: $convId, ct: $ct, v2RId: $v2RId, data: $data")
 
       (ct, v2RId) match {
-        case (Asset(a@AssetData.WithRemoteId(rId), preview), _) =>
+        case (Asset(a@AssetData.WithRemoteId(_), preview), _) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset v3: $asset with preview: $preview")
           saveAssetAndPreview(asset, preview)
+        case (Text(_, _, linkPreviews), _) =>
+          //TODO Dean - handle link previews with multiple images
+          linkPreviews.headOption.fold(Future.successful(Option.empty[AssetData])) {
+            case LinkPreview.WithAsset(a@AssetData.WithRemoteId(_)) =>
+              val asset = a.copy(id = AssetId(id.str))
+              verbose(s"Received link preview asset: $asset")
+              saveAssetAndPreview(asset, None)
+            case _ => Future successful None
+          }
         case (Asset(a, p), Some(rId)) =>
           val forPreview = a.otrKey.isEmpty //For assets containing previews, the second GenericMessage contains remote information about the preview, not the asset
           val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptData(a.id, a.otrKey, a.sha, data))
