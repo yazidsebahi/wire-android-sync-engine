@@ -36,7 +36,7 @@ class GmsInstanceIdListenerService extends InstanceIDListenerService with ZMessa
     ZMessaging.currentAccounts.getCurrentZms flatMap {
       case Some(zms) =>
         debug("clearing gcm token and requesting re-registration with gcm")
-        zms.gcmGlobal.unregister() flatMap { _ =>  zms.sync.registerGcm() }
+        zms.sync.resetGcm()
       case None =>
         debug(s"ZMessaging not available, not registering")
         Future.successful(())

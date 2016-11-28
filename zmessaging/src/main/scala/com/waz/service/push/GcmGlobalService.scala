@@ -59,14 +59,7 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
     else GcmRegistration("", AccountId(""), appVersion)
   }
 
-  def setGcmRegistration(token: String, user: AccountId): GcmRegistration = {
-    val reg = GcmRegistration(token, user, appVersion)
-    verbose(s"setGcmRegistration: $reg")
-    editPreferences(reg.save(_))
-    reg
-  }
-
-  def clearGcmRegistrationUser(user: AccountId) = withPreferences { prefs =>
+  def clearGcm(user: AccountId) = withPreferences { prefs =>
     val reg = GcmRegistration(prefs)
     verbose(s"clearGcmRegistrationUser($user): $reg")
     if (reg.user == user) {
@@ -76,31 +69,33 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
     }
   }
 
-  def registerGcm(user: AccountId): CancellableFuture[Option[GcmRegistration]] = getGcmRegistration flatMap {
-    case reg @ GcmRegistration(token, _, _) if token.nonEmpty =>
-      debug(s"registerGcm, already registered: $reg, reusing token")
-      CancellableFuture.successful(Some(reg))
-
-    case reg =>
-      debug(s"registerGcm($user), registering to play previous: $reg")
-      withGcm {
-        LoggedTry { unregisterFromGoogle() } // if localytics registered first with only their sender id, we have to unregister so that our own additional sender id gets registered, too
-        try {
-          val token = registerWithGoogle(gcmSenderId.str +: metadata.localyticsSenderId.toSeq)
-          Localytics.setPushDisabled(false)
-          Localytics.setPushRegistrationId(token)
-          CancellableFuture.successful(Some(setGcmRegistration(token, AccountId(""))))
-        } catch {
-          case NonFatal(ex) =>
-            setGcmRegistration("", AccountId(""))
-            warn(s"registerGcm failed for sender: '$gcmSenderId'", ex)
-            HockeyApp.saveException(ex, s"unable to register gcm for sender $gcmSenderId")
-            CancellableFuture.successful(None)
-        }
-        CancellableFuture successful None
+  //removes the current gcm token and generates a new one - ensures that the user shouldn't be left without a GCM token
+  def resetGcm(user: AccountId): CancellableFuture[Option[GcmRegistration]] = CancellableFuture.lift(unregister()) flatMap { _ =>
+    withGcm {
+      LoggedTry {deleteInstanceId()} // if localytics registered first with only their sender id, we have to unregister so that our own additional sender id gets registered, too
+      try {
+        val token = getGcmToken(gcmSenderId.str +: metadata.localyticsSenderId.toSeq)
+        Localytics.setPushDisabled(false)
+        Localytics.setPushRegistrationId(token)
+        CancellableFuture.successful(Some(setGcm(token, AccountId(""))))
+      } catch {
+        case NonFatal(ex) =>
+          setGcm("", AccountId(""))
+          warn(s"registerGcm failed for sender: '$gcmSenderId'", ex)
+          HockeyApp.saveException(ex, s"unable to register gcm for sender $gcmSenderId")
+          CancellableFuture.successful(None)
       }
+    }
   }
 
+  private def setGcm(token: String, user: AccountId): GcmRegistration = {
+    val reg = GcmRegistration(token, user, appVersion)
+    verbose(s"setGcmRegistration: $reg")
+    editPreferences(reg.save(_))
+    reg
+  }
+
+  //used to indicate that the token was registered properly with the BE - no user indicates it's not registered
   def updateRegisteredUser(token: String, user: AccountId) = withPreferences { prefs =>
     val reg = GcmRegistration(prefs)
     if (reg.token == token && reg.user != user) {
@@ -112,14 +107,15 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
     } else reg
   }
 
-  def unregister() = editPreferences(GcmRegistration().save(_)).future map { _ => withGcm(unregisterFromGoogle()) } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
+  def unregister() = editPreferences(GcmRegistration().save(_)).future map { _ => withGcm(deleteInstanceId()) } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
 
   private def withGcm[A](body: => A): A = if (gcmAvailable) body else throw new GcmGlobalService.GcmNotAvailableException
 
-  private def registerWithGoogle(senderIds: Seq[String]) =
+  private def getGcmToken(senderIds: Seq[String]) =
      InstanceID.getInstance(context).getToken(senderIds mkString ",", GoogleCloudMessaging.INSTANCE_ID_SCOPE)
 
-  private def unregisterFromGoogle(): Unit = LoggedTry.local { InstanceID.getInstance(context).deleteInstanceID() }
+  //Deleting the instance id also removes any tokens the instance id was using
+  private def deleteInstanceId(): Unit = LoggedTry.local { InstanceID.getInstance(context).deleteInstanceID() }
 }
 
 object GcmGlobalService {

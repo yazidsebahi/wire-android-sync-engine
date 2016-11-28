@@ -111,13 +111,16 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     case _ =>
   }
 
-  shouldReRegister.zip(registrationRetryCount.signal) {
-    case (true, retries) =>
-      verbose(s"shouldReRegister == true, retryFailLimit: $retryFailLimit")
-      HockeyApp.saveException(new Exception(s"GCM re-registration triggered, will try re-register if number of retries: $retries is greater than: $retryFailLimit") with NoStackTrace, "Reregister GCM triggered")
-      if (retries > retryFailLimit) sync.registerGcm() else Future.successful(None)
-        .flatMap(_ => registrationRetryCount := retries + 1)
-    case (false, _) =>
+  shouldReRegister {
+    case true =>
+      (for {
+        retries <- registrationRetryCount()
+        _ = HockeyApp.saveException(new Exception(s"GCM re-registration triggered, will try re-register if number of retries: $retries is greater than: $retryFailLimit") with NoStackTrace, "Reregister GCM triggered")
+        if retries > retryFailLimit
+        _ <- sync.resetGcm()
+      } yield retries).flatMap(retries => registrationRetryCount := retries + 1)
+
+    case false =>
       verbose(s"shouldReRegister == false")
   }
 
@@ -126,7 +129,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
   def ensureGcmRegistered(): Future[Any] =
     gcmGlobalService.getGcmRegistration.future map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
-      case _ => sync.registerGcm()
+      case _ => sync.resetGcm()
     }
 
   ensureGcmRegistered()
@@ -137,7 +140,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
       // lifecycle got to Stopped, means that were logged out
       gcmGlobalService.getGcmRegistration map {
         case GcmRegistration(token, userId, _) if userId == accountId =>
-          gcmGlobalService.clearGcmRegistrationUser(accountId)
+          gcmGlobalService.clearGcm(accountId)
           sync.deleteGcmToken(GcmId(token))
         case _ => // do nothing
       }
@@ -151,8 +154,9 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     }
   }
 
-  def register(post: GcmRegistration => Future[Boolean]): Future[Option[GcmRegistration]] =
-    gcmGlobalService.registerGcm(accountId).future flatMap {
+  //Will first unregister the current token before registering a new one
+  def resetGcm(post: GcmRegistration => Future[Boolean]): Future[Option[GcmRegistration]] =
+    gcmGlobalService.resetGcm(accountId).future flatMap {
       case Some(reg) => post(reg) flatMap {
         case true =>
           lastRegistrationTime := Instant.now

@@ -66,7 +66,7 @@ object SyncRequest {
   case object SyncConversations extends BaseRequest(Cmd.SyncConversations)
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
-  case object RegisterGcmToken extends BaseRequest(Cmd.RegisterGcmToken)
+  case object ResetGcmToken extends BaseRequest(Cmd.RegisterGcmToken)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
   case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
 
@@ -309,7 +309,7 @@ object SyncRequest {
         case Cmd.SyncConversations     => SyncConversations
         case Cmd.SyncConnectedUsers    => SyncConnectedUsers
         case Cmd.SyncConnections       => SyncConnections
-        case Cmd.RegisterGcmToken      => RegisterGcmToken
+        case Cmd.RegisterGcmToken      => ResetGcmToken
         case Cmd.PostSelf              => PostSelf(JsonDecoder[UserInfo]('user))
         case Cmd.PostAddressBook       => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
         case Cmd.PostInvitation        => PostInvitation(JsonDecoder[Invitation]('invitation))
@@ -407,7 +407,7 @@ object SyncRequest {
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncCommonConnections(_) => () // nothing to do
         case SyncCallState(_, _) => () // nothing to do
-        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | RegisterGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | ResetGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
       }
     }
   }
