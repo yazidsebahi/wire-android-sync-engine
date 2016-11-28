@@ -143,7 +143,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         case (Asset(a, preview), _ ) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset without remote data - we will expect another update: $asset")
-          saveAssetAndPreview(a, preview)
+          saveAssetAndPreview(asset, preview)
         case (Ephemeral(_, content), _)=>
           update(id, convId, content, v2RId, data)
         case res =>
