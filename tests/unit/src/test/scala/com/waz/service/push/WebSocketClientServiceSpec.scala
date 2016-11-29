@@ -63,6 +63,7 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     }
 
     scenario("client is not destroyed if lifecycle is paused for short time") {
+      (gcm.gcmAvailable _ ).expects().anyNumberOfTimes().returning(true)
       lifecycle.lifecycleState ! LifecycleState.Idle
 
       awaitUi(50.millis)
@@ -74,9 +75,8 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     }
 
     scenario("client is destroyed after delay when lifecycle is paused") {
+      (gcm.gcmAvailable _ ).expects().anyNumberOfTimes().returning(true)
       lifecycle.lifecycleState ! LifecycleState.Idle
-
-      (gcm.gcmAvailable _).expects.returning(true).anyNumberOfTimes()
 
       awaitUi(50.millis)
       client shouldBe 'defined
