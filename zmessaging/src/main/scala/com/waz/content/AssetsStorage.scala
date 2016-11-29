@@ -19,6 +19,7 @@ package com.waz.content
 
 import android.content.Context
 import com.waz.model.AssetData.AssetDataDao
+import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
@@ -46,7 +47,7 @@ class AssetsStorage(context: Context, storage: Database) extends CachedStorage[A
 
     val metaData = cur.metaData match {
       case None => newData.metaData
-      case Some(AssetMetaData.Image(dim, tag)) if tag == "" => AssetMetaData.Image(dim, newData.tag)
+      case Some(AssetMetaData.Image(dim, tag)) if tag == Image.Tag.Empty => Image(dim, newData.tag)
       case _ => cur.metaData
     }
 

@@ -34,11 +34,11 @@ class GcmSyncHandler(user: AccountId, gcmService: GcmService, clientId: ClientId
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[GcmSyncHandler]
 
-  def registerGcm(): Future[SyncResult] = {
+  def resetGcm(): Future[SyncResult] = {
     def post(token: String) =
       client.postPushToken(GcmToken(token, gcmService.gcmSenderId, clientId))
 
-    gcmService.register(r => post(r.token).map(_.isRight))
+    gcmService.resetGcm(r => post(r.token).map(_.isRight))
       .map {
         case Some(GcmRegistration(_, `user`, _)) => SyncResult.Success
         case _ => SyncResult.Failure(None, shouldRetry = true)

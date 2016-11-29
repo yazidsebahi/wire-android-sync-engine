@@ -17,6 +17,7 @@
  */
 package com.waz.service.push
 
+import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.KeyValueStorage
@@ -32,6 +33,7 @@ import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
+import scala.util.control.NoStackTrace
 
 trait IGcmService {
   def gcmAvailable: Boolean
@@ -103,6 +105,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     gcmGlobalService.gcmAvailable && loggedIn && !state.active && RegistrationRetryBackoff.delay(retries).elapsedSince(time)
   }
 
+
   gcmState {
     case GcmState(true, _) => registrationRetryCount := 0
     case _ =>
@@ -110,13 +113,12 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   shouldReRegister {
     case true =>
-      verbose(s"shouldReRegister == true")
-      for {
+      (for {
         retries <- registrationRetryCount()
-        _ <- registrationRetryCount := retries + 1
-        _ <- gcmGlobalService.unregister()
-        _ <- ensureGcmRegistered()
-      } yield ()
+        _ = HockeyApp.saveException(new Exception(s"GCM re-registration triggered, will try re-register if number of retries: $retries is greater than: $retryFailLimit") with NoStackTrace, "Reregister GCM triggered")
+        if retries > retryFailLimit
+        _ <- sync.resetGcm()
+      } yield retries).flatMap(retries => registrationRetryCount := retries + 1)
 
     case false =>
       verbose(s"shouldReRegister == false")
@@ -127,7 +129,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
   def ensureGcmRegistered(): Future[Any] =
     gcmGlobalService.getGcmRegistration.future map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
-      case _ => sync.registerGcm()
+      case _ => sync.resetGcm()
     }
 
   ensureGcmRegistered()
@@ -138,7 +140,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
       // lifecycle got to Stopped, means that were logged out
       gcmGlobalService.getGcmRegistration map {
         case GcmRegistration(token, userId, _) if userId == accountId =>
-          gcmGlobalService.clearGcmRegistrationUser(accountId)
+          gcmGlobalService.clearGcm(accountId)
           sync.deleteGcmToken(GcmId(token))
         case _ => // do nothing
       }
@@ -152,8 +154,9 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     }
   }
 
-  def register(post: GcmRegistration => Future[Boolean]): Future[Option[GcmRegistration]] =
-    gcmGlobalService.registerGcm(accountId).future flatMap {
+  //Will first unregister the current token before registering a new one
+  def resetGcm(post: GcmRegistration => Future[Boolean]): Future[Option[GcmRegistration]] =
+    gcmGlobalService.resetGcm(accountId).future flatMap {
       case Some(reg) => post(reg) flatMap {
         case true =>
           lastRegistrationTime := Instant.now
@@ -190,6 +193,13 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 }
 
 object GcmService {
+
+  /**
+    * To prevent over-aggressive re-registering of GCM tokens. The connection to the Google GCM servers can be down for up to 28
+    * minutes before the system realises it needs to re-establish the connection. If we miss a message in this time, and the user
+    * opens the app, we'll incorrectly diagnose this as a bad token and try to re-register it. So we'll give it a few chances.
+    */
+  val retryFailLimit = 3
 
   import scala.concurrent.duration._
 
