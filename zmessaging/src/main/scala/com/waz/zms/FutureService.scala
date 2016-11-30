@@ -31,8 +31,7 @@ import scala.concurrent.Future
 abstract class FutureService extends Service {
   private implicit val logTag: LogTag = logTagFor[FutureService]
 
-  protected val wakeLockLevel = PowerManager.PARTIAL_WAKE_LOCK
-  protected lazy val wakeLock = new WakeLock(getApplicationContext, wakeLockLevel)
+  protected lazy val wakeLock = new WakeLock(getApplicationContext)
 
   override def onBind(intent: Intent): IBinder = null
 
