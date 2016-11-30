@@ -72,7 +72,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     localFetchTime <- lastFetchedLocalTime.signal
     lastRegistered <- lastRegistrationTime.signal
   } yield {
-    verbose(s"gcmState, fetched: $lastFetched, received: $lastReceived, fetchTime: $localFetchTime, register: $lastReceived")
+    verbose(s"gcmState, lastFetched: $lastFetched, lastReceived: $lastReceived, localFetchTime: $localFetchTime, lastRegistered: $lastRegistered")
     GcmState(lastFetched <= lastReceived, localFetchTime <= lastRegistered)
   }
 
