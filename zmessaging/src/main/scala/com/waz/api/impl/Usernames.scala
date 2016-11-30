@@ -17,15 +17,19 @@
  */
 package com.waz.api.impl
 
+import java.text.Normalizer
+import android.content.Context
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback}
 import com.waz.model.{Handle, UserData}
 import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
+import com.waz.zms.R
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet._
-import scala.util.Try
+
+import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
 object Usernames {
@@ -72,6 +76,33 @@ class Usernames(netClient: ZNetClient) extends api.Usernames{
       case usernameRegex(_) => UsernameValidation(username = username, UsernameValidationError.NONE)
       case _ => UsernameValidation(username = username, UsernameValidationError.INVALID_CHARACTERS)
     }
+  }
+
+  override def generateUsernameFromName(name: String, context: Context): String = {
+    var cleanName: String = replaceOtherCases(name.toLowerCase)
+    cleanName = Normalizer.normalize(cleanName, Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+    cleanName = Normalizer.normalize(cleanName, Normalizer.Form.NFD).replaceAll("\\W+", "")
+    if (cleanName.isEmpty) {
+      cleanName = generateFromDictionary(context)
+    }
+    cleanName
+  }
+
+  private def replaceOtherCases(input: String): String = {
+    var output: String = input
+    output = output.replace("ł", "l")
+    output = output.replace("æ", "a")
+    output = output.replace("ø", "o")
+    output
+  }
+
+  private def generateFromDictionary(context: Context): String = {
+    if (context == null) { return "" }
+    val names: Array[String] = context.getResources.getStringArray(R.array.random_names)
+    val adjectives: Array[String] = context.getResources.getStringArray(R.array.random_adjectives)
+    val namesIndex: Int = Random.nextInt(names.length)
+    val adjectivesIndex: Int = Random.nextInt(adjectives.length)
+    (adjectives(adjectivesIndex) + names(namesIndex)).toLowerCase
   }
 }
 

@@ -22,8 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
 import com.waz.content.Preference
-import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model.{UserData, Handle$, _}
+import com.waz.model.{UserData, _}
 import com.waz.model.otr.Client
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._

@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
-import com.waz.model.{EmailAddress, Handle, Handle$, PhoneNumber}
+import com.waz.model.{EmailAddress, Handle, PhoneNumber}
 import com.waz.threading.Threading
 import com.waz.utils.JsonEncoder
 import com.waz.znet.ZNetClient.ErrorOrResponse
