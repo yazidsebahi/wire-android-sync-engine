@@ -65,8 +65,8 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
     }
   }
 
-  private[waz] def update(name: String = data.name, email: Option[EmailAddress] = data.email, accent: Int = data.accent, phone: Option[PhoneNumber] = data.phone): Unit = {
-    set(data.copy(name = name, email = email, accent = accent, phone = phone))
+  private[waz] def update(name: String = data.name, email: Option[EmailAddress] = data.email, accent: Int = data.accent, phone: Option[PhoneNumber] = data.phone, handle: Option[Handle] = data.handle): Unit = {
+    set(data.copy(name = name, email = email, accent = accent, phone = phone, handle = handle))
   }
 
   private def computeInitials(name: String): String = NameParts.parseFrom(name).initials
@@ -142,7 +142,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeString(JsonEncoder.encodeString(data))
   override def describeContents(): Int = 0
 
-  override def getUsername: String = "whisker_pants" //TODO: STUB
+  override def getUsername: String = data.handle.fold("")(_.string)
 
   override def getCommonConnectionsCount = 0 //TODO: STUB
 }

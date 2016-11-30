@@ -15,11 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.db.migrate
+package com.waz.model
 
-import android.database.sqlite.SQLiteDatabase
+import java.util.UUID
 
-object UserDataMigration {
-  lazy val v61 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN deleted INTEGER DEFAULT 0")
-  lazy val v78 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN handle TEXT DEFAULT ''")
+case class Handle(string: String) extends AnyVal{
+  override def toString : String = string
+}
+
+object Handle extends (String => Handle){
+  def apply(): Handle = Handle("")
+  def random: Handle = Handle(UUID.randomUUID().toString)
 }

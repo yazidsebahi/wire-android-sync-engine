@@ -102,8 +102,8 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     Given("empty local db and working search client")
 
     val entries = Vector(
-      UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
-      UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
+      UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None),
+      UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None)
     )
     response = Success(Right(entries))
 
@@ -126,8 +126,8 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     Given("empty local db and working search client")
 
     val entries = Vector(
-      UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
-      UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
+      UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None),
+      UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None)
     )
     response = Success(Right(entries))
 
@@ -143,8 +143,8 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   scenario("Update users data from search result") {
     val entries = Vector(
-        UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
-        UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
+        UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None),
+        UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None)
     )
     response = Success(Right(entries))
 
@@ -166,8 +166,8 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   scenario("Schedule sync for newly created users") {
     val entries = Vector(
-      UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
-      UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First)
+      UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None),
+      UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None)
     )
     response = Success(Right(entries))
 
@@ -183,9 +183,9 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   scenario("Schedule sync for old users contained in query results") {
     val entries = Vector(
-        UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First),
-        UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First),
-        UserSearchEntry(UserId(), "user 3", Some(EmailAddress("email 3")), None, 1, connected = Some(true), blocked = true, Relation.First)
+        UserSearchEntry(UserId(), "user 1", Some(EmailAddress("email 1")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None),
+        UserSearchEntry(UserId(), "user 2", Some(EmailAddress("email 2")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None),
+        UserSearchEntry(UserId(), "user 3", Some(EmailAddress("email 3")), None, 1, connected = Some(true), blocked = true, Relation.First, handle = None)
     )
     response = Success(Right(entries))
 

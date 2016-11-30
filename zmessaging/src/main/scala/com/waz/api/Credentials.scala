@@ -48,6 +48,8 @@ sealed trait Credentials
 
 package impl {
 
+  import com.waz.model.Handle
+
   sealed trait Credentials extends com.waz.api.Credentials {
     def canLogin: Boolean
     def autoLoginOnRegistration: Boolean
@@ -57,6 +59,7 @@ package impl {
     def maybeEmail: Option[EmailAddress]
     def maybePhone: Option[PhoneNumber]
     def maybePassword: Option[String]
+    def maybeUsername: Option[Handle]
   }
 
   object Credentials {
@@ -68,6 +71,7 @@ package impl {
       override def maybePassword: Option[String] = None
       override def autoLoginOnRegistration: Boolean = false
       override def addToRegistrationJson(o: JSONObject): Unit = ()
+      override def maybeUsername: Option[Handle] = None
     }
   }
 
@@ -87,6 +91,7 @@ package impl {
     override def maybeEmail: Option[EmailAddress] = Some(email)
     override def maybePhone: Option[PhoneNumber] = None
     override def maybePassword: Option[String] = password
+    override def maybeUsername: Option[Handle] = None
 
     override def toString: String = s"EmailBasedCredentials($email, ${password map (_.map(_ => '*'))})"
   }
@@ -108,7 +113,29 @@ package impl {
     override def maybeEmail: Option[EmailAddress] = None
     override def maybePhone: Option[PhoneNumber] = Some(phone)
     override def maybePassword: Option[String] = None
+    override def maybeUsername: Option[Handle] = None
 
     override def toString: String = s"PhoneBasedCredentials($phone, ${code map (_.str.map(_ => '*'))})"
+  }
+
+  case class UsernameCredentials(handle: Handle, password: Option[String], invitation: Option[PersonalInvitationToken] = None) extends Credentials {
+    override def canLogin: Boolean = password.isDefined
+
+    def autoLoginOnRegistration: Boolean = invitation.isDefined
+
+    override def addToRegistrationJson(o: JSONObject): Unit = {
+      o.put("email", handle.string)
+      password foreach (o.put("password", _))
+      invitation foreach (i => o.put("invitation_code", i.code))
+    }
+
+    override def addToLoginJson(o: JSONObject): Unit = addToRegistrationJson(o)
+
+    override def maybeEmail: Option[EmailAddress] = None
+    override def maybePhone: Option[PhoneNumber] = None
+    override def maybePassword: Option[String] = password
+    override def maybeUsername: Option[Handle] = Some(handle)
+
+    override def toString: String = s"UsernameBasedCredentials($handle, ${password map (_.map(_ => '*'))})"
   }
 }

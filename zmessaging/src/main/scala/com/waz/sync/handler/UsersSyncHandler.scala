@@ -55,7 +55,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
   def postSelfUser(info: UserInfo): Future[SyncResult] = updatedSelfToSyncResult(usersClient.updateSelf(info))
 
   def postSelfPicture(): Future[SyncResult] = userService.getSelfUser flatMap {
-    case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _)) =>
+    case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _, _)) =>
       for {
         Some(asset) <- assets.storage.get(assetId)
         preview <- imageGenerator.generateSmallProfile(asset).future
@@ -80,7 +80,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
             Future.successful(SyncResult.failed())
         }
       } yield res
-    case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _)) =>
+    case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _, _)) =>
       updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Seq.empty)))
     case _ => Future.successful(SyncResult.failed())
   }

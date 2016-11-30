@@ -67,6 +67,8 @@ class ZMessagingFactory(global: GlobalModule) {
   def userModule(userId: UserId, account: AccountService) = wire[UserModule]
 
   def zmessaging(clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
+
+  def usernamesClient(client: ZNetClient) = new com.waz.api.impl.Usernames(client)
 }
 
 

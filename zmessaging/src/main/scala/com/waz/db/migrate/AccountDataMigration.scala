@@ -19,7 +19,9 @@ package com.waz.db.migrate
 
 import android.database.sqlite.SQLiteDatabase
 
-object UserDataMigration {
-  lazy val v61 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN deleted INTEGER DEFAULT 0")
-  lazy val v78 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN handle TEXT DEFAULT ''")
+object AccountDataMigration {
+  lazy val v78 = { implicit db: SQLiteDatabase =>
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN handle TEXT DEFAULT ''")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN private_mode BOOL DEFAULT false")
+  }
 }

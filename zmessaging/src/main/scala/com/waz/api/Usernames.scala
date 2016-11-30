@@ -17,13 +17,20 @@
  */
 package com.waz.api
 
+import android.content.Context
+
 trait Usernames {
+  def areUsernamesAvailable(usernames: Array[String], callback: UsernamesRequestCallback) : Unit
   def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
   def isUsernameValid(username: String) : UsernameValidation
+  def generateUsernameFromName(name: String, context: Context): String
 }
 
 trait UsernamesRequestCallback{
-  def onUsernameRequestResult(username: String, validation: UsernameValidation) : Unit
+  def onUsernameRequestResult(usernameValidation: Array[UsernameValidation]) : Unit = {}
+  def onRequestFailed(errorCode: Integer)
 }
 
-case class UsernameValidation(isValid: Boolean, reason: UsernameValidationError)
+case class UsernameValidation(username: String, reason: UsernameValidationError) {
+  def isValid(): Boolean = reason == UsernameValidationError.NONE
+}

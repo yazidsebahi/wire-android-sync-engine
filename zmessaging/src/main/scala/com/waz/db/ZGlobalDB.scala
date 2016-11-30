@@ -25,7 +25,7 @@ import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.ZmsDatabase
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.Migrations
-import com.waz.db.migrate.{TableDesc, TableMigration}
+import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
@@ -52,7 +52,10 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
     Migration(11, 12){ implicit db =>
       db.execSQL("ALTER TABLE CacheEntry ADD COLUMN length INTEGER")
     },
-    Migration(12, 13)(Migrations.v11(context))
+    Migration(12, 13)(Migrations.v11(context)),
+    Migration(13,14){
+      implicit db => AccountDataMigration.v78(db)
+    }
   )
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
@@ -89,7 +92,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 13
+  val DbVersion = 14
 
 
   object Migrations {

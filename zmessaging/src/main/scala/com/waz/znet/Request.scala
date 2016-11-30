@@ -82,6 +82,9 @@ object Request {
   def Get(path: String, downloadCallback: Option[ProgressCallback] = None, requiresAuthentication: Boolean = true, headers: Map[String, String] = EmptyHeaders) =
     Request[Unit](GetMethod, Some(path), downloadCallback = downloadCallback, requiresAuthentication = requiresAuthentication, headers = headers)(EmptyContentEncoder)
 
+  def Head(path: String, downloadCallback: Option[ProgressCallback] = None, requiresAuthentication: Boolean = true, headers: Map[String, String] = EmptyHeaders) =
+    Request[Unit](HeadMethod, Some(path), downloadCallback = downloadCallback, requiresAuthentication = requiresAuthentication, headers = headers)(EmptyContentEncoder)
+
   def query(path: String, args: (String, Any)*): String = {
     args map {
       case (key, value) =>

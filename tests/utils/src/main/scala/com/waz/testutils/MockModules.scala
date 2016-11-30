@@ -79,7 +79,7 @@ class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts
   }
 }
 
-class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, "", None), accounts.global, accounts) {
+class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, "", None, handle = None), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -106,8 +106,8 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
 
   var timeout = 5.seconds
 
-  storage.usersStorage.put(selfUserId, UserData(selfUserId, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self))
-  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, true, Some("cookie"), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+  storage.usersStorage.put(selfUserId, UserData(selfUserId, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
+  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, true, Some("cookie"), Some("passwd"), None, Some(selfUserId), Some(clientId), handle = Some(Handle("test_username")))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 
