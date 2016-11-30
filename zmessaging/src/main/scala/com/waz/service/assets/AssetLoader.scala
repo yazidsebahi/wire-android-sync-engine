@@ -39,7 +39,7 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
   def getAssetData(request: AssetRequest): CancellableFuture[Option[LocalData]] =
     request match {
       case CachedAssetRequest(cacheKey, mime@Mime.Audio.PCM, name) =>
-        downloader.download(UnencodedAudioAsset(cacheKey, name))(unencodedAudioDownloader)
+        downloader.download(UnencodedAudioAsset(cacheKey, name), force = true)(unencodedAudioDownloader)
       case _ =>
         CancellableFuture.lift(cache.getEntry(request.cacheKey)) flatMap {
           case Some(entry) => CancellableFuture successful Some(entry)
@@ -51,9 +51,9 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
     ZLog.verbose(s"download asset with req: $req")
     req match {
       case LocalAssetRequest(cacheKey, uri, mime@Mime.Video(), name) =>
-        downloader.download(VideoAsset(cacheKey, uri, mime, name))(videoDownloader)
+        downloader.download(VideoAsset(cacheKey, uri, mime, name), force = true)(videoDownloader)
       case LocalAssetRequest(cacheKey, uri, mime, name) =>
-        downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), mime, name))(streamDownloader)
+        downloader.download(AssetFromInputStream(cacheKey, () => AssetLoader.openStream(context, uri), mime, name), force = true)(streamDownloader)
       case CachedAssetRequest(_, _, _) => CancellableFuture successful None
       case _ => downloader.download(req)(assetDownloader)
     }
