@@ -67,8 +67,6 @@ class ZMessagingFactory(global: GlobalModule) {
   def userModule(userId: UserId, account: AccountService) = wire[UserModule]
 
   def zmessaging(clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
-
-  def usernamesClient(client: ZNetClient) = new com.waz.api.impl.Usernames(client)
 }
 
 
@@ -175,7 +173,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val messagesClient     = wire[MessagesClient]
   lazy val openGraphClient    = wire[OpenGraphClient]
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
-
+  lazy val handlesClient      = wire[HandlesClient]
 
   lazy val convsContent: ConversationsContentUpdater = wire[ConversationsContentUpdater]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
@@ -223,6 +221,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val recordAndPlay                         = wire[RecordAndPlayService]
   lazy val receipts                              = wire[ReceiptService]
   lazy val ephemeral                             = wire[EphemeralMessagesService]
+  lazy val handlesService                        = wire[HandlesService]
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -241,6 +240,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val lastReadSync     = wire[LastReadSyncHandler]
   lazy val clearedSync      = wire[ClearedSyncHandler]
   lazy val openGraphSync    = wire[OpenGraphSyncHandler]
+  lazy val handlesSync      = wire[HandlesSyncHandler]
 
   lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 

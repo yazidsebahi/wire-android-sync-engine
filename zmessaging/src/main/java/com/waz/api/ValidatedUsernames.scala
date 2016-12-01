@@ -17,22 +17,6 @@
  */
 package com.waz.api
 
-import android.content.Context
-
-trait Usernames {
-  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
-  def isUsernameValid(username: String) : UsernameValidation
-  def generateUsernameFromName(name: String, context: Context): String
-
-  def validateUsernames(usernames: Array[String])
-  def getValidatedUsernames: ValidatedUsernames
-}
-
-trait UsernamesRequestCallback{
-  def onUsernameRequestResult(usernameValidation: Array[UsernameValidation]) : Unit = {}
-  def onRequestFailed(errorCode: Integer)
-}
-
-case class UsernameValidation(username: String, reason: UsernameValidationError) {
-  def isValid(): Boolean = reason == UsernameValidationError.NONE
+trait ValidatedUsernames extends UiObservable {
+  def getValidations(usernames: Array[String]): Array[UsernameValidation]
 }

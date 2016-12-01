@@ -142,6 +142,7 @@ object JsonDecoder {
   implicit def decodePhoneNumber(s: Symbol)(implicit js: JSONObject): PhoneNumber = PhoneNumber(js.getString(s.name))
   implicit def decodeOptPhoneNumber(s: Symbol)(implicit js: JSONObject): Option[PhoneNumber] = opt(s, js => PhoneNumber(js.getString(s.name)))
   implicit def decodeOptHandle(s: Symbol)(implicit js: JSONObject): Option[Handle] = opt(s, js => Handle(js.getString(s.name)))
+  implicit def decodeHandleSeq(s: Symbol)(implicit js: JSONObject): Seq[Handle] = array[Handle](s)({ (arr, i) => Handle(arr.getString(i)) })
 
   implicit def decodeGcmSenderId(s: Symbol)(implicit js: JSONObject): GcmSenderId = GcmSenderId(js.getString(s.name))
 

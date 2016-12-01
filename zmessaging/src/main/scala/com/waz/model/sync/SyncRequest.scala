@@ -68,7 +68,7 @@ object SyncRequest {
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object ResetGcmToken extends BaseRequest(Cmd.RegisterGcmToken)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
-  case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
+  case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
 
   case class PostAddressBook(addressBook: AddressBook) extends BaseRequest(Cmd.PostAddressBook) {
     override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(Merged(_))
@@ -260,6 +260,16 @@ object SyncRequest {
     override val mergeKey = (cmd, convId, user)
   }
 
+  case class ValidateHandles(handles: Seq[Handle]) extends BaseRequest(Cmd.ValidateHandles) {
+    override def merge(req: SyncRequest) = mergeHelper[ValidateHandles](req) {
+      other => Merged(ValidateHandles(other.handles ++ handles.filter(!other.handles.contains(_))))
+    }
+    override def isDuplicateOf(req: SyncRequest): Boolean = req match {
+      case ValidateHandles(otherHandles) => handles.sameElements(otherHandles)
+      case _ => false
+    }
+  }
+
   private def mergeHelper[A <: SyncRequest : ClassTag](other: SyncRequest)(f: A => MergeResult[A]): MergeResult[A] = other match {
     case req: A if req.mergeKey == other.mergeKey => f(req)
     case _ => Unchanged
@@ -322,6 +332,7 @@ object SyncRequest {
         case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
         case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
         case Cmd.PostReceipt           => PostReceipt(convId, messageId, userId, ReceiptType.fromName('type))
+        case Cmd.ValidateHandles       => ValidateHandles('handles)
         case Cmd.Unknown               => Unknown
       }
     }
@@ -408,6 +419,7 @@ object SyncRequest {
         case SyncCommonConnections(_) => () // nothing to do
         case SyncCallState(_, _) => () // nothing to do
         case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | ResetGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }
   }
