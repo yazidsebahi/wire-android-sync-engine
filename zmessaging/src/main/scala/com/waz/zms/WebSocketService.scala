@@ -45,6 +45,8 @@ class WebSocketBroadcastReceiver extends BroadcastReceiver {
   */
 class WebSocketService extends FutureService {
 
+  import com.waz.service.push.WebSocketClientService._
+
   private def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
   private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_ONE_SHOT)
@@ -63,7 +65,7 @@ class WebSocketService extends FutureService {
 
     // schedule service restart every couple minutes to send ping on web socket (needed to keep connection alive)
     def scheduleRestarts() = {
-      alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + WebSocketClient.PING_INTERVAL.toMillis, WebSocketClient.PING_INTERVAL.toMillis, restartIntent)
+      alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + PING_INTERVAL_BACKGROUND.toMillis, PING_INTERVAL_BACKGROUND.toMillis, restartIntent)
     }
 
     val currentZms = Option(ZMessaging.currentAccounts).fold2(Future successful None, _.getCurrentZms)
