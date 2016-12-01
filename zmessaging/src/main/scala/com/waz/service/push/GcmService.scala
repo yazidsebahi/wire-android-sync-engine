@@ -50,7 +50,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   val notificationsToProcess = Signal(Set[Uid]())
 
-  override val gcmAvailable = gcmGlobalService.gcmAvailable
+  override def gcmAvailable = gcmGlobalService.gcmAvailable
 
   val lastReceivedConvEventTime = keyVal.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
   val lastFetchedConvEventTime = keyVal.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
@@ -95,6 +95,11 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     }
   }
 
+  gcmGlobalService.gcmEnabled {
+    case true => ensureGcmRegistered()
+    case _ => gcmGlobalService.unregister()
+  }
+
   val shouldReRegister = for {
     state <- gcmState
     loggedIn <- lifecycle.loggedIn
@@ -126,11 +131,14 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   def gcmSenderId = gcmGlobalService.gcmSenderId
 
-  def ensureGcmRegistered(): Future[Any] =
+  def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.gcmEnabled) {
     gcmGlobalService.getGcmRegistration.future map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.resetGcm()
     }
+  } else {
+    Future.successful(())
+  }
 
   ensureGcmRegistered()
 
