@@ -25,19 +25,22 @@ import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.Response.Status
 import com.waz.RobolectricUtils
 import org.java_websocket.WebSocket
+import org.java_websocket.exceptions.WebsocketNotConnectedException
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
+import org.scalacheck.Prop
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.util.Try
 
 
 class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   object lock
   var socket: Option[WebSocket] = None
-  var server: WebSocketServer = _
+  var server: TestServer = _
   var manager: WebSocketClient = _
 
   var authResult: Either[Status, Token] = Right(Token("test_token", "Bearer"))
@@ -45,32 +48,7 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
     override def currentToken() = Future.successful(authResult)
   }
 
-  def createServer(port: Int = 9982) = {
-    val s = new WebSocketServer(new InetSocketAddress(port)) {
-
-      override def onOpen(conn: WebSocket, handshake: ClientHandshake): Unit = {
-        socket = Some(conn)
-        lock.synchronized(lock.notifyAll())
-      }
-
-      override def onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean): Unit = {
-        if (socket.contains(conn)) {
-          socket = None
-          lock.synchronized(lock.notifyAll())
-        }
-      }
-
-      override def onMessage(conn: WebSocket, message: String): Unit = {
-        println(s"Server received a message: $message")
-      }
-
-      override def onError(conn: WebSocket, ex: Exception): Unit = {
-        println(s"Server got an error $ex")
-        ex.printStackTrace(Console.err)
-      }
-    }
-    s
-  }
+  def createServer(port: Int = 9982) = new TestServer(port)
 
   before {
     server = createServer()
@@ -134,5 +112,49 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
       manager.close()
       awaitUi(socket.isEmpty)(10.seconds)
     }
+
+    scenario("Ensure that connection is actually closed from server when client calls close") {
+
+      def test(i: Int) = {
+        manager = new WebSocketClient(context, new AsyncClient(), Uri.parse("http://localhost:9982"), auth)
+        awaitUi(socket.isDefined)(10.seconds)
+        Await.ready(manager.close(), 10.seconds)
+        awaitUi(socket.isEmpty)(10.seconds)
+        server.sendMessage("Uh oh") shouldBe false
+      }
+
+      (1 to 10) foreach test
+    }
   }
+
+
+  class TestServer(port: Int) extends WebSocketServer(new InetSocketAddress(port)) {
+
+    override def onOpen(conn: WebSocket, handshake: ClientHandshake): Unit = {
+      socket = Some(conn)
+      lock.synchronized(lock.notifyAll())
+    }
+
+    override def onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean): Unit = {
+      if (socket.contains(conn)) {
+        socket = None
+        lock.synchronized(lock.notifyAll())
+      }
+    }
+
+    override def onMessage(conn: WebSocket, message: String): Unit = {
+      println(s"Server received a message: $message")
+    }
+
+    override def onError(conn: WebSocket, ex: Exception): Unit = {
+      println(s"Server got an error $ex")
+      ex.printStackTrace(Console.err)
+    }
+
+    def sendMessage(msg: String): Boolean = {
+      Try(socket.map{ s => s.send(msg); true}).toOption.flatten.getOrElse(false)
+    }
+  }
+
+
 }
