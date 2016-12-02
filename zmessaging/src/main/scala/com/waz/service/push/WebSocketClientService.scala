@@ -19,7 +19,6 @@ package com.waz.service.push
 
 import android.content.Context
 import android.net.Uri
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
@@ -58,14 +57,17 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
     case (true, state) =>
       debug(s"Active, client: $clientId")
 
-      if (state == Idle) {
-        // start android service to keep the app running while we need to be connected
-        com.waz.zms.WebSocketService(context)
-      }
-
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
-      prevClient.foreach { _.scheduleRecurringPing(if (state == Active || state == UiActive) PING_INTERVAL_FOREGROUND else PING_INTERVAL_BACKGROUND) }
+
+      if (state == Idle) {
+        // start android service to keep the app running while we need to be connected. It will
+        // perform a ping every ping-background-interval (from preferences), so no need to schedule another here.
+        com.waz.zms.WebSocketService(context)
+      }
+      else if (state == Active || state == UiActive) prevClient.foreach { _.scheduleRecurringPing(PING_INTERVAL_FOREGROUND) }
+      else warn(s"Unexpected lifecycle state for active websocket: $state")
+
       prevClient
     case (false, _) =>
       debug(s"onInactive")
@@ -118,7 +120,7 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
 }
 
 object WebSocketClientService {
-  val PING_INTERVAL_FOREGROUND = 30.seconds
-  val PING_INTERVAL_BACKGROUND = 15.minutes
+  val PING_INTERVAL_FOREGROUND         = 30.seconds
+  val DEFAULT_PING_INTERVAL_BACKGROUND = 15.minutes
 
 }

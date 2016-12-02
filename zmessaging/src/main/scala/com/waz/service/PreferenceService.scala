@@ -17,16 +17,20 @@
  */
 package com.waz.service
 
+import java.util.concurrent.TimeUnit
+
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
 import android.os.Looper
 import com.waz.content.Preference
 import com.waz.content.Preference.PrefCodec
+import com.waz.service.push.WebSocketClientService.DEFAULT_PING_INTERVAL_BACKGROUND
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.SourceSignal
 import com.waz.zms.R
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.Try
 
 class PreferenceService(context: Context) {
@@ -37,14 +41,16 @@ class PreferenceService(context: Context) {
   lazy val analyticsEnabledPrefKey = Try(context.getResources.getString(R.string.zms_analytics_preference_key)).getOrElse("PREF_KEY_AVS_METRICS")
   lazy val analyticsEnabledPref = uiPreferenceBooleanSignal(analyticsEnabledPrefKey)
 
-  lazy val autoAnswerCallPrefKey = Try(context.getResources.getString(R.string.zms_auto_answer_key)).getOrElse("PREF_KEY_AUTO_ANSWER_ENABLED")
-  lazy val sendWithAssetsV3Key   = Try(context.getResources.getString(R.string.zms_assets_v3)).getOrElse("PREF_KEY_SEND_WITH_ASSETS_V3")
-  lazy val gcmEnabledKey         = Try(context.getResources.getString(R.string.zms_gcm_enabled)).getOrElse("PREF_KEY_GCM_ENABLED")
+  lazy val autoAnswerCallPrefKey    = Try(context.getResources.getString(R.string.zms_auto_answer_key)).getOrElse("PREF_KEY_AUTO_ANSWER_ENABLED")
+  lazy val sendWithAssetsV3Key      = Try(context.getResources.getString(R.string.zms_assets_v3)).getOrElse("PREF_KEY_SEND_WITH_ASSETS_V3")
+  lazy val gcmEnabledKey            = Try(context.getResources.getString(R.string.zms_gcm_enabled)).getOrElse("PREF_KEY_GCM_ENABLED")
+  lazy val webSocketPingIntervalKey = Try(context.getResources.getString(R.string.zms_websocket_ping_interval)).getOrElse("PREF_KEY_WEBSOCKET_PING_INTERVAL")
 
   lazy val uiPreferences = uiPreferencesFrom(context)
 
   def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //false by default for production
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey, true) //true by default for production
+  def webSocketPingInterval = FiniteDuration(uiPreferences.getLong(webSocketPingIntervalKey, DEFAULT_PING_INTERVAL_BACKGROUND.toMillis), TimeUnit.MILLISECONDS)
 
   lazy val preferences = preferencesFrom(context)
 

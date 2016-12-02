@@ -25,9 +25,9 @@ import com.waz.ZLog._
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils._
-import com.waz.znet.WebSocketClient
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 /**
   * Receiver called on boot or when app is updated.
@@ -44,8 +44,6 @@ class WebSocketBroadcastReceiver extends BroadcastReceiver {
   * Service keeping the process running as long as web socket should be connected.
   */
 class WebSocketService extends FutureService {
-
-  import com.waz.service.push.WebSocketClientService._
 
   private def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
@@ -64,8 +62,8 @@ class WebSocketService extends FutureService {
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock async {
 
     // schedule service restart every couple minutes to send ping on web socket (needed to keep connection alive)
-    def scheduleRestarts() = {
-      alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + PING_INTERVAL_BACKGROUND.toMillis, PING_INTERVAL_BACKGROUND.toMillis, restartIntent)
+    def scheduleRestarts(pingInterval: FiniteDuration) = {
+      alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + pingInterval.toMillis, pingInterval.toMillis, restartIntent)
     }
 
     val currentZms = Option(ZMessaging.currentAccounts).fold2(Future successful None, _.getCurrentZms)
@@ -83,8 +81,9 @@ class WebSocketService extends FutureService {
             alarmService.cancel(restartIntent)
             Future successful None
           case true =>
-            verbose(s"current zms: $zms, scheduling restarts")
-            scheduleRestarts()
+            val interval = zms.prefs.webSocketPingInterval
+            verbose(s"current zms: $zms, scheduling restarts with interval: $interval")
+            scheduleRestarts(interval)
             zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
         }
     }
