@@ -307,6 +307,12 @@ object ActorMessage {
   case class UpdateProfileName(name: String) extends ActorMessage
 
   /**
+    * Change the unique user name
+    * @param userName
+    */
+  case class UpdateProfileUserName(userName : String) extends ActorMessage
+
+  /**
    * Change the accent color of the user logged into the remote device
    * @param color an [[AccentColor]] to change the accent color to
    */

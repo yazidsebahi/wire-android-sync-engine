@@ -463,6 +463,17 @@ class DeviceActor(val deviceName: String,
         Successful
       }
 
+    case UpdateProfileUserName(userName) =>
+      val p = Promise[ActorMessage]()
+      waitUntil(api.getSelf)(_.getUser != null).map { self =>
+        self.setUsername(userName, new CredentialsUpdateListener {
+          override def onUpdateFailed(code: Int, message: String, label: String): Unit = p.success(Failed(s"unable to update user name: $code, $message, $label"))
+
+          override def onUpdated(): Unit = p.success(Successful)
+        })
+      }
+      p.future
+
     case UpdateProfileColor(color) =>
       whenSelfLoaded { self =>
         self.setAccent(color)
