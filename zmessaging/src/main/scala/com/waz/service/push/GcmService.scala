@@ -36,7 +36,7 @@ import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
 trait IGcmService {
-  def gcmAvailable: Boolean
+  def gcmActive: Signal[Boolean]
 }
 
 class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVal: KeyValueStorage, convsContent: ConversationsContentUpdater,
@@ -50,7 +50,6 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   val notificationsToProcess = Signal(Set[Uid]())
 
-  override def gcmAvailable = gcmGlobalService.gcmAvailable
 
   val lastReceivedConvEventTime = keyVal.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
   val lastFetchedConvEventTime = keyVal.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
@@ -76,6 +75,14 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     GcmState(lastFetched <= lastReceived, localFetchTime <= lastRegistered)
   }
 
+  override val gcmActive = gcmState.zip(registrationRetryCount.signal).map {
+    case (st, retries) =>
+      //If we missed a gcm notification (say because the GCM server connection was down), then the state will be !active
+      //but we don't want to turn on the websocket just yet - we would then rely on web-socket and not get any updates to GCM, meaning
+      //it would be permanently disabled.
+      (st.active || retries < retryFailLimit) && gcmGlobalService.gcmAvailable
+  }
+
   eventsClient.onNotificationsPageLoaded.map(_.notifications.flatMap(_.events).collect { case ce: ConversationEvent => ce })
     .filter(_.nonEmpty).on(dispatcher)(updateFetchedTimes)
 
@@ -95,6 +102,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     }
   }
 
+  //unregister gcm for developer preference
   gcmGlobalService.gcmEnabled {
     case true => ensureGcmRegistered()
     case _ => gcmGlobalService.unregister()
@@ -107,7 +115,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     retries <- registrationRetryCount.signal
   } yield {
     verbose(s"should re-register, available: ${gcmGlobalService.gcmAvailable}, loggedIn: $loggedIn, state: $state, lastTry: $time, retries: $retries")
-    gcmGlobalService.gcmAvailable && loggedIn && !state.active && RegistrationRetryBackoff.delay(retries).elapsedSince(time)
+    gcmGlobalService.gcmAvailable && loggedIn && !state.active && RegistrationRetryBackoff.delay(math.max(0, retries - retryFailLimit)).elapsedSince(time)
   }
 
 

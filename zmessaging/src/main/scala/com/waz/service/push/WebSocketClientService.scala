@@ -42,10 +42,10 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   private var prevClient = Option.empty[WebSocketClient]
 
   // true if websocket should be active,
-  val wsActive = lifecycle.lifecycleState.map {
-    case Stopped => false
-    case Idle => !gcmService.gcmAvailable
-    case Active | UiActive => true
+  val wsActive = lifecycle.lifecycleState.flatMap {
+    case Stopped => Signal const false
+    case Idle => gcmService.gcmActive.map(!_)
+    case Active | UiActive => Signal const true
   }.flatMap {
     case true => Signal.const(true)
     case false =>
