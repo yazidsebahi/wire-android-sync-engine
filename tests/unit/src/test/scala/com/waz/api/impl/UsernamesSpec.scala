@@ -17,76 +17,88 @@
  */
 package com.waz.api.impl
 
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import com.waz.RobolectricUtils
+import com.waz.api.{UsernameValidation, UsernamesRequestCallback}
+import com.waz.model.UserId
+import com.waz.testutils.{MockUiModule, MockZMessaging}
+import org.scalatest.{OptionValues, _}
 
 import scala.util.Random
 
-class UsernamesSpec extends FeatureSpec with Matchers  with RobolectricTests {
-  val email = "test@test.com"
-  val password = "password"
-  val wireMockPort = 9000 + Random.nextInt(3000)
+class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils {
 
-  val usernames = new Usernames(null)
+  lazy val selfId = UserId()
+  lazy val zmessaging = new MockZMessaging(selfUserId = selfId)
+  implicit lazy val ui = new MockUiModule(zmessaging)
+  var usernames: Usernames = null
 
-    Random.setSeed(0)
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
 
-    scenario ("Username u should be invalid") {
-      usernames.isUsernameValid("u").isValid should be(false)
-    }
+    ui.onCreate(testContext)
+    ui.onResume()
 
-    scenario ("Username pokemon_master354 should be valid") {
-      usernames.isUsernameValid("pokemon_master354").isValid should be(true)
-    }
+    usernames = new Usernames()(ui)
+  }
 
-    scenario ("Username CatZ_MasteR should be invalid") {
-      usernames.isUsernameValid("CatZ_MasteR").isValid should be(false)
-    }
+  Random.setSeed(0)
 
-    scenario ("Username shiny+ufo should be invalid") {
-      usernames.isUsernameValid("shiny+ufo").isValid should be(false)
-    }
+  scenario ("Username u should be invalid") {
+    usernames.isUsernameValid("u").isValid should be(false)
+  }
 
-    scenario ("Username super_long_username_because_whatever should be invalid") {
-      usernames.isUsernameValid("super_long_username_because_whatever").isValid should be(false)
-    }
+  scenario ("Username pokemon_master354 should be valid") {
+    usernames.isUsernameValid("pokemon_master354").isValid should be(true)
+  }
 
-    scenario ("Username \uD83D\uDE3C孟利 should be invalid") {
-      usernames.isUsernameValid("\uD83D\uDE3C孟利").isValid should be(false)
-    }
+  scenario ("Username CatZ_MasteR should be invalid") {
+    usernames.isUsernameValid("CatZ_MasteR").isValid should be(false)
+  }
 
-    scenario ("Username generation with latin characters only") {
-      val genName = usernames.generateUsernameFromName("Wire", null)
-      genName should be("wire")
-    }
+  scenario ("Username shiny+ufo should be invalid") {
+    usernames.isUsernameValid("shiny+ufo").isValid should be(false)
+  }
 
-    scenario ("Username generation with latin characters and space") {
-      val genName = usernames.generateUsernameFromName("Wire Wireson", null)
-      genName should be("wirewireson")
-    }
+  scenario ("Username super_long_username_because_whatever should be invalid") {
+    usernames.isUsernameValid("super_long_username_because_whatever").isValid should be(false)
+  }
 
-    scenario ("Username generation with latin characters from extended alphabet") {
-      val genName = usernames.generateUsernameFromName("Æéÿüíøšłźçñ", null)
-      genName should be("aeyuioslzcn")
-    }
+  scenario ("Username \uD83D\uDE3C孟利 should be invalid") {
+    usernames.isUsernameValid("\uD83D\uDE3C孟利").isValid should be(false)
+  }
 
-    scenario ("Username generation with emojis only") {
-      val genName = usernames.generateUsernameFromName("\uD83D\uDE3C", null)
-      genName should be("")
-    }
+  scenario ("Username generation with latin characters only") {
+    val genName = usernames.generateUsernameFromName("Wire", null)
+    genName should be("wire")
+  }
 
-    scenario ("Username generation with cyrillic characters") {
-      val genName = usernames.generateUsernameFromName("Даша", null)
-      genName should be("")
-    }
+  scenario ("Username generation with latin characters and space") {
+    val genName = usernames.generateUsernameFromName("Wire Wireson", null)
+    genName should be("wirewireson")
+  }
 
-    scenario ("Username generation with arabic characters") {
-      val genName = usernames.generateUsernameFromName("داريا", null)
-      genName should be("")
-    }
+  scenario ("Username generation with latin characters from extended alphabet") {
+    val genName = usernames.generateUsernameFromName("Æéÿüíøšłźçñ", null)
+    genName should be("aeyuioslzcn")
+  }
 
-    scenario ("Username generation with chinese characters") {
-      val genName = usernames.generateUsernameFromName("孟利", null)
-      genName should be("")
-    }
+  scenario ("Username generation with emojis only") {
+    val genName = usernames.generateUsernameFromName("\uD83D\uDE3C", null)
+    genName should be("")
+  }
 
+  scenario ("Username generation with cyrillic characters") {
+    val genName = usernames.generateUsernameFromName("Даша", null)
+    genName should be("")
+  }
+
+  scenario ("Username generation with arabic characters") {
+    val genName = usernames.generateUsernameFromName("داريا", null)
+    genName should be("")
+  }
+
+  scenario ("Username generation with chinese characters") {
+    val genName = usernames.generateUsernameFromName("孟利", null)
+    genName should be("")
+  }
 }

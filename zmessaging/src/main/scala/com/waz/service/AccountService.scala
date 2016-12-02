@@ -147,7 +147,6 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   lazy val netClient          = global.factory.client(credentialsHandler)
   lazy val usersClient        = global.factory.usersClient(netClient)
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
-  lazy val usernamesClient    = global.factory.usernamesClient(netClient)
 
   @volatile private var _userModule = Option.empty[UserModule]
 

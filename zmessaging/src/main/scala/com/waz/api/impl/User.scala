@@ -144,7 +144,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def getUsername: String = data.handle.fold("")(_.string)
 
-  override def getCommonConnectionsCount = 0 //TODO: STUB
+  override def getCommonConnectionsCount = getCommonConnections.getTotalCount //TODO: STUB
 }
 
 object User {
