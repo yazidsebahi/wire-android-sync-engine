@@ -32,7 +32,7 @@ import com.waz.znet.{WebSocketClient, ZNetClient}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts, gcmService: IGcmService) {
+class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts, gcmService: IGcmService, prefs: PreferenceService) {
   import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -61,13 +61,10 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
         prevClient = Some(createWebSocketClient(clientId))
 
       if (state == Idle) {
-        // start android service to keep the app running while we need to be connected. It will
-        // perform a ping every ping-background-interval (from preferences), so no need to schedule another here.
+        // start android service to keep the app running while we need to be connected.
         com.waz.zms.WebSocketService(context)
       }
-      else if (state == Active || state == UiActive) prevClient.foreach { _.scheduleRecurringPing(PING_INTERVAL_FOREGROUND) }
-      else warn(s"Unexpected lifecycle state for active websocket: $state")
-
+      prevClient.foreach { _.scheduleRecurringPing(if (state == Active || state == UiActive) PING_INTERVAL_FOREGROUND else prefs.webSocketPingInterval) }
       prevClient
     case (false, _) =>
       debug(s"onInactive")
@@ -122,5 +119,6 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
 object WebSocketClientService {
   val PING_INTERVAL_FOREGROUND         = 30.seconds
   val DEFAULT_PING_INTERVAL_BACKGROUND = 15.minutes
+  val MIN_PING_INTERVAL                = 15.seconds
 
 }

@@ -89,6 +89,8 @@ class WebSocketClient(context: Context,
     info("closing")
     closed = true
     init.cancel()
+    pingSchedule.cancel()
+    pongFuture.cancel()
     closeCurrentSocket()
     connected ! false
   }
@@ -183,11 +185,15 @@ class WebSocketClient(context: Context,
 
   //Continually ping the BE at a given frequency to ensure the websocket remains connected.
   def scheduleRecurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
+    verbose(s"scheduling new recurring ping every $pingPeriod")
     //TODO Dean - can this eventually overflow the call stack?
     def recurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
       CancellableFuture.delay(pingPeriod).flatMap { _ =>
         if (closed) CancellableFuture.successful(()) //client is intentionally closed, do nothing to avoid re-establishing connection
-        else verifyConnection().flatMap(_ => recurringPing(pingPeriod))
+        else {
+          verbose("Performing scheduled ping")
+          verifyConnection().flatMap(_ => recurringPing(pingPeriod))
+        }
       }
     }
 
