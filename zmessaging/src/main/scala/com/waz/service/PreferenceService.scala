@@ -52,7 +52,8 @@ class PreferenceService(context: Context) {
   def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //false by default for production
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey, true) //true by default for production
   //TODO make this a long when fixed on UI
-  def webSocketPingInterval = FiniteDuration(Try(uiPreferences.getString(webSocketPingIntervalKey, "900000").toLong).toOption.filter(_ > MIN_PING_INTERVAL.toMillis).getOrElse(DEFAULT_PING_INTERVAL_BACKGROUND.toMillis), TimeUnit.MILLISECONDS)
+  def webSocketPingInterval = FiniteDuration(Try(uiPreferences.getString(webSocketPingIntervalKey, "900000").toLong).toOption
+    .collect{ case t => if (t < MIN_PING_INTERVAL.toMillis) MIN_PING_INTERVAL.toMillis else t }.getOrElse(DEFAULT_PING_INTERVAL_BACKGROUND.toMillis), TimeUnit.MILLISECONDS)
 
   lazy val preferences = preferencesFrom(context)
 

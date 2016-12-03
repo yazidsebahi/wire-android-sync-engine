@@ -41,16 +41,19 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   private var prevClient = Option.empty[WebSocketClient]
 
   // true if websocket should be active,
-  val wsActive = lifecycle.lifecycleState.flatMap {
-    case Stopped => Signal const false
-    case Idle => gcmService.gcmActive.map(!_)
-    case Active | UiActive => Signal const true
-  }.flatMap {
-    case true => Signal.const(true)
-    case false =>
-      // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
-      verbose(s"lifecycle no longer active, should stop the client")
-      Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+  val wsActive = network.networkMode.flatMap {
+    case NetworkMode.OFFLINE => Signal const false
+    case _ => lifecycle.lifecycleState.flatMap {
+      case Stopped => Signal const false
+      case Idle => gcmService.gcmActive.map(!_)
+      case Active | UiActive => Signal const true
+    }.flatMap {
+      case true => Signal.const(true)
+      case false =>
+        // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+        verbose(s"lifecycle no longer active, should stop the client")
+        Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+    }
   }
 
   val client = wsActive.zip(lifecycle.lifecycleState) map {
@@ -98,6 +101,14 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
       case None => Future.successful(())
       case Some(c) => c.verifyConnection().future
     }
+
+  network.networkMode {
+    case NetworkMode.OFFLINE => //no point in checking connection
+    case n =>
+    // ping web socket on network changes, this should help us discover potential network outage
+    verbose(s"network mode changed, will ping or reconnect, mode: $n")
+    verifyConnection()
+  }
 
   def awaitActive(): Future[Unit] = wsActive.collect { case false => () }.head
 

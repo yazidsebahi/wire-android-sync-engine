@@ -65,6 +65,7 @@ class WebSocketClient(context: Context,
   private var retryCount = 0
 
   private var pongPromise = Option.empty[Promise[Unit]]
+
   //Used to ensure just one ping request (waiting for pong) is active at a time
   private var pongFuture = CancellableFuture.cancelled[Unit]()
 
@@ -94,8 +95,6 @@ class WebSocketClient(context: Context,
     closeCurrentSocket()
     connected ! false
   }
-
-  def isClosed = closed
 
   private def closeCurrentSocket() = socket.foreach { s =>
     s.setEndCallback(null)
@@ -203,7 +202,7 @@ class WebSocketClient(context: Context,
   }
 
   //Ping, and attempt to reconnect if it fails according to the backoff
-  def verifyConnection(): CancellableFuture[Unit] = ping().recoverWith {
+  def verifyConnection(): CancellableFuture[Unit] = pingPong().recoverWith {
     case NonFatal(ex) =>
       warn("Ping to server failed, attempting to re-establish connection")
       retryLostConnection(ex).flatMap ( _ => verifyConnection() )
@@ -211,7 +210,7 @@ class WebSocketClient(context: Context,
 
   //Pings the BE. Will return a future of whether a pong was received within the pongTimeout. If the future
   //succeeds, we can assume the ping was successful.
-  def ping(): CancellableFuture[Unit] = init flatMap { ws =>
+  private def pingPong(): CancellableFuture[Unit] = init flatMap { ws =>
     pongPromise.fold {
       val p = Promise[Unit]()
       pongPromise = Some(p)
