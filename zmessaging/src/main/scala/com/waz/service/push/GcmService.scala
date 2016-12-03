@@ -215,7 +215,7 @@ object GcmService {
     * minutes before the system realises it needs to re-establish the connection. If we miss a message in this time, and the user
     * opens the app, we'll incorrectly diagnose this as a bad token and try to re-register it. So we'll give it a few chances.
     */
-  val retryFailLimit = 3
+  val retryFailLimit = 2
 
   import scala.concurrent.duration._
 
