@@ -18,6 +18,7 @@
 package com.waz.znet
 
 import java.net.InetSocketAddress
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import android.net.Uri
 import com.waz.RobolectricUtils
@@ -40,6 +41,7 @@ import scala.util.Try
 class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   import com.waz.threading.Threading.Implicits.Background
+  import com.waz.utils.events.EventContext.Implicits.global
 
   ShadowLog.stream = System.out
 
@@ -138,7 +140,7 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
   feature("Ping") {
 
-    def pingToBoolean = manager.ping().map(_ => true).recover{case _ => false}
+    def pingToBoolean = manager.pingPong().map(_ => true).recover{case _ => false}
 
     scenario("Simple ping pong should succeed") {
       manager = createClient()
@@ -198,6 +200,35 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
       Thread.sleep(500)
 
       connectionCount should be <= 5
+    }
+
+    scenario("Ping pong callbacks") {
+      manager = createClient(pongTimeout = 100.millis)
+      awaitUi(socket.isDefined)(10.seconds)
+
+      val pingLatch = new CountDownLatch(4)
+      val pongLatch = new CountDownLatch(3)
+
+      manager.onPing { _ =>
+        pingLatch.countDown()
+      }
+
+      manager.onPong { _ =>
+        pongLatch.countDown()
+      }
+
+      val seqPings = (1 to 4).foldLeft(Future.successful(())) { (f, count) =>
+        f.flatMap { _ =>
+          if (count == 4) {
+            server.returnPing = false
+          }
+          manager.pingPong().future
+        }
+      }
+
+      pingLatch.await(3.seconds.toMillis, TimeUnit.SECONDS)
+      pongLatch.await(3.seconds.toMillis, TimeUnit.SECONDS)
+
     }
   }
 

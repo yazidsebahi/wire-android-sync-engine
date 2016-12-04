@@ -57,6 +57,8 @@ class WebSocketClient(context: Context,
   val connected = Signal(false)
   val onError   = EventStream[Exception]()
   val onMessage = EventStream[ResponseContent]()
+  val onPing    = EventStream[Unit]()
+  val onPong    = EventStream[Unit]()
 
   private var init  : CancellableFuture[WebSocket] = connect()
   private var socket: Option[WebSocket]            = None
@@ -159,8 +161,11 @@ class WebSocketClient(context: Context,
     webSocket.setPongCallback(new PongCallback {
       override def onPongReceived(s: String): Unit = {
         info(s"pong")
-        pongPromise.foreach(_.trySuccess(()))
+        //delete current promise before completing it - otherwise chained pings won't work
+        val p = pongPromise
         pongPromise = None
+        p.foreach(_.trySuccess(()))
+        onPong ! (())
       }
     })
     webSocket.setEndCallback(new CompletedCallback {
@@ -185,7 +190,7 @@ class WebSocketClient(context: Context,
   //Continually ping the BE at a given frequency to ensure the websocket remains connected.
   def scheduleRecurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
     verbose(s"scheduling new recurring ping every $pingPeriod")
-    //TODO Dean - can this eventually overflow the call stack?
+
     def recurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
       CancellableFuture.delay(pingPeriod).flatMap { _ =>
         if (closed) CancellableFuture.successful(()) //client is intentionally closed, do nothing to avoid re-establishing connection
@@ -210,13 +215,14 @@ class WebSocketClient(context: Context,
 
   //Pings the BE. Will return a future of whether a pong was received within the pongTimeout. If the future
   //succeeds, we can assume the ping was successful.
-  private def pingPong(): CancellableFuture[Unit] = init flatMap { ws =>
+  def pingPong(): CancellableFuture[Unit] = init flatMap { ws =>
     pongPromise.fold {
       val p = Promise[Unit]()
       pongPromise = Some(p)
-      verbose(s"ping")
-      ws.ping("hello")
-      returning(new CancellableFuture(p).withTimeout(pongTimeout)) (pongFuture = _)
+      info(s"ping")
+      ws.ping(s"ping")
+      onPing ! (())
+      returning (new CancellableFuture(p).withTimeout(pongTimeout))(pongFuture = _)
     } { p =>
       pongFuture
     }.recoverWith { case _ =>

@@ -24,7 +24,6 @@ import android.content.{Context, SharedPreferences}
 import android.os.Looper
 import com.waz.content.Preference
 import com.waz.content.Preference.PrefCodec
-import com.waz.service.push.WebSocketClientService
 import com.waz.service.push.WebSocketClientService.{DEFAULT_PING_INTERVAL_BACKGROUND, MIN_PING_INTERVAL}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.SourceSignal
