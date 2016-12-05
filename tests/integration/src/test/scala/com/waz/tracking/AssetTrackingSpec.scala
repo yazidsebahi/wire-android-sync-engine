@@ -50,7 +50,7 @@ class AssetTrackingSpec extends FeatureSpec with BeforeAndAfter with Matchers wi
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
     override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
       new ApiZMessaging(clientId, user) {
-        override lazy val trackingEvents: TrackingEventsService = new TrackingEventsService(handlerFactory, assetsStorage, messagesStorage, assetDownloader) {
+        override lazy val trackingEvents: TrackingEventsService = new TrackingEventsService(handlerFactory, assetsStorage, messagesStorage, assetDownloader, pushTracking) {
           override def track(event: => TrackingEvent): Future[Unit] = {
             events = events :+ event
             Future.successful(())

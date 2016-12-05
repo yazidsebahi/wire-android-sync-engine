@@ -17,7 +17,6 @@
  */
 package com.waz.service.push
 
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.KeyValueStorage
@@ -33,7 +32,6 @@ import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
-import scala.util.control.NoStackTrace
 
 trait IGcmService {
   def gcmActive: Signal[Boolean]
