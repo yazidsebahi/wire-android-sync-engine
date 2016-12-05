@@ -26,6 +26,7 @@ import com.waz.provision.ActorMessage.{Login, Successful, _}
 import com.waz.service
 import com.waz.service._
 import com.waz.service.call.AvsMetrics
+import com.waz.service.push.PushTrackingService.NotificationsEvent
 import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -107,7 +108,9 @@ class MockEventsHandler extends TrackingEventsHandler {
 
   val avsMetrics = Promise[AvsMetrics]()
 
-  override def onTrackingEvent(event: TrackingEvent): Unit = ???
+  override def onNotificationsEvent(event: NotificationsEvent): Unit = ()
+
+  override def onTrackingEvent(event: TrackingEvent): Unit = ()
 
   override def onAvsMetricsEvent(avsMetrics: AvsMetrics): Unit = {
     println(s"onAvsMetricsEvent: $avsMetrics")
