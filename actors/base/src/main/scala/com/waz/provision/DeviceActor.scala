@@ -232,6 +232,9 @@ class DeviceActor(val deviceName: String,
     case GetUser =>
       waitUntil(api.getSelf)(_.getUser != null) map { self => Successful(self.getUser.getId) }
 
+    case GetUserName =>
+      waitUntil(api.getSelf)(_.getUser != null) map { self => Successful(self.getUser.getUsername)}
+
     case GetConv(name) =>
       waitUntil(convs)(_ => convExistsByName(name)) map { _ =>
         Successful(findConvByName(name).data.remoteId.str)
