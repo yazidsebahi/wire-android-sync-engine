@@ -15,24 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.model
 
-import android.content.Context
+import java.util.UUID
 
-trait Usernames {
-  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
-  def isUsernameValid(username: String) : UsernameValidation
-  def generateUsernameFromName(name: String, context: Context): String
-
-  def validateUsernames(usernames: Array[String])
-  def getValidatedUsernames: ValidatedUsernames
+case class Handle(string: String) extends AnyVal{
+  override def toString : String = string
 }
 
-trait UsernamesRequestCallback{
-  def onUsernameRequestResult(usernameValidation: Array[UsernameValidation]) : Unit = {}
-  def onRequestFailed(errorCode: Integer)
-}
-
-case class UsernameValidation(username: String, reason: UsernameValidationError) {
-  def isValid(): Boolean = reason == UsernameValidationError.NONE
+object Handle extends (String => Handle){
+  def apply(): Handle = Handle("")
+  def random: Handle = Handle(UUID.randomUUID().toString)
 }

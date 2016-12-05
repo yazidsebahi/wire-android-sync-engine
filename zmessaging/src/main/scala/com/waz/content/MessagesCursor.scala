@@ -57,14 +57,17 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
 
   override def size = cursor.getCount
 
-  val onUpdate = EventStream[MessageId]()
+  val onUpdate = EventStream[(MessageAndLikes, MessageAndLikes)]()
 
   private val subs = Seq (
-    loader.onUpdate { m =>
-      if (messages.get(m) != null) loader(Seq(m)).foreach(_.foreach{ mAndL =>
-        messages.put(m, mAndL)
-        onUpdate ! m
-      })
+    loader.onUpdate { id =>
+      Option(messages.get(id)) foreach { prev =>
+
+        loader.getMessageAndLikes(id).foreach(_ foreach { mAndL =>
+          messages.put(id, mAndL)
+          onUpdate ! (prev, mAndL)
+        })
+      }
     }
   )
 

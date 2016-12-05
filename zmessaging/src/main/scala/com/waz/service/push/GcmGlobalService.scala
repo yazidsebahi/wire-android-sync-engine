@@ -35,7 +35,7 @@ import com.waz.utils.events.EventContext
 
 import scala.util.control.{NoStackTrace, NonFatal}
 
-class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: MetaDataService, backendConfig: BackendConfig) {
+class GcmGlobalService(context: Context, val prefs: PreferenceService, metadata: MetaDataService, backendConfig: BackendConfig) {
 
   implicit val dispatcher = new SerialDispatchQueue(name = "GcmGlobalDispatchQueue")
 
@@ -52,7 +52,9 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
       ConnectionResult.DEVELOPER_ERROR
   }
 
-  lazy val gcmAvailable = gcmCheckResult == ConnectionResult.SUCCESS
+  val gcmEnabled = prefs.uiPreferenceBooleanSignal(prefs.gcmEnabledKey).signal
+
+  def gcmAvailable = prefs.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
 
   def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
     if (reg.version == appVersion) reg
@@ -107,7 +109,7 @@ class GcmGlobalService(context: Context, prefs: PreferenceService, metadata: Met
     } else reg
   }
 
-  def unregister() = editPreferences(GcmRegistration().save(_)).future map { _ => withGcm(deleteInstanceId()) } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
+  def unregister() = editPreferences(GcmRegistration().save(_)).future map { _ => deleteInstanceId() } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
 
   private def withGcm[A](body: => A): A = if (gcmAvailable) body else throw new GcmGlobalService.GcmNotAvailableException
 

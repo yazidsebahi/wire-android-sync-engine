@@ -23,14 +23,17 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
+import com.waz.service.LifecycleState._
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.znet.{WebSocketClient, ZNetClient}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
-class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts, gcmService: IGcmService) {
+class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts, gcmService: IGcmService, prefs: PreferenceService) {
+  import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
@@ -38,28 +41,35 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   private var prevClient = Option.empty[WebSocketClient]
 
   // true if websocket should be active,
-  val wsActive = lifecycle.lifecycleState.map {
-    case LifecycleState.Stopped => false
-    case LifecycleState.Idle => !gcmService.gcmAvailable
-    case LifecycleState.Active | LifecycleState.UiActive => true
-  }.flatMap {
-    case true => Signal.const(true)
-    case false =>
-      // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
-      verbose(s"lifecycle no longer active, should stop the client")
-      Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+  val wsActive = network.networkMode.flatMap {
+    case NetworkMode.OFFLINE => Signal const false
+    case _ => lifecycle.lifecycleState.flatMap {
+      case Stopped => Signal const false
+      case Idle => gcmService.gcmActive.map(!_)
+      case Active | UiActive => Signal const true
+    }.flatMap {
+      case true => Signal.const(true)
+      case false =>
+        // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+        verbose(s"lifecycle no longer active, should stop the client")
+        Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+    }
   }
 
-  val client = wsActive map {
-    case true =>
+  val client = wsActive.zip(lifecycle.lifecycleState) map {
+    case (true, state) =>
       debug(s"Active, client: $clientId")
-      // start android service to keep the app running while we need to be connected
-      com.waz.zms.WebSocketService(context)
 
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
+
+      if (state == Idle) {
+        // start android service to keep the app running while we need to be connected.
+        com.waz.zms.WebSocketService(context)
+      }
+      prevClient.foreach { _.scheduleRecurringPing(if (state == Active || state == UiActive) PING_INTERVAL_FOREGROUND else prefs.webSocketPingInterval) }
       prevClient
-    case false =>
+    case (false, _) =>
       debug(s"onInactive")
       prevClient foreach (_.close())
       prevClient = None
@@ -89,8 +99,16 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
   def verifyConnection() =
     client.head flatMap {
       case None => Future.successful(())
-      case Some(c) => c.retryIfDisconnected() map { _.foreach(_.ping("ping")) }
+      case Some(c) => c.verifyConnection().future
     }
+
+  network.networkMode {
+    case NetworkMode.OFFLINE => //no point in checking connection
+    case n =>
+    // ping web socket on network changes, this should help us discover potential network outage
+    verbose(s"network mode changed, will ping or reconnect, mode: $n")
+    verifyConnection()
+  }
 
   def awaitActive(): Future[Unit] = wsActive.collect { case false => () }.head
 
@@ -103,14 +121,15 @@ class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClien
     case _ => 1
   })
 
-  network.networkMode { n =>
-    // ping web socket on network changes, this should help us discover potential network outage
-    verbose(s"network mode changed, will ping or reconnect, mode: $n")
-    verifyConnection()
-  }
-
   private def webSocketUri(clientId: ClientId) =
     Uri.parse(backend.pushUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
   private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, webSocketUri(clientId))
+}
+
+object WebSocketClientService {
+  val PING_INTERVAL_FOREGROUND         = 30.seconds
+  val DEFAULT_PING_INTERVAL_BACKGROUND = 15.minutes
+  val MIN_PING_INTERVAL                = 15.seconds
+
 }

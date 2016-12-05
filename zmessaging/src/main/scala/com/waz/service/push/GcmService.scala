@@ -36,7 +36,7 @@ import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
 trait IGcmService {
-  def gcmAvailable: Boolean
+  def gcmActive: Signal[Boolean]
 }
 
 class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVal: KeyValueStorage, convsContent: ConversationsContentUpdater,
@@ -50,7 +50,6 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   val notificationsToProcess = Signal(Set[Uid]())
 
-  override val gcmAvailable = gcmGlobalService.gcmAvailable
 
   val lastReceivedConvEventTime = keyVal.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
   val lastFetchedConvEventTime = keyVal.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
@@ -72,8 +71,16 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     localFetchTime <- lastFetchedLocalTime.signal
     lastRegistered <- lastRegistrationTime.signal
   } yield {
-    verbose(s"gcmState, fetched: $lastFetched, received: $lastReceived, fetchTime: $localFetchTime, register: $lastReceived")
+    verbose(s"gcmState, lastFetched: $lastFetched, lastReceived: $lastReceived, localFetchTime: $localFetchTime, lastRegistered: $lastRegistered")
     GcmState(lastFetched <= lastReceived, localFetchTime <= lastRegistered)
+  }
+
+  override val gcmActive = gcmState.zip(registrationRetryCount.signal).map {
+    case (st, retries) =>
+      //If we missed a gcm notification (say because the GCM server connection was down), then the state will be !active
+      //but we don't want to turn on the websocket just yet - we would then rely on web-socket and not get any updates to GCM, meaning
+      //it would be permanently disabled.
+      (st.active || retries < retryFailLimit) && gcmGlobalService.gcmAvailable
   }
 
   eventsClient.onNotificationsPageLoaded.map(_.notifications.flatMap(_.events).collect { case ce: ConversationEvent => ce })
@@ -95,6 +102,12 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     }
   }
 
+  //unregister gcm for developer preference
+  gcmGlobalService.gcmEnabled {
+    case true => ensureGcmRegistered()
+    case _ => gcmGlobalService.unregister()
+  }
+
   val shouldReRegister = for {
     state <- gcmState
     loggedIn <- lifecycle.loggedIn
@@ -102,7 +115,7 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
     retries <- registrationRetryCount.signal
   } yield {
     verbose(s"should re-register, available: ${gcmGlobalService.gcmAvailable}, loggedIn: $loggedIn, state: $state, lastTry: $time, retries: $retries")
-    gcmGlobalService.gcmAvailable && loggedIn && !state.active && RegistrationRetryBackoff.delay(retries).elapsedSince(time)
+    gcmGlobalService.gcmAvailable && loggedIn && !state.active && RegistrationRetryBackoff.delay(math.max(0, retries - retryFailLimit)).elapsedSince(time)
   }
 
 
@@ -126,11 +139,14 @@ class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVa
 
   def gcmSenderId = gcmGlobalService.gcmSenderId
 
-  def ensureGcmRegistered(): Future[Any] =
+  def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.gcmEnabled) {
     gcmGlobalService.getGcmRegistration.future map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.resetGcm()
     }
+  } else {
+    Future.successful(())
+  }
 
   ensureGcmRegistered()
 
@@ -199,7 +215,7 @@ object GcmService {
     * minutes before the system realises it needs to re-establish the connection. If we miss a message in this time, and the user
     * opens the app, we'll incorrectly diagnose this as a bad token and try to re-register it. So we'll give it a few chances.
     */
-  val retryFailLimit = 3
+  val retryFailLimit = 2
 
   import scala.concurrent.duration._
 

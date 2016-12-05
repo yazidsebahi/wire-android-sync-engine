@@ -15,11 +15,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.db.migrate
+package com.waz.sync.handler
 
-import android.database.sqlite.SQLiteDatabase
+import com.waz.model.Handle
+import com.waz.service.HandlesService
+import com.waz.sync.SyncResult
+import com.waz.sync.client.HandlesClient
+import com.waz.threading.Threading
 
-object UserDataMigration {
-  lazy val v61 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN deleted INTEGER DEFAULT 0")
-  lazy val v78 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN handle TEXT DEFAULT ''")
+import scala.concurrent.Future
+
+class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesService) {
+  import Threading.Implicits.Background
+
+  def validateHandles(handles: Seq[Handle]): Future[SyncResult] = {
+    handlesClient.getHandlesValidation(handles).future map {
+      case Right(data) =>
+        handlesService.updateValidatedHandles(data.getOrElse(Seq()))
+        SyncResult.Success
+      case Left(error) => SyncResult.Failure(Some(error), shouldRetry = true)
+    }
+  }
 }

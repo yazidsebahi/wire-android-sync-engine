@@ -7,14 +7,14 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "86"
+val MajorVersion = "87"
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
   val buildNumber = sys.env.get("BUILD_NUMBER")
   val master = jobName.exists(_.endsWith("-master"))
   val buildNumberString = buildNumber.fold("-SNAPSHOT")("." + _)
-  if (master) MajorVersion + ".2" + buildNumberString // hotfix release
+  if (master) MajorVersion + ".0" + buildNumberString // hotfix release
   else MajorVersion + buildNumberString
 }
 
@@ -118,7 +118,7 @@ lazy val zmessaging = project
       Deps.spotifyPlayer,
       "org.threeten" % "threetenbp" % "1.3" % Provided,
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
-      "net.hockeyapp.android" % "HockeySDK" % "3.6.2",
+      Deps.hockeyApp % Provided,
       Deps.localytics,
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
@@ -265,7 +265,7 @@ lazy val actors_android = project.in(file("actors") / "android_app")
       "com.android.support" % "support-v4" % supportLibVersion,
       "com.android.support" % "recyclerview-v7" % supportLibVersion,
       "com.jakewharton.threetenabp" % "threetenabp" % "1.0.3",
-      "net.hockeyapp.android" % "HockeySDK" % "3.5.0",
+      Deps.hockeyApp,
       Deps.avs,
       Deps.avsAudio,
       Deps.cryptobox,

@@ -69,7 +69,17 @@ object UserSearchClient {
   val CommonConnectionsPath = "/search/common"
   val TopUserPath = "/search/top"
 
-  case class UserSearchEntry(id: UserId, name: String, email: Option[EmailAddress], phone: Option[PhoneNumber], colorId: Int, connected: Option[Boolean], blocked: Boolean, level: Relation, commonCount: Option[Int] = None, common: Seq[UserId] = Nil)
+  case class UserSearchEntry(id: UserId,
+                             name: String,
+                             email: Option[EmailAddress],
+                             phone: Option[PhoneNumber],
+                             colorId: Int,
+                             connected: Option[Boolean],
+                             blocked: Boolean,
+                             level: Relation,
+                             commonCount: Option[Int] = None,
+                             common: Seq[UserId] = Nil,
+                             handle: Option[Handle])
 
   object UserSearchEntry {
     import JsonDecoder._
@@ -77,7 +87,7 @@ object UserSearchClient {
     implicit lazy val Decoder: JsonDecoder[UserSearchEntry] = new JsonDecoder[UserSearchEntry] {
       override def apply(implicit js: JSONObject): UserSearchEntry =
         UserSearchEntry('id, 'name, 'email, 'phone, decodeOptInt('accent_id).getOrElse(0), 'connected, 'blocked,
-          decodeOptInt('level).fold(Relation.Other)(Relation.withId), 'total_mutual_friends, decodeStringSeq('mutual_friends).map(UserId(_)))
+          decodeOptInt('level).fold(Relation.Other)(Relation.withId), 'total_mutual_friends, decodeStringSeq('mutual_friends).map(UserId(_)), decodeOptHandle('handle))
     }
   }
 

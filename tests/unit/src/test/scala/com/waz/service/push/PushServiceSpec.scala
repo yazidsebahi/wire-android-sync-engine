@@ -58,7 +58,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
     }
 
-    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
+    override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm, prefs) {
       override val connected = wsConnected
     }
 

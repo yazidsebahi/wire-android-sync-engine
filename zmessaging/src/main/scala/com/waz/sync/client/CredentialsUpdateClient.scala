@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
-import com.waz.model.{PhoneNumber, EmailAddress}
+import com.waz.model.{EmailAddress, Handle, PhoneNumber}
 import com.waz.threading.Threading
 import com.waz.utils.JsonEncoder
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -39,10 +39,14 @@ class CredentialsUpdateClient(netClient: ZNetClient) {
       o.put("new_password", newPassword)
       currentPassword foreach (o.put("old_password", _))
     }))
+
+  def updateHandle(handle: Handle): ErrorOrResponse[Unit] =
+    netClient.updateWithErrorHandling("updateHandle", Request.Put(CredentialsUpdateClient.handlePath, JsonEncoder { _.put("handle", handle.toString) }))
 }
 
 object CredentialsUpdateClient {
   val passwordPath = "/self/password"
   val emailPath = "/self/email"
   val phonePath = "/self/phone"
+  val handlePath = "/self/handle"
 }

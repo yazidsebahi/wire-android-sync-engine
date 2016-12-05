@@ -201,7 +201,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
     def createUserIds(): Seq[UserId] = Seq(connect(createUserNamed("connected")), createUserNamed("unconnected"), connect(createUserNamed("connected, too")))
     def createSearchEntries(ids: Seq[UserId]): Seq[UserSearchEntry] = ids zip Seq(Some(false), Some(true), None) map { case (id, connected) =>
-        UserSearchEntry(id, id.str, None, None, -1, connected, blocked = false, Relation.Other)
+        UserSearchEntry(id, id.str, None, None, -1, connected, blocked = false, Relation.Other, handle = None)
     }
 
     scenario("Update users from search, but keep the connection status.") {

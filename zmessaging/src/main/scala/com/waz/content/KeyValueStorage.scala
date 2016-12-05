@@ -54,8 +54,13 @@ object KeyValueStorage {
 
   class KeyValuePref[A](storage: KeyValueStorage, key: String, val default: A)(implicit val trans: PrefCodec[A], implicit val dispatcher: ExecutionContext) extends Preference[A] {
     def apply(): Future[A] = storage.decodePref(key, trans.decode).map(_.getOrElse(default))
-    def :=(value: A): Future[Unit] = {
+
+    def :=(value: A): Future[Unit] = update(value)
+
+    def update(value: A): Future[Unit] = {
       storage.setPref(key, trans.encode(value)) .map { _ => signal ! value }
     }
+
+    def mutate(f: A => A): Future[Unit] = apply().flatMap(cur => update(f(cur)))
   }
 }

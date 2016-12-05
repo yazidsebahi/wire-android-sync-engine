@@ -22,6 +22,7 @@ import com.waz.model.otr.ClientId
 import com.waz.service._
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.utils.events.EventContext.Implicits.global
+import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.concurrent.ScalaFutures
@@ -46,7 +47,7 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
   lazy val meta = new MetaDataService(context)
 
   lazy val gcm = mock[IGcmService]
-  lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, BackendConfig.StagingBackend, ClientId(), timeouts, gcm)
+  lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, BackendConfig.StagingBackend, ClientId(), timeouts, gcm, prefs)
 
 
   feature("active client") {
@@ -63,6 +64,7 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     }
 
     scenario("client is not destroyed if lifecycle is paused for short time") {
+      (gcm.gcmActive _ ).expects().anyNumberOfTimes().returning(Signal const true)
       lifecycle.lifecycleState ! LifecycleState.Idle
 
       awaitUi(50.millis)
@@ -74,9 +76,8 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     }
 
     scenario("client is destroyed after delay when lifecycle is paused") {
+      (gcm.gcmActive _ ).expects().anyNumberOfTimes().returning(Signal const true)
       lifecycle.lifecycleState ! LifecycleState.Idle
-
-      (gcm.gcmAvailable _).expects.returning(true).anyNumberOfTimes()
 
       awaitUi(50.millis)
       client shouldBe 'defined
