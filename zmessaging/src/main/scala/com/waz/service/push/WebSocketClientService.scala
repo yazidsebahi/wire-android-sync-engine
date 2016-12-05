@@ -32,7 +32,15 @@ import com.waz.znet.{WebSocketClient, ZNetClient}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WebSocketClientService(context: Context, lifecycle: ZmsLifecycle, netClient: ZNetClient, val network: NetworkModeService, backend: BackendConfig, clientId: ClientId, timeouts: Timeouts, gcmService: IGcmService, prefs: PreferenceService) {
+class WebSocketClientService(context: Context,
+                             lifecycle: ZmsLifecycle,
+                             netClient: ZNetClient,
+                             val network: NetworkModeService,
+                             backend: BackendConfig,
+                             clientId: ClientId,
+                             timeouts: Timeouts,
+                             gcmService: IGcmService,
+                             prefs: PreferenceService) {
   import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")

@@ -28,6 +28,8 @@ import com.waz.model._
 import com.waz.service.call.AvsMetrics
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.WireAssetRequest
+import com.waz.service.push.PushTrackingService
+import com.waz.service.push.PushTrackingService.NotificationsEvent
 import com.waz.threading.Threading
 import com.waz.utils._
 import org.threeten.bp.{Duration, Instant}
@@ -35,7 +37,7 @@ import org.threeten.bp.{Duration, Instant}
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, assets: AssetsStorage, messages: MessagesStorage, downloader: AssetDownloader) {
+class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, assets: AssetsStorage, messages: MessagesStorage, downloader: AssetDownloader, pushTrackingService: PushTrackingService) {
   import Threading.Implicits.Background
   import TrackingEventsService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -77,6 +79,13 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
     case _ =>
   }
 
+  pushTrackingService.shouldSendEvent.onChanged.filter(v => v) { _ =>
+    sendNotificationEvent(pushTrackingService.buildEvent()).onSuccess{ case _ =>
+      pushTrackingService.reset()
+    }
+  }
+
+
   def sendAvsMetrics(avsMetrics: => AvsMetrics): Future[Unit] = Future {
     val metrics = avsMetrics
     verbose(s"avsMetrcs $metrics")
@@ -88,6 +97,12 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
     verbose(s"track $ev")
     handler.onTrackingEvent(ev)
   }(Threading.Ui).recoverWithLog()
+
+  def sendNotificationEvent(event: Future[NotificationsEvent]) = event.map { ev =>
+    verbose(s"track notifications: $ev")
+    handler.onNotificationsEvent(ev)
+  }(Threading.Ui).recoverWithLog()
+
 }
 object TrackingEventsService {
   private implicit val logTag: LogTag = logTagFor[TrackingEventsService]
@@ -95,4 +110,6 @@ object TrackingEventsService {
   def isOtto(conv: ConversationData, users: UsersStorage): Future[Boolean] =
     if (conv.convType == OneToOne) users.get(UserId(conv.id.str)).map(_.exists(_.isWireBot))(Threading.Background)
     else successful(false)
+
+
 }

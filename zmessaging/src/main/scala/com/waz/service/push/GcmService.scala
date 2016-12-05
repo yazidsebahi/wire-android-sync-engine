@@ -39,8 +39,14 @@ trait IGcmService {
   def gcmActive: Signal[Boolean]
 }
 
-class GcmService(accountId: AccountId, gcmGlobalService: GcmGlobalService, keyVal: KeyValueStorage, convsContent: ConversationsContentUpdater,
-                 eventsClient: EventsClient, eventPipeline: EventPipeline, sync: SyncServiceHandle, lifecycle: ZmsLifecycle) extends IGcmService {
+class GcmService(accountId:         AccountId,
+                 val gcmGlobalService:  GcmGlobalService,
+                 keyVal:            KeyValueStorage,
+                 convsContent:      ConversationsContentUpdater,
+                 eventsClient:      EventsClient,
+                 eventPipeline:     EventPipeline,
+                 sync:              SyncServiceHandle,
+                 lifecycle:         ZmsLifecycle) extends IGcmService {
 
   import GcmService._
 

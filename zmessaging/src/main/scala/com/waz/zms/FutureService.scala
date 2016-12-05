@@ -19,7 +19,7 @@ package com.waz.zms
 
 import android.app.Service
 import android.content.Intent
-import android.os.{IBinder, PowerManager}
+import android.os.IBinder
 import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog._
 import com.waz.service.ZMessaging

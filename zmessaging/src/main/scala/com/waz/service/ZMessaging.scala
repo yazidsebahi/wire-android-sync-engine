@@ -36,6 +36,7 @@ import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
+import com.waz.service.push.PushTrackingService.NotificationsEvent
 import com.waz.service.push._
 import com.waz.service.tracking.{TrackingEventsService, TrackingService}
 import com.waz.sync.client._
@@ -208,6 +209,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val invitations                           = wire[InvitationService]
   lazy val richmedia                             = wire[RichMediaService]
   lazy val tracking                              = wire[TrackingService]
+  lazy val pushTracking                          = wire[PushTrackingService]
   lazy val trackingEvents                        = wire[TrackingEventsService]
   lazy val giphy                                 = wire[GiphyService]
   lazy val youtubeMedia                          = wire[YouTubeMediaService]
@@ -361,5 +363,6 @@ object ZMessaging { self =>
   object EmptyTrackingEventsHandler extends TrackingEventsHandler {
     override def onTrackingEvent(event: TrackingEvent): Unit = ()
     override def onAvsMetricsEvent(avsMetrics: AvsMetrics): Unit = ()
+    override def onNotificationsEvent(ev: NotificationsEvent): Unit = ()
   }
 }
