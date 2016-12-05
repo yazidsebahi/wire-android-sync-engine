@@ -134,7 +134,6 @@ class GcmService(accountId:         AccountId,
     case true =>
       (for {
         retries <- registrationRetryCount()
-        _ = HockeyApp.saveException(new Exception(s"GCM re-registration triggered, will try re-register if number of retries: $retries is greater than: $retryFailLimit") with NoStackTrace, "Reregister GCM triggered")
         if retries > retryFailLimit
         _ <- sync.resetGcm()
       } yield retries).flatMap(retries => registrationRetryCount := retries + 1)
