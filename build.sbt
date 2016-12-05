@@ -14,7 +14,7 @@ version in ThisBuild := {
   val buildNumber = sys.env.get("BUILD_NUMBER")
   val master = jobName.exists(_.endsWith("-master"))
   val buildNumberString = buildNumber.fold("-SNAPSHOT")("." + _)
-  if (master) MajorVersion + ".0" + buildNumberString // hotfix release
+  if (master) MajorVersion + ".1" + buildNumberString // hotfix release
   else MajorVersion + buildNumberString
 }
 
