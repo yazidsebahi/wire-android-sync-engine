@@ -146,6 +146,8 @@ object ActorMessage {
    */
   case object GetUser extends ActorMessage
 
+  case object GetUserName extends ActorMessage
+
   /**
    * Fetch [[com.waz.model.RConvId]] of a conversation. Will return a [[Successful(convId: String)]] to the sender
    * @param name the name of the conversation to find the id for
