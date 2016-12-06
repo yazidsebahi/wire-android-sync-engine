@@ -56,7 +56,7 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
   }
 
   override def isUsernameValid(username: String): UsernameValidation = {
-    val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
+    val usernameRegex = s"""^([a-z]|[0-9]|_){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
 
     if (username.length  > Usernames.MAX_LENGTH) {
       return UsernameValidation(username = username, UsernameValidationError.TOO_LONG)
