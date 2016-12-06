@@ -18,12 +18,13 @@
 package com.waz.znet
 
 import java.net.InetSocketAddress
+import java.util.concurrent
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import android.net.Uri
 import com.waz.RobolectricUtils
 import com.waz.testutils.Slow
-import com.waz.utils.ExponentialBackoff
+import com.waz.utils.{ExponentialBackoff, returning}
 import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.Response.Status
 import org.java_websocket.WebSocket
@@ -58,7 +59,9 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
   val port = 9982
   def createServer() = new TestServer(port)
-  def createClient(pongTimeout: FiniteDuration = 15.seconds, backoff: ExponentialBackoff = WebSocketClient.defaultBackoff) = new WebSocketClient(context, new AsyncClient(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)
+  def createClient(pongTimeout: FiniteDuration = 15.seconds, backoff: ExponentialBackoff = WebSocketClient.defaultBackoff) = {
+    returning(new WebSocketClient(context, new AsyncClient(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
+  }
 
   before {
     server = createServer()
@@ -77,7 +80,10 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
     scenario("Connect to server and close") {
       manager = createClient()
       awaitUi(socket.isDefined)
+      assertClientConnected(true)
       manager.close()
+      Thread.sleep(100)
+      assertClientConnected(false)
       awaitUi(socket.isEmpty)
     }
 
@@ -87,10 +93,12 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
       manager = createClient()
       Thread.sleep(1000)
       socket.isDefined shouldEqual false
+      assertClientConnected(false)
 
       server = createServer()
       server.start()
       awaitUi(socket.isDefined)(10.seconds)
+      assertClientConnected(true)
 
       manager.close()
       awaitUi(socket.isEmpty)(10.seconds)
@@ -110,15 +118,18 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
     scenario("Retry when server stops working", Slow) {
       manager = createClient()
       awaitUi(socket.isDefined)(10.seconds)
+      assertClientConnected(true)
 
       server.stop()
       socket = None
 
       Thread.sleep(1000)
+      assertClientConnected(false)
 
       server = createServer()
       server.start()
       awaitUi(socket.isDefined)(10.seconds)
+      assertClientConnected(true)
 
       manager.close()
       awaitUi(socket.isEmpty)(10.seconds)
@@ -136,6 +147,8 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
       (1 to 10) foreach test
     }
+
+
   }
 
   feature("Ping") {
@@ -230,6 +243,15 @@ class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter
       pongLatch.await(3.seconds.toMillis, TimeUnit.SECONDS)
 
     }
+  }
+
+  def assertClientConnected(connected: Boolean) = {
+    val latch = new concurrent.CountDownLatch(1)
+    manager.connected { st =>
+      println(s"Client connected?: $st")
+      if (st == connected) latch.countDown()
+    }
+    latch.await(3000, TimeUnit.MILLISECONDS) shouldEqual true
   }
 
 
