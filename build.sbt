@@ -118,7 +118,7 @@ lazy val zmessaging = project
       Deps.spotifyPlayer,
       "org.threeten" % "threetenbp" % "1.3" % Provided,
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
-      "net.hockeyapp.android" % "HockeySDK" % "3.6.2",
+      Deps.hockeyApp % Provided,
       Deps.localytics,
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
@@ -265,7 +265,7 @@ lazy val actors_android = project.in(file("actors") / "android_app")
       "com.android.support" % "support-v4" % supportLibVersion,
       "com.android.support" % "recyclerview-v7" % supportLibVersion,
       "com.jakewharton.threetenabp" % "threetenabp" % "1.0.3",
-      "net.hockeyapp.android" % "HockeySDK" % "3.5.0",
+      Deps.hockeyApp,
       Deps.avs,
       Deps.avsAudio,
       Deps.cryptobox,
