@@ -61,6 +61,11 @@ class WebSocketClient(context: Context,
   val onPong    = EventStream[Unit]()
 
   private var init  : CancellableFuture[WebSocket] = connect()
+  init.onFailure {
+    case e: CancelException => CancellableFuture.cancelled()
+    case NonFatal(ex) => retryLostConnection(ex)
+  }
+
   private var socket: Option[WebSocket]            = None
 
   private var closed     = false
@@ -89,18 +94,15 @@ class WebSocketClient(context: Context,
   }
 
   def close() = dispatcher {
-    info("closing")
+    info(s"closing socket: $socket")
     closed = true
     init.cancel()
     pingSchedule.cancel()
     pongFuture.cancel()
     closeCurrentSocket()
-    connected ! false
   }
 
   private def closeCurrentSocket() = socket.foreach { s =>
-    s.setEndCallback(null)
-    s.setClosedCallback(null)
     s.close()
     socket = None
   }
@@ -125,15 +127,11 @@ class WebSocketClient(context: Context,
       }
     case Left(status) =>
       CancellableFuture.failed(new Exception(s"Authentication returned error status: $status"))
-
-  } recoverWith {
-    case e: CancelException => CancellableFuture.cancelled()
-    case NonFatal(ex) => retryLostConnection(ex)
   }
 
   private def onConnected(webSocket: WebSocket): WebSocket = {
-    debug(s"onConnected $webSocket")
     require(webSocket != null, "connected web socket should be not null")
+    debug(s"onConnected $webSocket")
 
     closeCurrentSocket()
     socket = Option(webSocket)
@@ -155,6 +153,7 @@ class WebSocketClient(context: Context,
       override def onCompleted(ex: Exception): Unit = dispatcher {
         if (ex != null) error("WebSocket connection has been closed with error", ex)
         else info("WebSocket connection has been closed")
+        connected ! false
         retryLostConnection(ex)
       }
     })
@@ -177,15 +176,21 @@ class WebSocketClient(context: Context,
     webSocket
   }
 
-  private def retryLostConnection(ex: Throwable) = if (!closed) {
-    warn(s"Retrying lost connection after failure", ex)
+  private def retryLostConnection(ex: Throwable): CancellableFuture[Any] = if (closed || !init.isCompleted) { //if closed, this should be cancelled, else let it finish
+    verbose(s"Will not retry connection: ${if (closed) "Connection closed" else "Connection still underway"}")
+    init
+  }
+  else {
+    error(s"Retrying lost connection after failure", ex)
     closeCurrentSocket()
-    connected ! false
     val delay = backoff.delay(retryCount)
     retryCount += 1
     debug(s"Retrying in $delay, retryCount = $retryCount")
     returning(CancellableFuture.delay(delay) flatMap { _ => connect() })(init = _)
-  } else init //if closed, this should be cancelled
+  }.recover  {
+    case e: CancelException => CancellableFuture.cancelled()
+    case NonFatal(ex) => retryLostConnection(ex)
+  }
 
   //Continually ping the BE at a given frequency to ensure the websocket remains connected.
   def scheduleRecurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {

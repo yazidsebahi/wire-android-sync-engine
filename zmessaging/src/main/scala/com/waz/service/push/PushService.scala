@@ -95,6 +95,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
       connectedPushPromise.trySuccess(self)
     case false =>
       debug("onDisconnected")
+      syncHistory()
       connectedPushPromise.tryFailure(new Exception("onDisconnected"))
       connectedPushPromise = Promise()
   }
