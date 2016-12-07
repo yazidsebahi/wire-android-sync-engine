@@ -25,9 +25,18 @@ import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class NotificationData(id: NotId, msg: String, conv: ConvId, user: UserId, msgType: NotificationType, serverTime: Instant,
-                            localTime: Instant = Instant.now, userName: Option[String] = None, ephemeral: Boolean = false,
-                            mentions: Seq[UserId] = Seq.empty, referencedMessage: Option[MessageId] = None)
+case class NotificationData(id: NotId,
+                            msg: String,
+                            conv: ConvId,
+                            user: UserId,
+                            msgType: NotificationType,
+                            serverTime: Instant,
+                            localTime: Instant = Instant.now,
+                            userName: Option[String] = None,
+                            ephemeral: Boolean = false,
+                            mentions: Seq[UserId] = Seq.empty,
+                            referencedMessage: Option[MessageId] = None,
+                            hasBeenDisplayed: Boolean = false)
 
 object NotificationData {
 
@@ -36,7 +45,7 @@ object NotificationData {
 
     override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id), 'message, 'conv, 'user,
       GcmNotificationCodec.decode('msgType), 'serverTime, decodeISOInstant('timestamp), 'userName, 'ephemeral,
-      decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage))
+      decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage), 'hasBeenDisplayed)
   }
 
   implicit lazy val Encoder: JsonEncoder[NotificationData] = new JsonEncoder[NotificationData] {
@@ -49,6 +58,7 @@ object NotificationData {
       o.put("timestamp", JsonEncoder.encodeISOInstant(v.localTime))
       o.put("serverTime", v.serverTime.toEpochMilli)
       o.put("ephemeral", v.ephemeral)
+      o.put("hasBeenDisplayed", v.hasBeenDisplayed)
       v.userName foreach (o.put("userName", _))
       if (v.mentions.nonEmpty) o.put("mentions", JsonEncoder.arrString(v.mentions.map(_.str)))
       v.referencedMessage foreach (o.put("referencedMessage", _))

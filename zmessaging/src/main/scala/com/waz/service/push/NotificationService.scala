@@ -79,6 +79,8 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     Future.successful(())
   }
 
+  def markAsDisplayed(ns: Seq[NotId]) = storage.updateAll2(ns, n => n.copy(hasBeenDisplayed = true))
+
   lifecycle.lifecycleState { state =>
     uiActive = returning(state == LifecycleState.UiActive) { active =>
       if (active || uiActive) {
@@ -230,9 +232,10 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     Future.traverse(ns) { data =>
       usersStorage.get(data.user).flatMap { user =>
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
+
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(NotificationInfo(data.msgType, time(data.serverTime, data.localTime), data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false))
+            Future.successful(NotificationInfo(data.id, data.msgType, time(data.serverTime, data.localTime), data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false, hasBeenDisplayed = data.hasBeenDisplayed))
           case _ =>
             for {
               msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
@@ -241,7 +244,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.msgType, time(g.serverTime, g.localTime), g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
+              NotificationInfo(g.id, g.msgType, time(g.serverTime, g.localTime), g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t, hasBeenDisplayed = data.hasBeenDisplayed)
             }
         }
       }
@@ -251,7 +254,8 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
 object NotificationService {
 
-  case class NotificationInfo(tpe: NotificationType,
+  case class NotificationInfo(id: NotId,
+                              tpe: NotificationType,
                               time: Instant,
                               message: String,
                               convId: ConvId,
@@ -260,7 +264,8 @@ object NotificationService {
                               isGroupConv: Boolean = false,
                               isUserMentioned: Boolean = false,
                               isEphemeral: Boolean = false,
-                              likedContent: Option[LikedContent] = None
+                              likedContent: Option[LikedContent] = None,
+                              hasBeenDisplayed: Boolean = false
   )
 
   def mapMessageType(mTpe: Message.Type, protos: Seq[GenericMessage], members: Set[UserId], sender: UserId) = {
