@@ -224,12 +224,15 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     } yield res
 
   private def createNotifications(ns: Seq[NotificationData]): Future[Seq[NotificationInfo]] = {
+
+    def time(serverTime: Instant, localTime: Instant) = if (serverTime == Instant.EPOCH) localTime else serverTime
+
     Future.traverse(ns) { data =>
       usersStorage.get(data.user).flatMap { user =>
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(NotificationInfo(data.msgType, data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false))
+            Future.successful(NotificationInfo(data.msgType, time(data.serverTime, data.localTime), data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false))
           case _ =>
             for {
               msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
@@ -238,7 +241,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.msgType, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
+              NotificationInfo(g.msgType, time(g.serverTime, g.localTime), g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t)
             }
         }
       }
@@ -249,6 +252,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 object NotificationService {
 
   case class NotificationInfo(tpe: NotificationType,
+                              time: Instant,
                               message: String,
                               convId: ConvId,
                               convName: Option[String] = None,
