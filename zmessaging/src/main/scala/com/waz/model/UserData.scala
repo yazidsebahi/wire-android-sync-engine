@@ -73,7 +73,10 @@ case class UserData(
     searchKey = SearchKey(user.name.getOrElse(name)),
     picture = user.mediumPicture.map(_.id),
     deleted = user.deleted,
-    handle = user.handle.orElse(handle)
+    handle = user.handle match {
+      case Some(h) if !h.toString.isEmpty => Some(h)
+      case _ => handle
+    }
   )
 
   def updated(user: UserSearchEntry): UserData = copy(
@@ -82,7 +85,11 @@ case class UserData(
     phone = user.phone.orElse(phone),
     searchKey = SearchKey(user.name),
     relation = user.level,
-    handle = user.handle.orElse(handle))
+    handle = user.handle match {
+      case Some(h) if !h.toString.isEmpty => Some(h)
+      case _ => handle
+    }
+  )
 
   def updated(name: Option[String] = None, email: Option[EmailAddress] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, picture: Option[AssetId] = None, trackingId: Option[String] = None, handle: Option[Handle] = None): UserData =
      copy(
@@ -92,7 +99,10 @@ case class UserData(
        accent = accent.fold(this.accent)(_.id),
        picture = picture.orElse(this.picture),
        searchKey = SearchKey(name.getOrElse(this.name)),
-       handle = handle.orElse(this.handle)
+       handle = handle match {
+         case Some(h) if !h.toString.isEmpty => Some(h)
+         case _ => this.handle
+       }
      )
 
   def updateConnectionStatus(status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): UserData = {
