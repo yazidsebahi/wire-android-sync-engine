@@ -20,7 +20,7 @@ package com.waz.sync.client
 import com.waz.api.{UsernameValidation, UsernameValidationError}
 import com.waz.model.{Handle, UserData}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.JsonDecoder
+import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet._
 import com.waz.znet.ZNetClient._
@@ -29,18 +29,23 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 object HandlesClient {
-  val checkMultipleAvailabilityPath = "/users"
+  val checkMultipleAvailabilityPath = "/users/handles"
   val checkSingleAvailabilityPath = "/users/handles/"
   val handlesQuery = "handles"
+  val MAX_HANDLES_TO_POST = 50
 }
 
 class HandlesClient(netClient: ZNetClient)  {
   def getHandlesValidation(handles: Seq[Handle]): ErrorOrResponse[Option[Seq[UsernameValidation]]] = {
-    val uri = Request.query(HandlesClient.checkMultipleAvailabilityPath, (HandlesClient.handlesQuery, handles.map(_.toString).reduce(_ + "," + _)))
-    netClient.withErrorHandling("getHandlesValidation", Request.Get(uri)) {
-      case Response(SuccessHttpStatus(), UsersHandleResponseContent(Seq(unavailableHandles)), headers) =>
-        Some(handles map (u => UsernameValidation(u.toString, if (unavailableHandles.contains(u)) UsernameValidationError.ALREADY_TAKEN else UsernameValidationError.NONE)))
-      case Response(HttpStatus(Status.NotFound, _), _, _) => Some(handles.map(u => UsernameValidation(u.toString, UsernameValidationError.NONE)))
+    val data = JsonEncoder { o =>
+      o.put("handles", JsonEncoder.arrString(handles.take(HandlesClient.MAX_HANDLES_TO_POST).map(_.toString)))
+      o.put("return", 10)
+    }
+    netClient.withErrorHandling("getHandlesValidation", Request.Post(HandlesClient.checkMultipleAvailabilityPath, data)) {
+      case Response(SuccessHttpStatus(), UsersHandleResponseContent(availableHandles), headers) =>
+        Some(handles
+          .filter(u => availableHandles.contains(u.toString))
+          .map(u => UsernameValidation(u.toString, UsernameValidationError.NONE)))
     }(Threading.Background)
   }
 }
@@ -49,7 +54,7 @@ object UsersHandleResponseContent {
   def unapply(response: ResponseContent): Option[Seq[String]] = {
     try {
       response match {
-        case JsonArrayResponse(js) => Try(JsonDecoder.array[UserData](js).map(user => user.handle.getOrElse(Handle("")).toString)).toOption
+        case JsonArrayResponse(js) => Try(JsonDecoder.array(js, _.getString(_))).toOption
         case _ => None
       }
     } catch {
