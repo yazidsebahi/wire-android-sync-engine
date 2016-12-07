@@ -62,7 +62,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
     uiVisibleTime <- lastUiVisibleTime.signal
   } yield {
     verbose(s"Retrieved from notifications storage: ${fCol(data)}, lastUiVisibleTime: $uiVisibleTime")
-    if (data.forall(_.localTime.isBefore(uiVisibleTime))) Seq.empty[NotificationData] // no new messages, don't show anything
+    if (data.forall(_.time.isBefore(uiVisibleTime))) Seq.empty[NotificationData] // no new messages, don't show anything
     else data
   }).flatMap {
     case (LifecycleState.UiActive, _) => Signal.const(Seq.empty[NotificationInfo])
@@ -96,11 +96,10 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
       case ev @ UserConnectionEvent(_, _, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime =>
         NotificationData(NotId(CONNECT_REQUEST, userId), msg.getOrElse(""), ConvId(userId.str), userId, CONNECT_REQUEST, time.instant, userName = name)
       case ev @ UserConnectionEvent(_, _, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
-        // this event doesn't generate corresponding message, we can not use event time for notification, as it would not be properly dismissed
-        NotificationData(NotId(CONNECT_ACCEPTED, userId), "", ConvId(userId.str), userId, CONNECT_ACCEPTED, Instant.EPOCH, userName = name)
+        NotificationData(NotId(CONNECT_ACCEPTED, userId), "", ConvId(userId.str), userId, CONNECT_ACCEPTED, userName = name)
       case ContactJoinEvent(_, userId, _) =>
         verbose("ContactJoinEvent")
-        NotificationData(NotId(CONTACT_JOIN, userId), "", ConvId(userId.str), userId, CONTACT_JOIN, Instant.EPOCH)
+        NotificationData(NotId(CONTACT_JOIN, userId), "", ConvId(userId.str), userId, CONTACT_JOIN)
     })
   }, _ => ! uiActive)
 
@@ -129,12 +128,16 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
   lastUiVisibleTime.signal.throttle(timeouts.notifications.clearThrottling)(removeNotificationsAfterUiActive)
 
   // remove notifications read by other devices
-  lastReadMap.throttle(timeouts.notifications.clearThrottling) { lastRead =>
-    verbose(s"remove read notifications: ${fCol(lastRead)})")
-    removeNotifications(n => lastRead.get(n.conv).exists(!_.isBefore(n.serverTime)))
+  lastReadMap.throttle(timeouts.notifications.clearThrottling) { lrMap =>
+    removeNotifications { n =>
+      val lastRead = lrMap.get(n.conv)
+      val filter = lastRead.exists(!_.isBefore(n.time))
+      verbose(s"Removing not(${n.id}) if exists $lastRead that !isBefore ${n.time}?: $filter")
+      filter
+    }
   }
 
-  messages.onAdded { addForIncoming(_) }
+  messages.onAdded { msgs => add(msgs.flatMap(notification)) }
 
   messages.onUpdated { updates =>
     // add notification when message sending fails
@@ -142,29 +145,18 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
       case (prev, msg) if prev.state != msg.state && msg.state == Message.Status.FAILED => msg
     }
     if (!uiActive && failedMsgs.nonEmpty) {
-      storage.insert(failedMsgs map { msg => NotificationData(NotId(msg.id), msg.contentString, msg.convId, msg.userId, MESSAGE_SENDING_FAILED, Instant.EPOCH) })
+      storage.insert(failedMsgs map { msg => NotificationData(NotId(msg.id), msg.contentString, msg.convId, msg.userId, MESSAGE_SENDING_FAILED) })
     }
 
     // add notifications for uploaded assets
     val updatedAssets = updates collect {
       case (prev, msg) if msg.state == Message.Status.SENT && msg.msgType == Message.Type.ANY_ASSET => msg
     }
-    if (updatedAssets.nonEmpty) addForIncoming(updatedAssets)
+    if (updatedAssets.nonEmpty) add(updatedAssets.flatMap(notification))
   }
 
   messages.onDeleted { ids =>
     storage.remove(ids.map(NotId(_)))
-  }
-
-  private def addForIncoming(msgs: Seq[MessageData]) = {
-    verbose(s"addForIncoming(${fCol(msgs)}")
-    lastReadMap.head map { lastRead =>
-      verbose(s"lastRead: ${fCol(lastRead)}")
-      msgs.filter(m => m.userId != selfUserId && lastRead.get(m.convId).forall(_.isBefore(m.time)) && m.localTime != Instant.EPOCH)
-    } flatMap { ms =>
-      verbose(s"filtered: ${fCol(ms)}")
-      storage.insert(ms flatMap notification)
-    }
   }
 
   reactionStorage.onChanged { reactions =>
@@ -181,7 +173,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
       storage.remove(toRemove.map(NotId(_))).flatMap { _ =>
         if (! uiActive)
-          add(toAdd.valuesIterator.map(r => NotificationData(NotId(r.id), "", convsByMsg.getOrElse(r.message, ConvId(r.user.str)), r.user, LIKE, Instant.EPOCH, referencedMessage = Some(r.message))).toVector)
+          add(toAdd.valuesIterator.map(r => NotificationData(NotId(r.id), "", convsByMsg.getOrElse(r.message, ConvId(r.user.str)), r.user, LIKE, referencedMessage = Some(r.message))).toVector)
         else
           Future.successful(Nil)
       }
@@ -200,34 +192,37 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
   }
 
   private def removeNotificationsAfterUiActive(uiLastVisible: Instant) = {
-    verbose(s"remove all notifications after ui is active: $uiLastVisible")
-    removeNotifications(n => uiLastVisible.isAfter(n.localTime)) //will effectively remove all
+    //will effectively remove all
+    removeNotifications { n =>
+      verbose(s"Removing n(${n.id}) if uiLastVisible: $uiLastVisible is after ${n.time}")
+      uiLastVisible.isAfter(n.time)
+    }
   }
 
   private def removeNotifications(filter: NotificationData => Boolean): Unit = {
     storage.notifications.head flatMap { data =>
-      verbose(s"notifications.head contains: ${fCol(data)}")
       val toRemove = data collect {
         case (id, n) if filter(n) => id
       }
-      verbose(s"Removing notifications: ${fCol(toRemove.toSeq)}")
       storage.remove(toRemove)
     }
   }
 
   private def add(notifications: Seq[NotificationData]) =
     for {
-      lastRead <- lastReadMap.head
+      lrMap <- lastReadMap.head
       res <- storage.insert(notifications filter { n =>
-        // filter notifications for unread messages in un-muted conversations
-        n.serverTime == Instant.EPOCH || lastRead.get(n.conv).forall(_.isBefore(n.serverTime))
+        //Filter notifications for those coming from other users, and that have come after the last-read time for their respective conversations.
+        //Note that for muted conversations, the last-read time is set to Instant.MAX, so they can never come after.
+        val lastRead = lrMap.get(n.conv)
+        val filter = n.user != selfUserId && lastRead.forall(_.isBefore(n.time))
+        verbose(s"Filtering for not(${n.id}) if forall lastRead: $lastRead it isBefore ${n.time}?: $filter")
+        filter
       })
-      _ = verbose(s"inserted: ${fCol(res)}")
+      _ = if (res.nonEmpty) verbose(s"inserted: ${res.size} notifications")
     } yield res
 
   private def createNotifications(ns: Seq[NotificationData]): Future[Seq[NotificationInfo]] = {
-
-    def time(serverTime: Instant, localTime: Instant) = if (serverTime == Instant.EPOCH) localTime else serverTime
 
     Future.traverse(ns) { data =>
       usersStorage.get(data.user).flatMap { user =>
@@ -235,7 +230,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(NotificationInfo(data.id, data.msgType, time(data.serverTime, data.localTime), data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false, hasBeenDisplayed = data.hasBeenDisplayed))
+            Future.successful(NotificationInfo(data.id, data.msgType, data.time, data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false, hasBeenDisplayed = data.hasBeenDisplayed))
           case _ =>
             for {
               msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
@@ -244,7 +239,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.id, g.msgType, time(g.serverTime, g.localTime), g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t, hasBeenDisplayed = data.hasBeenDisplayed)
+              NotificationInfo(g.id, g.msgType, g.time, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t, hasBeenDisplayed = data.hasBeenDisplayed)
             }
         }
       }
@@ -268,7 +263,7 @@ object NotificationService {
                               hasBeenDisplayed: Boolean = false
   )
 
-  def mapMessageType(mTpe: Message.Type, protos: Seq[GenericMessage], members: Set[UserId], sender: UserId) = {
+  def mapMessageType(mTpe: Message.Type, protos: Seq[GenericMessage], members: Set[UserId], sender: UserId): Option[NotificationType] = {
     import Message.Type._
     mTpe match {
       case TEXT | TEXT_EMOJI_ONLY | RICH_MEDIA => Some(NotificationType.TEXT)
@@ -290,7 +285,7 @@ object NotificationService {
 
   def notification(msg: MessageData): Option[NotificationData] = {
     mapMessageType(msg.msgType, msg.protos, msg.members, msg.userId).map {
-      tp => NotificationData(NotId(msg.id), if (msg.isEphemeral) "" else msg.contentString, msg.convId, msg.userId, tp, msg.time, msg.localTime, ephemeral = msg.isEphemeral, mentions = msg.mentions.keys.toSeq)
+      tp => NotificationData(NotId(msg.id), if (msg.isEphemeral) "" else msg.contentString, msg.convId, msg.userId, tp, if (msg.time == Instant.EPOCH) msg.localTime else msg.time, ephemeral = msg.isEphemeral, mentions = msg.mentions.keys.toSeq)
     }
   }
 }

@@ -30,8 +30,7 @@ case class NotificationData(id: NotId,
                             conv: ConvId,
                             user: UserId,
                             msgType: NotificationType,
-                            serverTime: Instant,
-                            localTime: Instant = Instant.now,
+                            time: Instant = Instant.now,
                             userName: Option[String] = None,
                             ephemeral: Boolean = false,
                             mentions: Seq[UserId] = Seq.empty,
@@ -44,7 +43,7 @@ object NotificationData {
     import JsonDecoder._
 
     override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id), 'message, 'conv, 'user,
-      GcmNotificationCodec.decode('msgType), 'serverTime, decodeISOInstant('timestamp), 'userName, 'ephemeral,
+      NotificationCodec.decode('msgType), 'time, 'userName, 'ephemeral,
       decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage), 'hasBeenDisplayed)
   }
 
@@ -54,9 +53,8 @@ object NotificationData {
       o.put("message", v.msg)
       o.put("conv", v.conv.str)
       o.put("user", v.user.str)
-      o.put("msgType", GcmNotificationCodec.encode(v.msgType))
-      o.put("timestamp", JsonEncoder.encodeISOInstant(v.localTime))
-      o.put("serverTime", v.serverTime.toEpochMilli)
+      o.put("msgType", NotificationCodec.encode(v.msgType))
+      o.put("time", v.time.toEpochMilli)
       o.put("ephemeral", v.ephemeral)
       o.put("hasBeenDisplayed", v.hasBeenDisplayed)
       v.userName foreach (o.put("userName", _))
@@ -75,9 +73,9 @@ object NotificationData {
     override def apply(implicit cursor: Cursor): NotificationData = JsonDecoder.decode(cursor.getString(1))
   }
 
-  implicit val NotificationOrdering: Ordering[NotificationData] = Ordering.by((data: NotificationData) => (data.localTime, data.id))
+  implicit val NotificationOrdering: Ordering[NotificationData] = Ordering.by((data: NotificationData) => (data.time, data.id))
 
-  implicit lazy val GcmNotificationCodec: EnumCodec[NotificationType, String] = EnumCodec.injective {
+  implicit lazy val NotificationCodec: EnumCodec[NotificationType, String] = EnumCodec.injective {
     case NotificationType.CONNECT_REQUEST => "ConnectRequest"
     case NotificationType.CONNECT_ACCEPTED => "ConnectAccepted"
     case NotificationType.CONTACT_JOIN => "ContactJoin"
