@@ -90,11 +90,10 @@ class VoiceChannelService(val context: Context, val content: VoiceChannelContent
   val callStateEventsStage = EventScheduler.Stage[CallStateEvent] {
     case (_, Seq(event)) => handleCallStateEvent(event)
     case (_, convEvents) =>
-      verbose(s"process batch: $convEvents, times: ${convEvents.map(_.localOrFetchTime)}")
+      verbose(s"process batch: $convEvents, times: ${convEvents.map(_.localTime)}")
       def merge(prev: CallStateEvent, ev: CallStateEvent): CallStateEvent =
         returning(ev.copy(participants = ev.participants.orElse(prev.participants), device = ev.device.orElse(prev.device))) { copied =>
           copied.localTime = ev.localTime
-          copied.notificationsFetchTime = ev.notificationsFetchTime
         }
 
       // select last event with latest version of participants and device info
@@ -206,7 +205,7 @@ class VoiceChannelService(val context: Context, val content: VoiceChannelContent
   private[call] def getSortedParticipantIds(participants: Array[UserId]): Array[UserId] = flows.getSortedGroupCallParticipantIds(participants.map(_.str)(breakOut)) map UserId
 
   def handleCallStateEvent(event: CallStateEvent, retryCount: Int = 0, resetSequence: Boolean = false) = users.withSelfUserFuture { selfUser =>
-    debug(s"handleCallStateEvent: $event, time: ${event.localOrFetchTime}")
+    debug(s"handleCallStateEvent: $event, time: ${event.localTime}")
 
     convs.processConvWithRemoteId(event.convId, retryAsync = true) { conv =>
       metrics = metrics.stateEvent(conv.id, event)

@@ -129,11 +129,8 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     pipeline {
       returning(notifications.flatMap(_.eventsForClient(clientId))) {
         _.foreach { ev =>
+          ev.withCurrentLocalTime()
           verbose(s"event: $ev")
-          returning(new Date) { d =>
-            ev.notificationsFetchTime = d
-            ev.localTime = d
-          }
         }
       }
     }.map {

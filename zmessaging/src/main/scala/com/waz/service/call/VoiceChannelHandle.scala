@@ -144,7 +144,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
         setDeviceState(newState)
       }
 
-      setState(computeCurrentState(data), event.maybeLocalTime, requestedLocally = event.localOrFetchTime == Event.UnknownDateTime)
+      setState(computeCurrentState(data), event.maybeLocalTime, requestedLocally = event.localTime == Event.UnknownDateTime)
 
     } else warn(s"ignoring invalid call state transition or duplicate/out-of-order call state events in state $data: $event")
   }
