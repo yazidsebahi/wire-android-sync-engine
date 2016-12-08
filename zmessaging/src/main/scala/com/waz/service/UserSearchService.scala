@@ -80,7 +80,7 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
   private val topPeoplePredicate: UserData => Boolean = u => ! u.deleted && u.connection == ConnectionStatus.Accepted
   private def recommendedPredicate(prefix: String, levels: Set[Relation]): UserData => Boolean = {
     val key = SearchKey(prefix)
-    u => ! u.deleted && ! u.isConnected && ((key.isAtTheStartOfAnyWordIn(u.searchKey) && levels(u.relation)) || u.email.exists(_.str == prefix))
+    u => ! u.deleted && ! u.isConnected && ((key.isAtTheStartOfAnyWordIn(u.searchKey) && levels(u.relation)) || u.email.exists(_.str == prefix) || u.handle.toString.contains(prefix))
   }
   private val withinThreeLevels = Set(Relation.First, Relation.Second, Relation.Third)
   private val atAnyLevel = Relation.values.toSet
