@@ -566,4 +566,16 @@ object GenericContent {
     override def set(msg: GenericMessage) = { action => msg.setClientAction(action.value) }
   }
 
+  type Calling = Messages.Calling
+
+  implicit object Calling extends GenericContent[Calling] {
+    override def set(msg: GenericMessage): (Calling) => GenericMessage = msg.setCalling
+
+    def apply(content: String): Calling = returning(new Calling) { c =>
+      c.content = content
+    }
+
+    def unapply(calling: Calling): Option[String] = Option(calling.content)
+  }
+
 }

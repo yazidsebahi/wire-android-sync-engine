@@ -120,6 +120,7 @@ lazy val zmessaging = project
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
       Deps.hockeyApp % Provided,
       Deps.localytics,
+      "net.java.dev.jna" % "jna" % "4.2.0",
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
   )

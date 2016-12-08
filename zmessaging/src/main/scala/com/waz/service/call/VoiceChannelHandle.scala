@@ -230,7 +230,8 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
       prepareCaptureDevices() flatMap { _ =>
         service.postCallState(id, data.deviceState, if (withVideo) Set(CallProperty.SendsVideo) else Set.empty).map {
           case CallJoined =>
-            service.acquireFlows(id, selfUserId, activeParticipantIds(data.participantsById) - selfUserId, data.sessionId); CallJoined
+            service.acquireFlows(id, selfUserId, activeParticipantIds(data.participantsById) - selfUserId, data.sessionId)
+            CallJoined
           case other => leave(CauseForCallStateEvent.DISCONNECTED); other
         }
       }

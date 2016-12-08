@@ -23,7 +23,7 @@ import com.waz.utils._
 
 object AVSystem {
   private object lazyInit {
-    val paths = sys.props.get("java.library.path").fold2(Array.empty, _.split(File.pathSeparatorChar).map(new File(_)))
+    val paths = sys.props.get("java.library.path").fold2(Seq.empty, _.split(File.pathSeparatorChar).map(new File(_)).toSeq) ++ Seq(new File("/repos/zmessaging-android/lib"))
     val baseName = System.mapLibraryName("avs")
     paths.flatMap(d => Option(d.listFiles).getOrElse(Array.empty)).find(f => f.isFile && (f.getName == baseName || f.getName == "libavs.jnilib")) match {
       case None =>
