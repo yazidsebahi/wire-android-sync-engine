@@ -79,7 +79,7 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
     case _ =>
   }
 
-  pushTrackingService.shouldSendEvent.onChanged.filter(v => v) { _ =>
+  pushTrackingService.shouldSendEvent.onChanged.filter(_ == true) { _ =>
     sendNotificationEvent(pushTrackingService.buildEvent()).onSuccess{ case _ =>
       pushTrackingService.reset()
     }
