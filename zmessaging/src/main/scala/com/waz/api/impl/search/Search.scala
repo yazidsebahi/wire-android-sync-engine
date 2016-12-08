@@ -19,7 +19,7 @@ package com.waz.api.impl.search
 
 import com.waz.api
 import com.waz.api.impl.{ConnectionsSearch, Contacts, OnlyContactsBySearchKeyFiltering}
-import com.waz.model.SearchQuery
+import com.waz.model.{Handle, SearchQuery}
 import com.waz.service.SearchKey
 import com.waz.ui.UiModule
 
@@ -27,8 +27,14 @@ class Search(implicit ui: UiModule) extends api.Search {
   override def getTopPeople(limit: Int, filter: Array[String]): api.UserSearchResult =
     new UserSearchResult(SearchQuery.TopPeople, limit, filter.toSet)
 
-  override def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): api.UserSearchResult =
-    new UserSearchResult(SearchQuery.Recommended(query), limit, filter.toSet)
+  override def getRecommendedPeople(query: String, limit: Int, filter: Array[String]): api.UserSearchResult = {
+    val strippedQuery =
+    query match {
+      case Handle.handlePattern(term) => term
+      case _ => query
+    }
+    new UserSearchResult(SearchQuery.Recommended(strippedQuery), limit, filter.toSet)
+  }
 
   override def getGroupConversations(query: String, limit: Int): api.ConversationSearchResult =
     new ConversationSearchResult(query.trim, limit)

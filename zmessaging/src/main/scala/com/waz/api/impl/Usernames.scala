@@ -71,7 +71,7 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
   }
 
   override def generateUsernameFromName(name: String, context: Context): String = {
-    var cleanName: String = replaceOtherCases(name.toLowerCase)
+    var cleanName: String = Handle.transliterated(name).toLowerCase
     cleanName = Normalizer.normalize(cleanName, Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
     cleanName = Normalizer.normalize(cleanName, Normalizer.Form.NFD).replaceAll("\\W+", "")
     if (cleanName.isEmpty) {
@@ -85,14 +85,6 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
   }
 
   override def getValidatedUsernames: ValidatedUsernames = new ValidatedHandles()
-
-  private def replaceOtherCases(input: String): String = {
-    var output: String = input
-    output = output.replace("ł", "l")
-    output = output.replace("æ", "a")
-    output = output.replace("ø", "o")
-    output
-  }
 
   private def generateFromDictionary(context: Context): String = {
     if (context == null) { return "" }
