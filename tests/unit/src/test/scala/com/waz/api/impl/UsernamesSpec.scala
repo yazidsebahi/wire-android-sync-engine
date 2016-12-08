@@ -19,7 +19,7 @@ package com.waz.api.impl
 
 import com.waz.RobolectricUtils
 import com.waz.api.{UsernameValidation, UsernamesRequestCallback}
-import com.waz.model.UserId
+import com.waz.model.{Handle, UserId}
 import com.waz.testutils.{MockUiModule, MockZMessaging}
 import org.scalatest.{OptionValues, _}
 
@@ -79,7 +79,7 @@ class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with B
 
   scenario ("Username generation with latin characters from extended alphabet") {
     val genName = usernames.generateUsernameFromName("Æéÿüíøšłźçñ", null)
-    genName should be("aeyuioslzcn")
+    genName should be("aeeyuioslzcn")
   }
 
   scenario ("Username generation with emojis only") {
@@ -89,16 +89,26 @@ class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with B
 
   scenario ("Username generation with cyrillic characters") {
     val genName = usernames.generateUsernameFromName("Даша", null)
-    genName should be("")
+    genName should be("dasa")
   }
 
   scenario ("Username generation with arabic characters") {
     val genName = usernames.generateUsernameFromName("داريا", null)
-    genName should be("")
+    genName should be("darya")
   }
 
   scenario ("Username generation with chinese characters") {
     val genName = usernames.generateUsernameFromName("孟利", null)
-    genName should be("")
+    genName should be("mengli")
+  }
+
+  scenario("Querying for usernames with @") {
+    val handle = Handle("abcd")
+    handle.containsQuery("@AbC") should be(true)
+  }
+
+  scenario("Querying for usernames without @") {
+    val handle = Handle("abcd")
+    handle.containsQuery("AbC") should be(true)
   }
 }

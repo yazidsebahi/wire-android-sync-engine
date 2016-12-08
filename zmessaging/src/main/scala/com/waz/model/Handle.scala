@@ -19,11 +19,21 @@ package com.waz.model
 
 import java.util.UUID
 
+import com.waz.utils.Locales
+
 case class Handle(string: String) extends AnyVal{
   override def toString : String = string
+  def containsQuery(query: String): Boolean = {
+    query match {
+      case Handle.handlePattern(h) => string.contains(Handle.transliterated(h).toLowerCase)
+      case _ => false
+    }
+  }
 }
 
 object Handle extends (String => Handle){
   def apply(): Handle = Handle("")
   def random: Handle = Handle(UUID.randomUUID().toString)
+  val handlePattern = """@?(.+)""".r
+  def transliterated(s: String): String = Locales.transliteration.transliterate(s).trim
 }
