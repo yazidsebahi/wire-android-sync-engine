@@ -70,7 +70,7 @@ case class UserData(
     accent = user.accentId.getOrElse(accent),
     trackingId = user.trackingId.orElse(trackingId),
     searchKey = SearchKey(user.name.getOrElse(name)),
-    picture = user.mediumPicture.map(_.id),
+    picture = user.mediumPicture.map(_.id).orElse(picture),
     deleted = user.deleted,
     handle = user.handle match {
       case Some(h) if !h.toString.isEmpty => Some(h)
