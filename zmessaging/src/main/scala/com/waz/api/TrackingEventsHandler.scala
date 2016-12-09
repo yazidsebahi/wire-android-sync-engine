@@ -17,6 +17,7 @@
  */
 package com.waz.api
 
+import com.waz.service.HandlesTrackingService.HandlesValidationTrackingEvent
 import com.waz.service.call.AvsMetrics
 import com.waz.service.push.PushTrackingService.NotificationsEvent
 import org.threeten.bp.Duration
@@ -25,6 +26,7 @@ trait TrackingEventsHandler {
   def onNotificationsEvent(ev: NotificationsEvent): Unit
   def onTrackingEvent(event: TrackingEvent): Unit
   def onAvsMetricsEvent(avsMetrics: AvsMetrics): Unit
+  def onHandleValidation(event: HandlesValidationTrackingEvent): Unit
 }
 
 trait TrackingEvent {

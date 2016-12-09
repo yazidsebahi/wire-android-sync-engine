@@ -95,16 +95,3 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
     (adjectives(adjectivesIndex) + names(namesIndex)).toLowerCase
   }
 }
-
-object UsersHandleResponseContent {
-  def unapply(response: ResponseContent): Option[Seq[String]] = {
-    try {
-      response match {
-        case JsonArrayResponse(js) => Try(JsonDecoder.array[UserData](js).map(user => user.handle.getOrElse(Handle("")).toString)).toOption
-        case _ => None
-      }
-    } catch {
-      case NonFatal(_) =>  None
-    }
-  }
-}

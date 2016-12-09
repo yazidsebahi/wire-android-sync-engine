@@ -18,10 +18,10 @@
 package com.waz.sync.client
 
 import com.waz.api.{UsernameValidation, UsernameValidationError}
-import com.waz.model.{Handle, UserData}
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.model.Handle
+import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}
-import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
+import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
 import com.waz.znet.ZNetClient._
 
