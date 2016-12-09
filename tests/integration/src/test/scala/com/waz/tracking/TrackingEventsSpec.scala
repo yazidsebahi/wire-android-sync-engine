@@ -24,6 +24,7 @@ import com.waz.model.VoiceChannelData.ChannelState
 import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{Login, Successful, _}
 import com.waz.service
+import com.waz.service.HandlesTrackingService.HandlesValidationTrackingEvent
 import com.waz.service._
 import com.waz.service.call.AvsMetrics
 import com.waz.service.push.PushTrackingService.NotificationsEvent
@@ -116,4 +117,6 @@ class MockEventsHandler extends TrackingEventsHandler {
     println(s"onAvsMetricsEvent: $avsMetrics")
     this.avsMetrics.success(avsMetrics)
   }
+
+  override def onHandleValidation(event: HandlesValidationTrackingEvent): Unit = ()
 }

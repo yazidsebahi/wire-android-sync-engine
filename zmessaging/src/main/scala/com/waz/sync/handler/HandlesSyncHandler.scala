@@ -17,20 +17,25 @@
  */
 package com.waz.sync.handler
 
+import com.waz.api.UsernameValidation
 import com.waz.model.Handle
 import com.waz.service.HandlesService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.HandlesClient
 import com.waz.threading.Threading
+import com.waz.utils.events.Signal
 
 import scala.concurrent.Future
 
 class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesService) {
   import Threading.Implicits.Background
 
+  val responseSignal = Signal(Seq.empty[UsernameValidation])
+
   def validateHandles(handles: Seq[Handle]): Future[SyncResult] = {
     handlesClient.getHandlesValidation(handles).future map {
       case Right(data) =>
+        responseSignal ! data.getOrElse(Seq())
         handlesService.updateValidatedHandles(data.getOrElse(Seq()))
         SyncResult.Success
       case Left(error) => SyncResult.Failure(Some(error), shouldRetry = true)
