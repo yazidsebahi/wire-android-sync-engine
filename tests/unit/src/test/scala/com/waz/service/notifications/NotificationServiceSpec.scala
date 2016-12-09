@@ -29,13 +29,14 @@ import com.waz.model.GenericContent.{Asset, MsgEdit, MsgRecall, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.Timeouts
+import com.waz.service.{LifecycleState, Timeouts, ZmsLifecycle}
 import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{EventContext, Signal, SourceSignal}
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
+import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.prop.PropertyChecks
 import org.threeten.bp.Instant
@@ -45,6 +46,8 @@ import scala.concurrent.duration._
 
 class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
+  ShadowLog.stream = System.out
+
   @volatile var currentNotifications = Nil: Seq[NotificationInfo]
 
   lazy val selfUserId = UserId()
@@ -52,7 +55,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
   lazy val groupConv = ConversationData(ConvId(), RConvId(), Some("group conv"), selfUserId, ConversationType.Group)
 
   lazy val zms = new MockZMessaging(selfUserId = selfUserId) { self =>
-    notifications.notifications { currentNotifications = _ } (EventContext.Global)
+    notifications.notifications { ns => println(s"updating ns: $ns"); currentNotifications = ns } (EventContext.Global)
 
     override def timeouts = new Timeouts {
       override val notifications = new Notifications() {
@@ -85,7 +88,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.CONNECT_REQUEST, "hello", _, Some("other user"), Some("other user"), false, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.CONNECT_REQUEST, _, "hello", _, Some("other user"), Some("other user"), false, _, _, _, _)) => true
         }
       }
     }
@@ -96,7 +99,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.CONTACT_JOIN, _, _, _, _, false, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.CONTACT_JOIN, _, _, _, _, _, false, _, _, _, _)) => true
         }
       }
     }
@@ -109,7 +112,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.TEXT, "test name", `convId`, _, _, false, true, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.TEXT, _, "test name", `convId`, _, _, false, true, _, _, _)) => true
         }
       }
     }
@@ -122,7 +125,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.ANY_ASSET, _, `convId`, _, _, false, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.ANY_ASSET, _, _, `convId`, _, _, false, _, _, _, _)) => true
         }
       }
     }
@@ -137,7 +140,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.TEXT, "meep", `groupId`, Some("group conv"), _, true, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.TEXT, _, "meep", `groupId`, Some("group conv"), _, true, _, _, _, _)) => true
         }
       }
     }
@@ -237,7 +240,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(NotificationType.TEXT, _, `groupId`, Some("group conv"), _, true, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.TEXT, _, _, `groupId`, Some("group conv"), _, true, _, _, _, _)) => true
         }
       }
     }

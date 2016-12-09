@@ -36,3 +36,7 @@ class HandlesService {
     validatedHandles map (currentHandles => handles.filter(h => currentHandles.contains(h)).flatMap(h => currentHandles.get(h)))
   }
 }
+
+object HandlesTrackingService {
+  case class HandlesValidationTrackingEvent(success: Boolean)
+}

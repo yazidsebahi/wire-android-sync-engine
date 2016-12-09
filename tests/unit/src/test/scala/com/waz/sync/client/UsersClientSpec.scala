@@ -99,7 +99,7 @@ class UsersClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
       response.id shouldEqual userId
 
-      response.picture.map(_.convId) shouldEqual Some(RConvId(userId.str))
+      response.picture.flatMap(_.head.convId) shouldEqual Some(RConvId(userId.str))
 
       info(s"parsed response: $response")
     }

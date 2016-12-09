@@ -290,7 +290,7 @@ object Generators {
     picture <- arbitrary[Option[AssetData]]
     trackingId <- arbitrary[Option[TrackingId]]
     accent <- arbitrary[Option[Int]]
-  } yield UserInfo(userId, name, accent, email, phone, picture.toSeq, trackingId))
+  } yield UserInfo(userId, name, accent, email, phone, Some(picture.toSeq), trackingId))
 
   implicit lazy val arbAddressBook: Arbitrary[AddressBook] = Arbitrary(for {
     selfHashes <- arbitrary[Seq[String]] map (_ map sha2)

@@ -25,11 +25,13 @@ import com.waz.api.{TrackingEvent, impl}
 import com.waz.content.{AssetsStorage, MessagesStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType.OneToOne
 import com.waz.model._
+import com.waz.service.HandlesTrackingService.HandlesValidationTrackingEvent
 import com.waz.service.call.AvsMetrics
 import com.waz.service.downloads.AssetDownloader
 import com.waz.service.downloads.DownloadRequest.WireAssetRequest
 import com.waz.service.push.PushTrackingService
 import com.waz.service.push.PushTrackingService.NotificationsEvent
+import com.waz.sync.handler.HandlesSyncHandler
 import com.waz.threading.Threading
 import com.waz.utils._
 import org.threeten.bp.{Duration, Instant}
@@ -37,7 +39,7 @@ import org.threeten.bp.{Duration, Instant}
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, assets: AssetsStorage, messages: MessagesStorage, downloader: AssetDownloader, pushTrackingService: PushTrackingService) {
+class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, assets: AssetsStorage, messages: MessagesStorage, downloader: AssetDownloader, pushTrackingService: PushTrackingService, handlesSyncHandler: HandlesSyncHandler) {
   import Threading.Implicits.Background
   import TrackingEventsService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -46,19 +48,28 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
 
   downloader.onDownloadStarting {
     case WireAssetRequest(_, id, _, _, _, _) =>
-      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
+      messages.get(MessageId(id.str)).flatMap {
+        case None => Future.successful(()) //asset not associated with a message - do not track
+        case Some(_) => assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
+      }
     case _ => // ignore
   }
 
   downloader.onDownloadDone {
     case WireAssetRequest(_, id, _, _, mime, _) =>
-      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
+      messages.get(MessageId(id.str)).flatMap {
+        case None => Future.successful(()) //asset not associated with a message - do not track
+        case Some(_) => assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
+      }
     case _ => // ignore
   }
 
   downloader.onDownloadFailed {
     case (WireAssetRequest(_, id, _, _, _, _), err) if err.code != ErrorResponse.CancelledCode =>
-      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
+      messages.get(MessageId(id.str)).flatMap {
+        case None => Future.successful(()) //asset not associated with a message - do not track
+        case Some(_) => assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
+      }
     case _ => // ignore
   }
 
@@ -79,10 +90,14 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
     case _ =>
   }
 
-  pushTrackingService.shouldSendEvent.onChanged.filter(v => v) { _ =>
+  pushTrackingService.shouldSendEvent.onChanged.filter(_ == true) { _ =>
     sendNotificationEvent(pushTrackingService.buildEvent()).onSuccess{ case _ =>
       pushTrackingService.reset()
     }
+  }
+
+  handlesSyncHandler.responseSignal.onChanged { data =>
+    sendHandlesEvent(new HandlesValidationTrackingEvent(data.nonEmpty))
   }
 
 
@@ -101,6 +116,11 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
   def sendNotificationEvent(event: Future[NotificationsEvent]) = event.map { ev =>
     verbose(s"track notifications: $ev")
     handler.onNotificationsEvent(ev)
+  }(Threading.Ui).recoverWithLog()
+
+  def sendHandlesEvent(event: HandlesValidationTrackingEvent): Future[Unit] = Future {
+    verbose(s"track handles: $event")
+    handler.onHandleValidation(event)
   }(Threading.Ui).recoverWithLog()
 
 }

@@ -68,7 +68,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
               case Right(uploaded) =>
                 for {
                   asset <- assets.storage.get(assetId)
-                  res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Seq(uploadedPreview, uploaded).flatten)))
+                  res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Some(Seq(uploadedPreview, uploaded).flatten))))
                 } yield res
 
               case Left(err) =>
@@ -81,7 +81,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
         }
       } yield res
     case Some(UserData(id, _, _, _, _, None, _, _, _, _, _, _, _, _, _, _, _, _)) =>
-      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Seq.empty)))
+      updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = None)))
     case _ => Future.successful(SyncResult.failed())
   }
 

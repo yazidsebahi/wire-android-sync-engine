@@ -56,7 +56,7 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
   }
 
   override def isUsernameValid(username: String): UsernameValidation = {
-    val usernameRegex = s"""^([a-z]|[0-9]|_|\\.){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
+    val usernameRegex = s"""^([a-z]|[0-9]|_){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
 
     if (username.length  > Usernames.MAX_LENGTH) {
       return UsernameValidation(username = username, UsernameValidationError.TOO_LONG)
@@ -71,7 +71,7 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
   }
 
   override def generateUsernameFromName(name: String, context: Context): String = {
-    var cleanName: String = replaceOtherCases(name.toLowerCase)
+    var cleanName: String = Handle.transliterated(name).toLowerCase
     cleanName = Normalizer.normalize(cleanName, Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
     cleanName = Normalizer.normalize(cleanName, Normalizer.Form.NFD).replaceAll("\\W+", "")
     if (cleanName.isEmpty) {
@@ -86,14 +86,6 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
 
   override def getValidatedUsernames: ValidatedUsernames = new ValidatedHandles()
 
-  private def replaceOtherCases(input: String): String = {
-    var output: String = input
-    output = output.replace("ł", "l")
-    output = output.replace("æ", "a")
-    output = output.replace("ø", "o")
-    output
-  }
-
   private def generateFromDictionary(context: Context): String = {
     if (context == null) { return "" }
     val names: Array[String] = context.getResources.getStringArray(R.array.random_names)
@@ -101,18 +93,5 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
     val namesIndex: Int = Random.nextInt(names.length)
     val adjectivesIndex: Int = Random.nextInt(adjectives.length)
     (adjectives(adjectivesIndex) + names(namesIndex)).toLowerCase
-  }
-}
-
-object UsersHandleResponseContent {
-  def unapply(response: ResponseContent): Option[Seq[String]] = {
-    try {
-      response match {
-        case JsonArrayResponse(js) => Try(JsonDecoder.array[UserData](js).map(user => user.handle.getOrElse(Handle("")).toString)).toOption
-        case _ => None
-      }
-    } catch {
-      case NonFatal(_) =>  None
-    }
   }
 }

@@ -27,6 +27,7 @@ import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
+import com.waz.service.HandlesTrackingService.HandlesValidationTrackingEvent
 import com.waz.service.assets.{AssetLoader, AssetService, RecordAndPlayService}
 import com.waz.service.call._
 import com.waz.service.conversation._
@@ -364,5 +365,7 @@ object ZMessaging { self =>
     override def onTrackingEvent(event: TrackingEvent): Unit = ()
     override def onAvsMetricsEvent(avsMetrics: AvsMetrics): Unit = ()
     override def onNotificationsEvent(ev: NotificationsEvent): Unit = ()
+
+    override def onHandleValidation(event: HandlesValidationTrackingEvent): Unit = ()
   }
 }

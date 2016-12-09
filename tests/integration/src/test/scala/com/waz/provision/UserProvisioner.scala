@@ -74,6 +74,9 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
       }
     }
 
+  def addHandle(handle: Handle) =
+    credentialsClient.updateHandle(handle)
+
   def connect(user: UserId, name: String, msg: String) = connClient.createConnection(user, name, msg)
 
   def accept(user: UserId) = connClient.updateConnection(user, ConnectionStatus.Accepted)

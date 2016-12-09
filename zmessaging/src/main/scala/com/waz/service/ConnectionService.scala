@@ -74,7 +74,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
 
     val lastEvents = events.groupBy(_.to).map { case (_, es) => es.maxBy(_.lastUpdated) }
 
-    val fromSync: Set[UserId] = lastEvents.filter(_.localOrFetchTime == Event.UnknownDateTime).map(_.to)(breakOut)
+    val fromSync: Set[UserId] = lastEvents.filter(_.localTime == Event.UnknownDateTime).map(_.to)(breakOut)
     usersStorage.updateOrCreateAll(lastEvents.map { ev => ev.to -> updateOrCreate(ev) _ } (breakOut)) map ((_, fromSync))
   } flatMap { case (users, fromSync) =>
     val toSync = users filter { u => u.connection == ConnectionStatus.Accepted || u.connection == ConnectionStatus.PendingFromOther || u.connection == ConnectionStatus.PendingFromUser }

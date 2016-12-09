@@ -43,7 +43,6 @@ sealed trait Event {
 
   //FIXME do we still need this separation?
   var localTime: Date = UnknownDateTime
-  var notificationsFetchTime: Date = UnknownDateTime
 
   def withCurrentLocalTime(): this.type = {
     localTime = new Date()
@@ -56,8 +55,6 @@ sealed trait Event {
   }
 
   def hasLocalTime = localTime != UnknownDateTime
-
-  def localOrFetchTime = if (localTime == UnknownDateTime) notificationsFetchTime else localTime
 
   def maybeLocalTime: Option[Instant] = if (localTime == UnknownDateTime) None else Some(localTime.instant)
 }

@@ -232,6 +232,9 @@ class DeviceActor(val deviceName: String,
     case GetUser =>
       waitUntil(api.getSelf)(_.getUser != null) map { self => Successful(self.getUser.getId) }
 
+    case GetUserName =>
+      waitUntil(api.getSelf)(_.getUser != null) map { self => Successful(self.getUser.getUsername)}
+
     case GetConv(name) =>
       waitUntil(convs)(_ => convExistsByName(name)) map { _ =>
         Successful(findConvByName(name).data.remoteId.str)
@@ -462,6 +465,17 @@ class DeviceActor(val deviceName: String,
         self.setName(name)
         Successful
       }
+
+    case UpdateProfileUserName(userName) =>
+      val p = Promise[ActorMessage]()
+      waitUntil(api.getSelf)(_.getUser != null).map { self =>
+        self.setUsername(userName, new CredentialsUpdateListener {
+          override def onUpdateFailed(code: Int, message: String, label: String): Unit = p.success(Failed(s"unable to update user name: $code, $message, $label"))
+
+          override def onUpdated(): Unit = p.success(Successful)
+        })
+      }
+      p.future
 
     case UpdateProfileColor(color) =>
       whenSelfLoaded { self =>
