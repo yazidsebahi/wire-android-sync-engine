@@ -46,19 +46,28 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
 
   downloader.onDownloadStarting {
     case WireAssetRequest(_, id, _, _, _, _) =>
-      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
+      messages.get(MessageId(id.str)).flatMap {
+        case None => Future.successful(()) //asset not associated with a message - do not track
+        case Some(_) => assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadStarted(asset.sizeInBytes)) }
+      }
     case _ => // ignore
   }
 
   downloader.onDownloadDone {
     case WireAssetRequest(_, id, _, _, mime, _) =>
-      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
+      messages.get(MessageId(id.str)).flatMap {
+        case None => Future.successful(()) //asset not associated with a message - do not track
+        case Some(_) => assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadSuccessful(asset.sizeInBytes, mime.str)) }
+      }
     case _ => // ignore
   }
 
   downloader.onDownloadFailed {
     case (WireAssetRequest(_, id, _, _, _, _), err) if err.code != ErrorResponse.CancelledCode =>
-      assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
+      messages.get(MessageId(id.str)).flatMap {
+        case None => Future.successful(()) //asset not associated with a message - do not track
+        case Some(_) => assets.get(id) flatMapSome { asset => track(impl.TrackingEvent.assetDownloadFailed(asset.sizeInBytes)) }
+      }
     case _ => // ignore
   }
 
