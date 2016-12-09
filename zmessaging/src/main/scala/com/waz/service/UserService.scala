@@ -22,7 +22,6 @@ import java.util.Date
 import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
 import com.waz.content._
-import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.UserService._
@@ -199,7 +198,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
       case _ => Future.successful(())
     }
 
-  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picture) ++ users.flatMap(_.picture))
+  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picture.getOrElse(Seq.empty[AssetData])))
 
   def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
     debug(s"update synced users: $users, service: $this")

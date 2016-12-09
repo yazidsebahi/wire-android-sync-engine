@@ -26,7 +26,6 @@ import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.service.SearchKey
 import com.waz.sync.client.UserSearchClient.UserSearchEntry

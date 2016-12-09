@@ -31,15 +31,15 @@ import org.json.{JSONArray, JSONObject}
 import scala.util.Try
 
 case class UserInfo(id:           UserId,
-                    name:         Option[String]        = None,
-                    accentId:     Option[Int]           = None,
-                    email:        Option[EmailAddress]  = None,
-                    phone:        Option[PhoneNumber]   = None,
-                    picture:      Seq[AssetData]        = Seq.empty,
-                    trackingId:   Option[TrackingId]    = None,
-                    deleted:      Boolean               = false,
-                    handle:       Option[Handle]        = None,
-                    privateMode:  Option[Boolean]       = None) {
+                    name:         Option[String]          = None,
+                    accentId:     Option[Int]             = None,
+                    email:        Option[EmailAddress]    = None,
+                    phone:        Option[PhoneNumber]     = None,
+                    picture:      Option[Seq[AssetData]]  = None, //the empty sequence is used to delete pictures
+                    trackingId:   Option[TrackingId]      = None,
+                    deleted:      Boolean                 = false,
+                    handle:       Option[Handle]          = None,
+                    privateMode:  Option[Boolean]         = None) {
   def mediumPicture = picture.collectFirst { case a@AssetData.IsImageWithTag(Medium) => a }
 }
 
@@ -97,7 +97,7 @@ object UserInfo {
       //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists.
       val pic = getAssets.orElse(getPicture(id)).toSeq
       val privateMode = decodeOptBoolean('privateMode)
-      UserInfo(id, 'name, accentId, 'email, 'phone, pic, decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted, handle = 'handle, privateMode = privateMode)
+      UserInfo(id, 'name, accentId, 'email, 'phone, Some(pic), decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted, handle = 'handle, privateMode = privateMode)
     }
   }
 
@@ -158,8 +158,8 @@ object UserInfo {
       info.email.foreach(e => o.put("email", e.str))
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
-      o.put("assets", encodeAsset(info.picture))
-      o.put("picture", encodePicture(info.picture))
+      info.picture.foreach(ps => o.put("assets", encodeAsset(ps)))
+      info.picture.foreach(ps => o.put("picture", encodePicture(ps)))
     }
   }
 
@@ -167,8 +167,8 @@ object UserInfo {
     JsonEncoder { o =>
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
-      o.put("assets", encodeAsset(info.picture))
-      o.put("picture", encodePicture(info.picture))
+      info.picture.foreach(ps => o.put("assets", encodeAsset(ps)))
+      info.picture.foreach(ps => o.put("picture", encodePicture(ps)))
     }
   }
 }
