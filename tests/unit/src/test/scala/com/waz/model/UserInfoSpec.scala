@@ -33,7 +33,7 @@ class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ge
 
     scenario("Encode picture array") {
       val convId = RConvId()
-      val userInfo = UserInfo(UserId(), Some("name"), picture = Seq(AssetData(convId = Some(convId), metaData = Some(AssetMetaData.Image(Dim2(10, 10), Medium)), remoteId = Some(RAssetId()))))
+      val userInfo = UserInfo(UserId(), Some("name"), picture = Some(Seq(AssetData(convId = Some(convId), metaData = Some(AssetMetaData.Image(Dim2(10, 10), Medium)), remoteId = Some(RAssetId())))))
       val json = UserInfo.ContentEncoder(userInfo).toString
       info(json)
 
@@ -52,7 +52,7 @@ class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ge
 
       val info = JsonDecoder.decode[UserInfo](json)
       info.picture should not be 'empty
-      val pic = info.picture.head
+      val pic = info.picture.get.head
       pic.id shouldEqual AssetId("308133e9-6fd8-4652-baf4-3db41904e912")
     }
   }
