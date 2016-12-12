@@ -54,6 +54,13 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
     notifyChanged()
   }
 
+  val commonConnections = ui.cached(Uris.CommonConnectionsUri(id), new CommonConnections(id)(ui))
+  commonConnections.addUpdateListener(new UpdateListener {
+    override def updated(): Unit = {
+      notifyChanged()
+    }
+  })
+
   def set(d: UserData): Unit = {
     require(this.id == d.id)
     verbose(s"set($d)")
@@ -124,7 +131,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def cancelConnection(): Unit = ui.users.cancelConnection(this)
 
-  override def getCommonConnections = ui.cached(Uris.CommonConnectionsUri(id), new CommonConnections(id)(ui))
+  override def getCommonConnections = commonConnections
 
   override def isContact: Boolean = firstContact.nonEmpty
 
