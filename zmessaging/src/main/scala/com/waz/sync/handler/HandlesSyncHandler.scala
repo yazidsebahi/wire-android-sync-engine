@@ -18,12 +18,14 @@
 package com.waz.sync.handler
 
 import com.waz.api.UsernameValidation
+import com.waz.api.impl.ErrorResponse
 import com.waz.model.Handle
 import com.waz.service.HandlesService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.HandlesClient
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
+import com.waz.znet.Response.Status
 
 import scala.concurrent.Future
 
@@ -38,6 +40,9 @@ class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesSe
         responseSignal ! data.getOrElse(Seq())
         handlesService.updateValidatedHandles(data.getOrElse(Seq()))
         SyncResult.Success
+      case Left(ErrorResponse(Status.NotFound, _, _)) =>
+        handlesService.updateValidatedHandles(Seq())
+        SyncResult.Failure(Some(ErrorResponse(Status.NotFound, "", "")), shouldRetry = false)
       case Left(error) => SyncResult.Failure(Some(error), shouldRetry = true)
     }
   }
