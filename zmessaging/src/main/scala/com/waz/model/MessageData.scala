@@ -395,6 +395,9 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def countSentByType(selfUserId: UserId, tpe: Message.Type)(implicit db: SQLiteDatabase) = queryNumEntries(db, table.name, s"${User.name} = '${User(selfUserId)}' AND ${Type.name} = '${Type(tpe)}'")
 
+    def findByType(conv: ConvId, tpe: Message.Type)(implicit db: SQLiteDatabase) =
+      iterating(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(tpe)}'", null, null, null, s"${Time.name} ASC"))
+
     /**
      * Returns incoming messages (for all unmuted conversations) with local time greater then given time in millis.
      */
