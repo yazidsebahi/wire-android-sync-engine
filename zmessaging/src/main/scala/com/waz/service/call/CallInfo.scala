@@ -1,0 +1,97 @@
+/*
+ * Wire
+ * Copyright (C) 2016 Wire Swiss GmbH
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.waz.service.call
+
+import com.waz.api.VoiceChannelState
+import com.waz.api.VoiceChannelState.NO_ACTIVE_USERS
+import com.waz.model.{ConvId, UserId}
+import com.waz.service.call.CallInfo.ClosedReason.Normal
+import com.waz.service.call.CallInfo.VideoSendState.Stopped
+import com.waz.service.call.CallInfo._
+import org.threeten.bp.Instant
+
+case class CallInfo(convId:           Option[ConvId]    = None,
+                    others:           Set[UserId]       = Set.empty,
+                    withVideo:        Boolean           = false,
+                    state:            VoiceChannelState = NO_ACTIVE_USERS,
+                    muted:            Boolean           = false,
+                    receivingVideo:   VideoSendState    = Stopped,
+                    estabTime:        Option[Instant]   = None,
+                    closedReason:     ClosedReason      = Normal) {
+  override def toString: String =
+    s"""
+       |CallInfo:
+       | convId:        $convId
+       | others:        $others
+       | withVideo:     $withVideo
+       | state:         $state
+       | muted:         $muted
+       | receivingVideo $receivingVideo
+       | estabTime:     $estabTime
+       | closedReason   $closedReason
+    """.stripMargin
+}
+
+object CallInfo {
+
+  val IdleCall = CallInfo()
+
+  sealed trait ClosedReason
+
+  object ClosedReason {
+
+    case object Normal extends ClosedReason
+    case object Error extends ClosedReason
+    case object LostMedia extends ClosedReason
+    case object Timeout extends ClosedReason
+    case object Unknown extends ClosedReason
+
+    def apply(reasonCode: Int): ClosedReason = reasonCode match {
+      case Calling.WCALL_REASON_NORMAL      => Normal
+      case Calling.WCALL_REASON_ERROR       => Error
+      case Calling.WCALL_REASON_LOST_MEDIA  => LostMedia
+      case Calling.WCALL_REASON_TIMEOUT     => Timeout
+      case _                                => Unknown
+    }
+  }
+
+  object IsIdle {
+    def unapply(arg: CallInfo): Boolean = arg.state == NO_ACTIVE_USERS
+  }
+
+  object IsActive {
+    def unapply(arg: CallInfo): Boolean = !IsIdle.unapply(arg)
+  }
+
+  sealed trait VideoSendState
+
+  object VideoSendState {
+
+    case object Stopped extends VideoSendState
+    case object Started extends VideoSendState
+    case object BadConnection extends VideoSendState
+    case object Unknown extends VideoSendState
+
+    def apply(stateCode: Int): VideoSendState = stateCode match {
+      case Calling.WCALL_VIDEO_RECEIVE_STARTED  => Started
+      case Calling.WCALL_VIDEO_RECEIVE_STOPPED  => Stopped
+      case Calling.WCALL_VIDEO_RECEIVE_BAD_CONN => BadConnection
+      case _ => Unknown
+    }
+  }
+}

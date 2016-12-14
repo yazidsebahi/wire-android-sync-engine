@@ -205,6 +205,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val flowmanager: FlowManagerService       = wire[FlowManagerService]
   lazy val voiceContent                          = wire[VoiceChannelContent]
   lazy val voice: VoiceChannelService            = wire[VoiceChannelService]
+  lazy val calling: CallingService               = wire[CallingService]
   lazy val contacts: ContactsService             = wire[ContactsService]
   lazy val typing: TypingService                 = wire[TypingService]
   lazy val invitations                           = wire[InvitationService]
@@ -257,6 +258,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           users.userUpdateEventsStage,
           users.userDeleteEventsStage,
           flowmanager.callEventsStage,
+          calling.callMessagesStage,
           voice.callStateEventsStage,
           voice.memberLeaveEventsStage,
           conversations.convStateEventProcessingStage,

@@ -120,6 +120,7 @@ class DeviceActor(val deviceName: String,
   }
   def optZms = Await.result(api.ui.getCurrent, 5.seconds)
   lazy val zmessaging = optZms.get
+  lazy val prefs = zmessaging.prefs
   lazy val convs = api.getConversations
   lazy val archived = convs.getArchivedConversations
   lazy val channels = api.getActiveVoiceChannels
@@ -347,13 +348,13 @@ class DeviceActor(val deviceName: String,
 
       //TODO: Dean remove after v2 transition period
     case SetAssetToV3 =>
-      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", true) }.future.map {
+      prefs.editUiPreferences { _.putBoolean(prefs.sendWithAssetsV3Key, true) }.future.map {
         case true => Successful
         case false => Failed("unable to set preferences to send with v3")
       }
 
     case SetAssetToV2 =>
-      globalModule.prefs.editUiPreferences { _.putBoolean("PREF_KEY_SEND_WITH_ASSETS_V3", false) }.future.map {
+      prefs.editUiPreferences { _.putBoolean(prefs.sendWithAssetsV3Key, false) }.future.map {
         case true => Successful
         case false => Failed("unable to set preferences to send with v3")
       }
@@ -493,6 +494,12 @@ class DeviceActor(val deviceName: String,
         Successful
       }
 
+    case SetCallingVersion(version) =>
+      prefs.editUiPreferences { _.putBoolean(prefs.callingV3Key, if (version == 3) true else false) }.future.map {
+        case true => Successful
+        case false => Failed("unable to set preferences to use calling v3")
+      }
+
     case AcceptCall =>
       whenCallIncoming { channel =>
         channel.join(spy.joinCallback)
@@ -501,7 +508,10 @@ class DeviceActor(val deviceName: String,
 
     case StartCall(remoteId) =>
       whenConversationExists(remoteId) { conv =>
-        conv.getVoiceChannel.join(spy.joinCallback)
+        if (prefs.callingV3) zmessaging.calling.startCall(conv.id)
+        else {
+          conv.getVoiceChannel.join(spy.joinCallback)
+        }
         Successful
       }
 

@@ -115,6 +115,7 @@ case class RenameConversationEvent(id: Uid, convId: RConvId, time: Date, from: U
 
 case class GenericMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent
 
+case class CallMessageEvent(id: Uid, convId: RConvId, time: Date, from: UserId, sender: ClientId, content: String) extends MessageEvent with UnarchivingEvent
 
 sealed trait OtrError
 case object Duplicate extends OtrError

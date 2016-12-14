@@ -42,6 +42,7 @@ resolvers in ThisBuild ++= Seq(
   "Localytics" at "http://maven.localytics.com/public"
 )
 
+
 lazy val licenseHeaders = HeaderPlugin.autoImport.headers := Set("scala", "java", "rs") .map { _ -> GPLv3("2016", "Wire Swiss GmbH") } (collection.breakOut)
 
 lazy val root = Project("zmessaging-android", file("."))

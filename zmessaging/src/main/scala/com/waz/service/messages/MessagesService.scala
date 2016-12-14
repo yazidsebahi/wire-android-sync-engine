@@ -204,6 +204,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case MsgRecall(_) => MessageData.Empty
       case MsgEdit(_, _) => MessageData.Empty
       case Receipt(_) => MessageData.Empty
+      case Calling(_) => MessageData.Empty
       case Ephemeral(expiry, ct) =>
         content(id, ct, from, time, proto).copy(ephemeral = expiry)
       case _ =>
@@ -523,6 +524,9 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
       case Success(Some(m)) => content.messagesStorage.onMessageSent ! m
     }
   }
+
+  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant) =
+    addMessage(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, from, time = time, localTime = Instant.now))
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
     updateMessageState(convId, msg.id, Message.Status.FAILED) andThen {

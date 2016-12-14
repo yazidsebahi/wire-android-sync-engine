@@ -19,10 +19,10 @@ package com.waz.utils.jna
 
 import com.sun.jna.{IntegerType, Native}
 
-case class Uint32_t(value: Long) extends IntegerType(4, value, true) {
+case class Uint32_t(value: Int) extends IntegerType(4, value, true) {
   def this() = this(0)
 }
 
-case class Size_t(value: Long) extends IntegerType(Native.SIZE_T_SIZE, value, true) {
+case class Size_t(value: Int) extends IntegerType(Native.SIZE_T_SIZE, value, true) {
   def this() = this(0)
 }

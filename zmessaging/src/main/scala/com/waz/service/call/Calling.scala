@@ -17,10 +17,9 @@
  */
 package com.waz.service.call
 
-import com.sun.jna.{Callback, IntegerType, Native, Pointer}
+import com.sun.jna.{Callback, Native, Pointer}
 import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.ConvId
 import com.waz.utils.jna.{Size_t, Uint32_t}
 
 object Calling {
@@ -31,16 +30,26 @@ object Calling {
   }
 
   @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
-  @native def wcall_close(): Unit
-  @native def wcall_start(convid: String, is_video_call: Int): Int
-  @native def wcall_answer(convId: String): Unit
-  @native def wcall_resp(status: Int, reason: String, arg: Pointer): Int
-  @native def wcall_recv_msg(msg: Array[Byte], len: Int, curr_time: Uint32_t, msg_time: Uint32_t, convId: String, userId: String, clientId: String): Int
-  @native def wcall_end(convId: String): Unit
-//???  @native def wcall_set_video_state_handler(convId: String): Int
-  @native def wcall_set_video_send_active(convId: String, active: Int): Unit
-  @native def wcall_is_video_call(convId: String): Int
 
+  @native def wcall_close(): Unit
+
+  @native def wcall_start(convid: String, is_video_call: Boolean): Int
+
+  @native def wcall_answer(convid: String): Unit
+
+  @native def wcall_resp(status: Int, reason: String, arg: Pointer): Int
+
+  @native def wcall_recv_msg(msg: Array[Byte], len: Int, curr_time: Uint32_t, msg_time: Uint32_t, convId: String, userId: String, clientId: String): Int
+
+  @native def wcall_end(convId: String): Unit
+
+  @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoStateHandler): Unit
+
+  @native def wcall_set_video_send_active(convid: String, active: Boolean): Unit
+
+  @native def wcall_is_video_call(convid: String): Int
+
+  @native def wcall_get_state(convid: String): Int
 
 
   val WCALL_REASON_NORMAL          = 0
@@ -62,7 +71,7 @@ object Calling {
 
   /* Send calling message otr data */
   trait SendHandler extends Callback {
-    def invoke(ctx: Pointer, convid: String, userid: String, clientid: String, data: Pointer, len: Size_t, arg: Pointer): Int
+    def invoke(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int
   }
 
   /* Incoming call */
@@ -72,12 +81,12 @@ object Calling {
 
   /* Missed call */
   trait MissedCallHandler extends Callback {
-    def invoke(convid: String, msg_time: IntegerType, userid: String, video_call: Boolean, arg: Pointer): Unit
+    def invoke(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, arg: Pointer): Unit
   }
 
   /* Call established (with media) */
   trait EstablishedCallHandler extends Callback {
-    def invoke(convid: String, userid: String, arg: Pointer): Unit
+    def invoke(convId: String, userId: String, arg: Pointer): Unit
   }
 
   /* Call terminated */
@@ -90,7 +99,6 @@ object Calling {
     * or stopped
     *
     * @param state  New video state start/stopped
-    * @param reason Reason (when stopping), normal/low bandwidth etc.
     * @param arg    The handler argument passed when registering
     */
   trait VideoStateHandler extends Callback {
