@@ -156,16 +156,18 @@ object AssetMetaData {
 
     val Empty = Image(Dim2.Empty, Tag.Empty)
 
-    def apply(file: File): Option[Image] = apply(new FileInputStream(file))
+    def apply(file: File): Option[Image] = apply(file, Tag.Empty)
+    def apply(file: File, tag: Tag): Option[Image] = apply(new FileInputStream(file), tag)
 
-    def apply(context: Context, uri: Uri): Option[Image] = apply(context.getContentResolver.openInputStream(uri))
+    def apply(context: Context, uri: Uri): Option[Image] = apply(context, uri, Tag.Empty)
+    def apply(context: Context, uri: Uri, tag: Tag): Option[Image] = apply(context.getContentResolver.openInputStream(uri), tag)
 
-    def apply(stream: => InputStream): Option[Image] = Managed(stream).acquire { is =>
+    def apply(stream: => InputStream, tag: Tag): Option[Image] = Managed(stream).acquire { is =>
       val opts = new BitmapFactory.Options
       opts.inJustDecodeBounds = true
       BitmapFactory.decodeStream(is, null, opts)
       if (opts.outWidth == 0 && opts.outHeight == 0) None
-      else Some(Image(Dim2(opts.outWidth, opts.outHeight)))
+      else Some(Image(Dim2(opts.outWidth, opts.outHeight), tag))
     }
   }
 }
