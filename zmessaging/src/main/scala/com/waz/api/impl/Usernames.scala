@@ -23,17 +23,13 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback, ValidatedUsernames}
-import com.waz.model.sync.SyncRequest.ValidateHandles
-import com.waz.model.{Handle, UserData}
+import com.waz.model.Handle
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
-import com.waz.utils.JsonDecoder
 import com.waz.zms.R
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet._
-
-import scala.util.{Random, Try}
-import scala.util.control.NonFatal
+import scala.util.Random
 
 object Usernames {
   val MAX_LENGTH = 21
@@ -56,18 +52,19 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
   }
 
   override def isUsernameValid(username: String): UsernameValidation = {
-    val usernameRegex = s"""^([a-z]|[0-9]|_){${Usernames.MIN_LENGTH},${Usernames.MAX_LENGTH}}$$""".r
+    val usernameRegex = s"""^([a-z]|[0-9]|_)*""".r
 
+    username match {
+      case usernameRegex(_) =>
+      case _ => return UsernameValidation(username = username, UsernameValidationError.INVALID_CHARACTERS)
+    }
     if (username.length  > Usernames.MAX_LENGTH) {
       return UsernameValidation(username = username, UsernameValidationError.TOO_LONG)
     }
     if (username.length  < Usernames.MIN_LENGTH) {
       return UsernameValidation(username = username, UsernameValidationError.TOO_SHORT)
     }
-    username match {
-      case usernameRegex(_) => UsernameValidation(username = username, UsernameValidationError.NONE)
-      case _ => UsernameValidation(username = username, UsernameValidationError.INVALID_CHARACTERS)
-    }
+    UsernameValidation(username = username, UsernameValidationError.NONE)
   }
 
   override def generateUsernameFromName(name: String, context: Context): String = {
