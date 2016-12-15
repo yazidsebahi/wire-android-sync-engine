@@ -220,6 +220,11 @@ object ConversationData {
 
     import com.waz.model.ConversationData.ConversationType._
 
+    override def onCreate(db: SQLiteDatabase): Unit = {
+      super.onCreate(db)
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_search_key on Conversations (${SKey.name})")
+    }
+
     def establishedConversations(implicit db: SQLiteDatabase) = iterating(db.rawQuery(
       s"""SELECT *
          |  FROM ${table.name}
@@ -269,6 +274,7 @@ object ConversationMemberData {
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_conv on ConversationMembers (${ConvId.name})")
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (${UserId.name})")
     }
 
     def listForConv(convId: ConvId)(implicit db: SQLiteDatabase) = list(find(ConvId, convId))

@@ -223,6 +223,12 @@ object UserData {
     override def apply(implicit cursor: Cursor): UserData =
       new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
+    override def onCreate(db: SQLiteDatabase): Unit = {
+      super.onCreate(db)
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_id on Users (${Id.name})")
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS UserData_search_key on Users (${SKey.name})")
+    }
+
     def get(id: UserId)(implicit db: SQLiteDatabase): Option[UserData] = single(find(Id, id)(db))
 
     override def getCursor(id: UserId)(implicit db: SQLiteDatabase): Cursor = find(Id, id)(db)
