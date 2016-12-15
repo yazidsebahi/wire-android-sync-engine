@@ -248,6 +248,7 @@ object ConversationData {
          |     OR c.${SKey.name}   LIKE '% ${SKey(Some(prefix))}%'
          |     OR u.${U.SKey.name} LIKE '${U.SKey(prefix)}%'
          |     OR u.${U.SKey.name} LIKE '% ${U.SKey(prefix)}%'
+         |     OR u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%'
          |   )
        """.stripMargin, null))
   }
