@@ -28,11 +28,11 @@ import org.threeten.bp.Instant
 
 import scala.collection._
 
-class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean, showBlockedUsers: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
+class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], alsoSearchByEmail: Boolean, showBlockedUsers: Boolean, searchByHandleOnly: Boolean)(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private val filteredIds = filter.toSet
   private val query = SearchKey(searchTerm)
   private val predicate: UserData => Boolean = u =>
-    (query.isAtTheStartOfAnyWordIn(u.searchKey) || u.handle.exists(_.containsQuery(searchTerm)) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str) && (showBlockedUsers || (u.connection != BLOCKED))
+    ((query.isAtTheStartOfAnyWordIn(u.searchKey) && !searchByHandleOnly) || u.handle.exists(_.containsQuery(searchTerm)) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str) && (showBlockedUsers || (u.connection != BLOCKED))
 
   private var users = Option.empty[Vector[UserData]]
 

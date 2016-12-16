@@ -127,7 +127,7 @@ class ConversationStorage(storage: ZmsDatabase) extends CachedStorage[ConvId, Co
       }
     } yield res
 
-  def search(prefix: SearchKey, self: UserId): Future[Vector[ConversationData]] = storage(ConversationDataDao.search(prefix, self)(_))
+  def search(prefix: SearchKey, self: UserId, handleOnly: Boolean): Future[Vector[ConversationData]] = storage(ConversationDataDao.search(prefix, self, handleOnly)(_))
 }
 
 object ConversationStorage {

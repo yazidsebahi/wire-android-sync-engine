@@ -26,14 +26,14 @@ import com.waz.service.SearchKey
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
 
-class ConversationSearchResult(prefix: String, limit: Int)(implicit ui: UiModule) extends api.ConversationSearchResult with CoreList[IConversation] with SignalLoading {
+class ConversationSearchResult(prefix: String, limit: Int, handleOnly: Boolean)(implicit ui: UiModule) extends api.ConversationSearchResult with CoreList[IConversation] with SignalLoading {
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag = logTagFor[ConversationSearchResult]
 
   @volatile private var convs = Option.empty[Vector[ConvId]]
 
   addLoader { zms =>
-    Signal.future(zms.convsUi.findGroupConversations(SearchKey(prefix), limit).map(_.map(_.id).toVector))
+    Signal.future(zms.convsUi.findGroupConversations(SearchKey(prefix), limit, handleOnly).map(_.map(_.id).toVector))
   } { cs =>
     verbose(s"loaded conversations ($prefix, $limit): $cs")
     if (convs.forall(_ != cs)) {
