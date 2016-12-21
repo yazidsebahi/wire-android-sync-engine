@@ -97,7 +97,7 @@ class TrackingEventsService(handlerFactory: => NotificationsHandlerFactory, asse
   }
 
   handlesSyncHandler.responseSignal.onChanged { data =>
-    sendHandlesEvent(new HandlesValidationTrackingEvent(data.nonEmpty))
+    sendHandlesEvent(new HandlesValidationTrackingEvent(data.exists(_.nonEmpty)))
   }
 
 

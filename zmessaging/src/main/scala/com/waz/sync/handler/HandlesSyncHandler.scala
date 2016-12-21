@@ -32,15 +32,16 @@ import scala.concurrent.Future
 class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesService) {
   import Threading.Implicits.Background
 
-  val responseSignal = Signal(Seq.empty[UsernameValidation])
+  val responseSignal = Signal[Option[Seq[UsernameValidation]]](None)
 
   def validateHandles(handles: Seq[Handle]): Future[SyncResult] = {
     handlesClient.getHandlesValidation(handles).future map {
       case Right(data) =>
-        responseSignal ! data.getOrElse(Seq())
+        responseSignal ! Some(data.getOrElse(Seq()))
         handlesService.updateValidatedHandles(data.getOrElse(Seq()))
         SyncResult.Success
       case Left(ErrorResponse(Status.NotFound, _, _)) =>
+        responseSignal ! Some(Seq())
         handlesService.updateValidatedHandles(Seq())
         SyncResult.Failure(Some(ErrorResponse(Status.NotFound, "", "")), shouldRetry = false)
       case Left(error) => SyncResult.Failure(Some(error), shouldRetry = true)
