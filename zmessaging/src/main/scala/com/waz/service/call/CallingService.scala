@@ -24,16 +24,17 @@ import android.content.Context
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.VideoSendState._
 import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MembersStorage
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.{EventScheduler, MediaManagerService}
 import com.waz.service.call.CallInfo._
 import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
+import com.waz.service.{EventScheduler, MediaManagerService}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, EventStream, Signal}
@@ -102,7 +103,8 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
           verbose(s"Incoming call from $userId in conv: $convId")
           withConversation(convId) { conv =>
             currentCall.mutate {
-              case IsIdle() => CallInfo(Some(conv.id), Set(UserId(userId)), video_call, OTHER_CALLING)
+              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+              case IsIdle() => CallInfo(Some(conv.id), Set(UserId(userId)), OTHER_CALLING, isVideoCall = video_call, videoSendState = if(video_call) PREVIEW else DONT_SEND)
               case cur =>
                 warn(s"Call already in progress, received incoming call from $userId")
                 cur
@@ -121,7 +123,10 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
         override def invoke(convId: String, userId: String, arg: Pointer): Unit = {
           verbose(s"call established for conv: $convId, userId: $userId")
           withConversation(convId) { conv =>
-            currentCall.mutate(_.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now)))
+            currentCall.mutate{ c =>
+              setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
+              c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now))
+            }
           }
         }
       },
@@ -141,10 +146,11 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
     )
     callingReady.future
   }.map { _ =>
+    //Handles the state of received video, not sent video
     Calling.wcall_set_video_state_handler(new VideoStateHandler {
       override def invoke(state: Int, arg: Pointer): Unit = {
-        verbose(s"video state changed: ${VideoSendState(state)}")
-        currentCall.mutate(_.copy(receivingVideo = VideoSendState(state)))
+        verbose(s"video state changed: ${VideoReceiveState(state)}")
+        currentCall.mutate(_.copy(videoReceiveState = VideoReceiveState(state)))
       }
     })
   }
@@ -169,7 +175,9 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
         members.map(_.userId).find(_ != selfUserId).foreach { other =>
           Calling.wcall_start(conv.remoteId.str, isVideo)
           currentCall.mutate {
-            case IsIdle() => CallInfo(Some(conv.id), Set(other), isVideo, SELF_CALLING)
+            case IsIdle() =>
+              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+              CallInfo(Some(conv.id), Set(other), SELF_CALLING, isVideoCall = isVideo, videoSendState = if(isVideo) PREVIEW else DONT_SEND)
             case cur =>
               error("Call already in progress, not updating")
               cur
@@ -215,6 +223,7 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
     verbose(s"setVideoSendActive: $convId, $send")
     withConvWhenReady(convId) { conv =>
       Calling.wcall_set_video_send_active(conv.remoteId.str, send)
+      currentCall.mutate(_.copy(videoSendState = if (send) SEND else DONT_SEND))
     }
   }
 

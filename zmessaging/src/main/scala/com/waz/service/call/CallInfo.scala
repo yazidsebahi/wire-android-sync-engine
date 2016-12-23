@@ -17,33 +17,36 @@
  */
 package com.waz.service.call
 
-import com.waz.api.VoiceChannelState
+import com.waz.api.VideoSendState._
+import com.waz.api.{VideoSendState, VoiceChannelState}
 import com.waz.api.VoiceChannelState.NO_ACTIVE_USERS
 import com.waz.model.{ConvId, UserId}
 import com.waz.service.call.CallInfo.ClosedReason.Normal
-import com.waz.service.call.CallInfo.VideoSendState.Stopped
+import com.waz.service.call.CallInfo.VideoReceiveState.Stopped
 import com.waz.service.call.CallInfo._
 import org.threeten.bp.Instant
 
-case class CallInfo(convId:           Option[ConvId]    = None,
-                    others:           Set[UserId]       = Set.empty,
-                    withVideo:        Boolean           = false,
-                    state:            VoiceChannelState = NO_ACTIVE_USERS,
-                    muted:            Boolean           = false,
-                    receivingVideo:   VideoSendState    = Stopped,
-                    estabTime:        Option[Instant]   = None,
-                    closedReason:     ClosedReason      = Normal) {
+case class CallInfo(convId:            Option[ConvId]    = None,
+                    others:            Set[UserId]       = Set.empty,
+                    state:             VoiceChannelState = NO_ACTIVE_USERS,
+                    muted:             Boolean           = false,
+                    isVideoCall:       Boolean           = false,
+                    videoSendState:    VideoSendState    = DONT_SEND,
+                    videoReceiveState: VideoReceiveState = Stopped,
+                    estabTime:         Option[Instant]   = None,
+                    closedReason:      ClosedReason      = Normal) {
   override def toString: String =
     s"""
        |CallInfo:
-       | convId:        $convId
-       | others:        $others
-       | withVideo:     $withVideo
-       | state:         $state
-       | muted:         $muted
-       | receivingVideo $receivingVideo
-       | estabTime:     $estabTime
-       | closedReason   $closedReason
+       | convId:            $convId
+       | others:            $others
+       | state:             $state
+       | muted:             $muted
+       | isVideoCall:       $isVideoCall
+       | videoSendState:    $videoSendState
+       | videoReceiveState: $videoReceiveState
+       | estabTime:         $estabTime
+       | closedReason       $closedReason
     """.stripMargin
 }
 
@@ -78,16 +81,16 @@ object CallInfo {
     def unapply(arg: CallInfo): Boolean = !IsIdle.unapply(arg)
   }
 
-  sealed trait VideoSendState
+  sealed trait VideoReceiveState
 
-  object VideoSendState {
+  object VideoReceiveState {
 
-    case object Stopped extends VideoSendState
-    case object Started extends VideoSendState
-    case object BadConnection extends VideoSendState
-    case object Unknown extends VideoSendState
+    case object Stopped extends VideoReceiveState
+    case object Started extends VideoReceiveState
+    case object BadConnection extends VideoReceiveState
+    case object Unknown extends VideoReceiveState
 
-    def apply(stateCode: Int): VideoSendState = stateCode match {
+    def apply(stateCode: Int): VideoReceiveState = stateCode match {
       case Calling.WCALL_VIDEO_RECEIVE_STARTED  => Started
       case Calling.WCALL_VIDEO_RECEIVE_STOPPED  => Stopped
       case Calling.WCALL_VIDEO_RECEIVE_BAD_CONN => BadConnection

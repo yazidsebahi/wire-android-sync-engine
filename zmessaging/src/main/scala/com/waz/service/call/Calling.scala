@@ -18,15 +18,18 @@
 package com.waz.service.call
 
 import com.sun.jna.{Callback, Native, Pointer}
-import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.utils.jna.{Size_t, Uint32_t}
 
 object Calling {
 
-  try Native.register(Calling.getClass, "avs")
+  try {
+    verbose("Native.register: avs")
+    Native.register(Calling.getClass, "avs")
+  }
   catch {
-    case e: Throwable => ZLog.error("Unable to start avs", e)
+    case e: Throwable => error("Unable to start avs", e)
   }
 
   @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
