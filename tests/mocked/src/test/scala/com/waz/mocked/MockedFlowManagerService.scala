@@ -52,5 +52,5 @@ class MockedFlowManagerService(context: Context, netClient: ZNetClient, websocke
   override def getVideoCaptureDevices = Future.successful(Vector(CaptureDeviceData("front", "front-facing cam"), CaptureDeviceData("back", "back-facing cam")))
   override def setVideoCaptureDevice(id: RConvId, deviceId: String): Future[Unit] = Future.successful { videoCaptureDeviceId += id -> deviceId }
 
-  override lazy val flowManager = None
+  override val flowManager = None
 }

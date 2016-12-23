@@ -46,6 +46,8 @@ import scala.util.Try
 class FlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: PreferenceService, network: NetworkModeService) {
   import FlowManagerService._
 
+  verbose("started")
+
   val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
   val avsAudioTestFlag: Long = 1 << 1
 
@@ -59,19 +61,21 @@ class FlowManagerService(context: Context, netClient: ZNetClient, websocket: Web
   private lazy val loggingEnabledPref = prefs.preferenceBooleanSignal(loggingEnabledPrefKey)
   private lazy val logLevelPref       = prefs.intPreference(logLevelPrefKey)
 
-  val onMediaEstablished = new Publisher[RConvId]
-  val onFlowManagerError = new Publisher[(RConvId, Int)] // (conv, errorCode)
-  val onVolumeChanged = new Publisher[(RConvId, UserId, Float)] // (conv, participant, volume)
+  val onMediaEstablished = EventStream[RConvId]()
+  val onFlowManagerError = EventStream[(RConvId, Int)]()
+  // (conv, errorCode)
+  val onVolumeChanged = EventStream[(RConvId, UserId, Float)]() // (conv, participant, volume)
 
-  val onFlowsEstablished = new Publisher[EstablishedFlows]
+  val onFlowsEstablished = EventStream[EstablishedFlows]()
 
-  val onFlowRequest = new Publisher[String]
-  val onFlowResponse = new Publisher[String]
-  val onFlowEvent = new Publisher[UnknownCallEvent]
-  val onAvsMetricsReceived = EventStream[AvsMetrics]()
+  val onFlowRequest         = EventStream[String]()
+  val onFlowResponseMetrics = EventStream[String]()
+  val onFlowResponse        = EventStream[(Response, Long, Request[BinaryRequestContent], Instant)]() // (resp, ctx, req, startTime)
+  val onFlowEvent           = EventStream[UnknownCallEvent]()
+  val onAvsMetricsReceived  = EventStream[AvsMetrics]()
 
   val stateOfReceivedVideo = Signal[StateOfReceivedVideo](UnknownState)
-  val cameraFailedSig = Signal[Boolean]
+  val cameraFailedSig      = Signal[Boolean]()
 
   val avsLogDataSignal = metricsEnabledPref.signal.zip(loggingEnabledPref.signal).zip(logLevelPref.signal) map { case ((metricsEnabled, loggingEnabled), logLevel) =>
       AvsLogData(metricsEnabled = metricsEnabled, loggingEnabled = loggingEnabled, AvsLogLevel.fromPriority(logLevel))
@@ -106,61 +110,32 @@ class FlowManagerService(context: Context, netClient: ZNetClient, websocket: Web
   // (protected instead of private just for testing)
   protected final val requestHandler = new RequestHandler {
     override def request(manager: FlowManager, path: String, method: String, ctype: String, content: Array[Byte], ctx: Long): Int = {
-      val m = Option(method).getOrElse(Request.GetMethod)
-      val t = Option(ctype).getOrElse("")
-      val c = Option(content).getOrElse(Array())
-
-      debug(s"request($path, $m, $t, ${new String(c)}, $ctx)")
-      onFlowRequest ! s"$m $path"
-      val startTime = System.currentTimeMillis
+      val request = Request(Option(method).getOrElse(Request.GetMethod), Some(path), data = Some(BinaryRequestContent(Option(content).getOrElse(Array()), Option(ctype).getOrElse(""))), decoder = Some(responseDecoder))
+      debug(s"$request, $ctx)")
+      onFlowRequest ! s"${request.httpMethod} ${request.resourcePath}"
+      val startTime = Instant.now
 
       path match {
         case MetricsUrlRE(convId) => onAvsMetricsReceived ! AvsMetrics(RConvId(convId), content)
-        case _ => netClient(Request(m, Some(path), data = Some(BinaryRequestContent(c, t)), decoder = Some(responseDecoder))).map { resp =>
-          onFlowResponse ! f"after ${System.currentTimeMillis - startTime}%4d ms - $m $path"
-          resp match {
-            case Response(status, BinaryResponse(data, mime), _) => doWithFlowManager(_.response(status.status, mime, data, ctx))
-            case Response(status, EmptyResponse, _) => doWithFlowManager(_.response(status.status, null, null , ctx))
-            case r => error(s"unexpected response $r for FlowManager request($path, $m, $t, ${new String(c)}, $ctx)")
-          }
-        } (dispatcher)
+        case _ => netClient(request).map(onFlowResponse ! (_, ctx, request, startTime)) (dispatcher)
       }
       0
     }
   }
 
+  val flowManager: Option[FlowManager] = LoggedTry(new FlowManager(context, requestHandler, if (prefs.uiPreferences.getBoolean(prefs.autoAnswerCallPrefKey, false)) avsAudioTestFlag else 0)).toOption
 
-  lazy val flowManager: Option[FlowManager] = LoggedTry {
-    val fm = new FlowManager(context, requestHandler, if (prefs.uiPreferences.getBoolean(prefs.autoAnswerCallPrefKey, false)) avsAudioTestFlag else 0)
-    fm.addListener(flowListener)
-    fm.setLogHandler(logHandler)
-    metricsEnabledPref.signal { fm.setEnableMetrics }
-    fm
-  } .toOption
-
-  val callEventsStage = EventScheduler.Stage[UnknownCallEvent] { (convId, events) =>
-    flowManager.fold(Future.successful(())) { fm =>
-      Future {
-        events.foreach { event =>
-          verbose(s"passing call event to flow manager: ${event.json}")
-          onFlowEvent ! event
-          fm.event("application/json", event.json.toString.getBytes("utf8"))
-          verbose(s"event delivered: $event")
-        }
-      }
-    }
-  }
-
-  private val logHandler = new LogHandler { // unused atm
-    override def append(msg: String): Unit = ()
-    override def upload(): Unit = ()
+  onFlowResponse.on(dispatcher) {
+    case (Response(status, BinaryResponse(data, mime), _), ctx, _, _) => doWithFlowManager(_.response(status.status, mime, data, ctx))
+    case (Response(status, EmptyResponse, _), ctx, _, _) => doWithFlowManager(_.response(status.status, null, null , ctx))
+    case (resp, ctx, req, _) => error(s"unexpected response $resp for FlowManager(ctx: $ctx) request: $req")
   }
 
   private val flowListener = new FlowManagerListener {
     override def volumeChanged(convId: String, participantId: String, volume: Float): Unit = {
       callVolumePubs.getOrElse(participantId, returning(new Publisher[Float]) { p =>
         callVolumePubs = callVolumePubs.updated(participantId, p)
-        Signal.wrap(volume, p).throttle(500.millis) { volume =>  onVolumeChanged ! (RConvId(convId), UserId(participantId), volume) }
+        Signal.wrap(volume, p).throttle(500.millis) { volume => onVolumeChanged ! (RConvId(convId), UserId(participantId), volume) }
       }) ! volume
     }
 
@@ -201,6 +176,33 @@ class FlowManagerService(context: Context, netClient: ZNetClient, websocket: Web
     }
 
     override def changeVideoSize(i: Int, i1: Int): Unit = ()
+  }
+
+  private val logHandler = new LogHandler {
+    // unused atm
+    override def append(msg: String): Unit = ()
+    override def upload(): Unit = ()
+  }
+
+  flowManager.flatMap(fm => LoggedTry {
+    verbose(s"FlowManager $fm initialised from context: $context")
+    fm.addListener(flowListener)
+    fm.setLogHandler(logHandler)
+    metricsEnabledPref.signal { fm.setEnableMetrics }
+    fm
+  }.toOption)
+
+  val callEventsStage = EventScheduler.Stage[UnknownCallEvent] { (convId, events) =>
+    flowManager.fold(Future.successful(())) { fm =>
+      Future {
+        events.foreach { event =>
+          verbose(s"passing call event to flow manager: ${event.json}")
+          onFlowEvent ! event
+          fm.event("application/json", event.json.toString.getBytes("utf8"))
+          verbose(s"event delivered: $event")
+        }
+      }
+    }
   }
 
   def acquireFlows(convId: RConvId, selfId: UserId, participantIds: Set[UserId], sessionId: Option[CallSessionId]): Future[Unit] = Future {
