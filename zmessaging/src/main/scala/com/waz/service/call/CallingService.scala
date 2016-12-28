@@ -54,15 +54,14 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
                      otrSyncHandler: OtrSyncHandler, flowManagerService: FlowManagerService, messagesService: MessagesService,
                      mediaManagerService: MediaManagerService) {
 
-  verbose("Instantiating calling service")
-
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
 
   private val fm = flowManagerService.flowManager
 
+  val v3Available = Signal.future(Calling.v3Available.map(_ => true).recover { case _ => false })
   val currentCall = Signal(IdleCall)
-  val missedCall = EventStream[(ConvId, UserId, Instant)]()
+  val missedCall  = EventStream[(ConvId, UserId, Instant)]()
 
   private val response = EventStream[(Either[ErrorResponse, Date], Pointer)]()
 
@@ -71,7 +70,7 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
     i.convId.foreach(CallService(context, _)) // start tracking
   }
 
-  private lazy val init = {
+  private lazy val init = Calling.v3Available.map { _ =>
 
     def withConversation(convId: String)(f: ConversationData => Unit) = convs.convByRemoteId(RConvId(convId)).map {
       case Some(conv) => f(conv)
@@ -249,7 +248,9 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
   private def withConvWhenReady(convId: ConvId)(f: ConversationData => Unit): Unit = init.flatMap(_ => convs.convById(convId).map {
     case Some(conv) => f(conv)
     case _ => error(s"Could not find conversation: $convId")
-  })
+  }).recover {
+    case e: Throwable => error("Attempted to perform avs v3 action after failed init", e)
+  }
 }
 
 

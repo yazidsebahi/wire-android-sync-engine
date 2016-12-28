@@ -22,14 +22,22 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.utils.jna.{Size_t, Uint32_t}
 
+import scala.concurrent.Promise
+
 object Calling {
+
+  private val available = Promise[Unit]()
+  val v3Available = available.future
 
   try {
     verbose("Native.register: avs")
     Native.register(Calling.getClass, "avs")
+    available.success({})
   }
   catch {
-    case e: Throwable => error("Unable to start avs", e)
+    case e: Throwable =>
+      error("Unable to start avs", e)
+      available.failure(e)
   }
 
   @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
