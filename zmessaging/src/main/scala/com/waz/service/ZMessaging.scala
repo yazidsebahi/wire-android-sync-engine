@@ -282,8 +282,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   // force loading of services which should run on start
   {
-    calling
-//    flowmanager
     conversations
     users
 

@@ -25,5 +25,5 @@ class MockedMediaManagerService(context: Context, prefs: PreferenceService) exte
 
   def changePlaybackRoute(route: PlaybackRoute): Unit = mediaManager foreach (_.onPlaybackRouteChanged(route.avsIndex))
 
-  override val mediaManager: Option[MediaManager] = None
+  override lazy val mediaManager: Option[MediaManager] = None
 }

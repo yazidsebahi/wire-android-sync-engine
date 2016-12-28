@@ -24,7 +24,7 @@ import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{EventContext, Signal, SourceSignal}
+import com.waz.utils.events.{EventContext, SourceSignal}
 import com.waz.utils._
 import com.waz.zms.R
 import org.json.JSONObject
@@ -35,46 +35,46 @@ import scala.util.Try
 
 class MediaManagerService(context: Context, prefs: PreferenceService) {
   import com.waz.service.MediaManagerService._
-  verbose("started")
-  private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
 
+  private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
 
-  val isSpeakerOn = Signal[Boolean]()
+  lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
+  
+  lazy val mediaManager = LoggedTry {
+    val manager = MediaManager.getInstance(context.getApplicationContext)
+    manager.addListener(listener)
+    audioConfig.foreach(manager.registerMediaFromConfiguration)
+    manager
+  } .toOption
 
-  val audioConfig =
-    LoggedTry(new JSONObject(IoUtils.asString(context.getAssets.open(AudioConfigAsset)))).toOption
+  lazy val listener: MediaManagerListener = new MediaManagerListener {
+    override def mediaCategoryChanged(convId: String, category: Int): Int = category // we don't need to do anything in here, I guess, and the return value gets ignored anyway
 
-  val mediaManager = LoggedTry(returning(MediaManager.getInstance(context.getApplicationContext)) { mm =>
-    verbose(s"Manager: $mm instantiated with cxt: ${mm.getContext}")
-    mm.addListener(new MediaManagerListener {
-      override def mediaCategoryChanged(convId: String, category: Int): Int = category // we don't need to do anything in here, I guess, and the return value gets ignored anyway
+    override def onPlaybackRouteChanged(route: Int): Unit = {
+      val pbr = PlaybackRoute.fromAvsIndex(route)
+      debug(s"onPlaybackRouteChanged($pbr)")
+      isSpeakerOn ! (pbr == PlaybackRoute.Speaker)
+    }
+  }
 
-      override def onPlaybackRouteChanged(route: Int): Unit = {
-        val pbr = PlaybackRoute.fromAvsIndex(route)
-        debug(s"onPlaybackRouteChanged($pbr)")
-        isSpeakerOn ! (pbr == PlaybackRoute.Speaker)
-      }
-    })
-    audioConfig.foreach(mm.registerMediaFromConfiguration)
-    isSpeakerOn ! mm.isLoudSpeakerOn
-  }).toOption
+  private lazy val prefAll = Try(context.getResources.getString(R.string.pref_sound_value_all)).getOrElse("all")
+  private lazy val prefSome = Try(context.getResources.getString(R.string.pref_sound_value_some)).getOrElse("some")
+  private lazy val prefNone = Try(context.getResources.getString(R.string.pref_sound_value_none)).getOrElse("none")
+  private lazy val soundsPrefKey = Try(context.getResources.getString(R.string.pref_sound_option_key)).getOrElse("PREF_KEY_SOUND") // hardcoded value used in tests
 
-  private val prefAll = Try(context.getResources.getString(R.string.pref_sound_value_all)).getOrElse("all")
-  private val prefSome = Try(context.getResources.getString(R.string.pref_sound_value_some)).getOrElse("some")
-  private val prefNone = Try(context.getResources.getString(R.string.pref_sound_value_none)).getOrElse("none")
+  private lazy val intensityMap = Map(prefAll -> IntensityLevel.FULL, prefSome -> IntensityLevel.SOME, prefNone -> IntensityLevel.NONE)
 
-  private val soundsPrefKey = Try(context.getResources.getString(R.string.pref_sound_option_key)).getOrElse("PREF_KEY_SOUND") // hardcoded value used in tests
+  private lazy val soundsPref = prefs.uiPreferenceStringSignal(soundsPrefKey)
 
-  private val intensityMap = Map(prefAll -> IntensityLevel.FULL, prefSome -> IntensityLevel.SOME, prefNone -> IntensityLevel.NONE)
-
-  private val soundsPref = prefs.uiPreferenceStringSignal(soundsPrefKey)
   soundsPref.signal { value =>
     val intensity = intensityMap.getOrElse(value, IntensityLevel.FULL)
     verbose(s"setting intensity to: $intensity")
     withMedia { _.setIntensity(intensity) }
   }
 
+  lazy val audioConfig =
+    LoggedTry(new JSONObject(IoUtils.asString(context.getAssets.open(AudioConfigAsset)))).toOption
 
   lazy val audioConfigUris =
     audioConfig.map(new Configuration(_).getSoundMap.asScala.mapValues { value =>

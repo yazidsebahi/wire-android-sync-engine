@@ -57,7 +57,9 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
 
+  //need to ensure that flow manager and media manager are initialised for v3 (they are lazy values)
   private val fm = flowManagerService.flowManager
+  private val mm = mediaManagerService.mediaManager
 
   val v3Available = Signal.future(Calling.v3Available.map(_ => true).recover { case _ => false })
   val currentCall = Signal(IdleCall)

@@ -62,7 +62,7 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
   }
 
   override lazy val mediaManager = new MediaManagerService(context, prefs) {
-    override val mediaManager = None
+    override lazy val mediaManager = None
   }
 }
 

@@ -35,8 +35,6 @@ import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, SourceSignal}
 import com.waz.utils.returning
-import com.waz.utils.RichInstant
-import com.waz.utils.RichFiniteDuration
 import org.threeten.bp.{Instant, Duration => Duration310}
 
 import scala.collection.breakOut
@@ -72,9 +70,7 @@ class VoiceChannelService(val context: Context, val content: VoiceChannelContent
 
   flows.onFlowEvent.on(dispatcher) { event => metrics = metrics.flowEvent(event.kind) }
   flows.onFlowRequest.on(dispatcher) { req => metrics = metrics.flowRequest(req) }
-  flows.onFlowResponse.on(dispatcher) {
-    case (resp, _, req, startTime) => metrics = metrics.flowResponse(f"after ${startTime.until(Instant.now).toMillis}%4d ms - ${req.httpMethod} ${req.resourcePath}")
-  }
+  flows.onFlowResponse.on(dispatcher) { req => metrics = metrics.flowResponse(req) }
 
   flows.onAvsMetricsReceived.on(dispatcher) { avsMetrics =>
 
