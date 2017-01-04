@@ -194,8 +194,9 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
    */
   def syncIfNeeded(users: UserData*): Future[Unit] =
     lastSlowSyncTimestamp flatMap {
-      case Some(time) => sync.syncUsersIfNotEmpty(users.filter(_.syncTimestamp < time).map(_.id))
-      case _ => Future.successful(())
+      //TODO: Remove empty picture check when not needed anymore
+      case Some(time) => sync.syncUsersIfNotEmpty(users.filter(user => user.syncTimestamp < time || user.picture.isEmpty).map(_.id))
+      case _ => sync.syncUsersIfNotEmpty(users.filter(_.picture.isEmpty).map(_.id))
     }
 
   def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picture.getOrElse(Seq.empty[AssetData])))
