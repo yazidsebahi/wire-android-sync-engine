@@ -19,13 +19,13 @@ package com.waz.model
 
 import android.database.Cursor
 import android.database.DatabaseUtils.queryNumEntries
-import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.{SQLiteDatabase, SQLiteQueryBuilder}
 import android.net.Uri
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.Type._
-import com.waz.api.{EphemeralExpiration, Message}
+import com.waz.api.{EphemeralExpiration, Message, MessageFilter}
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.ConversationData.ConversationDataDao
@@ -397,6 +397,22 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def findByType(conv: ConvId, tpe: Message.Type)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(tpe)}'", null, null, null, s"${Time.name} ASC"))
+
+
+    def msgIndexCursorFiltered(conv: ConvId, messageFilter: Option[MessageFilter])(implicit db: SQLiteDatabase): Cursor = {
+     messageFilter.flatMap{ mf =>
+        val builder = new SQLiteQueryBuilder()
+        mf.msgType.fold(Option.empty[String]){
+          types =>
+            Some(builder.buildUnionQuery(
+              types.map(mt =>
+                s"SELECT * FROM (" +
+                  SQLiteQueryBuilder.buildQueryString(false, table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(mt)}'", null, null, s"${Time.name} DESC", messageFilter.get.limit.fold[String](null)(_.toString)) +
+                  s")").toArray,
+              null, null))
+        }
+      }.fold(msgIndexCursor(conv))(db.rawQuery(_, null))
+    }
 
     /**
      * Returns incoming messages (for all unmuted conversations) with local time greater then given time in millis.

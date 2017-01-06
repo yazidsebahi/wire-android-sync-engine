@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.api.{ErrorResponse, Message}
+import com.waz.api.{ErrorResponse, Message, MessageFilter}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
 import com.waz.service.Timeouts
@@ -68,6 +68,9 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
     } {
       Future.successful
     }
+
+  def msgsFilteredIndex(conv: ConvId, messageFilter: MessageFilter): Future[ConvMessagesIndex] =
+    Future(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, filter = Some(messageFilter)))
 
   onAdded { added =>
     Future.traverse(added.groupBy(_.convId)) { case (convId, msgs) =>
