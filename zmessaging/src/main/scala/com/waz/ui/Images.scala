@@ -55,7 +55,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
-      val asset = AssetData.newImageAsset(tag = Medium).copy(source = Some(uri))
+      val asset = AssetData.newImageAssetFromUri(tag = Medium, uri = uri)
       cacheImageAsset(asset.id, new LocalImageAsset(asset))
     }
   }
