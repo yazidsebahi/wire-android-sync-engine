@@ -283,17 +283,13 @@ object JCE {
       val cryptoAllPermission = Class.forName("javax.crypto.CryptoAllPermission")
 
       val isRestrictedField = jceSecurity.getDeclaredField("isRestricted")
-      isRestrictedField.get(null) match {
-        case java.lang.Boolean.TRUE =>
-          if(java.lang.reflect.Modifier.isFinal(isRestrictedField.getModifiers)){
-            val modifiers = Class.forName("java.lang.reflect.Field").getDeclaredField("modifiers")
-            modifiers.setAccessible(true)
-            modifiers.setInt(isRestrictedField, isRestrictedField.getModifiers & ~java.lang.reflect.Modifier.FINAL);
-          }
-          isRestrictedField.setAccessible(true)
-          isRestrictedField.set(null, false)
-        case _ => println(s"RestrictedField does not need to change")
+      if (java.lang.reflect.Modifier.isFinal(isRestrictedField.getModifiers)) {
+        val modifiers = Class.forName("java.lang.reflect.Field").getDeclaredField("modifiers")
+        modifiers.setAccessible(true)
+        modifiers.setInt(isRestrictedField, isRestrictedField.getModifiers & ~java.lang.reflect.Modifier.FINAL)
       }
+      isRestrictedField.setAccessible(true)
+      isRestrictedField.set(null, false)
 
       val defaultPolicyField = jceSecurity.getDeclaredField("defaultPolicy")
       defaultPolicyField.setAccessible(true)
@@ -308,7 +304,8 @@ object JCE {
       defaultPolicy.add(instance.get(null).asInstanceOf[Permission])
     } catch {
       case e: ClassNotFoundException =>
-        println(s"Unable to enable unlimited-strength crpto: $e")
+        println(s"Unable to enable unlimited-strength crypto: $e")
+        e.printStackTrace()
       case e: Exception =>
         println("Failed to remove cryptography restrictions")
         e.printStackTrace()
