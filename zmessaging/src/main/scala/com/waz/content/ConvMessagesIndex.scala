@@ -18,7 +18,7 @@
 package com.waz.content
 
 import com.waz.ZLog._
-import com.waz.api.Message
+import com.waz.api.{Message, MessageFilter}
 import com.waz.api.Message.Status
 import com.waz.content.ConvMessagesIndex._
 import com.waz.model.MessageData.{MessageDataDao, isUserContent}
@@ -33,7 +33,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: UserId, users: UsersStorage,
-    convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase) { self =>
+    convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase, filter: Option[MessageFilter] = None) { self =>
 
   private implicit val tag: LogTag = s"ConvMessagesIndex_$conv"
 
@@ -113,7 +113,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   private[waz] def loadCursor = CancellableFuture.lift(init) flatMap { _ =>
     verbose(s"loadCursor for $conv")
     storage { implicit db =>
-      val cursor = MessageDataDao.msgIndexCursor(conv)
+      val cursor = MessageDataDao.msgIndexCursorFiltered(conv, filter)
       val time = lastReadTime.currentValue.getOrElse(Instant.EPOCH)
       val readMessagesCount = MessageDataDao.countAtLeastAsOld(conv, time).toInt
       verbose(s"index of $time = $readMessagesCount")
