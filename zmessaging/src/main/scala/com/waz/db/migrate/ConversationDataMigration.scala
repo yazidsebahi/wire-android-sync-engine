@@ -96,6 +96,10 @@ object ConversationDataMigration {
     db.execSQL("ALTER TABLE Conversations ADD COLUMN ephemeral INTEGER DEFAULT 0")
   }
 
+  lazy val v79 = { implicit db: SQLiteDatabase =>
+    db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_search_key on Conversations (search_key)")
+  }
+
   object Columns {
 
     object v63 {

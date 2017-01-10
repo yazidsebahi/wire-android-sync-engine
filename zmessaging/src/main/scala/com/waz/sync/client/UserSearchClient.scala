@@ -19,7 +19,7 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.SearchQuery.{Recommended, TopPeople}
+import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
@@ -39,8 +39,9 @@ class UserSearchClient(netClient: ZNetClient) {
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = {
     debug(s"graphSearch('$query', $limit)")
     query match {
-      case TopPeople           => extractUsers("TopPeople", Request.Get(Request.query(TopUserPath, "size" -> limit)))
-      case Recommended(prefix) => extractUsers(s"Recommended($prefix)", Request.Get(graphSearchQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
+      case TopPeople                 => extractUsers("TopPeople", Request.Get(Request.query(TopUserPath, "size" -> limit)))
+      case Recommended(prefix)       => extractUsers(s"Recommended($prefix)", Request.Get(graphSearchQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
+      case RecommendedHandle(prefix) => extractUsers(s"RecommendedHandle($prefix)", Request.Get(graphSearchQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
     }
   }
 

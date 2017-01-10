@@ -22,4 +22,8 @@ import android.database.sqlite.SQLiteDatabase
 object UserDataMigration {
   lazy val v61 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN deleted INTEGER DEFAULT 0")
   lazy val v78 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN handle TEXT DEFAULT ''")
+  lazy val v79 = { implicit db: SQLiteDatabase =>
+    db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_id on Users (_id)")
+    db.execSQL(s"CREATE INDEX IF NOT EXISTS UserData_search_key on Users (skey)")
+  }
 }

@@ -351,8 +351,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     }
   }
 
-  def findGroupConversations(prefix: SearchKey, limit: Int): Future[Seq[ConversationData]] =
-    withSelfUserFuture(id => convStorage.search(prefix, id)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))
+  def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
+    withSelfUserFuture(id => convStorage.search(prefix, id, handleOnly)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))
 
   def knock(id: ConvId): Future[Option[MessageData]] =
     for {
