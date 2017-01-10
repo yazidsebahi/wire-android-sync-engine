@@ -18,4 +18,6 @@
 package com.waz.api
 
 //TODO: other filter types like content or user?
-case class MessageFilter(msgType: Option[Seq[Message.Type]], limit: Option[Int] = None)
+case class MessageFilter(msgType: Option[Seq[TypeFilter]], overallLimit: Option[Int] = None)
+
+case class TypeFilter(msgType: Message.Type, limit: Option[Int] = None)

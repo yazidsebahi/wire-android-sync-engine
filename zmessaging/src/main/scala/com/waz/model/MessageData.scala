@@ -398,20 +398,19 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def findByType(conv: ConvId, tpe: Message.Type)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(tpe)}'", null, null, null, s"${Time.name} ASC"))
 
-
     def msgIndexCursorFiltered(conv: ConvId, messageFilter: Option[MessageFilter])(implicit db: SQLiteDatabase): Cursor = {
-     messageFilter.flatMap{ mf =>
-        val builder = new SQLiteQueryBuilder()
-        mf.msgType.fold(Option.empty[String]){
-          types =>
-            Some(builder.buildUnionQuery(
-              types.map(mt =>
-                s"SELECT * FROM (" +
-                  SQLiteQueryBuilder.buildQueryString(false, table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(mt)}'", null, null, s"${Time.name} DESC", messageFilter.get.limit.fold[String](null)(_.toString)) +
-                  s")").toArray,
-              null, null))
-        }
-      }.fold(msgIndexCursor(conv))(db.rawQuery(_, null))
+      messageFilter.flatMap(_.msgType) match {
+        case Some(types) =>
+          val builder = new SQLiteQueryBuilder()
+          val q = builder.buildUnionQuery(
+            types.map(mt =>
+              s"SELECT * FROM (" +
+                SQLiteQueryBuilder.buildQueryString(false, table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(mt.msgType)}'", null, null, s"${Time.name} DESC", mt.limit.fold[String](null)(_.toString)) +
+                s")").toArray,
+            null, messageFilter.flatMap(_.overallLimit).fold[String](null)(_.toString))
+          db.rawQuery(q, null)
+        case None => msgIndexCursor(conv)
+      }
     }
 
     /**
