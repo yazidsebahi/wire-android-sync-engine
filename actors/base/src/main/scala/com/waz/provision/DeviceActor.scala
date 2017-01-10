@@ -381,18 +381,20 @@ class DeviceActor(val deviceName: String,
       }
 
     case SendFile(remoteId, path, mime) =>
-      withConv(remoteId) { conv =>
+      whenConversationExistsFuture(remoteId) { conv =>
         val file = new File(path)
         val assetId = AssetId()
-        zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).flatMap { cacheEntry =>
+        zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).map { cacheEntry =>
           Mime(mime) match {
-            case Mime.Image() => zmessaging.convsUi.sendMessage(conv.id, new Image(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream))))
-            case _ => {
+            case Mime.Image() =>
+              zmessaging.convsUi.sendMessage(conv.id, new Image(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream))))
+              Successful
+            case _ =>
               val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
                 _ => new FileInputStream(file)
               }
               zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
-            }
+              Successful
           }
         }
       }
