@@ -385,10 +385,15 @@ class DeviceActor(val deviceName: String,
         val file = new File(path)
         val assetId = AssetId()
         zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).flatMap { cacheEntry =>
-          val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
-            _ => new FileInputStream(file)
+          Mime(mime) match {
+            case Mime.Image() => zmessaging.convsUi.sendMessage(conv.id, new Image(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream))))
+            case _ => {
+              val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
+                _ => new FileInputStream(file)
+              }
+              zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
+            }
           }
-          zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
         }
       }
 
