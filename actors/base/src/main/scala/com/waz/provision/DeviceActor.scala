@@ -242,16 +242,17 @@ class DeviceActor(val deviceName: String,
       }
 
     case GetMessages(rConvId) =>
-      for {
-        conv <- getConv(rConvId)
-        idx <- zmessaging.messagesStorage.msgsIndex(conv.id)
-        cursor <- idx.loadCursor
-      } yield {
+      whenConversationExistsFuture(rConvId) { conv =>
+        for {
+          idx <- zmessaging.messagesStorage.msgsIndex(conv.id)
+          cursor <- idx.loadCursor
+        } yield {
 
-        ConvMessages(Array.tabulate(cursor.size) { i =>
-          val m = cursor(i)
-          MessageInfo(m.message.id, m.message.msgType, m.message.time)
-        })
+          ConvMessages(Array.tabulate(cursor.size) { i =>
+            val m = cursor(i)
+            MessageInfo(m.message.id, m.message.msgType, m.message.time)
+          })
+        }
       }
 
     case CreateGroupConversation(users@_*) =>
@@ -280,7 +281,7 @@ class DeviceActor(val deviceName: String,
       }
 
     case DeleteMessage(convId, msgId) =>
-      getConv(convId) flatMap  { conv =>
+      whenConversationExistsFuture(convId) { conv =>
        zmessaging.messagesStorage.getMessage(msgId) flatMap {
           case Some(msg) =>
             zmessaging.convsUi.deleteMessage(conv.id, msgId) map { _ => Successful }
@@ -309,8 +310,10 @@ class DeviceActor(val deviceName: String,
       }
 
     case RecallMessage(convId, msgId) =>
-      withConv(convId) { conv =>
-        zmessaging.convsUi.recallMessage(conv.id, msgId)
+      whenConversationExistsFuture(convId) { conv =>
+        zmessaging.convsUi.recallMessage(conv.id, msgId).map { _ =>
+          Successful
+        }
       }
 
     case AcceptConnection(userId) =>
@@ -342,8 +345,10 @@ class DeviceActor(val deviceName: String,
       }
 
     case SendImageData(remoteId, bytes) =>
-      withConv(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes)))
+      whenConversationExistsFuture(remoteId) { conv =>
+        zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes))).map { _ =>
+          Successful
+        }
       }
 
       //TODO: Dean remove after v2 transition period
@@ -360,7 +365,7 @@ class DeviceActor(val deviceName: String,
       }
 
     case SendAsset(remoteId, bytes, mime, name, delay) =>
-      getConv(remoteId) flatMap  { conv =>
+      whenConversationExistsFuture(remoteId) { conv =>
         delayNextAssetPosting.set(delay)
         zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(impl.AssetForUpload(AssetId(), Some(name), Mime(mime), Some(bytes.length.toLong)) {
           _ => new ByteArrayInputStream(bytes)
@@ -368,7 +373,7 @@ class DeviceActor(val deviceName: String,
       }
 
     case SendLocation(remoteId, lon, lat, name, zoom) =>
-      getConv(remoteId) flatMap  { conv =>
+      whenConversationExistsFuture(remoteId) { conv =>
         zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Location(lon, lat, name, zoom)).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
       }
 
@@ -400,18 +405,24 @@ class DeviceActor(val deviceName: String,
       }
 
     case AddMembers(remoteId, users@_*) =>
-      withConv(remoteId) { conv =>
-        zmessaging.convsUi.addConversationMembers(conv.id, users)
+      whenConversationExistsFuture(remoteId) { conv =>
+        zmessaging.convsUi.addConversationMembers(conv.id, users).map { _ =>
+          Successful
+        }
       }
 
     case Knock(remoteId) =>
-      withConv(remoteId) { conv =>
-        zmessaging.convsUi.knock(conv.id)
+      whenConversationExistsFuture(remoteId) { conv =>
+        zmessaging.convsUi.knock(conv.id).map { _ =>
+          Successful
+        }
       }
 
     case SetEphemeral(remoteId, expiration) =>
-      withConv(remoteId) { conv =>
-        zmessaging.convsUi.setEphemeral(conv.id, expiration)
+      whenConversationExistsFuture(remoteId) { conv =>
+        zmessaging.convsUi.setEphemeral(conv.id, expiration).map { _ =>
+          Successful
+        }
       }
 
     case MarkEphemeralRead(convId, messageId) =>
@@ -646,9 +657,11 @@ class DeviceActor(val deviceName: String,
     }
   }
 
+  // Should not use withConv directly in Endpoint, because which will not wait until convId exist
   def withConv[A](id: RConvId)(f: ConversationData => Future[A]) =
     getConv(id) flatMap f map { _ => Successful }
 
+  // Should not use withConv directly in Endpoint, because which will not wait until convId exist
   def getConv(id: RConvId) = zmessaging.convsContent.convByRemoteId(id) flatMap {
     case None =>
       log.warning(s"rconv id not found: $id")
@@ -673,8 +686,9 @@ class DeviceActor(val deviceName: String,
   }
 
   private var listeners = Set.empty[UpdateListener] // required to keep references to the listeners as waitUntil manages to get them garbage-collected
+  private var delay = CancellableFuture.cancelled[Unit]()
 
-  def waitUntil[S <: UiObservable](observable: S)(check: S => Boolean): Future[S] = {
+  def waitUntil[S <: UiObservable](observable: S, timeout: FiniteDuration = 120.seconds)(check: S => Boolean): Future[S] = {
     Threading.assertUiThread()
     val promise = Promise[S]()
 
@@ -693,10 +707,16 @@ class DeviceActor(val deviceName: String,
 
     onUpdated
 
+    delay = CancellableFuture.delay(timeout)
+    delay.onSuccess { case _ =>
+      promise.tryFailure(new Exception(s"Waituntil did not complete before timeout of : ${timeout.toSeconds} seconds"))
+    }
+
     promise.future.andThen {
       case _ =>
         observable.removeUpdateListener(listener)
         listeners -= listener
+        delay.cancel()("wait_until")
     }
   }
 }
