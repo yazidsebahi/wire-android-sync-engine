@@ -59,7 +59,7 @@ case class UserData(
   def isAcceptedOrPending = connection == ConnectionStatus.Accepted || connection == ConnectionStatus.PendingFromOther || connection == ConnectionStatus.PendingFromUser
   def isVerified = verified == Verification.VERIFIED
   def isAutoConnect = isConnected && ! isSelf && connectionMessage.isEmpty
-  lazy val isWireBot = email.exists(e => UserData.botEmail.matcher(e.str).matches)
+  lazy val isWireBot = handle.exists(h => UserData.botHandle.matcher(h.string).matches)
 
   def getDisplayName = if (displayName.isEmpty) name else displayName
 
@@ -126,7 +126,7 @@ case class UserData(
 object UserData {
 
   val Empty = UserData(UserId("EMPTY"), "")
-  val botEmail = compile("(welcome|anna)(\\+\\d+)?@wire\\.com", CASE_INSENSITIVE)
+  val botHandle = compile("ottothebot|annathebot", CASE_INSENSITIVE)
 
   type ConnectionStatus = com.waz.api.User.ConnectionStatus
   object ConnectionStatus {
