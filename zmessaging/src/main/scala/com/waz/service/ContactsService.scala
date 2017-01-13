@@ -197,7 +197,10 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
   private lazy val contactsSignal: Signal[GenMap[ContactId, Contact]] = new AggregatingSignal[IndexedSeq[Contact], IndexedSeq[Contact]](contactsLoaded, initialContactsLoading, (stale, fresh) => fresh).map(_.by[ContactId, mut.HashMap](_.id))
 
-  def contactForUser(id: UserId) = contactsOnWire.map(_.aftersets).map(_.get(id)).collect { case Some(c) => c.headOption }.zip(contactsSignal).collect { case (Some(cId), contacts) => contacts.get(cId) }
+  def contactForUser(id: UserId) = contactsOnWire.map(_.aftersets).map(_.get(id).flatMap(_.headOption)).zip(contactsSignal).map {
+    case (Some(cId), contacts) => contacts.get(cId)
+    case _ => None
+  }
 
   private def initialContactsLoading: Future[IndexedSeq[Contact]] =
     storage.read(db => logTime(s"loading first $InitialContactsBatchSize contacts")(ContactsDao.list(ContactsDao.listCursorWithLimit(Some(InitialContactsBatchSize))(db)))).andThen {
