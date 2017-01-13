@@ -20,8 +20,9 @@ package com.waz.content
 import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
+import android.support.v4.util.LruCache
 import com.waz.ZLog._
-import com.waz.api.{ErrorResponse, Message}
+import com.waz.api.{ErrorResponse, Message, MessageFilter}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
 import com.waz.service.Timeouts
@@ -53,6 +54,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   val onMessageFailed = EventStream[(MessageData, ErrorResponse)]()
 
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
+  private val filteredIndexes = new LruCache[(ConvId, MessageFilter), ConvMessagesIndex](MessagesStorage.filteredMessagesCacheSize)
 
   lazy val incomingMessages = storage {
     MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis)(_)
@@ -60,11 +62,14 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
 
   def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] =
     Option(indexes.get(conv)).fold {
-      Future {
-        Option(indexes.get(conv)).getOrElse {
-          returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage))(indexes.put(conv, _))
-        }
-      }
+      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage))(indexes.put(conv, _)))
+    } {
+      Future.successful
+    }
+
+  def msgsFilteredIndex(conv: ConvId, messageFilter: MessageFilter): Future[ConvMessagesIndex] =
+    Option(filteredIndexes.get((conv, messageFilter))).fold {
+      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, filter = Some(messageFilter)))(filteredIndexes.put((conv, messageFilter), _)))
     } {
       Future.successful
     }
@@ -218,6 +223,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
 
 object MessagesStorage {
   val cacheSize = 12048
+  val filteredMessagesCacheSize = 32
   val FirstMessageTypes = {
     import Message.Type._
     Set(TEXT, TEXT_EMOJI_ONLY, KNOCK, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, LOCATION)

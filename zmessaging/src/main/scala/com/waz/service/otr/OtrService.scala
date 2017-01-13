@@ -95,6 +95,8 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
           case Right(GenericMessage(mId, SessionReset)) if metadata.internalBuild => // display session reset notifications in internal build
              Some(GenericMessageEvent(id, conv, time, from, GenericMessage(mId, Text("System msg: session reset", Map.empty, Nil))))
           case Right(GenericMessage(mId, SessionReset)) => None // ignore session reset notifications
+          case Right(GenericMessage(mId, Calling(content))) =>
+            Some(CallMessageEvent(id, conv, time, from, sender, content)) //call messages need sender client id
           case Right(msg) =>
             Some(GenericMessageEvent(id, conv, time, from, msg).withLocalTime(ev.localTime))
         }

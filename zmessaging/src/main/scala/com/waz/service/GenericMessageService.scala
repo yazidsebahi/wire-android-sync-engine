@@ -20,16 +20,16 @@ package com.waz.service
 import com.waz.ZLog._
 import com.waz.model.GenericContent._
 import com.waz.model._
-import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
-import com.waz.service.messages.{ReactionsService, MessagesContentUpdater, ReceiptService}
+import com.waz.service.messages.{MessagesContentUpdater, ReactionsService, ReceiptService}
 import com.waz.utils._
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future.traverse
 
 class GenericMessageService(messages: MessagesContentUpdater, convs: ConversationsContentUpdater,
-    convEvents: ConversationEventsService, images: AssetService, reactions: ReactionsService, receipts: ReceiptService) {
+                            convEvents: ConversationEventsService, reactions: ReactionsService,
+                            receipts: ReceiptService) {
 
   private implicit val tag: LogTag = logTagFor[GenericMessageService]
   import com.waz.threading.Threading.Implicits.Background

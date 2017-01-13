@@ -43,13 +43,15 @@ class PreferenceService(context: Context) {
 
   lazy val autoAnswerCallPrefKey    = Try(context.getResources.getString(R.string.zms_auto_answer_key)).getOrElse("PREF_KEY_AUTO_ANSWER_ENABLED")
   lazy val sendWithAssetsV3Key      = Try(context.getResources.getString(R.string.zms_assets_v3)).getOrElse("PREF_KEY_SEND_WITH_ASSETS_V3")
+  lazy val callingV3Key             = Try(context.getResources.getString(R.string.zms_calling_v3)).getOrElse("PREF_KEY_CALLING_V3")
   lazy val gcmEnabledKey            = Try(context.getResources.getString(R.string.zms_gcm_enabled)).getOrElse("PREF_KEY_GCM_ENABLED")
   lazy val webSocketPingIntervalKey = Try(context.getResources.getString(R.string.zms_websocket_ping_interval)).getOrElse("PREF_KEY_WEBSOCKET_PING_INTERVAL")
 
   lazy val uiPreferences = uiPreferencesFrom(context)
 
   def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //false by default for production
-  def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey, true) //true by default for production
+  def callingV3  = uiPreferences.getBoolean(callingV3Key,        false) //false by default for production
+  def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey,       true) //true by default for production
   //TODO make this a long when fixed on UI
   def webSocketPingInterval = FiniteDuration(Try(uiPreferences.getString(webSocketPingIntervalKey, "900000").toLong).toOption
     .collect{ case t => if (t < MIN_PING_INTERVAL.toMillis) MIN_PING_INTERVAL.toMillis else t }.getOrElse(DEFAULT_PING_INTERVAL_BACKGROUND.toMillis), TimeUnit.MILLISECONDS)

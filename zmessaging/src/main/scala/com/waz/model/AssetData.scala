@@ -159,6 +159,8 @@ object AssetData {
   //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
   def newImageAsset(id: AssetId = AssetId(), tag: Image.Tag) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), tag)))
 
+  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag, uri: Uri) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
+
   val Empty = AssetData()
 
   object WithMetaData {

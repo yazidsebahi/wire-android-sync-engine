@@ -15,15 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.db.migrate
+package com.waz.utils.jna
 
-import android.database.sqlite.SQLiteDatabase
+import com.sun.jna.{IntegerType, Native}
 
-object UserDataMigration {
-  lazy val v61 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN deleted INTEGER DEFAULT 0")
-  lazy val v78 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN handle TEXT DEFAULT ''")
-  lazy val v79 = { implicit db: SQLiteDatabase =>
-    db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_id on Users (_id)")
-    db.execSQL(s"CREATE INDEX IF NOT EXISTS UserData_search_key on Users (skey)")
-  }
+case class Uint32_t(value: Int) extends IntegerType(4, value, true) {
+  def this() = this(0)
+}
+
+case class Size_t(value: Int) extends IntegerType(Native.SIZE_T_SIZE, value, true) {
+  def this() = this(0)
 }

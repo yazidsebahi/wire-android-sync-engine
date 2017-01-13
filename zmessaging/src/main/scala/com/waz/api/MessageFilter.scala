@@ -15,15 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.db.migrate
+package com.waz.api
 
-import android.database.sqlite.SQLiteDatabase
+//TODO: other filter types like content or user?
+case class MessageFilter(msgType: Option[Seq[TypeFilter]], overallLimit: Option[Int] = None)
 
-object UserDataMigration {
-  lazy val v61 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN deleted INTEGER DEFAULT 0")
-  lazy val v78 = (_: SQLiteDatabase).execSQL("ALTER TABLE Users ADD COLUMN handle TEXT DEFAULT ''")
-  lazy val v79 = { implicit db: SQLiteDatabase =>
-    db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_id on Users (_id)")
-    db.execSQL(s"CREATE INDEX IF NOT EXISTS UserData_search_key on Users (skey)")
-  }
-}
+case class TypeFilter(msgType: Message.Type, limit: Option[Int] = None)

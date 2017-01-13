@@ -25,6 +25,7 @@ object SearchQuery {
   def fromCacheKey(key: String): SearchQuery =
     if (key == TopPeople.cacheKey) TopPeople
     else if (key startsWith Recommended.prefix) Recommended(key substring Recommended.prefix.length)
+    else if (key startsWith RecommendedHandle.prefix) RecommendedHandle(key substring RecommendedHandle.prefix.length)
     else throw new IllegalArgumentException(s"not a valid cacheKey: $key")
 
   case object TopPeople extends SearchQuery {
@@ -36,5 +37,12 @@ object SearchQuery {
   }
   object Recommended extends (String => Recommended) {
     val prefix = "##recommended##"
+  }
+
+  case class RecommendedHandle(searchTerm: String) extends SearchQuery {
+    val cacheKey = s"${RecommendedHandle.prefix}$searchTerm"
+  }
+  object RecommendedHandle extends (String => RecommendedHandle) {
+    val prefix = "##recommendedhandle##"
   }
 }

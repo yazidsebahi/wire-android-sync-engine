@@ -327,6 +327,12 @@ object ActorMessage {
   case class UpdateProfileEmail(email: String) extends ActorMessage
 
   /**
+    * Change the preference for calling version.
+    * @param version either 2 or 3
+    */
+  case class SetCallingVersion(version: Int) extends ActorMessage
+
+  /**
    * Accept an incoming call on the remote device
    */
   case object AcceptCall extends ActorMessage

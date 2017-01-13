@@ -220,6 +220,11 @@ object ConversationData {
 
     import com.waz.model.ConversationData.ConversationType._
 
+    override def onCreate(db: SQLiteDatabase): Unit = {
+      super.onCreate(db)
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_search_key on Conversations (${SKey.name})")
+    }
+
     def establishedConversations(implicit db: SQLiteDatabase) = iterating(db.rawQuery(
       s"""SELECT *
          |  FROM ${table.name}
@@ -234,22 +239,28 @@ object ConversationData {
     import ConversationMemberData.{ConversationMemberDataDao => CM}
     import UserData.{UserDataDao => U}
 
-    def search(prefix: SearchKey, self: UserId)(implicit db: SQLiteDatabase) = list(db.rawQuery(
-      s"""SELECT DISTINCT c.*
-         |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
-         | WHERE cm.${CM.ConvId.name} = c.${Id.name}
-         |   AND cm.${CM.UserId.name} = u.${U.Id.name}
-         |   AND c.${ConvType.name} = ${ConvType(ConversationType.Group)}
-         |   AND c.${Hidden.name} = ${Hidden(false)}
-         |   AND u.${U.Id.name} != '${U.Id(self)}'
-         |   AND (c.${Cleared.name} < c.${LastEventTime.name} OR c.${Status.name} = ${ConversationStatus.Active.value})
-         |   AND (
-         |        c.${SKey.name}   LIKE '${SKey(Some(prefix))}%'
-         |     OR c.${SKey.name}   LIKE '% ${SKey(Some(prefix))}%'
-         |     OR u.${U.SKey.name} LIKE '${U.SKey(prefix)}%'
-         |     OR u.${U.SKey.name} LIKE '% ${U.SKey(prefix)}%'
-         |   )
-       """.stripMargin, null))
+    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean)(implicit db: SQLiteDatabase) ={
+      val select =
+        s"""SELECT DISTINCT c.*
+            |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
+            | WHERE cm.${CM.ConvId.name} = c.${Id.name}
+            |   AND cm.${CM.UserId.name} = u.${U.Id.name}
+            |   AND c.${ConvType.name} = ${ConvType(ConversationType.Group)}
+            |   AND c.${Hidden.name} = ${Hidden(false)}
+            |   AND u.${U.Id.name} != '${U.Id(self)}'
+            |   AND (c.${Cleared.name} < c.${LastEventTime.name} OR c.${Status.name} = ${ConversationStatus.Active.value})""".stripMargin
+      val handleCondition =
+        if (handleOnly){
+          s"""AND u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
+        } else {
+          s"""AND (    c.${SKey.name}   LIKE '${SKey(Some(prefix))}%'
+              |     OR c.${SKey.name}   LIKE '% ${SKey(Some(prefix))}%'
+              |     OR u.${U.SKey.name} LIKE '${U.SKey(prefix)}%'
+              |     OR u.${U.SKey.name} LIKE '% ${U.SKey(prefix)}%'
+              |     OR u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
+        }
+      list(db.rawQuery(select + " " + handleCondition, null))
+    }
   }
 }
 
@@ -268,6 +279,7 @@ object ConversationMemberData {
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_conv on ConversationMembers (${ConvId.name})")
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (${UserId.name})")
     }
 
     def listForConv(convId: ConvId)(implicit db: SQLiteDatabase) = list(find(ConvId, convId))

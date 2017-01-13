@@ -85,36 +85,21 @@ class TrackingSpec extends FeatureSpec with Matchers with Inspectors with Before
   }
 
   feature("Bot detection") {
-    scenario("legit bot email address") {
+    scenario("legit bot handle") {
       forAll(Seq(
-        "welcome@wire.com",
-        "welcome+123@wire.com",
-        "anna@wire.com",
-        "anna+0@wire.com",
-        "WelcOMe@WirE.cOM",
-        "WelcOME+123@wIre.com",
-        "Anna@Wire.com",
-        "Anna+000@wiRe.COM"
+        "annathebot",
+        "ottothebot"
       )) { input =>
-        UserData.botEmail.matcher(input).matches shouldBe true
+        UserData.botHandle.matcher(input).matches shouldBe true
       }
     }
 
     scenario("other email addresses") {
       forAll(Seq(
-        "@wire.com",
-        "welcom@wire.com",
-        "welcome+@wire.com",
-        "welcome@wire",
-        "welcome@wire.de",
-        "welcome+abc@wire.com",
-        "ann@wire.com",
-        "anna+@wire.com",
-        "anna@wire",
-        "anna@wire.de",
-        "anna+abc@wire.com"
+        "somehandle",
+        "maybea123"
       )) { input =>
-        UserData.botEmail.matcher(input).matches shouldBe false
+        UserData.botHandle.matcher(input).matches shouldBe false
       }
     }
   }

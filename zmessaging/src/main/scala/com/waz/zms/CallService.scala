@@ -19,8 +19,11 @@ package com.waz.zms
 
 import android.content.{Context, Intent}
 import com.waz.ZLog._
+import com.waz.api.VoiceChannelState
+import com.waz.api.VoiceChannelState._
 import com.waz.model.ConvId
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
+import com.waz.service.call.CallInfo.IsActive
 import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
@@ -95,38 +98,75 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
   private implicit val logTag: LogTag = logTagFor[CallExecutor]
   import Threading.Implicits.Background
 
-  def join(conv: ConvId, id: Int, withVideo: Boolean) = execute { zms => zms.voice.joinVoiceChannel(conv, withVideo) flatMap (_ => track(conv, zms)) }  (s"CallExecutor.join($id, withVideo = $withVideo)")
+  def join(conv: ConvId, id: Int, withVideo: Boolean) = execute { zms =>
+    isV3Call(zms).flatMap {
+      case true => Future.successful(zms.calling.acceptCall(conv))
+      case _ => zms.voice.joinVoiceChannel(conv, withVideo) flatMap (_ => track(conv, zms))
+    }
+  }(s"CallExecutor.join($id, withVideo = $withVideo)")
 
-  def leave(conv: ConvId, id: Int) = execute { _.voice.leaveVoiceChannel(conv) } (s"CallExecutor.leave $id")
+  def leave(conv: ConvId, id: Int) = execute { zms =>
+    isV3Call(zms).flatMap {
+      case true => Future.successful(zms.calling.endCall(conv))
+      case _ => zms.voice.leaveVoiceChannel(conv)
+    }
+  }(s"CallExecutor.leave $id")
 
-  def silence(conv: ConvId, id: Int) = execute { _.voice.silenceVoiceChannel(conv) } (s"CallExecutor.silence $id")
+  def silence(conv: ConvId, id: Int) = execute { zms =>
+    isV3Call(zms).flatMap {
+      case true => Future.successful(zms.calling.endCall(conv))
+      case _ => zms.voice.silenceVoiceChannel(conv)
+    }
+  }(s"CallExecutor.silence $id")
 
   def track(conv: ConvId, id: Int): Future[Unit] = execute(track(conv, _)) (s"CallExecutor.track $id")
+
+  private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case IsActive() => true; case _ => false }.head
 
   private def track(conv: ConvId, zms: ZMessaging): Future[Unit] = {
     val promise = Promise[Unit]()
 
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
-      CancellableFuture.lift(zms.voice.getVoiceChannel(conv) flatMap {
-        case data if ChannelState.isConnecting(data.state) => zms.voice.leaveVoiceChannel(conv)
-        case _ => Future.successful(())
-      })
+      CancellableFuture.lift(isV3Call(zms)).flatMap {
+        case true =>
+          CancellableFuture.lift(zms.calling.currentCall.head.map(_.state).map(ChannelState.isConnecting).map {
+            case true => zms.calling.endCall(conv)
+            case _ =>
+          })
+        case _ =>
+          CancellableFuture.lift(zms.voice.getVoiceChannel(conv) flatMap {
+            case data if ChannelState.isConnecting(data.state) => zms.voice.leaveVoiceChannel(conv)
+            case _ => Future.successful(())
+          })
+      }
     }
 
-    def check() = zms.voice.getVoiceChannel(conv) map {
-      case data if data.deviceActive =>
-        verbose(s"call in progress: $data")
-        if (data.deviceState == ConnectionState.Connected) timeoutFuture.cancel()
-      case _ => promise.trySuccess({})
-    }
+    def check() = isV3Call(zms).flatMap {
+      case true =>
+        zms.calling.currentCall.head map {
+          case info if info.state == SELF_CALLING =>
+            verbose(s"call in progress: $info")
+            if (info.state == SELF_CONNECTED) timeoutFuture.cancel()
+          case _ => promise.trySuccess({})
+        }
+      case false =>
+        zms.voice.getVoiceChannel(conv) map {
+          case data if data.deviceActive =>
+            verbose(s"call in progress: $data")
+            if (data.deviceState == ConnectionState.Connected) timeoutFuture.cancel()
+          case _ => promise.trySuccess({})
+        }
+      }
 
-    val subscriber = zms.voiceContent.activeChannel { _ => check() }
+    val subscriberV2 = zms.voiceContent.activeChannel { _ => check() }
+    val subscriberV3 = zms.calling.currentCall.map(_.state) { _ => check()}
 
     check()
 
     promise.future.onComplete { _ =>
       timeoutFuture.cancel()
-      subscriber.destroy()
+      subscriberV2.destroy()
+      subscriberV3.destroy()
     }
     promise.future
   }

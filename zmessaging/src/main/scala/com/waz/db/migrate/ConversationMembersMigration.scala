@@ -41,6 +41,10 @@ object ConversationMembersMigration {
     }
   }
 
+  lazy val v79 = { implicit db: SQLiteDatabase =>
+    db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (user_id)")
+  }
+
   object Columns {
 
     object v72 {

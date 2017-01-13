@@ -7,14 +7,14 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "88"
+val MajorVersion = "89"
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
   val buildNumber = sys.env.get("BUILD_NUMBER")
   val master = jobName.exists(_.endsWith("-master"))
   val buildNumberString = buildNumber.fold("-SNAPSHOT")("." + _)
-  if (master) MajorVersion + ".2" + buildNumberString // hotfix release
+  if (master) MajorVersion + ".0" + buildNumberString // hotfix release
   else MajorVersion + buildNumberString
 }
 
@@ -41,6 +41,7 @@ resolvers in ThisBuild ++= Seq(
   "Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases",
   "Localytics" at "http://maven.localytics.com/public"
 )
+
 
 lazy val licenseHeaders = HeaderPlugin.autoImport.headers := Set("scala", "java", "rs") .map { _ -> GPLv3("2016", "Wire Swiss GmbH") } (collection.breakOut)
 
@@ -120,6 +121,7 @@ lazy val zmessaging = project
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
       Deps.hockeyApp % Provided,
       Deps.localytics,
+      "net.java.dev.jna" % "jna" % "4.2.0",
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
   )

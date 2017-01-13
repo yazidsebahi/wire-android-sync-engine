@@ -283,6 +283,11 @@ object JCE {
       val cryptoAllPermission = Class.forName("javax.crypto.CryptoAllPermission")
 
       val isRestrictedField = jceSecurity.getDeclaredField("isRestricted")
+      if (java.lang.reflect.Modifier.isFinal(isRestrictedField.getModifiers)) {
+        val modifiers = Class.forName("java.lang.reflect.Field").getDeclaredField("modifiers")
+        modifiers.setAccessible(true)
+        modifiers.setInt(isRestrictedField, isRestrictedField.getModifiers & ~java.lang.reflect.Modifier.FINAL)
+      }
       isRestrictedField.setAccessible(true)
       isRestrictedField.set(null, false)
 
@@ -298,6 +303,9 @@ object JCE {
       instance.setAccessible(true)
       defaultPolicy.add(instance.get(null).asInstanceOf[Permission])
     } catch {
+      case e: ClassNotFoundException =>
+        println(s"Unable to enable unlimited-strength crypto: $e")
+        e.printStackTrace()
       case e: Exception =>
         println("Failed to remove cryptography restrictions")
         e.printStackTrace()

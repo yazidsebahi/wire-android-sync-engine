@@ -19,7 +19,7 @@ package com.waz.service
 
 import com.waz.ZLog._
 import com.waz.content.{CommonConnectionsStorage, SearchQueryCacheStorage, UsersStorage}
-import com.waz.model.SearchQuery.{Recommended, TopPeople}
+import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{SearchQuery, _}
 import com.waz.sync.SyncServiceHandle
@@ -54,6 +54,8 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
             usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
           case Recommended(prefix) =>
             usersStorage.find[UserData, Vector[UserData]](recommendedPredicate(prefix, withinThreeLevels), db => UserDataDao.recommendedPeople(prefix)(db), identity)
+          case RecommendedHandle(prefix) =>
+            usersStorage.find[UserData, Vector[UserData]](recommendedHandlePredicate(prefix), db => UserDataDao.recommendedPeople(prefix)(db), identity)
         }
 
         fallbackToLocal.map(_.sortBy(_.name)(currentLocaleOrdering)).flatMap { users =>
@@ -74,6 +76,10 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
           users filter topPeoplePredicate
         case Recommended(prefix) =>
           users filter recommendedPredicate(prefix, atAnyLevel)
+        case RecommendedHandle(prefix) =>
+          users filter recommendedHandlePredicate(prefix)
+        case _ =>
+          users
       }
     }.map(users => SeqMap(limit.fold2(users, users.take))(_.id, identity))
 
@@ -81,6 +87,9 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
   private def recommendedPredicate(prefix: String, levels: Set[Relation]): UserData => Boolean = {
     val key = SearchKey(prefix)
     u => ! u.deleted && ! u.isConnected && ((key.isAtTheStartOfAnyWordIn(u.searchKey) && levels(u.relation)) || u.email.exists(_.str == prefix) || u.handle.exists(_.containsQuery(prefix)))
+  }
+  private def recommendedHandlePredicate(prefix: String): UserData => Boolean = {
+    u => ! u.deleted && ! u.isConnected && u.handle.exists(_.containsQuery(prefix))
   }
   private val withinThreeLevels = Set(Relation.First, Relation.Second, Relation.Third)
   private val atAnyLevel = Relation.values.toSet
