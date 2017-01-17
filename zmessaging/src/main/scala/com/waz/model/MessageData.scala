@@ -336,7 +336,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def last(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} DESC", "1"))
 
-    def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${State.name} = '${Message.Status.SENT.name}'", null, null, null, s"${Time.name} DESC", "1"))
+    def lastSent(conv: ConvId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${State.name} IN ('${Message.Status.SENT.name}', '${Message.Status.DELIVERED.name}')", null, null, null, s"${Time.name} DESC", "1"))
 
     def lastFromSelf(conv: ConvId, selfUserId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${Conv.name} = '${Conv(conv)}' AND ${User.name} = '${User(selfUserId)}' AND $userContentPredicate", null, null, null, s"${Time.name} DESC", "1"))
 

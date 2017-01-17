@@ -62,12 +62,17 @@ class OpenGraphClient(netClient: ZNetClient) {
         case Response(SuccessStatus(), _, _) =>
           verbose(s"loadMetadata(), HEAD indicates unsupported content type for $uri")
           CancellableFuture successful Right(None)
-        case resp @ Response(ClientErrorStatus(), _, _) =>
+        case Response(ClientErrorStatus(), _, _) =>
           verbose(s"loadMetadata(), HEAD request failed with client error for $uri")
           CancellableFuture successful Right(None)
-        case resp @ Response(HttpStatus(code, msg), _, _) =>
+        case Response(ConnectionError(msg), _, _) =>
+          verbose(s"loadMetadata(), HEAD request failed with connection error [$msg] for $uri")
+          // either we are offline or uri doesn't point to existing website,
+          // it's hard to distinguish between those cases, so we will just ignore the preview to be safe
+          CancellableFuture successful Right(None)
+        case resp @ Response(status, _, _) =>
           warn(s"loadMetadata(), unexpected response to HEAD: $resp")
-          CancellableFuture successful Left(ErrorResponse(code, msg, "unexpected"))
+          CancellableFuture successful Left(ErrorResponse(status.status, status.msg, "unexpected"))
       }
     }
 
