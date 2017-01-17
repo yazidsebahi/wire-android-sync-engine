@@ -228,8 +228,8 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
   private def updateLast(msgs: Iterable[MessageData]): Unit = {
     updateSignal(lastMessage)(msgs.maxBy(_.time))
 
-    val sent = msgs.filter(_.state == Status.SENT)
-    if (sent.nonEmpty) updateSignal(lastMessage)(sent.maxBy(_.time))
+    val sent = msgs.filter(m => m.state == Status.SENT || m.state == Status.DELIVERED)
+    if (sent.nonEmpty) updateSignal(lastSentMessage)(sent.maxBy(_.time))
 
     val (fromSelf, fromOther) = msgs.filter(m => isUserContent(m.msgType)).partition(_.userId == selfUserId)
     if (fromSelf.nonEmpty) updateSignal(lastMessageFromSelf)(fromSelf.maxBy(_.time))
