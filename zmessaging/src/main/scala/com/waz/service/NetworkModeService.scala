@@ -22,6 +22,7 @@ import android.net.{ConnectivityManager, NetworkInfo}
 import android.telephony.TelephonyManager
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
+import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
 
@@ -55,7 +56,7 @@ class NetworkModeService(context: Context) {
       case Some(info) => computeMode(info, telephonyManager)
     }
     verbose(s"updateNetworkMode: $mode")
-    networkMode ! mode
+    networkMode.publish(mode, Threading.Background)
   }
 
   def isOfflineMode = networkMode.currentValue contains NetworkMode.OFFLINE
