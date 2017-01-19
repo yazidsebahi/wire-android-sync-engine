@@ -43,9 +43,15 @@ class NetworkModeService(context: Context) {
 
   def updateNetworkMode(): Unit = {
     val network = Option(connectivityManager.getActiveNetworkInfo)
+
+    network match {
+      case Some(ni) => verbose(s"Detailed state: ${ni.getDetailedState.name()} => ${ni.getState.name()}, networkType: ${ni.getType}")
+      case None => verbose("No network info available")
+    }
+
     val mode = network match {
       case None => NetworkMode.OFFLINE
-      case Some(info) if !info.isConnectedOrConnecting => NetworkMode.OFFLINE
+      case Some(info) if !info.isConnected => NetworkMode.OFFLINE
       case Some(info) => computeMode(info, telephonyManager)
     }
     verbose(s"updateNetworkMode: $mode")
@@ -70,36 +76,32 @@ object NetworkModeService {
    * Contributors on StackOverflow:
    *  - Anonsage (http://stackoverflow.com/users/887894/anonsage)
    */
-  def computeMode(ni: NetworkInfo, tm: => TelephonyManager): NetworkMode = {
-    if (ni.isConnected) {
-      ni.getType match {
-        case ConnectivityManager.TYPE_WIFI | ConnectivityManager.TYPE_ETHERNET => NetworkMode.WIFI
+  def computeMode(ni: NetworkInfo, tm: => TelephonyManager): NetworkMode = ni.getType match {
+    case ConnectivityManager.TYPE_WIFI | ConnectivityManager.TYPE_ETHERNET => NetworkMode.WIFI
+    case _ =>
+      tm.getNetworkType match {
+        case TelephonyManager.NETWORK_TYPE_GPRS |
+             TelephonyManager.NETWORK_TYPE_1xRTT |
+             TelephonyManager.NETWORK_TYPE_IDEN |
+             TelephonyManager.NETWORK_TYPE_CDMA =>
+          NetworkMode._2G
+        case TelephonyManager.NETWORK_TYPE_EDGE =>
+          NetworkMode.EDGE
+        case TelephonyManager.NETWORK_TYPE_EVDO_0 |
+             TelephonyManager.NETWORK_TYPE_EVDO_A |
+             TelephonyManager.NETWORK_TYPE_HSDPA |
+             TelephonyManager.NETWORK_TYPE_HSPA |
+             TelephonyManager.NETWORK_TYPE_HSUPA |
+             TelephonyManager.NETWORK_TYPE_UMTS |
+             TelephonyManager.NETWORK_TYPE_EHRPD |
+             TelephonyManager.NETWORK_TYPE_EVDO_B |
+             TelephonyManager.NETWORK_TYPE_HSPAP =>
+          NetworkMode._3G
+        case TelephonyManager.NETWORK_TYPE_LTE =>
+          NetworkMode._4G
         case _ =>
-          tm.getNetworkType match {
-            case TelephonyManager.NETWORK_TYPE_GPRS |
-                 TelephonyManager.NETWORK_TYPE_1xRTT |
-                 TelephonyManager.NETWORK_TYPE_IDEN |
-                 TelephonyManager.NETWORK_TYPE_CDMA =>
-              NetworkMode._2G
-            case TelephonyManager.NETWORK_TYPE_EDGE =>
-              NetworkMode.EDGE
-            case TelephonyManager.NETWORK_TYPE_EVDO_0 |
-                 TelephonyManager.NETWORK_TYPE_EVDO_A |
-                 TelephonyManager.NETWORK_TYPE_HSDPA |
-                 TelephonyManager.NETWORK_TYPE_HSPA |
-                 TelephonyManager.NETWORK_TYPE_HSUPA |
-                 TelephonyManager.NETWORK_TYPE_UMTS |
-                 TelephonyManager.NETWORK_TYPE_EHRPD |
-                 TelephonyManager.NETWORK_TYPE_EVDO_B |
-                 TelephonyManager.NETWORK_TYPE_HSPAP =>
-              NetworkMode._3G
-            case TelephonyManager.NETWORK_TYPE_LTE =>
-              NetworkMode._4G
-            case _ =>
-              info("Unknown network type, defaulting to Wifi")
-              NetworkMode.WIFI
-          }
+          info("Unknown network type, defaulting to Wifi")
+          NetworkMode.WIFI
       }
-    } else NetworkMode.OFFLINE
   }
 }
