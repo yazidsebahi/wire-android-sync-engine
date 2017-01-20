@@ -17,27 +17,30 @@
  */
 package com.waz.utils
 
+import java.util.concurrent.ConcurrentHashMap
+
 import android.support.v4.util.LruCache
 
-import scala.collection.mutable
+import scala.collection.JavaConverters._
 
+//TODO: Add some tests
 class MultiKeyLruCache[K1, K2, V](maxSize: Int) {
 
   private val cache = new LruCache[(K1, K2), V](maxSize)
-  private val map = new mutable.HashMap[K1, mutable.HashMap[K2, V]]()
+  private val map: collection.concurrent.Map[K1, collection.concurrent.Map[K2, V]] = new ConcurrentHashMap[K1, collection.concurrent.Map[K2, V]]().asScala
 
   def get(k1: K1, k2: K2): Option[V] ={
     Option(cache.get((k1,k2)))
   }
 
   def get(k1: K1): Map[K2, V] = {
-    val subMap = map.getOrElse(k1, mutable.HashMap[K2, V]())
+    val subMap = map.getOrElse(k1, new ConcurrentHashMap[K2, V]().asScala)
     subMap.foreach(item => cache.get((k1, item._1)))
     subMap.toMap
   }
 
   def put(k1: K1, k2: K2, v: V): Unit ={
-    map.getOrElseUpdate(k1, new mutable.HashMap[K2, V]()).put(k2, v)
+    map.getOrElseUpdate(k1, new ConcurrentHashMap[K2, V]().asScala).put(k2, v)
     cache.put((k1,k2), v)
   }
 
