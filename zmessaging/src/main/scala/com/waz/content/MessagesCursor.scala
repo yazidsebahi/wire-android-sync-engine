@@ -179,6 +179,28 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
 
     window.msgs.slice(offset - window.offset, end - window.offset)
   }
+
+  def getPositionForMessage(messageData: MessageData): Option[Int] = {
+    Threading.assertUiThread()
+    val currentPos = cursor.getPosition
+    val pos = cursorBinarySearch(messageData) match {
+      case -1 => None
+      case i => Some(i)
+    }
+    cursor.moveToPosition(currentPos)
+    pos
+  }
+
+  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1): Int = {
+    val idx = from + (to - from - 1) / 2
+    cursor.moveToPosition(idx)
+    Entry(cursor).time.compareTo(messageData.time) match {
+      case c if c != 0 && from == to => -1
+      case c if c > 0 => cursorBinarySearch(messageData, from, idx)
+      case c if c < 0 => cursorBinarySearch(messageData, idx + 1, to)
+      case 0 => idx
+    }
+  }
 }
 
 object MessagesCursor {

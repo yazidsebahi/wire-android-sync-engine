@@ -20,7 +20,6 @@ package com.waz.content
 import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
-import android.support.v4.util.LruCache
 import com.waz.ZLog._
 import com.waz.api.{ErrorResponse, Message, MessageFilter}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
@@ -54,7 +53,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   val onMessageFailed = EventStream[(MessageData, ErrorResponse)]()
 
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
-  private val filteredIndexes = new LruCache[(ConvId, MessageFilter), ConvMessagesIndex](MessagesStorage.filteredMessagesCacheSize)
+  private val filteredIndexes = new MultiKeyLruCache[ConvId, MessageFilter, ConvMessagesIndex](MessagesStorage.filteredMessagesCacheSize)
 
   lazy val incomingMessages = storage {
     MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis)(_)
@@ -68,38 +67,44 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
     }
 
   def msgsFilteredIndex(conv: ConvId, messageFilter: MessageFilter): Future[ConvMessagesIndex] =
-    Option(filteredIndexes.get((conv, messageFilter))).fold {
-      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, filter = Some(messageFilter)))(filteredIndexes.put((conv, messageFilter), _)))
+    filteredIndexes.get(conv, messageFilter).fold {
+      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, filter = Some(messageFilter)))(filteredIndexes.put(conv, messageFilter, _)))
     } {
       Future.successful
     }
 
-  onAdded { added =>
-    Future.traverse(added.groupBy(_.convId)) { case (convId, msgs) =>
-      msgsIndex(convId).flatMap { index =>
-        index.add(msgs).flatMap(_ => index.firstMessageId) map { first =>
-          // XXX: calling update here is a bit ugly
-          val ms = msgs.map {
-            case msg if first.contains(msg.id) =>
-              update(msg.id, _.copy(firstMessage = first.contains(msg.id)))
-              msg.copy(firstMessage = first.contains(msg.id))
-            case msg => msg
-          }
+  def msgsFilteredIndex(conv: ConvId): Seq[ConvMessagesIndex] = filteredIndexes.get(conv).values.toSeq
 
-          updateIncomingMessagesList(convId, ms)
+  onAdded { added =>
+    Future.traverse(added.groupBy(_.convId)) { case (convId, msgs) =>{
+        msgsFilteredIndex(convId).foreach(_.add(msgs))
+        msgsIndex(convId).flatMap { index =>
+          index.add(msgs).flatMap(_ => index.firstMessageId) map { first =>
+            // XXX: calling update here is a bit ugly
+            val ms = msgs.map {
+              case msg if first.contains(msg.id) =>
+                update(msg.id, _.copy(firstMessage = first.contains(msg.id)))
+                msg.copy(firstMessage = first.contains(msg.id))
+              case msg => msg
+            }
+
+            updateIncomingMessagesList(convId, ms)
+          }
         }
       }
     } .recoverWithLog(reportHockey = true)
   }
 
   onUpdated { updates =>
-    Future.traverse(updates.groupBy(_._1.convId)) { case (convId, msgs) =>
-      for {
-        index <- msgsIndex(convId)
-        _ <- index.update(msgs)
-        _ <- updateIncomingMessagesList(convId, msgs.map(_._2))
-      } yield ()
-    } .recoverWithLog(reportHockey = true)
+    Future.traverse(updates.groupBy(_._1.convId)) { case (convId, msgs) =>{
+        msgsFilteredIndex(convId).foreach(_.update(msgs))
+        for {
+          index <- msgsIndex(convId)
+          _ <- index.update(msgs)
+          _ <- updateIncomingMessagesList(convId, msgs.map(_._2))
+        } yield ()
+      } .recoverWithLog(reportHockey = true)
+    }
   }
 
   onDeleted { ids =>
@@ -165,6 +170,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   def delete(msg: MessageData): Future[Unit] =
     for {
       _ <- super.remove(msg.id)
+      _ <- Future(msgsFilteredIndex(msg.convId).foreach(_.delete(msg)))
       index <- msgsIndex(msg.convId)
       _ <- index.delete(msg)
     } yield ()
@@ -184,8 +190,10 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
       fromDb <- getAll(keys)
       msgs = fromDb.collect { case Some(m) => m }
       _ <- super.remove(keys)
-      _ <- Future.traverse(msgs) { msg =>
-            msgsIndex(msg.convId).flatMap(_.delete(msg))
+      _ <- Future.traverse(msgs) { msg => {
+        Future(msgsFilteredIndex(msg.convId).foreach(_.delete(msg))).zip(
+        msgsIndex(msg.convId).flatMap(_.delete(msg)))
+      }
           } map { _ => () }
     } yield ()
 
@@ -194,6 +202,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
     for {
       _ <- storage { MessageDataDao.deleteUpTo(conv, upTo)(_) } .future
       _ <- deleteCached(m => m.convId == conv && ! m.time.isAfter(upTo))
+      _ <- Future(msgsFilteredIndex(conv).foreach(_.delete(upTo)))
       _ <- msgsIndex(conv).flatMap(_.delete(upTo))
       _ <- incomingMessages.map(_.remove(conv))
     } yield ()
@@ -209,6 +218,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
     for {
       _ <- storage { MessageDataDao.deleteForConv(conv)(_) } .future
       _ <- deleteCached(_.convId == conv)
+      _ <- Future(msgsFilteredIndex(conv).foreach(_.delete()))
       _ <- msgsIndex(conv).flatMap(_.delete())
       _ <- incomingMessages.map(_.remove(conv))
     } yield ()

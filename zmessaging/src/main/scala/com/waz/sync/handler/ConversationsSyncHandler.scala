@@ -41,7 +41,7 @@ object ConversationsSyncHandler {
   val PostMembersLimit = 64
 }
 
-class ConversationsSyncHandler(assetSync: AssetSyncHandler, network: NetworkModeService,
+class ConversationsSyncHandler(assetSync: AssetSyncHandler,
                                userService: UserService, messagesStorage: MessagesStorage, messagesService: MessagesService,
                                convService: ConversationsService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService,
                                errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
