@@ -33,8 +33,8 @@ import scala.ref.WeakReference
 object Signal {
   private implicit val logTag: LogTag = logTagFor(Signal)
 
-  def apply[A]() = new SourceSignal[A]
-  def apply[A](e: A) = new SourceSignal[A](Some(e))
+  def apply[A]() = new SourceSignal[A] with NoAutowiring
+  def apply[A](e: A) = new SourceSignal[A](Some(e)) with NoAutowiring
   def empty[A]: Signal[A] = new ConstSignal[A](None)
   def const[A](v: A): Signal[A] = new ConstSignal[A](Some(v))
   def apply[A, B](s1: Signal[A], s2: Signal[B]): Signal[(A, B)] = new Zip2Signal[A ,B](s1, s2)
@@ -189,18 +189,22 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
   protected def publish(value: A, currentContext: ExecutionContext): Unit = set(Some(value), Some(currentContext))
 }
 
+trait NoAutowiring { self: Signal[_] =>
+  disableAutowiring()
+}
+
 /**
  * Immutable signal value. Can be used whenever some constant or empty signal is needed.
  * Using immutable signals in flatMap chains should have better performance compared to regular signals with the same value.
  */
-class ConstSignal[A](v: Option[A]) extends Signal[A](v) {
+final class ConstSignal[A](v: Option[A]) extends Signal[A](v) with NoAutowiring {
   override def subscribe(l: SignalListener): Unit = ()
   override def unsubscribe(l: SignalListener): Unit = ()
   override protected[events] def update(f: (Option[A]) => Option[A], ec: Option[ExecutionContext]): Boolean = throw new UnsupportedOperationException("Const signal can not be updated")
   override protected[events] def set(v: Option[A], ec: Option[ExecutionContext]): Unit = throw new UnsupportedOperationException("Const signal can not be changed")
 }
 
-class ThrottlingSignal[A](source: Signal[A], delay: FiniteDuration) extends ProxySignal[A](source) {
+final class ThrottlingSignal[A](source: Signal[A], delay: FiniteDuration) extends ProxySignal[A](source) {
   import scala.concurrent.duration._
   private val waiting = new AtomicBoolean(false)
   @volatile private var lastDispatched = 0L
