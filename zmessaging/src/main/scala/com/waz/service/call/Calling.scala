@@ -63,10 +63,12 @@ object Calling {
   @native def wcall_get_state(convid: String): Int
 
 
-  val WCALL_REASON_NORMAL          = 0
-  val WCALL_REASON_ERROR           = 1
-  val WCALL_REASON_TIMEOUT         = 2
-  val WCALL_REASON_LOST_MEDIA      = 3
+  val WCALL_REASON_NORMAL             = 0
+  val WCALL_REASON_ERROR              = 1
+  val WCALL_REASON_TIMEOUT            = 2
+  val WCALL_REASON_LOST_MEDIA         = 3
+  val WCALL_REASON_CANCELED           = 4
+  val WCALL_REASON_ANSWERED_ELSEWHERE = 5
 
   val WCALL_VIDEO_RECEIVE_STOPPED  = 0
   val WCALL_VIDEO_RECEIVE_STARTED  = 1

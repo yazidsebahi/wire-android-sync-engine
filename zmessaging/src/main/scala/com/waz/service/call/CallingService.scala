@@ -30,6 +30,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.MembersStorage
 import com.waz.model.{RConvId, _}
 import com.waz.model.otr.ClientId
+import com.waz.service.call.CallInfo.ClosedReason.AnsweredElsewhere
 import com.waz.service.call.CallInfo._
 import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -39,7 +40,7 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.utils.jna.{Size_t, Uint32_t}
-import com.waz.utils.{RichDate, returning}
+import com.waz.utils.{RichDate, RichInstant, returning}
 import com.waz.zms.CallService
 import org.threeten.bp.Instant
 
@@ -106,13 +107,14 @@ class CallingService(context:             Context,
       },
       new IncomingCallHandler {
         override def invoke(convId: String, userId: String, video_call: Boolean, arg: Pointer): Unit = {
-          verbose(s"Incoming call from $userId in conv: $convId")
+          val user = UserId(userId)
+          verbose(s"Incoming call from $user in conv: $convId")
           withConversation(convId) { conv =>
             currentCall.mutate {
               //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              case IsIdle() => CallInfo(Some(conv.id), Set(UserId(userId)), OTHER_CALLING, isVideoCall = video_call, videoSendState = if(video_call) PREVIEW else DONT_SEND)
+              case IsIdle() => CallInfo(Some(conv.id), user, Set(user), OTHER_CALLING, isVideoCall = video_call, videoSendState = if(video_call) PREVIEW else DONT_SEND)
               case cur =>
-                verbose(s"Incoming call from $userId while in a call - ignoring")
+                verbose(s"Incoming call from $user while in a call - ignoring")
                 cur
             }
           }
@@ -143,15 +145,21 @@ class CallingService(context:             Context,
           withConversation(convId) { conv =>
             currentCall.mutate {
               case call if call.convId.contains(conv.id) =>
-                if (ClosedReason(reason) == ClosedReason.Normal) call.state match {
+                if (ClosedReason(reason) != AnsweredElsewhere) call.state match {
                   //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
                   case SELF_CALLING =>
                     verbose("Call timed out out the other didn't answer - add a \"you called\" message")
                     messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
-                  case OTHER_CALLING =>
+                  case OTHER_CALLING | SELF_JOINING =>
                     verbose("Call timed out out and we didn't answer - mark as missed call")
                     messagesService.addMissedCallMessage(conv.id, UserId(userId), Instant.now)
-                  case _ => //no op
+                  case SELF_CONNECTED =>
+                    verbose("Had a successful call, save duration as a message")
+                    call.estabTime.foreach { est =>
+                      messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
+                    }
+                  case _ =>
+                    warn(s"Call closed from unexpected state: ${call.state}")
                 }
                 IdleCall.copy(closedReason = ClosedReason(reason))
               case call if call.convId.isDefined =>
@@ -184,7 +192,6 @@ class CallingService(context:             Context,
     error("Error initialising calling v3", e)
   }
 
-  //TODO Dean - check error codes properly
   response {
     case (resp, ctx) => init.foreach { _ => Calling.wcall_resp(resp.fold(_.code, _ => 200), resp.fold(_.message, _ => ""), ctx) }
   }
@@ -198,7 +205,7 @@ class CallingService(context:             Context,
           currentCall.mutate {
             case IsIdle() =>
               //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              CallInfo(Some(conv.id), Set(other), SELF_CALLING, isVideoCall = isVideo, videoSendState = if(isVideo) PREVIEW else DONT_SEND)
+              CallInfo(Some(conv.id), selfUserId, Set(other), SELF_CALLING, isVideoCall = isVideo, videoSendState = if(isVideo) PREVIEW else DONT_SEND)
             case cur =>
               error("Call already in progress, not updating")
               cur

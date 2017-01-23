@@ -37,7 +37,7 @@ import com.waz.service.media.{MessageContentBuilder, RichMediaContentParser}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder, returning}
 import org.json.JSONObject
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.breakOut
 
@@ -58,7 +58,8 @@ case class MessageData(id: MessageId,
                        editTime: Instant = MessageData.UnknownInstant,
                        ephemeral: EphemeralExpiration = EphemeralExpiration.NONE,
                        expiryTime: Option[Instant] = None, // local expiration time
-                       expired: Boolean = false
+                       expired: Boolean = false,
+                       duration: Duration = Duration.ZERO //for successful calls
                       ) {
 
   override def toString: String =
@@ -70,7 +71,7 @@ case class MessageData(id: MessageId,
        | userId:        $userId
        | protos:        ${protos.toString().replace("\n", "")}
        | localTime:     $localTime
-       | other fields:  $content, $firstMessage, $members, $recipient, $email, $name, $state, $time, $editTime, $ephemeral, $expiryTime, $expired
+       | other fields:  $content, $firstMessage, $members, $recipient, $email, $name, $state, $time, $editTime, $ephemeral, $expiryTime, $expired, $duration
     """.stripMargin
 
 
@@ -116,7 +117,7 @@ case class MessageData(id: MessageId,
    *
    */
   def isSystemMessage = msgType match {
-    case RENAME | CONNECT_REQUEST | CONNECT_ACCEPTED | MEMBER_JOIN | MEMBER_LEAVE | MISSED_CALL => true
+    case RENAME | CONNECT_REQUEST | CONNECT_ACCEPTED | MEMBER_JOIN | MEMBER_LEAVE | MISSED_CALL | SUCCESSFUL_CALL => true
     case _ => false
   }
 
@@ -207,7 +208,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
   }
 }
 
-object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant, EphemeralExpiration, Option[Instant], Boolean) => MessageData) {
+object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[MessageContent], Seq[GenericMessage], Boolean, Set[UserId], Option[UserId], Option[String], Option[String], Message.Status, Instant, Instant, Instant, EphemeralExpiration, Option[Instant], Boolean, Duration) => MessageData) {
   val Empty = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""))
   val Deleted = new MessageData(MessageId(""), ConvId(""), Message.Type.UNKNOWN, UserId(""), state = Message.Status.DELETED)
   val UnknownInstant = Instant.EPOCH
@@ -238,7 +239,8 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
         Instant.ofEpochMilli(decodeLong('editTime)),
         EphemeralExpiration.getForMillis(decodeLong('ephemeral)),
         decodeOptLong('expiryTime) map Instant.ofEpochMilli,
-        'expired
+        'expired,
+        'duration
       )
   }
 
@@ -262,6 +264,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       o.put("ephemeral", v.ephemeral.milliseconds)
       v.expiryTime foreach { t => o.put("expiryTime", t.toEpochMilli) }
       o.put("expired", v.expired)
+      o.put("duration", v.duration.toMillis)
     }
   }
 
@@ -279,6 +282,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     case Message.Type.CONNECT_ACCEPTED => "ConnectAccepted"
     case Message.Type.RENAME => "Rename"
     case Message.Type.MISSED_CALL => "MissedCall"
+    case Message.Type.SUCCESSFUL_CALL => "SuccessfulCall"
     case Message.Type.RICH_MEDIA => "RichMedia"
     case Message.Type.OTR_ERROR => "OtrFailed"
     case Message.Type.OTR_IDENTITY_CHANGED => "OtrIdentityChanged"
@@ -314,10 +318,11 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     val Ephemeral = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
     val ExpiryTime = opt(timestamp('expiry_time))(_.expiryTime)
     val Expired = bool('expired)(_.expired)
+    val Duration = long[org.threeten.bp.Duration]('duration, _.toMillis, org.threeten.bp.Duration.ofMillis)(_.duration)
 
     override val idCol = Id
 
-    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime, Ephemeral, ExpiryTime, Expired)
+    override val table = Table("Messages", Id, Conv, Type, User, Content, Protos, Time, LocalTime, FirstMessage, Members, Recipient, Email, Name, State, ContentSize, EditTime, Ephemeral, ExpiryTime, Expired, Duration)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
@@ -325,7 +330,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     }
 
     override def apply(implicit cursor: Cursor): MessageData =
-      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime, Ephemeral, ExpiryTime, Expired)
+      MessageData(Id, Conv, Type, User, Content, Protos, FirstMessage, Members, Recipient, Email, Name, State, Time, LocalTime, EditTime, Ephemeral, ExpiryTime, Expired, Duration)
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(Conv, id)
 
