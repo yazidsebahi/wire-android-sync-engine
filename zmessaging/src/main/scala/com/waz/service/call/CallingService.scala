@@ -50,8 +50,14 @@ import scala.concurrent.{Future, Promise}
   *  - The void *arg, here represented in the native methods as a Pointer, is a reference to the object that handles the callbacks and native
   *    method calls. Since we know which class is doing the calling and handling, we don't really need to use it and so pass and receive null
   */
-class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, convs: ConversationsContentUpdater, membersStorage: MembersStorage,
-                     otrSyncHandler: OtrSyncHandler, flowManagerService: FlowManagerService, messagesService: MessagesService,
+class CallingService(context:             Context,
+                     selfUserId:          UserId,
+                     clientId:            ClientId,
+                     convs:               ConversationsContentUpdater,
+                     membersStorage:      MembersStorage,
+                     otrSyncHandler:      OtrSyncHandler,
+                     flowManagerService:  FlowManagerService,
+                     messagesService:     MessagesService,
                      mediaManagerService: MediaManagerService) {
 
   private implicit val eventContext = EventContext.Global
@@ -185,8 +191,7 @@ class CallingService(context: Context, selfUserId: UserId, clientId: ClientId, c
           }
         }
       } else {
-        //TODO handle group conversations
-        verbose("Group calls not yet supported in calling v3")
+        warn("Group calls not yet supported in calling v3")
       }
     }
   }

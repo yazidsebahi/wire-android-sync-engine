@@ -116,7 +116,7 @@ case class MessageData(id: MessageId,
    *
    */
   def isSystemMessage = msgType match {
-    case RENAME | CONNECT_REQUEST | CONNECT_ACCEPTED | MEMBER_JOIN | MEMBER_LEAVE | MISSED_CALL | INCOMING_CALL => true
+    case RENAME | CONNECT_REQUEST | CONNECT_ACCEPTED | MEMBER_JOIN | MEMBER_LEAVE | MISSED_CALL => true
     case _ => false
   }
 
@@ -279,7 +279,6 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     case Message.Type.CONNECT_ACCEPTED => "ConnectAccepted"
     case Message.Type.RENAME => "Rename"
     case Message.Type.MISSED_CALL => "MissedCall"
-    case Message.Type.INCOMING_CALL => "IncomingCall"
     case Message.Type.RICH_MEDIA => "RichMedia"
     case Message.Type.OTR_ERROR => "OtrFailed"
     case Message.Type.OTR_IDENTITY_CHANGED => "OtrIdentityChanged"
