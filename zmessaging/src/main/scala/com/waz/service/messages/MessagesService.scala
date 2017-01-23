@@ -525,7 +525,15 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
   }
 
-  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant) =
+  def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+    convs.convByRemoteId(rConvId).flatMap {
+      case Some(conv) => addMissedCallMessage(conv.id, from, time)
+      case None =>
+        warn(s"No conversation found for remote id: $rConvId")
+        Future.successful(None)
+    }
+
+  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
     addMessage(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, from, time = time, localTime = Instant.now))
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
