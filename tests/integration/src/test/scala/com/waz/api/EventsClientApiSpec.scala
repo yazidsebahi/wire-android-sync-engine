@@ -60,7 +60,7 @@ class EventsClientApiSpec extends FeatureSpec with Matchers with BeforeAndAfter 
     }
 
     {
-      lastResponse should beMatching({ case Some(LoadNotificationsResponse(_, false)) => () })
+      lastResponse should beMatching({ case Some(LoadNotificationsResponse(_, false, _)) => () })
     } .soon
   }
 }

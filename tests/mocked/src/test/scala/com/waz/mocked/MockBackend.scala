@@ -397,11 +397,11 @@ trait MockOrlop { self: ApiSpec with MockedClient with MockedWebSocket with Mock
   override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOrResponse[Option[Uid]] = { // does not emulate paging
     val tail = notifications.dropWhile(n => since.exists(_ != n.id))
     if (tail.isEmpty) {
-      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = false)
+      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = false, Some(Instant.now))
       success(since)
     } else {
       assert(since forall (_ == tail.head.id))
-      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(tail.tail, lastIdWasFound = true)
+      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(tail.tail, lastIdWasFound = true, Some(Instant.now))
       success(tail.lastOption map (_.id) orElse since)
     }
   }
