@@ -55,11 +55,12 @@ trait Observable[Listener] {
     }
   }
 
-  def disableAutowiring() = listenersMonitor.synchronized {
+  def disableAutowiring(): this.type = listenersMonitor.synchronized {
     autowiring = false
     if (!wired) {
       wired = true
       onWire()
     }
+    this
   }
 }

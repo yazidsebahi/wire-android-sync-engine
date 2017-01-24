@@ -165,7 +165,6 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
     override protected def computeValue(current: Option[C]): Option[C] = for (a <- self.value; b <- s.value) yield f(a, b)
   }
   def throttle(delay: FiniteDuration): Signal[A] = new ThrottlingSignal(this, delay)
-
   def orElse(fallback: Signal[A]): Signal[A] = new ProxySignal[A](self, fallback) {
     override protected def computeValue(current: Option[A]): Option[A] = self.value.orElse(fallback.value)
   }
