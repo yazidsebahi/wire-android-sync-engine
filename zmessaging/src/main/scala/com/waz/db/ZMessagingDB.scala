@@ -104,6 +104,9 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
       UserDataMigration.v79(db)
       ConversationMembersMigration.v79(db)
       ConversationDataMigration.v79(db)
+    },
+    Migration(79, 80) { db =>
+      MessageDataMigration.v80(db)
     }
   )
 
@@ -116,5 +119,5 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 79
+  val DbVersion = 80
 }

@@ -28,7 +28,8 @@ import com.waz.utils._
 import org.json.JSONArray
 import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
-import org.threeten.bp.{Duration, Instant}
+import org.threeten.bp
+import org.threeten.bp.Instant
 
 class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
@@ -95,7 +96,7 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
         "syncNeeded" -> true
       ) -> MessageContent(
             Message.Part.Type.YOUTUBE, "youtube link",
-            richMedia = Option[MediaAssetData](TrackData(MediaProvider.YOUTUBE, "title", None, "link-url", None, Some(Duration.ofMillis(123L)), streamable = true, None, Some("preview-url"), now)),
+            richMedia = Option[MediaAssetData](TrackData(MediaProvider.YOUTUBE, "title", None, "link-url", None, Some(bp.Duration.ofMillis(123L)), streamable = true, None, Some("preview-url"), now)),
             openGraph = Some(OpenGraphData("wire", "descr", Some(Uri.parse("http://www.wire.com")), "website", None)), Some(assetId), 100, 80, syncNeeded = true, mentions = Map.empty[UserId, String])
     )
 

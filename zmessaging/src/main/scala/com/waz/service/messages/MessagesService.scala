@@ -21,8 +21,6 @@ import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
-import com.waz.model.AssetMetaData.Image
-import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
@@ -39,7 +37,7 @@ import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
 import com.waz.utils.crypto.AESUtils
 import com.waz.utils.events.{EventContext, Signal}
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.breakOut
 import scala.concurrent.Future
@@ -525,8 +523,19 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
   }
 
-  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant) =
-    addMessage(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, from, time = time, localTime = Instant.now))
+  def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+    convs.convByRemoteId(rConvId).flatMap {
+      case Some(conv) => addMissedCallMessage(conv.id, from, time)
+      case None =>
+        warn(s"No conversation found for remote id: $rConvId")
+        Future.successful(None)
+    }
+
+  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+    addMessage(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, from, time = time))
+
+  def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
+    addMessage(MessageData(MessageId(), convId, Message.Type.SUCCESSFUL_CALL, from, time = time, duration = duration))
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
     updateMessageState(convId, msg.id, Message.Status.FAILED) andThen {
