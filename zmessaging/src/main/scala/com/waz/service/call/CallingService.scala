@@ -71,6 +71,8 @@ class CallingService(context:             Context,
   val v3Available = Signal.future(Calling.v3Available.map(_ => true).recover { case _ => false })
   val currentCall = Signal(IdleCall)
 
+  val requestedCallVersion = Signal(-1)
+
   private val response = EventStream[(Either[ErrorResponse, Date], Pointer)]()
 
   currentCall.onChanged { i =>
@@ -78,7 +80,7 @@ class CallingService(context:             Context,
     i.convId.foreach(CallService(context, _)) // start tracking
   }
 
-  private lazy val init = Calling.v3Available.map { _ =>
+  private val init = Calling.v3Available.map { _ =>
 
     def withConversation(convId: String)(f: ConversationData => Unit) = convs.convByRemoteId(RConvId(convId)).map {
       case Some(conv) => f(conv)
@@ -92,6 +94,7 @@ class CallingService(context:             Context,
       new ReadyHandler {
         override def invoke(version: Int, arg: Pointer): Unit = {
           verbose(s"Calling ready: avs version: $version")
+          requestedCallVersion ! version
           callingReady.success(())
         }
       },
