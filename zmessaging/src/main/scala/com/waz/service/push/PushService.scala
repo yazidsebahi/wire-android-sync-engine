@@ -33,6 +33,7 @@ import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
+import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.{Future, Promise}
 
@@ -48,12 +49,22 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
 
   var connectedPushPromise = Promise[PushService]()
 
+  /**
+    * Drift to the BE time at the moment we fetch notifications
+    * Used for calling (time critical) messages that can't always rely on local time, since the drift can be
+    * greater than the window in which we need to respond to messages
+    */
+  val beDrift = Signal(Duration.ZERO).disableAutowiring()
+
   webSocket.connected {
     signals.pushConnected ! _
   }
 
   client.onNotificationsPageLoaded.on(dispatcher) { resp =>
     onPushNotifications(resp.notifications)
+    resp.beTime.foreach { beTime =>
+      beDrift ! Instant.now.until(beTime)
+    }
     if (resp.lastIdWasFound) debug(s"Loaded page of ${resp.notifications.size} notifications")
     else {
       info(s"server couldn't provide all missing notifications, will schedule slow sync, after processing available events")

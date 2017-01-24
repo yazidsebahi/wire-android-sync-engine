@@ -57,8 +57,8 @@ class EventsClient(netClient: ZNetClient) {
               .flatMap(_ => loadNextPage(since, isFirstPage, attempts + 1)) //try last page again
           }
 
-        case Response(status, PagedNotificationsResponse((notifications, hasMore)), _) =>
-          onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = !isFirstPage || status.isSuccess)
+        case Response(status, PagedNotificationsResponse((notifications, hasMore, time)), _) =>
+          onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = !isFirstPage || status.isSuccess, time)
 
           if (hasMore) loadNextPage(since = notifications.lastOption.map(_.id), isFirstPage = false)
           else CancellableFuture.successful(Right(notifications.lastOption map (_.id), false))
@@ -73,7 +73,7 @@ class EventsClient(netClient: ZNetClient) {
     netClient(Request.Get(lastNotificationPath(client))) map {
       case Response(SuccessHttpStatus(), NotificationsResponse(notification), _) =>
         //This is only triggered on slow sync, so no need to trigger another even if the lastId wasn't found
-        onNotificationsPageLoaded ! LoadNotificationsResponse(Vector(notification), lastIdWasFound = true)
+        onNotificationsPageLoaded ! LoadNotificationsResponse(Vector(notification), lastIdWasFound = true, None)
         Right(Some(notification))
       case Response(HttpStatus(Status.NotFound, _), ErrorResponse(404, _, "not-found"), _) => Right(None)
       case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
@@ -139,7 +139,7 @@ object EventsClient {
 
   val backoff = new ExponentialBackoff(3.second, 15.seconds)
 
-  case class LoadNotificationsResponse(notifications: Vector[PushNotification], lastIdWasFound: Boolean)
+  case class LoadNotificationsResponse(notifications: Vector[PushNotification], lastIdWasFound: Boolean, beTime: Option[Instant])
 
   object NotificationsResponse {
     def unapplySeq(response: ResponseContent): Option[Seq[PushNotification]] = try response match {
@@ -157,9 +157,9 @@ object EventsClient {
 
     import com.waz.utils.JsonDecoder._
 
-    def unapply(response: ResponseContent): Option[(Vector[PushNotification], Boolean)] = try response match {
-      case JsonObjectResponse(js) if js.has("notifications") => Some((arrayColl[PushNotification, Vector](js.getJSONArray("notifications")), decodeBool('has_more)(js)))
-      case JsonArrayResponse(js) => Some((arrayColl[PushNotification, Vector](js), false))
+    def unapply(response: ResponseContent): Option[(Vector[PushNotification], Boolean, Option[Instant])] = try response match {
+      case JsonObjectResponse(js) if js.has("notifications") => Some((arrayColl[PushNotification, Vector](js.getJSONArray("notifications")), decodeBool('has_more)(js), decodeOptISOInstant('time)(js)))
+      case JsonArrayResponse(js) => Some((arrayColl[PushNotification, Vector](js), false, None))
       case _ => None
     } catch {
       case NonFatal(e) =>

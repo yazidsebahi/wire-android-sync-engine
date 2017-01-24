@@ -35,6 +35,7 @@ import com.waz.service.call.CallInfo._
 import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
+import com.waz.service.push.PushService
 import com.waz.service.{EventScheduler, MediaManagerService}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
@@ -42,7 +43,7 @@ import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.utils.jna.{Size_t, Uint32_t}
 import com.waz.utils.{RichDate, RichInstant, returning}
 import com.waz.zms.CallService
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.{Future, Promise}
 
@@ -59,7 +60,8 @@ class CallingService(context:             Context,
                      otrSyncHandler:      OtrSyncHandler,
                      flowManagerService:  FlowManagerService,
                      messagesService:     MessagesService,
-                     mediaManagerService: MediaManagerService) {
+                     mediaManagerService: MediaManagerService,
+                     pushService:         PushService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -267,9 +269,12 @@ class CallingService(context:             Context,
   }
 
   private def receiveCallEvent(content: String, msgTime: Instant, convId: RConvId, from: UserId, sender: ClientId): Unit = {
+
+    val drift = pushService.beDrift.currentValue.getOrElse(Duration.ZERO)
+    val curTime = Instant.now + drift
+
     val msg = content.getBytes("UTF-8")
-    val curTime = Instant.now
-    verbose(s"Received msg for avs: curTime: $curTime, msgTime: $msgTime, msg: $content")
+    verbose(s"Received msg for avs: localTime: ${Instant.now} curTime: $curTime, drift: $drift, msgTime: $msgTime, msg: $content")
     Calling.wcall_recv_msg(msg, msg.length, uint32_tTime(curTime), uint32_tTime(msgTime), convId.str, from.str, sender.str)
   }
 

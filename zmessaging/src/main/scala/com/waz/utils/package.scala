@@ -186,7 +186,8 @@ package object utils {
     def javaDate: Date = new Date(a.toEpochMilli)
     def until(b: bp.Instant): bp.Duration = bp.Duration.ofMillis(b.toEpochMilli - a.toEpochMilli)
     def -(d: FiniteDuration) = a.minusNanos(d.toNanos)
-    def +(d: FiniteDuration) = a.plusNanos(d.toNanos)
+    def +(d: FiniteDuration): Instant = a.plusNanos(d.toNanos)
+    def +(d: bp.Duration): Instant = a.plusNanos(d.toNanos)
     def isAfter(d: Date): Boolean = a.toEpochMilli > d.getTime
     def isBefore(d: Date): Boolean = a.toEpochMilli < d.getTime
     def max(b: bp.Instant) = if (a isBefore b) b else a
