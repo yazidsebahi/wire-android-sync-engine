@@ -201,14 +201,17 @@ class CallingService(context:             Context,
       verbose(s"startCall convId: $convId, isVideo: $isVideo")
       if (members.size == 2) {
         members.map(_.userId).find(_ != selfUserId).foreach { other =>
-          Calling.wcall_start(conv.remoteId.str, isVideo)
-          currentCall.mutate {
-            case IsIdle() =>
-              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              CallInfo(Some(conv.id), selfUserId, Set(other), SELF_CALLING, isVideoCall = isVideo, videoSendState = if(isVideo) PREVIEW else DONT_SEND)
-            case cur =>
-              error("Call already in progress, not updating")
-              cur
+          Calling.wcall_start(conv.remoteId.str, isVideo) match {
+            case 0 =>
+              currentCall.mutate {
+                case IsIdle() =>
+                  //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+                  CallInfo(Some(conv.id), selfUserId, Set(other), SELF_CALLING, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+                case cur =>
+                  error("Call already in progress, not updating")
+                  cur
+              }
+            case err => warn(s"Unable to start call, reason: errno: $err")
           }
         }
       } else {
