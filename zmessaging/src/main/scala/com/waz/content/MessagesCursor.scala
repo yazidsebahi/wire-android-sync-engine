@@ -184,7 +184,17 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
   def getPositionForMessage(messageData: MessageData): Option[Int] = {
     Threading.assertUiThread()
     val currentPos = cursor.getPosition
-    val pos = cursorBinarySearch(messageData) match {
+
+    //A bit ugly but the cursor itself has no order information
+    val ascending = if (cursor.getCount > 1){
+      cursor.moveToFirst()
+      val first = Entry(cursor)
+      cursor.moveToNext()
+      val second = Entry(cursor)
+      first.time.compareTo(second.time) < 0
+    } else true
+
+    val pos = cursorBinarySearch(messageData, ascending = ascending) match {
       case -1 => None
       case i => Some(i)
     }
@@ -192,13 +202,13 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     pos
   }
 
-  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1): Int = {
+  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1, ascending: Boolean = true): Int = {
     val idx = from + (to - from - 1) / 2
     cursor.moveToPosition(idx)
     Entry(cursor).time.compareTo(messageData.time) match {
       case c if c != 0 && from == to => -1
-      case c if c > 0 => cursorBinarySearch(messageData, from, idx)
-      case c if c < 0 => cursorBinarySearch(messageData, idx + 1, to)
+      case c if (c > 0 && ascending) || (c < 0 && !ascending) => cursorBinarySearch(messageData, from, idx, ascending)
+      case c if (c < 0 && ascending) || (c > 0 && !ascending) => cursorBinarySearch(messageData, idx + 1, to, ascending)
       case 0 => idx
     }
   }
