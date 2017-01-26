@@ -23,6 +23,7 @@ import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
+import com.waz.model
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Preview
 import com.waz.model._
@@ -124,7 +125,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
 
     if (options.shouldScaleOriginalSize(meta.width, meta.height)) generateScaled()
     else input.fold(
-      local => cache.addStream(CacheKey.fromAssetId(id), local.inputStream, cacheLocation = Some(saveDir)).map((_, meta)).lift,
+      local => cache.addStream(CacheKey.fromAssetId(id), local.inputStream, cacheLocation = Some(saveDir), mime = model.Mime(meta.mimeType)).map((_, meta)).lift,
       image => save(image))
   }
 
