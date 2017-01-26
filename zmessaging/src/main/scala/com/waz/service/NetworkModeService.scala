@@ -63,7 +63,11 @@ class NetworkModeService(context: Context) {
     verbose(s"updateNetworkMode: $mode")
     if (scheduled) {
       CancellableFuture.delayed(scheduledNetworkCheckTimeout)(updateNetworkMode(true))
-      if (!(networkMode.currentValue contains mode)) HockeyApp.saveException(new RuntimeException("Missed network mode update"), s"mode: $mode")
+      if (!(networkMode.currentValue contains mode)) {
+        context.unregisterReceiver(receiver)
+        context.registerReceiver(receiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
+        HockeyApp.saveException(new RuntimeException("Missed network mode update"), s"mode: $mode")
+      }
     }
     networkMode.publish(mode, Threading.Background)
   }
