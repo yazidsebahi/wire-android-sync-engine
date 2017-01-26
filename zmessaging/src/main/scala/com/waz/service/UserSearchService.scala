@@ -68,8 +68,15 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
         Signal.empty[Vector[UserData]]
       case Some(cached) =>
         verbose(s"query $query cached: ${cached.entries.map(_.size)} (${cached.timestamp})")
-        if ((cacheRefreshInterval elapsedSince cached.timestamp)) queryCache.getOrCreate(query, SearchQueryCache(query, Instant.now, None)).flatMap(_ => sync.syncSearchQuery(query)).logFailure()
-        cached.entries.fold2(Signal.const(Vector.empty[UserData]), ids => usersStorage.listSignal(ids))
+        if (cacheRefreshInterval elapsedSince cached.timestamp) queryCache.getOrCreate(query, SearchQueryCache(query, Instant.now, None)).flatMap(_ => sync.syncSearchQuery(query)).logFailure()
+
+        //The common connections count will eventually come from the sync, therefore if we return the cached results with a old timestamp it will
+        //unnecessarily attempt to refresh the cc with the search/common request for each result.
+        val refreshCachedCommonTimestamps = cached.entries.fold2(Future.successful(Vector()), ids => Future.traverse(ids)(id => updateCommonConnectionsTimestamp(id)))
+        cached.entries match {
+          case Some(ids) if !(cacheRefreshInterval elapsedSince cached.timestamp) => Signal.future(refreshCachedCommonTimestamps).flatMap( _ => usersStorage.listSignal(ids))
+          case _ => Signal.const(Vector.empty[UserData])
+        }
     }.map { users =>
       query match {
         case TopPeople =>
@@ -109,7 +116,7 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
 
   def commonConnections(userId: UserId, fullList: Boolean): Signal[Option[CommonConnectionsData]] = {
     def shouldRefreshCommonConnections(conn: CommonConnectionsData) = {
-      def forceRefresh = conn.totalCount > conn.connections.size && (fullList || conn.connections.size < MinCommonConnections)
+      def forceRefresh = conn.totalCount > conn.connections.size && fullList
       cacheRefreshInterval.elapsedSince(conn.timestamp) || forceRefresh
     }
     commonConnsStorage.optSignal(userId).map { conns =>
@@ -132,6 +139,11 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
       }
       prev.copy(totalCount = totalCount, connections = merged, timestamp = Instant.now)
     }, CommonConnectionsData(user, totalCount, connections))
+
+  private def updateCommonConnectionsTimestamp(user: UserId): Future[Option[CommonConnectionsData]] =
+    commonConnsStorage.update(user, {
+      _.copy(timestamp = Instant.now)
+    }).map(_.map(_._2))
 }
 
 object UserSearchService {
