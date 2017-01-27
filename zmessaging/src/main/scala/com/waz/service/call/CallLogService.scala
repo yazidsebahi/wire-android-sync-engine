@@ -35,8 +35,8 @@ class CallLogService(storage: ZmsDatabase) {
 
   val callLogEntryAdded = EventStream[CallLogEntry]
 
-  def add(event: KindOfCallingEvent, session: Option[CallSessionId], conv: ConvId, isVideo: Boolean): Future[Unit] = {
-    val entry = CallLogEntry(event, session, conv, now, isVideo)
+  def addEstablishedCall(session: Option[CallSessionId], conv: ConvId, isVideo: Boolean): Future[Unit] = {
+    val entry = CallLogEntry(KindOfCallingEvent.CALL_ESTABLISHED, session, conv, now, isVideo)
     storage(CallLogEntryDao.insertOrReplace(entry)(_)).future.andThen { case Success(e) => callLogEntryAdded ! e }.recoverWithLog()(logTagFor[CallLogService])
   }
 

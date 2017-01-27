@@ -354,13 +354,8 @@ object ZMessaging { self =>
     case app =>
       error(s"Application: '$app' doesn't implement NotificationsHandlerFactory")
       new NotificationsHandlerFactory {
-        override def getCallingEventsHandler: CallingEventsHandler = EmptyEventsHandler
         override def getTrackingEventsHandler: TrackingEventsHandler = EmptyTrackingEventsHandler
       }
-  }
-
-  object EmptyEventsHandler extends CallingEventsHandler {
-    override def onCallingEvent(event: CallingEvent): Unit = ()
   }
 
   object EmptyTrackingEventsHandler extends TrackingEventsHandler {

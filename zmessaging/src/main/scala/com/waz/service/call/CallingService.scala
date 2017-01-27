@@ -28,8 +28,8 @@ import com.waz.api.VideoSendState._
 import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MembersStorage
-import com.waz.model.{RConvId, _}
 import com.waz.model.otr.ClientId
+import com.waz.model.{RConvId, _}
 import com.waz.service.call.CallInfo.ClosedReason.AnsweredElsewhere
 import com.waz.service.call.CallInfo._
 import com.waz.service.call.Calling._
@@ -61,7 +61,8 @@ class CallingService(context:             Context,
                      flowManagerService:  FlowManagerService,
                      messagesService:     MessagesService,
                      mediaManagerService: MediaManagerService,
-                     pushService:         PushService) {
+                     pushService:         PushService,
+                     callLogService:      CallLogService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -162,6 +163,8 @@ class CallingService(context:             Context,
                     verbose("Had a successful call, save duration as a message")
                     call.estabTime.foreach { est =>
                       messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
+                      //TODO can this information be gathered some other way - we really only care about successful calls.
+                      callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
                     }
                   case _ =>
                     warn(s"Call closed from unexpected state: ${call.state}")

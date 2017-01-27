@@ -87,13 +87,15 @@ object CaptureDeviceData extends ((String, String) => CaptureDeviceData) {
 }
 
 case class CallTrackingData(
-  initiated: Option[Instant], joined: Option[Instant], established: Option[Instant],
-  duration: FiniteDuration = Duration.Zero,
+  initiated:          Option[Instant],
+  joined:             Option[Instant],
+  established:        Option[Instant],
+  duration:           FiniteDuration = Duration.Zero,
   maxNumParticipants: Int,
-  kindOfCall: KindOfCall,
-  callDirection: CallDirection,
-  cause: CauseForCallStateEvent = CauseForCallStateEvent.REQUESTED,
-  requestedLocally: Boolean = false) /* whether a state change was requested locally or received via some notification mechanism */
+  kindOfCall:         KindOfCall,
+  callDirection:      CallDirection,
+  cause:              CauseForCallStateEvent = CauseForCallStateEvent.REQUESTED,
+  requestedLocally:   Boolean = false) /* whether a state change was requested locally or received via some notification mechanism */
 
 object CallTrackingData extends ((Option[Instant], Option[Instant], Option[Instant], FiniteDuration, Int, KindOfCall, CallDirection, CauseForCallStateEvent, Boolean) => CallTrackingData) {
   implicit lazy val Decoder: JsonDecoder[CallTrackingData] = new JsonDecoder[CallTrackingData] {

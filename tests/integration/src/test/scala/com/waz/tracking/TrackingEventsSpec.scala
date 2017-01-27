@@ -19,7 +19,7 @@ package com.waz.tracking
 
 import akka.pattern.ask
 import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
-import com.waz.api.{CallingEventsHandler, _}
+import com.waz.api._
 import com.waz.model.VoiceChannelData.ChannelState
 import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{Login, Successful, _}
@@ -54,7 +54,6 @@ class TrackingEventsSpec extends FeatureSpec with Matchers with OptionValues wit
       new ApiZMessaging(clientId, user) {
 
         override def handlerFactory: NotificationsHandlerFactory = new NotificationsHandlerFactory {
-          override def getCallingEventsHandler: CallingEventsHandler = ???
           override def getTrackingEventsHandler: TrackingEventsHandler = handler
         }
       }
