@@ -22,13 +22,13 @@ import javax.net.ssl._
 
 import com.google.android.gms.security.ProviderInstaller
 import com.koushikdutta.async.http.{AsyncHttpClient, AsyncHttpClientMiddleware, AsyncSSLEngineConfigurator}
-import com.waz.ZLog
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils._
+import org.apache.http.conn.ssl.{AbstractVerifier, StrictHostnameVerifier}
 
-import scala.collection.JavaConverters
 import scala.concurrent.Future
 
 trait ClientWrapper extends (AsyncHttpClient => Future[AsyncHttpClient])
@@ -37,7 +37,6 @@ trait ClientWrapper extends (AsyncHttpClient => Future[AsyncHttpClient])
  * Wrapper for instrumenting of AsyncHttpClient, by default is empty, but will be replaced in tests.
   */
 object ClientWrapper extends ClientWrapper {
-  private implicit val logTag: LogTag = logTagFor(ClientWrapper)
   import Threading.Implicits.Background
 
   val domains @ Seq(zinfra, wire, cloudfront) = Seq("zinfra.io", "wire.com", "cloudfront.net")
@@ -45,12 +44,12 @@ object ClientWrapper extends ClientWrapper {
   val installGmsCoreOpenSslProvider = Future (try {
     ProviderInstaller.installIfNeeded(ZMessaging.context)
   } catch {
-    case t: Throwable => ZLog.debug("Looking up GMS Core OpenSSL provider failed fatally.") // this should only happen in the tests
+    case t: Throwable => debug("Looking up GMS Core OpenSSL provider failed fatally.") // this should only happen in the tests
   })
 
   def apply(client: AsyncHttpClient): Future[AsyncHttpClient] = installGmsCoreOpenSslProvider map { _ =>
-    import JavaConverters._
-
+    // using specific hostname verifier to ensure compatibility with `isCertForDomain` (below)
+    client.getSSLSocketMiddleware.setHostnameVerifier(new StrictHostnameVerifier)
     client.getSSLSocketMiddleware.setTrustManagers(Array(new X509TrustManager {
       override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {
         debug(s"checking certificate for authType $authType, name: ${chain(0).getSubjectDN.getName}")
@@ -81,8 +80,18 @@ object ClientWrapper extends ClientWrapper {
 
       override def getAcceptedIssuers: Array[X509Certificate] = throw new SSLException("unexpected call to getAcceptedIssuers")
 
-      private def isCertForDomain(domain: String, cert: X509Certificate): Boolean =
-        cert.getSubjectAlternativeNames.asScala.map(_.asScala match { case Seq(_, name) => name.toString}).forall { name => name == domain || name.endsWith(s".$domain")}
+      /**
+        * Checks if certificate matches given domain.
+        * This is used to check if currently verified server is known to wire, and we should do certificate pinning for it.
+        *
+        * Warning: it's very important that this implementation matches used HostnameVerifier.
+        * If HostnameVerifier accepts this cert with some wire sub-domain then this function must return true,
+        * otherwise pinning will be skipped and we risk MITM attack.
+        */
+      private def isCertForDomain(domain: String, cert: X509Certificate): Boolean = {
+        def iter(arr: Array[String]) = Option(arr).fold2(Iterator.empty, _.iterator)
+        (iter(AbstractVerifier.getCNs(cert)) ++ iter(AbstractVerifier.getDNSSubjectAlts(cert))).exists(_.endsWith(s".$domain"))
+      }
     }))
 
     client.getSSLSocketMiddleware.setSSLContext(returning(SSLContext.getInstance("TLSv1.2")) { _.init(null, null, null) })

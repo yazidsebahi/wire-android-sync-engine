@@ -32,6 +32,7 @@ import org.threeten.bp.Instant
 
 import scala.collection.Searching.{Found, InsertionPoint}
 import scala.concurrent.{Await, Future}
+import scala.util.Success
 
 trait MsgCursor {
   def size: Int
@@ -97,7 +98,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     }
 
   private def asyncIndexOf(time: Instant): Future[Int] =
-    windowLoader.currentWindow flatMap (_.indexOf(time) match {
+    windowLoader.currentWindow.indexOf(time) match {
       case index if index >= 0 => Future.successful(index)
       case _ =>
         Future {
@@ -109,7 +110,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
             if (index < 0) lastReadIndex else index
           }
         }
-    })
+    }
 
   def prefetch(index: Int): Future[Unit] = windowLoader(index) flatMap { prefetch }
 
@@ -128,16 +129,16 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
 
   private var prevWindow = new IndexWindow(0, IndexedSeq.empty)
 
-  private def loadWindow(index: Int) = {
+  private def loadWindow(index: Int, count: Int = 1) = {
     Threading.assertUiThread()
+    require(index >= 0 && index + count <= size, s"loadWindow($index, $count) called on cursor with size: $size")
 
-    if (index < 0 || index >= size)
-      throw new IndexOutOfBoundsException(s"invalid message index: $index, available count: $size")
+    val windowFuture = windowLoader(index, count)
 
-    val windowFuture = windowLoader(index)
-
-    if (windowFuture.value.isDefined && windowFuture.value.get.isSuccess) windowFuture.value.get.get
-    else logTime(s"loading window for index: $index")(Await.result(windowFuture, 5.seconds))
+    windowFuture.value match {
+      case Some(Success(result)) => result
+      case _ => logTime(s"loading window for index: $index")(Await.result(windowFuture, 5.seconds))
+    }
   }
 
   /** Returns message at given index, will block if message data is not yet available for given index. */
@@ -172,7 +173,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
 
   def getEntries(offset: Int, count: Int): Seq[Entry] = {
     val end = math.min(size, offset + count)
-    val window = loadWindow(offset + count / 2)
+    val window = loadWindow(offset, math.min(count, WindowSize))
 
     if (! window.contains(offset) || !window.contains(end - 1))
       HockeyApp.saveException(new RuntimeException(s"cursor window loading failed, requested [$offset, $end), got window with offset: ${window.offset} and size: ${window.msgs.size}"), "")
@@ -183,7 +184,17 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
   def getPositionForMessage(messageData: MessageData): Option[Int] = {
     Threading.assertUiThread()
     val currentPos = cursor.getPosition
-    val pos = cursorBinarySearch(messageData) match {
+
+    //A bit ugly but the cursor itself has no order information
+    val ascending = if (cursor.getCount > 1){
+      cursor.moveToFirst()
+      val first = Entry(cursor)
+      cursor.moveToNext()
+      val second = Entry(cursor)
+      first.time.compareTo(second.time) < 0
+    } else true
+
+    val pos = cursorBinarySearch(messageData, ascending = ascending) match {
       case -1 => None
       case i => Some(i)
     }
@@ -191,13 +202,13 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     pos
   }
 
-  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1): Int = {
+  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1, ascending: Boolean = true): Int = {
     val idx = from + (to - from - 1) / 2
     cursor.moveToPosition(idx)
     Entry(cursor).time.compareTo(messageData.time) match {
       case c if c != 0 && from == to => -1
-      case c if c > 0 => cursorBinarySearch(messageData, from, idx)
-      case c if c < 0 => cursorBinarySearch(messageData, idx + 1, to)
+      case c if (c > 0 && ascending) || (c < 0 && !ascending) => cursorBinarySearch(messageData, from, idx, ascending)
+      case c if (c < 0 && ascending) || (c > 0 && !ascending) => cursorBinarySearch(messageData, idx + 1, to, ascending)
       case 0 => idx
     }
   }
@@ -247,38 +258,45 @@ class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
   private implicit val tag = logTagFor[WindowLoader]
 
   @volatile private[this] var window = IndexWindow.Empty
-  @volatile private[this] var windowFuture = Future.successful(window)
-  @volatile private[this] var windowLoading = windowFuture
+  @volatile private[this] var windowLoading = Future.successful(window)
 
-  private def shouldRefresh(window: IndexWindow, index: Int) =
-    window == IndexWindow.Empty || window.offset > 0 && index < window.offset + WindowMargin || index > window.offset + WindowSize - WindowMargin
+  private def shouldRefresh(window: IndexWindow, index: Int, count: Int) =
+    window == IndexWindow.Empty || window.offset > 0 && index < window.offset + WindowMargin || index + count > window.offset + WindowSize - WindowMargin
 
-  private def fetchWindow(index: Int) = {
-    verbose(s"fetchWindow($index)")
-    val items = (index until math.min(cursor.getCount, index + MessagesCursor.WindowSize)) map { pos =>
+  private def fetchWindow(start: Int, end: Int) = {
+    verbose(s"fetchWindow($start, $end)")
+
+    val items = (start until end) map { pos =>
       if (cursor.moveToPosition(pos)) Entry(cursor) else {
-        error(s"can not move cursor to position: $pos, requested fetchWindow($index)")
+        error(s"can not move cursor to position: $pos, requested fetchWindow($start, $end)")
         Entry.Empty
       }
     }
-    IndexWindow(index, items)
+    IndexWindow(start, items)
   }
 
-  private def loadWindow(index: Int) = windowLoading .recover { case _ => window } .map {
-    case w if shouldRefresh(w, index) =>
-      window = fetchWindow(math.max(0, index - WindowSize / 2))
-      windowFuture = Future.successful(window)
+  private def loadWindow(index: Int, count: Int) = windowLoading .recover { case _ => window } .map {
+    case w if shouldRefresh(w, index, count) =>
+      val start = math.max(0, math.min(cursor.getCount - WindowSize, index + count / 2 - WindowSize / 2))
+      val end = math.min(cursor.getCount, start + MessagesCursor.WindowSize)
+      window = fetchWindow(start, end)
       window
     case w => w
   }
 
-  def apply(index: Int): Future[IndexWindow] = {
-    if (shouldRefresh(window, index)) windowLoading = loadWindow(index)
+  /**
+    * Loads window containing element at given index and at least `minCount` following elements.
+    */
+  def apply(index: Int, minCount: Int = 1): Future[IndexWindow] = {
+    require(minCount <= MessagesCursor.WindowSize)
 
-    if (window.contains(index)) windowFuture else windowLoading
+    if (shouldRefresh(window, index, minCount)) windowLoading = loadWindow(index, minCount)
+
+    if (window.contains(index) && window.contains(index + minCount - 1)) Future.successful(window)
+    else windowLoading
   }
 
-  def currentWindow = windowFuture
+  def currentWindow = window
 }
 
 case class IndexWindow(offset: Int, msgs: IndexedSeq[Entry]) {

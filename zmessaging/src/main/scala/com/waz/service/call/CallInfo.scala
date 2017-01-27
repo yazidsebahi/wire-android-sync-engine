@@ -26,7 +26,12 @@ import com.waz.service.call.CallInfo.VideoReceiveState.Stopped
 import com.waz.service.call.CallInfo._
 import org.threeten.bp.Instant
 
+/**
+  * Note - We use the v2 `VoiceChannelState` here to simplify state handling in the UI, however we only use
+  * a subset of them, namely: NO_ACTIVE_USERS, SELF_CALLING, OTHER_CALLING, SELF_JOINING and SELF_CONNECTED.
+  */
 case class CallInfo(convId:            Option[ConvId]    = None,
+                    caller:            UserId            = UserId.Zero,
                     others:            Set[UserId]       = Set.empty,
                     state:             VoiceChannelState = NO_ACTIVE_USERS,
                     muted:             Boolean           = false,
@@ -39,6 +44,7 @@ case class CallInfo(convId:            Option[ConvId]    = None,
     s"""
        |CallInfo:
        | convId:            $convId
+       | caller:            $caller
        | others:            $others
        | state:             $state
        | muted:             $muted
@@ -62,14 +68,18 @@ object CallInfo {
     case object Error extends ClosedReason
     case object LostMedia extends ClosedReason
     case object Timeout extends ClosedReason
+    case object Cancelled extends ClosedReason
+    case object AnsweredElsewhere extends ClosedReason
     case object Unknown extends ClosedReason
 
     def apply(reasonCode: Int): ClosedReason = reasonCode match {
-      case Calling.WCALL_REASON_NORMAL      => Normal
-      case Calling.WCALL_REASON_ERROR       => Error
-      case Calling.WCALL_REASON_LOST_MEDIA  => LostMedia
-      case Calling.WCALL_REASON_TIMEOUT     => Timeout
-      case _                                => Unknown
+      case Calling.WCALL_REASON_NORMAL              => Normal
+      case Calling.WCALL_REASON_ERROR               => Error
+      case Calling.WCALL_REASON_LOST_MEDIA          => LostMedia
+      case Calling.WCALL_REASON_TIMEOUT             => Timeout
+      case Calling.WCALL_REASON_CANCELED            => Cancelled
+      case Calling.WCALL_REASON_ANSWERED_ELSEWHERE  => AnsweredElsewhere
+      case _                                        => Unknown
     }
   }
 

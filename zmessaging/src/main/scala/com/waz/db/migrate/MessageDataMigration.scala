@@ -105,6 +105,10 @@ object MessageDataMigration {
     db.execSQL("ALTER TABLE Messages ADD COLUMN expired INTEGER DEFAULT 0")
   }
 
+  lazy val v80 = { implicit db: SQLiteDatabase =>
+    db.execSQL("ALTER TABLE Messages ADD COLUMN duration INTEGER DEFAULT 0")
+  }
+
   object Columns {
 
     object v68 {

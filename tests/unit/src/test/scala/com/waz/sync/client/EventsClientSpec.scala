@@ -38,7 +38,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse notifications response") {
     val json = new JSONObject(Source.fromInputStream(getClass.getResourceAsStream("/events/notifications.json")).getLines().mkString("\n"))
     JsonObjectResponse(json) match {
-      case PagedNotificationsResponse((notifications, false)) => //info(s"found notifications: $notifications")
+      case PagedNotificationsResponse((notifications, false, _)) => //info(s"found notifications: $notifications")
         notifications foreach { n => n.transient shouldEqual false }
       case _ => fail(s"notifications parsing failed for: $json")
     }
@@ -47,7 +47,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse notifications response 1") {
     val json = new JSONObject(Source.fromInputStream(getClass.getResourceAsStream("/events/notifications1.json")).getLines().mkString("\n"))
     JsonObjectResponse(json) match {
-      case PagedNotificationsResponse((notifications, true)) => //info(s"found notifications: $notifications")
+      case PagedNotificationsResponse((notifications, true, _)) => //info(s"found notifications: $notifications")
       case _ => fail(s"notifications parsing failed for: $json")
     }
   }

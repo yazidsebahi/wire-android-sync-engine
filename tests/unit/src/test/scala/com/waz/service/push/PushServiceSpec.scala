@@ -32,6 +32,7 @@ import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.EventContext.Implicits.{global => evc}
 import com.waz.utils.events.Signal
 import org.scalatest._
+import org.threeten.bp.Instant
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -84,7 +85,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     slowSyncRequested = 0
     clientDelay = Duration.Zero
     lastNotification = Some(PushNotification(lastId, Nil))
-    notifications = Right(Vector(LoadNotificationsResponse(Vector.empty, lastIdWasFound = false)))
+    notifications = Right(Vector(LoadNotificationsResponse(Vector.empty, lastIdWasFound = false, Some(Instant.now))))
   }
 
   after {
@@ -148,8 +149,8 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       val notification1 = PushNotification(Uid(), Nil)
       val notification2 = PushNotification(Uid(), Nil)
       notifications = Right(Vector(
-        LoadNotificationsResponse(Vector(notification1), lastIdWasFound = true),
-        LoadNotificationsResponse(Vector(notification2), lastIdWasFound = true)))
+        LoadNotificationsResponse(Vector(notification1), lastIdWasFound = true, Some(Instant.now)),
+        LoadNotificationsResponse(Vector(notification2), lastIdWasFound = true, Some(Instant.now))))
       wsConnected ! true
 
       withDelay {
@@ -164,8 +165,8 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       val notification1 = PushNotification(Uid(), Nil)
       val notification2 = PushNotification(Uid(), Nil)
       notifications = Right(Vector(
-        LoadNotificationsResponse(Vector(notification1), lastIdWasFound = false),
-        LoadNotificationsResponse(Vector(notification2), lastIdWasFound = true)))
+        LoadNotificationsResponse(Vector(notification1), lastIdWasFound = false, Some(Instant.now)),
+        LoadNotificationsResponse(Vector(notification2), lastIdWasFound = true, Some(Instant.now))))
       wsConnected ! true
 
       withDelay {
@@ -177,7 +178,7 @@ class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
     scenario("request slow sync and fetch last notification if /notifications returns 404 without notifications") {
       lastNotificationId = Some(lastId)
-      notifications = Right(Vector(LoadNotificationsResponse(Vector.empty, lastIdWasFound = false)))
+      notifications = Right(Vector(LoadNotificationsResponse(Vector.empty, lastIdWasFound = false, Some(Instant.now))))
       wsConnected ! true
 
       withDelay {

@@ -123,6 +123,11 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
 
   private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case IsActive() => true; case _ => false }.head
 
+  /**
+    * Sets up a cancellable future which will end the call after the `callConnectingTimeout`, unless
+    * the promise is completed (which can be triggered by a successfully established call), at which
+    * point the future will be cancelled, and the call allowed to continue indefinitely.
+    */
   private def track(conv: ConvId, zms: ZMessaging): Future[Unit] = {
     val promise = Promise[Unit]()
 
@@ -146,7 +151,6 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
         zms.calling.currentCall.head map {
           case info if info.state == SELF_CALLING =>
             verbose(s"call in progress: $info")
-            if (info.state == SELF_CONNECTED) timeoutFuture.cancel()
           case _ => promise.trySuccess({})
         }
       case false =>
