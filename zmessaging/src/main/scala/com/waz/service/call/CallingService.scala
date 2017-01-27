@@ -30,7 +30,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.MembersStorage
 import com.waz.model.otr.ClientId
 import com.waz.model.{RConvId, _}
-import com.waz.service.call.CallInfo.ClosedReason.AnsweredElsewhere
+import com.waz.service.call.CallInfo.ClosedReason.{AnsweredElsewhere, Interrupted}
 import com.waz.service.call.CallInfo._
 import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -145,13 +145,13 @@ class CallingService(context:             Context,
         }
       },
       new CloseCallHandler {
-        override def invoke(reason: Int, convId: String, userId: String, metrics_json: String, arg: Pointer): Unit = {
-          verbose(s"call closed: reason: ${ClosedReason(reason)}, convId: $convId, userId: $userId, metrics: $metrics_json")
+        override def invoke(reasonCode: Int, convId: String, userId: String, metrics_json: String, arg: Pointer): Unit = {
+          verbose(s"call closed: reason: ${ClosedReason(reasonCode)}, convId: $convId, userId: $userId, metrics: $metrics_json")
 
           withConversation(convId) { conv =>
             currentCall.mutate {
               case call if call.convId.contains(conv.id) =>
-                if (ClosedReason(reason) != AnsweredElsewhere) call.state match {
+                if (ClosedReason(reasonCode) != AnsweredElsewhere) call.state match {
                   //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
                   case SELF_CALLING =>
                     verbose("Call timed out out the other didn't answer - add a \"you called\" message")
@@ -169,7 +169,8 @@ class CallingService(context:             Context,
                   case _ =>
                     warn(s"Call closed from unexpected state: ${call.state}")
                 }
-                IdleCall.copy(closedReason = ClosedReason(reason))
+
+                IdleCall.copy(closedReason = if (call.closedReason == Interrupted) call.closedReason else ClosedReason(reasonCode))
               case call if call.convId.isDefined =>
                 verbose("A call other than the current one was closed - likely missed another incoming call.")
                 messagesService.addMissedCallMessage(conv.id, UserId(userId), Instant.now)
@@ -230,8 +231,16 @@ class CallingService(context:             Context,
 
   def endCall(convId: ConvId): Unit = withConvWhenReady(convId) { conv =>
     verbose(s"endCall: $convId")
-    Calling.wcall_end(conv.remoteId.str)
     //wcall_end will always(???) lead to the CloseCall handler - we handle state there
+    Calling.wcall_end(conv.remoteId.str)
+  }
+
+  //Drop the current call in case of incoming GSM interruption
+  def onInterrupted(): Unit = {
+    currentCall.mutate { call =>
+      call.convId.foreach(id => withConvWhenReady(id) { conv => Calling.wcall_end(conv.remoteId.str) })
+      call.copy(closedReason = Interrupted)
+    }
   }
 
   def acceptCall(convId: ConvId): Unit = withConvWhenReady(convId) { conv =>

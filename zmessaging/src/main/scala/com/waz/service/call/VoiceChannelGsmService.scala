@@ -20,11 +20,12 @@ package com.waz.service.call
 import android.content.Context
 import android.telephony.{PhoneStateListener, TelephonyManager}
 import com.waz.ZLog._
+import com.waz.api.VoiceChannelState
 import com.waz.service.LifecycleState
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 
-class VoiceChannelGsmService(voice: VoiceChannelService) {
+class VoiceChannelGsmService(voice: VoiceChannelService, callingService: CallingService) {
   import voice._
 
   private implicit val eventContext = EventContext.Global
@@ -37,9 +38,9 @@ class VoiceChannelGsmService(voice: VoiceChannelService) {
 
   lazy val listener = new PhoneStateListener {
     override def onCallStateChanged(state: Int, incomingNumber: String): Unit = {
-      if (state != TelephonyManager.CALL_STATE_IDLE) {
+      if (state == TelephonyManager.CALL_STATE_OFFHOOK) {
         info(s"Received GSM call, will leave all voice channels")
-        interruptActiveVoiceChannels()
+        dropWireCalls()
       }
     }
   }
@@ -49,17 +50,20 @@ class VoiceChannelGsmService(voice: VoiceChannelService) {
     case _ =>
   }
 
-  content.activeChannel.on(dispatcher) {
-    case None => stopListening()
-    case Some(_) =>
+  (for {
+    hasContent <- content.activeChannel.map(_.isDefined)
+    v3call <- callingService.currentCall.map(_.state != VoiceChannelState.NO_ACTIVE_USERS)
+  } yield hasContent || v3call).on(dispatcher) {
+    case false => stopListening()
+    case true =>
       if (hasGsmCall) {
-        info(s"GSM call in progress, leaving voice channels: ${content.channels}")
-        interruptActiveVoiceChannels()
+        info(s"GSM call in progress, leaving voice channels or v3 call")
+        dropWireCalls()
       }
       else startListening()
   }
 
-  voice.content.activeChannels.map(_.incoming.headOption).on(dispatcher)(_ foreach { _ => if (hasGsmCall) interruptActiveVoiceChannels() })
+  voice.content.activeChannels.map(_.incoming.headOption).on(dispatcher)(_ foreach { _ => if (hasGsmCall) dropWireCalls() })
 
   private def startListening() = if (!listening) {
     telephonyManager.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
@@ -71,5 +75,10 @@ class VoiceChannelGsmService(voice: VoiceChannelService) {
     listening = false
   }
 
-  def hasGsmCall = telephonyManager.getCallState != TelephonyManager.CALL_STATE_IDLE
+  def hasGsmCall = telephonyManager.getCallState == TelephonyManager.CALL_STATE_OFFHOOK
+
+  def dropWireCalls() = {
+    interruptActiveVoiceChannels()
+    callingService.onInterrupted()
+  }
 }

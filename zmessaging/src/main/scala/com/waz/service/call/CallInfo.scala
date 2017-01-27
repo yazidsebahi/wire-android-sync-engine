@@ -70,6 +70,7 @@ object CallInfo {
     case object Timeout extends ClosedReason
     case object Cancelled extends ClosedReason
     case object AnsweredElsewhere extends ClosedReason
+    case object Interrupted extends ClosedReason
     case object Unknown extends ClosedReason
 
     def apply(reasonCode: Int): ClosedReason = reasonCode match {
