@@ -39,6 +39,7 @@ case class CallInfo(convId:            Option[ConvId]    = None,
                     videoSendState:    VideoSendState    = DONT_SEND,
                     videoReceiveState: VideoReceiveState = Stopped,
                     estabTime:         Option[Instant]   = None,
+                    hangupRequested:   Boolean           = false, //whether selfUser called end call, or some other reason
                     closedReason:      ClosedReason      = Normal) {
   override def toString: String =
     s"""
@@ -52,6 +53,7 @@ case class CallInfo(convId:            Option[ConvId]    = None,
        | videoSendState:    $videoSendState
        | videoReceiveState: $videoReceiveState
        | estabTime:         $estabTime
+       | hangupRequested:   $hangupRequested
        | closedReason       $closedReason
     """.stripMargin
 }
