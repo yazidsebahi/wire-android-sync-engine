@@ -55,8 +55,6 @@ class VoiceChannelService(val context: Context, val content: VoiceChannelContent
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "VoiceChannelService")
 
-  val gsmHandler = new VoiceChannelGsmService(this)
-
   @volatile private var voiceChannelSignals = Map[ConvId, SourceSignal[VoiceChannelData]]()
   @volatile private var volumeChangedSignals = Map[(ConvId, UserId), SourceSignal[Float]]()
 

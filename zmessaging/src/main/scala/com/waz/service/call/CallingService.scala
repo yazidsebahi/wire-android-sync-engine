@@ -28,9 +28,9 @@ import com.waz.api.VideoSendState._
 import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MembersStorage
-import com.waz.model.{RConvId, _}
 import com.waz.model.otr.ClientId
-import com.waz.service.call.CallInfo.ClosedReason.AnsweredElsewhere
+import com.waz.model.{RConvId, _}
+import com.waz.service.call.CallInfo.ClosedReason.{AnsweredElsewhere, Interrupted}
 import com.waz.service.call.CallInfo._
 import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -61,7 +61,8 @@ class CallingService(context:             Context,
                      flowManagerService:  FlowManagerService,
                      messagesService:     MessagesService,
                      mediaManagerService: MediaManagerService,
-                     pushService:         PushService) {
+                     pushService:         PushService,
+                     callLogService:      CallLogService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -84,11 +85,6 @@ class CallingService(context:             Context,
 
   private val init = Calling.v3Available.map { _ =>
 
-    def withConversation(convId: String)(f: ConversationData => Unit) = convs.convByRemoteId(RConvId(convId)).map {
-      case Some(conv) => f(conv)
-      case _ => error(s"Unknown conv: $convId")
-    }
-
     val callingReady = Promise[Unit]()
 
     verbose(s"Initialising calling for self: $selfUserId and current client: $clientId")
@@ -104,7 +100,7 @@ class CallingService(context:             Context,
         override def invoke(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int = {
           val msg = data.getString(0, "UTF-8")
           verbose(s"Sending msg on behalf of avs: convId: $convId, userId: $userId, clientId: $clientId, msg: $msg")
-          withConversation(convId) {
+          withConversationFromPointer(convId) {
             otrSyncHandler.postOtrMessage(_, GenericMessage(Uid(), GenericContent.Calling(msg))).map { case (resp) => response ! (resp, ctx) }
           }
           0
@@ -114,7 +110,7 @@ class CallingService(context:             Context,
         override def invoke(convId: String, userId: String, video_call: Boolean, arg: Pointer): Unit = {
           val user = UserId(userId)
           verbose(s"Incoming call from $user in conv: $convId")
-          withConversation(convId) { conv =>
+          withConversationFromPointer(convId) { conv =>
             currentCall.mutate {
               //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
               case IsIdle() => CallInfo(Some(conv.id), user, Set(user), OTHER_CALLING, isVideoCall = video_call, videoSendState = if(video_call) PREVIEW else DONT_SEND)
@@ -135,7 +131,7 @@ class CallingService(context:             Context,
       new EstablishedCallHandler {
         override def invoke(convId: String, userId: String, arg: Pointer): Unit = {
           verbose(s"call established for conv: $convId, userId: $userId")
-          withConversation(convId) { conv =>
+          withConversationFromPointer(convId) { conv =>
             currentCall.mutate{ c =>
               setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
               c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now))
@@ -144,13 +140,13 @@ class CallingService(context:             Context,
         }
       },
       new CloseCallHandler {
-        override def invoke(reason: Int, convId: String, userId: String, metrics_json: String, arg: Pointer): Unit = {
-          verbose(s"call closed: reason: ${ClosedReason(reason)}, convId: $convId, userId: $userId, metrics: $metrics_json")
+        override def invoke(reasonCode: Int, convId: String, userId: String, metrics_json: String, arg: Pointer): Unit = {
+          verbose(s"call closed: reason: ${ClosedReason(reasonCode)}, convId: $convId, userId: $userId, metrics: $metrics_json")
 
-          withConversation(convId) { conv =>
+          withConversationFromPointer(convId) { conv =>
             currentCall.mutate {
               case call if call.convId.contains(conv.id) =>
-                if (ClosedReason(reason) != AnsweredElsewhere) call.state match {
+                if (ClosedReason(reasonCode) != AnsweredElsewhere) call.state match {
                   //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
                   case SELF_CALLING =>
                     verbose("Call timed out out the other didn't answer - add a \"you called\" message")
@@ -162,11 +158,21 @@ class CallingService(context:             Context,
                     verbose("Had a successful call, save duration as a message")
                     call.estabTime.foreach { est =>
                       messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
+                      //TODO can this information be gathered some other way - we really only care about successful calls.
+                      callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
                     }
                   case _ =>
                     warn(s"Call closed from unexpected state: ${call.state}")
                 }
-                IdleCall.copy(closedReason = ClosedReason(reason))
+
+                //Leave the current call with any information that makes sense to keep after a call was finished for tracking - will be overwritten on a new call.
+                IdleCall.copy(
+                  convId          = call.convId,
+                  estabTime       = call.estabTime,
+                  caller          = call.caller,
+                  hangupRequested = call.hangupRequested,
+                  closedReason    = if (call.closedReason == Interrupted) Interrupted else ClosedReason(reasonCode)
+                )
               case call if call.convId.isDefined =>
                 verbose("A call other than the current one was closed - likely missed another incoming call.")
                 messagesService.addMissedCallMessage(conv.id, UserId(userId), Instant.now)
@@ -189,6 +195,18 @@ class CallingService(context:             Context,
       override def invoke(state: Int, arg: Pointer): Unit = {
         verbose(s"video state changed: ${VideoReceiveState(state)}")
         currentCall.mutate(_.copy(videoReceiveState = VideoReceiveState(state)))
+      }
+    })
+
+    Calling.wcall_set_state_handler(new CallStateHandler {
+      override def invoke(convId: String, state: Int, arg: Pointer) = {
+        verbose(s"calling state on $convId changed to: $state")
+        if (state == WCALL_STATE_ANSWERED) withConversationFromPointer(convId) { conv =>
+          currentCall.mutate {
+            case call if call.convId.contains(conv.id) && (call.state == SELF_CALLING | call.state == OTHER_CALLING) => call.copy(state = SELF_JOINING)
+            case call => call //Other states will be handled in their dedicated callbacks
+          }
+        }
       }
     })
   }
@@ -227,19 +245,22 @@ class CallingService(context:             Context,
 
   def endCall(convId: ConvId): Unit = withConvWhenReady(convId) { conv =>
     verbose(s"endCall: $convId")
-    Calling.wcall_end(conv.remoteId.str)
     //wcall_end will always(???) lead to the CloseCall handler - we handle state there
+    currentCall.mutate { _.copy(hangupRequested = true)}
+    Calling.wcall_end(conv.remoteId.str)
+  }
+
+  //Drop the current call in case of incoming GSM interruption
+  def onInterrupted(): Unit = {
+    currentCall.mutate { call =>
+      call.convId.foreach(id => withConvWhenReady(id) { conv => Calling.wcall_end(conv.remoteId.str) })
+      call.copy(closedReason = Interrupted)
+    }
   }
 
   def acceptCall(convId: ConvId): Unit = withConvWhenReady(convId) { conv =>
     verbose(s"answerCall: $convId")
     Calling.wcall_answer(conv.remoteId.str)
-    currentCall.mutate {
-      case c if c.state == OTHER_CALLING => c.copy(state = SELF_JOINING)
-      case c =>
-        error(s"accepted call from unexpected state: ${c.state}")
-        c
-    }
   }
 
   def setCallMuted(muted: Boolean): Unit = fm.foreach { f =>
@@ -282,6 +303,15 @@ class CallingService(context:             Context,
     returning(Uint32_t((Instant.now.toEpochMilli / 1000).toInt))(t => verbose(s"uint32_tTime for $instant = ${t.value}"))
 
   protected def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)
+
+  /**
+    * Conversation ids passed to and from AVS are always string representations of the REMOTE conv id. This convenience method
+    * provides the conv data for each one.
+    */
+  private def withConversationFromPointer(convId: String)(f: ConversationData => Unit) = convs.convByRemoteId(RConvId(convId)).map {
+    case Some(conv) => f(conv)
+    case _ => error(s"Unknown conv: $convId")
+  }
 
   //Ensures that wcall is initialised and then loads the conversation to perform any call actions on.
   private def withConvWhenReady(convId: ConvId)(f: ConversationData => Unit): Unit = init.flatMap(_ => convs.convById(convId).map {

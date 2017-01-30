@@ -56,6 +56,8 @@ object Calling {
 
   @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoStateHandler): Unit
 
+  @native def wcall_set_state_handler(wcall_state_change_h: CallStateHandler): Unit
+
   @native def wcall_set_video_send_active(convid: String, active: Boolean): Unit
 
   @native def wcall_is_video_call(convid: String): Int
@@ -73,6 +75,15 @@ object Calling {
   val WCALL_VIDEO_RECEIVE_STOPPED  = 0
   val WCALL_VIDEO_RECEIVE_STARTED  = 1
   val WCALL_VIDEO_RECEIVE_BAD_CONN = 2
+
+
+  val WCALL_STATE_NONE        = 0
+  val WCALL_STATE_OUTGOING    = 1
+  val WCALL_STATE_INCOMING    = 2
+  val WCALL_STATE_ANSWERED    = 3
+  val WCALL_STATE_MEDIA_ESTAB = 4
+  val WCALL_STATE_TERMINATING = 5
+  val WCALL_STATE_UNKNOWN     = 6
 
   /* This will be called when the calling system is ready for calling.
      * The version parameter specifies the config obtained version to use
@@ -117,4 +128,9 @@ object Calling {
   trait VideoStateHandler extends Callback {
     def invoke(state: Int, arg: Pointer): Unit
   }
+
+  trait CallStateHandler extends Callback {
+    def invoke(convId: String, state: Int, arg: Pointer): Unit
+  }
+
 }
