@@ -402,7 +402,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         val convId = up.id
         val changedUsers = convUsers(convId).filter(!_.isVerified).flatMap { u => changes.get(u.id).map(u.id -> _) }
         val (users, change) =
-          if (changedUsers.forall(c => c._2 == ClientAdded || c._2 == MemberAdded)) (changedUsers map (_._1), ClientAdded)
+          if (changedUsers.forall(c => c._2 == ClientAdded)) (changedUsers map (_._1), ClientAdded)
+          else if (changedUsers.forall(c => c._2 == MemberAdded)) (changedUsers map (_._1), MemberAdded)
           else (changedUsers collect { case (user, ClientUnverified) => user }, ClientUnverified)
 
         val (self, other) = users.partition(_ == selfUserId)
@@ -492,7 +493,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   def addOtrVerifiedMessage(convId: ConvId): Future[Option[MessageData]] =
     messagesStorage.getLastMessage(convId) flatMap {
-      case Some(msg) if msg.msgType == Message.Type.OTR_UNVERIFIED || msg.msgType == Message.Type.OTR_DEVICE_ADDED =>
+      case Some(msg) if msg.msgType == Message.Type.OTR_UNVERIFIED || msg.msgType == Message.Type.OTR_DEVICE_ADDED ||  msg.msgType == Message.Type.OTR_MEMBER_ADDED =>
         verbose(s"addOtrVerifiedMessage, removing previous message: $msg")
         messagesStorage.delete(msg.id) map { _ => None }
       case _ =>
@@ -502,11 +503,15 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
 
   def addOtrUnverifiedMessage(convId: ConvId, users: Seq[UserId], change: VerificationChange): Future[Option[MessageData]] = {
-      val msgType = if (change == ClientUnverified) Message.Type.OTR_UNVERIFIED else Message.Type.OTR_DEVICE_ADDED
-      withSelfUserFuture { selfUser =>
-        addLocalSentMessage(MessageData(MessageId(), convId, msgType, selfUser, members = users.toSet)) map { Some(_) }
-      }
+    val msgType = change match {
+      case ClientUnverified => Message.Type.OTR_UNVERIFIED
+      case MemberAdded => Message.Type.OTR_MEMBER_ADDED
+      case _ => Message.Type.OTR_DEVICE_ADDED
     }
+    withSelfUserFuture { selfUser =>
+      addLocalSentMessage(MessageData(MessageId(), convId, msgType, selfUser, members = users.toSet)) map { Some(_) }
+    }
+  }
 
   def retryMessageSending(conv: ConvId, msgId: MessageId) =
     updateMessage(msgId) { msg =>
