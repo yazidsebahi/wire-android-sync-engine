@@ -101,7 +101,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0): Future[Any] = ev match {
     case CreateConversationEvent(id, rConvId, time, from, data) =>
       updateConversations(selfUserId, Seq(data)) flatMap { case (_, created) => Future.traverse(created) (created =>
-        addMemberJoinMessage(created.id, from, data.members.map(_.userId).toSet)
+        addMemberJoinMessage(created.id, from, data.members.map(_.userId).filter(_ != from).toSet + selfUserId)
       )}
 
     case ConversationEvent(_, rConvId, _, _) =>
