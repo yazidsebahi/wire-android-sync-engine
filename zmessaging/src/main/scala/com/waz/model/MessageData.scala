@@ -289,6 +289,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     case Message.Type.OTR_VERIFIED => "OtrVerified"
     case Message.Type.OTR_UNVERIFIED => "OtrUnverified"
     case Message.Type.OTR_DEVICE_ADDED => "OtrDeviceAdded"
+    case Message.Type.OTR_MEMBER_ADDED => "OtrMemberAdded"
     case Message.Type.STARTED_USING_DEVICE => "StartedUsingDevice"
     case Message.Type.HISTORY_LOST => "HistoryLost"
     case Message.Type.LOCATION => "Location"

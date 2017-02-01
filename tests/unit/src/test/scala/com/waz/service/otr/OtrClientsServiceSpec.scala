@@ -170,6 +170,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
     lazy val clients1 = Seq(Client(ClientId(), "c1"), Client(ClientId(), "c2"))
     lazy val clients2 = Seq(Client(ClientId(), "c3"))
     lazy val clients3 = Seq(Client(ClientId(), "c4"))
+    lazy val clients2_1 = Seq(Client(ClientId(), "c5"))
 
     scenario("update user verification state when clients are verified") {
       service.otrClientsService.updateSelfClients(selfClients, true)
@@ -234,7 +235,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
 
       withDelay {
         service.getConv(conv.id).map(_.verified) shouldEqual Some(UNKNOWN)
-        service.messagesStorage.getLastMessage(conv.id).futureValue.map(_.msgType) shouldEqual Some(Message.Type.OTR_DEVICE_ADDED)
+        service.messagesStorage.getLastMessage(conv.id).futureValue.map(_.msgType) shouldEqual Some(Message.Type.OTR_MEMBER_ADDED)
       }
     }
 
@@ -247,6 +248,15 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
       withDelay {
         service.getConv(conv.id).map(_.verified) shouldEqual Some(VERIFIED)
         service.messagesStorage.getLastMessage(conv.id).futureValue.map(_.contentString) shouldEqual Some("test msg") // OTR_UNVERIFIED gets deleted again
+      }
+    }
+
+    scenario("switch to unverified state when a verified user adds an unverified device") {
+      service.otrClientsService.updateUserClients(user2.id, clients2_1).futureValue
+
+      withDelay {
+        service.getConv(conv.id).map(_.verified) shouldEqual Some(UNVERIFIED)
+        service.messagesStorage.getLastMessage(conv.id).futureValue.map(_.msgType) shouldEqual Some(Message.Type.OTR_DEVICE_ADDED)
       }
     }
   }
