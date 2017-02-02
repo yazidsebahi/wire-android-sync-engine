@@ -27,6 +27,7 @@ import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response._
+import net.hockeyapp.android.ExceptionHandler
 import org.json.JSONObject
 
 import scala.concurrent.Future
@@ -73,48 +74,39 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
    */
   private var loginFuture: CancellableFuture[Either[Status, Token]] = CancellableFuture.lift(tokenPref() map { _.fold[Either[Status, Token]](Left(Cancelled))(Right(_)) })
 
-  def currentToken() = tokenPref() flatMap {
-    case Some(token) if !isExpired(token) =>
-      if (shouldRefresh(token)) performLogin() // schedule login on background and don't care about the result, it's supposed to refresh the access token
-      Future.successful(Right(token))
-    case _ => performLogin()
-  }
-
   def invalidateToken() = tokenPref() .map (_.foreach { token => tokenPref := Some(token.copy(expiresAt = 0)) })(dispatcher)
 
-  def isExpired(token: Token) = token.expiresAt < System.currentTimeMillis()
+  def isExpired(token: Token) = token.expiresAt - expireThreshold < System.currentTimeMillis()
 
   def close() = dispatcher {
     closed = true
     loginFuture.cancel()
   }
 
-  private def shouldRefresh(token: Token) = token.expiresAt - bgRefreshThreshold < System.currentTimeMillis()
-
   /**
-   * Performs login request once the last request is finished, but only if we still need it (ie. we don't have access token already)
+   * Returns current token if not expired or performs login request
    */
-  private def performLogin(): Future[Either[Status, Token]] = {
-    debug(s"performLogin, \ncredentials: ${user.credentials}")
-
-    loginFuture = loginFuture.recover {
-      case ex =>
-        warn(s"login failed", ex)
-        Left(Cancelled)
-    } flatMap { _ =>
-      CancellableFuture.lift(tokenPref()) flatMap {
-        case Some(token: Token) if !isExpired(token) =>
-          if (shouldRefresh(token)) dispatchAccessRequest()
-          CancellableFuture.successful(Right(token))
-        case _ =>
-          debug(s"No access token, or expired, cookie: ${user.cookie}")
-          CancellableFuture.lift(user.cookie()) flatMap {
-            case Some(_) => dispatchAccessRequest()
+  def currentToken(): Future[Either[Status, Token]] = tokenPref() flatMap {
+    case Some(token) if !isExpired(token) => Future.successful(Right(token))
+    case token => {
+      debug(s"currentToken refresh, \ncredentials: ${user.credentials}")
+      loginFuture = loginFuture.recover {
+        case ex =>
+          warn(s"login failed", ex)
+          Left(Cancelled)
+      } flatMap { _ =>
+        CancellableFuture.lift(user.cookie()) flatMap { cookie =>
+          debug(s"No access token, or expired, cookie: $cookie, token: $token")
+          cookie match {
+            case Some(_) => {
+              dispatchAccessRequest()
+            }
             case None => dispatchLoginRequest()
           }
+        }
       }
+      loginFuture.future
     }
-    loginFuture.future
   }
 
   private def dispatchAccessRequest(): CancellableFuture[Either[Status, Token]] =
@@ -125,6 +117,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
         dispatchRequest(client.access(cookie, token)) {
           case Left(resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label)) =>
             debug(s"access request failed (label: $label, message: $message), will try login request. token: $token, cookie: $cookie, access resp: $resp")
+            ExceptionHandler.saveException(new RuntimeException("Access request failed"), null)
             user.cookie := None
             user.accessToken := None
             dispatchLoginRequest()
@@ -174,7 +167,7 @@ object AuthenticationManager {
   private implicit val logTag: LogTag = logTagFor[AuthenticationManager]
 
   val MaxRetryCount = 3
-  val bgRefreshThreshold = 15 * 1000 // refresh access token on background if it is close to expire
+  val expireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
 
   type ResponseHandler = PartialFunction[LoginResult, CancellableFuture[Either[Status, Token]]]
 
