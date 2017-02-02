@@ -20,7 +20,7 @@ object SharedSettings {
   val audioVersion = "1.195.0"
   val RobolectricVersion = "5.0.0_r2-robolectric-1"
   val supportLibVersion = "23.1.1"
-  val cryptoboxVersion = "0.8.1"
+  val cryptoboxVersion = "1.0.0"
 
   object Deps {
     lazy val avs = "com.wire" % "avs" % avsVersion
