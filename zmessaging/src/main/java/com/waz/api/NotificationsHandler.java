@@ -20,7 +20,6 @@ package com.waz.api;
 public interface NotificationsHandler {
 
     interface NotificationsHandlerFactory {
-        CallingEventsHandler getCallingEventsHandler();
         TrackingEventsHandler getTrackingEventsHandler();
     }
 

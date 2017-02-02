@@ -216,8 +216,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getSpotify: api.Spotify = ui.cached(Uris.SpotifyUri, new Spotify)
 
-  override def getLogging: Logging = ui.cached(Uris.LoggingUri, new Logging)
-
   override def getConnectionIndicator = new ConnectionIndicator()
 
   override def getUsernames = new Usernames

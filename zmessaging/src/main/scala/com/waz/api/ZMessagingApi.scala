@@ -115,11 +115,6 @@ trait ZMessagingApi {
 
   def getSpotify: Spotify
 
-  /**
-   * Access point for logging to S3.
-   */
-  def getLogging: Logging
-
   def getConnectionIndicator: ConnectionIndicator
 
   def getUsernames: Usernames

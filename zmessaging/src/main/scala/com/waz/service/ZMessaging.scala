@@ -226,6 +226,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val receipts                              = wire[ReceiptService]
   lazy val ephemeral                             = wire[EphemeralMessagesService]
   lazy val handlesService                        = wire[HandlesService]
+  lazy val gsmService                            = wire[VoiceChannelGsmService]
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -284,6 +285,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   {
     conversations
     users
+    gsmService
 
     push // connect on start
 
@@ -354,13 +356,8 @@ object ZMessaging { self =>
     case app =>
       error(s"Application: '$app' doesn't implement NotificationsHandlerFactory")
       new NotificationsHandlerFactory {
-        override def getCallingEventsHandler: CallingEventsHandler = EmptyEventsHandler
         override def getTrackingEventsHandler: TrackingEventsHandler = EmptyTrackingEventsHandler
       }
-  }
-
-  object EmptyEventsHandler extends CallingEventsHandler {
-    override def onCallingEvent(event: CallingEvent): Unit = ()
   }
 
   object EmptyTrackingEventsHandler extends TrackingEventsHandler {

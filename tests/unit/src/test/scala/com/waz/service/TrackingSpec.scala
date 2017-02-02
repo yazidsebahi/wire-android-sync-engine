@@ -79,8 +79,8 @@ class TrackingSpec extends FeatureSpec with Matchers with Inspectors with Before
         zmessaging.messagesStorage.insert(MessageData(MessageId(), annaConv.id, Message.Type.MEMBER_JOIN, anna.id)),
         zmessaging.messagesStorage.insert(MessageData(MessageId(), ottoConv.id, Message.Type.TEXT, selfUser.id)),
         zmessaging.messagesStorage.insert(MessageData(MessageId(), oneToOne.id, Message.Type.ASSET, selfUser.id)),
-        zmessaging.callLog.add(KindOfCallingEvent.CALL_DROPPED, Option(CallSessionId()), ConvId(), false)
-      ) ++ (1 to 42).map(_ => zmessaging.callLog.add(KindOfCallingEvent.CALL_ESTABLISHED, Option(CallSessionId()), ConvId(), false))
+        zmessaging.callLog.addEstablishedCall(Option(CallSessionId()), ConvId(), false)
+      ) ++ (1 to 42).map(_ => zmessaging.callLog.addEstablishedCall(Option(CallSessionId()), ConvId(), false))
     ).await()
   }
 
@@ -160,12 +160,12 @@ class TrackingSpec extends FeatureSpec with Matchers with Inspectors with Before
     }
 
     scenario("Voice calls") {
-      2.times(zmessaging.callLog.add(KindOfCallingEvent.CALL_ESTABLISHED, Option(CallSessionId()), ConvId(), false))
+      2.times(zmessaging.callLog.addEstablishedCall(Option(CallSessionId()), ConvId(), false))
       tracking should resemble(TrackingStats(4, 2, 1, 2, 1, 2, 44, 0, 3, 3, 4)) soon
     }
 
     scenario("Video calls") {
-      23.times(zmessaging.callLog.add(KindOfCallingEvent.CALL_ESTABLISHED, Option(CallSessionId()), ConvId(), true))
+      23.times(zmessaging.callLog.addEstablishedCall(Option(CallSessionId()), ConvId(), true))
       tracking should resemble(TrackingStats(4, 2, 1, 2, 1, 2, 44, 23, 3, 3, 4)) soon
     }
   }
