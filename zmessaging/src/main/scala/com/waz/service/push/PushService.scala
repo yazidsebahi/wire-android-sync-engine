@@ -17,8 +17,6 @@
  */
 package com.waz.service.push
 
-import java.util.Date
-
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse

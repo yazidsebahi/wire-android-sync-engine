@@ -23,6 +23,7 @@ import com.waz.utils._
 import com.waz.utils.events.Publisher
 import org.robolectric.Robolectric
 import org.scalatest._
+import com.waz.ZLog.ImplicitTag._
 
 class UiCacheUpdaterSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 

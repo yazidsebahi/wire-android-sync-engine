@@ -27,6 +27,7 @@ import com.waz.znet.ZNetClient.EmptyClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 

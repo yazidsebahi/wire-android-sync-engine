@@ -24,6 +24,7 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 

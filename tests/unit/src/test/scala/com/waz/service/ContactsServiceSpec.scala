@@ -38,6 +38,7 @@ import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
 import scala.math.abs
 import scala.util.Random.nextDouble
+import com.waz.ZLog.ImplicitTag._
 
 class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit val timeout: FiniteDuration = 2.seconds

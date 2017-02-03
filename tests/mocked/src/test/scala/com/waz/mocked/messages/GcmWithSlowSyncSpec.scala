@@ -29,6 +29,7 @@ import com.waz.testutils.Implicits._
 import com.waz.testutils._
 import com.waz.utils.returning
 import org.scalatest.{FeatureSpec, Matchers}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 

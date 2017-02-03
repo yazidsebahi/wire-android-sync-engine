@@ -30,6 +30,7 @@ import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.threeten.bp.Instant
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

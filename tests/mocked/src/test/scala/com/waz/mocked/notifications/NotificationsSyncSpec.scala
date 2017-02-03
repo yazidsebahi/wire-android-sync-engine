@@ -26,6 +26,7 @@ import com.waz.model._
 import com.waz.testutils.Implicits._
 import com.waz.threading.DispatchQueueStats
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

@@ -32,6 +32,7 @@ import com.waz.threading.Threading.Implicits.Background
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.annotation.Config
 import org.scalatest._
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 

@@ -18,6 +18,7 @@
 package com.waz.utils.events
 
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import com.waz.ZLog.ImplicitTag._
 
 class ScanSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 

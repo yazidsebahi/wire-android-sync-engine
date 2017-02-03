@@ -30,6 +30,7 @@ import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils.returning
+import com.waz.ZLog.ImplicitTag._
 import org.scalatest.{BeforeAndAfter, EitherValues, FeatureSpec, Matchers}
 
 import scala.collection.JavaConverters._

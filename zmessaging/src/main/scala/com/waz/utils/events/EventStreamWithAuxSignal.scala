@@ -18,6 +18,7 @@
 package com.waz.utils.events
 
 import scala.concurrent.ExecutionContext
+import com.waz.ZLog.ImplicitTag._
 
 class EventStreamWithAuxSignal[A, B](source: EventStream[A], aux: Signal[B]) extends EventStream[(A, Option[B])] {
   val listener = new EventListener[A] {
