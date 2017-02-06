@@ -17,8 +17,10 @@
  */
 package com.waz.service
 
+import android.annotation.TargetApi
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
-import android.net.{ConnectivityManager, NetworkInfo}
+import android.net.{ConnectivityManager, Network, NetworkInfo, NetworkRequest}
+import android.os.Build
 import android.telephony.TelephonyManager
 import com.waz.HockeyApp
 import com.waz.ZLog._
@@ -30,6 +32,7 @@ import com.waz.utils.returning
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
+@TargetApi(21)
 class NetworkModeService(context: Context) {
   import NetworkModeService._
 
@@ -46,6 +49,19 @@ class NetworkModeService(context: Context) {
   context.registerReceiver(receiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
   updateNetworkMode()
   CancellableFuture.delayed(scheduledNetworkCheckTimeout)(updateNetworkMode(true))
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+    connectivityManager.registerNetworkCallback(new NetworkRequest.Builder().build(),
+      new ConnectivityManager.NetworkCallback() {
+        override def onAvailable(network: Network): Unit = {
+          verbose(s"onAvailable callback")
+          updateNetworkMode(false)
+        }
+        override def onLost(network: Network): Unit = {
+          verbose(s"onLost callback")
+          updateNetworkMode(false)
+        }
+      })
+  }
 
   def updateNetworkMode(scheduled: Boolean = false): Unit = {
     val network = Option(connectivityManager.getActiveNetworkInfo)
@@ -78,7 +94,7 @@ class NetworkModeService(context: Context) {
 
 object NetworkModeService {
   private implicit val logTag: LogTag = logTagFor(NetworkModeService)
-  private val scheduledNetworkCheckTimeout = 15.seconds
+  private val scheduledNetworkCheckTimeout = 60.seconds
 
   /*
    * This part (the mapping of mobile data network types to the networkMode enum) of the Wire software
