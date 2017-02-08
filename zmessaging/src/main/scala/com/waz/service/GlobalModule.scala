@@ -46,7 +46,6 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val phoneNumbers: PhoneNumberService = wire[PhoneNumberService]
   lazy val timeouts = wire[Timeouts]
   lazy val permissions: PermissionsService = wire[PermissionsService]
-  lazy val handlerFactory = ZMessaging.notificationsHandlerFactory(context)
 
   lazy val reporting = wire[GlobalReportingService]
 

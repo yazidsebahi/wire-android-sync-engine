@@ -36,7 +36,6 @@ import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeAndAfter with MockedClientApiSpec with MockBackend with RobolectricUtils { test =>
   import DefaultPushBehaviour.Implicit
 

@@ -31,7 +31,6 @@ import org.scalatest.{FeatureSpec, OptionValues}
 import scala.collection.breakOut
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend with MockedClientApiSpec with MockedFlows {
   import DefaultPushBehaviour.Implicit
 
