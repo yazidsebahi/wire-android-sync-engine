@@ -131,9 +131,6 @@ object AccountData {
     def findByEmail(email: EmailAddress)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
 
-    def findByUser(user: UserId)(implicit db: SQLiteDatabase) =
-      iterating(db.query(table.name, null, s"${UserId.name} = ?", Array(user.str), null, null, null))
-
     def findByPhone(phone: PhoneNumber)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Phone.name} = ?", Array(phone.str), null, null, null))
 
