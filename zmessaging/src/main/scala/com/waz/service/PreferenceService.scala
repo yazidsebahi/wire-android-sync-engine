@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
 import android.os.Looper
+import com.waz.api.ZmsVersion
 import com.waz.content.Preference
 import com.waz.content.Preference.PrefCodec
 import com.waz.service.push.WebSocketClientService.{DEFAULT_PING_INTERVAL_BACKGROUND, MIN_PING_INTERVAL}
@@ -50,7 +51,7 @@ class PreferenceService(context: Context) {
   lazy val uiPreferences = uiPreferencesFrom(context)
 
   def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //false by default for production
-  def callingV3  = uiPreferences.getString(callingV3Key,         "0") //0 (calling v2) by default for production
+  def callingV3  = uiPreferences.getString(callingV3Key,         if (ZmsVersion.DEBUG) "2" else "0") //0 (calling v2) by default for production, v3 (2) for debug
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey,       true) //true by default for production
   //TODO make this a long when fixed on UI
   def webSocketPingInterval = FiniteDuration(Try(uiPreferences.getString(webSocketPingIntervalKey, "900000").toLong).toOption
