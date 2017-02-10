@@ -17,7 +17,25 @@
  */
 package com.waz.api
 
-//TODO: other filter types like content or user?
-case class MessageFilter(msgType: Option[Seq[TypeFilter]] = None, contentSearchQuery: Option[ContentSearchQuery] = None, overallLimit: Option[Int] = None)
+import com.waz.model.{AssetId, ConvId, MessageId}
+import com.waz.utils.Locales
 
-case class TypeFilter(msgType: Message.Type, limit: Option[Int] = None)
+case class ContentSearchQuery(originalString: String){
+  import ContentSearchQuery._
+
+  lazy val elements : Set[String] =
+    originalString
+      .split(" ")
+      .map(transliterated)
+      .filter(_.nonEmpty)
+      .toSet
+
+  override def toString = elements.reduceOption(_ + " " + _).getOrElse("")
+  def toFtsQuery = elements.map("*" + _ + "*").reduceOption(_ + " " + _).getOrElse("")
+}
+
+object ContentSearchQuery{
+  val empty = ContentSearchQuery("")
+
+  def transliterated(s: String): String = Locales.transliteration("Latin-ASCII; Lower").transliterate(s).trim
+}

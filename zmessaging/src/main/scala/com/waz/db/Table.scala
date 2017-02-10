@@ -27,6 +27,8 @@ class Table[A](val name: String, val columns: ColBinder[_, A]*) {
 
   lazy val createSql = columns.map(c => s"${c.name} ${c.col.sqlType} ${c.col.modifiers}").mkString(s"CREATE TABLE $name (", ", ", ");")
 
+  lazy val createFtsSql = columns.map(c => s"${c.name} ${c.col.sqlType} ${c.col.modifiers}").mkString(s"CREATE VIRTUAL TABLE $name using fts3(", ", ", ");")
+
   lazy val insertSql = insertOr("REPLACE")
   lazy val insertOrIgnoreSql = insertOr("IGNORE")
 

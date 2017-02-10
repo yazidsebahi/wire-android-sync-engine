@@ -154,6 +154,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   lazy val messagesStorage: MessagesStorage = wire[MessagesStorage]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
+  lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
 
   lazy val spotifyClientId  = metadata.spotifyClientId
 
@@ -300,6 +301,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
     tempFiles
     recordAndPlay
+
+    messagesIndexStorage
 
     reporting.addStateReporter { pw =>
       Future {
