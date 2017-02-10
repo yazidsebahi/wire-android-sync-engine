@@ -79,4 +79,6 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val blacklist       = new VersionBlacklistService(metadata, prefs, blacklistClient)
 
   lazy val factory = new ZMessagingFactory(this)
+
+  val lifecycle = new ZmsLifecycle()
 }

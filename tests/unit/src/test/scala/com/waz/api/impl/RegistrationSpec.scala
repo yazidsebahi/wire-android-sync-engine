@@ -130,7 +130,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
   after {
     ShadowLog.stream = null
-    if (api.account.exists(_.lifecycle.isUiActive)) {
+    if (api.account.exists(_.global.lifecycle.isUiActive)) {
       api.onPause()
       api.account foreach { acc =>
         Thread.sleep(1000)

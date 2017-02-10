@@ -55,7 +55,7 @@ class UserModule(val userId: UserId, val account: AccountService) {
   def convsStorage = account.storage.convsStorage
   def membersStorage = account.storage.membersStorage
   def clientsStorage = account.storage.otrClientsStorage
-  def lifecycle = account.lifecycle
+  def lifecycle = account.global.lifecycle
   def cryptoBox = account.cryptoBox
   def reporting = account.global.reporting
 
@@ -93,8 +93,6 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   val id = account.id
 
   import global._
-
-  val lifecycle = new ZmsLifecycle()
 
   lazy val storage: StorageModule = returning(global.factory.baseStorage(id)) { storage =>
 
