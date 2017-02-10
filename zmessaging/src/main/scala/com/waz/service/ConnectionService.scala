@@ -158,8 +158,13 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     } flatMap { _ =>
       getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
         updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) flatMap { updated =>
-          addMemberJoinMessage(conv.id, selfUserId, Set(selfUserId)) map { _ => // TODO: check existing messages, we don't want duplicates
-            updated.fold(conv)(_._2)
+          messagesStorage.getLastMessage(conv.id) flatMap  {
+            case Some(_) =>
+              Future successful updated.fold(conv)(_._2)
+            case _ =>
+              addMemberJoinMessage(conv.id, selfUserId, Set(selfUserId), firstMessage = true) map { _ =>
+                updated.fold(conv)(_._2)
+              }
           }
         }
       }

@@ -438,14 +438,14 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
   }
 
-  def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId]) = {
+  def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false) = {
     verbose(s"addMemberJoinMessage($convId, $creator, $users)")
 
     def updateOrCreate(added: Set[UserId]) = {
       def update(msg: MessageData) = {
         msg.copy(members = msg.members ++ added)
       }
-      def create = MessageData(MessageId(), convId, Message.Type.MEMBER_JOIN, creator, members = added)
+      def create = MessageData(MessageId(), convId, Message.Type.MEMBER_JOIN, creator, members = added, firstMessage = firstMessage)
       updateOrCreateLocalMessage(convId, Message.Type.MEMBER_JOIN, update, create)
     }
 
