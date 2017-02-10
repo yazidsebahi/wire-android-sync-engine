@@ -104,7 +104,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   val zNetClient = account.netClient
   val storage    = account.storage
-  val lifecycle  = account.lifecycle
+  val lifecycle  = global.lifecycle
 
   lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync

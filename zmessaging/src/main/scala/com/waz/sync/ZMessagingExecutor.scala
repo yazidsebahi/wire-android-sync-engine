@@ -68,8 +68,8 @@ trait AccountExecutor {
         error(s"zmessaging not available")
         Future.failed(ZMessagingExecutor.NoAccountException)
       case Some(acc) =>
-        val future = Threading.Ui(acc.lifecycle.acquireSync(logTag)).future flatMap { _ => body(acc) }
-        future.onComplete(_ => acc.lifecycle.releaseSync(logTag))(Threading.Ui)
+        val future = Threading.Ui(acc.global.lifecycle.acquireSync(logTag)).future flatMap { _ => body(acc) }
+        future.onComplete(_ => acc.global.lifecycle.releaseSync(logTag))(Threading.Ui)
         future
     }
   }

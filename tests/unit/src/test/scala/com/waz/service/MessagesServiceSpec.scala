@@ -66,7 +66,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   lazy val service = new MockZMessaging(selfUserId = selfUserId) {
 
-    override def network: NetworkModeService = new NetworkModeService(context) {
+    override def network: NetworkModeService = new NetworkModeService(context, lifecycle) {
       override def isOnlineMode: Boolean = online
       override def isOfflineMode: Boolean = !online
     }
