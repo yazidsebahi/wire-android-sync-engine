@@ -19,9 +19,9 @@ package com.waz.db
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.ClientRegistrationState
+import com.waz.ZLog._
+import com.waz.api.{ClientRegistrationState, ZmsVersion}
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.ZmsDatabase
 import com.waz.db.Col._
@@ -30,6 +30,7 @@ import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
+import com.waz.service.PreferenceService
 import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, Resource}
 import com.waz.znet.AuthenticationManager.Token
 
@@ -49,7 +50,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 14
+  val DbVersion = 15
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao)
 
@@ -87,7 +88,11 @@ object ZGlobalDB {
       Migration(12, 13)(Migrations.v11(context)),
       Migration(13, 14) {
         implicit db => AccountDataMigration.v78(db)
-      }
+      },
+      Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
+        val prefs = new PreferenceService(context)
+        prefs.editUiPreferences(_.putString(prefs.callingV3Key, "2")) //force update debug builds to calling v3
+      }}
     )
 
     implicit object ZmsDatabaseRes extends Resource[ZmsDatabase] {
@@ -129,7 +134,7 @@ object ZGlobalDB {
 
       val moveConvs = new TableMigration(TableDesc("ZUsers", Columns.v12.all), TableDesc("Accounts", Columns.v13.all)) {
 
-        import Columns.{v13 => dst, v12 => src}
+        import Columns.{v12 => src, v13 => dst}
 
         override val bindings: Seq[Binder] = Seq(
           dst.Id := src.Id,
