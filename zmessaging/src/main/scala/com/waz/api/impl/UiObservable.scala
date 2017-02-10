@@ -83,10 +83,6 @@ object UiSignal {
     addLoader(s) { set }
   }
 
-  def account[A](s: AccountService => Signal[A])(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
-    accountLoader(s) { set }
-  }
-
   def mapped[A, B](s: ZMessaging => Signal[B], f: B => A)(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
     addLoader(s) { v => set(f(v)) }
   }

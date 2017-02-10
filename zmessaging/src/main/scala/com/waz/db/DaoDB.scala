@@ -22,14 +22,16 @@ import android.database.sqlite.SQLiteDatabase.CursorFactory
 import android.database.sqlite.{SQLiteDatabase, SQLiteOpenHelper}
 import com.waz.utils.returning
 
-abstract class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int) extends SQLiteOpenHelper(context, name, factory, version) {
-
-  val daos: Seq[BaseDao[_]]
-  val migrations: Seq[Migration]
-
-  setWriteAheadLoggingEnabled(true)
+class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int, daos: Seq[BaseDao[_]], migrations: Seq[Migration]) extends SQLiteOpenHelper(context, name, factory, version) {
 
   override def getWritableDatabase: SQLiteDatabase = synchronized(returning(super.getWritableDatabase)(db => if (! db.isWriteAheadLoggingEnabled) db.enableWriteAheadLogging()))
+
+  /**
+    * Force database upgrade or creation before WAL mode is enabled. Once completed, WAL mode will be enabled. This gives
+    * onUpgrade an exclusive lock on the database. This should prevent the scenario where we try and read a database
+    * from a different thread before the upgrade has completed - leading to some weird migration issues.
+    */
+  getWritableDatabase
 
   override def onCreate(db: SQLiteDatabase): Unit =
     daos.foreach { dao =>
@@ -44,3 +46,4 @@ abstract class DaoDB(context: Context, name: String, factory: CursorFactory, ver
       db.execSQL(s"DROP TABLE IF EXISTS ${dao.table.name};")
     }
 }
+

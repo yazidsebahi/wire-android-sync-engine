@@ -19,7 +19,7 @@ package com.waz.db
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import com.waz.ZLog._
+import com.waz.db.ZMessagingDB.{DbVersion, daos, migrations}
 import com.waz.db.migrate._
 import com.waz.model.AddressBook.ContactHashesDao
 import com.waz.model.AssetData.AssetDataDao
@@ -42,11 +42,20 @@ import com.waz.model.VoiceParticipantData.VoiceParticipantDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
 
-class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getApplicationContext, dbName, null, ZMessagingDB.DbVersion) {
+class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getApplicationContext, dbName, null, DbVersion, daos, migrations) {
 
-  implicit val logTag = logTagFor[ZMessagingDB]
+  override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
+    if (from < 60) {
+      dropAllTables(db)
+      onCreate(db)
+    } else super.onUpgrade(db, from, to)
+  }
+}
 
-  val daos = Seq (
+object ZMessagingDB {
+  val DbVersion = 80
+
+  lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
@@ -54,7 +63,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
     ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao
   )
 
-  override val migrations = Seq(
+  lazy val migrations = Seq(
     Migration(60, 61)(UserDataMigration.v61),
     Migration(61, 62) { _.execSQL("ALTER TABLE Errors ADD COLUMN messages TEXT") },
     Migration(62, 63) { _.execSQL("ALTER TABLE VoiceParticipants ADD COLUMN sends_video INTEGER DEFAULT 0") },
@@ -109,15 +118,4 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
       MessageDataMigration.v80(db)
     }
   )
-
-  override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
-    if (from < 60) {
-      dropAllTables(db)
-      onCreate(db)
-    } else super.onUpgrade(db, from, to)
-  }
-}
-
-object ZMessagingDB {
-  val DbVersion = 80
 }

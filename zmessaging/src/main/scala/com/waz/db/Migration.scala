@@ -17,8 +17,9 @@
  */
 package com.waz.db
 
-import android.database.sqlite.SQLiteDatabase
-import com.waz.{HockeyApp, ZLog}, ZLog._
+import android.database.sqlite.{SQLiteDatabase, SQLiteTransactionListener}
+import com.waz.{HockeyApp, ZLog}
+import ZLog._
 
 import scala.util.control.NonFatal
 
@@ -75,11 +76,15 @@ class Migrations(migrations: Migration*) {
   }
 
   /**
-   * Migrates database using provided migrations.
-   * Falls back to dropping all data if migration fails.
+    * Migrates database using provided migrations.
+    * Falls back to dropping all data if migration fails.
+    *
+    * Note, SQLiteOpenHelper#onUpgrade is already called from within an exclusive transaction when the system realises
+    * that a database you are trying to access needs to be upgraded. So we can just execute all sql commands directly
+    * (no point in calling nested transactions for code we control)
     *
     * @throws IllegalStateException if no migration plan can be found
-   */
+    */
   @throws[IllegalStateException]("If no migration plan can be found for given versions")
   def migrate(storage: DaoDB, fromVersion: Int, toVersion: Int)(implicit db: SQLiteDatabase): Unit = {
     if (fromVersion != toVersion) {
@@ -89,18 +94,14 @@ class Migrations(migrations: Migration*) {
           try {
             ms.foreach { m =>
               verbose(s"applying migration: $m")
-              inTransaction {
-                m(db)
-                db.execSQL(s"PRAGMA user_version = ${m.toVersion}")
-              }
+              m(db)
+              db.execSQL(s"PRAGMA user_version = ${m.toVersion}")
             }
           } catch {
             case NonFatal(e) =>
               error(s"Migration failed for $storage, from: $fromVersion to: $toVersion", e)
               HockeyApp.saveException(e, s"Migration failed for $storage, from: $fromVersion to: $toVersion")
-              inTransaction {
-                fallback(storage, db)
-              }
+              fallback(storage, db)
           }
       }
     }

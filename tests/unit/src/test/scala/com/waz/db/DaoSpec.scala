@@ -34,10 +34,7 @@ import scala.util.Random
 
 class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests with RobolectricUtils { outer =>
 
-  lazy val dbHelper = new DaoDB(Robolectric.application, "testdb", null, 1) {
-    override val daos: Seq[BaseDao[_]] = Seq(TestItemDao, CompositeKeyTestItemDao)
-    override val migrations: Seq[Migration] = Seq()
-  }
+  lazy val dbHelper = new DaoDB(Robolectric.application, "testdb", null, 1, Seq(TestItemDao, CompositeKeyTestItemDao), Seq.empty[Migration])
 
   implicit def database = dbHelper.getWritableDatabase
 
