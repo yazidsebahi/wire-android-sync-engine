@@ -24,7 +24,6 @@ import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.model
-import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Preview
 import com.waz.model._
 import com.waz.service.assets.AssetService
@@ -72,7 +71,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
   }
 
   def generateAssetData(asset: AssetData, input: Either[LocalData, Bitmap], meta: Metadata, co: CompressionOptions): CancellableFuture[AssetData] = {
-    generateImageData(asset.id, co, input, meta) flatMap {
+    generateImageData(asset, co, input, meta) flatMap {
       case (file, m) =>
         verbose(s"generated image, size: ${input.fold(_.length, _.getByteCount)}, meta: $m")
         if (shouldRecode(file, m, co)) recode(asset.id, file, co, m)
@@ -91,13 +90,13 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
-  private def generateImageData(id: AssetId, options: CompressionOptions, input: Either[LocalData, Bitmap], meta: Metadata) = {
+  private def generateImageData(asset: AssetData, options: CompressionOptions, input: Either[LocalData, Bitmap], meta: Metadata) = {
 
     def loadScaled(w: Int, h: Int, crop: Boolean) = {
       val minWidth = if (crop) math.max(w, w * meta.width / meta.height) else w
       val sampleSize = BitmapUtils.computeInSampleSize(minWidth, meta.width)
       val memoryNeeded = (w * h) + (meta.width / sampleSize * meta.height / sampleSize) * 4
-      imageCache.reserve(id, options.req, memoryNeeded)
+      imageCache.reserve(asset.id, options.req, memoryNeeded)
       input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation), CancellableFuture.successful) map { image =>
         if (crop) {
           verbose(s"cropping to $w")
@@ -119,13 +118,13 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
 
     def save(image: Bitmap): CancellableFuture[(CacheEntry, Metadata)] = {
-      imageCache.add(id, options.req, image)
-      saveImage(id, image, meta.mimeType, options)
+      imageCache.add(asset.id, options.req, image)
+      saveImage(asset.cacheKey, image, meta.mimeType, options)
     }
 
     if (options.shouldScaleOriginalSize(meta.width, meta.height)) generateScaled()
     else input.fold(
-      local => cache.addStream(CacheKey.fromAssetId(id), local.inputStream, cacheLocation = Some(saveDir), mime = model.Mime(meta.mimeType)).map((_, meta)).lift,
+      local => cache.addStream(asset.cacheKey, local.inputStream, cacheLocation = Some(saveDir), mime = model.Mime(meta.mimeType)).map((_, meta)).lift,
       image => save(image))
   }
 
@@ -133,8 +132,8 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     if (!forceLossy && mime == Mime.Png) Bitmap.CompressFormat.PNG
     else Bitmap.CompressFormat.JPEG
 
-  private def saveImage(id: AssetId, image: Bitmap, mime: String, options: CompressionOptions): CancellableFuture[(CacheEntry, Metadata)] =
-    cache.createForFile(CacheKey.fromAssetId(id), cacheLocation = Some(saveDir)).flatMap(saveImage(_, image, mime, options)).lift
+  private def saveImage(key: CacheKey, image: Bitmap, mime: String, options: CompressionOptions): CancellableFuture[(CacheEntry, Metadata)] =
+    cache.createForFile(key, cacheLocation = Some(saveDir)).flatMap(saveImage(_, image, mime, options)).lift
 
   private def saveImage(file: CacheEntry, image: Bitmap, mime: String, options: CompressionOptions): Future[(CacheEntry, Metadata)] = {
     val format = saveFormat(mime, options.forceLossy)
