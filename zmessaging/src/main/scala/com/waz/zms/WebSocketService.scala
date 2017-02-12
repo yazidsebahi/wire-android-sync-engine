@@ -47,7 +47,7 @@ class WebSocketService extends FutureService {
 
   private def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
-  private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_ONE_SHOT)
+  private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_CANCEL_CURRENT)
 
   override def onStartCommand(intent: Intent, flags: Int, startId: Int): Int = wakeLock {
     verbose(s"onStartCommand($intent, $startId)")
