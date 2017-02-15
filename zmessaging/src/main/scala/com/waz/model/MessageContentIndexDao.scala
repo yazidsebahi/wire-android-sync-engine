@@ -38,6 +38,8 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   val Content = text('content)(_.content)
   val Time = timestamp('time)(_.time)
 
+  private lazy val transliteration = Locales.transliteration("Latin-ASCII; Lower")
+
   override def onCreate(db: SQLiteDatabase) = {
     db.execSQL(table.createFtsSql)
   }
@@ -89,7 +91,7 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   }
 
   private def normalizeContent(text: String): String = {
-    Locales.transliteration("Latin-ASCII; Lower").transliterate(text).trim
+    transliteration.transliterate(text).trim
   }
 
 }

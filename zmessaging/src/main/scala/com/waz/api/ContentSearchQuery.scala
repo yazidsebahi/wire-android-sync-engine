@@ -25,6 +25,7 @@ case class ContentSearchQuery(originalString: String){
 
   lazy val elements : Set[String] =
     originalString
+      .replaceAll("[,'*]"," ")
       .split(" ")
       .map(transliterated)
       .filter(_.nonEmpty)
@@ -35,7 +36,10 @@ case class ContentSearchQuery(originalString: String){
 }
 
 object ContentSearchQuery{
+
+  private lazy val transliteration = Locales.transliteration("Latin-ASCII; Lower")
+
   val empty = ContentSearchQuery("")
 
-  def transliterated(s: String): String = Locales.transliteration("Latin-ASCII; Lower").transliterate(s).trim
+  def transliterated(s: String): String = transliteration.transliterate(s).trim
 }
