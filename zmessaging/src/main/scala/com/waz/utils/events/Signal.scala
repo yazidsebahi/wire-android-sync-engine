@@ -64,12 +64,6 @@ object Signal {
     } (Threading.Background)
   }
 
-  def future[A](initial: A, future: Future[A]): Signal[A] = returning(new Signal[A](Some(initial))) { signal =>
-    future.onSuccess {
-      case res => signal.set(Option(res), Some(Threading.Background))
-    } (Threading.Background)
-  }
-
   def wrap[A](initial: A, source: EventStream[A]): Signal[A] = new Signal[A](Some(initial)) {
     lazy val subscription = source { publish } (EventContext.Global)
     override protected def onWire(): Unit = subscription.enable()

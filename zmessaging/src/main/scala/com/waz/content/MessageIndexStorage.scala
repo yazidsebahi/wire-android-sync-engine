@@ -24,7 +24,6 @@ import com.waz.ZLog._
 import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.Locales
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
@@ -33,6 +32,7 @@ import scala.concurrent.duration.FiniteDuration
 
 class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorage: MessagesStorage, loader: MessageAndLikesStorage) {
   import MessageIndexStorage._
+  import MessageContentIndex._
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val logTag: LogTag = logTagFor[MessageIndexStorage]
@@ -45,14 +45,14 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
     }
   }
 
-  val finishedIndexing = Signal.future(false, updateOutdated())
+  val finishedIndexing = Signal.future(updateOutdated()).orElse(Signal(true))
 
   messagesStorage.onAdded{ added =>
-    storage(MessageContentIndexDao.addMessages(added.filter(m => m.msgType == Message.Type.TEXT || m.msgType == Message.Type.TEXT_EMOJI_ONLY || m.msgType == Message.Type.RICH_MEDIA))(_))
+    storage(MessageContentIndexDao.addMessages(added.filter(m => TextMessageTypes.contains(m.msgType)))(_))
   }
 
   messagesStorage.onUpdated{ updated =>
-    storage(MessageContentIndexDao.updateMessages(updated.filter(m => m._2.msgType == Message.Type.TEXT || m._2.msgType == Message.Type.TEXT_EMOJI_ONLY || m._2.msgType == Message.Type.RICH_MEDIA))(_))
+    storage(MessageContentIndexDao.updateMessages(updated.filter(m => TextMessageTypes.contains(m._2.msgType)))(_))
   }
 
   messagesStorage.onDeleted{ removed =>
@@ -61,8 +61,8 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
 
   def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] ={
     convId match {
-      case Some(conv) => storage(MessageContentIndexDao.findContent(contentSearchQuery.toFtsQuery, convId)(_)).map(c => new MessagesCursor(conv, c, 0, Instant.now, loader))
-      //TODO: global search
+      case Some(conv) => storage(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(conv, c, 0, Instant.now, loader))
+      case _ => storage(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(ConvId(), c, 0, Instant.now, loader)) //TODO: global search cursor
     }
   }
 

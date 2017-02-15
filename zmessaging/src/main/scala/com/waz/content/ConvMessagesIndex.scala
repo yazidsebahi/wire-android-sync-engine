@@ -115,7 +115,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
     storage { implicit db =>
       val cursor = filter match {
           //TODO: this ignores other filter types if the content query is on. they should all be considered...
-        case Some(MessageFilter(_, Some(query), _)) => MessageContentIndexDao.findContent(query.toFtsQuery, Some(conv))
+        case Some(MessageFilter(_, Some(query), _)) => MessageContentIndexDao.findContent(query, Some(conv))
         case _ => MessageDataDao.msgIndexCursorFiltered(conv, filter)
       }
       val time = lastReadTime.currentValue.getOrElse(Instant.EPOCH)

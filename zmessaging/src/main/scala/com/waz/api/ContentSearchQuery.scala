@@ -32,7 +32,7 @@ case class ContentSearchQuery(originalString: String){
       .toSet
 
   override def toString = elements.reduceOption(_ + " " + _).getOrElse("")
-  def toFtsQuery = elements.map("*" + _ + "*").reduceOption(_ + " " + _).getOrElse("")
+  def toFtsQuery = elements.map(_ + "*").reduceOption(_ + " " + _).getOrElse("")
 }
 
 object ContentSearchQuery{
