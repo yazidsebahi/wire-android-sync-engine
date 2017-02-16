@@ -119,7 +119,7 @@ object ZMessagingDB {
       MessageDataMigration.v80(db)
     },
     Migration(80, 81) { db =>
-      db.execSQL("CREATE VIRTUAL TABLE MessageContentIndex using fts3(conv_id TEXT, message_id TEXT, content TEXT, time TIMESTAMP")
+      db.execSQL("CREATE VIRTUAL TABLE MessageContentIndex using fts3(conv_id TEXT, message_id TEXT, content TEXT, time TIMESTAMP)")
     }
   )
 }
