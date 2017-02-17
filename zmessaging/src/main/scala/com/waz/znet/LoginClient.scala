@@ -43,7 +43,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
   private[znet] var lastRequestTime = 0L
   private[znet] var failedAttempts = 0
   private var lastResponse = Status.Success
-  private var loginFuture = CancellableFuture.successful[LoginResult](Left(ErrorResponse.Cancelled))
+  private var loginFuture = CancellableFuture.successful[LoginResult](Left((None, ErrorResponse.Cancelled)))
 
   def requestDelay =
     if (failedAttempts == 0) Duration.Zero
@@ -70,10 +70,10 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
       verbose(s"starting request")
       lastRequestTime = System.currentTimeMillis()
       request map {
-        case Left(error) =>
+        case Left((rId, error)) =>
           failedAttempts += 1
           lastResponse = error.getCode
-          Left(error)
+          Left((rId, error))
         case resp =>
           failedAttempts = 0
           lastResponse = Status.Success
@@ -108,10 +108,10 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     case Response(SuccessHttpStatus(), JsonObjectResponse(TokenResponse(token, exp, ttype)), responseHeaders) =>
       debug(s"receivedAccessToken: '$token', headers: $responseHeaders")
       Right((Token(token, ttype, System.currentTimeMillis() + exp * 1000), getCookieFromHeaders(responseHeaders)))
-    case r @ Response(status, ErrorResponse(code, msg, label), _) =>
+    case r @ Response(status, ErrorResponse(code, msg, label), headers) =>
       warn(s"failed login attempt: $r")
-      Left(ErrorResponse(code, msg, label))
-    case r @ Response(status, _, _) => Left(ErrorResponse(status.status, s"unexpected login response: $r", ""))
+      Left((headers(RequestId), ErrorResponse(code, msg, label)))
+    case r @ Response(status, _, headers) => Left((headers(RequestId), ErrorResponse(status.status, s"unexpected login response: $r", "")))
   }
 
   private val loginUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(LoginPath).encodedQuery("persist=true").build()
@@ -120,8 +120,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
 }
 
 object LoginClient {
-  private implicit val logTag: LogTag = logTagFor(LoginClient)
-  type LoginResult = Either[ErrorResponse, (Token, Cookie)]
+  type LoginResult = Either[(Option[String], ErrorResponse), (Token, Option[Cookie])]
   type AccessToken = (String, Int, String)
 
   val SetCookie = "Set-Cookie"
@@ -130,6 +129,9 @@ object LoginClient {
   val LoginPath = "/login"
   val AccessPath = "/access"
   val ActivateSendPath = "/activate/send"
+
+  //TODO remove once logout issue is fixed: https://wearezeta.atlassian.net/browse/AN-4816
+  val RequestId = "Request-Id"
 
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
 

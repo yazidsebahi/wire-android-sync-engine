@@ -103,10 +103,10 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
             cookie match {
               case Some(c) =>
                 dispatchRequest(client.access(c, token)) {
-                  case Left((resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label)) =>
+                  case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
                     verbose(s"access request failed (label: $label, message: $message), will try login request. token: $token, cookie: $cookie, access resp: $resp")
 
-                    ExceptionHandler.saveException(new RuntimeException(s"Access request failed"), null)
+                    ExceptionHandler.saveException(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
                     for {
                       _ <- CancellableFuture.lift(user.cookie := None)
                       _ <- CancellableFuture.lift(user.accessToken := None)
@@ -152,7 +152,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
 
       case Left(_) if closed => CancellableFuture.successful(Left(ClientClosed))
 
-      case Left(err @ ErrorResponse(Cancelled.status, msg, label)) =>
+      case Left((_, err @ ErrorResponse(Cancelled.status, msg, label))) =>
         debug(s"request has been cancelled")
         CancellableFuture.successful(Left(HttpStatus(err.code, s"$msg - $label")))
 
@@ -160,7 +160,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
         info(s"Received error from request: $err, will retry")
         dispatchRequest(request, retryCount + 1)(handler)
 
-      case Left(err) =>
+      case Left((_, err)) =>
         val msg = s"Login request failed after $retryCount retries, last status: $err"
         error(msg)
         CancellableFuture.successful(Left(HttpStatus(err.code, msg)))

@@ -110,7 +110,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
 
   before {
-    loginResponse = Left(ErrorResponse(0, "", ""))
+    loginResponse = Left((Some("123"), ErrorResponse(0, "", "")))
     registerResponse = Left(ErrorResponse(0, "", ""))
     response = { _ => Response(Response.Cancelled) }
     request = None
@@ -164,7 +164,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
     scenario("Register new user, verify email right away, and set picture") {
       val selfUserId = UserId()
       registerResponse = Right((UserInfo(selfUserId, Some("name"), Some(0), Some(EmailAddress("email"))), Some(Cookie("sd-zuid=asd;asd"))))
-      loginResponse = Left(ErrorResponse(403, "", "pending-activation"))
+      loginResponse = Left((Some("123"), ErrorResponse(403, "", "pending-activation")))
       response = { _ => Response(HttpStatus(403), JsonObjectResponse(Json("code" -> 403, "message" -> "invalid credentials", "label" -> "pending-activation"))) }
 
       var self: com.waz.api.Self = null
@@ -227,7 +227,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
     scenario("Register new user, restart the app, verify email, login again") {
       val selfUserId = UserId()
       registerResponse = Right((UserInfo(selfUserId, Some("name"), Some(0), Some(EmailAddress("email1"))), Some(Cookie("sd-zuid=asd;asd"))))
-      loginResponse = Left(ErrorResponse(403, "", "pending-activation"))
+      loginResponse = Left((Some("123"), ErrorResponse(403, "", "pending-activation")))
       response = _ => Response(HttpStatus(403), JsonObjectResponse(Json("code" -> 403, "message" -> "invalid credentials", "label" -> "")))
 
       var self: com.waz.api.Self = null

@@ -67,14 +67,14 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
   before {
     ShadowLog.stream = null
     loginRequest = None
-    loginResponse = Left(ErrorResponse(0, "", ""))
+    loginResponse = Left((Some("123"), ErrorResponse(0, "", "")))
     loadSelfResponse = Left(ErrorResponse(0, "", ""))
   }
 
   feature("login") {
 
     scenario("login with unverified user") {
-      loginResponse = Left(ErrorResponse(403, "message", "pending-activation"))
+      loginResponse = Left((Some("123"), ErrorResponse(403, "message", "pending-activation")))
 
       val creds = EmailCredentials(EmailAddress("email"), Some("pass"))
       Await.result(accounts.login(creds), 2.seconds) match {

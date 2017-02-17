@@ -344,9 +344,9 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
             acc <- accountsStorage.updateOrCreate(id, _.copy(activated = true, cookie = cookie, accessToken = Some(token)), account.copy(activated = true, cookie = cookie, accessToken = Some(token)))
           } yield Right(acc)
         }
-      case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
+      case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
         CancellableFuture successful Right(account.copy(activated = false))
-      case Left(err) =>
+      case Left((_, err)) =>
         verbose(s"activate failed: $err")
         CancellableFuture successful Left(err)
     }
