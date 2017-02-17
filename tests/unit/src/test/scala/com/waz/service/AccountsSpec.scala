@@ -26,6 +26,7 @@ import com.waz.testutils._
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{LoginClient, ZNetClient}
 import org.robolectric.shadows.ShadowLog
@@ -38,12 +39,12 @@ import scala.concurrent.duration._
 class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
   var loginRequest: Option[Credentials] = _
-  var loginResponse: Either[ErrorResponse, (Token, Cookie)] = _
+  var loginResponse: LoginResult = _
   var loadSelfResponse: Either[ErrorResponse, UserInfo] = _
 
   lazy val global = new MockGlobalModule {
     override lazy val loginClient: LoginClient = new LoginClient(client, BackendConfig.StagingBackend) {
-      override def login(userId: AccountId, credentials: Credentials): CancellableFuture[Either[ErrorResponse, (Token, Cookie)]] = {
+      override def login(userId: AccountId, credentials: Credentials) = {
         loginRequest = Some(credentials)
         CancellableFuture successful loginResponse
       }
@@ -99,7 +100,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
     scenario("log in with phone number") {
       val accountsSize = accounts.accountMap.size
 
-      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some("cookie")))
+      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some(Cookie("cookie"))))
       loadSelfResponse = Right(userInfo)
 
       val Right(data) = accounts.login(PhoneCredentials(phone, Some(ConfirmationCode("code")))).await()
@@ -117,7 +118,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
 
     scenario("log in with email") {
       val accountsSize = accounts.accountMap.size
-      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some("cookie")))
+      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some(Cookie("cookie"))))
       loadSelfResponse = Right(userInfo)
 
       val Right(data) = accounts.login(EmailCredentials(email, Some("passwd"))).await()
@@ -135,7 +136,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
 
     scenario("log in with new password (after changing it on backend)") {
       val accountsSize = accounts.accountMap.size
-      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some("cookie")))
+      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some(Cookie("cookie"))))
       loadSelfResponse = Right(userInfo)
 
       val Right(data) = accounts.login(EmailCredentials(email, Some("new_password"))).await()

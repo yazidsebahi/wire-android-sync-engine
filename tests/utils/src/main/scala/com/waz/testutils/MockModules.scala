@@ -35,7 +35,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ZNetClient.{EmptyAsyncClient, ErrorOrResponse}
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
@@ -57,8 +57,8 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
   override lazy val factory = new MockZMessagingFactory(this)
 
   override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
-    override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(""))))
-    override def access(cookie: Option[String], token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(""))))
+    override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
+    override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
 
   override lazy val mediaManager = new MediaManagerService(context, prefs) {
@@ -107,7 +107,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
   var timeout = 5.seconds
 
   storage.usersStorage.put(selfUserId, UserData(selfUserId, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
-  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, true, Some("cookie"), Some("passwd"), None, Some(selfUserId), Some(clientId), handle = Some(Handle("test_username")))) map { _ =>
+  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId), handle = Some(Handle("test_username")))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 

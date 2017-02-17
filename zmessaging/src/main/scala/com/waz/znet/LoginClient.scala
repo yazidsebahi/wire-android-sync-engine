@@ -20,6 +20,7 @@ package com.waz.znet
 import android.net.Uri
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.client.RegistrationClient
 import com.waz.model.{AccountId, EmailAddress}
@@ -54,7 +55,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
 
   def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = throttled(loginNow(accountId, credentials))
 
-  def access(cookie: Option[String], token: Option[Token]) = throttled(accessNow(cookie, token))
+  def access(cookie: Cookie, token: Option[Token]) = throttled(accessNow(cookie, token))
 
   def throttled(request: => CancellableFuture[LoginResult]): CancellableFuture[LoginResult] = dispatcher {
     loginFuture = loginFuture.recover {
@@ -86,8 +87,8 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     debug(s"trying to login: $credentials")
     client(loginUri, Request.PostMethod, loginRequestBody(userId, credentials), timeout = RegistrationClient.timeout) map responseHandler
   }
-  def accessNow(cookie: Option[String], token: Option[Token]) = {
-    val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.fold(Request.EmptyHeaders)(c => Map(Cookie -> s"zuid=$c"))
+  def accessNow(cookie: Cookie, token: Option[Token]) = {
+    val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
     client(accessUri, Request.PostMethod, EmptyRequestContent, headers, timeout = RegistrationClient.timeout) map responseHandler
   }
 
@@ -137,10 +138,10 @@ object LoginClient {
     credentials.addToLoginJson(o)
   })
 
-  def getCookieFromHeaders(headers: Response.Headers): Cookie = headers(SetCookie) flatMap {
+  def getCookieFromHeaders(headers: Response.Headers): Option[Cookie] = headers(SetCookie) flatMap {
     case header @ CookieHeader(cookie) =>
       verbose(s"parsed cookie from header: $header, cookie: $cookie")
-      Some(cookie)
+      Some(AuthenticationManager.Cookie(cookie))
     case header =>
       warn(s"Unexpected content for Set-Cookie header: $header")
       None

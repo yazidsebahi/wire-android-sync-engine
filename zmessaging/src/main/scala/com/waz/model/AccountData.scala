@@ -21,6 +21,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.util.Base64
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.db.Col._
@@ -29,6 +30,7 @@ import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
 import com.waz.utils.{JsonDecoder, JsonEncoder}
+import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 
 /**
@@ -38,7 +40,7 @@ import com.waz.znet.AuthenticationManager.{Cookie, Token}
  * @param password - will not be stored in db
  */
 case class AccountData(id: AccountId, email: Option[EmailAddress], hash: String, phone: Option[PhoneNumber],
-                       activated: Boolean = false, cookie: Cookie = None, password: Option[String] = None, accessToken: Option[Token] = None,
+                       activated: Boolean = false, cookie: Option[Cookie] = None, password: Option[String] = None, accessToken: Option[Token] = None,
                        userId: Option[UserId] = None, clientId: Option[ClientId] = None, clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
                        handle:Option[Handle], privateMode:Boolean = false) {
 
@@ -71,7 +73,7 @@ case class AccountData(id: AccountId, email: Option[EmailAddress], hash: String,
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState) =
     copy(userId = userId orElse this.userId, activated = this.activated | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
 
-  override def toString: String = s"AccountData($id, $handle, $email, $phone, $activated, user: $userId, client: $clientId, cookie: ${cookie.map(_ take 10)}, password: ${password.isDefined})"
+  override def toString: String = s"AccountData($id, $handle, $email, $phone, $activated, user: $userId, client: $clientId, cookie: ${cookie.toString}, password: ${password.isDefined})"
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
@@ -88,8 +90,6 @@ case class ConfirmationCode(str: String) extends AnyVal {
 }
 
 object AccountData {
-  private implicit val logTag: LogTag = logTagFor(AccountData)
-
   def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
 
   def apply(id: AccountId, credentials: Credentials): AccountData =
@@ -114,7 +114,7 @@ object AccountData {
     val Email = opt(emailAddress('email))(_.email)
     val Hash = text('hash)(_.hash)
     val EmailVerified = bool('verified)(_.activated)
-    val Cookie = opt(text('cookie))(_.cookie)
+    val Cookie = opt(text[Cookie]('cookie, _.str, AuthenticationManager.Cookie))(_.cookie)
     val Phone = opt(phoneNumber('phone))(_.phone)
     val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))(_.accessToken)
     val UserId = opt(id[UserId]('user_id)).apply(_.userId)
