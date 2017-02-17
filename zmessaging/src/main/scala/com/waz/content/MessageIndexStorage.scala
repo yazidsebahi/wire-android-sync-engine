@@ -48,11 +48,11 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
   val finishedIndexing = Signal.future(updateOutdated()).orElse(Signal(true))
 
   messagesStorage.onAdded{ added =>
-    storage(MessageContentIndexDao.addMessages(added.filter(m => TextMessageTypes.contains(m.msgType)))(_))
+    storage(MessageContentIndexDao.addMessages(added.filter(m => TextMessageTypes.contains(m.msgType) && !m.isEphemeral))(_))
   }
 
   messagesStorage.onUpdated{ updated =>
-    storage(MessageContentIndexDao.updateMessages(updated.filter(m => TextMessageTypes.contains(m._2.msgType)))(_))
+    storage(MessageContentIndexDao.updateMessages(updated.filter(m => TextMessageTypes.contains(m._2.msgType) && !m._2.isEphemeral))(_))
   }
 
   messagesStorage.onDeleted{ removed =>
