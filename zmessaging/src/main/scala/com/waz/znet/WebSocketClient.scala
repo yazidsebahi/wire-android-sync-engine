@@ -31,7 +31,9 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.{ExponentialBackoff, WakeLock, returning}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent}
+import com.waz.znet.WebSocketClient.Disconnect
 import org.json.JSONObject
+import org.threeten.bp.Instant
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
@@ -59,6 +61,8 @@ class WebSocketClient(context: Context,
   val onMessage = EventStream[ResponseContent]()
   val onPing    = EventStream[Unit]()
   val onPong    = EventStream[Unit]()
+  val lastReceiveTime = Signal[Instant]() // time when something was last received on websocket
+  val onConnectionLost = EventStream[Disconnect]()
 
   private var init  : CancellableFuture[WebSocket] = connect()
   init.onFailure {
@@ -70,8 +74,6 @@ class WebSocketClient(context: Context,
 
   private var closed     = false
   private var retryCount = 0
-
-  private var pongPromise = Option.empty[Promise[Unit]]
 
   //Used to ensure just one ping request (waiting for pong) is active at a time
   private var pongFuture = CancellableFuture.cancelled[Unit]()
@@ -138,14 +140,17 @@ class WebSocketClient(context: Context,
     retryCount = 0
 
     connected ! true
+    lastReceiveTime ! Instant.now
 
     webSocket.setStringCallback(new StringCallback {
       override def onStringAvailable(s: String): Unit = wakeLock {
+        lastReceiveTime ! Instant.now
         onMessage ! Try(JsonObjectResponse(new JSONObject(s))).getOrElse(StringResponse(s))
       }
     })
     webSocket.setDataCallback(new DataCallback {
       override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit = wakeLock {
+        lastReceiveTime ! Instant.now
         onMessage ! Try(JsonObjectResponse(new JSONObject(new String(bb.getAllByteArray, "utf8")))).getOrElse(BinaryResponse(bb.getAllByteArray, ""))
       }
     })
@@ -154,16 +159,14 @@ class WebSocketClient(context: Context,
         if (ex != null) error("WebSocket connection has been closed with error", ex)
         else info("WebSocket connection has been closed")
         connected ! false
+        if (!closed) onConnectionLost ! Disconnect.WsClosed
         retryLostConnection(ex)
       }
     })
     webSocket.setPongCallback(new PongCallback {
       override def onPongReceived(s: String): Unit = {
         info(s"pong")
-        //delete current promise before completing it - otherwise chained pings won't work
-        val p = pongPromise
-        pongPromise = None
-        p.foreach(_.trySuccess(()))
+        lastReceiveTime ! Instant.now
         onPong ! (())
       }
     })
@@ -171,6 +174,7 @@ class WebSocketClient(context: Context,
       override def onCompleted(ex: Exception): Unit = {
         error("WebSocket frame parsing failed", ex)
         onError ! ex
+        if (!closed) onConnectionLost ! Disconnect.WsEnded
       }
     })
     webSocket
@@ -213,27 +217,24 @@ class WebSocketClient(context: Context,
 
   //Ping, and attempt to reconnect if it fails according to the backoff
   def verifyConnection(): CancellableFuture[Unit] = pingPong().recoverWith {
-    case NonFatal(ex) =>
+    case NonFatal(ex) if !closed =>
       warn("Ping to server failed, attempting to re-establish connection")
+      onConnectionLost ! Disconnect.NoPong
       retryLostConnection(ex).flatMap ( _ => verifyConnection() )
   }
 
   //Pings the BE. Will return a future of whether a pong was received within the pongTimeout. If the future
   //succeeds, we can assume the ping was successful.
   def pingPong(): CancellableFuture[Unit] = init flatMap { ws =>
-    pongPromise.fold {
-      val p = Promise[Unit]()
-      pongPromise = Some(p)
+    import com.waz.utils.events.EventContext.Implicits.global
+    
+    if (pongFuture.isCompleted) { // ping only if not waiting for pong already
+      pongFuture = onPong.next.withTimeout(pongTimeout)
       info(s"ping")
       ws.ping(s"ping")
       onPing ! (())
-      returning (new CancellableFuture(p).withTimeout(pongTimeout))(pongFuture = _)
-    } { p =>
-      pongFuture
-    }.recoverWith { case _ =>
-      pongPromise = None
-      pongFuture
     }
+    pongFuture
   }
 }
 
@@ -243,4 +244,11 @@ object WebSocketClient {
 
   def apply(context: Context, client: ZNetClient, pushUri: => Uri) =
     new WebSocketClient(context, client.client, pushUri, client.auth)
+
+  trait Disconnect
+  object Disconnect {
+    case object NoPong extends Disconnect
+    case object WsClosed extends Disconnect
+    case object WsEnded extends Disconnect
+  }
 }

@@ -26,8 +26,10 @@ import com.waz.model.otr.ClientId
 import com.waz.service.LifecycleState._
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, EventStream, Signal}
+import com.waz.znet.WebSocketClient.Disconnect
 import com.waz.znet.{WebSocketClient, ZNetClient}
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -104,6 +106,8 @@ class WebSocketClientService(context: Context,
     }
   }
 
+  val connectionStats = client collect { case Some(c) => new ConnectionStats(network, c) }
+
   def verifyConnection() =
     client.head flatMap {
       case None => Future.successful(())
@@ -136,8 +140,47 @@ class WebSocketClientService(context: Context,
 }
 
 object WebSocketClientService {
-  val PING_INTERVAL_FOREGROUND         = 30.seconds
-  val DEFAULT_PING_INTERVAL_BACKGROUND = 15.minutes
-  val MIN_PING_INTERVAL                = 15.seconds
+  val PING_INTERVAL_FOREGROUND  = 30.seconds
 
+  // following only apply for background ping
+  val DEFAULT_PING_INTERVAL     = 9.minutes
+  val MIN_PING_INTERVAL         = 2.minutes // no point it doing it more often,
+  val MAX_PING_INTERVAL         = 14.minutes // backend disconnects after 15 minutes of inactivity, we need to ping more often than that
+
+  // collects websocket connection statistics for tracking and optimal ping timeout calculation
+  class ConnectionStats(network: NetworkModeService,
+                        client: WebSocketClient) {
+
+    import com.waz.utils._
+
+    def lastReceiveTime = client.lastReceiveTime.currentValue
+
+    // last inactivity duration computed from lastReceiveTime
+    val inactiveDuration = client.lastReceiveTime.scan(Option.empty[(Instant, FiniteDuration)]) {
+      case (Some((prev, _)), time) => Some((time, prev.until(time).asScala))
+      case (_, time) => Some((time, Duration.Zero))
+    }
+
+    val maxInactiveDuration = inactiveDuration.scan(Duration.Zero) {
+      case (prev, None) => prev
+      case (prev, Some((_, duration))) => prev max duration
+    }
+
+    // disconnection detected by missing Pong mean that we actually had stale connection and didn't notice it earlier
+    // that's where we loose notifications, we need to somehow limit that cases
+    val lostOnPingDuration = lostConnectionDuration(client.onConnectionLost.filter(_ == Disconnect.NoPong))
+
+    // connection was lost but we were notified about it, so we'll automatically reconnect, that's not bad
+    val aliveDuration = lostConnectionDuration(client.onConnectionLost.filter(_ != Disconnect.NoPong))
+
+    private def lostConnectionDuration(onConnectionLost: EventStream[Disconnect]) =
+      onConnectionLost map { _ =>
+        lastReceiveTime.fold(Duration.Zero) { _.until(Instant.now).asScala }
+      } filter { duration =>
+        // will only report connection lost if:
+        // - we have network (meaning that most likely disconnection is not a result of loosing internet connection)
+        // - connection was inactive for some time, we only care about idle connections, want to detect when those get closed by some router/isp
+        network.networkMode.currentValue.exists(_ != NetworkMode.OFFLINE) && duration >= MIN_PING_INTERVAL
+      }
+  }
 }
