@@ -227,7 +227,7 @@ class WebSocketClient(context: Context,
   //succeeds, we can assume the ping was successful.
   def pingPong(): CancellableFuture[Unit] = init flatMap { ws =>
     import com.waz.utils.events.EventContext.Implicits.global
-    
+
     if (pongFuture.isCompleted) { // ping only if not waiting for pong already
       pongFuture = onPong.next.withTimeout(pongTimeout)
       info(s"ping")

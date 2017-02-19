@@ -41,8 +41,7 @@ class WebSocketClientService(context: Context,
                              backend: BackendConfig,
                              clientId: ClientId,
                              timeouts: Timeouts,
-                             gcmService: IGcmService,
-                             prefs: PreferenceService) {
+                             gcmService: IGcmService) {
   import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -77,7 +76,6 @@ class WebSocketClientService(context: Context,
         // start android service to keep the app running while we need to be connected.
         com.waz.zms.WebSocketService(context)
       }
-      prevClient.foreach { _.scheduleRecurringPing(if (state == Active || state == UiActive) PING_INTERVAL_FOREGROUND else prefs.webSocketPingInterval) }
       prevClient
     case (false, _) =>
       debug(s"onInactive")
@@ -140,12 +138,6 @@ class WebSocketClientService(context: Context,
 }
 
 object WebSocketClientService {
-  val PING_INTERVAL_FOREGROUND  = 30.seconds
-
-  // following only apply for background ping
-  val DEFAULT_PING_INTERVAL     = 9.minutes
-  val MIN_PING_INTERVAL         = 2.minutes // no point it doing it more often,
-  val MAX_PING_INTERVAL         = 14.minutes // backend disconnects after 15 minutes of inactivity, we need to ping more often than that
 
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
   class ConnectionStats(network: NetworkModeService,
@@ -161,6 +153,9 @@ object WebSocketClientService {
       case (_, time) => Some((time, Duration.Zero))
     }
 
+    // maximum time between anything is received on web socket without connection being lost
+    // this gives us lower bound for ping intervals, no need to ping more often if we already know that
+    // connection is able to stay alive for some interval
     val maxInactiveDuration = inactiveDuration.scan(Duration.Zero) {
       case (prev, None) => prev
       case (prev, Some((_, duration))) => prev max duration
@@ -180,7 +175,7 @@ object WebSocketClientService {
         // will only report connection lost if:
         // - we have network (meaning that most likely disconnection is not a result of loosing internet connection)
         // - connection was inactive for some time, we only care about idle connections, want to detect when those get closed by some router/isp
-        network.networkMode.currentValue.exists(_ != NetworkMode.OFFLINE) && duration >= MIN_PING_INTERVAL
+        network.networkMode.currentValue.exists(_ != NetworkMode.OFFLINE) && duration >= PingIntervalService.MIN_PING_INTERVAL
       }
   }
 }

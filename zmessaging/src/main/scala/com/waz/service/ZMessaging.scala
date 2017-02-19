@@ -184,6 +184,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val gcm: GcmService                       = wire[GcmService]
   lazy val errors                                = wire[ErrorsService]
   lazy val reporting                             = new ZmsReportingService(accountId, global.reporting)
+  lazy val pingInterval: PingIntervalService     = wire[PingIntervalService]
   lazy val websocket: WebSocketClientService     = wire[WebSocketClientService]
   lazy val userSearch                            = wire[UserSearchService]
   lazy val assetGenerator                        = wire[ImageAssetGenerator]
