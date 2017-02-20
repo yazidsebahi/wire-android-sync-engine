@@ -18,6 +18,7 @@
 package com.waz.utils.events
 
 import org.scalatest._
+import com.waz.ZLog.ImplicitTag._
 
 class FlatMapSignalSpec extends FeatureSpec with OptionValues with Matchers with BeforeAndAfter with RobolectricTests {
   implicit val ec: EventContext = EventContext.Global

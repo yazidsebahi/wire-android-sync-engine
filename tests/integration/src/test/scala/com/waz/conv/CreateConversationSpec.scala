@@ -30,6 +30,7 @@ import com.waz.sync.client.ConnectionsClient
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
 import com.waz.znet._
+import com.waz.ZLog.ImplicitTag._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, OptionValues}
 

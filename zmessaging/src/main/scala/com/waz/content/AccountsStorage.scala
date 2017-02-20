@@ -18,7 +18,7 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
@@ -27,11 +27,8 @@ import com.waz.utils.{CachedStorage, TrimmingLruCache}
 
 import scala.concurrent.Future
 
-class AccountsStorage(context: Context, storage: Database) extends CachedStorage[AccountId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao, "AccountStorage") {
-  import AccountsStorage._
+class AccountsStorage(context: Context, storage: Database) extends CachedStorage[AccountId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) {
   import com.waz.threading.Threading.Implicits.Background
-
-  def findByUserId(user: UserId) = find(_.userId == user, AccountDataDao.findByUser(user)(_), identity).map(_.headOption)
 
   def findByEmail(email: EmailAddress) = find(_.email.contains(email), AccountDataDao.findByEmail(email)(_), identity).map(_.headOption)
 
@@ -42,27 +39,4 @@ class AccountsStorage(context: Context, storage: Database) extends CachedStorage
     case PhoneCredentials(phone, _, _) => findByPhone(phone)
     case _ => Future successful None
   }
-
-  def updateCookie(user: AccountData, cookie: Option[String]) = storage { implicit db =>
-    verbose(s"updateCookie($user, cookie.isDefined = ${cookie.isDefined}")
-    AccountDataDao.update(user)(_.copy(cookie = cookie, activated = user.activated || cookie.isDefined))
-  }
-
-  def updateEmail(id: AccountId, email: EmailAddress, verified: Boolean) = storage { implicit db =>
-    debug(s"updateEmail($id, $email, $verified)")
-    AccountDataDao.updateById(id)(_.copy(email = Some(email), activated = verified))
-  } ("ZUsers.updateEmail")
-
-  def updatePhone(id: AccountId, phone: PhoneNumber) = storage { implicit db =>
-    debug(s"updatePhone($id, $phone)")
-    AccountDataDao.updateById(id)(_.copy(phone = Some(phone)))
-  } ("ZUsers.updatePhone")
-
-  def resetCredentials(user: AccountData) = storage.withTransaction { implicit db =>
-    AccountDataDao.update(user)(_.copy(hash = "", cookie = None))
-  }
-}
-
-object AccountsStorage {
-  private implicit val Tag: LogTag = "AccountStorage"
 }

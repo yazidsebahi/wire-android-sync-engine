@@ -19,6 +19,7 @@ package com.waz.utils.events
 
 import com.waz.RobolectricUtils
 import org.scalatest._
+import com.waz.ZLog.ImplicitTag._
 
 class EmptySignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils  {
 

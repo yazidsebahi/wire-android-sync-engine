@@ -90,8 +90,6 @@ trait SignalListener {
 }
 
 class Signal[A](@volatile protected[events] var value: Option[A] = None) extends Observable[SignalListener] with EventSource[A] { self =>
-  import Signal.logTag
-
   private object updateMonitor
 
   protected[events] def update(f: Option[A] => Option[A], currentContext: Option[ExecutionContext] = None): Boolean = {
@@ -113,9 +111,9 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
 
   private[events] def notifyListeners(currentContext: Option[ExecutionContext]): Unit = super.notifyListeners { _.changed(currentContext) }
 
-  final def currentValue: Option[A] = {
+  final def currentValue(implicit logTag: LogTag): Option[A] = {
     if (!wired) {
-      ZLog.warn("Accessing value of unwired signal, autowiring will be disabled")
+      ZLog.warn(s"Accessing value of unwired signal: $this, autowiring will be disabled, returning value: $value")
       disableAutowiring()
     }
     value

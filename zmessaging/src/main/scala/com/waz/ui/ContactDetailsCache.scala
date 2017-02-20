@@ -23,6 +23,7 @@ import com.waz.model.{Contact, ContactId}
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.events.EventStream
+import com.waz.ZLog.ImplicitTag._
 
 import scala.collection.Seq
 import scala.concurrent.Future

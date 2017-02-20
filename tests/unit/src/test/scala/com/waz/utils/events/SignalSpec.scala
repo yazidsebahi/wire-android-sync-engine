@@ -24,6 +24,7 @@ import com.waz.RobolectricUtils
 import com.waz.testutils.Implicits._
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import org.scalatest._
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, blocking}

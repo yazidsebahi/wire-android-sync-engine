@@ -77,8 +77,8 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean) = postMessageResponse
     }
 
-    override lazy val network: NetworkModeService = new NetworkModeService(context) {
-      override def updateNetworkMode(scheduled: Boolean = false): Unit = ()
+    override lazy val network: NetworkModeService = new NetworkModeService(context, lifecycle) {
+      override def updateNetworkMode(): Unit = ()
     }
 
     override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync, prefs) {

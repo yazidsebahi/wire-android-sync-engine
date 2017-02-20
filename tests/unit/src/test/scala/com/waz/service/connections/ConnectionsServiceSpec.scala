@@ -34,6 +34,7 @@ import com.waz.threading.Threading
 import org.robolectric.Robolectric
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import com.waz.ZLog.ImplicitTag._
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.Await

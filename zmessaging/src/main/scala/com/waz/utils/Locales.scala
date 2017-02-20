@@ -61,6 +61,8 @@ object Locales {
 
   lazy val transliteration = Transliteration.chooseImplementation()
 
+  def transliteration(id: String) = Transliteration.chooseImplementation(id)
+
   def indexing(locale: Locale = currentLocale): Indexing = Try(Class.forName("libcore.icu.AlphabeticIndex")).flatMap(
     _ => Try(LibcoreIndexing.create(locale))).getOrElse(FallbackIndexing.instance)
 }
@@ -112,7 +114,7 @@ trait Transliteration {
 object Transliteration {
   private implicit val logTag: LogTag = logTagFor(Transliteration)
   private val id = "Any-Latin; Latin-ASCII; Lower; [^\\ 0-9a-z] Remove"
-  def chooseImplementation(): Transliteration =
+  def chooseImplementation(id: String = id): Transliteration =
     if (Try(Class.forName("libcore.icu.Transliterator")).isSuccess) LibcoreTransliteration.create(id)
     else ICU4JTransliteration.create(id)
 }

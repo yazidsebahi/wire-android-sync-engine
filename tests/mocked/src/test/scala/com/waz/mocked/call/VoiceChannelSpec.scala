@@ -35,6 +35,7 @@ import com.waz.testutils._
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ZNetClient._
 import org.robolectric.annotation.Config
+import com.waz.ZLog.ImplicitTag._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues, Tag}
 
 import scala.collection.{breakOut, mutable}

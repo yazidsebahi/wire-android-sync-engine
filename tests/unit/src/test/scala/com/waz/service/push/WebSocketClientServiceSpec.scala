@@ -27,6 +27,7 @@ import com.waz.znet.ZNetClient.EmptyClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 
@@ -42,7 +43,7 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
   }
 
   lazy val lifecycle = new ZmsLifecycle
-  lazy val network = new NetworkModeService(context)
+  lazy val network = new NetworkModeService(context, lifecycle)
   lazy val prefs = new PreferenceService(context)
   lazy val meta = new MetaDataService(context)
 

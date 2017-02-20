@@ -21,6 +21,7 @@ import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventStream
 import com.waz.utils.returning
 import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import com.waz.ZLog.ImplicitTag._
 
 class RecordingLevelsSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
   scenario("Aggregating recording levels") {

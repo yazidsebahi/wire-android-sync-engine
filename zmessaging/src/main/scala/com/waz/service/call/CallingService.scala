@@ -25,6 +25,7 @@ import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.VideoSendState._
+import com.waz.api.VoiceChannelState
 import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MembersStorage
@@ -126,6 +127,14 @@ class CallingService(context:             Context,
           messagesService.addMissedCallMessage(RConvId(convId), UserId(userId), t)
         }
       },
+      new AnsweredCallHandler {
+        override def invoke(convId: String, arg: Pointer) = withConversationFromPointer(convId) { conv =>
+          verbose(s"outgoing call answered for conv: ${conv.id}")
+          currentCall.mutate {
+            case call if call.convId.contains(conv.id) => call.copy(state = SELF_JOINING)
+          }
+        }
+      },
       new EstablishedCallHandler {
         override def invoke(convId: String, userId: String, arg: Pointer): Unit = withConversationFromPointer(convId) { conv =>
           verbose(s"call established for conv: ${conv.id}, userId: $userId")
@@ -137,46 +146,9 @@ class CallingService(context:             Context,
       },
       new CloseCallHandler {
         override def invoke(reasonCode: Int, convId: String, userId: String, metrics_json: String, arg: Pointer): Unit = withConversationFromPointer(convId) { conv =>
-          verbose(s"call closed: reason: ${ClosedReason(reasonCode)}, convId: ${conv.id}, userId: $userId, metrics: $metrics_json")
-          currentCall.mutate {
-            case call if call.convId.contains(conv.id) =>
-              if (ClosedReason(reasonCode) != AnsweredElsewhere) call.state match {
-                //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
-                case SELF_CALLING =>
-                  verbose("Call timed out out the other didn't answer - add a \"you called\" message")
-                  messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
-                case OTHER_CALLING | SELF_JOINING =>
-                  verbose("Call timed out out and we didn't answer - mark as missed call")
-                  messagesService.addMissedCallMessage(conv.id, UserId(userId), Instant.now)
-                case SELF_CONNECTED =>
-                  verbose("Had a successful call, save duration as a message")
-                  call.estabTime.foreach { est =>
-                    messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
-                    //TODO can this information be gathered some other way - we really only care about successful calls.
-                    callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
-                  }
-                case _ =>
-                  warn(s"Call closed from unexpected state: ${call.state}")
-              }
-
-              //Leave the current call with any information that makes sense to keep after a call was finished for tracking - will be overwritten on a new call.
-              IdleCall.copy(
-                convId          = call.convId,
-                estabTime       = call.estabTime,
-                caller          = call.caller,
-                hangupRequested = call.hangupRequested,
-                closedReason    = if (call.closedReason == Interrupted) Interrupted else ClosedReason(reasonCode)
-              )
-            case call if call.convId.isDefined =>
-              verbose("A call other than the current one was closed - likely missed another incoming call.")
-              messagesService.addMissedCallMessage(conv.id, UserId(userId), Instant.now)
-              //don't change the current call state, since the close callback was for a different conv/call
-              call
-            case _ =>
-              warn("There was no current call defined - setting call information to idle")
-              IdleCall
+          currentCall.mutate { call =>
+            onCallClosed(call, ClosedReason(reasonCode), conv, UserId(userId))
           }
-
         }
       },
       null
@@ -188,18 +160,6 @@ class CallingService(context:             Context,
       override def invoke(state: Int, arg: Pointer): Unit = dispatcher { //ensure call state change is posted to dispatch queue
         verbose(s"video state changed: ${VideoReceiveState(state)}")
         currentCall.mutate(_.copy(videoReceiveState = VideoReceiveState(state)))
-      }
-    })
-
-    Calling.wcall_set_state_handler(new CallStateHandler {
-      override def invoke(convId: String, state: Int, arg: Pointer) = withConversationFromPointer(convId) { conv =>
-        verbose(s"calling state on $convId changed to: $state")
-        currentCall.mutate {
-          case call if state == WCALL_STATE_ANSWERED &&
-                       call.convId.contains(conv.id) &&
-                       (call.state == SELF_CALLING | call.state == OTHER_CALLING) => call.copy(state = SELF_JOINING)
-          case call => call //Other states will be handled in their dedicated callbacks
-        }
       }
     })
   }
@@ -239,8 +199,17 @@ class CallingService(context:             Context,
   def endCall(convId: ConvId): Unit = withConvWhenReady(convId) { conv =>
     verbose(s"endCall: $convId")
     //wcall_end will always(???) lead to the CloseCall handler - we handle state there
-    currentCall.mutate { _.copy(hangupRequested = true)}
-    Calling.wcall_end(conv.remoteId.str)
+    currentCall.mutate { call =>
+      if (call.state == VoiceChannelState.OTHER_CALLING) {
+        verbose("Incoming call ended - performing reject instead")
+        Calling.wcall_reject(conv.remoteId.str)
+        onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller)
+      } else {
+        verbose(s"Call ended in other state: ${call.state}, ending normally")
+        Calling.wcall_end(conv.remoteId.str)
+        call.copy(hangupRequested = true)
+      }
+    }
   }
 
   //Drop the current call in case of incoming GSM interruption
@@ -254,6 +223,9 @@ class CallingService(context:             Context,
   def acceptCall(convId: ConvId): Unit = withConvWhenReady(convId) { conv =>
     verbose(s"answerCall: $convId")
     Calling.wcall_answer(conv.remoteId.str)
+    currentCall.mutate {
+      case call if call.convId.contains(conv.id) => call.copy(state = SELF_JOINING)
+    }
   }
 
   def setCallMuted(muted: Boolean): Unit = fm.foreach { f =>
@@ -280,6 +252,48 @@ class CallingService(context:             Context,
     case (_, events) => Future.successful(events.sortBy(_.time).foreach { e =>
       receiveCallEvent(e.content, e.time.instant, e.convId, e.from, e.sender)
     })
+  }
+
+  private def onCallClosed(currentCall: CallInfo, reason: ClosedReason, conv: ConversationData, userId: UserId): CallInfo = {
+    verbose(s"call closed: reason: $reason, convId: ${conv.id}, userId: $userId")
+    currentCall match {
+      case call if call.convId.contains(conv.id) =>
+        if (reason != AnsweredElsewhere) call.state match {
+          //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
+          case SELF_CALLING =>
+            verbose("Call timed out out the other didn't answer - add a \"you called\" message")
+            messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
+          case OTHER_CALLING | SELF_JOINING =>
+            verbose("Call timed out out and we didn't answer - mark as missed call")
+            messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
+          case SELF_CONNECTED =>
+            verbose("Had a successful call, save duration as a message")
+            call.estabTime.foreach { est =>
+              messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
+              //TODO can this information be gathered some other way - we really only care about successful calls.
+              callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
+            }
+          case _ =>
+            warn(s"Call closed from unexpected state: ${call.state}")
+        }
+
+        //Leave the current call with any information that makes sense to keep after a call was finished for tracking - will be overwritten on a new call.
+        IdleCall.copy(
+          convId          = call.convId,
+          estabTime       = call.estabTime,
+          caller          = call.caller,
+          hangupRequested = call.hangupRequested,
+          closedReason    = if (call.closedReason == Interrupted) Interrupted else reason
+        )
+      case call if call.convId.isDefined =>
+        verbose("A call other than the current one was closed - likely missed another incoming call.")
+        messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
+        //don't change the current call state, since the close callback was for a different conv/call
+        call
+      case _ =>
+        warn("There was no current call defined - setting call information to idle")
+        IdleCall
+    }
   }
 
   private def receiveCallEvent(content: String, msgTime: Instant, convId: RConvId, from: UserId, sender: ClientId): Unit = {

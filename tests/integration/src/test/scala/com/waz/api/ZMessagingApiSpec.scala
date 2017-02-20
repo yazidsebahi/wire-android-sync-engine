@@ -24,6 +24,7 @@ import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import com.waz.ZLog.ImplicitTag._
 
 class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with ProvisionedApiSpec {
 

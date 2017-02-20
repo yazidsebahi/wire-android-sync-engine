@@ -44,6 +44,7 @@ import com.waz.{RoboProcess, RobolectricUtils, ShadowLogging}
 import net.hockeyapp.android.Constants
 import org.scalatest._
 import org.scalatest.enablers.{Containing, Emptiness, Length}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

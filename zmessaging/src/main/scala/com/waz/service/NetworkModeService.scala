@@ -20,17 +20,13 @@ package com.waz.service
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
 import android.net.{ConnectivityManager, NetworkInfo}
 import android.telephony.TelephonyManager
-import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
-
-class NetworkModeService(context: Context) {
+class NetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) {
   import NetworkModeService._
 
   private implicit val ev = EventContext.Global
@@ -40,35 +36,20 @@ class NetworkModeService(context: Context) {
 
   val networkMode = returning(Signal[NetworkMode](NetworkMode.OFFLINE)) { _.disableAutowiring() }
 
+  zmsLifecycle.lifecycleState { state => if (state == LifecycleState.UiActive) updateNetworkMode() }
+
   val receiver = new BroadcastReceiver {
     override def onReceive(context: Context, intent: Intent): Unit = updateNetworkMode()
   }
   context.registerReceiver(receiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
   updateNetworkMode()
-  CancellableFuture.delayed(scheduledNetworkCheckTimeout)(updateNetworkMode(true))
 
-  def updateNetworkMode(scheduled: Boolean = false): Unit = {
-    val network = Option(connectivityManager.getActiveNetworkInfo)
-
-    network match {
-      case Some(ni) => verbose(s"Detailed state: ${ni.getDetailedState.name()} => ${ni.getState.name()}, networkType: ${ni.getType}")
-      case None => verbose("No network info available")
-    }
-
-    val mode = network match {
+  def updateNetworkMode(): Unit = {
+    val mode = Option(connectivityManager.getActiveNetworkInfo) match {
       case None => NetworkMode.OFFLINE
-      case Some(info) if !info.isConnected => NetworkMode.OFFLINE
-      case Some(info) => computeMode(info, telephonyManager)
+      case Some(info) => if (info.isConnected) computeMode(info, telephonyManager) else NetworkMode.OFFLINE
     }
     verbose(s"updateNetworkMode: $mode")
-    if (scheduled) {
-      CancellableFuture.delayed(scheduledNetworkCheckTimeout)(updateNetworkMode(true))
-      if (!(networkMode.currentValue contains mode)) {
-        context.unregisterReceiver(receiver)
-        context.registerReceiver(receiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-        HockeyApp.saveException(new RuntimeException("Missed network mode update"), s"mode: $mode")
-      }
-    }
     networkMode.publish(mode, Threading.Background)
   }
 
@@ -78,7 +59,6 @@ class NetworkModeService(context: Context) {
 
 object NetworkModeService {
   private implicit val logTag: LogTag = logTagFor(NetworkModeService)
-  private val scheduledNetworkCheckTimeout = 15.seconds
 
   /*
    * This part (the mapping of mobile data network types to the networkMode enum) of the Wire software

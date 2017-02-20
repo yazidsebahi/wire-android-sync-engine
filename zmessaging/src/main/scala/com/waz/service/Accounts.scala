@@ -138,10 +138,10 @@ class Accounts(val global: GlobalModule) {
       loginClient.login(account.id, normalized).future map {
         case Right((token, c)) =>
           Right(account.updated(normalized).copy(cookie = c, activated = true, accessToken = Some(token)))
-        case Left(error @ ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
+        case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
           verbose(s"account pending activation: $normalized, $error")
           Right(account.updated(normalized).copy(activated = false, cookie = None, accessToken = None))
-        case Left(error) =>
+        case Left((_, error)) =>
           verbose(s"login failed: $error")
           Left(error)
       }

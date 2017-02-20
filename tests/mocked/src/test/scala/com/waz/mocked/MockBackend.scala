@@ -265,10 +265,10 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     addNotification(UserUpdateEvent(Uid(), info))(PushBehaviour.NoPush)
   })
 
-  override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = {
+  override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = {
     val info = UserInfo(selfUserId, Option(name), accentId, credentials.maybeEmail, credentials.maybePhone, None)
     users += selfUserId -> info
-    CancellableFuture.successful(Right((info, Some("cookie"))))
+    CancellableFuture.successful(Right((info, Some(Cookie("cookie")))))
   }
 
   override def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = CancellableFuture.delayed(clientDelay)(Right(ids.map(getUser).toIndexedSeq))

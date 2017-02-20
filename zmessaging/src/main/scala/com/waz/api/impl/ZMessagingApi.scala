@@ -70,8 +70,8 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   private def setAccount(zms: Option[AccountService]): Unit = if (account != zms) {
     if (resumeCount > 0) {
-      account.foreach(_.lifecycle.releaseUi(s"replace api: $this"))
-      zms.foreach(_.lifecycle.acquireUi(s"replace api: $this"))
+      account.foreach(_.global.lifecycle.releaseUi(s"replace api: $this"))
+      zms.foreach(_.global.lifecycle.acquireUi(s"replace api: $this"))
     }
     account = zms
   }
@@ -79,7 +79,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def onResume(): Unit = {
     debug("onResume")
     resumeCount += 1
-    account.foreach(_.lifecycle.acquireUi(s"resume api: $this"))
+    account.foreach(_.global.lifecycle.acquireUi(s"resume api: $this"))
     ui.onResume()
   }
 
@@ -88,7 +88,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     assert(resumeCount > 0, "onPause should be called exactly once for every onResume")
     resumeCount -= 1
     ui.onPause()
-    account.foreach(_.lifecycle.releaseUi(s"pause api: $this"))
+    account.foreach(_.global.lifecycle.releaseUi(s"pause api: $this"))
   }
 
   override def onDestroy(): Unit = {

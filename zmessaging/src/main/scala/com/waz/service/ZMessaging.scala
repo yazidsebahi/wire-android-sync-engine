@@ -104,7 +104,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   val zNetClient = account.netClient
   val storage    = account.storage
-  val lifecycle  = account.lifecycle
+  val lifecycle  = global.lifecycle
 
   lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync
@@ -154,6 +154,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   lazy val messagesStorage: MessagesStorage = wire[MessagesStorage]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
+  lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
 
   lazy val spotifyClientId  = metadata.spotifyClientId
 
@@ -300,6 +301,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
     tempFiles
     recordAndPlay
+
+    messagesIndexStorage
 
     reporting.addStateReporter { pw =>
       Future {

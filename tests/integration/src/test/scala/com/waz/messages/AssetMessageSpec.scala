@@ -52,6 +52,7 @@ import org.robolectric.shadows.ShadowContentResolver2
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.Matcher
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}

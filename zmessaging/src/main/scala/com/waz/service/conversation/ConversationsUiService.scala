@@ -327,7 +327,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   usersStorage.get(toUser).flatMap {
     case Some(u) if u.connection == ConnectionStatus.Ignored =>
       createConversationWithMembers(ConvId(toUser.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, toUser, Seq(selfUserId), hidden = true) flatMap { conv =>
-        addMemberJoinMessage(conv.id, toUser, Set(selfUserId)) flatMap { _ =>
+        addMemberJoinMessage(conv.id, toUser, Set(selfUserId), firstMessage = true) flatMap { _ =>
           u.connectionMessage.fold {
             Future.successful(conv)
           } { msg =>
@@ -338,7 +338,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     case _ =>
       sync.postConversation(ConvId(toUser.str), Seq(toUser), None)
       createConversationWithMembers(ConvId(toUser.str), RConvId(), ConversationType.OneToOne, selfUserId, Seq(toUser)) flatMap { conv =>
-        addMemberJoinMessage(conv.id, selfUserId, Set(toUser)) map (_ => conv)
+        addMemberJoinMessage(conv.id, selfUserId, Set(toUser), firstMessage = true) map (_ => conv)
       }
   }
 
@@ -347,7 +347,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
     createConversationWithMembers(id, ConversationsService.generateTempConversationId((selfUserId +: members).distinct: _*), ConversationType.Group, selfUserId, members) flatMap { conv =>
       debug(s"created: $conv")
       sync.postConversation(id, members, conv.name)
-      addMemberJoinMessage(conv.id, selfUserId, members.toSet) map (_ => conv)
+      addMemberJoinMessage(conv.id, selfUserId, members.toSet, firstMessage = true) map (_ => conv)
     }
   }
 

@@ -44,6 +44,7 @@ import org.robolectric.shadows.ShadowTelephonyManager2
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

@@ -33,6 +33,7 @@ import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.threeten.bp.Instant
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 

@@ -40,7 +40,7 @@ object Calling {
       available.failure(e)
   }
 
-  @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
+  @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
 
   @native def wcall_close(): Unit
 
@@ -54,9 +54,9 @@ object Calling {
 
   @native def wcall_end(convId: String): Unit
 
-  @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoStateHandler): Unit
+  @native def wcall_reject(convId: String): Unit
 
-  @native def wcall_set_state_handler(wcall_state_change_h: CallStateHandler): Unit
+  @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoStateHandler): Unit
 
   @native def wcall_set_video_send_active(convid: String, active: Boolean): Unit
 
@@ -108,6 +108,10 @@ object Calling {
     def invoke(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, arg: Pointer): Unit
   }
 
+  trait AnsweredCallHandler extends Callback {
+    def invoke(convId: String, arg: Pointer): Unit
+  }
+
   /* Call established (with media) */
   trait EstablishedCallHandler extends Callback {
     def invoke(convId: String, userId: String, arg: Pointer): Unit
@@ -127,10 +131,6 @@ object Calling {
     */
   trait VideoStateHandler extends Callback {
     def invoke(state: Int, arg: Pointer): Unit
-  }
-
-  trait CallStateHandler extends Callback {
-    def invoke(convId: String, state: Int, arg: Pointer): Unit
   }
 
 }

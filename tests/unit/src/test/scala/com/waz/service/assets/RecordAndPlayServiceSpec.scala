@@ -34,6 +34,7 @@ import org.scalatest._
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}

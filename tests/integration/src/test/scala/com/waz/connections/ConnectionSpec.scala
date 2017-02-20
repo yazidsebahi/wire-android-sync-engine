@@ -27,6 +27,7 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{FeatureSpec, Matchers}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 

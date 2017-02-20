@@ -18,6 +18,7 @@
 package com.waz.utils.events
 
 import com.waz.RobolectricUtils
+import com.waz.ZLog.ImplicitTag._
 import org.scalatest._
 
 class FilterSignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils  {
