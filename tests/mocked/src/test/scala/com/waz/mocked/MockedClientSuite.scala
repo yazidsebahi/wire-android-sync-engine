@@ -194,11 +194,11 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val clientWrapper: ClientWrapper = TestClientWrapper
     override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
       override def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
-      override def access(cookie: Option[String], token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
+      override def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
 
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
-      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = suite.register(user, credentials, name, accentId)
+      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = suite.register(user, credentials, name, accentId)
       override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
       override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCall(phone, kindOfAccess)
 
@@ -250,10 +250,10 @@ trait MockedGcm {
 
 trait MockedClient { test: ApiSpec =>
 
-  def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some("cookie"))))
-  def access(cookie: Option[String], token: Option[Token]): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some("cookie"))))
-  def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] =
-    successful(Right((UserInfo(UserId(), Some(name), accentId, credentials.maybeEmail, credentials.maybePhone, None), Some("cookie"))))
+  def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
+  def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
+  def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] =
+    successful(Right((UserInfo(UserId(), Some(name), accentId, credentials.maybeEmail, credentials.maybePhone, None), Some(Cookie("cookie")))))
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = successful(Right(()))

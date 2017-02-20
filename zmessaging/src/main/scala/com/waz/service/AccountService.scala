@@ -159,7 +159,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
 
   lazy val credentialsHandler = new CredentialsHandler {
     override val userId: AccountId = id
-    override val cookie: Preference[Option[String]] = Preference[Option[String]](None, accountsStorage.get(id).map(_.flatMap(_.cookie)), { c => accountsStorage.update(id, _.copy(cookie = c)) })
+    override val cookie: Preference[Option[Cookie]] = Preference[Option[Cookie]](None, accountsStorage.get(id).map(_.flatMap(_.cookie)), { c => accountsStorage.update(id, _.copy(cookie = c)) })
     override val accessToken: Preference[Option[Token]] = Preference[Option[Token]](None, accountsStorage.get(id).map(_.flatMap(_.accessToken)), { token => accountsStorage.update(id, _.copy(accessToken = token)) })
     override def credentials: Credentials = self.credentials
 
@@ -344,9 +344,9 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
             acc <- accountsStorage.updateOrCreate(id, _.copy(activated = true, cookie = cookie, accessToken = Some(token)), account.copy(activated = true, cookie = cookie, accessToken = Some(token)))
           } yield Right(acc)
         }
-      case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
+      case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
         CancellableFuture successful Right(account.copy(activated = false))
-      case Left(err) =>
+      case Left((_, err)) =>
         verbose(s"activate failed: $err")
         CancellableFuture successful Left(err)
     }

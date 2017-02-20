@@ -42,7 +42,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   import com.waz.client.RegistrationClient._
   private implicit val tag: LogTag = logTagFor[RegistrationClient]
 
-  def register(userId: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Cookie)] = {
+  def register(userId: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
     val json = JsonEncoder { o =>
       o.put("name", name)
       o.put("label", userId.str)

@@ -45,6 +45,7 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import com.waz.ZLog.ImplicitTag._
+import com.waz.znet.LoginClient.LoginResult
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -59,8 +60,8 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
   lazy val selfUser = UserData("Self User")
   lazy val otherUser = UserData("Other User")
 
-  var loginResponse: Either[ErrorResponse, (Token, Cookie)] = _
-  var registerResponse: Either[ErrorResponse, (UserInfo, Cookie)] = _
+  var loginResponse: LoginResult = _
+  var registerResponse: Either[ErrorResponse, (UserInfo, Option[Cookie])] = _
   var response: ((Uri, RequestContent)) => Response = _
   var request: Option[(Uri, RequestContent)] = _
   var selfUserSyncRequested = false
@@ -77,7 +78,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
     override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
       override def login(user: AccountId, credentials: Credentials) = CancellableFuture.successful(loginResponse)
-      override def access(cookie: Option[String], token: Option[Token]) = CancellableFuture.successful(loginResponse)
+      override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
       override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
@@ -109,7 +110,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
 
   before {
-    loginResponse = Left(ErrorResponse(0, "", ""))
+    loginResponse = Left((Some("123"), ErrorResponse(0, "", "")))
     registerResponse = Left(ErrorResponse(0, "", ""))
     response = { _ => Response(Response.Cancelled) }
     request = None
@@ -162,8 +163,8 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
     scenario("Register new user, verify email right away, and set picture") {
       val selfUserId = UserId()
-      registerResponse = Right((UserInfo(selfUserId, Some("name"), Some(0), Some(EmailAddress("email"))), Some("sd-zuid=asd;asd")))
-      loginResponse = Left(ErrorResponse(403, "", "pending-activation"))
+      registerResponse = Right((UserInfo(selfUserId, Some("name"), Some(0), Some(EmailAddress("email"))), Some(Cookie("sd-zuid=asd;asd"))))
+      loginResponse = Left((Some("123"), ErrorResponse(403, "", "pending-activation")))
       response = { _ => Response(HttpStatus(403), JsonObjectResponse(Json("code" -> 403, "message" -> "invalid credentials", "label" -> "pending-activation"))) }
 
       var self: com.waz.api.Self = null
@@ -191,7 +192,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
         case _ =>
           Response(HttpStatus(400), EmptyResponse)
       }
-      loginResponse = Right((Token("", "Bearer", System.currentTimeMillis() + 10.minutes.toMillis), Some("sd-zuid=asd;asd")))
+      loginResponse = Right((Token("", "Bearer", System.currentTimeMillis() + 10.minutes.toMillis), Some(Cookie("sd-zuid=asd;asd"))))
 
 
       within (10.seconds) {
@@ -225,8 +226,8 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
     scenario("Register new user, restart the app, verify email, login again") {
       val selfUserId = UserId()
-      registerResponse = Right((UserInfo(selfUserId, Some("name"), Some(0), Some(EmailAddress("email1"))), Some("sd-zuid=asd;asd")))
-      loginResponse = Left(ErrorResponse(403, "", "pending-activation"))
+      registerResponse = Right((UserInfo(selfUserId, Some("name"), Some(0), Some(EmailAddress("email1"))), Some(Cookie("sd-zuid=asd;asd"))))
+      loginResponse = Left((Some("123"), ErrorResponse(403, "", "pending-activation")))
       response = _ => Response(HttpStatus(403), JsonObjectResponse(Json("code" -> 403, "message" -> "invalid credentials", "label" -> "")))
 
       var self: com.waz.api.Self = null
@@ -307,7 +308,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
         zmessagingCreated(api2) shouldEqual false
       }
 
-      loginResponse = Right((Token("", "Bearer", System.currentTimeMillis() + 10.minutes.toMillis), Some("sd-zuid=asd;asd")))
+      loginResponse = Right((Token("", "Bearer", System.currentTimeMillis() + 10.minutes.toMillis), Some(Cookie("sd-zuid=asd;asd"))))
       res = ""
       api2.login(CredentialsFactory.emailCredentials("email1", "passwd"), new LoginListener {
         override def onSuccess(user: com.waz.api.Self): Unit = res = "done"

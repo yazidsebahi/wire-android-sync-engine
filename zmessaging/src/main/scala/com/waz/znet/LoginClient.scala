@@ -20,6 +20,7 @@ package com.waz.znet
 import android.net.Uri
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.client.RegistrationClient
 import com.waz.model.{AccountId, EmailAddress}
@@ -42,7 +43,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
   private[znet] var lastRequestTime = 0L
   private[znet] var failedAttempts = 0
   private var lastResponse = Status.Success
-  private var loginFuture = CancellableFuture.successful[LoginResult](Left(ErrorResponse.Cancelled))
+  private var loginFuture = CancellableFuture.successful[LoginResult](Left((None, ErrorResponse.Cancelled)))
 
   def requestDelay =
     if (failedAttempts == 0) Duration.Zero
@@ -54,7 +55,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
 
   def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = throttled(loginNow(accountId, credentials))
 
-  def access(cookie: Option[String], token: Option[Token]) = throttled(accessNow(cookie, token))
+  def access(cookie: Cookie, token: Option[Token]) = throttled(accessNow(cookie, token))
 
   def throttled(request: => CancellableFuture[LoginResult]): CancellableFuture[LoginResult] = dispatcher {
     loginFuture = loginFuture.recover {
@@ -69,10 +70,10 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
       verbose(s"starting request")
       lastRequestTime = System.currentTimeMillis()
       request map {
-        case Left(error) =>
+        case Left((rId, error)) =>
           failedAttempts += 1
           lastResponse = error.getCode
-          Left(error)
+          Left((rId, error))
         case resp =>
           failedAttempts = 0
           lastResponse = Status.Success
@@ -86,8 +87,8 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     debug(s"trying to login: $credentials")
     client(loginUri, Request.PostMethod, loginRequestBody(userId, credentials), timeout = RegistrationClient.timeout) map responseHandler
   }
-  def accessNow(cookie: Option[String], token: Option[Token]) = {
-    val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.fold(Request.EmptyHeaders)(c => Map(Cookie -> s"zuid=$c"))
+  def accessNow(cookie: Cookie, token: Option[Token]) = {
+    val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
     client(accessUri, Request.PostMethod, EmptyRequestContent, headers, timeout = RegistrationClient.timeout) map responseHandler
   }
 
@@ -107,10 +108,10 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     case Response(SuccessHttpStatus(), JsonObjectResponse(TokenResponse(token, exp, ttype)), responseHeaders) =>
       debug(s"receivedAccessToken: '$token', headers: $responseHeaders")
       Right((Token(token, ttype, System.currentTimeMillis() + exp * 1000), getCookieFromHeaders(responseHeaders)))
-    case r @ Response(status, ErrorResponse(code, msg, label), _) =>
+    case r @ Response(status, ErrorResponse(code, msg, label), headers) =>
       warn(s"failed login attempt: $r")
-      Left(ErrorResponse(code, msg, label))
-    case r @ Response(status, _, _) => Left(ErrorResponse(status.status, s"unexpected login response: $r", ""))
+      Left((headers(RequestId), ErrorResponse(code, msg, label)))
+    case r @ Response(status, _, headers) => Left((headers(RequestId), ErrorResponse(status.status, s"unexpected login response: $r", "")))
   }
 
   private val loginUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(LoginPath).encodedQuery("persist=true").build()
@@ -119,8 +120,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
 }
 
 object LoginClient {
-  private implicit val logTag: LogTag = logTagFor(LoginClient)
-  type LoginResult = Either[ErrorResponse, (Token, Cookie)]
+  type LoginResult = Either[(Option[String], ErrorResponse), (Token, Option[Cookie])]
   type AccessToken = (String, Int, String)
 
   val SetCookie = "Set-Cookie"
@@ -130,6 +130,9 @@ object LoginClient {
   val AccessPath = "/access"
   val ActivateSendPath = "/activate/send"
 
+  //TODO remove once logout issue is fixed: https://wearezeta.atlassian.net/browse/AN-4816
+  val RequestId = "Request-Id"
+
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
 
   def loginRequestBody(user: AccountId, credentials: Credentials) = JsonContentEncoder(JsonEncoder { o =>
@@ -137,10 +140,10 @@ object LoginClient {
     credentials.addToLoginJson(o)
   })
 
-  def getCookieFromHeaders(headers: Response.Headers): Cookie = headers(SetCookie) flatMap {
+  def getCookieFromHeaders(headers: Response.Headers): Option[Cookie] = headers(SetCookie) flatMap {
     case header @ CookieHeader(cookie) =>
       verbose(s"parsed cookie from header: $header, cookie: $cookie")
-      Some(cookie)
+      Some(AuthenticationManager.Cookie(cookie))
     case header =>
       warn(s"Unexpected content for Set-Cookie header: $header")
       None
