@@ -17,16 +17,8 @@
  */
 package com.waz.testutils
 
-import android.app.Application
-import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
-import com.waz.api._
 import com.waz.model.VoiceChannelData
-import com.waz.service.ZMessaging
 import com.waz.service.push.NotificationService.NotificationInfo
-
-class TestApplication extends Application with NotificationsHandlerFactory {
-  override def getTrackingEventsHandler: TrackingEventsHandler = ZMessaging.EmptyTrackingEventsHandler
-}
 
 object TestApplication {
   val notificationsSpy = new NotificationsSpy(Seq.empty, None, None, true)

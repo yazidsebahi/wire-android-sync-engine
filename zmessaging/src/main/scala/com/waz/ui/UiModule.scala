@@ -117,7 +117,6 @@ class UiModule(val accounts: Accounts) extends UiEventContext with ZMessagingRes
   def prefs = global.prefs
   def imageCache = global.imageCache
   def bitmapDecoder = global.bitmapDecoder
-  def handlerFactory = global.handlerFactory
 
   val currentAccount = accounts.current
   val currentZms = accounts.currentZms

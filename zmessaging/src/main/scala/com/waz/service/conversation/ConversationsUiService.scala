@@ -32,10 +32,10 @@ import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.call.VoiceChannelService
 import com.waz.service.messages.MessagesService
-import com.waz.service.tracking.TrackingEventsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
+import com.waz.utils.events.EventStream
 import com.waz.utils.{RichInstant, _}
 import org.threeten.bp.Instant
 
@@ -48,7 +48,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
                              storage: ZmsDatabase, messages: MessagesService, members: MembersStorage, assetStorage: AssetsStorage,
                              convsContent: ConversationsContentUpdater, convStorage: ConversationStorage, network: NetworkModeService,
                              convs: ConversationsService, voice: VoiceChannelService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle,
-                             tracking: TrackingEventsService, errors: ErrorsService) {
+                             errors: ErrorsService) {
 
   import ConversationsUiService._
   import Threading.Implicits.Background
@@ -56,6 +56,10 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
   import convsContent._
   import messages._
   import users._
+
+  val assetUploadStarted   = EventStream[AssetData]()
+  val assetUploadCancelled = EventStream[Mime]() //size, mime
+  val assetUploadFailed    = EventStream[ErrorResponse]()
 
   def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = {
 
@@ -84,6 +88,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         data <- addImageAsset(img, conv.remoteId, isSelf = false)
         msg <- addAssetMessage(convId, data)
         _ <- updateLastRead(msg)
+        _ <- Future.successful(assetUploadStarted ! data)
         _ <- sync.postMessage(msg.id, convId, msg.editTime)
       } yield Some(msg)
     }
@@ -109,10 +114,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         handler.noWifiAndFileIsLarge(size, net, new api.MessageContent.Asset.Answer {
           override def ok(): Unit = messages.retryMessageSending(convId, message.id)
 
-          override def cancel(): Unit =
-            messages.content.deleteMessage(message) flatMap { _ =>
-              tracking.track(TrackingEvent.assetUploadCancelled(Some(size), mime.str))
-            }
+          override def cancel(): Unit = messages.content.deleteMessage(message).map(_ => assetUploadCancelled ! mime)
         })
       }
 
@@ -122,7 +124,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
           for {
             _ <- updateMessageState(convId, message.id, Message.Status.FAILED)
             _ <- errors.addAssetTooLargeError(convId, message.id)
-            _ <- tracking.track(TrackingEvent.assetUploadFailed(ErrorResponse.internalError("asset too large")))
+            _ <- Future.successful(assetUploadFailed ! ErrorResponse.internalError("asset too large"))
           } yield false
         case Some(s) =>
           shouldWarnAboutFileSize(s) flatMap {
@@ -144,8 +146,7 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
         asset <- addAsset(in, conv.remoteId)
         message <- addAssetMessage(convId, asset)
         size <- in.sizeInBytes
-        isOtto <- TrackingEventsService.isOtto(conv, usersStorage)
-        _ <- tracking.track(TrackingEvent.assetUploadStarted(size, mime.str, conv.convType, isOtto, conv.ephemeral))
+        _ <- Future.successful(assetUploadStarted ! asset)
         shouldSend <- checkSize(size, mime, message)
         _ <- if (shouldSend) sync.postMessage(message.id, convId, message.editTime) else Future.successful(())
       } yield Some(message)
@@ -171,10 +172,6 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
               case a@ContentUriAssetForUpload(_, uri) =>
                 a.mimeType.flatMap {
                   case m@Mime.Image() =>
-                    for {
-                      size <- a.sizeInBytes
-                      isOtto <- TrackingEventsService.isOtto(conv, usersStorage)
-                    } tracking.track(TrackingEvent.imageUploadAsAsset(size, m.str, conv.convType, isOtto, conv.ephemeral))
                     sendImageMessage(ImageAssetFactory.getImageAsset(uri), conv) // XXX: this has to run on UI thread, so we can't make if part of the for-expression
                   case _ =>
                     sendAssetMessage(a, conv, m.getErrorHandler)

@@ -29,7 +29,6 @@ import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class ConnectionSyncSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with MockBackend with MockedClientApiSpec { test =>
 
   val past = Timeline.sometimeInThePast

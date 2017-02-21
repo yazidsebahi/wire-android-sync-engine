@@ -41,7 +41,6 @@ import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues, Ta
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with OptionValues with MockBackend with MockedClientApiSpec with MockedFlows with MockedMedia {
   import DefaultPushBehaviour.Implicit
 

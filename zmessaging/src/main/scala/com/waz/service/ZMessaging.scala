@@ -20,14 +20,12 @@ package com.waz.service
 import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.ZLog._
-import com.waz.api.NotificationsHandler.NotificationsHandlerFactory
 import com.waz.api._
 import com.waz.api.impl.LogLevel
 import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
-import com.waz.service.HandlesTrackingService.HandlesValidationTrackingEvent
 import com.waz.service.assets.{AssetLoader, AssetService, RecordAndPlayService}
 import com.waz.service.call._
 import com.waz.service.conversation._
@@ -37,9 +35,8 @@ import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
-import com.waz.service.push.PushTrackingService.NotificationsEvent
 import com.waz.service.push._
-import com.waz.service.tracking.{TrackingEventsService, TrackingService}
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.client._
 import com.waz.sync.handler._
 import com.waz.sync.otr.OtrSyncHandler
@@ -129,7 +126,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def tempFiles         = global.tempFiles
   def metadata          = global.metadata
   def network           = global.network
-  def handlerFactory    = global.handlerFactory
   def blacklist         = global.blacklist
   def backend           = global.backend
   def accountsStorage   = global.accountsStorage
@@ -212,8 +208,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val invitations                           = wire[InvitationService]
   lazy val richmedia                             = wire[RichMediaService]
   lazy val tracking                              = wire[TrackingService]
-  lazy val pushTracking                          = wire[PushTrackingService]
-  lazy val trackingEvents                        = wire[TrackingEventsService]
   lazy val giphy                                 = wire[GiphyService]
   lazy val youtubeMedia                          = wire[YouTubeMediaService]
   lazy val soundCloudMedia                       = wire[SoundCloudMediaService]
@@ -352,22 +346,5 @@ object ZMessaging { self =>
       currentAccounts = accounts
       Threading.Background { Locales.preloadTransliterator() } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
-  }
-
-  def notificationsHandlerFactory(context: Context) = context.getApplicationContext match { // TODO: use some registration mechanism instead of expecting the app to implement this interface
-    case app: NotificationsHandlerFactory => app
-    case app =>
-      error(s"Application: '$app' doesn't implement NotificationsHandlerFactory")
-      new NotificationsHandlerFactory {
-        override def getTrackingEventsHandler: TrackingEventsHandler = EmptyTrackingEventsHandler
-      }
-  }
-
-  object EmptyTrackingEventsHandler extends TrackingEventsHandler {
-    override def onTrackingEvent(event: TrackingEvent): Unit = ()
-    override def onAvsMetricsEvent(avsMetrics: AvsMetrics): Unit = ()
-    override def onNotificationsEvent(ev: NotificationsEvent): Unit = ()
-
-    override def onHandleValidation(event: HandlesValidationTrackingEvent): Unit = ()
   }
 }

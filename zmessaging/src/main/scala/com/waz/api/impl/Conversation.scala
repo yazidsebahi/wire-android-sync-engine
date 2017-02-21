@@ -19,11 +19,15 @@ package com.waz.api.impl
 
 import com.waz.ZLog._
 import com.waz.api.impl.conversation.BaseConversation
-import com.waz.model.{ConvId, ConversationData}
-import com.waz.service.tracking.TrackingEventsService
+import com.waz.content.UsersStorage
+import com.waz.model.ConversationData.ConversationType
+import com.waz.model.{ConvId, ConversationData, UserId}
 import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils.RichFutureOpt
+
+import scala.concurrent.Future
+import scala.concurrent.Future.successful
 
 class Conversation(override val id: ConvId, val initData: ConversationData = ConversationData.Empty)(implicit ui: UiModule) extends BaseConversation {
   import Threading.Implicits.Background
@@ -40,7 +44,7 @@ class Conversation(override val id: ConvId, val initData: ConversationData = Con
     ui.zms
       .flatMapFuture { zms =>
         zms.convsContent.convById(id).flatMapSome { conv =>
-          TrackingEventsService.isOtto(conv, zms.usersStorage).map(isOtto => (conv, isOtto))
+          Conversation.isOtto(conv, zms.usersStorage).map(isOtto => (conv, isOtto))
         }
       }.mapSome { case (conv, otto) =>
         set(conv)
@@ -63,4 +67,8 @@ object Conversation {
     override def update(item: Conversation, d: ConversationData): Unit = item.set(d)
     override def toUpdateMap(values: Seq[ConversationData]) = values.map(c => c.id -> c)(collection.breakOut)
   }
+
+  def isOtto(conv: ConversationData, users: UsersStorage): Future[Boolean] =
+    if (conv.convType == ConversationType.OneToOne) users.get(UserId(conv.id.str)).map(_.exists(_.isWireBot))(Threading.Background)
+    else successful(false)
 }
