@@ -20,7 +20,6 @@ package com.waz.service
 import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.ZLog._
-import com.waz.api._
 import com.waz.api.impl.LogLevel
 import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
@@ -36,7 +35,6 @@ import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
 import com.waz.service.push._
-import com.waz.service.tracking.TrackingService
 import com.waz.sync.client._
 import com.waz.sync.handler._
 import com.waz.sync.otr.OtrSyncHandler
@@ -207,7 +205,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val typing: TypingService                 = wire[TypingService]
   lazy val invitations                           = wire[InvitationService]
   lazy val richmedia                             = wire[RichMediaService]
-  lazy val tracking                              = wire[TrackingService]
   lazy val giphy                                 = wire[GiphyService]
   lazy val youtubeMedia                          = wire[YouTubeMediaService]
   lazy val soundCloudMedia                       = wire[SoundCloudMediaService]

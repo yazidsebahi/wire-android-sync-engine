@@ -204,8 +204,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
-  override def getTrackingData: TrackingData = ui.cached(Uris.TrackingUri, new TrackingData)
-
   override def getInvitations: Invitations = ui.invitations
 
   override def getAvs: Avs = ui.cached(Uris.AvsUri, new Avs)
