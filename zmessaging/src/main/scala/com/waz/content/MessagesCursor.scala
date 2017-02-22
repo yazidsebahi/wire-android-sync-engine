@@ -184,15 +184,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
   def getPositionForMessage(messageData: MessageData): Option[Int] = {
     Threading.assertUiThread()
     val currentPos = cursor.getPosition
-
-    //A bit ugly but the cursor itself has no order information
-    val ascending = if (cursor.getCount > 1){
-      cursor.moveToFirst()
-      val first = Entry(cursor)
-      cursor.moveToNext()
-      val second = Entry(cursor)
-      first.time.compareTo(second.time) < 0
-    } else true
+    val ascending = isAscending(cursor)
 
     val pos = cursorBinarySearch(messageData, ascending = ascending) match {
       case -1 => None
@@ -250,6 +242,29 @@ object MessagesCursor {
 
     def apply(c: Cursor): Entry = EntryReader(c)
     def apply(m: MessageData): Entry = Entry(m.id, m.time)
+  }
+
+  private def isAscending(cursor: Cursor): Boolean = {
+    val previousPos = cursor.getPosition
+    cursor.moveToFirst()
+    val first = Entry(cursor)
+
+    def checkNext(): Boolean = {
+      if (cursor.isLast) {
+        false
+      } else {
+        cursor.moveToNext()
+        val second = Entry(cursor)
+        val comparison = first.time.compareTo(second.time)
+
+        if (comparison == 0)
+          checkNext()
+        else
+          comparison < 0
+      }
+    }
+
+    returning(checkNext())(_ => cursor.moveToPosition(previousPos))
   }
 }
 
