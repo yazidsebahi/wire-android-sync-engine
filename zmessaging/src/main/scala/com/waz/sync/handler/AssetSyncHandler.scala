@@ -68,10 +68,10 @@ class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, 
   //for v2
   def postSelfImageAsset(convId: RConvId, id: AssetId): Future[SyncResult] =
     (for {
-      asset <- assets.storage.get(id)
-      data <- cache.getEntry(CacheKey.fromAssetId(id))
+      Some(asset) <- assets.storage.get(id)
+      data        <- cache.getEntry(asset.cacheKey)
     } yield (asset, data)) flatMap {
-      case (Some(a), Some(d)) => postImageData(convId, a, d, nativePush = false)
+      case (a, Some(d)) => postImageData(convId, a, d, nativePush = false)
       case _ => Future.successful(SyncResult.Failure(None))
     }
 
