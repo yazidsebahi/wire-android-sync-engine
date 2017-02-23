@@ -92,7 +92,11 @@ case class AssetData(id:          AssetId               = AssetId(),
   }
 
   lazy val cacheKey = {
-    val key = proxyPath.map(CacheKey).orElse(source.map(cacheKeyFrom)).getOrElse(CacheKey(id.str))
+    val key = (proxyPath, source) match {
+      case (Some(proxy), _) => CacheKey(proxy)
+      case (_, Some(uri)) if !NonKeyURIs.contains(uri) => CacheKey.fromUri(uri)
+      case _ => CacheKey.fromAssetId(id)
+    }
     verbose(s"created cache key: $key for asset: $id")
     key
   }
@@ -142,6 +146,13 @@ case class AssetData(id:          AssetId               = AssetId(),
 }
 
 object AssetData {
+
+  /**
+    * Do not use these URIs as cache keys, as they do not provide a unique identifier to the asset downloaded from them
+    */
+  val NonKeyURIs = Set(
+    "https://source.unsplash.com/800x800/?landscape"
+  ).map(Uri.parse)
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
 
