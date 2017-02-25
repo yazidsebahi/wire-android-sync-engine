@@ -281,6 +281,4 @@ object NotId {
   def apply(tpe: NotificationType, userId: UserId): NotId = NotId(s"$tpe-${userId.str}")
   def apply(id: (MessageId, UserId)): NotId = NotId(s"$LIKE-${id._1.str}-${id._2.str}")
   def apply(msgId: MessageId): NotId = NotId(msgId.str)
-  def apply(s: Symbol): NotId = NotId(s.toString)
-
 }
