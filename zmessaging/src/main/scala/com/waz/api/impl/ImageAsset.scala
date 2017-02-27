@@ -78,7 +78,7 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
   override def getMimeType: String = data.mime.str
 
   override def saveImageToGallery(callback: SaveCallback): Unit = ui.zms { zms =>
-    zms.imageLoader.saveImageToGallery(data).onComplete(imageSaveHandler(callback))(Threading.Ui)
+    zms.assetsStorage.get(AssetId(getId)).flatMap(_.fold2(Future.successful(None), zms.imageLoader.saveImageToGallery))(Threading.Background).onComplete(imageSaveHandler(callback))(Threading.Ui)
   }
 
   override def equals(other: Any): Boolean = other match {
