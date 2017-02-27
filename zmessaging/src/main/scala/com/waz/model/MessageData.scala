@@ -398,6 +398,9 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def countAtLeastAsOld(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
       queryNumEntries(db, table.name, s"""${Conv.name} = '${Conv(conv)}' AND ${Time.name} <= ${Time(time)}""")
 
+    def countLaterThan(conv: ConvId, time: Instant)(implicit db: SQLiteDatabase) =
+      queryNumEntries(db, table.name, s"""${Conv.name} = '${Conv(conv)}' AND ${Time.name} > ${Time(time)}""")
+
     def countSentByType(selfUserId: UserId, tpe: Message.Type)(implicit db: SQLiteDatabase) = queryNumEntries(db, table.name, s"${User.name} = '${User(selfUserId)}' AND ${Type.name} = '${Type(tpe)}'")
 
     def findByType(conv: ConvId, tpe: Message.Type)(implicit db: SQLiteDatabase) =

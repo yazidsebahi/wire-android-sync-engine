@@ -135,6 +135,8 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
 
   def countMessages(conv: ConvId, p: MessageEntry => Boolean): Future[Int] = storage(MessageDataDao.countMessages(conv, p)(_))
 
+  def countLaterThan(conv: ConvId, time: Instant): Future[Long] = storage(MessageDataDao.countLaterThan(conv, time)(_))
+
   def getMessage(id: MessageId): Future[Option[MessageData]] = get(id)
 
   def getMessages(ids: MessageId*): Future[Seq[Option[MessageData]]] = getAll(ids)
