@@ -49,9 +49,9 @@ class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netC
 
   val otrClientsProcessingStage = EventScheduler.Stage[OtrClientEvent] { (convId, events) =>
     RichFuture.processSequential(events) {
-      case OtrClientAddEvent(id, client) =>
+      case OtrClientAddEvent(client) =>
         updateClients(Map(userId -> Seq(client))).flatMap(_ => sync.syncPreKeys(userId, Set(client.id)))
-      case OtrClientRemoveEvent(id, cId) =>
+      case OtrClientRemoveEvent(cId) =>
         removeClients(userId, Seq(cId))
     }
   }

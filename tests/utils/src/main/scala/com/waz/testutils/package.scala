@@ -266,7 +266,7 @@ package object testutils {
   def randomPhoneNumber = PhoneNumber("+0" + (Random.nextInt(9) + 1).toString + Array.fill(13)(Random.nextInt(10)).mkString)
 
   def textMessageEvent(id: Uid, conv: RConvId, time: Date, from: UserId, text: String) =
-    GenericMessageEvent(id, conv, time, from, GenericMessage(id, Text(text)))
+    GenericMessageEvent(conv, time, from, GenericMessage(id, Text(text)))
 }
 
 object JCE {

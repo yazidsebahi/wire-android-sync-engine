@@ -35,8 +35,8 @@ class CallStateEventSpec extends FeatureSpec with Matchers with GeneratorDrivenP
 
   feature("json deserialisation of call state events") {
     scenario("deserialise some json data") {
-      Event.EventDecoder.callStateEvent(Uid("event-id"))(new JSONObject(callState)) shouldEqual CallStateEvent(
-        Uid("event-id"), RConvId("conversation-id"),
+      Event.EventDecoder.callStateEvent(new JSONObject(callState)) shouldEqual CallStateEvent(
+        RConvId("conversation-id"),
         participants = Some(Set(
           CallParticipant(UserId("idle-id"), joined = false, Set.empty),
           CallParticipant(UserId("joined-id"), joined = true, Set.empty),

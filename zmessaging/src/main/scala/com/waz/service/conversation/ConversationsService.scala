@@ -99,12 +99,12 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     }
 
   def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0): Future[Any] = ev match {
-    case CreateConversationEvent(id, rConvId, time, from, data) =>
+    case CreateConversationEvent(rConvId, time, from, data) =>
       updateConversations(selfUserId, Seq(data)) flatMap { case (_, created) => Future.traverse(created) (created =>
         addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
       )}
 
-    case ConversationEvent(_, rConvId, _, _) =>
+    case ConversationEvent(rConvId, _, _) =>
       convByRemoteId(rConvId) flatMap {
         case Some(conv) => processUpdateEvent(conv, ev)
         case None if retryCount > 3 =>
@@ -112,7 +112,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
           successful(())
         case None =>
           ev match {
-            case MemberJoinEvent(_, _, time, from, members, _) if from != selfUserId =>
+            case MemberJoinEvent(_, time, from, members, _) if from != selfUserId =>
               // this happens when we are added to group conversation
               createGroupConversationOnMemberJoin(rConvId, time.instant, from, members)
             case _ =>
@@ -123,9 +123,9 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   }
 
   private def processUpdateEvent(conv: ConversationData, ev: ConversationEvent): Future[Any] = ev match {
-    case RenameConversationEvent(_, _, time, _, name) => updateConversationName(conv.id, name, Some(time.instant))
+    case RenameConversationEvent(_, time, _, name) => updateConversationName(conv.id, name, Some(time.instant))
 
-    case MemberJoinEvent(id, convId, time, from, userIds, _) =>
+    case MemberJoinEvent(convId, time, from, userIds, _) =>
       def joined(updated: ConversationData) = ! conv.activeMember && updated.activeMember && updated.convType == ConversationType.Group
 
       def ensureConvActive() = updateConversationStatus(conv.id, ConversationStatus.Active, time.instant).map(_.map(_._2).filter(joined))
@@ -138,7 +138,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
         _        <- if (userIds.contains(selfUser)) ensureConvActive() else successful(None)
       } yield ()
 
-    case MemberLeaveEvent(id, convId, time, from, userIds) =>
+    case MemberLeaveEvent(convId, time, from, userIds) =>
       membersStorage.remove(conv.id, time.instant, userIds: _*) flatMap { _ =>
         withSelfUserFuture { selfUserId =>
           if (userIds.contains(selfUserId)) updateConversationStatus(conv.id, ConversationStatus.Inactive, time.instant)
@@ -146,9 +146,9 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
         }
       }
 
-    case MemberUpdateEvent(id, convId, time, from, state) => updateConversationState(conv.id, state)
+    case MemberUpdateEvent(convId, time, from, state) => updateConversationState(conv.id, state)
 
-    case ConnectRequestEvent(_, _, time, from, _, recipient, _, _) =>
+    case ConnectRequestEvent(_, time, from, _, recipient, _, _) =>
       debug(s"ConnectRequestEvent(from = $from, recipient = $recipient")
       membersStorage.add(conv.id, time.instant, from, recipient) flatMap { added =>
         val userIdsAdded = added map (_.userId)

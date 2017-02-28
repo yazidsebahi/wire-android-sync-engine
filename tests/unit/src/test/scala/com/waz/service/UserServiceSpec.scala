@@ -86,7 +86,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   scenario("update other user") {
     zms.insertUsers(users)
     val id = users(2).id
-    zms.dispatch(UserUpdateEvent(Uid(id.str), UserInfo(id)))
+    zms.dispatch(UserUpdateEvent(UserInfo(id)))
     withDelay {
       val user = zms.getUser(id)
       user should be (defined)

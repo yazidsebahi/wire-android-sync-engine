@@ -59,7 +59,7 @@ class ConversationEventsService(convs: ConversationsContentUpdater, messages: Me
   // we may want to decouple lastEventTime and conv ordering, order should be based on last visible change / last message, events are no longer relevant
   private[service] def filterConvOrderEvents(events: Seq[ConversationOrderEvent]) =
     events filter {
-      case GenericMessageEvent(_, _, _, _, GenericMessage(_, _ : MsgEdit | _ : MsgDeleted | _: MsgRecall | _: Receipt | _: Reaction)) => false
+      case GenericMessageEvent(_, _, _, GenericMessage(_, _ : MsgEdit | _ : MsgDeleted | _: MsgRecall | _: Receipt | _: Reaction)) => false
       case _ => true
     }
 

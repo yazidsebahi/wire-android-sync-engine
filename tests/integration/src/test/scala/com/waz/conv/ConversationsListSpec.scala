@@ -64,7 +64,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
 
       withDelay(msgs should not be empty)(15.seconds)
 
-      zmessaging.eventPipeline(Seq(GenericMessageEvent(Uid(), lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message", Map.empty)).withCurrentLocalTime()))
+      zmessaging.eventPipeline(Seq(GenericMessageEvent(lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message", Map.empty)).withCurrentLocalTime()))
 
       withDelay {
         msgs.getLastMessage.getBody shouldEqual "test message"
@@ -82,7 +82,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
 
       withDelay(msgs should not be empty)(15.seconds)
 
-      zmessaging.eventPipeline(Seq(GenericMessageEvent(Uid(), lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message 1", Map.empty)).withCurrentLocalTime()))
+      zmessaging.eventPipeline(Seq(GenericMessageEvent(lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message 1", Map.empty)).withCurrentLocalTime()))
 
       withDelay {
         msgs.getLastMessage.getBody shouldEqual "test message 1"
@@ -97,7 +97,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
     scenario("incoming connection conversations") {
       withDelay(convs should not be empty)
 
-      zmessaging.eventPipeline(Seq(UserConnectionEvent(Uid(), RConvId("123"), self.getUser.id, unconnected1, Some("Want to connect"), UserData.ConnectionStatus.PendingFromOther, new Date())))
+      zmessaging.eventPipeline(Seq(UserConnectionEvent(RConvId("123"), self.getUser.id, unconnected1, Some("Want to connect"), UserData.ConnectionStatus.PendingFromOther, new Date())))
 
       val incoming = convs.getIncomingConversations
 
@@ -106,7 +106,7 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
         incoming.map(_.data.remoteId) should contain(RConvId("123"))
       }
 
-      zmessaging.eventPipeline(Seq(UserConnectionEvent(Uid(), RConvId("321"), self.getUser.id, unconnected2, Some("Want to connect"), UserData.ConnectionStatus.PendingFromOther, new Date())))
+      zmessaging.eventPipeline(Seq(UserConnectionEvent(RConvId("321"), self.getUser.id, unconnected2, Some("Want to connect"), UserData.ConnectionStatus.PendingFromOther, new Date())))
 
       withDelay {
         convs.map(_.data.remoteId) should not contain RConvId("321")

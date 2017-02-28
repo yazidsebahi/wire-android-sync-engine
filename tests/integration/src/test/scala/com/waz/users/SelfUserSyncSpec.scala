@@ -134,7 +134,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
     implicit val timeout = 45.seconds: Timeout
 
     withPush {
-      case UserUpdateEvent(_, _) => true
+      case UserUpdateEvent(_) => true
     } {
       otherClient ? UpdateProfileImage("/images/penguin.png") should eventually(be(Successful))
     }
@@ -158,7 +158,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
 
   scenario("clear self picture") {
     withPush {
-      case UserUpdateEvent(_, _) => true
+      case UserUpdateEvent(_) => true
     } {
       otherClient ? ClearProfileImage should eventually(be(Successful))
     }
@@ -173,7 +173,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
     implicit val timeout = 45.seconds: Timeout
 
     withPush {
-      case UserUpdateEvent(_, _) => true
+      case UserUpdateEvent(_) => true
     } {
       auto2 ? UpdateProfileImage("/images/penguin.png") should eventually(be(Successful))
     }
@@ -198,7 +198,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
     val user2 = api.getUser(provisionedUserId("auto2").str)
     withDelay(user2.getPicture should not be ImageAsset.Empty)
     withPush {
-      case UserUpdateEvent(_, _) => true
+      case UserUpdateEvent(_) => true
     } {
       auto2 ? ClearProfileImage should eventually(be(Successful))
     }

@@ -65,7 +65,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("Add knock message to incoming messages list") {
       val msgId = MessageId()
-      val event = GenericMessageEvent(Uid(), conv.remoteId, new Date, UserId(), GenericMessage(msgId.uid, Knock())).withCurrentLocalTime()
+      val event = GenericMessageEvent(conv.remoteId, new Date, UserId(), GenericMessage(msgId.uid, Knock())).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       withDelay {
         val msgs = incoming
@@ -87,7 +87,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
     }
 
     scenario("Add connect request messages") {
-      val event = ConnectRequestEvent(Uid(), conv1.remoteId, new Date, UserId(), "with local time", selfUser.id, "meep", None).withCurrentLocalTime()
+      val event = ConnectRequestEvent(conv1.remoteId, new Date, UserId(), "with local time", selfUser.id, "meep", None).withCurrentLocalTime()
       withUpdate(msgsSignal) { service.dispatch(event) }
       val msgs = incoming
       msgs should have size 3

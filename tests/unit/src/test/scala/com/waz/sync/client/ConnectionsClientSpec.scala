@@ -45,7 +45,7 @@ class ConnectionsClientSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Decode JSONObject to UserConnection") {
       val jsonObject = new JSONObject(connectionResponse)
 
-      val userConnection = UserConnectionEvent(Uid(),
+      val userConnection = UserConnectionEvent(
         RConvId("a129255b-ad8c-4a56-b630-b50daf54ea8e"),
         UserId("72733645-9170-499b-916b-aa3ce2adb8c2"),
         UserId("2eb5ef16-1c1c-40bb-a4c5-0ad1cca731cc"),
@@ -54,7 +54,7 @@ class ConnectionsClientSpec extends FeatureSpec with Matchers with BeforeAndAfte
         getDateFormat.parse("2014-04-01T15:34:56.723Z")
       )
 
-      Event.EventDecoder.connectionEvent(userConnection.id)(jsonObject, name = None) should be(userConnection)
+      Event.EventDecoder.connectionEvent(jsonObject, name = None) should be(userConnection)
     }
 
     scenario("Extract connection from response") {

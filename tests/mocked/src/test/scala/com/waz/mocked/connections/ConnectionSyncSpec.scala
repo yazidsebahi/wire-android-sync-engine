@@ -39,7 +39,7 @@ class ConnectionSyncSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
   override protected def beforeAll(): Unit = {
     1 to 3 map (_ => UserId()) foreach { userId =>
-      connections(userId) = UserConnectionEvent(Uid(), RConvId(), selfUserId, userId, Some(s"Hello, let's connect $userId"), ConnectionStatus.PendingFromOther, past.next())
+      connections(userId) = UserConnectionEvent(RConvId(), selfUserId, userId, Some(s"Hello, let's connect $userId"), ConnectionStatus.PendingFromOther, past.next())
     }
 
     super.beforeAll()

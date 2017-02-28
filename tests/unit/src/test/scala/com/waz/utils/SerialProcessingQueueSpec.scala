@@ -43,7 +43,7 @@ class SerialProcessingQueueSpec extends FeatureSpec with Matchers with Robolectr
       })
 
       val convId = RConvId()
-      val future = queue.enqueue(Seq(TypingEvent(Uid(), convId, new Date, UserId(), true), TypingEvent(Uid(), convId, new Date, UserId(), true), TypingEvent(Uid(), RConvId(), new Date, UserId(), true)))
+      val future = queue.enqueue(Seq(TypingEvent(convId, new Date, UserId(), true), TypingEvent(convId, new Date, UserId(), true), TypingEvent(RConvId(), new Date, UserId(), true)))
 
       val res = Await.result(future, 1.second)
       info(s"res: $res")

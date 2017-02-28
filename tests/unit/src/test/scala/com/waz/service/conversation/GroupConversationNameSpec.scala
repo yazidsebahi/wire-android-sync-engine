@@ -58,20 +58,20 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
   feature("Syncing") {
 
     scenario("Set name from initial sync event") {
-      service.dispatchEvent(CreateConversationEvent(Uid(), conv.remoteId, new Date(time), selfUser.id, ConversationResponse(conv, Seq(ConversationMemberData(selfUser.id, conv.id), ConversationMemberData(user1.id, conv.id)))))
+      service.dispatchEvent(CreateConversationEvent(conv.remoteId, new Date(time), selfUser.id, ConversationResponse(conv, Seq(ConversationMemberData(selfUser.id, conv.id), ConversationMemberData(user1.id, conv.id)))))
       withDelay {
         listConvs.flatMap(_.name) shouldEqual List("convName")
       }
     }
 
     scenario("Don't update name on event older than just fetched lastEvent") {
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(time - 100), user1.id, "old name"))
+      service.dispatchEvent(RenameConversationEvent(conv.remoteId, new Date(time - 100), user1.id, "old name"))
       awaitUi(200.millis)
       getConv(conv.id).flatMap(_.name) shouldEqual Some("convName")
     }
 
     scenario("Update name on new RenameEvent") {
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(time + 1), user1.id, "updated name"))
+      service.dispatchEvent(RenameConversationEvent(conv.remoteId, new Date(time + 1), user1.id, "updated name"))
       withDelay {
         getConv(conv.id).flatMap(_.name) shouldEqual Some("updated name")
         getConv(conv.id).map(_.lastEventTime.toEpochMilli) shouldEqual Some(time + 1)
@@ -79,7 +79,7 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
     }
 
     scenario("Don't update name on older RenameEvent") {
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(time), user1.id, "prev name"))
+      service.dispatchEvent(RenameConversationEvent(conv.remoteId, new Date(time), user1.id, "prev name"))
       awaitUi(200.millis)
       getConv(conv.id).flatMap(_.name) shouldEqual Some("updated name")
       getConv(conv.id).map(_.lastEventTime.toEpochMilli) shouldEqual Some(time + 1)

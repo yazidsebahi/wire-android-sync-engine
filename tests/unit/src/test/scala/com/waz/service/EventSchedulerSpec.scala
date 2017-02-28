@@ -144,10 +144,10 @@ class EventSchedulerSpec extends FeatureSpec with Matchers with OptionValues wit
   }
 
   feature("Defining event processing stages") {
-    lazy val e1 = new RenameConversationEvent(Uid("e1"), RConvId("R"), new Date, UserId("u1"), "meep 1")
-    lazy val e2 = new TypingEvent(Uid("e2"), RConvId("R"), new Date, UserId("u1"), true)
-    lazy val e3 = new RenameConversationEvent(Uid("e3"), RConvId("R"), new Date, UserId("u2"), "meep 2")
-    lazy val e4 = new TypingEvent(Uid("e4"), RConvId("R"), new Date, UserId("u2"), true)
+    lazy val e1 = RenameConversationEvent(RConvId("R"), new Date, UserId("u1"), "meep 1")
+    lazy val e2 = TypingEvent(RConvId("R"), new Date, UserId("u1"), isTyping = true)
+    lazy val e3 = RenameConversationEvent(RConvId("R"), new Date, UserId("u2"), "meep 2")
+    lazy val e4 = TypingEvent(RConvId("R"), new Date, UserId("u2"), isTyping = true)
 
     scenario("Eligibility check")(withFixture { env => import env._
       lazy val stage = Stage[TypingEvent](append, _.from.str == "u1")
@@ -200,9 +200,7 @@ class EventSchedulerSpec extends FeatureSpec with Matchers with OptionValues wit
     }
 
     def E(es: Symbol*): Vector[Event] = es.zipWithIndex.map {
-      case (user, uid) => new TypingEvent(Uid(Integer.toString(uid, 36)), conv, new Date, UserId(user.name), true) {
-        override def toString = id.str
-      }
+      case (user, uid) => TypingEvent(conv, new Date, UserId(user.name), isTyping = true)
     }(breakOut)
 
     implicit class RichEvents(events: Vector[Event]) {
