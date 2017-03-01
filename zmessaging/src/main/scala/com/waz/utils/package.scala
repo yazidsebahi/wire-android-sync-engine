@@ -30,6 +30,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
+import org.threeten.bp.temporal.ChronoUnit
 
 import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
@@ -190,6 +191,7 @@ package object utils {
     def +(d: bp.Duration): Instant = a.plusNanos(d.toNanos)
     def isAfter(d: Date): Boolean = a.toEpochMilli > d.getTime
     def isBefore(d: Date): Boolean = a.toEpochMilli < d.getTime
+    def isToday: Boolean = a.truncatedTo(ChronoUnit.DAYS) == Instant.now.truncatedTo(ChronoUnit.DAYS)
     def max(b: bp.Instant) = if (a isBefore b) b else a
     def max(b: Date) = if (a.toEpochMilli < b.getTime) b else a
     def min(b: bp.Instant) = if (a isBefore b) a else b

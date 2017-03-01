@@ -23,7 +23,7 @@ import com.waz._
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Preview
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
+import com.waz.model.GenericContent.{ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.testutils._

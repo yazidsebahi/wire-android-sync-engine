@@ -21,7 +21,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.support.v4.content.ContextCompat
 import com.waz.RobolectricUtils
-import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model.AssetMetaData.Image

@@ -27,7 +27,7 @@ import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils._
 
 import scala.concurrent.Future
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.Duration
 
 /**
   * Receiver called on boot or when app is updated.
@@ -62,7 +62,7 @@ class WebSocketService extends FutureService {
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock async {
 
     // schedule service restart every couple minutes to send ping on web socket (needed to keep connection alive)
-    def scheduleRestarts(pingInterval: FiniteDuration) = {
+    def scheduleRestarts(pingInterval: Duration) = {
       alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + pingInterval.toMillis, pingInterval.toMillis, restartIntent)
     }
 
@@ -81,10 +81,11 @@ class WebSocketService extends FutureService {
             alarmService.cancel(restartIntent)
             Future successful None
           case true =>
-            val interval = zms.prefs.webSocketPingInterval
-            verbose(s"current zms: $zms, scheduling restarts with interval: $interval")
-            scheduleRestarts(interval)
-            zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
+            zms.pingInterval.interval.head flatMap { interval =>
+              verbose(s"current zms: $zms, scheduling restarts with interval: $interval")
+              scheduleRestarts(interval)
+              zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
+            }
         }
     }
   } flatMap {

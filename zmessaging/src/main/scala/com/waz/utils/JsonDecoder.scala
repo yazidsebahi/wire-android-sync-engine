@@ -18,6 +18,7 @@
 package com.waz.utils
 
 import java.text.SimpleDateFormat
+import java.util.concurrent.TimeUnit
 import java.util.{Date, Locale, TimeZone}
 
 import android.net.Uri
@@ -28,6 +29,7 @@ import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.generic._
+import scala.concurrent.duration.FiniteDuration
 import scala.language.{higherKinds, implicitConversions}
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -114,6 +116,7 @@ object JsonDecoder {
   implicit def decodeUtcDate(s: Symbol)(implicit js: JSONObject): Date = parseDate(js.getString(s.name))
   implicit def decodeInstant(s: Symbol)(implicit js: JSONObject): Instant = withDefault(s, Instant.EPOCH, { js => Instant.ofEpochMilli(js.getLong(s.name)) })
   implicit def decodeDuration(s: Symbol)(implicit js: JSONObject): Duration = Duration.ofMillis(js.getLong(s.name))
+  implicit def decodeFiniteDuration(s: Symbol)(implicit js: JSONObject): FiniteDuration = FiniteDuration(withDefault(s, 0L, _.getLong(s.name)), TimeUnit.MILLISECONDS)
   implicit def decodeLocale(s: Symbol)(implicit js: JSONObject): Option[Locale] = withDefault(s, None, o => Locales.bcp47.localeFor(o.getString(s.name)))
   implicit def decodeUid(s: Symbol)(implicit js: JSONObject): Uid = Uid(js.getString(s.name))
 
@@ -155,6 +158,7 @@ object JsonDecoder {
   implicit def decodeStringSeq(s: Symbol)(implicit js: JSONObject): Seq[String] = array[String](s)({ _.getString(_) })
   implicit def decodeClientIdSeq(s: Symbol)(implicit js: JSONObject): Seq[ClientId] = array[ClientId](s)({ (arr, i) => ClientId(arr.getString(i)) })
   implicit def decodeFloatSeq(s: Symbol)(implicit js: JSONObject): Seq[Float] = array[Float](s)({ _.getDouble(_).toFloat })
+  implicit def decodeFiniteDurationSeq(s: Symbol)(implicit js: JSONObject): Seq[FiniteDuration] = array[FiniteDuration](s)({ (arr, i) => FiniteDuration(arr.getLong(i), TimeUnit.MILLISECONDS) })
 
   implicit def decodeUserId(s: Symbol)(implicit js: JSONObject): UserId = UserId(js.getString(s.name))
   implicit def decodeConvId(s: Symbol)(implicit js: JSONObject): ConvId = ConvId(js.getString(s.name))

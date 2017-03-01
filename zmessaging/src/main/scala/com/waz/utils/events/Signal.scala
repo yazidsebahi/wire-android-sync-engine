@@ -157,6 +157,7 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
       pf.andThen(Some(_)).applyOrElse(v, { _: A => None })
     }
   }
+  def foreach(f: A => Unit)(implicit eventContext: EventContext): Subscription = apply(f)
   def flatMap[B](f: A => Signal[B]): Signal[B] = new FlatMapSignal[A, B](this, f)
   def scan[B](zero: B)(f: (B, A) => B): Signal[B] = new ScanSignal[A, B](this, zero, f)
   def combine[B, C](s: Signal[B])(f: (A, B) => C): Signal[C] = new ProxySignal[C](this, s) {

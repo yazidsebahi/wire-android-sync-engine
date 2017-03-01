@@ -21,10 +21,9 @@ import java.io.ByteArrayOutputStream
 
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap.CompressFormat
-import android.graphics.{Bitmap, BitmapFactory}
+import android.graphics.BitmapFactory
 import com.waz._
 import com.waz.api.impl.ErrorResponse
-import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.cache._
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Medium
