@@ -18,7 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
-import com.waz.content.{CommonConnectionsStorage, SearchQueryCacheStorage, UsersStorage}
+import com.waz.content.{CommonConnectionsStorage, MessagesStorage, SearchQueryCacheStorage, UsersStorage}
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{SearchQuery, _}
@@ -36,7 +36,7 @@ import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
 
 class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage: CommonConnectionsStorage,
-    userService: UserService, usersStorage: UsersStorage, timeouts: Timeouts, sync: SyncServiceHandle) {
+    userService: UserService, usersStorage: UsersStorage, timeouts: Timeouts, sync: SyncServiceHandle, messages: MessagesStorage) {
 
   import Threading.Implicits.Background
   import com.waz.service.UserSearchService._
@@ -46,12 +46,15 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
 
   def searchUserData(query: SearchQuery, limit: Option[Int] = None): Signal[SeqMap[UserId, UserData]] =
     queryCache.optSignal(query).flatMap {
+      case _ if query == TopPeople =>
+        verbose(s"$query local search")
+        val connectedUsers = usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
+        val usersAndMessageCount = connectedUsers.flatMap(users => Future.sequence(users.map(u => messages.countLaterThan(ConvId(u.id.str), Instant.now - topPeopleMessageInterval).map(count => (u, count)))))
+        Signal.future(usersAndMessageCount.map(_.sortBy(_._2)(Ordering[Long].reverse).map(_._1)))
       case r if r.forall(cached => (cacheExpiryTime elapsedSince cached.timestamp) || cached.entries.isEmpty) =>
         verbose(s"no cached entries for query $query")
 
         def fallbackToLocal = query match {
-          case TopPeople =>
-            usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
           case Recommended(prefix) =>
             usersStorage.find[UserData, Vector[UserData]](recommendedPredicate(prefix, withinThreeLevels), db => UserDataDao.recommendedPeople(prefix)(db), identity)
           case RecommendedHandle(prefix) =>
