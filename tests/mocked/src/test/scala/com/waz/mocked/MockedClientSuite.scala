@@ -113,7 +113,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val giphyClient        = new GiphyClient(zNetClient) {}
     override lazy val userSearchClient   = new UserSearchClient(zNetClient) {
       override def graphSearch(query: SearchQuery, limit: Int) = suite.graphSearch(query, limit)
-      override def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] = suite.loadCommonConnections(id)
     }
     override lazy val connectionsClient  = new ConnectionsClient(zNetClient) {
       override def loadConnections(start: Option[UserId], pageSize: Int): ErrorOrResponse[Seq[UserConnectionEvent]] = suite.loadConnections(start, pageSize)

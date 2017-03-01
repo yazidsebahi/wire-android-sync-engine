@@ -29,11 +29,6 @@ class CommonConnections(userId: UserId)(implicit ui: UiModule) extends com.waz.a
 
   lazy val fullList = new CommonConnectionsList(userId, data.connections)
 
-  addLoader(_.userSearch.commonConnections(userId, fullList = false)) { data =>
-    this.data = data.getOrElse(this.data)
-    notifyChanged()
-  }
-
   override def getTopConnections: Array[api.User] = data.connections.take(UserSearchService.MinCommonConnections).map(ui.users.getUser).toArray
 
   override def getTotalCount: Int = data.totalCount
@@ -43,11 +38,6 @@ class CommonConnections(userId: UserId)(implicit ui: UiModule) extends com.waz.a
 
 
 class CommonConnectionsList(userId: UserId, var data: Seq[UserId] = Nil)(implicit ui: UiModule) extends UsersList with CoreList[com.waz.api.User] with SignalLoading {
-
-  addLoader(_.userSearch.commonConnections(userId, fullList = true)) { data =>
-    this.data = data.fold(Seq.empty[UserId])(_.connections)
-    notifyChanged()
-  }
 
   override def size: Int = data.size
   override def get(index: Int): User = ui.users.getUser(data(index))

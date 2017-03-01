@@ -114,23 +114,6 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
     } yield ()
   }
 
-  def commonConnections(userId: UserId, fullList: Boolean): Signal[Option[CommonConnectionsData]] = {
-    def shouldRefreshCommonConnections(conn: CommonConnectionsData) = {
-      def forceRefresh = conn.totalCount > conn.connections.size && fullList
-      cacheRefreshInterval.elapsedSince(conn.timestamp) || forceRefresh
-    }
-    commonConnsStorage.optSignal(userId).map { conns =>
-      if (conns.forall(shouldRefreshCommonConnections)) sync.syncCommonConnections(userId)
-      conns
-    }
-  }
-  def updateCommonConnections(user: UserId, connections: Seq[UserSearchEntry]): Future[CommonConnectionsData] =
-    for {
-      updated <- userService.updateUsers(connections)
-      _       <- userService.syncIfNeeded(updated.toSeq: _*)
-      conns   <- updateCommonConnections(user, connections.size, connections.map(_.id))
-    } yield conns
-
   private def updateCommonConnections(user: UserId, totalCount: Int, connections: Seq[UserId]): Future[CommonConnectionsData] =
     commonConnsStorage.updateOrCreate(user, { prev =>
       val merged = if (totalCount == connections.size) connections else {

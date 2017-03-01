@@ -20,8 +20,8 @@ package com.waz.model.sync
 import com.waz.api.EphemeralExpiration
 import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{SearchQuery, _}
 import com.waz.model.otr.ClientId
+import com.waz.model.{SearchQuery, _}
 import com.waz.sync.client.{ConversationsClient, UsersClient}
 import com.waz.sync.queue.SyncJobMerger._
 import com.waz.utils._
@@ -203,7 +203,6 @@ object SyncRequest {
     override val mergeKey = (cmd, userId)
   }
 
-  case class SyncCommonConnections(userId: UserId) extends RequestForUser(Cmd.SyncCommonConnections)
   case class PostConnection(userId: UserId, name: String, message: String) extends RequestForUser(Cmd.PostConnection)
 
   case class PostConnectionStatus(userId: UserId, status: Option[ConnectionStatus]) extends RequestForUser(Cmd.PostConnectionStatus) {
@@ -302,7 +301,6 @@ object SyncRequest {
         case Cmd.PostLastRead          => PostLastRead(convId, 'time)
         case Cmd.PostCleared           => PostCleared(convId, 'time)
         case Cmd.PostTypingState       => PostTypingState(convId, 'typing)
-        case Cmd.SyncCommonConnections => SyncCommonConnections(userId)
         case Cmd.PostConnectionStatus  => PostConnectionStatus(userId, opt('status, js => ConnectionStatus(js.getString("status"))))
         case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
         case Cmd.PostMessage           => PostMessage(convId, messageId, 'time)
@@ -416,7 +414,6 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
-        case SyncCommonConnections(_) => () // nothing to do
         case SyncCallState(_, _) => () // nothing to do
         case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | ResetGcmToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))

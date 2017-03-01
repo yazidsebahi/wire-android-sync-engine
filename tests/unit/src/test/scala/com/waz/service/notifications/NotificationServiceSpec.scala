@@ -23,17 +23,17 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.model.AssetData.RemoteData
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
+import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Asset, MsgEdit, MsgRecall, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.{LifecycleState, Timeouts, ZmsLifecycle}
+import com.waz.service.Timeouts
 import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
-import com.waz.utils.events.{EventContext, Signal, SourceSignal}
+import com.waz.utils.events.EventContext
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
