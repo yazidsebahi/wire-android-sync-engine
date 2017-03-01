@@ -27,16 +27,15 @@ import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone, UploadInProgress}
+import com.waz.model.AssetStatus.{UploadCancelled, UploadInProgress}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
-import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
+import com.waz.model.GenericContent.{Asset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.{Mime, _}
-import com.waz.testutils.Matchers._
 import com.waz.testutils.Implicits._
+import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.threading.Threading
 import com.waz.utils._

@@ -47,7 +47,6 @@ trait SyncServiceHandle {
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
-  def syncCommonConnections(id: UserId): Future[SyncId]
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId]
 
   def postSelfUser(info: UserInfo): Future[SyncId]
@@ -105,7 +104,6 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncConversations(dependsOn: Option[SyncId]) = addRequest(SyncConversations, priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
-  def syncCommonConnections(id: UserId) = addRequest(SyncCommonConnections(id))
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
   def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None) = addRequest(SyncConversation(Set(id)), dependsOn = dependsOn.toSeq)
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal) = addRequest(SyncCallState(id, fromFreshNotification = fromFreshNotification), priority = priority)
@@ -178,7 +176,6 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case DeleteGcmToken(token)                 => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
-    case SyncCommonConnections(userId)         => zms.usersearchSync.syncCommonConnections(userId)
     case SyncCallState(convId, fresh)          => zms.voicechannelSync.syncCallState(convId, fresh)
     case SyncConversations                     => zms.conversationSync.syncConversations()
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()

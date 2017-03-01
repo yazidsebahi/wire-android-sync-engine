@@ -18,7 +18,6 @@
 package com.waz.api.impl
 
 import com.waz.RobolectricUtils
-import com.waz.api.{UsernameValidation, UsernamesRequestCallback}
 import com.waz.model.{Handle, UserId}
 import com.waz.testutils.{MockUiModule, MockZMessaging}
 import org.scalatest.{OptionValues, _}

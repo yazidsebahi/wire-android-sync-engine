@@ -35,7 +35,6 @@ public enum SyncCommand {
     PostLastRead("post-last-read"),
     PostCleared("post-cleared"),
     PostTypingState("post-typing-state"),
-    SyncCommonConnections("sync-common-connections"),
     PostConnectionStatus("post-conn-status"),
     PostSelfPicture("post-picture"),
     PostMessage("post-message"),

@@ -48,9 +48,6 @@ class UserSearchClient(netClient: ZNetClient) {
   def graphSearchQuery(query: String, limit: Int, level: Int, useDirectory: Boolean): String =
     Request.query(GraphSearchPath, "q" -> query, "size" -> limit, "l" -> level, "d" -> (if (useDirectory) 1 else 0))
 
-  def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] =
-    extractUsers("loadCommonConnections", Request.Get(CommonConnectionsPath + "/" + id))
-
   private def extractUsers(name: String, req: Request[Unit]): ErrorOrResponse[Seq[UserSearchEntry]] = {
     val handling404s: PartialFunction[Response, Either[ErrorResponse, Seq[UserSearchEntry]]] = {
       case Response(SuccessHttpStatus(), UserSearchResponse(users), _) =>
@@ -67,7 +64,6 @@ class UserSearchClient(netClient: ZNetClient) {
 
 object UserSearchClient {
   val GraphSearchPath = "/search/contacts"
-  val CommonConnectionsPath = "/search/common"
   val TopUserPath = "/search/top"
 
   case class UserSearchEntry(id: UserId,

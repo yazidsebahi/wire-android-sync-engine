@@ -195,7 +195,6 @@ object Generators {
       arbitrary[SyncPreKeys]))
 
     implicit lazy val arbUserBasedSyncRequest: Arbitrary[RequestForUser] = Arbitrary(oneOf(
-      arbitrary[SyncCommonConnections],
       arbitrary[PostConnection],
       arbitrary[PostConnectionStatus]))
 
@@ -226,7 +225,6 @@ object Generators {
     implicit lazy val arbPostSelfSyncRequest: Arbitrary[PostSelf] = Arbitrary(resultOf(PostSelf))
     implicit lazy val arbPostConvStateSyncRequest: Arbitrary[PostConvState] = Arbitrary(resultOf(PostConvState))
     implicit lazy val arbPostTypingStateSyncRequest: Arbitrary[PostTypingState] = Arbitrary(resultOf(PostTypingState))
-    implicit lazy val arbCommonConnectionsSyncRequest: Arbitrary[SyncCommonConnections] = Arbitrary(resultOf(SyncCommonConnections))
     implicit lazy val arbPostConnectionStatusSyncRequest: Arbitrary[PostConnectionStatus] = Arbitrary(resultOf(PostConnectionStatus))
     implicit lazy val arbMessageSyncRequest: Arbitrary[PostMessage] = Arbitrary(resultOf(PostMessage))
     implicit lazy val arbMessageDelSyncRequest: Arbitrary[PostDeleted] = Arbitrary(resultOf(PostDeleted))

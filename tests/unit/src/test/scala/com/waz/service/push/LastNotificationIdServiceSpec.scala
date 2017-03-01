@@ -21,7 +21,7 @@ import com.waz.RobolectricUtils
 import com.waz.content.{KeyValueStorage, ZmsDatabase}
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, Uid}
-import PushService.SlowSyncRequest
+import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
@@ -29,7 +29,6 @@ import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
-import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 

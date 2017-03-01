@@ -19,7 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.content.SearchQueryCacheStorage
-import com.waz.model.{SearchQuery, UserId}
+import com.waz.model.SearchQuery
 import com.waz.service.UserSearchService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.UserSearchClient
@@ -44,16 +44,6 @@ class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSe
         userSearch.updateSearchResults(query, results).map(_ => SyncResult.Success)
       case Left(error) =>
         warn("graphSearch request failed")
-        successful(SyncResult(error))
-    }
-  }
-
-  def syncCommonConnections(user: UserId): Future[SyncResult] = {
-    debug(s"starting sync commonConnections for UserId: $user")
-    client.loadCommonConnections(user).future flatMap {
-      case Right(results) => userSearch.updateCommonConnections(user, results).map(_ => SyncResult.Success)
-      case Left(error) =>
-        warn("loadCommonConnections request failed")
         successful(SyncResult(error))
     }
   }
