@@ -51,7 +51,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
 
     val selfId = self.getUser.getId
 
-    addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(selfId), name = Some("name"), email = None, phone = Some(PhoneNumber(phone)))))
+    addNotification(UserUpdateEvent(UserInfo(UserId(selfId), name = Some("name"), email = None, phone = Some(PhoneNumber(phone)))))
 
     soon {
       self.getName shouldEqual "name"
@@ -62,7 +62,7 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
       self.data.value.phone shouldEqual Some(PhoneNumber(phone))
     }
 
-    addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(selfId), email = Some(EmailAddress("email1@test.com")), phone = None)))
+    addNotification(UserUpdateEvent(UserInfo(UserId(selfId), email = Some(EmailAddress("email1@test.com")), phone = None)))
 
     soon {
       self.getName shouldEqual "name"

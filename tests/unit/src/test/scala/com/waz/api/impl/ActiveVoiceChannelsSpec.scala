@@ -84,5 +84,5 @@ class ActiveVoiceChannelsSpec extends FeatureSpec with Matchers with BeforeAndAf
   }
 
   private def push(user: UserId, joined: Boolean): Unit =
-    zmessaging.eventPipeline(Vector(CallStateEvent(Uid(), conv.remoteId, Some(Set(CallParticipant(selfId, joined = false, Set.empty), CallParticipant(user, joined = joined, Set(CallProperty.SendsVideo)))), device = None, CauseForCallStateEvent.REQUESTED).withCurrentLocalTime()))
+    zmessaging.eventPipeline(Vector(CallStateEvent(conv.remoteId, Some(Set(CallParticipant(selfId, joined = false, Set.empty), CallParticipant(user, joined = joined, Set(CallProperty.SendsVideo)))), device = None, CauseForCallStateEvent.REQUESTED).withCurrentLocalTime()))
 }

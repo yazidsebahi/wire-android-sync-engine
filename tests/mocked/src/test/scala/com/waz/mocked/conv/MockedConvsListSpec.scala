@@ -112,7 +112,7 @@ class MockedConvsListSpec extends FeatureSpec with Matchers with Inspectors with
 
       val current = events.getOrElse(convId, Nil)
       val messageEvent = textMessageEvent(Uid(), convId, SystemTimeline.next(), selfUserId, "meep")
-      val updateEvent = new GenericMessageEvent(Uid(), RConvId(selfUserId.str), SystemTimeline.next(), selfUserId, GenericMessage(Uid(), LastRead(convId, messageEvent.time.instant)))
+      val updateEvent = new GenericMessageEvent(RConvId(selfUserId.str), SystemTimeline.next(), selfUserId, GenericMessage(Uid(), LastRead(convId, messageEvent.time.instant)))
       addNotification(PushNotification(Uid(), Vector(messageEvent, updateEvent), transient = false))
 
       api.onResume()

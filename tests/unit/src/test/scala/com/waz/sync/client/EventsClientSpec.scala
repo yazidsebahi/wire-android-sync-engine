@@ -71,7 +71,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     n.transient shouldEqual false
     n.events should have size 1
     n.events match {
-      case Seq(ContactJoinEvent(_, user, name)) =>
+      case Seq(ContactJoinEvent(user, name)) =>
         user shouldEqual UserId("13962457-c316-4de1-9962-929c40f8cff4")
         name shouldEqual "Name of the new user"
       case evs => fail(s"unexpected events: $evs")
@@ -81,7 +81,7 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   scenario("parse voice channel deactivate event") {
     val json = new JSONObject("""{"id":"5.800122000a5ba6c8","time":"2014-09-30T10:41:52.542Z","data":{"reason":"completed"},"conversation":"2e42d328-dc40-4fdf-abad-891b0e94d96a","from":"5400e48e-ec36-4507-bdd7-d08bfb0448de","type":"conversation.voice-channel-deactivate"}""")
     Event.EventDecoder(json) match {
-      case e @ VoiceChannelDeactivateEvent(uid, convId, time, from, Some("completed")) => //info(s"got event: $e")
+      case e @ VoiceChannelDeactivateEvent(convId, time, from, Some("completed")) => //info(s"got event: $e")
       case e => fail(s"unexpected event: $e")
     }
   }

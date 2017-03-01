@@ -120,9 +120,9 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     Robolectric.application.getDatabasePath(service.db.dbHelper.getDatabaseName).delete()
   }
 
-  def idleEvent(id: RConvId = conv.remoteId, idx: Option[CallSequenceNumber] = None) = CallStateEvent(Uid(), id, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)
-  def incomingCall(id: RConvId = conv.remoteId, idx: Option[CallSequenceNumber] = None) = CallStateEvent(Uid(), id, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)
-  def cancelledCall(idx: Option[CallSequenceNumber] = None) = CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), device = deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)
+  def idleEvent(id: RConvId = conv.remoteId, idx: Option[CallSequenceNumber] = None) = CallStateEvent(id, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)
+  def incomingCall(id: RConvId = conv.remoteId, idx: Option[CallSequenceNumber] = None) = CallStateEvent(id, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)
+  def cancelledCall(idx: Option[CallSequenceNumber] = None) = CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), device = deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = idx)
 
   implicit def int_to_optSeqNum(idx: Int): Option[CallSequenceNumber] = Some(CallSequenceNumber(idx))
 
@@ -208,7 +208,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.dispatchEvent(incomingCall())
 
       withDelay(listChannels.filter(_.active) should have size 1)
-      service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user2.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv1.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user2.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv1.remoteId, Set(user2.id))
 
       awaitUi(100.millis)
@@ -233,7 +233,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv.remoteId, Set(user1.id))
       service.dispatchEvent(incomingCall())
       withDelay(listChannels.filter(_.active) should have size 1)
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.INTERRUPTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.INTERRUPTED))
 
       withDelay {
         val channel = listChannels.find(_.id == conv.id).value
@@ -246,7 +246,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("start a call from current device") {
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
@@ -262,7 +262,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.voice.volumeChanged(conv.id, user1.id).on(Threading.Ui) { v => volumeChanged = Some(v) }
 
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onVolumeChanged ! (conv.remoteId, user1.id, 0.25f)
       withDelay { volumeChanged shouldEqual Some(0.25f) }
     }
@@ -272,7 +272,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.voice.volumeChanged(conv.id, selfUser.id).on(Threading.Ui) { v => volumeChanged = Some(v) }
 
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
 
       service.flowmanager.onVolumeChanged ! (conv.remoteId, UserId("self"), 0.25f)
       withDelay { volumeChanged shouldEqual Some(0.25f) }
@@ -280,7 +280,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("start a call from other device") {
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
@@ -292,8 +292,8 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("accept incoming call on current device") {
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv.remoteId, Set(user1.id))
 
       assertSingleChannel { channel =>
@@ -306,8 +306,8 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("accept incoming call on other device and check for voice channel notification on another incoming call") {
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv.remoteId, Set(user1.id))
 
       assertSingleChannel { channel =>
@@ -318,7 +318,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertParticipants(selfUser.id -> ConnectionState.Connected, user1.id -> ConnectionState.Connected)
 
       withNotification(conv1.id) {
-        service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user2.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+        service.dispatchEvent(CallStateEvent(conv1.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user2.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       }
       listChannels.filter(_.ongoing) should have size 1
       listChannels.filter(_.active) should have size 2
@@ -326,14 +326,14 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("second incoming call (different conversation) with one already accepted on other device") {
       service.dispatchEvent(idleEvent())
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
 
       withDelay {
         listChannels.map(_.data.state) shouldEqual Seq(ChannelState.UserConnected)
       }
 
-      service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv1.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
 
       withDelay {
         val channels = listChannels
@@ -348,7 +348,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("other user accepts call started from current device then we transfer it to other device") {
       // start calling
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv.remoteId, Set(user1.id))
 
       assertSingleChannel { channel =>
@@ -366,7 +366,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       }
 
       // other user joins
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       assertSingleChannel { channel =>
         channel.state shouldEqual ChannelState.DeviceConnected
         channel.deviceState shouldEqual ConnectionState.Connected
@@ -374,7 +374,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertParticipants(selfUser.id -> ConnectionState.Connected, user1.id -> ConnectionState.Connected)
 
       // transfer to other device
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.state shouldEqual ChannelState.UserConnected
@@ -384,8 +384,8 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     scenario("other user accepts call started from other device and we transfer the call to current device then the call is ended") {
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv.remoteId, Set(user1.id))
 
       assertSingleChannel { channel =>
@@ -396,7 +396,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertParticipants(selfUser.id -> ConnectionState.Connected, user1.id -> ConnectionState.Connected)
 
       // transfer to current device
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.state shouldEqual ChannelState.DeviceJoining
@@ -414,7 +414,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertParticipants(selfUser.id -> ConnectionState.Connected, user1.id -> ConnectionState.Connected)
 
       //call is ended from other side
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = false), participant(selfUser.id, joined = false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = false), participant(selfUser.id, joined = false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.state shouldEqual ChannelState.Idle
@@ -424,8 +424,8 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     scenario("other users create and accept a call in group conversation, user joins group call then leaves it") {
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       service.flowmanager.onFlowsEstablished ! EstablishedFlows(conv.remoteId, Set(user1.id, user2.id))
 
       assertSingleChannel { channel =>
@@ -436,7 +436,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertParticipants(user1.id -> ConnectionState.Connected, user2.id -> ConnectionState.Connected)
 
       // join on current device
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true), participant(selfUser.id, joined = true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.muted shouldEqual false
@@ -454,7 +454,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       assertParticipants(user1.id -> ConnectionState.Connected, user2.id -> ConnectionState.Connected, selfUser.id -> ConnectionState.Connected)
 
       // leave
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true), participant(selfUser.id, joined = false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true), participant(selfUser.id, joined = false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.state shouldEqual ChannelState.OthersConnected
@@ -464,7 +464,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
 
       //join on other device
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user2.id, joined = true), participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
 
       assertSingleChannel { channel =>
         channel.state shouldEqual ChannelState.UserConnected
@@ -526,16 +526,16 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       val spy = new ActiveChannelSpy
 
-      response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
+      response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
       Await.result(service.voice.joinVoiceChannel(conv.id), 100.millis)
 
       spy.assertChannelState(2, ChannelState.DeviceCalling)
 
       // other accepts and we cancel (at nearly the same time)
-      response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), device = deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 4))
+      response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), device = deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 4))
       service.voice.leaveVoiceChannel(conv.id)
       awaitUi(100.millis)
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 3))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 3))
 
       spy.assertChannelState(3, ChannelState.Idle)
     }
@@ -547,7 +547,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       withNotification(conv.id) { service.dispatchEvent(idleEvent()) }
       service.voice.joinVoiceChannel(conv.id)
 
-      service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(user2.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv1.remoteId, Some(Set(participant(user2.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
       withDelay {
         listChannels.filter(_.ongoing).map(_.id) shouldEqual Seq(conv.id)
         listChannels.filter(_.active).map(_.id) should contain(conv1.id)
@@ -558,10 +558,10 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     scenario("queue incoming when connected") {
       service.dispatchEvent(idleEvent())
       service.voice.joinVoiceChannel(conv.id)
-      service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       withDelay { listChannels.filter(_.active).map(_.id) shouldEqual Seq(conv.id) }
 
-      service.dispatchEvent(CallStateEvent(Uid(), conv1.remoteId, Some(Set(participant(user2.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+      service.dispatchEvent(CallStateEvent(conv1.remoteId, Some(Set(participant(user2.id, joined = true), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
       withDelay {
         listChannels.filter(_.ongoing).map(_.id) shouldEqual Seq(conv.id)
         listChannels.filter(_.active).map(_.id) should contain(conv1.id)
@@ -593,7 +593,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         o.put("participants", new JSONObject())
       })
 
-      response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
+      response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
       service.voice.joinVoiceChannel(conv.id)
 
       withDelay {
@@ -606,7 +606,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       withNotification(conv.id) { service.dispatchEvent(idleEvent()) }
       withNotification(conv.id) { service.dispatchEvent(incomingCall()) }
 
-      response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
+      response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
       service.voice.joinVoiceChannel(conv.id)
 
       withDelay {
@@ -646,7 +646,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val incomingSpy = new FirstIncomingChannelSpy
       val activeSpy = new ActiveChannelSpy
       withUiNotificationOnCall(conv.id) {
-        service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = false), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
+        service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = false), participant(selfUser.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED))
       }
       withDelay {
         currentlyActiveChannel shouldEqual None
@@ -664,7 +664,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val activeSpy = new ActiveChannelSpy
 
       withUiNotificationOnCall(conv.id) {
-        response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, device = deviceState(joined = true)))
+        response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED, device = deviceState(joined = true)))
         service.voice.joinVoiceChannel(conv.id)
       }
 
@@ -684,7 +684,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val activeSpy = new ActiveChannelSpy
 
       withUiNotificationOnCall(conv.id) {
-        service.dispatchEvent(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
+        service.dispatchEvent(CallStateEvent(conv.remoteId, Some(Set(participant(user1.id, joined = true), participant(selfUser.id, joined = true))), cause = CauseForCallStateEvent.REQUESTED))
       }
 
       withDelay {
@@ -700,7 +700,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val activeSpy = new ActiveChannelSpy
 
       withUiNotificationOnCall(conv.id) {
-        response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
+        response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = false), participant(user1.id, joined = false))), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
         service.voice.leaveVoiceChannel(conv.id)
       }
       withDelay {
@@ -842,7 +842,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       service.dispatchEvent(incomingCall())
 
       assertSingleChannel { channel => channel.state shouldEqual ChannelState.OtherCalling }
-      response = Right(CallStateEvent(Uid(), conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), device = Some(CallDeviceState(joined = true, Set())), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
+      response = Right(CallStateEvent(conv.remoteId, Some(Set(participant(selfUser.id, joined = true), participant(user1.id, joined = true))), device = Some(CallDeviceState(joined = true, Set())), cause = CauseForCallStateEvent.REQUESTED, sequenceNumber = 2))
       service.voice.joinVoiceChannel(conv.id)
       assertSingleChannel { channel => channel.state shouldEqual ChannelState.DeviceJoining }
       service.flowmanager.onMediaEstablished ! conv.remoteId

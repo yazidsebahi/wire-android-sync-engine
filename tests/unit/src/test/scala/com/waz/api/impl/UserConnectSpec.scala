@@ -268,20 +268,20 @@ class UserConnectSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   }
 
   def sentConnectionEvent(user: UserId, conv: RConvId = RConvId()) =
-    UserConnectionEvent(Uid(), conv, selfUser.id, user, Some("Hi"), ConnectionStatus.PendingFromUser, new Date)
+    UserConnectionEvent(conv, selfUser.id, user, Some("Hi"), ConnectionStatus.PendingFromUser, new Date)
 
   def pendingConnectionEvent(user: UserId, conv: RConvId = RConvId()) =
-    UserConnectionEvent(Uid(), conv, user, selfUser.id, Some("Hi"), ConnectionStatus.PendingFromOther, new Date)
+    UserConnectionEvent(conv, user, selfUser.id, Some("Hi"), ConnectionStatus.PendingFromOther, new Date)
 
   def acceptedConnectionEvent(from: UserId, to: UserId, conv: RConvId) =
-    UserConnectionEvent(Uid(), conv, selfUser.id, to, Some("Hello test"), ConnectionStatus.Accepted, new Date)
+    UserConnectionEvent(conv, selfUser.id, to, Some("Hello test"), ConnectionStatus.Accepted, new Date)
 
   def conversationCreateEvent(conv: RConvId = RConvId(), user: UserId = selfUser.id) = 
-    CreateConversationEvent(Uid(), conv, new Date, user, ConversationResponse(ConversationData(ConvId(conv.str), conv, None, user, ConversationType.WaitForConnection), Nil))
+    CreateConversationEvent(conv, new Date, user, ConversationResponse(ConversationData(ConvId(conv.str), conv, None, user, ConversationType.WaitForConnection), Nil))
 
   def conversationConnectRequestEvent(user: UserId, conv: RConvId) = 
-    ConnectRequestEvent(Uid(), conv, new Date, selfUser.id, "Hello Test", user, "One2One", None)
+    ConnectRequestEvent(conv, new Date, selfUser.id, "Hello Test", user, "One2One", None)
   
   def memberJoinEvent(user: UserId, conv: RConvId) =
-    MemberJoinEvent(Uid(), conv, new Date, selfUser.id, Seq(user))
+    MemberJoinEvent(conv, new Date, selfUser.id, Seq(user))
 }

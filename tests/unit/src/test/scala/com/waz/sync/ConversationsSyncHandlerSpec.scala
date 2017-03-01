@@ -125,7 +125,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
       val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group, lastEventTime = Instant.ofEpochMilli(1500)))
       val members = Seq.fill(128)(UserId())
       postConvResponse = Right(ConversationResponse(conv, members.take(64).map(u => ConversationMemberData(u, conv.id))))
-      postMemberJoinResponse = Right(Some(MemberJoinEvent(Uid(), conv.remoteId, new Date, UserId(), members.drop(64), false)))
+      postMemberJoinResponse = Right(Some(MemberJoinEvent(conv.remoteId, new Date, UserId(), members.drop(64), false)))
 
       handler.postConversation(conv.id, members, Some("Test group")).futureValue shouldEqual SyncResult.Success
 
@@ -201,7 +201,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
     scenario("Post many members") {
       val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
       val members = Seq.fill(128)(UserId())
-      postMemberJoinResponse = Right(Some(MemberJoinEvent(Uid(), conv.remoteId, new Date, UserId(), members.take(64), false)))
+      postMemberJoinResponse = Right(Some(MemberJoinEvent(conv.remoteId, new Date, UserId(), members.take(64), false)))
 
       handler.postConversationMemberJoin(conv.id, members).futureValue shouldEqual SyncResult.Success
 

@@ -69,9 +69,9 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
     val afterCleared = events.filter(e => conv.cleared.isBefore(e.time.instant))
 
-    val recalls = afterCleared collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
+    val recalls = afterCleared collect { case GenericMessageEvent(_, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
 
-    val edits = afterCleared collect { case GenericMessageEvent(_, _, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
+    val edits = afterCleared collect { case GenericMessageEvent(_, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
 
     for {
       as    <- updateAssets(afterCleared)
@@ -151,10 +151,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
 
     Future.sequence(events.collect {
-      case GenericMessageEvent(_, _, time, from, GenericMessage(id, ct)) =>
+      case GenericMessageEvent(_, time, from, GenericMessage(id, ct)) =>
         update(id, None, ct, None, None)
 
-      case GenericAssetEvent(_, convId, time, from, msg @ GenericMessage(id, ct), dataId, data) =>
+      case GenericAssetEvent(convId, time, from, msg @ GenericMessage(id, ct), dataId, data) =>
         update(id, Some(convId), ct, Some(dataId), data)
     }) map { _.flatten }
   }
@@ -174,7 +174,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
   }
 
   private def createMessage(conv: ConversationData, event: MessageEvent) = {
-    val id = MessageId.fromUid(event.id)
+    val id = MessageId()
     val convId = conv.id
 
     //v3 assets go here
@@ -232,25 +232,25 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
 
     event match {
-      case ConnectRequestEvent(_, _, time, from, text, recipient, name, email) =>
+      case ConnectRequestEvent(_, time, from, text, recipient, name, email) =>
         MessageData(id, convId, Message.Type.CONNECT_REQUEST, from, MessageData.textContent(text), recipient = Some(recipient), email = email, name = Some(name), time = time.instant, localTime = event.localTime.instant)
-      case RenameConversationEvent(_, _, time, from, name) =>
+      case RenameConversationEvent(_, time, from, name) =>
         MessageData(id, convId, Message.Type.RENAME, from, name = Some(name), time = time.instant, localTime = event.localTime.instant)
-      case MemberJoinEvent(_, _, time, from, userIds, firstEvent) =>
+      case MemberJoinEvent(_, time, from, userIds, firstEvent) =>
         MessageData(id, convId, Message.Type.MEMBER_JOIN, from, members = userIds.toSet, time = time.instant, localTime = event.localTime.instant, firstMessage = firstEvent)
-      case MemberLeaveEvent(_, _, time, from, userIds) =>
+      case MemberLeaveEvent(_, time, from, userIds) =>
         MessageData(id, convId, Message.Type.MEMBER_LEAVE, from, members = userIds.toSet, time = time.instant, localTime = event.localTime.instant)
-      case MissedCallEvent(_, _, time, from) =>
+      case MissedCallEvent(_, time, from) =>
         MessageData(id, convId, Message.Type.MISSED_CALL, from, time = time.instant, localTime = event.localTime.instant)
       case _: VoiceChannelDeactivateEvent =>
         MessageData.Empty // don't add any message, interesting case is handled with MissedCallEvent extractor
-      case OtrErrorEvent(_, _, time, from, IdentityChangedError(_, _)) =>
+      case OtrErrorEvent(_, time, from, IdentityChangedError(_, _)) =>
         MessageData (id, conv.id, Message.Type.OTR_IDENTITY_CHANGED, from, time = time.instant, localTime = event.localTime.instant)
-      case OtrErrorEvent(_, _, time, from, otrError) =>
+      case OtrErrorEvent(_, time, from, otrError) =>
         MessageData (id, conv.id, Message.Type.OTR_ERROR, from, time = time.instant, localTime = event.localTime.instant)
-      case GenericMessageEvent(_, _, time, from, proto @ GenericMessage(uid, msgContent)) =>
+      case GenericMessageEvent(_, time, from, proto @ GenericMessage(uid, msgContent)) =>
         content(MessageId(uid.str), msgContent, from, time.instant, proto)
-      case GenericAssetEvent(_, _, time, from, proto @ GenericMessage(uid, msgContent), dataId, data) =>
+      case GenericAssetEvent(_, time, from, proto @ GenericMessage(uid, msgContent), dataId, data) =>
         assetContent(MessageId(uid.str), msgContent, from, time.instant, proto)
       case _ =>
         warn(s"Unexpected event for addMessage: $event")

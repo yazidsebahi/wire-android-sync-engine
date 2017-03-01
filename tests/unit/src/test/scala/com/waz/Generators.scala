@@ -61,7 +61,7 @@ object Generators {
       resultOf(MemberJoinEvent),
       resultOf(MemberLeaveEvent),
       resultOf(RenameConversationEvent),
-      resultOf(VoiceChannelDeactivateEvent(_: Uid, _: RConvId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
+      resultOf(VoiceChannelDeactivateEvent(_: RConvId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
   }
 
   implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))

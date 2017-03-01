@@ -77,7 +77,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       insertUsers(Seq(selfUser, otherUser))
 
       val rconvId = RConvId()
-      service.dispatchEvent(UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("Hello from test"), ConnectionStatus.PendingFromOther, new Date))
+      service.dispatchEvent(UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("Hello from test"), ConnectionStatus.PendingFromOther, new Date))
 
       withDelay {
         listVisibleConvs should have size 1
@@ -104,7 +104,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       insertUsers(Seq(selfUser, otherUser))
 
       val rconvId = RConvId()
-      service.dispatchEvent(UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date))
+      service.dispatchEvent(UserConnectionEvent(rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date))
 
       withDelay {
         listVisibleConvs should have size 1
@@ -125,8 +125,8 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       msg.map(_.msgType) shouldEqual Some(Message.Type.MEMBER_JOIN)
       msg.map(_.userId) shouldEqual Some(selfUser.id)
 
-      service.dispatchEvent(MemberJoinEvent(Uid(), rconvId, new Date, otherUser.id, Seq(selfUser.id)))
-      service.dispatchEvent(UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date))
+      service.dispatchEvent(MemberJoinEvent(rconvId, new Date, otherUser.id, Seq(selfUser.id)))
+      service.dispatchEvent(UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date))
 
       withDelay {
         listVisibleConvs should have size 1
@@ -142,10 +142,10 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       val rconvId = RConvId()
       val time = System.currentTimeMillis()
       val events = Seq[Event](
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 3)),
-        MemberJoinEvent(Uid(), rconvId, new Date(time + 1), otherUser.id, Seq(selfUser.id)),
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 2)),
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time))
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 3)),
+        MemberJoinEvent(rconvId, new Date(time + 1), otherUser.id, Seq(selfUser.id)),
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 2)),
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time))
       )
 
       listVisibleConvs should have size 0
@@ -169,10 +169,10 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       val rconvId = RConvId()
       val time = System.currentTimeMillis()
       val events = Seq[Event](
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time)),
-        MemberJoinEvent(Uid(), rconvId, new Date(time + 1), otherUser.id, Seq(selfUser.id)),
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 2)),
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test1"), ConnectionStatus.Accepted, new Date(time + 3))
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time)),
+        MemberJoinEvent(rconvId, new Date(time + 1), otherUser.id, Seq(selfUser.id)),
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Accepted, new Date(time + 2)),
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test1"), ConnectionStatus.Accepted, new Date(time + 3))
       )
 
       val eventsGen = Gen.choose(1, 2).map(_ => Random.shuffle(events))
@@ -205,7 +205,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       insertUsers(Seq(selfUser, otherUser))
 
       val rconvId = RConvId()
-      service.dispatchEvent(UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date))
+      service.dispatchEvent(UserConnectionEvent(rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date))
 
       withDelay {
         listVisibleConvs should have size 1
@@ -217,7 +217,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       listVisibleConvs should have size 0
       getUser(otherUser.id).map(_.connection) shouldEqual Some(ConnectionStatus.Ignored)
 
-      service.dispatchEvent(UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Ignored, new Date))
+      service.dispatchEvent(UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Ignored, new Date))
 
       Thread.sleep(200)
       listVisibleConvs should have size 0
@@ -235,9 +235,9 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       val rconvId = RConvId()
       val time = System.currentTimeMillis()
       val events = Seq[Event](
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time)),
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Ignored, new Date(time + 1)),
-        UserConnectionEvent(Uid(), rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Ignored, new Date(time + 1))
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, None, ConnectionStatus.PendingFromOther, new Date(time)),
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Ignored, new Date(time + 1)),
+        UserConnectionEvent(rconvId, selfUser.id, otherUser.id, Some("test"), ConnectionStatus.Ignored, new Date(time + 1))
       )
 
       val eventsGen = Gen.choose(1, 2).map(_ => Random.shuffle(events))
@@ -293,7 +293,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       val conv = ConversationData(ConvId(otherUser.id.str), RConvId(), None, selfUser.id, ConversationType.OneToOne)
       insertConv(conv)
 
-      service.dispatchEvent(UserConnectionEvent(Uid(), conv.remoteId, selfUser.id, otherUser.id, None, ConnectionStatus.Blocked, new Date))
+      service.dispatchEvent(UserConnectionEvent(conv.remoteId, selfUser.id, otherUser.id, None, ConnectionStatus.Blocked, new Date))
       Thread.sleep(200)
 
       getUser(otherUser.id).map(_.connection) shouldEqual Some(ConnectionStatus.Blocked)
@@ -317,7 +317,7 @@ class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAf
       insertUsers(Seq(selfUser, otherUser.copy(connection = ConnectionStatus.Blocked)))
       val conv = insertConv(ConversationData(ConvId(otherUser.id.str), RConvId(), None, selfUser.id, ConversationType.OneToOne, hidden = true))
 
-      service.dispatchEvent(UserConnectionEvent(Uid(), conv.remoteId, selfUser.id, otherUser.id, None, ConnectionStatus.Accepted, new Date))
+      service.dispatchEvent(UserConnectionEvent(conv.remoteId, selfUser.id, otherUser.id, None, ConnectionStatus.Accepted, new Date))
       Thread.sleep(200)
 
       val conv1 = getConv(conv.id)

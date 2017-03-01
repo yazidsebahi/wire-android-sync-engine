@@ -65,5 +65,5 @@ class AccountDeletionSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     }
   }
 
-  def userDeleteEvent(user: UserId) = addNotification(UserDeleteEvent(Uid(), user))
+  def userDeleteEvent(user: UserId) = addNotification(UserDeleteEvent(user))
 }

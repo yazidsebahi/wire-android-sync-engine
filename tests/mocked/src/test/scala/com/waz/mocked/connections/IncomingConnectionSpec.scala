@@ -92,5 +92,5 @@ class IncomingConnectionSpec extends FeatureSpec with Matchers with BeforeAndAft
   override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = syncAction(user, status)
 
   def never[A] = CancellableFuture.lift(Promise[A]().future)
-  lazy val createConnectionEvent = (user: UserId, status: ConnectionStatus) => CancellableFuture.successful(Right(Some(UserConnectionEvent(Uid(), RConvId(user.str), selfUserId, user, None, ConnectionStatus.Ignored, SystemTimeline.next()))))
+  lazy val createConnectionEvent = (user: UserId, status: ConnectionStatus) => CancellableFuture.successful(Right(Some(UserConnectionEvent(RConvId(user.str), selfUserId, user, None, ConnectionStatus.Ignored, SystemTimeline.next()))))
 }

@@ -88,7 +88,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
 
   def createConversationEvent(remoteId: RConvId = RConvId()) = {
     val response = conversationResponse(ConvId(), remoteId)
-    CreateConversationEvent(Uid(), remoteId, new Date, selfUser.id, response)
+    CreateConversationEvent(remoteId, new Date, selfUser.id, response)
   }
 
   def getConv(id: ConvId) = Await.result(service.convsContent.convById(id), timeout)
@@ -150,7 +150,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
     conv.remoteId shouldEqual response.conversation.remoteId
 
-    val event = MemberJoinEvent(Uid(), conv.remoteId, new Date, selfUser.id, Seq(user1.id, user2.id), firstEvent = true)
+    val event = MemberJoinEvent(conv.remoteId, new Date, selfUser.id, Seq(user1.id, user2.id), firstEvent = true)
     service.dispatchEvent(event)
     awaitUi(250.millis)
 
@@ -228,7 +228,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     convSync shouldEqual Some(convId)
 
     val remoteId = RConvId()
-    val event = CreateConversationEvent(Uid(remoteId.str), remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, 0, Instant.now),
+    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, 0, Instant.now),
       Seq(ConversationMemberData(user1.id,ConvId(remoteId.str)), ConversationMemberData(user2.id, ConvId(remoteId.str)))))
 
     info(s"tempId: ${ConversationsService.generateTempConversationId(event.data.members.map(_.userId): _*)}")
@@ -249,7 +249,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     Await.result(service.convsUi.createGroupConversation(convId, Seq(user1.id, user2.id)), timeout)
 
     val remoteId = RConvId()
-    val event = CreateConversationEvent(Uid(remoteId.str), remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, 0, Instant.now),
+    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, 0, Instant.now),
     Seq(ConversationMemberData(user1.id,ConvId(remoteId.str)), ConversationMemberData(user2.id, ConvId(remoteId.str)))))
 
     service.dispatchEvent(event)
