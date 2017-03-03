@@ -53,7 +53,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
   val client = wrapper(new AsyncHttpClient(new AsyncServer))
 
   def apply(uri: Uri, method: String = Request.GetMethod, body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
-    debug(s"Starting request[$method]($uri) with body: '${if (body.toString.contains("password")) "<body>" else body}', headers: '$headers'")
+    debug(s"Starting request[$method]($uri) with body: $body, headers: $headers")
 
     val requestTimeout = if (method != Request.PostMethod) timeout else body match {
       case _: MultipartRequestContent => MultipartPostTimeout
@@ -114,7 +114,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       }
     }
   }
-
+  
   def close(): Unit = client foreach { _.getServer.stop() }
 
   private def buildHttpRequest(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration): AsyncHttpRequest = {

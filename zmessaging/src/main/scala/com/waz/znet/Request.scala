@@ -29,7 +29,7 @@ import com.koushikdutta.async.http.body._
 import com.koushikdutta.async.{DataEmitter, DataSink, Util}
 import com.waz.api.impl.ProgressIndicator
 import com.waz.utils
-import com.waz.utils.{ExponentialBackoff, IoUtils, JsonEncoder}
+import com.waz.utils.{ExponentialBackoff, IoUtils, JsonEncoder, returning}
 import com.waz.znet.ContentEncoder.{EmptyContentEncoder, EmptyRequestContent, RequestContent}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{ResponseBodyDecoder, Status}
@@ -128,17 +128,20 @@ object ContentEncoder {
       override def parse(emitter: DataEmitter, completed: CompletedCallback): Unit = { throw new UnsupportedOperationException("Temp request body should only be used for writing") }
       override def write(request: AsyncHttpRequest, sink: DataSink, completed: CompletedCallback): Unit = Util.writeAll(sink, data, completed)
     })
+
+    override def toString: String = {
+      val ct = Option(contentType)
+      if (ct.exists(_.contains("text")) || ct.exists(_.contains("json"))) {
+        val content = if (ct.exists(_.contains("json"))) {
+          returning(new JSONObject(new String(data, "utf8")))(json => if (json.has("password")) json.put("password", json.getString("password").map(_ => '*'))).toString
+        } else new String(data, "utf8")
+        s"${getClass.getSimpleName}: $content, $ct"
+      }
+      else s"${getClass.getSimpleName}: data len:${data.length}, $ct"
+    }
   }
 
   case class BinaryRequestContent(data: Array[Byte], contentType: String) extends ByteArrayRequestContent {
-    override def toString: String = {
-      val ct = Option(contentType)
-      if (ct.exists(_.contains("text")) || ct.exists(_.contains("json")))
-        s"BinaryRequestContent(${new String(data, "utf8")}, $ct)"
-      else
-        s"BinaryRequestContent(data len:${data.length}, $ct)"
-    }
-
     def gzipped = GzippedRequestContent(data, contentType)
   }
 
@@ -160,13 +163,7 @@ object ContentEncoder {
       super.apply(req)
     }
 
-    override def toString: String = {
-      val ct = Option(contentType)
-      if (ct.exists(_.contains("text")) || ct.exists(_.contains("json")))
-        s"GzippedRequestContent(orig size: ${bytes.length}, gzip size:${data.length}, ${new String(bytes, "utf8")}, $ct)"
-      else
-        s"GzippedRequestContent(orig size: ${bytes.length}, gzip size:${data.length}, $ct)"
-    }
+    override def toString: String = s"${super.toString}, gzip size:${data.length}"
   }
 
   case class StreamRequestContent(stream: InputStream, contentType: String, length: Int) extends RequestContent { self =>
