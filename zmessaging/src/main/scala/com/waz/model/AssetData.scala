@@ -103,8 +103,8 @@ case class AssetData(id:          AssetId               = AssetId(),
 
   def loadRequest = {
     val req = (remoteData, v2ProfileId, source, proxyPath) match {
-      case (Some(rData), _, _, _)                      => WireAssetRequest(cacheKey, id, rData, convId, mime)
-      case (_, Some(v2Id), _, _)                       => WireAssetRequest(cacheKey, id, RemoteData(Some(v2Id)), convId, mime)
+      case (Some(rData), _, _, _)                      => WireAssetRequest(cacheKey, id, rData, convId, mime, name)
+      case (_, Some(v2Id), _, _)                       => WireAssetRequest(cacheKey, id, RemoteData(Some(v2Id)), convId, mime, name)
       case (_, _, Some(uri), _) if isExternalUri(uri)  => External(cacheKey, uri)
       case (_, _, Some(uri), _)                        => LocalAssetRequest(cacheKey, uri, mime, name)
       case (_, _, None, Some(path))                    => Proxied(cacheKey, path)
