@@ -23,7 +23,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.Message
 import com.waz.content.GlobalDatabase
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
@@ -228,7 +228,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     convSync shouldEqual Some(convId)
 
     val remoteId = RConvId()
-    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, 0, Instant.now),
+    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, Some(ConversationStatus.Active)),
       Seq(ConversationMemberData(user1.id,ConvId(remoteId.str)), ConversationMemberData(user2.id, ConvId(remoteId.str)))))
 
     info(s"tempId: ${ConversationsService.generateTempConversationId(event.data.members.map(_.userId): _*)}")
@@ -249,7 +249,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     Await.result(service.convsUi.createGroupConversation(convId, Seq(user1.id, user2.id)), timeout)
 
     val remoteId = RConvId()
-    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, 0, Instant.now),
+    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, Some(ConversationStatus.Active)),
     Seq(ConversationMemberData(user1.id,ConvId(remoteId.str)), ConversationMemberData(user2.id, ConvId(remoteId.str)))))
 
     service.dispatchEvent(event)

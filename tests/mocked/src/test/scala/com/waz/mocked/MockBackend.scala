@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
@@ -146,8 +146,8 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   def removeUsersFromGroupConversation(users: Seq[UserId], id: RConvId, from: UserId = selfUserId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): MemberLeaveEvent = {
     val evt = MemberLeaveEvent(id, time.next(), from, users)
-    members(id) = members(id).map(m => if (users.contains(m.userId)) m.copy(active = false, time = evt.time.instant) else m)
-    if (users contains selfUserId) conversations(id) = conversations(id).copy(status = 1, statusTime = evt.time.instant)
+    members(id) = members(id).filter(u => users.contains(u.userId))
+    if (users contains selfUserId) conversations(id) = conversations(id).copy(status = Some(ConversationStatus.Inactive))
     addEvent(evt)
   }
 
@@ -162,7 +162,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     assert(prev.exists(_.userId == from), "only current member can add ppl to conv")
     members(convId) = prev ++ ms.map(id => ConversationMemberData(id, conv.id))
     val evt = MemberJoinEvent(convId, time.next(), from, ms)
-    if (users contains selfUserId) conversations(convId) = conversations(convId).copy(status = 0, statusTime = evt.time.instant)
+    if (users contains selfUserId) conversations(convId) = conversations(convId).copy(status = Some(ConversationStatus.Inactive))
     addEvent(evt)
     conv
   }
@@ -311,7 +311,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   override def postMemberJoin(conv: RConvId, newMembers: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
-    if ((members(conv).filter(_.active).map(_.userId) ++ newMembers).distinct.size > 128)
+    if ((members(conv).map(_.userId) ++ newMembers).distinct.size > 128)
       CancellableFuture.successful(Left(ErrorResponse(403, "Maximum number of members per conversation reached", "too-many-members")))
     else {
       members.update(conv, members(conv) ++ newMembers.map(id => ConversationMemberData(id, ConvId(conv.str))))

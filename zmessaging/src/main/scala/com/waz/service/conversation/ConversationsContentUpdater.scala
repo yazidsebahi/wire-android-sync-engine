@@ -62,10 +62,9 @@ class ConversationsContentUpdater(val storage: ConversationStorage, users: UserS
         conv
     })
 
-  def setConversationStatusInactive(id: ConvId) = storage.update(id, _.copy(status = ConversationStatus.Inactive.value))
+  def setConversationStatusInactive(id: ConvId) = storage.update(id, _.copy(status = Some(ConversationStatus.Inactive)))
 
-  def updateConversationStatus(id: ConvId, status: ConversationStatus, time: Instant) = storage.update(id, { c =>
-    if (time.isAfter(c.statusTime)) c.copy(status = status.value, statusTime = time) else c
+  def updateConversationStatus(id: ConvId, status: ConversationStatus) = storage.update(id, { _.copy(status = Some(status))
   })
 
   def updateConversationArchived(id: ConvId, archived: Boolean) = storage.update(id, { c =>

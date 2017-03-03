@@ -250,7 +250,6 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       members should have size 1
       val member = members.head
       member.userId shouldEqual user1.id
-      member.active shouldEqual true
 
       listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id)
       listMembers(conv.id).map(_.userId).toSet shouldEqual Set(selfUser.id, user1.id)
@@ -285,7 +284,6 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       Then("New member is added")
       members should have size users.size
       members.map(_.userId).toSet shouldEqual users.map(_.id).toSet
-      members.map(_.active) shouldEqual { for (_ <- 1 to users.size) yield true }
 
       listMembers(conv.id).map(_.userId).toSet shouldEqual (selfUser.id :: users.map(_.id)).toSet
       listActiveMembers(conv.id).toSet shouldEqual (selfUser.id :: users.map(_.id)).toSet

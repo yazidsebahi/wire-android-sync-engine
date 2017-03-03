@@ -18,11 +18,11 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
-import com.waz.utils.{Json, JsonDecoder, JsonEncoder}
+import com.waz.utils.{Json, JsonDecoder, JsonEncoder, RichOption}
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
@@ -117,7 +117,7 @@ object ConversationsClient {
     import com.waz.utils.JsonDecoder._
 
     def memberDecoder(convId: ConvId) = new JsonDecoder[ConversationMemberData] {
-      override def apply(implicit js: JSONObject) = ConversationMemberData('id, convId, decodeInt('status) == 0)
+      override def apply(implicit js: JSONObject) = ConversationMemberData('id, convId)
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
@@ -132,7 +132,7 @@ object ConversationsClient {
 
       ConversationData(
         ConvId(id.str), id, decodeOptString('name)(js) filterNot (_.isEmpty), decodeUserId('creator)(js), convType,
-        lastEventTime, 'status, decodeISOInstant('status_time),
+        lastEventTime, decodeOptInt('status).fold2(Some(ConversationStatus.Active), i => Some(ConversationStatus(i))),
         Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime), renameEvent = renameEvt
       )
     }
