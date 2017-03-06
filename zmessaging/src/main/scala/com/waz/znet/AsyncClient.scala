@@ -139,7 +139,6 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(0, 0, api.ProgressIndicator.State.COMPLETED))) }
       CancellableFuture.successful(Response(httpStatus, headers = new Headers(response.headers())))
     } else {
-      debug(s"waiting for content from $uri")
 
       val p = Promise[Response]()
       val consumer = decoder(contentType, contentLength)
@@ -156,7 +155,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
             case Failure(t) =>
               progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(0, contentLength, api.ProgressIndicator.State.FAILED))) }
-              Success(Response(Response.InternalError(s"Response body consumer failed for request: $uri", Some(t), Some(httpStatus))))
+              Success(Response(Response.InternalError(s"Response body consumer failed for request: '$uri'", Some(t), Some(httpStatus))))
           }
         )
       }

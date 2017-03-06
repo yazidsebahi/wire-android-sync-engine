@@ -121,7 +121,9 @@ class ZNetClient(credentials: CredentialsHandler,
         ongoing += handle.id -> handle
 
         val request: Request[_] = handle.request
+
         val uri = request.resourcePath.map(path => baseUri.buildUpon().encodedPath(path).build()).orElse(request.absoluteUri).get
+
         val future =
           if (request.requiresAuthentication) {
             CancellableFuture.lift(auth.currentToken()) flatMap {
@@ -245,8 +247,8 @@ object ZNetClient {
     case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
       warn(s"Error response to $name query: ${ErrorResponse(code, msg, label)}")
       Left(ErrorResponse(code, msg, label))
-    case resp @ Response(ErrorStatus(), _, _) =>
-      warn(s"$name query failed: $resp")
+    case resp @ Response(ErrorStatus(), body, headers) =>
+      warn(s"$name query failed: $resp, body: $body, headers: $headers")
       Left(ErrorResponse(resp.status.status, resp.toString, "internal-error"))
     case resp @ Response(_, _, _) =>
       error(s"Unexpected response to $name query: $resp")
