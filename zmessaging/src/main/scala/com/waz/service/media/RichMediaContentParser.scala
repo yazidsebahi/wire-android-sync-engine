@@ -25,6 +25,7 @@ import com.waz.ZLog._
 import com.waz.api.Message.Part
 import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
+import com.waz.sync.client.{SoundCloudClient, SpotifyClient, YouTubeClient}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -37,12 +38,10 @@ class RichMediaContentParser {
 
   def findMatches(content: String, weblinkEnabled: Boolean = false) = {
 
-    val knownDomains = Map(
-      "youtu.be" -> YOUTUBE,
-      "youtube.com" -> YOUTUBE,
-      "soundcloud.com" -> SOUNDCLOUD,
-      "open.spotify.com" -> SPOTIFY
-    )
+    val knownDomains = (YouTubeClient.domainNames.map(_ -> YOUTUBE) ++
+                        SoundCloudClient.domainNames.map(_ -> SOUNDCLOUD) ++
+                        SpotifyClient.domainNames.map(_ -> SPOTIFY)
+                        ).toMap
 
     def validate(content: String, uri: Uri, tpe: Part.Type): Boolean = tpe match {
       case YOUTUBE     => youtubeVideoId(uri).isDefined
@@ -53,11 +52,11 @@ class RichMediaContentParser {
       case _           => false
     }
 
-    def matchDomain(host: String): Part.Type = knownDomains.getOrElse(host, {
+    def matchDomain(host: String): Part.Type = knownDomains.find(entry => host.contains(entry._1)).getOrElse(host, {
       val dot = host.indexOf('.')
       if (dot >= 0) matchDomain(host.substring(dot + 1))
       else WEB_LINK
-    })
+    })._2
 
     def uriAndType(content: String): Option[Part.Type] = {
       val uri = parseUriWithScheme(content)

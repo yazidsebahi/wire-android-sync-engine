@@ -153,8 +153,15 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
 
   val Empty = apply(Message.Part.Type.TEXT, "")
 
-  def apply(tpe: Message.Part.Type, content: String, openGraph: Option[OpenGraphData] = None, asset: Option[AssetId] = None, width: Int = 0, height: Int = 0, syncNeeded: Boolean = false, mentions: Map[UserId, String] = Map.empty): MessageContent =
+  def apply(tpe: Message.Part.Type,
+            content: String,
+            openGraph: Option[OpenGraphData] = None,
+            asset: Option[AssetId] = None,
+            width: Int = 0, height: Int = 0,
+            syncNeeded: Boolean = false,
+            mentions: Map[UserId, String] = Map.empty): MessageContent = {
     MessageContent(tpe, content, emptyMediaAsset(tpe), openGraph, asset, width, height, syncNeeded, mentions)
+  }
 
   def emptyMediaAsset(tpe: Message.Part.Type) =
     if (tpe == Message.Part.Type.SPOTIFY || tpe == Message.Part.Type.SOUNDCLOUD || tpe == Message.Part.Type.YOUTUBE) Some(MediaAssetData.empty(tpe)) else None
