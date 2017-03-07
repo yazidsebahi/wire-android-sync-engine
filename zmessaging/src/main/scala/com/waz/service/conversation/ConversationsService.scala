@@ -81,7 +81,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     case ErrorData(_, ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION, userIds, _, Some(convId), _, _, _, _) => Future.successful(())
     case ErrorData(_, ErrorType.CANNOT_ADD_USER_TO_FULL_CONVERSATION, userIds, _, Some(convId), _, _, _, _) => Future.successful(())
     case ErrorData(_, ErrorType.CANNOT_SEND_MESSAGE_TO_UNVERIFIED_CONVERSATION, _, _, Some(conv), _, _, _, _) =>
-      convsStorage.update(conv, { c => c.copy(verified = if (c.verified == UNVERIFIED) UNKNOWN else c.verified) })
+      convsStorage.setUnknownVerification(conv)
   }
 
   private def scheduleSlowSync() =
