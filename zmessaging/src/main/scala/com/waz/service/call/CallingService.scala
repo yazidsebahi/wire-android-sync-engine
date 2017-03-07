@@ -204,9 +204,9 @@ class CallingService(context:             Context,
     }
   }
 
-  def retryCallMessage(): Unit = currentCall.head.map(info => (info.convId, info.outstandingMsg) match {
-    case (Some(cId), Some((msg, ctx))) =>
-      convs.storage.setUnknownVerification(cId).map(_ => sendCallMessage(cId, msg, ctx))
+  def continueDegradedCall(): Unit = currentCall.head.map(info => (info.convId, info.outstandingMsg, info.state) match {
+    case (Some(cId), Some((msg, ctx)), _) => convs.storage.setUnknownVerification(cId).map(_ => sendCallMessage(cId, msg, ctx))
+    case (Some(cId), None, OTHER_CALLING) => convs.storage.setUnknownVerification(cId).map(_ => acceptCall(cId))
     case _ => error(s"Tried resending message on invalid info: ${info.convId} in state ${info.state} with msg: ${info.outstandingMsg}")
   })
 
