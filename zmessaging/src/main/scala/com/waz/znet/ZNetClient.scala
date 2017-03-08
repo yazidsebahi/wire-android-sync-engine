@@ -247,8 +247,8 @@ object ZNetClient {
     case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
       warn(s"Error response to $name query: ${ErrorResponse(code, msg, label)}")
       Left(ErrorResponse(code, msg, label))
-    case resp @ Response(ErrorStatus(), body, headers) =>
-      warn(s"$name query failed: $resp, body: $body, headers: $headers")
+    case resp @ Response(ErrorStatus(), _, _) =>
+      warn(s"$name query failed: $resp")
       Left(ErrorResponse(resp.status.status, resp.toString, "internal-error"))
     case resp @ Response(_, _, _) =>
       error(s"Unexpected response to $name query: $resp")
