@@ -21,18 +21,20 @@ import android.content.Intent
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.model.UserId
+import com.waz.model.{Uid, UserId}
 import com.waz.service.ZMessaging
 import com.waz.service.push.GcmGlobalService.GcmSenderId
 import com.waz.sync.client.PushNotification
 import com.waz.threading.Threading
-import com.waz.utils.{LoggedTry, TimedWakeLock}
-import com.waz.zms.GcmHandlerService.Notification.{EncryptedData, Unencrypted}
+import com.waz.utils.{JsonDecoder, LoggedTry, TimedWakeLock}
+import com.waz.zms.GcmHandlerService.Notification.{EncryptedData, LargeNotification, Unencrypted}
+import org.json
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.Try
 
 class GcmHandlerService extends FutureService with ZMessagingService {
   import Threading.Implicits.Background
@@ -49,6 +51,8 @@ class GcmHandlerService extends FutureService with ZMessagingService {
 
     verbose(s"onIntent with extras: $extrasToString")
 
+    //TODO we no longer rely on the content of GCM notifications - we could get rid of this decryption since we do it later on fetch anyway.
+    //The tricky thing is that we rely on the event time (for conv events) in order to determine if we're missing GCM notifications or not...
     def getNotification = Future {
       intent match {
         case FromExtra(from) if from != gcm.gcmSenderId =>
@@ -58,6 +62,8 @@ class GcmHandlerService extends FutureService with ZMessagingService {
           Some(EncryptedData(content, mac))
         case NotificationForUser(notification, user) =>
           Some(Unencrypted(notification, user))
+        case LargeGcmNotification(id) =>
+          Some(LargeNotification(id))
         case  _ =>
           error(s"Received GCM notification, but some required extra field is missing, intent extras: $extrasToString")
           None
@@ -81,18 +87,24 @@ class GcmHandlerService extends FutureService with ZMessagingService {
     getNotification flatMap {
       case Some(EncryptedData(content, mac)) =>
         decryptNotification(content, mac) flatMap {
-          case Some((zms, notification)) => zms.gcm.addNotificationToProcess(notification)
+          case Some((zms, notification)) => zms.gcm.addNotificationToProcess(notification.id, Some(notification))
           case None => Future.successful(())
         }
       case Some(Unencrypted(notification, userId)) =>
         accounts.getCurrentZms flatMap {
           case Some(zms) if zms.selfUserId == userId =>
-            zms.gcm.addNotificationToProcess(notification)
+            zms.gcm.addNotificationToProcess(notification.id, Some(notification))
           case Some(zms) =>
             warn(s"received notification for wrong user: $extrasToString")
             Future.successful(())
           case None =>
             Future.successful(())
+        }
+      case Some(LargeNotification(nId)) =>
+        warn("Received large GCM notification - need to trigger fetch")
+        accounts.getCurrentZms flatMap {
+          case Some(zms) => zms.gcm.addNotificationToProcess(nId)
+          case None => Future.successful({})
         }
       case None =>
         Future.successful(())
@@ -128,6 +140,10 @@ object GcmHandlerService {
       }
   }
 
+  object LargeGcmNotification {
+    def unapply(intent: Intent): Option[Uid] = Option(intent.getStringExtra(ContentExtra)).flatMap(s => Try(JsonDecoder.decodeUid('id)(new json.JSONObject(s))).toOption)
+  }
+
   object EncryptedGcm {
     def unapply(js: JSONObject): Option[PushNotification] = LoggedTry.local { PushNotification.NotificationDecoder(js.getJSONObject("data")) }.toOption
   }
@@ -136,5 +152,6 @@ object GcmHandlerService {
   object Notification {
     case class EncryptedData(data: Array[Byte], mac: Array[Byte]) extends Notification
     case class Unencrypted(notification: PushNotification, userId: UserId) extends Notification
+    case class LargeNotification(id: Uid) extends Notification
   }
 }

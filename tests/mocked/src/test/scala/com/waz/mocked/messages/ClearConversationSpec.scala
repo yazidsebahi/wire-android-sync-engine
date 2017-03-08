@@ -37,7 +37,6 @@ import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Inside, Matchers}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class ClearConversationSpec extends FeatureSpec with Matchers with Inside with BeforeAndAfterAll with MockedClientApiSpec with MockBackend with RobolectricUtils {
   implicit def pushing = PushBehaviour.Push
 

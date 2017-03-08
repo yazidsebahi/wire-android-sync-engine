@@ -45,7 +45,6 @@ import org.scalatest._
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class MessageReactionsSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with OptionValues with Inspectors with ProvisionedApiSpec with ThreadActorSpec { test =>
 
   scenario("Initial sync") {

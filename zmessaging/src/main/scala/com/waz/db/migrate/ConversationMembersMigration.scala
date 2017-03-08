@@ -45,6 +45,22 @@ object ConversationMembersMigration {
     db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (user_id)")
   }
 
+  lazy val v82 = { implicit db: SQLiteDatabase =>
+    val table = TableDesc("ConversationMembers_tmp", Columns.v82.all)
+
+    inTransaction { tr: Transaction =>
+      db.execSQL("DROP TABLE IF EXISTS ConversationMembers_tmp")
+      db.execSQL(table.createSql)
+
+      // copy all data
+      db.execSQL("INSERT INTO ConversationMembers_tmp SELECT user_id, conv_id FROM ConversationMembers WHERE active = 1")
+
+      db.execSQL("DROP TABLE ConversationMembers")
+      db.execSQL("ALTER TABLE ConversationMembers_tmp RENAME TO ConversationMembers")
+      db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_conv on ConversationMembers (conv_id)")
+    }
+  }
+
   object Columns {
 
     object v72 {
@@ -54,6 +70,13 @@ object ConversationMembersMigration {
       val Time = timestamp('time)
 
       val all = Seq(UserId, ConvId, Active, Time)
+    }
+
+    object v82 {
+      val UserId = id[UserId]('user_id)
+      val ConvId = id[ConvId]('conv_id)
+
+      val all = Seq(UserId, ConvId)
     }
   }
 }

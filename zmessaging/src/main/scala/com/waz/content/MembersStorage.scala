@@ -25,7 +25,6 @@ import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{AggregatingSignal, Signal}
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
-import org.threeten.bp.Instant
 
 import scala.collection._
 import scala.concurrent.Future
@@ -35,55 +34,41 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
 
   def getByConv(conv: ConvId) = find(_.convId == conv, ConversationMemberDataDao.findForConv(conv)(_), identity)
 
-  def getActiveByConv(conv: ConvId) = find({ m => m.active && m.convId == conv }, ConversationMemberDataDao.findActiveForConv(conv)(_), identity)
-
   def getByUser(user: UserId) = find(_.userId == user, ConversationMemberDataDao.findForUser(user)(_), identity)
 
-  def getActiveByUser(user: UserId) = find({ m => m.active && m.userId == user }, ConversationMemberDataDao.findActiveForUser(user)(_), identity)
+  def activeMembers(conv: ConvId): Signal[Set[UserId]] = new AggregatingSignal[Seq[(UserId, Boolean)], Set[UserId]](onConvMemberChanged(conv), getActiveUsers(conv).map(_.toSet), { (current, changes) =>
+    val (active, inactive) = changes.partition(_._2)
 
-  def activeMembers(conv: ConvId): Signal[Set[UserId]] = new AggregatingSignal[Seq[ConversationMemberData], Set[UserId]](onConvMemberChanged(conv), getActiveUsers(conv).map(_.toSet), { (current, changes) =>
-    val (active, inactive) = changes.partition(_.active)
-
-    current -- inactive.map(_.userId) ++ active.map(_.userId)
+    current -- inactive.map(_._1) ++ active.map(_._1)
   })
 
-  private def onConvMemberChanged(conv: ConvId) = onChanged.map(_.filter(_.convId == conv)).filter(_.nonEmpty)
+  private def onConvMemberChanged(conv: ConvId) = onAdded.map(_.map(_.userId -> true)).union(onDeleted.map(_.map(_._1 -> false)))
 
-  def getActiveUsers(conv: ConvId): Future[Seq[UserId]] = getActiveByConv(conv) map { _.map(_.userId) }
+  def getActiveUsers(conv: ConvId): Future[Seq[UserId]] = getByConv(conv) map { _.map(_.userId) }
 
-  def getActiveConvs(user: UserId): Future[Seq[ConvId]] = getActiveByUser(user) map { _.map(_.convId) }
+  def getActiveConvs(user: UserId): Future[Seq[ConvId]] = getByUser(user) map { _.map(_.convId) }
 
-  def add(conv: ConvId, time: Instant, users: UserId*): Future[Set[ConversationMemberData]] =
+  def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]] =
     updateOrCreateAll2(users.map((_, conv)), { (k, v) =>
       v match {
-        case Some(m) if m.time.isAfter(time) => m
-        case Some(m) => m.copy(active = true, time = time)
-        case None    => ConversationMemberData(k._1, conv, active = true, time)
+        case Some(m) => m.copy()
+        case None    => ConversationMemberData(k._1, conv)
       }
     })
 
-  def remove(conv: ConvId, time: Instant, users: UserId*): Future[Seq[ConversationMemberData]] =
-    updateAll2(users.map(_ -> conv), {
-      case m if m.time.isAfter(time) => m
-      case m => m.copy(active = false, time = time)
-    }).map(_.map(_._2))
+  def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]] = {
+    getAll(users.map(_ -> conv)).flatMap(toBeRemoved => remove(users.map(_ -> conv)).map(_ => toBeRemoved.flatten))
+  }
 
-  def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]] =
-    updateOrCreateAll2(users.map(_ -> conv), { (k, v) => v.fold(ConversationMemberData(k._1, conv, active = true)){_.copy(active = true)} })
-
-  def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]] =
-    updateAll2(users.map(_ -> conv), _.copy(active = false)).map(_.map(_._2))
-
-
-  def set(conv: ConvId, time: Instant, users: Seq[UserId]): Future[Unit] = getActiveUsers(conv) flatMap { active =>
+  def set(conv: ConvId, users: Seq[UserId]): Future[Unit] = getActiveUsers(conv) flatMap { active =>
     val usersSet = users.toSet
     val toRemove = active.filterNot(usersSet)
     val toAdd = usersSet -- toRemove
 
-    remove(conv, time, toRemove: _*).zip(add(conv, time, toAdd.toSeq: _*)).map(_ => ())
+    remove(conv, toRemove: _*).zip(add(conv, toAdd.toSeq: _*)).map(_ => ())
   }
 
-  def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv) map (_.exists(_.active))
+  def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
 
   def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
 }

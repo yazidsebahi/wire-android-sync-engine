@@ -113,7 +113,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val giphyClient        = new GiphyClient(zNetClient) {}
     override lazy val userSearchClient   = new UserSearchClient(zNetClient) {
       override def graphSearch(query: SearchQuery, limit: Int) = suite.graphSearch(query, limit)
-      override def loadCommonConnections(id: UserId): ErrorOrResponse[Seq[UserSearchEntry]] = suite.loadCommonConnections(id)
     }
     override lazy val connectionsClient  = new ConnectionsClient(zNetClient) {
       override def loadConnections(start: Option[UserId], pageSize: Int): ErrorOrResponse[Seq[UserConnectionEvent]] = suite.loadConnections(start, pageSize)
@@ -121,7 +120,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm, prefs) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
 
       override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
         override def close() = dispatcher {
@@ -273,8 +272,8 @@ trait MockedClient { test: ApiSpec =>
   def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = successful(Right(IndexedSeq()))
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
-  def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(Uid(), id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
-  def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = successful(Right(Right(CallStateEvent(Uid(), id, Some(Set.empty), cause = cause))))
+  def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
+  def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = successful(Right(Right(CallStateEvent(id, Some(Set.empty), cause = cause))))
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))

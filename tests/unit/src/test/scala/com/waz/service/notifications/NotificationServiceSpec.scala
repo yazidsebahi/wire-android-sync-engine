@@ -23,17 +23,17 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.model.AssetData.RemoteData
-import com.waz.model.AssetStatus.{UploadCancelled, UploadDone}
+import com.waz.model.AssetStatus.UploadCancelled
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Asset, MsgEdit, MsgRecall, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.{LifecycleState, Timeouts, ZmsLifecycle}
+import com.waz.service.Timeouts
 import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
-import com.waz.utils.events.{EventContext, Signal, SourceSignal}
+import com.waz.utils.events.EventContext
 import com.waz.zms.GcmHandlerService.EncryptedGcm
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
@@ -84,7 +84,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Process user connection event for an unsynced user") {
       val userId = UserId(oneToOneConv.id.str)
       val convId = oneToOneConv.remoteId
-      Await.ready(zms.dispatch(UserConnectionEvent(Uid(), convId, selfUserId, userId, Some("hello"), ConnectionStatus.PendingFromOther, new Date, Some("other user")).withCurrentLocalTime()), 5.seconds)
+      Await.ready(zms.dispatch(UserConnectionEvent(convId, selfUserId, userId, Some("hello"), ConnectionStatus.PendingFromOther, new Date, Some("other user")).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
@@ -95,7 +95,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
     scenario("Process contact join event") {
       val userId = UserId()
-      Await.ready(zms.dispatch(ContactJoinEvent(Uid(), userId, "test name")), 5.seconds)
+      Await.ready(zms.dispatch(ContactJoinEvent(userId, "test name")), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
@@ -108,7 +108,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
       val userId = UserId(oneToOneConv.id.str)
       val convId = oneToOneConv.id
 
-      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), oneToOneConv.remoteId, new Date, userId, TextMessage("test name", Map(selfUserId -> "name"))).withCurrentLocalTime()), 5.seconds)
+      Await.ready(zms.dispatch(GenericMessageEvent(oneToOneConv.remoteId, new Date, userId, TextMessage("test name", Map(selfUserId -> "name"))).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
@@ -120,8 +120,8 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
     scenario("Process any asset event") {
       val userId = UserId(oneToOneConv.id.str)
       val convId = oneToOneConv.id
-      Await.ready(zms.dispatch(GenericMessageEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(AssetData(status = UploadCancelled)))).withCurrentLocalTime()), 5.seconds) // this should not generate a notification
-      Await.ready(zms.dispatch(GenericAssetEvent(Uid(), oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(AssetData().copyWithRemoteData(RemoteData(Some(RAssetId()), None, Some(AESKey()), Some(Sha256("sha")))))), RAssetId(), None).withCurrentLocalTime()), 5.seconds)
+      Await.ready(zms.dispatch(GenericMessageEvent(oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(AssetData(status = UploadCancelled)))).withCurrentLocalTime()), 5.seconds) // this should not generate a notification
+      Await.ready(zms.dispatch(GenericAssetEvent(oneToOneConv.remoteId, new Date, userId, GenericMessage(MessageId().uid, Asset(AssetData().copyWithRemoteData(RemoteData(Some(RAssetId()), None, Some(AESKey()), Some(Sha256("sha")))))), RAssetId(), None).withCurrentLocalTime()), 5.seconds)
 
       withDelay {
         currentNotifications should beMatching {
@@ -202,7 +202,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
         currentNotifications should have size 1
       }
 
-      zms.dispatch(GenericMessageEvent(Uid(), groupConv.remoteId, new Date(), user, GenericMessage(Uid(), MsgRecall(MessageId(id.str)))).withCurrentLocalTime())
+      zms.dispatch(GenericMessageEvent(groupConv.remoteId, new Date(), user, GenericMessage(Uid(), MsgRecall(MessageId(id.str)))).withCurrentLocalTime())
 
       withDelay {
         currentNotifications should have size 0
@@ -221,7 +221,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
         currentNotifications should have size 1
       }
 
-      zms.dispatch(GenericMessageEvent(Uid(), groupConv.remoteId, new Date(), user, GenericMessage(Uid(), MsgEdit(MessageId(id.str), Text("updated")))).withCurrentLocalTime())
+      zms.dispatch(GenericMessageEvent(groupConv.remoteId, new Date(), user, GenericMessage(Uid(), MsgEdit(MessageId(id.str), Text("updated")))).withCurrentLocalTime())
 
       withDelay {
         currentNotifications should have size 1

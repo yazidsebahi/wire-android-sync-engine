@@ -28,7 +28,6 @@ import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class AccountDeletionSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with OptionValues with MockBackend with MockedClientApiSpec {
   import DefaultPushBehaviour.Implicit
 
@@ -66,5 +65,5 @@ class AccountDeletionSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     }
   }
 
-  def userDeleteEvent(user: UserId) = addNotification(UserDeleteEvent(Uid(), user))
+  def userDeleteEvent(user: UserId) = addNotification(UserDeleteEvent(user))
 }

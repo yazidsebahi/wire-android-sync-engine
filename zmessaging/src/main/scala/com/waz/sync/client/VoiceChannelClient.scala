@@ -35,7 +35,7 @@ class VoiceChannelClient(netClient: ZNetClient) {
   private implicit val logTag: LogTag = logTagFor[VoiceChannelClient]
 
   def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = netClient.withErrorHandling(s"loadCallState($id)", Request.Get(callStatePath(id))) {
-    case Response(SuccessHttpStatus(), CallState(device, participants, cause, s, idx), _) => CallStateEvent(Uid(), id, Some(participants), Some(device), cause, s, idx)
+    case Response(SuccessHttpStatus(), CallState(device, participants, cause, s, idx), _) => CallStateEvent(id, Some(participants), Some(device), cause, s, idx)
   }
 
   def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = {
@@ -44,7 +44,7 @@ class VoiceChannelClient(netClient: ZNetClient) {
       o.put("cause", mapCauseToPermittedBackendValues(cause).asJson)
     }
     netClient.withErrorHandling("updateSelfCallState", Request.Put(callStatePath(id), payload)) {
-      case Response(SuccessHttpStatus(), CallState(d, p, c, s, idx), _) => Right(CallStateEvent(Uid(), id, Some(p), Some(d), c, s, idx))
+      case Response(SuccessHttpStatus(), CallState(d, p, c, s, idx), _) => Right(CallStateEvent(id, Some(p), Some(d), c, s, idx))
       case Response(status, JoinCallFailed(label, maxJoined, memberCount, maxMembers), _) if status.status == 409 && deviceState.joined => Left(JoinCallFailed(label, maxJoined, memberCount, maxMembers))
     }
   }

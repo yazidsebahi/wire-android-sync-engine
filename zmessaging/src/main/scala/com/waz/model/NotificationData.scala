@@ -42,7 +42,7 @@ object NotificationData {
   implicit lazy val Decoder: JsonDecoder[NotificationData] = new JsonDecoder[NotificationData] {
     import JsonDecoder._
 
-    override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id), 'message, 'conv, 'user,
+    override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id: String), 'message, 'conv, 'user,
       NotificationCodec.decode('msgType), 'time, 'userName, 'ephemeral,
       decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage), 'hasBeenDisplayed)
   }

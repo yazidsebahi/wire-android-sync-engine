@@ -18,8 +18,6 @@
 package com.waz.service.call
 
 
-import java.util.Date
-
 import android.content.Context
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
@@ -37,10 +35,10 @@ import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
-import com.waz.service.{EventScheduler, MediaManagerService}
+import com.waz.service.{ErrorsService, EventScheduler, MediaManagerService}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{EventContext, EventStream, Signal}
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.jna.{Size_t, Uint32_t}
 import com.waz.utils.{RichDate, RichInstant, returning}
 import com.waz.zms.CallService
@@ -63,7 +61,8 @@ class CallingService(context:             Context,
                      messagesService:     MessagesService,
                      mediaManagerService: MediaManagerService,
                      pushService:         PushService,
-                     callLogService:      CallLogService) {
+                     callLogService:      CallLogService,
+                     errors:              ErrorsService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -76,8 +75,6 @@ class CallingService(context:             Context,
   val currentCall = Signal(IdleCall)
 
   val requestedCallVersion = Signal(-1)
-
-  private val response = EventStream[(Either[ErrorResponse, Date], Pointer)]()
 
   currentCall.onChanged { i =>
     verbose(s"Calling information changed: $i")
@@ -99,10 +96,9 @@ class CallingService(context:             Context,
       },
       new SendHandler {
         override def invoke(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int = {
-          withConversationFromPointer(convId) {
-            val msg = data.getString(0, "UTF-8")
-            verbose(s"Sending msg on behalf of avs: convId: $convId, userId: $userId, clientId: $clientId, msg: $msg")
-            otrSyncHandler.postOtrMessage(_, GenericMessage(Uid(), GenericContent.Calling(msg))).map { case (resp) => response ! (resp, ctx) }
+          val msg = data.getString(0, "UTF-8") //be sure to fetch the message on the callback thread!
+          withConversationFromPointer(convId) { conv =>
+            sendCallMessage(conv.id, GenericMessage(Uid(), GenericContent.Calling(msg)), ctx)
           }
           0
         }
@@ -168,10 +164,6 @@ class CallingService(context:             Context,
     error("Error initialising calling v3", e)
   }
 
-  response {
-    case (resp, ctx) => init.foreach { _ => Calling.wcall_resp(resp.fold(_.code, _ => 200), resp.fold(_.message, _ => ""), ctx) }
-  }
-
   def startCall(convId: ConvId, isVideo: Boolean = false): Unit = withConvWhenReady(convId) { conv =>
     membersStorage.getByConv(conv.id).map { members =>
       verbose(s"startCall convId: $convId, isVideo: $isVideo")
@@ -209,6 +201,28 @@ class CallingService(context:             Context,
         Calling.wcall_end(conv.remoteId.str)
         call.copy(hangupRequested = true)
       }
+    }
+  }
+
+  def continueDegradedCall(): Unit = currentCall.head.map(info => (info.convId, info.outstandingMsg, info.state) match {
+    case (Some(cId), Some((msg, ctx)), _) => convs.storage.setUnknownVerification(cId).map(_ => sendCallMessage(cId, msg, ctx))
+    case (Some(cId), None, OTHER_CALLING) => convs.storage.setUnknownVerification(cId).map(_ => acceptCall(cId))
+    case _ => error(s"Tried resending message on invalid info: ${info.convId} in state ${info.state} with msg: ${info.outstandingMsg}")
+  })
+
+  private def sendCallMessage(convId: ConvId, msg: GenericMessage, ctx: Pointer): Unit = withConvWhenReady(convId) { conv =>
+    verbose(s"Sending msg on behalf of avs: convId: $convId, msg: $msg")
+    otrSyncHandler.postOtrMessage(conv, msg).map {
+      case Right(_) =>
+        currentCall.mutate(_.copy(outstandingMsg = None))
+        init.map(_ => Calling.wcall_resp(200, "", ctx))
+      case Left(ErrorResponse.Unverified) =>
+        warn(s"Conversation degraded, delay sending message on behalf of AVS")
+        //TODO need to handle degrading of conversation during a call
+        //Currently, the call will just time out...
+        currentCall.mutate(_.copy(outstandingMsg = Some(msg, ctx)))
+      case Left(ErrorResponse(code, errorMsg, label)) =>
+        init.map(_ => Calling.wcall_resp(code, errorMsg, ctx))
     }
   }
 

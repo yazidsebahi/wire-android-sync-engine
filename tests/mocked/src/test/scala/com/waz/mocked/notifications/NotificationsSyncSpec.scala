@@ -142,7 +142,7 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
     }
 
     scenario("generate invalid notifications") {
-      addNotification(MemberUpdateEvent(Uid(), RConvId(), new Date, selfUserId, ConversationState()))
+      addNotification(MemberUpdateEvent(RConvId(), new Date, selfUserId, ConversationState()))
       addGroupConversation(Seq(UserId(), UserId()), time = SystemTimeline)
     }
 

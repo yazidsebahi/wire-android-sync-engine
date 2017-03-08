@@ -80,32 +80,32 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
 
   private def collectEvents(clientId: ClientId, events: Vector[Event]): Future[Vector[Event]] =
     Future.traverse(events) {
-      case ev @ OtrMessageEvent(id, conv, time, from, sender, `clientId`, data, extData) =>
+      case ev @ OtrMessageEvent(conv, time, from, sender, `clientId`, data, extData) =>
         decryptOtrEvent(ev) map {
           case Left(Duplicate) => None
-          case Left(error) => Some(OtrErrorEvent(id, conv, time, from, error))
+          case Left(error) => Some(OtrErrorEvent(conv, time, from, error))
           case Right(GenericMessage(msgId, External(key, sha))) =>
             decodeExternal(key, Some(sha), extData) match {
               case None =>
                 error(s"External message could not be decoded External($key, $sha), data: $extData")
-                Some(OtrErrorEvent(id, conv, time, from, DecryptionError("symmetric decryption failed", from, sender)))
+                Some(OtrErrorEvent(conv, time, from, DecryptionError("symmetric decryption failed", from, sender)))
               case Some(extMsg) =>
-                Some(GenericMessageEvent(id, conv, time, from, extMsg).withLocalTime(ev.localTime))
+                Some(GenericMessageEvent(conv, time, from, extMsg).withLocalTime(ev.localTime))
             }
           case Right(GenericMessage(mId, SessionReset)) if metadata.internalBuild => // display session reset notifications in internal build
-             Some(GenericMessageEvent(id, conv, time, from, GenericMessage(mId, Text("System msg: session reset", Map.empty, Nil))))
+             Some(GenericMessageEvent(conv, time, from, GenericMessage(mId, Text("System msg: session reset", Map.empty, Nil))))
           case Right(GenericMessage(mId, SessionReset)) => None // ignore session reset notifications
           case Right(GenericMessage(mId, Calling(content))) =>
-            Some(CallMessageEvent(id, conv, time, from, sender, content)) //call messages need sender client id
+            Some(CallMessageEvent(conv, time, from, sender, content)) //call messages need sender client id
           case Right(msg) =>
-            Some(GenericMessageEvent(id, conv, time, from, msg).withLocalTime(ev.localTime))
+            Some(GenericMessageEvent(conv, time, from, msg).withLocalTime(ev.localTime))
         }
 
-      case ev @ OtrAssetEvent(_, conv, time, from, sender, `clientId`, dataId, _, data) =>
+      case ev @ OtrAssetEvent(conv, time, from, sender, `clientId`, dataId, _, data) =>
         decryptOtrEvent(ev) map {
           case Left(Duplicate) => None
-          case Left(error) => Some(OtrErrorEvent(ev.id, conv, time, from, error))
-          case Right(msg) => Some(GenericAssetEvent(ev.id, conv, time, from, msg, dataId, data).withLocalTime(ev.localTime))
+          case Left(error) => Some(OtrErrorEvent(conv, time, from, error))
+          case Right(msg) => Some(GenericAssetEvent(conv, time, from, msg, dataId, data).withLocalTime(ev.localTime))
         }
       case ev: OtrEvent if ev.recipient != clientId =>
         verbose(s"Skipping otr event not intended for us: $ev")

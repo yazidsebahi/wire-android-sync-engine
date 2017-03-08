@@ -26,8 +26,10 @@ import com.waz.model.otr.ClientId
 import com.waz.service.LifecycleState._
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, EventStream, Signal}
+import com.waz.znet.WebSocketClient.Disconnect
 import com.waz.znet.{WebSocketClient, ZNetClient}
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -39,8 +41,7 @@ class WebSocketClientService(context: Context,
                              backend: BackendConfig,
                              clientId: ClientId,
                              timeouts: Timeouts,
-                             gcmService: IGcmService,
-                             prefs: PreferenceService) {
+                             gcmService: IGcmService) {
   import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -75,7 +76,6 @@ class WebSocketClientService(context: Context,
         // start android service to keep the app running while we need to be connected.
         com.waz.zms.WebSocketService(context)
       }
-      prevClient.foreach { _.scheduleRecurringPing(if (state == Active || state == UiActive) PING_INTERVAL_FOREGROUND else prefs.webSocketPingInterval) }
       prevClient
     case (false, _) =>
       debug(s"onInactive")
@@ -103,6 +103,8 @@ class WebSocketClientService(context: Context,
         Signal.future(CancellableFuture.delayed(getErrorTimeout(nm))(true)) orElse Signal.const(false)
     }
   }
+
+  val connectionStats = client collect { case Some(c) => new ConnectionStats(network, c) }
 
   def verifyConnection() =
     client.head flatMap {
@@ -136,8 +138,44 @@ class WebSocketClientService(context: Context,
 }
 
 object WebSocketClientService {
-  val PING_INTERVAL_FOREGROUND         = 30.seconds
-  val DEFAULT_PING_INTERVAL_BACKGROUND = 15.minutes
-  val MIN_PING_INTERVAL                = 15.seconds
 
+  // collects websocket connection statistics for tracking and optimal ping timeout calculation
+  class ConnectionStats(network: NetworkModeService,
+                        client: WebSocketClient) {
+
+    import com.waz.utils._
+
+    def lastReceiveTime = client.lastReceiveTime.currentValue
+
+    // last inactivity duration computed from lastReceiveTime
+    val inactiveDuration = client.lastReceiveTime.scan(Option.empty[(Instant, FiniteDuration)]) {
+      case (Some((prev, _)), time) => Some((time, prev.until(time).asScala))
+      case (_, time) => Some((time, Duration.Zero))
+    }
+
+    // maximum time between anything is received on web socket without connection being lost
+    // this gives us lower bound for ping intervals, no need to ping more often if we already know that
+    // connection is able to stay alive for some interval
+    val maxInactiveDuration = inactiveDuration.scan(Duration.Zero) {
+      case (prev, None) => prev
+      case (prev, Some((_, duration))) => prev max duration
+    }
+
+    // disconnection detected by missing Pong mean that we actually had stale connection and didn't notice it earlier
+    // that's where we loose notifications, we need to somehow limit that cases
+    val lostOnPingDuration = lostConnectionDuration(client.onConnectionLost.filter(_ == Disconnect.NoPong))
+
+    // connection was lost but we were notified about it, so we'll automatically reconnect, that's not bad
+    val aliveDuration = lostConnectionDuration(client.onConnectionLost.filter(_ != Disconnect.NoPong))
+
+    private def lostConnectionDuration(onConnectionLost: EventStream[Disconnect]) =
+      onConnectionLost map { _ =>
+        lastReceiveTime.fold(Duration.Zero) { _.until(Instant.now).asScala }
+      } filter { duration =>
+        // will only report connection lost if:
+        // - we have network (meaning that most likely disconnection is not a result of loosing internet connection)
+        // - connection was inactive for some time, we only care about idle connections, want to detect when those get closed by some router/isp
+        network.networkMode.currentValue.exists(_ != NetworkMode.OFFLINE) && duration >= PingIntervalService.MIN_PING_INTERVAL
+      }
+  }
 }

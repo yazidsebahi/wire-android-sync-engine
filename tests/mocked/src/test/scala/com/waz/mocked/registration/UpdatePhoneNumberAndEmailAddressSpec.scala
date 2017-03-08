@@ -44,7 +44,7 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
         self.accountActivated shouldEqual true       // still has a valid verified email address (the old one)
       }.soon
 
-      addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = None)))
+      addNotification(UserUpdateEvent(UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = None)))
 
       {
         self.getEmail shouldEqual "updated@test.com"
@@ -67,7 +67,7 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
         self.getPhone shouldEqual ""           // no phone number yet
       }.soon
 
-      addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = Some(PhoneNumber("12345678")))))
+      addNotification(UserUpdateEvent(UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = Some(PhoneNumber("12345678")))))
 
       {
         self.getPhone shouldEqual "12345678"
@@ -83,7 +83,7 @@ class UpdatePhoneNumberAndEmailAddressSpec extends FeatureSpec with MockedClient
         self.getPhone shouldEqual "12345678"  // not updated until verified
       }.soon
 
-      addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = Some(PhoneNumber("87654321")))))
+      addNotification(UserUpdateEvent(UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("updated@test.com")), phone = Some(PhoneNumber("87654321")))))
 
       {
         self.getPhone shouldEqual "87654321"

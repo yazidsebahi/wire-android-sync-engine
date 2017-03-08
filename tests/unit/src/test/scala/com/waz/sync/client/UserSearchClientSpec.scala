@@ -291,13 +291,6 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
       result.right.get.length should be(1)
     }
 
-    scenario("loadCommonConnectios") {
-      val client = new TestUserSearchClient(commonConnectionsResponse)
-      val result = Await.result(client.loadCommonConnections(UserId("12")), 5.seconds)
-
-      result should be('right)
-      result.right.get.length should be(8)
-    }
   }
 
   feature("Requests") {
@@ -307,14 +300,6 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
       request.httpMethod should be("GET")
       request.resourcePath should be(Some("/search/contacts?q=z&size=10&l=3&d=1"))
-    }
-
-    scenario("loadCommonConnections request") {
-      val client = new TestUserSearchClient(commonConnectionsResponse)
-      Await.result(client.loadCommonConnections(UserId("12")), 5.seconds)
-
-      request.httpMethod should be("GET")
-      request.resourcePath should be(Some("/search/common/12"))
     }
 
     scenario("request for the top people") {

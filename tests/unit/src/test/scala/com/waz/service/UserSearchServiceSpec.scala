@@ -68,11 +68,6 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
         syncRequest = Some(query)
         onSync(query).flatMap(_ => super.syncSearchQuery(query))(Threading.Background)
       }
-
-      override def syncCommonConnections(id: UserId): Future[SyncId] = {
-        commonSyncRequest = Some(id)
-        super.syncCommonConnections(id)
-      }
     }
   }
 
@@ -176,49 +171,6 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       within(1.second) {
         result.current.value should contain theSameElementsAs(ids('g, 'h, 'i))
       }
-    }
-  }
-
-  feature("Common connections") {
-    lazy val userId = users.head.id
-
-    scenario("Request sync when common connections are requested") {
-      val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(250.millis)(result.current.value shouldBe None).soon
-      commonSyncRequest shouldEqual Some(userId)
-    }
-
-    scenario("Request sync when local common connections are expired") {
-      val data = zms.commonConnections.insert(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), now - zms.timeouts.search.cacheRefreshInterval - 1.milli)).await()
-
-      val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(250.millis)(result.current.value.value shouldEqual data).soon
-      commonSyncRequest shouldEqual Some(userId)
-    }
-
-    scenario("Request sync when not enough common connections is cached") {
-      val data = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(3)(UserId()), now)).await()
-
-      val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(250.millis)(result.current.value.value shouldEqual data).soon
-      commonSyncRequest shouldEqual Some(userId)
-    }
-
-    scenario("Don't request sync when requesting top common connections are already loaded") {
-      val data = zms.commonConnections.insert(CommonConnectionsData(userId, 3, Seq.fill(3)(UserId()), now)).await()
-      val result = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(250.millis)(result.current.value.value shouldEqual data).soon
-      commonSyncRequest shouldEqual None
-
-      val data1 = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(MinCommonConnections)(UserId()), now)).await()
-      val result1 = service.commonConnections(userId, fullList = false).sink
-      forAsLongAs(250.millis)(result1.current.value.value shouldEqual data1).soon
-      commonSyncRequest shouldEqual None
-
-      val data2 = zms.commonConnections.insert(CommonConnectionsData(userId, 10, Seq.fill(10)(UserId()), now)).await()
-      val result2 = service.commonConnections(userId, fullList = true).sink
-      forAsLongAs(250.millis)(result2.current.value.value shouldEqual data2).soon
-      commonSyncRequest shouldEqual None
     }
   }
 

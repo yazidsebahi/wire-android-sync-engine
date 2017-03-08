@@ -25,7 +25,7 @@ import java.util.{Date, Locale}
 import android.net.Uri
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model.GenericContent.Text
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
@@ -61,7 +61,7 @@ object Generators {
       resultOf(MemberJoinEvent),
       resultOf(MemberLeaveEvent),
       resultOf(RenameConversationEvent),
-      resultOf(VoiceChannelDeactivateEvent(_: Uid, _: RConvId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
+      resultOf(VoiceChannelDeactivateEvent(_: RConvId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
   }
 
   implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))
@@ -81,7 +81,6 @@ object Generators {
     convType <- arbitrary[ConversationType]
     lastEventTime <- arbitrary[Instant]
     status <- arbitrary[Int]
-    statusTime <- arbitrary[Instant]
     muted <- arbitrary[Boolean]
     muteTime <- arbitrary[Instant]
     archived <- arbitrary[Boolean]
@@ -98,7 +97,7 @@ object Generators {
     renameEvent <- arbitrary[Instant]
     voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, status, statusTime, Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]
@@ -195,7 +194,6 @@ object Generators {
       arbitrary[SyncPreKeys]))
 
     implicit lazy val arbUserBasedSyncRequest: Arbitrary[RequestForUser] = Arbitrary(oneOf(
-      arbitrary[SyncCommonConnections],
       arbitrary[PostConnection],
       arbitrary[PostConnectionStatus]))
 
@@ -226,7 +224,6 @@ object Generators {
     implicit lazy val arbPostSelfSyncRequest: Arbitrary[PostSelf] = Arbitrary(resultOf(PostSelf))
     implicit lazy val arbPostConvStateSyncRequest: Arbitrary[PostConvState] = Arbitrary(resultOf(PostConvState))
     implicit lazy val arbPostTypingStateSyncRequest: Arbitrary[PostTypingState] = Arbitrary(resultOf(PostTypingState))
-    implicit lazy val arbCommonConnectionsSyncRequest: Arbitrary[SyncCommonConnections] = Arbitrary(resultOf(SyncCommonConnections))
     implicit lazy val arbPostConnectionStatusSyncRequest: Arbitrary[PostConnectionStatus] = Arbitrary(resultOf(PostConnectionStatus))
     implicit lazy val arbMessageSyncRequest: Arbitrary[PostMessage] = Arbitrary(resultOf(PostMessage))
     implicit lazy val arbMessageDelSyncRequest: Arbitrary[PostDeleted] = Arbitrary(resultOf(PostDeleted))

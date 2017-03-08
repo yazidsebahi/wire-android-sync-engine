@@ -96,7 +96,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("update knock on event") {
       val msg = knock()
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock())))
+      service.dispatchEvent(GenericMessageEvent(conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock())))
       Thread.sleep(250)
 
       val msg1 = lastMessage(conv.id)
@@ -126,7 +126,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("knock, incoming message, knock") {
       val msg = knock()
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock())))
+      service.dispatchEvent(GenericMessageEvent(conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock())))
       Thread.sleep(250)
 
       val msgId = MessageId()
@@ -143,7 +143,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
 
     scenario("knock, incoming knock, knock") {
       val msg = knock()
-      service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock())))
+      service.dispatchEvent(GenericMessageEvent(conv.remoteId, new Date, selfUser.id, GenericMessage(msg.id.uid, Knock())))
       Thread.sleep(250)
 
 
@@ -178,7 +178,7 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
     scenario("receive single knock") {
       val incoming = service.messagesStorage.getIncomingMessages
       testutils.withUpdate(incoming) {
-        service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock())).withCurrentLocalTime())
+        service.dispatchEvent(GenericMessageEvent(conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock())).withCurrentLocalTime())
       }
 
       withDelay {

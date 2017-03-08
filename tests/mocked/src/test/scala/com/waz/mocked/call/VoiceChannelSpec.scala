@@ -41,7 +41,6 @@ import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers, OptionValues, Ta
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with OptionValues with MockBackend with MockedClientApiSpec with MockedFlows with MockedMedia {
   import DefaultPushBehaviour.Implicit
 
@@ -653,7 +652,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
     scenario("First participant joins") {
       zmessaging.network.networkMode ! NetworkMode._4G
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = true, meep = true, foo = false)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = true, meep = true, foo = false)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         group.hasVoiceChannel shouldEqual true
@@ -690,7 +689,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
     scenario("Second participant joins") {
       // "foo" joins
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = true, meep = true, foo = true)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = true, meep = true, foo = true)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         groupVoice.getState shouldEqual DeviceConnected
@@ -727,7 +726,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
     scenario("Another participant leaves, call ends") {
       // "meep" leaves (and "foo" leaves by force)
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = false, meep = false, foo = false)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = false, meep = false, foo = false)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         groupVoice.getState shouldEqual Idle
@@ -745,7 +744,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     scenario("Meep initiates the call") {
       callSessionId += groupId -> CallSessionId("group-2-session-id")
 
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = false, meep = true, foo = false)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = false, meep = true, foo = false)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         groupVoice.getState shouldEqual OtherCalling
@@ -764,7 +763,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Foo joins") {
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = false, meep = true, foo = true)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = false, meep = true, foo = true)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         groupVoice.getState shouldEqual OthersConnected
@@ -813,7 +812,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Meep leaves") {
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = true, meep = false, foo = true)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = true, meep = false, foo = true)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         groupVoice.getState shouldEqual DeviceConnected
@@ -832,7 +831,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
     }
 
     scenario("Foo leaves, thus ending the call") {
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = false, meep = false, foo = false)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = false, meep = false, foo = false)), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
 
       withDelay {
         groupVoice.getState shouldEqual Idle
@@ -904,7 +903,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       callSessionId += groupId -> CallSessionId("group-4-session-id")
       setupGroupCall()
 
-      addNotification(MemberLeaveEvent(Uid(), groupId, new Date, UserId("meep"), Seq(selfId)))
+      addNotification(MemberLeaveEvent(groupId, new Date, UserId("meep"), Seq(selfId)))
       withDelay {
         group.hasVoiceChannel shouldEqual false
         groupVoice.getState shouldEqual Idle
@@ -915,13 +914,13 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
       groupVoice.join(spy.joinCallback)
       withDelay { group.hasVoiceChannel shouldEqual true }
 
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = true, meep = true, foo = false)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = true, meep = true, foo = false)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
       withDelay { idsOfAll(groupVoice.getParticipants: _*) should contain theSameElementsAs meep }
 
       establishMedia(groupId)
       withDelay { groupVoice.getState shouldEqual DeviceConnected }
 
-      addNotification(CallStateEvent(Uid(), groupId, Some(groupParticipants(self = true, meep = true, foo = true)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
+      addNotification(CallStateEvent(groupId, Some(groupParticipants(self = true, meep = true, foo = true)), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupId))))
       withDelay {
         idsOfAll(groupVoice.getParticipants: _*) should contain theSameElementsAs meepAndFoo
         groupVoice.getState shouldEqual DeviceConnected
@@ -1065,7 +1064,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
   def callStateEvent(conv: ConvData, selfJoined: Boolean = false, otherJoined: Boolean = false, device: Option[CallDeviceState] = None) =
     addNotification(CallStateEvent(
-      Uid(), conv.event.convId,
+      conv.event.convId,
       Some(Set(CallParticipant(selfId, joined = selfJoined, props = Set.empty), CallParticipant(UserId(conv.id), joined = otherJoined, props = Set.empty))),
       device, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(conv.event.convId))))
 

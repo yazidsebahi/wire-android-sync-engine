@@ -23,7 +23,7 @@ import com.waz._
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Preview
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.GenericContent.{Asset, ImageAsset, Knock}
+import com.waz.model.GenericContent.{ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.testutils._
@@ -309,26 +309,26 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   def awaitSuccess[T](op: => Future[Option[T]]): T = Await.result(op, 1.second).value
   def withConvFromStore(op: ConversationData => Unit): Unit = withDelay { op(getConv(conv.id).value) }
 
-  def memberJoin(old: Boolean = false): Unit = service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, date(old), user1.id, Seq()))
-  def memberLeave(old: Boolean = false, user: UserId = user1.id): Unit = service.dispatchEvent(MemberLeaveEvent(Uid(), conv.remoteId, date(old), user, Seq(user)))
-  def memberUpdate(): Unit = service.dispatchEvent(MemberUpdateEvent(Uid(), conv.remoteId, new Date, selfUser.id, ConversationState()))
+  def memberJoin(old: Boolean = false): Unit = service.dispatchEvent(MemberJoinEvent(conv.remoteId, date(old), user1.id, Seq()))
+  def memberLeave(old: Boolean = false, user: UserId = user1.id): Unit = service.dispatchEvent(MemberLeaveEvent(conv.remoteId, date(old), user, Seq(user)))
+  def memberUpdate(): Unit = service.dispatchEvent(MemberUpdateEvent(conv.remoteId, new Date, selfUser.id, ConversationState()))
 
-  def renameConv(old: Boolean = false): Unit = service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, date(old), user1.id, ""))
+  def renameConv(old: Boolean = false): Unit = service.dispatchEvent(RenameConversationEvent(conv.remoteId, date(old), user1.id, ""))
 
-  def knock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock())))
-  def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock())))
+  def knock(old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(conv.remoteId, date(old), user1.id, GenericMessage(Uid(), Knock())))
+  def genericKnock[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), Knock())))
 
   def sendTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, "hello"))
-  def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
+  def sendGenericTextMessage[T](old: Boolean = false): Unit = service.dispatchEvent(GenericMessageEvent(conv.remoteId, if (old) date(old) else date(old), user1.id, TextMessage("hello", Map.empty)))
 
   def sendImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(GenericAssetEvent(Uid(), conv.remoteId, date(old), selfUser.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview))))), RAssetId(), None))
+    service.dispatchEvent(GenericAssetEvent(conv.remoteId, date(old), selfUser.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview))))), RAssetId(), None))
 
   def sendGenericImageMessage[T](old: Boolean = false): Unit =
-    service.dispatchEvent(GenericMessageEvent(Uid(), conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview)))))))
+    service.dispatchEvent(GenericMessageEvent(conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview)))))))
 
-  def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(Uid(), conv.remoteId, date(old), user1.id))
-  def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), conv.remoteId, date(old), user1.id, Some("missed")))
+  def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(conv.remoteId, date(old), user1.id))
+  def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(conv.remoteId, date(old), user1.id, Some("missed")))
 
   def date(old: Boolean): Date = if (old) new Date(System.currentTimeMillis() - 100000) else new Date
 

@@ -55,9 +55,15 @@ class VerificationStateUpdater(selfUserId: UserId, usersStorage: UsersStorage, c
     } (breakOut))
   }
 
-  membersStorage.onChanged { members =>
+  membersStorage.onAdded{ members =>
     Serialized.future(SerializationKey) {
-      updateConversations(members.map(_.convId).distinct, members.map { member => member.userId -> (if (member.active) MemberAdded else Other) } (breakOut))
+      updateConversations(members.map(_.convId).distinct, members.map { member => member.userId -> MemberAdded } (breakOut))
+    }
+  }
+
+  membersStorage.onDeleted{ members =>
+    Serialized.future(SerializationKey) {
+      updateConversations(members.map(_._2).distinct, members.map { _._1 -> Other } (breakOut))
     }
   }
 

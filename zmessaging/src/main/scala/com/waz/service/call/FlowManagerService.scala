@@ -312,9 +312,7 @@ class FlowManagerService(context: Context, netClient: ZNetClient, websocket: Web
   }
 }
 
-case class AvsMetrics(protected[call] val rConvId: RConvId, private val bytes: Array[Byte]) {
-
-  def convId = rConvId.str
+case class AvsMetrics(rConvId: RConvId, private val bytes: Array[Byte]) {
 
   val json = try {
     new JSONObject(new String(bytes))

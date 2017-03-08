@@ -20,7 +20,6 @@ package com.waz.api;
 import android.os.Parcel;
 import android.os.Parcelable;
 import com.waz.service.ZMessaging$;
-import java.lang.annotation.Annotation;
 
 public interface User extends UiObservable, Parcelable {
 

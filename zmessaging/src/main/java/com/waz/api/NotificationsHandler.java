@@ -19,10 +19,6 @@ package com.waz.api;
 
 public interface NotificationsHandler {
 
-    interface NotificationsHandlerFactory {
-        TrackingEventsHandler getTrackingEventsHandler();
-    }
-
     enum NotificationType {
         CONNECT_REQUEST,
         CONNECT_ACCEPTED,

@@ -66,7 +66,6 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostConvState requests") { PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))) should beUnchangedByEncodingAndDecoding }
     scenario("PostTypingState requests") { PostTypingState(ConvId(), isTyping = true) should beUnchangedByEncodingAndDecoding }
     scenario("SyncCallState requests") { SyncCallState(ConvId(), fromFreshNotification = false) should beUnchangedByEncodingAndDecoding }
-    scenario("SyncCommonConnections requests") { SyncCommonConnections(UserId()) should beUnchangedByEncodingAndDecoding }
     scenario("DeleteGcmToken requests") { DeleteGcmToken(GcmId()) should beUnchangedByEncodingAndDecoding }
     scenario("SyncSearchQuery requests") { SyncSearchQuery(SearchQuery.Recommended("meep moop")) should beUnchangedByEncodingAndDecoding }
     scenario("PostMessage requests") { PostMessage(ConvId(), MessageId(), Instant.now()) should beUnchangedByEncodingAndDecoding }

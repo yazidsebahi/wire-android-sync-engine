@@ -163,7 +163,7 @@ class RegistrationAndLoginByPhoneSpec extends FeatureSpec with MockedClientApiSp
         self.accountActivated shouldEqual true
       }
 
-      addNotification(UserUpdateEvent(Uid(), UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("meep@moop.org")), phone = None)))
+      addNotification(UserUpdateEvent(UserInfo(UserId(self.getUser.getId), email = Some(EmailAddress("meep@moop.org")), phone = None)))
       withDelay {
         self.getEmail shouldEqual "meep@moop.org"
         self.accountActivated shouldEqual true

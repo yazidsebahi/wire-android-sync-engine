@@ -104,13 +104,21 @@ class NameUpdater(context: Context, users: UserService, usersStorage: UsersStora
       }
     }
 
-    membersStorage.onChanged { members =>
+    membersStorage.onAdded { members =>
       init map { _ =>
         val ms = members.filter(m => groupConvs(m.convId))
-        val (active, inactive) = ms.partition(_.active)
-        groupMembers = groupMembers -- inactive.map(m => m.convId -> m.userId) ++ active.map(m => m.convId -> m.userId)
+        groupMembers = groupMembers ++ ms.map(m => m.convId -> m.userId)
 
         queue.enqueue(ms.map(_.convId).distinct)
+      }
+    }
+
+    membersStorage.onDeleted { members =>
+      init map { _ =>
+        val ms = members.filter(m => groupConvs(m._2))
+        groupMembers = groupMembers -- ms.map(m => m._2 -> m._1)
+
+        queue.enqueue(ms.map(_._2).distinct)
       }
     }
   }

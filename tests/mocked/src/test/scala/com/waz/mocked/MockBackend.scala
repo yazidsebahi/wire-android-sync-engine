@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
@@ -96,30 +96,30 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   def autoConnect(uid: UserId = UserId(), time: Timeline = DefaultTimeline)(implicit p: PushBehaviour) = {
     val convId = RConvId()
-    val conn = UserConnectionEvent(Uid(), convId, selfUserId, uid, None, ConnectionStatus.Accepted, time.next())
+    val conn = UserConnectionEvent(convId, selfUserId, uid, None, ConnectionStatus.Accepted, time.next())
     connections(uid) = conn
     conversations(convId) = ConversationData(ConvId(convId.str), convId, None, selfUserId, ConversationType.OneToOne)
     members(convId) = Seq(ConversationMemberData(selfUserId, ConvId(convId.str)), ConversationMemberData(uid, ConvId(convId.str)))
     addNotification(PushNotification(Uid(), Seq(conn)))
-    addEvent(MemberJoinEvent(Uid(), convId, time.next(), selfUserId, Seq(selfUserId)))
+    addEvent(MemberJoinEvent(convId, time.next(), selfUserId, Seq(selfUserId)))
     conn
   }
 
   def addOutgoingConnectionRequest(uid: UserId = UserId(), time: Timeline = DefaultTimeline)(implicit p: PushBehaviour) = {
     val convId = RConvId()
-    val conn = UserConnectionEvent(Uid(), convId, selfUserId, uid, Some(s"Hello, let's connect $uid"), ConnectionStatus.PendingFromUser, time.next())
+    val conn = UserConnectionEvent(convId, selfUserId, uid, Some(s"Hello, let's connect $uid"), ConnectionStatus.PendingFromUser, time.next())
     val timestamp = time.next()
     connections(uid) = conn
     conversations(convId) = ConversationData(ConvId(convId.str), convId, None, selfUserId, ConversationType.WaitForConnection)
     members(convId) = Seq(ConversationMemberData(selfUserId, ConvId(convId.str)), ConversationMemberData(uid, ConvId(convId.str)))
     addNotification(PushNotification(Uid(), Seq(conn)))
-    addEvent(MemberJoinEvent(Uid(), convId, timestamp, selfUserId, Seq(selfUserId)))
-    addEvent(ConnectRequestEvent(Uid(), convId, timestamp, selfUserId, "request", uid, "name", None))
+    addEvent(MemberJoinEvent(convId, timestamp, selfUserId, Seq(selfUserId)))
+    addEvent(ConnectRequestEvent(convId, timestamp, selfUserId, "request", uid, "name", None))
     conn
   }
 
   def addIncomingConnectionRequest(uid: UserId = UserId(), convId: RConvId = RConvId(), time: Timeline = DefaultTimeline)(implicit p: PushBehaviour) = {
-    val conn = UserConnectionEvent(Uid(), convId, selfUserId, uid, Some(s"Hello, let's connect $uid"), ConnectionStatus.PendingFromOther, time.next())
+    val conn = UserConnectionEvent(convId, selfUserId, uid, Some(s"Hello, let's connect $uid"), ConnectionStatus.PendingFromOther, time.next())
     connections(uid) = conn
     addNotification(PushNotification(Uid(), Seq(conn)))
     conn
@@ -131,7 +131,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
       connections(uid) = conn.copy(status = ConnectionStatus.Accepted, lastUpdated = now)
       conversations(conn.convId) = conversations(conn.convId).copy(convType = ConversationType.OneToOne)
       addNotification(connections(uid))
-      addEvent(MemberJoinEvent(Uid(), conn.convId, now, conn.from, Seq(uid)))
+      addEvent(MemberJoinEvent(conn.convId, now, conn.from, Seq(uid)))
     }
   }
 
@@ -140,14 +140,14 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     conversations(id) = conv
     members(id) = (selfUserId +: creator +: ms).toSet.map((u: UserId) => ConversationMemberData(u, ConvId(id.str))).toSeq
     val creationTime = time.next()
-    addNotification(PushNotification(Uid(), Seq(CreateConversationEvent(Uid(), id, creationTime, creator, ConversationResponse(conv, members(id))))))
+    addNotification(PushNotification(Uid(), Seq(CreateConversationEvent(id, creationTime, creator, ConversationResponse(conv, members(id))))))
     conv
   }
 
   def removeUsersFromGroupConversation(users: Seq[UserId], id: RConvId, from: UserId = selfUserId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): MemberLeaveEvent = {
-    val evt = MemberLeaveEvent(Uid(), id, time.next(), from, users)
-    members(id) = members(id).map(m => if (users.contains(m.userId)) m.copy(active = false, time = evt.time.instant) else m)
-    if (users contains selfUserId) conversations(id) = conversations(id).copy(status = 1, statusTime = evt.time.instant)
+    val evt = MemberLeaveEvent(id, time.next(), from, users)
+    members(id) = members(id).filter(u => users.contains(u.userId))
+    if (users contains selfUserId) conversations(id) = conversations(id).copy(status = Some(ConversationStatus.Inactive))
     addEvent(evt)
   }
 
@@ -161,14 +161,14 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     val prev = members(convId)
     assert(prev.exists(_.userId == from), "only current member can add ppl to conv")
     members(convId) = prev ++ ms.map(id => ConversationMemberData(id, conv.id))
-    val evt = MemberJoinEvent(Uid(), convId, time.next(), from, ms)
-    if (users contains selfUserId) conversations(convId) = conversations(convId).copy(status = 0, statusTime = evt.time.instant)
+    val evt = MemberJoinEvent(convId, time.next(), from, ms)
+    if (users contains selfUserId) conversations(convId) = conversations(convId).copy(status = Some(ConversationStatus.Inactive))
     addEvent(evt)
     conv
   }
 
   def addLikingEvent(convId: RConvId, messageId: MessageId, action: Liking.Action, time: Timeline = DefaultTimeline, from: UserId = selfUserId)(implicit p: PushBehaviour) =
-    addEvent(GenericMessageEvent(Uid(), convId, time.next(), from, GenericMessage(Uid(), Reaction(messageId, action))))
+    addEvent(GenericMessageEvent(convId, time.next(), from, GenericMessage(Uid(), Reaction(messageId, action))))
 
   def addEvent(ev: ConversationEvent)(implicit p: PushBehaviour): ev.type = {
     require (ev match {
@@ -185,7 +185,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   def markAsRead(convId: RConvId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): GenericMessageEvent = {
     val t = time.next()
-    returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), t, selfUserId, GenericMessage(Uid(), LastRead(convId, t.instant)))) { lastRead =>
+    returning(GenericMessageEvent(RConvId(selfUserId.str), t, selfUserId, GenericMessage(Uid(), LastRead(convId, t.instant)))) { lastRead =>
       addEvent(lastRead)
       conversations(convId) = conversations(convId).copy(lastRead = t.instant)
     }
@@ -193,16 +193,16 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   def clearConversation(convId: RConvId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): GenericMessageEvent = {
     val t = conversations(convId).lastEventTime
-    returning(GenericMessageEvent(Uid(), RConvId(selfUserId.str), time.next(), selfUserId, GenericMessage(Uid(), Cleared(convId, t)))) { clearEvent =>
+    returning(GenericMessageEvent(RConvId(selfUserId.str), time.next(), selfUserId, GenericMessage(Uid(), Cleared(convId, t)))) { clearEvent =>
       addEvent(clearEvent)
-      addEvent(MemberUpdateEvent(Uid(), convId, time.next(), selfUserId, ConversationState(archived = Some(true), archiveTime = Some(t))))
+      addEvent(MemberUpdateEvent(convId, time.next(), selfUserId, ConversationState(archived = Some(true), archiveTime = Some(t))))
       conversations(convId) = conversations(convId).copy(cleared = t, archived = true, archiveTime = t, lastRead = clearEvent.time.instant)
     }
   }
 
   def archiveConversation(convId: RConvId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): MemberUpdateEvent = {
     val t = conversations(convId).lastEventTime
-    returning(MemberUpdateEvent(Uid(), convId, time.next(), selfUserId, ConversationState(archived = Some(true), archiveTime = Some(t)))) { archiveEvent =>
+    returning(MemberUpdateEvent(convId, time.next(), selfUserId, ConversationState(archived = Some(true), archiveTime = Some(t)))) { archiveEvent =>
       addEvent(archiveEvent)
       conversations(convId) = conversations(convId).copy(archived = true, archiveTime = t, lastRead = archiveEvent.time.instant)
     }
@@ -237,7 +237,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     val current = events.getOrElse(convId, Nil)
     val time = timeline.getOrElse(if (current.isEmpty) DefaultTimeline else ArtificialTimeline(Instant.ofEpochMilli(current.map(_.time).max.getTime)))
     val es = for (i <- 1 to count) yield {
-      GenericMessageEvent(Uid(), convId, time.next(), from, TextMessage(s"$msg $i", Map.empty))
+      GenericMessageEvent(convId, time.next(), from, TextMessage(s"$msg $i", Map.empty))
     }
     events(convId) = current ++: es
     addNotification(PushNotification(Uid(), es))
@@ -262,7 +262,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     users += info.id -> info
     Right(())
   })(_.onSuccess { case _ =>
-    addNotification(UserUpdateEvent(Uid(), info))(PushBehaviour.NoPush)
+    addNotification(UserUpdateEvent(info))(PushBehaviour.NoPush)
   })
 
   override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = {
@@ -285,11 +285,11 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delayed(clientDelay)(Right(searchResults(query).take(limit)))
 
   override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] =
-    CancellableFuture.delayed(clientDelay)(Right(CallStateEvent(Uid(), id, callParticipants.get(id), callDeviceState.get(id), CauseForCallStateEvent.REQUESTED, callParticipants.get(id).map(_ => callSessionId(id)))))
+    CancellableFuture.delayed(clientDelay)(Right(CallStateEvent(id, callParticipants.get(id), callDeviceState.get(id), CauseForCallStateEvent.REQUESTED, callParticipants.get(id).map(_ => callSessionId(id)))))
 
   override def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = {
     callDeviceState += id -> deviceState
-    CancellableFuture.delayed(clientDelay)(Right(Right(CallStateEvent(Uid(), id, callParticipants.get(id), Some(deviceState), cause, callParticipants.get(id).map(_ => callSessionId(id))))))
+    CancellableFuture.delayed(clientDelay)(Right(Right(CallStateEvent(id, callParticipants.get(id), Some(deviceState), cause, callParticipants.get(id).map(_ => callSessionId(id))))))
   }
 
   override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
@@ -300,7 +300,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   override def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = {
     conversations.get(convId) match {
       case Some(conv) =>
-        val event = RenameConversationEvent(Uid(), convId, SystemTimeline.next(), selfUserId, name)
+        val event = RenameConversationEvent(convId, SystemTimeline.next(), selfUserId, name)
         conversations(convId) = conv.copy(name = Some(name))
         addEvent(event)(PushBehaviour.NoPush)
 
@@ -311,11 +311,11 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   override def postMemberJoin(conv: RConvId, newMembers: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
-    if ((members(conv).filter(_.active).map(_.userId) ++ newMembers).distinct.size > 128)
+    if ((members(conv).map(_.userId) ++ newMembers).distinct.size > 128)
       CancellableFuture.successful(Left(ErrorResponse(403, "Maximum number of members per conversation reached", "too-many-members")))
     else {
       members.update(conv, members(conv) ++ newMembers.map(id => ConversationMemberData(id, ConvId(conv.str))))
-      val evt = MemberJoinEvent(Uid(), conv, SystemTimeline.next(), selfUserId, newMembers)
+      val evt = MemberJoinEvent(conv, SystemTimeline.next(), selfUserId, newMembers)
       addEvent(evt)(PushBehaviour.NoPush)
       CancellableFuture.delayed(clientDelay)(Right(Some(evt)))
     }
@@ -333,7 +333,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
       muted = updated.muted.getOrElse(previous.muted),
       muteTime = updated.muteTime.getOrElse(previous.muteTime)))
 
-    addEvent(MemberUpdateEvent(Uid(), convId, SystemTimeline.next(), selfUserId, updated))(PushBehaviour.NoPush)
+    addEvent(MemberUpdateEvent(convId, SystemTimeline.next(), selfUserId, updated))(PushBehaviour.NoPush)
     CancellableFuture.delayed(clientDelay)(Right(true))
   }
 

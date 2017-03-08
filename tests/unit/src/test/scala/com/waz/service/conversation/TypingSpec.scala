@@ -176,7 +176,7 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
   def stopTyping(user: UserData, time: Date = new Date, notify: Boolean = true): Unit = setTypingState(user, time, isTyping = false, notify)
 
   def setTypingState(user: UserData, time: Date, isTyping: Boolean, notify: Boolean) = {
-    val event = TypingEvent(Uid(), conv.remoteId, time, user.id, isTyping = isTyping)
+    val event = TypingEvent(conv.remoteId, time, user.id, isTyping = isTyping)
     event.localTime = time
     var notified = false
     val sub = service.onTypingChanged { _ => notified = true } (EventContext.Global)

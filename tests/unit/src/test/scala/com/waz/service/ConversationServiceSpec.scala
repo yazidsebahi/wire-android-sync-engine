@@ -148,7 +148,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val messagesCount = listMessages(conv.id).size
 
       When("rename event is received on push channel")
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "new name"))
+      service.dispatchEvent(RenameConversationEvent(conv.remoteId, new Date(), selfUser.id, "new name"))
 
       Thread.sleep(500) // push event is handled async so we need to give it some time
 
@@ -250,7 +250,6 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       members should have size 1
       val member = members.head
       member.userId shouldEqual user1.id
-      member.active shouldEqual true
 
       listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id)
       listMembers(conv.id).map(_.userId).toSet shouldEqual Set(selfUser.id, user1.id)
@@ -263,7 +262,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convMemberJoinSync shouldEqual Some((conv.id, Seq(user1.id)))
 
       When("push notification is received for member join")
-      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, new Date(), selfUser.id, Seq(user1.id)))
+      service.dispatchEvent(MemberJoinEvent(conv.remoteId, new Date(), selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 
       Then("message is updated")
@@ -285,7 +284,6 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       Then("New member is added")
       members should have size users.size
       members.map(_.userId).toSet shouldEqual users.map(_.id).toSet
-      members.map(_.active) shouldEqual { for (_ <- 1 to users.size) yield true }
 
       listMembers(conv.id).map(_.userId).toSet shouldEqual (selfUser.id :: users.map(_.id)).toSet
       listActiveMembers(conv.id).toSet shouldEqual (selfUser.id :: users.map(_.id)).toSet
@@ -298,7 +296,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convMemberJoinSync shouldEqual Some((conv.id, users.map(_.id)))
 
       When("push notification is received for member join")
-      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, new Date(), selfUser.id, users.map(_.id)))
+      service.dispatchEvent(MemberJoinEvent(conv.remoteId, new Date(), selfUser.id, users.map(_.id)))
       Thread.sleep(500)
 
       Then("message is updated")
@@ -328,7 +326,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
       When("push notification is received for only one user")
       Thread.sleep(500)
-      service.dispatchEvent(MemberJoinEvent(Uid(), conv.remoteId, (msg.time - 1.milli).javaDate, selfUser.id, Seq(user1.id)))
+      service.dispatchEvent(MemberJoinEvent(conv.remoteId, (msg.time - 1.milli).javaDate, selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 
       Then("message is split in two, with first one updated to push result")
@@ -341,7 +339,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
     scenario("Create conversation on incoming member join event containing self") {
       deleteAllConvs()
       listConvs should have size 0
-      val ev = MemberJoinEvent(Uid(), RConvId(), new Date, user1.id, Seq(selfUser.id))
+      val ev = MemberJoinEvent(RConvId(), new Date, user1.id, Seq(selfUser.id))
       Await.result(conversations.processConversationEvent(ev, selfUser.id), timeout)
 
       getConv(ev.convId) should be('defined)
@@ -358,7 +356,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("Create conversation on incoming member join event containing self and other users") {
       deleteAllConvs()
-      val ev = MemberJoinEvent(Uid(), RConvId(), new Date, user1.id, Seq(user2.id, selfUser.id))
+      val ev = MemberJoinEvent(RConvId(), new Date, user1.id, Seq(user2.id, selfUser.id))
       Await.result(conversations.processConversationEvent(ev, selfUser.id), timeout)
 
       getConv(ev.convId) should be('defined)
@@ -474,7 +472,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       convMemberLeaveSync shouldEqual Some((conv.id, user1.id))
 
       When("push notification is received for member leave")
-      service.dispatchEvent(MemberLeaveEvent(Uid(), conv.remoteId, new Date(), selfUser.id, Seq(user1.id)))
+      service.dispatchEvent(MemberLeaveEvent(conv.remoteId, new Date(), selfUser.id, Seq(user1.id)))
       Thread.sleep(500)
 
       Then("message is updated")
@@ -555,7 +553,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     def createConversationEvent = {
       val response = conversationResponse
-      CreateConversationEvent(Uid(), response.conversation.remoteId, new Date, selfUser.id, response)
+      CreateConversationEvent(response.conversation.remoteId, new Date, selfUser.id, response)
     }
 
     scenario("getOneToOneConversation should update remoteId") {
@@ -676,7 +674,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
       val conv = getConv(ConvId(user1.id.str)).get
       listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id)
 
-      val event = MemberJoinEvent(Uid(), conv.remoteId, new Date, selfUser.id, Seq(user1.id))
+      val event = MemberJoinEvent(conv.remoteId, new Date, selfUser.id, Seq(user1.id))
       service.dispatchEvent(event)
       Thread.sleep(500)
 

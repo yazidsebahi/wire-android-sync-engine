@@ -17,10 +17,11 @@
  */
 package com.waz.service.call
 
+import com.sun.jna.Pointer
 import com.waz.api.VideoSendState._
 import com.waz.api.{VideoSendState, VoiceChannelState}
 import com.waz.api.VoiceChannelState.NO_ACTIVE_USERS
-import com.waz.model.{ConvId, UserId}
+import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.call.CallInfo.ClosedReason.Normal
 import com.waz.service.call.CallInfo.VideoReceiveState.Stopped
 import com.waz.service.call.CallInfo._
@@ -30,17 +31,18 @@ import org.threeten.bp.Instant
   * Note - We use the v2 `VoiceChannelState` here to simplify state handling in the UI, however we only use
   * a subset of them, namely: NO_ACTIVE_USERS, SELF_CALLING, OTHER_CALLING, SELF_JOINING and SELF_CONNECTED.
   */
-case class CallInfo(convId:            Option[ConvId]    = None,
-                    caller:            UserId            = UserId.Zero,
-                    others:            Set[UserId]       = Set.empty,
-                    state:             VoiceChannelState = NO_ACTIVE_USERS,
-                    muted:             Boolean           = false,
-                    isVideoCall:       Boolean           = false,
-                    videoSendState:    VideoSendState    = DONT_SEND,
-                    videoReceiveState: VideoReceiveState = Stopped,
-                    estabTime:         Option[Instant]   = None,
-                    hangupRequested:   Boolean           = false, //whether selfUser called end call, or some other reason
-                    closedReason:      ClosedReason      = Normal) {
+case class CallInfo(convId:            Option[ConvId]                    = None,
+                    caller:            UserId                            = UserId.Zero,
+                    others:            Set[UserId]                       = Set.empty,
+                    state:             VoiceChannelState                 = NO_ACTIVE_USERS,
+                    muted:             Boolean                           = false,
+                    isVideoCall:       Boolean                           = false,
+                    videoSendState:    VideoSendState                    = DONT_SEND,
+                    videoReceiveState: VideoReceiveState                 = Stopped,
+                    estabTime:         Option[Instant]                   = None,
+                    hangupRequested:   Boolean                           = false, //whether selfUser called end call, or some other reason
+                    closedReason:      ClosedReason                      = Normal,
+                    outstandingMsg:    Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
   override def toString: String =
     s"""
        |CallInfo:
@@ -55,6 +57,7 @@ case class CallInfo(convId:            Option[ConvId]    = None,
        | estabTime:         $estabTime
        | hangupRequested:   $hangupRequested
        | closedReason       $closedReason
+       | hasOutstandingMsg: ${outstandingMsg.isDefined}
     """.stripMargin
 }
 

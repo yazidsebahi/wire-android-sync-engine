@@ -31,6 +31,6 @@ class ConversationEventsServiceSpec extends FeatureSpec with Matchers with Befor
   lazy val service = zms.convEvents
 
   scenario("Ignore like events") {
-    service.filterConvOrderEvents(Seq(GenericMessageEvent(Uid(), RConvId(), new Date, UserId(), GenericMessage(Uid(), Reaction(MessageId(), Liking.Action.Like))))) shouldBe empty
+    service.filterConvOrderEvents(Seq(GenericMessageEvent(RConvId(), new Date, UserId(), GenericMessage(Uid(), Reaction(MessageId(), Liking.Action.Like))))) shouldBe empty
   }
 }

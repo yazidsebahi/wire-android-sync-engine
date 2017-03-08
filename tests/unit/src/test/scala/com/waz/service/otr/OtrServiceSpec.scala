@@ -169,7 +169,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
 
     def send(m: GenericMessage, from: TestClient, to: TestClient) = {
       val content = Await.result(from.otrService.encryptMessage(from.conv.id, m), 5.seconds).content(to.self.id)(to.selfClient.id)
-      val event = OtrMessageEvent(Uid(), to.conv.remoteId, new Date, from.self.id, from.selfClient.id, to.selfClient.id, content)
+      val event = OtrMessageEvent(to.conv.remoteId, new Date, from.self.id, from.selfClient.id, to.selfClient.id, content)
       val res = Await.result(to.otrService.decryptOtrEvent(event), 5.seconds)
       res shouldBe 'right
       res.right.get shouldEqual m
@@ -232,7 +232,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       val session = box.initSessionFromPreKey("session1", client2.prekeys(1))
 
       val msg = TextMessage("test5", Map.empty)
-      val event = OtrMessageEvent(Uid(), client2.conv.remoteId, new Date, client1.self.id, client1.selfClient.id, client2.selfClient.id, session.encrypt(GenericMessage.toByteArray(msg)))
+      val event = OtrMessageEvent(client2.conv.remoteId, new Date, client1.self.id, client1.selfClient.id, client2.selfClient.id, session.encrypt(GenericMessage.toByteArray(msg)))
 
       Await.result(client2.otrService.decryptOtrEvent(event), 5.seconds) shouldEqual Left(IdentityChangedError(client1.self.id, client1.selfClient.id))
     }

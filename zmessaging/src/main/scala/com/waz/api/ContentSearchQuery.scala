@@ -17,7 +17,6 @@
  */
 package com.waz.api
 
-import com.waz.model.{AssetId, ConvId, MessageId}
 import com.waz.utils.Locales
 
 case class ContentSearchQuery(originalString: String){

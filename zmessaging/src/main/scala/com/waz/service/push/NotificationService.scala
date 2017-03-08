@@ -71,7 +71,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
   val lastReadProcessingStage = EventScheduler.Stage[GenericMessageEvent] { (convId, events) =>
     events.foreach {
-      case GenericMessageEvent(_, _, _, _, GenericMessage(_, LastRead(conv, time))) =>
+      case GenericMessageEvent(_, _, _, GenericMessage(_, LastRead(conv, time))) =>
         otherDeviceActiveTime ! Instant.now
         alarmService.set(AlarmManager.RTC, Instant.now().toEpochMilli + checkNotificationsTimeout.toMillis, checkNotificationsIntent(context))
       case _ =>
@@ -93,11 +93,11 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
   val notificationEventsStage = EventScheduler.Stage[Event]({ (c, events) =>
     add(events collect {
-      case ev @ UserConnectionEvent(_, _, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime =>
+      case ev @ UserConnectionEvent(_, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime =>
         NotificationData(NotId(CONNECT_REQUEST, userId), msg.getOrElse(""), ConvId(userId.str), userId, CONNECT_REQUEST, time.instant, userName = name)
-      case ev @ UserConnectionEvent(_, _, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
+      case ev @ UserConnectionEvent(_, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
         NotificationData(NotId(CONNECT_ACCEPTED, userId), "", ConvId(userId.str), userId, CONNECT_ACCEPTED, userName = name)
-      case ContactJoinEvent(_, userId, _) =>
+      case ContactJoinEvent(userId, _) =>
         verbose("ContactJoinEvent")
         NotificationData(NotId(CONTACT_JOIN, userId), "", ConvId(userId.str), userId, CONTACT_JOIN)
     })

@@ -104,8 +104,6 @@ trait ZMessagingApi {
 
   def getErrors: ErrorsList
 
-  def getTrackingData: TrackingData
-
   /**
    * Access point for methods that get passed through to AVS.
    */

@@ -113,7 +113,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with Inspectors with Be
     }
 
     scenario("update last read on notification") {
-      zmessaging.dispatch(GenericMessageEvent(Uid(), RConvId(selfUserId.str), new Date, selfUserId, GenericMessage(Uid(), LastRead(conv.remoteId, timeForEvent(122)))))
+      zmessaging.dispatch(GenericMessageEvent(RConvId(selfUserId.str), new Date, selfUserId, GenericMessage(Uid(), LastRead(conv.remoteId, timeForEvent(122)))))
 
       withDelay {
         msgs.lastRead shouldEqual timeForEvent(122)

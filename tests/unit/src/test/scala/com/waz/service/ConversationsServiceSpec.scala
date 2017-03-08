@@ -93,7 +93,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
 
       val rconvId = RConvId()
       val conversationResponse = ConversationResponse(conversationData.copy(remoteId = rconvId), Seq(ConversationMemberData(from, conversationData.id), ConversationMemberData(to, conversationData.id)))
-      service.dispatchEvent(CreateConversationEvent(Uid(), rconvId, new Date(), from, conversationResponse))
+      service.dispatchEvent(CreateConversationEvent(rconvId, new Date(), from, conversationResponse))
 
       withDelay {
         getConv(conversationData.id).map(_.remoteId) shouldEqual Some(rconvId)
@@ -106,7 +106,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
     scenario("Update last event and time on message add event") {
       val conv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), selfUserId, ConversationType.Group, lastEventTime = Instant.ofEpochMilli(100)))
 
-      service.dispatchEvent(RenameConversationEvent(Uid(), conv.remoteId, new Date(1000), UserId(), "test"))
+      service.dispatchEvent(RenameConversationEvent(conv.remoteId, new Date(1000), UserId(), "test"))
       withDelay {
         convsContent.convById(conv.id).map(_.map(_.lastEventTime)) should eventually(be(Some(Instant.ofEpochMilli(1000))))
       }
@@ -126,7 +126,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
 
     scenario("load missed call info") {
       val oneToOneConv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), user.id, ConversationType.Group, lastRead = Instant.now.minusSeconds(1000)))
-      service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), oneToOneConv.remoteId, new Date(), user.id, Some("missed")))
+      service.dispatchEvent(VoiceChannelDeactivateEvent(oneToOneConv.remoteId, new Date(), user.id, Some("missed")))
 
       withDelay {
         Await.result(convsContent.convById(oneToOneConv.id), timeout).flatMap(_.missedCallMessage) should be('defined)
@@ -136,7 +136,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
     scenario("after a call ends, the conv updates its last event time") {
       val oneToOneConv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), user.id, ConversationType.Group))
       val eventTime = new Date
-      service.dispatchEvent(VoiceChannelDeactivateEvent(Uid(), oneToOneConv.remoteId, eventTime, user.id, None))
+      service.dispatchEvent(VoiceChannelDeactivateEvent(oneToOneConv.remoteId, eventTime, user.id, None))
       awaitUi(100.millis)
       Await.result(convsContent.convById(oneToOneConv.id), timeout).map(_.lastEventTime) shouldEqual Some(eventTime.instant)
     }

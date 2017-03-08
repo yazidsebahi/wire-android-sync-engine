@@ -35,7 +35,6 @@ import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.service.otr.OtrService
-import com.waz.service.tracking.TrackingEventsService
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -54,7 +53,7 @@ import scala.concurrent.Future.successful
 class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
                           client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
                           assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
-                          sync: SyncServiceHandle, assets: AssetService, tracking: TrackingEventsService, users: UserService, cache: CacheService,
+                          sync: SyncServiceHandle, assets: AssetService, users: UserService, cache: CacheService,
                           members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background

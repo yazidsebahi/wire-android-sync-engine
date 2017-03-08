@@ -31,7 +31,6 @@ import org.scalatest.{FeatureSpec, OptionValues}
 import scala.collection.breakOut
 import scala.concurrent.duration._
 
-@Config(application = classOf[TestApplication])
 class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend with MockedClientApiSpec with MockedFlows {
   import DefaultPushBehaviour.Implicit
 
@@ -113,7 +112,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
     }
 
     scenario("Other joins (with video)") {
-      addNotification(CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (true, true), other -> (true, true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
+      addNotification(CallStateEvent(remoteId, Some(participants(selfId -> (true, true), other -> (true, true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
       withDelay {
         voice.getState shouldEqual DeviceJoining
         voice.isVideoCall shouldEqual true
@@ -213,7 +212,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
 
     scenario("Incoming 2nd video call") {
       callSessionId += remoteId2 -> CallSessionId("session-id-inc-1")
-      addNotification(CallStateEvent(Uid(), remoteId2, Some(participants(selfId -> (false, false), yetAnother -> (true, true))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId2))))
+      addNotification(CallStateEvent(remoteId2, Some(participants(selfId -> (false, false), yetAnother -> (true, true))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId2))))
       withDelay {
         voice.isVideoCall shouldEqual true
         voice.getState shouldEqual DeviceConnected
@@ -265,8 +264,8 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
       callParticipants.clear()
 
       addNotification(
-        CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(300))),
-        CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(300))))
+        CallStateEvent(remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(300))),
+        CallStateEvent(remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(300))))
 
       withDelay {
         voice.getState shouldEqual Idle
@@ -305,7 +304,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
       spy.reset()
       resetVideoCalls()
       callSessionId += remoteId -> CallSessionId(s"session-id-2")
-      addNotification(CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (true, true))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
+      addNotification(CallStateEvent(remoteId, Some(participants(selfId -> (false, false), other -> (true, true))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
       withDelay {
         voice.getState shouldEqual OtherCalling
         voice.isVideoCall shouldEqual true
@@ -340,7 +339,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
     }
 
     scenario("Other turns off video, call should still remain a video call as it originally started as one") {
-      addNotification(CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (true, false), other -> (true, false))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
+      addNotification(CallStateEvent(remoteId, Some(participants(selfId -> (true, false), other -> (true, false))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
       withDelay {
         voice.getState shouldEqual DeviceConnected
         voice.isVideoCall shouldEqual true
@@ -349,7 +348,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
     }
 
     scenario("Other turns on video again") {
-      addNotification(CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (true, false), other -> (true, true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
+      addNotification(CallStateEvent(remoteId, Some(participants(selfId -> (true, false), other -> (true, true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
       withDelay {
         voice.getState shouldEqual DeviceConnected
         voice.isVideoCall shouldEqual true
@@ -361,8 +360,8 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
     scenario("Other hangs up") {
 
       addNotification(
-        CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(200))),
-        CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(200))))
+        CallStateEvent(remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), deviceState(joined = false), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(200))),
+        CallStateEvent(remoteId, Some(participants(selfId -> (false, false), other -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId)), sequenceNumber = Some(CallSequenceNumber(200))))
 
       withDelay {
         voice.getState shouldEqual Idle
@@ -385,7 +384,7 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
     }
 
     scenario("Other joins") {
-      addNotification(CallStateEvent(Uid(), remoteId, Some(participants(selfId -> (true, true), other -> (true, true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
+      addNotification(CallStateEvent(remoteId, Some(participants(selfId -> (true, true), other -> (true, true))), deviceState(joined = true), cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(remoteId))))
       withDelay { voice.getState shouldEqual DeviceJoining }
     }
 
@@ -440,8 +439,8 @@ class VideoCallingSpec extends FeatureSpec with OptionValues with MockBackend wi
 
       callSessionId += remoteId -> CallSessionId(s"group-id-2")
       addNotification(
-        CallStateEvent(Uid(), groupRemoteId, Some(participants(selfId -> (false, false), other -> (true, false), yetAnother -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupRemoteId))),
-        CallStateEvent(Uid(), groupRemoteId, Some(participants(selfId -> (false, false), other -> (true, false), yetAnother -> (true,  false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupRemoteId))))
+        CallStateEvent(groupRemoteId, Some(participants(selfId -> (false, false), other -> (true, false), yetAnother -> (false, false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupRemoteId))),
+        CallStateEvent(groupRemoteId, Some(participants(selfId -> (false, false), other -> (true, false), yetAnother -> (true,  false))), None, cause = CauseForCallStateEvent.REQUESTED, Some(callSessionId(groupRemoteId))))
 
       withDelay {
         group.getState shouldEqual OthersConnected

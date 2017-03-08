@@ -18,6 +18,8 @@
 package com.waz.content
 
 import com.waz.ZLog._
+import com.waz.api.Verification
+import com.waz.api.Verification.UNKNOWN
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model._
@@ -58,6 +60,8 @@ class ConversationStorage(storage: ZmsDatabase) extends CachedStorage[ConvId, Co
 
     updateSearchKey(cs)
   }
+
+  def setUnknownVerification(convId: ConvId) = update(convId, { c => c.copy(verified = if (c.verified == Verification.UNVERIFIED) UNKNOWN else c.verified) })
 
   onDeleted.on(dispatcher) { cs =>
     cs foreach { c =>
