@@ -19,7 +19,7 @@ package com.waz.db.migrate
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import com.waz.api.Verification
+import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.db.Col._
 import com.waz.db._
 import com.waz.model.ConversationData.ConversationType
@@ -98,6 +98,24 @@ object ConversationDataMigration {
 
   lazy val v79 = { implicit db: SQLiteDatabase =>
     db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_search_key on Conversations (search_key)")
+  }
+
+  lazy val v82 = { implicit db: SQLiteDatabase =>
+    val table = TableDesc("Conversations_tmp", Columns.v82.all)
+
+    inTransaction { tr: Transaction =>
+      db.execSQL("DROP TABLE IF EXISTS Conversations_tmp")
+      db.execSQL(table.createSql)
+
+      // copy all data
+      db.execSQL("INSERT INTO Conversations_tmp SELECT _id, remote_id, name, creator, conv_type, last_event_time, status, " +
+        "last_read, muted, mute_time, archived, archive_time, cleared, generated_name, search_key, unread_count, " +
+        "unsent_count, has_voice, voice_muted, hidden, missed_call, incoming_knock, (CASE conv_type WHEN 0 THEN last_event_time ELSE 0 END), " +
+        "unjoined_call, verified, ephemeral FROM Conversations")
+
+      db.execSQL("DROP TABLE Conversations")
+      db.execSQL("ALTER TABLE Conversations_tmp RENAME TO Conversations")
+    }
   }
 
   object Columns {
@@ -199,5 +217,37 @@ object ConversationDataMigration {
 
       val all = Seq(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified)
     }
+
+    object v82 {
+      val Id            = id[ConvId]('_id, "PRIMARY KEY")
+      val RemoteId      = id[RConvId]('remote_id)
+      val Name          = opt(text('name))
+      val Creator       = id[UserId]('creator)
+      val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))
+      val LastEventTime = timestamp('last_event_time)
+      val Status        = int('status)
+      val LastRead      = timestamp('last_read)
+      val Muted         = bool('muted)
+      val MutedTime     = timestamp('mute_time)
+      val Archived      = bool('archived)
+      val ArchivedTime  = timestamp('archive_time)
+      val Cleared       = timestamp('cleared)
+      val GeneratedName = text('generated_name)
+      val SKey          = opt(text[SearchKey]('search_key, _.asciiRepresentation, SearchKey.unsafeRestore))
+      val UnreadCount   = int('unread_count)
+      val FailedCount   = int('unsent_count)
+      val HasVoice      = bool('has_voice)
+      val UnjoinedCall  = bool('unjoined_call)
+      val MissedCall    = opt(id[MessageId]('missed_call))
+      val IncomingKnock = opt(id[MessageId]('incoming_knock))
+      val RenameEvent   = timestamp('rename_event_time)
+      val VoiceMuted    = bool('voice_muted)
+      val Hidden        = bool('hidden)
+      val Verified      = text[Verification]('verified, _.name, Verification.valueOf)
+      val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)
+
+      val all = Seq(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
+    }
+
   }
 }

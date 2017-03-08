@@ -54,7 +54,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 81
+  val DbVersion = 82
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -120,6 +120,10 @@ object ZMessagingDB {
     },
     Migration(80, 81) { db =>
       db.execSQL("CREATE VIRTUAL TABLE MessageContentIndex using fts3(conv_id TEXT, message_id TEXT, content TEXT, time TIMESTAMP)")
+    },
+    Migration(81, 82) { db =>
+      ConversationMembersMigration.v82(db)
+      ConversationDataMigration.v82(db)
     }
   )
 }

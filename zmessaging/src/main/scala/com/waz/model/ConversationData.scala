@@ -34,8 +34,7 @@ case class ConversationData(id: ConvId,
                             creator: UserId,
                             convType: ConversationType,
                             lastEventTime: Instant = Instant.EPOCH,
-                            status: Int = 0,
-                            statusTime: Instant = Instant.EPOCH,
+                            status: Option[ConversationStatus] = None,
                             lastRead: Instant = Instant.EPOCH,
                             muted: Boolean = false,
                             muteTime: Instant = Instant.EPOCH,
@@ -56,7 +55,7 @@ case class ConversationData(id: ConvId,
                             verified: Verification = Verification.UNKNOWN,
                             ephemeral: EphemeralExpiration = EphemeralExpiration.NONE) {
 
-  def activeMember = status == ConversationStatus.Active.value
+  def activeMember = status.contains(ConversationStatus.Active)
 
   def displayName = if (convType == ConversationType.Group) name.getOrElse(generatedName) else generatedName
 
@@ -72,11 +71,11 @@ case class ConversationData(id: ConvId,
 
   def updated(d: ConversationData): Option[ConversationData] = {
     val ct = if (ConversationType.isOneToOne(convType) && d.convType != ConversationType.OneToOne) convType else d.convType
-    val st = if (d.statusTime.isAfter(statusTime)) d.status else status
+    val st = if (d.status.isDefined) d.status else status
     val nameSource = if (d.renameEvent.isAfter(renameEvent)) d else this
 
     val updated = copy(remoteId = d.remoteId, name = nameSource.name, creator = d.creator, convType = ct,
-      lastEventTime = lastEventTime max d.lastEventTime, status = st, statusTime = statusTime max d.statusTime,
+      lastEventTime = lastEventTime max d.lastEventTime, status = st,
       lastRead = lastRead max d.lastRead, muted = d.muted,
       muteTime = d.muteTime, archived = d.archived, cleared = cleared max d.cleared,
       renameEvent = nameSource.renameEvent, searchKey = nameSource.searchKey)
@@ -87,10 +86,8 @@ case class ConversationData(id: ConvId,
 
 /**
  * Conversation user binding.
- *
- * @param active - false if user left the conversation
  */
-case class ConversationMemberData(userId: UserId, convId: ConvId, active: Boolean = true, time: Instant = Instant.EPOCH)
+case class ConversationMemberData(userId: UserId, convId: ConvId)
 
 object ConversationData {
 
@@ -104,6 +101,8 @@ object ConversationData {
     case object Inactive extends ConversationStatus {
       override val value: Int = 1
     }
+
+    def apply(value: Int): ConversationStatus = if (value == 0) Active else Inactive
   }
 
   val Empty = ConversationData(ConvId(), RConvId(), None, UserId(), IConversation.Type.UNKNOWN)
@@ -141,7 +140,7 @@ object ConversationData {
     override def apply(implicit js: JSONObject): ConversationData = ConversationData(
       id = 'id, remoteId = 'remoteId, name = decodeOptString('name), creator = 'creator, convType = ConversationType('convType),
       lastEventTime = decodeInstant('lastEventTime),
-      status = 'status, statusTime = decodeInstant('statusTime),
+      status = decodeOptInt('status).map(ConversationStatus(_)),
       lastRead = decodeInstant('lastReadTime),
       muted = 'muted, muteTime = decodeInstant('muteTime), archived = 'archived,
       archiveTime = decodeInstant('archiveTime), cleared = decodeInstant('cleared),
@@ -162,8 +161,7 @@ object ConversationData {
       o.put("creator", v.creator.str)
       o.put("convType", v.convType.id)
       o.put("lastEventTime", v.lastEventTime.toEpochMilli)
-      o.put("status", v.status)
-      o.put("statusTime", v.statusTime.toEpochMilli)
+      v.status.foreach(status => o.put("status", status.value))
       o.put("lastReadTime", v.lastRead.toEpochMilli)
       o.put("muted", v.muted)
       o.put("muteTime", v.muteTime.toEpochMilli)
@@ -192,8 +190,7 @@ object ConversationData {
     val Creator       = id[UserId]('creator).apply(_.creator)
     val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
     val LastEventTime = timestamp('last_event_time)(_.lastEventTime)
-    val Status        = int('status)(_.status)
-    val StatusTime    = timestamp('status_time)(_.statusTime)
+    val Status        = opt(int[ConversationStatus]('status, _.value, ConversationStatus(_)))(_.status)
     val LastRead      = timestamp('last_read)(_.lastRead)
     val Muted         = bool('muted)(_.muted)
     val MutedTime     = timestamp('mute_time)(_.muteTime)
@@ -215,8 +212,8 @@ object ConversationData {
     val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
-    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, StatusTime, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
+    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
+    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
 
     import com.waz.model.ConversationData.ConversationType._
 
@@ -269,12 +266,10 @@ object ConversationMemberData {
   implicit object ConversationMemberDataDao extends Dao2[ConversationMemberData, UserId, ConvId] {
     val UserId = id[UserId]('user_id).apply(_.userId)
     val ConvId = id[ConvId]('conv_id).apply(_.convId)
-    val Active = bool('active)(_.active)
-    val Time = timestamp('time).apply(_.time)
 
     override val idCol = (UserId, ConvId)
-    override val table = Table("ConversationMembers", UserId, ConvId, Active, Time)
-    override def apply(implicit cursor: Cursor): ConversationMemberData = ConversationMemberData(UserId, ConvId, Active, Time)
+    override val table = Table("ConversationMembers", UserId, ConvId)
+    override def apply(implicit cursor: Cursor): ConversationMemberData = ConversationMemberData(UserId, ConvId)
 
     override def onCreate(db: SQLiteDatabase): Unit = {
       super.onCreate(db)
@@ -287,19 +282,11 @@ object ConversationMemberData {
     def findForConv(convId: ConvId)(implicit db: SQLiteDatabase) = iterating(find(ConvId, convId))
     def findForUser(userId: UserId)(implicit db: SQLiteDatabase) = iterating(find(UserId, userId))
 
-    def findActiveForConv(convId: ConvId)(implicit db: SQLiteDatabase) = iterating {
-      db.query(table.name, null, s"${Active.name} = 1 AND ${ConvId.name} = '$convId'", null, null, null, null)
-    }
-
-    def findActiveForUser(userId: UserId)(implicit db: SQLiteDatabase) = iterating {
-      db.query(table.name, null, s"${Active.name} = 1 AND ${UserId.name} = '$userId'", null, null, null, null)
-    }
-
     def get(convId: ConvId, userId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, userId.toString), null, null, null))
 
     def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.mkString("'", "','", "'")})", Array(convId.toString), null, null, null))
 
-    def isActiveMember(convId: ConvId, user: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ? AND ${Active.name} = 1", Array(convId.toString, user.toString), null, null, null)).isDefined
+    def isActiveMember(convId: ConvId, user: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, user.toString), null, null, null)).isDefined
 
     def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(ConvId, id)
   }
