@@ -121,7 +121,9 @@ class ZNetClient(credentials: CredentialsHandler,
         ongoing += handle.id -> handle
 
         val request: Request[_] = handle.request
+
         val uri = request.resourcePath.map(path => baseUri.buildUpon().encodedPath(path).build()).orElse(request.absoluteUri).get
+
         val future =
           if (request.requiresAuthentication) {
             CancellableFuture.lift(auth.currentToken()) flatMap {

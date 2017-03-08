@@ -59,6 +59,8 @@ class SoundCloudClient(netClient: ZNetClient) {
 object SoundCloudClient {
   import com.waz.utils.JsonDecoder._
 
+  val domainNames = Set("soundcloud.com")
+
   implicit val logTag = logTagFor[SoundCloudClient]
 
   def proxyPath(resource: String, url: String) = s"/proxy/soundcloud/$resource?url=${URLEncoder.encode(url, "utf8")}"
