@@ -8,13 +8,14 @@ import sbtassembly.MappingSet
 import SharedSettings._
 
 val MajorVersion = "94"
+val MinorVersion = "1" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
   val buildNumber = sys.env.get("BUILD_NUMBER")
   val master = jobName.exists(_.endsWith("-master"))
   val buildNumberString = buildNumber.fold("-SNAPSHOT")("." + _)
-  if (master) MajorVersion + ".0" + buildNumberString // hotfix release
+  if (master) MajorVersion + "." + MinorVersion + buildNumberString
   else MajorVersion + buildNumberString
 }
 
