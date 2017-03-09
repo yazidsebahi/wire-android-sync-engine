@@ -125,7 +125,7 @@ case class UserData(
 
 object UserData {
 
-  val Empty = UserData(UserId("EMPTY"), "")
+  lazy val Empty = UserData(UserId("EMPTY"), "")
   val botHandle = compile("ottothebot|annathebot", CASE_INSENSITIVE)
 
   type ConnectionStatus = com.waz.api.User.ConnectionStatus

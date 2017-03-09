@@ -36,7 +36,7 @@ final class SearchKey private (val asciiRepresentation: String) extends Serializ
 
 object SearchKey extends (String => SearchKey) {
   val empty = new SearchKey("")
-  def apply(name: String): SearchKey = new SearchKey(transliterated(name))
+  def apply(name: String): SearchKey = if(name.isEmpty) empty else new SearchKey(transliterated(name))
   def unsafeRestore(asciiRepresentation: String) = new SearchKey(asciiRepresentation)
   def unapply(k: SearchKey): Option[String] = Some(k.asciiRepresentation)
 
