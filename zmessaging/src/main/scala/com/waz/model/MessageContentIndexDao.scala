@@ -24,13 +24,11 @@ import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.MessageData.MessageDataDao
-import com.waz.utils.Locales
 import org.threeten.bp.Instant
 
 case class MessageContentIndexEntry(messageId: MessageId, convId: ConvId, content: String, time: Instant)
 
 object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
-  import com.waz.db._
   import MessageContentIndex._
   private implicit val logTag: LogTag = "MessageContentIndex"
 
@@ -38,8 +36,6 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   val Conv = id[ConvId]('conv_id).apply(_.convId)
   val Content = text('content)(_.content)
   val Time = timestamp('time)(_.time)
-
-  private lazy val transliteration = Locales.transliteration("Latin-ASCII; Lower")
 
   override def onCreate(db: SQLiteDatabase) = {
     db.execSQL(table.createFtsSql)
@@ -83,12 +79,6 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
     insertOrReplace(added.map(messageData => MessageContentIndexEntry(messageData.id, messageData.convId, normalizeContent(messageData.contentString), messageData.time)))
   }
 
-  def updateMessages(updated: Seq[(MessageData, MessageData)])(implicit db: SQLiteDatabase): Unit ={
-    //FTS tables ignore UNIQUE or PKEY constraints so we have to force the replace
-    deleteEvery(updated.map(_._2.id))
-    insertOrReplace(updated.map(_._2).map(messageData => MessageContentIndexEntry(messageData.id, messageData.convId, normalizeContent(messageData.contentString), messageData.time)))
-  }
-
   def removeMessages(removed: Seq[MessageId])(implicit db: SQLiteDatabase): Unit ={
     deleteEvery(removed)
   }
@@ -108,7 +98,7 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   }
 
   private def normalizeContent(text: String): String = {
-    transliteration.transliterate(text).trim
+    ContentSearchQuery.transliterated(text)
   }
 
 }

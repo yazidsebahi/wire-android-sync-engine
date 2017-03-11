@@ -26,13 +26,17 @@ import com.waz.api.ContentSearchQuery
 import com.waz.db.{CursorIterator, Reader}
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.utils.TrimmingLruCache.Fixed
+import com.waz.utils.{CachedStorage, TrimmingLruCache}
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorage: MessagesStorage, loader: MessageAndLikesStorage) {
+class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorage: MessagesStorage, loader: MessageAndLikesStorage)
+    extends CachedStorage[MessageId, MessageContentIndexEntry](new TrimmingLruCache(context, Fixed(MessageContentIndex.MaxSearchResults)), storage)(MessageContentIndexDao, "MessageIndexStorage_Cached") {
+
   import MessageIndexStorage._
   import MessageContentIndex.TextMessageTypes
   import com.waz.utils.events.EventContext.Implicits.global
@@ -49,29 +53,38 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
 
   val finishedIndexing = Signal.future(updateOutdated()).orElse(Signal(true))
 
-  messagesStorage.onAdded{ added =>
-    storage(MessageContentIndexDao.addMessages(added.filter(m => TextMessageTypes.contains(m.msgType) && !m.isEphemeral))(_))
+  private def entry(m: MessageData) =
+    MessageContentIndexEntry(m.id, m.convId, ContentSearchQuery.transliterated(m.contentString), m.time)
+
+  messagesStorage.onAdded { added =>
+    insert(added.filter(m => TextMessageTypes.contains(m.msgType) && !m.isEphemeral).map(entry))
   }
 
-  messagesStorage.onUpdated{ updated =>
-    storage(MessageContentIndexDao.updateMessages(updated.filter(m => TextMessageTypes.contains(m._2.msgType) && !m._2.isEphemeral))(_))
+  messagesStorage.onUpdated { updated =>
+    val entries = updated.collect { case (_, m) if TextMessageTypes.contains(m.msgType) && !m.isEphemeral => entry(m) }
+    //FTS tables ignore UNIQUE or PKEY constraints so we have to force the replace
+    remove(entries.map(_.messageId))
+    insert(entries)
   }
 
-  messagesStorage.onDeleted{ removed =>
-    storage(MessageContentIndexDao.removeMessages(removed)(_))
+  messagesStorage.onDeleted { removed =>
+    remove(removed)
   }
 
   def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] =
-    storage.read(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(c, 0, Instant.now, loader)(MessagesCursor.Descending))
+    for {
+      cursor <- storage.read(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)) // find messages
+      _ <- getAll(CursorIterator.list[MessageId](cursor, close = false)(MsgIdReader)) // prefetch index entries to ensure following get calls are fast
+    } yield
+      new MessagesCursor(cursor, 0, Instant.now, loader)(MessagesCursor.Descending)
 
   def matchingMessages(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[Set[MessageId]] =
     storage.read { implicit db =>
       CursorIterator.list[MessageId](MessageContentIndexDao.findContent(contentSearchQuery, convId))(MsgIdReader).toSet
     }
 
-  def getNormalizedContentForMessage(messageId: MessageId): Future[Option[String]] ={
-    storage(MessageContentIndexDao.getById(messageId)(_).map(_.content))
-  }
+  def getNormalizedContentForMessage(messageId: MessageId): Future[Option[String]] =
+    get(messageId).map(_.map(_.content))
 }
 
 object MessageIndexStorage {
