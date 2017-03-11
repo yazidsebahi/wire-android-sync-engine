@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.api.{ContentSearchQuery, Message}
+import com.waz.api.ContentSearchQuery
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.Signal
@@ -59,12 +59,8 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
     storage(MessageContentIndexDao.removeMessages(removed)(_))
   }
 
-  def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] ={
-    convId match {
-      case Some(conv) => storage(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(conv, c, 0, Instant.now, loader))
-      case _ => storage(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(ConvId(), c, 0, Instant.now, loader)) //TODO: global search cursor
-    }
-  }
+  def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] =
+    storage(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(c, 0, Instant.now, loader))
 
   def getNormalizedContentForMessage(messageId: MessageId): Future[Option[String]] ={
     storage(MessageContentIndexDao.getById(messageId)(_).map(_.content))

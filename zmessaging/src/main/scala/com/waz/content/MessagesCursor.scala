@@ -43,7 +43,7 @@ trait MsgCursor {
   def close(): Unit
 }
 
-class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage) extends MsgCursor { self =>
+class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage) extends MsgCursor { self =>
   import MessagesCursor._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -72,7 +72,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     }
   )
 
-  verbose(s"init($conv, _, $lastReadIndex, $lastReadTime) - lastRead: $lastReadIndex")
+  verbose(s"init(_, $lastReadIndex, $lastReadTime) - lastRead: $lastReadIndex")
 
   override def close(): Unit = {
     Threading.assertUiThread()
