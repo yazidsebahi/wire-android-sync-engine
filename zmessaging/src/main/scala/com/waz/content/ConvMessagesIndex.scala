@@ -123,7 +123,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorage, selfUserId: Use
       verbose(s"index of $time = $readMessagesCount")
       (cursor, time, math.max(0, readMessagesCount - 1))
     } ("ConvMessageIndex_loadCursor") map { case (cursor, time, lastReadIndex) =>
-      new MessagesCursor(conv, cursor, lastReadIndex, time, msgAndLikes)
+      new MessagesCursor(cursor, lastReadIndex, time, msgAndLikes)
     }
   }
 
