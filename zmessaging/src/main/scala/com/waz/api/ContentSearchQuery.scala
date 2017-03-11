@@ -32,6 +32,8 @@ case class ContentSearchQuery(originalString: String){
 
   override def toString = elements.reduceOption(_ + " " + _).getOrElse("")
   def toFtsQuery = elements.map(_ + "*").reduceOption(_ + " " + _).getOrElse("")
+
+  def isEmpty = elements.isEmpty
 }
 
 object ContentSearchQuery{

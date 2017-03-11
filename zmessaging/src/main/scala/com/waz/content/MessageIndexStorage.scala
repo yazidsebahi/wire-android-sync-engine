@@ -20,8 +20,10 @@ package com.waz.content
 import java.util.concurrent.TimeUnit
 
 import android.content.Context
+import android.database.Cursor
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
+import com.waz.db.{CursorIterator, Reader}
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.Signal
@@ -32,7 +34,7 @@ import scala.concurrent.duration.FiniteDuration
 
 class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorage: MessagesStorage, loader: MessageAndLikesStorage) {
   import MessageIndexStorage._
-  import MessageContentIndex._
+  import MessageContentIndex.TextMessageTypes
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val logTag: LogTag = logTagFor[MessageIndexStorage]
@@ -60,13 +62,22 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
   }
 
   def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] =
-    storage(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(c, 0, Instant.now, loader))
+    storage.read(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(c, 0, Instant.now, loader))
+
+  def matchingMessages(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[Set[MessageId]] =
+    storage.read { implicit db =>
+      CursorIterator.list[MessageId](MessageContentIndexDao.findContent(contentSearchQuery, convId))(MsgIdReader).toSet
+    }
 
   def getNormalizedContentForMessage(messageId: MessageId): Future[Option[String]] ={
     storage(MessageContentIndexDao.getById(messageId)(_).map(_.content))
   }
 }
 
-object MessageIndexStorage{
+object MessageIndexStorage {
   val UpdateOldMessagesThrottle = FiniteDuration(1, TimeUnit.SECONDS)
+
+  implicit object MsgIdReader extends Reader[MessageId] {
+    override def apply(implicit c: Cursor): MessageId = MessageId(c.getString(0))
+  }
 }

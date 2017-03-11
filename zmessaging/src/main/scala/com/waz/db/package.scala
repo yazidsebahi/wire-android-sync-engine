@@ -38,6 +38,11 @@ package object db {
     override def hasNext: Boolean = !c.isClosed && !c.isAfterLast
   }
 
+  object CursorIterator {
+    def list[A](c: Cursor, close: Boolean = true, filter: A => Boolean = { (_: A) => true })(implicit reader: Reader[A]) =
+      try { new CursorIterator(c)(reader).filter(filter).toVector } finally { if (close) c.close() }
+  }
+
   class ReverseCursorIterator[A](c: Cursor)(implicit read: Reader[A]) extends Iterator[A] {
     c.moveToLast()
     override def next(): A = returning(read(c)){ _ => c.moveToPrevious() }

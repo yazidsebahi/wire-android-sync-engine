@@ -63,9 +63,9 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   def findContentFts(queryText: String, convId: Option[ConvId])(implicit db: SQLiteDatabase): Cursor ={
     convId match {
       case Some(conv) =>
-        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC", SearchLimit)
       case _ =>
-        db.query(table.name, IndexColumns, s"${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC", SearchLimit)
     }
   }
 
@@ -73,9 +73,9 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
     val likeQuery = queries.map(q => s"${Content.name} LIKE '%$q%'").mkString("(", " AND ", ")")
     convId match {
       case Some(conv) =>
-        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND $likeQuery", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND $likeQuery", null, null, null, s"${Time.name} DESC", SearchLimit)
       case _ =>
-        db.query(table.name, IndexColumns, s"$likeQuery", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"$likeQuery", null, null, null, s"${Time.name} DESC", SearchLimit)
     }
   }
 
@@ -113,7 +113,9 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
 
 }
 
-object MessageContentIndex{
+object MessageContentIndex {
+  val MaxSearchResults = 1024 // don't want to read whole db on common search query
+  val SearchLimit = MaxSearchResults.toString
   val UsingFTS = true
   val TextMessageTypes = Set(Message.Type.TEXT, Message.Type.TEXT_EMOJI_ONLY, Message.Type.RICH_MEDIA)
 }
