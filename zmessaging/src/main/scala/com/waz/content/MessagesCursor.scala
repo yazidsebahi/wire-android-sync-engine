@@ -22,7 +22,7 @@ import android.support.v4.util.LruCache
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.content.MessagesCursor.Entry
-import com.waz.db.{Reader, ReverseCursorIterator}
+import com.waz.db.{CursorIterator, Reader, ReverseCursorIterator}
 import com.waz.model._
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{SerialDispatchQueue, Threading}
@@ -80,14 +80,14 @@ class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastRe
     Future(if (! cursor.isClosed) cursor.close())
   }
 
-  override def finalize: Unit = Future(if (! cursor.isClosed) cursor.close())
+  override def finalize(): Unit = Future(if (! cursor.isClosed) cursor.close())
 
   def prefetchById(id: MessageId): Future[Unit] = {
     verbose(s"prefetchById($id)")
     for {
       m <- loader(Seq(id))
       i <- m.headOption.fold(Future successful lastReadIndex) { d => asyncIndexOf(d.message.time) }
-      _ <- prefetch(i)
+      _ <- prefetch(if (i < 0) lastReadIndex else i)
     } yield ()
   }
 
@@ -97,20 +97,27 @@ class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastRe
       verbose(s"indexOf($time) = $index, lastReadTime: $lastReadTime")
     }
 
-  private def asyncIndexOf(time: Instant): Future[Int] =
+  def asyncIndexOf(time: Instant, binarySearch: Boolean = false): Future[Int] = {
+    def cursorSearch(from: Int, to: Int) = Future {
+      logTime(s"time: $time not found in pre-fetched window, had to go through cursor, binarySearch: $binarySearch") {
+        val index = if (binarySearch) cursorBinarySearch(time, from, to) else cursorLinearSearch(time, from, to)
+        verbose(s"index in cursor: $index")
+        index
+      }
+    }
+
+    def cursorSearchBounds(window: IndexWindow) =
+      if (window.msgs.isEmpty) (0, cursor.getCount - 1)
+      else if (window.msgs.head.time >= time) (0, window.offset - 1)
+      else (window.offset + window.msgs.size, cursor.getCount - 1)
+
     windowLoader.currentWindow.indexOf(time)(ordering) match {
       case index if index >= 0 => Future.successful(index)
       case _ =>
-        Future {
-          logTime(s"time: $time not found in pre-fetched window, had to go through cursor") {
-            val indexFromEnd = new ReverseCursorIterator(cursor)(Entry.EntryReader).indexWhere(!_.time.isAfter(time))
-            val index = if (indexFromEnd < 0) -1 else cursor.getCount - indexFromEnd - 1
-
-            verbose(s"index in cursor: $index")
-            if (index < 0) lastReadIndex else index
-          }
-        }
+        val (from, to) = cursorSearchBounds(windowLoader.currentWindow)
+        if (to < from) Future.successful(-1) else cursorSearch(from, to)
     }
+  }
 
   def prefetch(index: Int): Future[Unit] = windowLoader(index) flatMap { prefetch }
 
@@ -181,26 +188,22 @@ class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastRe
     window.msgs.slice(offset - window.offset, end - window.offset)
   }
 
-  def getPositionForMessage(messageData: MessageData): Option[Int] = {
-    Threading.assertUiThread()
-    val currentPos = cursor.getPosition
-
-    val pos = cursorBinarySearch(messageData) match {
-      case -1 => None
-      case i => Some(i)
+  private def cursorLinearSearch(time: Instant, from: Int = 0, to: Int = cursor.getCount - 1): Int =
+    if (from == 0) {
+      new CursorIterator(cursor)(Entry.EntryReader).indexWhere(e => ordering.compare(e.time, time) >= 0)
+    } else {
+      val indexFromEnd = new ReverseCursorIterator(cursor)(Entry.EntryReader).indexWhere(e => ordering.compare(e.time, time) <= 0)
+      if (indexFromEnd < 0) -1 else cursor.getCount - indexFromEnd - 1
     }
-    cursor.moveToPosition(currentPos)
-    pos
-  }
 
-  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1): Int = {
+  private def cursorBinarySearch(time: Instant, from: Int = 0, to: Int = cursor.getCount - 1): Int = {
     val idx = from + (to - from - 1) / 2
     cursor.moveToPosition(idx)
-    ordering.compare(Entry(cursor).time, messageData.time) match {
+    ordering.compare(Entry(cursor).time, time) match {
       case 0 => idx
       case c if c != 0 && from == to => -1
-      case c if c > 0 => cursorBinarySearch(messageData, from, idx)
-      case _ => cursorBinarySearch(messageData, idx + 1, to)
+      case c if c > 0 => cursorBinarySearch(time, from, idx)
+      case _ => cursorBinarySearch(time, idx + 1, to)
     }
   }
 }
