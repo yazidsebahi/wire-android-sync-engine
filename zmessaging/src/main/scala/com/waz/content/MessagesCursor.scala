@@ -275,8 +275,12 @@ class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
   @volatile private[this] var window = IndexWindow.Empty
   @volatile private[this] var windowLoading = Future.successful(window)
 
+  private val totalCount = cursor.getCount
+
   private def shouldRefresh(window: IndexWindow, index: Int, count: Int) =
-    window == IndexWindow.Empty || window.offset > 0 && index < window.offset + WindowMargin || index + count > window.offset + WindowSize - WindowMargin
+    window == IndexWindow.Empty ||
+      window.offset > 0 && index < window.offset + WindowMargin ||
+      (window.offset + WindowSize < totalCount && index + count > window.offset + WindowSize - WindowMargin)
 
   private def fetchWindow(start: Int, end: Int) = {
     verbose(s"fetchWindow($start, $end)")
