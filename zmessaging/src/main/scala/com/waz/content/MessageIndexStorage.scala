@@ -62,7 +62,7 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
   }
 
   def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] =
-    storage.read(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(c, 0, Instant.now, loader))
+    storage.read(MessageContentIndexDao.findContent(contentSearchQuery, convId)(_)).map(c => new MessagesCursor(c, 0, Instant.now, loader)(MessagesCursor.Descending))
 
   def matchingMessages(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[Set[MessageId]] =
     storage.read { implicit db =>
