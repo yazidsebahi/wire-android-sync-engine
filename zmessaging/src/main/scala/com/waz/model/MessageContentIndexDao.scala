@@ -23,7 +23,6 @@ import com.waz.ZLog._
 import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.MessageData.MessageDataDao
 import org.threeten.bp.Instant
 
 case class MessageContentIndexEntry(messageId: MessageId, convId: ConvId, content: String, time: Instant)
@@ -74,33 +73,6 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
         db.query(table.name, IndexColumns, s"$likeQuery", null, null, null, s"${Time.name} DESC", SearchLimit)
     }
   }
-
-  def addMessages(added: Seq[MessageData])(implicit db: SQLiteDatabase): Unit ={
-    insertOrReplace(added.map(messageData => MessageContentIndexEntry(messageData.id, messageData.convId, normalizeContent(messageData.contentString), messageData.time)))
-  }
-
-  def removeMessages(removed: Seq[MessageId])(implicit db: SQLiteDatabase): Unit ={
-    deleteEvery(removed)
-  }
-
-  def updateOldMessages()(implicit db: SQLiteDatabase): Boolean ={
-    val queryString =
-      s"SELECT ${MessageDataDao.table.name}.* FROM ${MessageDataDao.table.name} " +
-        s"WHERE " +
-        TextMessageTypes.map(t => s"${MessageDataDao.table.name}.${MessageDataDao.Type.name} = '${MessageDataDao.Type(t)}'").mkString("(", "  OR ", ")") +
-        s"AND ${MessageDataDao.table.name}.${MessageDataDao.Id.name} NOT IN " +
-        s"(SELECT ${MessageId.name} FROM ${table.name}) " +
-        s"ORDER BY ${Time.name} DESC " +
-        s"LIMIT 200"
-    val cursor = db.rawQuery(queryString, null)
-    MessageDataDao.iterating(cursor).acquire(msgs => addMessages(msgs.toSeq))
-    cursor.getCount == 0
-  }
-
-  private def normalizeContent(text: String): String = {
-    ContentSearchQuery.transliterated(text)
-  }
-
 }
 
 object MessageContentIndex {

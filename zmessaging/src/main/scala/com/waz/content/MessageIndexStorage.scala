@@ -25,10 +25,9 @@ import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
 import com.waz.db.{CursorIterator, Reader}
 import com.waz.model._
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
-import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -43,15 +42,6 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
 
   private implicit val logTag: LogTag = logTagFor[MessageIndexStorage]
   private implicit val dispatcher = new SerialDispatchQueue(name = "MessageIndexStorage")
-
-  def updateOutdated(): CancellableFuture[Boolean] = {
-    storage{ MessageContentIndexDao.updateOldMessages()(_)}.flatMap{
-      case false => CancellableFuture.delay(UpdateOldMessagesThrottle).flatMap(_ => updateOutdated())
-      case _ =>  CancellableFuture.successful(true)
-    }
-  }
-
-  val finishedIndexing = Signal.future(updateOutdated()).orElse(Signal(true))
 
   private def entry(m: MessageData) =
     MessageContentIndexEntry(m.id, m.convId, ContentSearchQuery.transliterated(m.contentString), m.time)

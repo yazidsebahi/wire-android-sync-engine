@@ -23,7 +23,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
 import android.net.Uri
 import com.waz.Generators
-import com.waz.api.{KindOfCallingEvent, Message}
+import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.CallLogEntry.CallLogEntryDao
@@ -241,6 +241,21 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
 
       SyncJobDao.list should have size 100
       SyncJobDao.list shouldEqual before
+    }
+  }
+
+  scenario("Populate MessageContentIndex in 83") {
+    implicit val db = loadDb("/db/zmessaging_60.db")
+    dbHelper.onUpgrade(db, 60, 83)
+
+    val msgs = MessageDataDao.list.filter(m => MessageContentIndex.TextMessageTypes(m.msgType)).sortBy(_.time)
+    val index = MessageContentIndexDao.list.sortBy(_.time)
+    msgs should not be empty
+    index should have size msgs.size
+
+    msgs.zip(index) foreach { case (msg, idx) =>
+      idx.time shouldEqual msg.time
+      idx.content shouldEqual ContentSearchQuery.transliterated(msg.contentString)
     }
   }
 
