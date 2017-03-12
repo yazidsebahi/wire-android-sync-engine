@@ -94,8 +94,11 @@ class MessagesList(convId: ConvId)(implicit ui: UiModule) extends com.waz.api.Me
 
   override def getLastMessage: Message = lastMessage.map(ui.messages.cachedOrUpdated(_)).orNull
 
-  override def getLastReadIndex: Int =
-    returning(if (lastRead == Instant.EPOCH) msgs.lastReadIndex else msgs.indexOf(lastRead)) { ind => verbose(s"getLastReadIndex [$convId] - $ind, count: $size") }
+  override def getLastReadIndex: Int = {
+    val ind = if (lastRead == Instant.EPOCH) msgs.lastReadIndex else msgs.indexOf(lastRead)
+    verbose(s"getLastReadIndex [$convId] - $ind, count: $size")
+    if (ind < 0) msgs.lastReadIndex else ind
+  }
 
   override def getMessageIndex(m: api.Message): Int = {
     require(m != null, "null messages don't have an index")
