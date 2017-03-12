@@ -126,7 +126,8 @@ abstract class BaseDao[T] extends Reader[T] {
 
   def single(c: Cursor, close: Boolean = true): Option[T] = try { if (c.moveToFirst()) Option(apply(c)) else None } finally { if (close) c.close() }
 
-  def list(c: Cursor, close: Boolean = true, filter: T => Boolean = { _ => true }): Vector[T] = try { new CursorIterator(c)(this).filter(filter).toVector } finally { if (close) c.close() }
+  def list(c: Cursor, close: Boolean = true, filter: T => Boolean = { _ => true }): Vector[T] =
+    CursorIterator.list[T](c, close, filter)(this)
 
   def foreach(c: Cursor, f: T => Unit): Unit =
     try { new CursorIterator(c)(this).foreach(f) } finally { c.close() }

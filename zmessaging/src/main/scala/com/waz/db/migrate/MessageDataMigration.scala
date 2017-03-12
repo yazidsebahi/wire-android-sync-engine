@@ -18,7 +18,8 @@
 package com.waz.db.migrate
 
 import android.database.sqlite.SQLiteDatabase
-import com.waz.api.Message
+import com.waz.api
+import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.db.Col._
 import com.waz.db._
 import com.waz.model.GenericContent.Knock
@@ -107,6 +108,43 @@ object MessageDataMigration {
 
   lazy val v80 = { implicit db: SQLiteDatabase =>
     db.execSQL("ALTER TABLE Messages ADD COLUMN duration INTEGER DEFAULT 0")
+  }
+
+  lazy val v83 = { implicit db: SQLiteDatabase =>
+    // ensures MessageContentIndex is fully populated
+
+    val Type = text[Message.Type]('msg_type, MessageData.MessageTypeCodec.encode, MessageData.MessageTypeCodec.decode)
+    val Content = jsonArray[MessageContent, Seq, Vector]('content)
+    val Protos = protoSeq[GenericMessage, Seq, Vector]('protos)
+
+    val queryString =
+      "SELECT _id, conv_id, msg_type, content, protos, time FROM Messages WHERE msg_type IN ('Text', 'TextEmojiOnly', 'RichMedia') AND _id NOT IN (SELECT message_id FROM MessageContentIndex)"
+
+    withStatement("INSERT OR REPLACE INTO MessageContentIndex (message_id, conv_id, content, time) VALUES (?, ?, ?, ?)") { stmt =>
+      forEachRow(db.rawQuery(queryString, null)) { c =>
+        stmt.clearBindings()
+        val id = c.getString(0)
+        val convId = c.getString(1)
+        val msgType = Type.load(c, 2)
+        val content = Content.load(c, 3)
+        val protos = Protos.load(c, 4)
+        val time = c.getLong(5)
+
+        val contentString = protos.lastOption match {
+          case Some(TextMessage(ct, _, _)) => ct
+          case _ if msgType == api.Message.Type.RICH_MEDIA => content.map(_.content).mkString(" ")
+          case _ => content.headOption.fold("")(_.content)
+        }
+
+        val normalized = ContentSearchQuery.transliterated(contentString)
+
+        stmt.bindString(1, id)
+        stmt.bindString(2, convId)
+        stmt.bindString(3, normalized)
+        stmt.bindLong(4, time)
+        stmt.execute()
+      }
+    }
   }
 
   object Columns {

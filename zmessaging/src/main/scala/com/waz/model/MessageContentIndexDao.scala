@@ -23,14 +23,11 @@ import com.waz.ZLog._
 import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.MessageData.MessageDataDao
-import com.waz.utils.Locales
 import org.threeten.bp.Instant
 
 case class MessageContentIndexEntry(messageId: MessageId, convId: ConvId, content: String, time: Instant)
 
 object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
-  import com.waz.db._
   import MessageContentIndex._
   private implicit val logTag: LogTag = "MessageContentIndex"
 
@@ -38,8 +35,6 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   val Conv = id[ConvId]('conv_id).apply(_.convId)
   val Content = text('content)(_.content)
   val Time = timestamp('time)(_.time)
-
-  private lazy val transliteration = Locales.transliteration("Latin-ASCII; Lower")
 
   override def onCreate(db: SQLiteDatabase) = {
     db.execSQL(table.createFtsSql)
@@ -63,9 +58,9 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   def findContentFts(queryText: String, convId: Option[ConvId])(implicit db: SQLiteDatabase): Cursor ={
     convId match {
       case Some(conv) =>
-        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC", SearchLimit)
       case _ =>
-        db.query(table.name, IndexColumns, s"${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC", SearchLimit)
     }
   }
 
@@ -73,47 +68,16 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
     val likeQuery = queries.map(q => s"${Content.name} LIKE '%$q%'").mkString("(", " AND ", ")")
     convId match {
       case Some(conv) =>
-        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND $likeQuery", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND $likeQuery", null, null, null, s"${Time.name} DESC", SearchLimit)
       case _ =>
-        db.query(table.name, IndexColumns, s"$likeQuery", null, null, null, s"${Time.name} DESC")
+        db.query(table.name, IndexColumns, s"$likeQuery", null, null, null, s"${Time.name} DESC", SearchLimit)
     }
   }
-
-  def addMessages(added: Seq[MessageData])(implicit db: SQLiteDatabase): Unit ={
-    insertOrReplace(added.map(messageData => MessageContentIndexEntry(messageData.id, messageData.convId, normalizeContent(messageData.contentString), messageData.time)))
-  }
-
-  def updateMessages(updated: Seq[(MessageData, MessageData)])(implicit db: SQLiteDatabase): Unit ={
-    //FTS tables ignore UNIQUE or PKEY constraints so we have to force the replace
-    deleteEvery(updated.map(_._2.id))
-    insertOrReplace(updated.map(_._2).map(messageData => MessageContentIndexEntry(messageData.id, messageData.convId, normalizeContent(messageData.contentString), messageData.time)))
-  }
-
-  def removeMessages(removed: Seq[MessageId])(implicit db: SQLiteDatabase): Unit ={
-    deleteEvery(removed)
-  }
-
-  def updateOldMessages()(implicit db: SQLiteDatabase): Boolean ={
-    val queryString =
-      s"SELECT ${MessageDataDao.table.name}.* FROM ${MessageDataDao.table.name} " +
-        s"WHERE " +
-        TextMessageTypes.map(t => s"${MessageDataDao.table.name}.${MessageDataDao.Type.name} = '${MessageDataDao.Type(t)}'").mkString("(", "  OR ", ")") +
-        s"AND ${MessageDataDao.table.name}.${MessageDataDao.Id.name} NOT IN " +
-        s"(SELECT ${MessageId.name} FROM ${table.name}) " +
-        s"ORDER BY ${Time.name} DESC " +
-        s"LIMIT 200"
-    val cursor = db.rawQuery(queryString, null)
-    MessageDataDao.iterating(cursor).acquire(msgs => addMessages(msgs.toSeq))
-    cursor.getCount == 0
-  }
-
-  private def normalizeContent(text: String): String = {
-    transliteration.transliterate(text).trim
-  }
-
 }
 
-object MessageContentIndex{
+object MessageContentIndex {
+  val MaxSearchResults = 1024 // don't want to read whole db on common search query
+  val SearchLimit = MaxSearchResults.toString
   val UsingFTS = true
   val TextMessageTypes = Set(Message.Type.TEXT, Message.Type.TEXT_EMOJI_ONLY, Message.Type.RICH_MEDIA)
 }
