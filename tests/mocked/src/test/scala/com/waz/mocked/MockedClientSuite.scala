@@ -183,7 +183,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   override def pushGcm(notification: PushNotification, userId: UserId) =
     Option(ZMessaging.currentAccounts) foreach { accounts =>
       accounts.getCurrentZms.foreach {
-        case Some(zms) if zms.selfUserId == userId => zms.gcm.addNotificationToProcess(notification)
+        case Some(zms) if zms.selfUserId == userId => zms.gcm.addNotificationToProcess(Uid(), Some(notification))
         case _ =>
       }(Threading.Background)
     }
