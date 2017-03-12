@@ -25,7 +25,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Message.Type._
-import com.waz.api.{EphemeralExpiration, Message, MessageFilter}
+import com.waz.api.{EphemeralExpiration, Message, TypeFilter}
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.ConversationData.ConversationDataDao
@@ -406,19 +406,15 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def findByType(conv: ConvId, tpe: Message.Type)(implicit db: SQLiteDatabase) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(tpe)}'", null, null, null, s"${Time.name} ASC"))
 
-    def msgIndexCursorFiltered(conv: ConvId, messageFilter: Option[MessageFilter])(implicit db: SQLiteDatabase): Cursor = {
-      messageFilter.flatMap(_.msgType) match {
-        case Some(types) =>
-          val builder = new SQLiteQueryBuilder()
-          val q = builder.buildUnionQuery(
-            types.map(mt =>
-              s"SELECT * FROM (" +
-                SQLiteQueryBuilder.buildQueryString(false, table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(mt.msgType)}' AND ${Ephemeral.name} = 0", null, null, s"${Time.name} DESC", mt.limit.fold[String](null)(_.toString)) +
-                s")").toArray,
-            null, messageFilter.flatMap(_.overallLimit).fold[String](null)(_.toString))
-          db.rawQuery(q, null)
-        case None => msgIndexCursor(conv)
-      }
+    def msgIndexCursorFiltered(conv: ConvId, types: Seq[TypeFilter], limit: Option[Int] = None)(implicit db: SQLiteDatabase): Cursor = {
+      val builder = new SQLiteQueryBuilder()
+      val q = builder.buildUnionQuery(
+        types.map(mt =>
+          s"SELECT * FROM (" +
+            SQLiteQueryBuilder.buildQueryString(false, table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(mt.msgType)}' AND ${Ephemeral.name} = 0", null, null, s"${Time.name} DESC", mt.limit.fold[String](null)(_.toString)) +
+            s")").toArray,
+        null, limit.fold[String](null)(_.toString))
+      db.rawQuery(q, null)
     }
 
     /**
