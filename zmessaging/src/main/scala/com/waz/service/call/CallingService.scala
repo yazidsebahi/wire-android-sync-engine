@@ -35,7 +35,7 @@ import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
-import com.waz.service.{ErrorsService, EventScheduler, MediaManagerService}
+import com.waz.service.{ErrorsService, EventScheduler, MediaManagerService, NetworkModeService}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
@@ -62,6 +62,7 @@ class CallingService(context:             Context,
                      mediaManagerService: MediaManagerService,
                      pushService:         PushService,
                      callLogService:      CallLogService,
+                     network: NetworkModeService,
                      errors:              ErrorsService) {
 
   private implicit val eventContext = EventContext.Global
@@ -79,6 +80,16 @@ class CallingService(context:             Context,
   currentCall.onChanged { i =>
     verbose(s"Calling information changed: $i")
     i.convId.foreach(CallService(context, _)) // start tracking
+  }
+
+  (for {
+    c <- currentCall if c.state != NO_ACTIVE_USERS
+    n <- network.networkMode
+  } yield n).onChanged { _ =>
+    init.map { _ =>
+      verbose("network mode changed during call - informing AVS")
+      Calling.wcall_network_changed()
+    }
   }
 
   private val init = Calling.v3Available.map { _ =>
