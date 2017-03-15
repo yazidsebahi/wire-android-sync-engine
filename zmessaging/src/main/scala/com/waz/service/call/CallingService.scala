@@ -82,16 +82,6 @@ class CallingService(context:             Context,
     i.convId.foreach(CallService(context, _)) // start tracking
   }
 
-  (for {
-    c <- currentCall if c.state != NO_ACTIVE_USERS
-    n <- network.networkMode
-  } yield n).onChanged { _ =>
-    init.map { _ =>
-      verbose("network mode changed during call - informing AVS")
-      Calling.wcall_network_changed()
-    }
-  }
-
   private val init = Calling.v3Available.map { _ =>
 
     val callingReady = Promise[Unit]()
@@ -173,6 +163,16 @@ class CallingService(context:             Context,
 
   init.onFailure { case e =>
     error("Error initialising calling v3", e)
+  }
+
+  (for {
+    c <- currentCall if c.state != NO_ACTIVE_USERS
+    n <- network.networkMode
+  } yield n).onChanged { _ =>
+    init.map { _ =>
+      verbose("network mode changed during call - informing AVS")
+      Calling.wcall_network_changed()
+    }
   }
 
   def startCall(convId: ConvId, isVideo: Boolean = false): Unit = withConvWhenReady(convId) { conv =>
