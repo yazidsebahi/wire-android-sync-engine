@@ -41,7 +41,7 @@ import scala.concurrent.Future
 
 class NotificationService(context: Context, selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
     storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
-    kv: KeyValueStorage, timeouts: Timeouts) {
+    kv: KeyValueStorage, timeouts: Timeouts, pushService: PushService) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -81,12 +81,15 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
   def markAsDisplayed(ns: Seq[NotId]) = storage.updateAll2(ns, n => n.copy(hasBeenDisplayed = true))
 
-  lifecycle.lifecycleState { state =>
+  (for {
+    state <- lifecycle.lifecycleState
+    drift <- pushService.beDrift //TODO BE do NOT want us to rely on this time, we should find a better way, but for now, it's better than using local time
+  } yield (state, drift)) { case (state, drift) =>
     uiActive = returning(state == LifecycleState.UiActive) { active =>
       if (active || uiActive) {
         val inst = Instant.now()
-        verbose(s"UI last active at $inst")
-        lastUiVisibleTime := inst
+        verbose(s"UI last active at $inst with BE drift: $drift")
+        lastUiVisibleTime := inst + drift
       }
     }
   }

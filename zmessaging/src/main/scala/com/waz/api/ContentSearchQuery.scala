@@ -30,11 +30,13 @@ case class ContentSearchQuery(originalString: String){
       .filter(_.nonEmpty)
       .toSet
 
-  override def toString = elements.reduceOption(_ + " " + _).getOrElse("")
-  def toFtsQuery = elements.map(_ + "*").reduceOption(_ + " " + _).getOrElse("")
+  override def toString = elements.mkString(" ")
+  def toFtsQuery = elements.map(_ + "*").mkString(" ")
+
+  def isEmpty = elements.isEmpty
 }
 
-object ContentSearchQuery{
+object ContentSearchQuery {
 
   private lazy val transliteration = Locales.transliteration("Latin-ASCII; Lower")
 

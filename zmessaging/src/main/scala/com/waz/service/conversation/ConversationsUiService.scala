@@ -258,8 +258,8 @@ class ConversationsUiService(assets: AssetService, users: UserService, usersStor
       ifAbleToModifyMembers(conv, selfUserId, Option.empty[SyncId]) {
         members.remove(conv, user) flatMap { members =>
           if (members.isEmpty) Future.successful(None)
-          else addMemberLeaveMessage(conv, selfUserId, members.head.userId) flatMap { _ =>
-            sync.postConversationMemberLeave(conv, members.head.userId).map(Some(_))
+          else addMemberLeaveMessage(conv, selfUserId, user) flatMap { _ =>
+            sync.postConversationMemberLeave(conv, user).map(Some(_))
           }
         }
       }

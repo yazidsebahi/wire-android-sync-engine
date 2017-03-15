@@ -81,7 +81,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     case ErrorData(_, ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION, userIds, _, Some(convId), _, _, _, _) => Future.successful(())
     case ErrorData(_, ErrorType.CANNOT_ADD_USER_TO_FULL_CONVERSATION, userIds, _, Some(convId), _, _, _, _) => Future.successful(())
     case ErrorData(_, ErrorType.CANNOT_SEND_MESSAGE_TO_UNVERIFIED_CONVERSATION, _, _, Some(conv), _, _, _, _) =>
-      convsStorage.update(conv, { c => c.copy(verified = if (c.verified == UNVERIFIED) UNKNOWN else c.verified) })
+      convsStorage.setUnknownVerification(conv)
   }
 
   private def scheduleSlowSync() =
@@ -128,29 +128,29 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     case MemberJoinEvent(convId, time, from, userIds, _) =>
       def joined(updated: ConversationData) = ! conv.activeMember && updated.activeMember && updated.convType == ConversationType.Group
 
-      def ensureConvActive() = updateConversationStatus(conv.id, ConversationStatus.Active, time.instant).map(_.map(_._2).filter(joined))
+      def ensureConvActive() = updateConversationStatus(conv.id, ConversationStatus.Active).map(_.map(_._2).filter(joined))
         .flatMapSome(_ => sync.syncCallState(conv.id, fromFreshNotification = false).map(Some(_)))
 
       for {
         _        <- users.syncNotExistingOrExpired(userIds)
-        _        <- membersStorage.add(conv.id, time.instant, userIds: _*)
+        _        <- membersStorage.add(conv.id, userIds: _*)
         selfUser <- selfUserOrFail
         _        <- if (userIds.contains(selfUser)) ensureConvActive() else successful(None)
       } yield ()
 
     case MemberLeaveEvent(convId, time, from, userIds) =>
-      membersStorage.remove(conv.id, time.instant, userIds: _*) flatMap { _ =>
+      membersStorage.remove(conv.id, userIds: _*) flatMap { _ =>
         withSelfUserFuture { selfUserId =>
-          if (userIds.contains(selfUserId)) updateConversationStatus(conv.id, ConversationStatus.Inactive, time.instant)
+          if (userIds.contains(selfUserId)) updateConversationStatus(conv.id, ConversationStatus.Inactive)
           else successful(())
         }
       }
 
     case MemberUpdateEvent(convId, time, from, state) => updateConversationState(conv.id, state)
 
-    case ConnectRequestEvent(_, time, from, _, recipient, _, _) =>
+    case ConnectRequestEvent(_, _, from, _, recipient, _, _) =>
       debug(s"ConnectRequestEvent(from = $from, recipient = $recipient")
-      membersStorage.add(conv.id, time.instant, from, recipient) flatMap { added =>
+      membersStorage.add(conv.id, from, recipient) flatMap { added =>
         val userIdsAdded = added map (_.userId)
         usersStorage.listAll(userIdsAdded) map { localUsers =>
           syncIfNeeded(localUsers: _*)
@@ -163,7 +163,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
 
   private def createGroupConversationOnMemberJoin(remoteId: RConvId, time: Instant, from: UserId, members: Seq[UserId]) = {
     insertConversation(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
-      membersStorage.add(conv.id, time, from +: members: _*) flatMap { ms =>
+      membersStorage.add(conv.id, from +: members: _*) flatMap { ms =>
         addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
           sync.syncConversation(conv.id) flatMap { _ => sync.syncCallState(conv.id, fromFreshNotification = false) }
           conv
@@ -244,7 +244,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     def updateMembers() = Future.sequence(convs map {
         case ConversationResponse(conv, members) =>
           convByRemoteId(conv.remoteId) flatMap {
-            case Some(c) => membersStorage.set(c.id, conv.lastEventTime, selfUserId +: members.filter(_.active).map(_.userId))
+            case Some(c) => membersStorage.set(c.id, selfUserId +: members.map(_.userId))
             case _ =>
               error(s"updateMembers() didn't find conv with given remote id for: $conv")
               successful(())

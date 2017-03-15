@@ -25,7 +25,7 @@ import java.util.{Date, Locale}
 import android.net.Uri
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model.GenericContent.Text
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
@@ -81,7 +81,6 @@ object Generators {
     convType <- arbitrary[ConversationType]
     lastEventTime <- arbitrary[Instant]
     status <- arbitrary[Int]
-    statusTime <- arbitrary[Instant]
     muted <- arbitrary[Boolean]
     muteTime <- arbitrary[Instant]
     archived <- arbitrary[Boolean]
@@ -98,7 +97,7 @@ object Generators {
     renameEvent <- arbitrary[Instant]
     voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, status, statusTime, Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]

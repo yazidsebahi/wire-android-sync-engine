@@ -22,7 +22,7 @@ import android.support.v4.util.LruCache
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.content.MessagesCursor.Entry
-import com.waz.db.{Reader, ReverseCursorIterator}
+import com.waz.db.{CursorIterator, Reader, ReverseCursorIterator}
 import com.waz.model._
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{SerialDispatchQueue, Threading}
@@ -43,7 +43,7 @@ trait MsgCursor {
   def close(): Unit
 }
 
-class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage) extends MsgCursor { self =>
+class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage)(implicit ordering: Ordering[Instant]) extends MsgCursor { self =>
   import MessagesCursor._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -72,7 +72,7 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     }
   )
 
-  verbose(s"init($conv, _, $lastReadIndex, $lastReadTime) - lastRead: $lastReadIndex")
+  verbose(s"init(_, $lastReadIndex, $lastReadTime) - lastRead: $lastReadIndex")
 
   override def close(): Unit = {
     Threading.assertUiThread()
@@ -80,14 +80,14 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     Future(if (! cursor.isClosed) cursor.close())
   }
 
-  override def finalize: Unit = Future(if (! cursor.isClosed) cursor.close())
+  override def finalize(): Unit = Future(if (! cursor.isClosed) cursor.close())
 
   def prefetchById(id: MessageId): Future[Unit] = {
     verbose(s"prefetchById($id)")
     for {
       m <- loader(Seq(id))
       i <- m.headOption.fold(Future successful lastReadIndex) { d => asyncIndexOf(d.message.time) }
-      _ <- prefetch(i)
+      _ <- prefetch(if (i < 0) lastReadIndex else i)
     } yield ()
   }
 
@@ -97,20 +97,27 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
       verbose(s"indexOf($time) = $index, lastReadTime: $lastReadTime")
     }
 
-  private def asyncIndexOf(time: Instant): Future[Int] =
-    windowLoader.currentWindow.indexOf(time) match {
+  def asyncIndexOf(time: Instant, binarySearch: Boolean = false): Future[Int] = {
+    def cursorSearch(from: Int, to: Int) = Future {
+      logTime(s"time: $time not found in pre-fetched window, had to go through cursor, binarySearch: $binarySearch") {
+        val index = if (binarySearch) cursorBinarySearch(time, from, to) else cursorLinearSearch(time, from, to)
+        verbose(s"index in cursor: $index")
+        index
+      }
+    }
+
+    def cursorSearchBounds(window: IndexWindow) =
+      if (window.msgs.isEmpty) (0, cursor.getCount - 1)
+      else if (window.msgs.head.time >= time) (0, window.offset - 1)
+      else (window.offset + window.msgs.size, cursor.getCount - 1)
+
+    windowLoader.currentWindow.indexOf(time)(ordering) match {
       case index if index >= 0 => Future.successful(index)
       case _ =>
-        Future {
-          logTime(s"time: $time not found in pre-fetched window, had to go through cursor") {
-            val indexFromEnd = new ReverseCursorIterator(cursor)(Entry.EntryReader).indexWhere(!_.time.isAfter(time))
-            val index = if (indexFromEnd < 0) -1 else cursor.getCount - indexFromEnd - 1
-
-            verbose(s"index in cursor: $index")
-            if (index < 0) lastReadIndex else index
-          }
-        }
+        val (from, to) = cursorSearchBounds(windowLoader.currentWindow)
+        if (to < from) Future.successful(-1) else cursorSearch(from, to)
     }
+  }
 
   def prefetch(index: Int): Future[Unit] = windowLoader(index) flatMap { prefetch }
 
@@ -181,27 +188,22 @@ class MessagesCursor(conv: ConvId, cursor: Cursor, override val lastReadIndex: I
     window.msgs.slice(offset - window.offset, end - window.offset)
   }
 
-  def getPositionForMessage(messageData: MessageData): Option[Int] = {
-    Threading.assertUiThread()
-    val currentPos = cursor.getPosition
-    val ascending = isAscending(cursor)
-
-    val pos = cursorBinarySearch(messageData, ascending = ascending) match {
-      case -1 => None
-      case i => Some(i)
+  private def cursorLinearSearch(time: Instant, from: Int = 0, to: Int = cursor.getCount - 1): Int =
+    if (from == 0) {
+      new CursorIterator(cursor)(Entry.EntryReader).indexWhere(e => ordering.compare(e.time, time) >= 0)
+    } else {
+      val indexFromEnd = new ReverseCursorIterator(cursor)(Entry.EntryReader).indexWhere(e => ordering.compare(e.time, time) <= 0)
+      if (indexFromEnd < 0) -1 else cursor.getCount - indexFromEnd - 1
     }
-    cursor.moveToPosition(currentPos)
-    pos
-  }
 
-  private def cursorBinarySearch(messageData: MessageData, from: Int = 0, to: Int = cursor.getCount - 1, ascending: Boolean = true): Int = {
+  private def cursorBinarySearch(time: Instant, from: Int = 0, to: Int = cursor.getCount - 1): Int = {
     val idx = from + (to - from - 1) / 2
     cursor.moveToPosition(idx)
-    Entry(cursor).time.compareTo(messageData.time) match {
-      case c if c != 0 && from == to => -1
-      case c if (c > 0 && ascending) || (c < 0 && !ascending) => cursorBinarySearch(messageData, from, idx, ascending)
-      case c if (c < 0 && ascending) || (c > 0 && !ascending) => cursorBinarySearch(messageData, idx + 1, to, ascending)
+    ordering.compare(Entry(cursor).time, time) match {
       case 0 => idx
+      case c if c != 0 && from == to => -1
+      case c if c > 0 => cursorBinarySearch(time, from, idx)
+      case _ => cursorBinarySearch(time, idx + 1, to)
     }
   }
 }
@@ -211,6 +213,9 @@ object MessagesCursor {
   val WindowSize = 256
   val WindowMargin = WindowSize / 4
   val futureUnit = Future.successful(())
+
+  val Ascending = implicitly[Ordering[Instant]]
+  val Descending = Ascending.reverse
 
   val Empty: MsgCursor = new MsgCursor {
     override val size: Int = 0
@@ -243,29 +248,6 @@ object MessagesCursor {
     def apply(c: Cursor): Entry = EntryReader(c)
     def apply(m: MessageData): Entry = Entry(m.id, m.time)
   }
-
-  private def isAscending(cursor: Cursor): Boolean = {
-    val previousPos = cursor.getPosition
-    cursor.moveToFirst()
-    val first = Entry(cursor)
-
-    def checkNext(): Boolean = {
-      if (cursor.isLast) {
-        false
-      } else {
-        cursor.moveToNext()
-        val second = Entry(cursor)
-        val comparison = first.time.compareTo(second.time)
-
-        if (comparison == 0)
-          checkNext()
-        else
-          comparison < 0
-      }
-    }
-
-    returning(checkNext())(_ => cursor.moveToPosition(previousPos))
-  }
 }
 
 class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
@@ -275,8 +257,12 @@ class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
   @volatile private[this] var window = IndexWindow.Empty
   @volatile private[this] var windowLoading = Future.successful(window)
 
+  private val totalCount = cursor.getCount
+
   private def shouldRefresh(window: IndexWindow, index: Int, count: Int) =
-    window == IndexWindow.Empty || window.offset > 0 && index < window.offset + WindowMargin || index + count > window.offset + WindowSize - WindowMargin
+    window == IndexWindow.Empty ||
+      window.offset > 0 && index < window.offset + WindowMargin ||
+      (window.offset + WindowSize < totalCount && index + count > window.offset + WindowSize - WindowMargin)
 
   private def fetchWindow(start: Int, end: Int) = {
     verbose(s"fetchWindow($start, $end)")
@@ -305,10 +291,16 @@ class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
   def apply(index: Int, minCount: Int = 1): Future[IndexWindow] = {
     require(minCount <= MessagesCursor.WindowSize)
 
-    if (shouldRefresh(window, index, minCount)) windowLoading = loadWindow(index, minCount)
+    if (shouldRefresh(window, index, minCount)) {
+      verbose(s"shouldRefresh($index) = true   offset: ${window.offset}")
+      windowLoading = loadWindow(index, minCount)
+    }
 
     if (window.contains(index) && window.contains(index + minCount - 1)) Future.successful(window)
-    else windowLoading
+    else {
+      verbose(s"window doesn't contain all: $index - $minCount")
+      windowLoading
+    }
   }
 
   def currentWindow = window
@@ -320,7 +312,7 @@ case class IndexWindow(offset: Int, msgs: IndexedSeq[Entry]) {
 
   def apply(pos: Int) = msgs(pos - offset)
 
-  def indexOf(time: Instant) = msgs.binarySearch(time, _.time) match {
+  def indexOf(time: Instant)(implicit ord: Ordering[Instant]) = msgs.binarySearch(time, _.time)(ord) match {
     case Found(n) => n + offset
     case InsertionPoint(n) => if (n == 0 || n == msgs.size) -1 else n + offset
   }

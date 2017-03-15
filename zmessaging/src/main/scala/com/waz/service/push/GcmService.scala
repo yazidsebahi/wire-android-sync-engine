@@ -187,17 +187,19 @@ class GcmService(accountId:         AccountId,
       case None => Future.successful(None)
     }
 
-  def addNotificationToProcess(n: PushNotification): Future[Any] = {
-    val time = n.lastConvEventTime
-    if (time != Instant.EPOCH) lastReceivedConvEventTime := time
+  def addNotificationToProcess(nId: Uid, not: Option[PushNotification] = None): Future[Any] = {
+    not.foreach { n =>
+      val time = n.lastConvEventTime
+      if (time != Instant.EPOCH) lastReceivedConvEventTime := time
+    }
 
     lifecycle.lifecycleState.head flatMap {
       case LifecycleState.UiActive | LifecycleState.Active => Future.successful(()) // no need to process GCM when ui is active
       case _ =>
-        verbose(s"addNotification: $n")
+        verbose(s"addNotification: $nId")
         // call state events can not be directly dispatched like the other events because they might be stale
-        syncCallStateForConversations(n.events.collect { case e: CallStateEvent => e }.map(_.withCurrentLocalTime()))
-        Future.successful(notificationsToProcess.mutate(_ + n.id))
+        not.foreach(n => syncCallStateForConversations(n.events.collect { case e: CallStateEvent => e }.map(_.withCurrentLocalTime())))
+        Future.successful(notificationsToProcess.mutate(_ + nId))
     }
   }
 

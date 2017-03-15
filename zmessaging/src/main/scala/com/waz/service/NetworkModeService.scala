@@ -71,7 +71,7 @@ object NetworkModeService {
    * Contributors on StackOverflow:
    *  - Anonsage (http://stackoverflow.com/users/887894/anonsage)
    */
-  def computeMode(ni: NetworkInfo, tm: => TelephonyManager): NetworkMode = ni.getType match {
+  def computeMode(ni: NetworkInfo, tm: => TelephonyManager): NetworkMode = Option(ni.getType).map {
     case ConnectivityManager.TYPE_WIFI | ConnectivityManager.TYPE_ETHERNET => NetworkMode.WIFI
     case _ =>
       tm.getNetworkType match {
@@ -98,5 +98,5 @@ object NetworkModeService {
           info("Unknown network type, defaulting to Wifi")
           NetworkMode.WIFI
       }
-  }
+  }.getOrElse(NetworkMode.OFFLINE)
 }
