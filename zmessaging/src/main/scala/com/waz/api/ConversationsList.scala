@@ -17,8 +17,6 @@
  */
 package com.waz.api
 
-import com.waz.api.ConversationsList.VerificationStateCallback
-
 object ConversationsList {
 
   trait ConversationCallback {
@@ -60,6 +58,4 @@ trait ConversationsList extends CoreList[IConversation] with EventualReadiness {
   def getArchivedConversations: ConversationsList.SearchableConversationsList
   def getIncomingConversations: ConversationsList.SearchableConversationsList
   def getEstablishedConversations: ConversationsList
-
-  def onVerificationStateChange(callback: VerificationStateCallback): Unit
 }
