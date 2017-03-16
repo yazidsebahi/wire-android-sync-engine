@@ -46,10 +46,12 @@ object Mime {
   object Video {
     val MP4 = Mime("video/mp4")
     val `3GPP` = Mime("video/3gpp")
+    val WebM = Mime("video/webm")
 
     def unapply(mime: Mime): Boolean = cond(mime) {
       case MP4 => true
       case `3GPP` => true
+      case WebM => true
     }
   }
 
