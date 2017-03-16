@@ -54,7 +54,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 82
+  val DbVersion = 83
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -124,6 +124,9 @@ object ZMessagingDB {
     Migration(81, 82) { db =>
       ConversationMembersMigration.v82(db)
       ConversationDataMigration.v82(db)
+    },
+    Migration(82, 83) { db =>
+      MessageDataMigration.v83(db)
     }
   )
 }

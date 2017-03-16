@@ -50,6 +50,10 @@ import scala.concurrent.{Future, Promise}
   * Implementation notes:
   *  - The void *arg, here represented in the native methods as a Pointer, is a reference to the object that handles the callbacks and native
   *    method calls. Since we know which class is doing the calling and handling, we don't really need to use it and so pass and receive null
+  *
+  *  - All modifications to the current call state should be done INSIDE a future to the serial dispatch queue - best is to perform any
+  *  mutations inside `withConvWhenReady` or `withConvFromPointer`. This should ensure that all state changes are performed serially to
+  *  the currentCall state in the order the user/AVS triggers the callbacks.
   */
 class CallingService(context:             Context,
                      selfUserId:          UserId,
@@ -228,9 +232,13 @@ class CallingService(context:             Context,
 
   //Drop the current call in case of incoming GSM interruption
   def onInterrupted(): Unit = {
-    currentCall.mutate { call =>
-      call.convId.foreach(id => withConvWhenReady(id) { conv => Calling.wcall_end(conv.remoteId.str) })
-      call.copy(closedReason = Interrupted)
+    verbose("onInterrupted - gsm call received")
+    currentCall.map(_.convId).currentValue.flatten.foreach { convId =>
+      //Ensure that conversation state is only performed INSIDE withConvWhenReady
+      withConvWhenReady(convId) { conv =>
+        Calling.wcall_end(conv.remoteId.str)
+        currentCall.mutate(_.copy(closedReason = Interrupted))
+      }
     }
   }
 
