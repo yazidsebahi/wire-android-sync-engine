@@ -72,20 +72,6 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
 
   def knock(id: ConvId): Unit = zms(_.convsUi.knock(id))
 
-  def onVerificationStateChange(callback: VerificationStateCallback) = {
-
-    def changeStream(zMessaging: ZMessaging) =
-      zMessaging.convsStorage.onUpdated.map {
-        _.filter { case (prev, conv) => prev.verified != conv.verified }
-      }.filter(_.nonEmpty)
-
-    zms {
-      changeStream(_).on(Threading.Ui) { _ foreach {
-          case (prev, conv) => callback.onVerificationStateChanged(conv.id.str, prev.verified, conv.verified)
-        }
-      }
-    }
-  }
 }
 
 object Conversations {
