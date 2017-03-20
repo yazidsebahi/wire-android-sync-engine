@@ -43,6 +43,9 @@ class KeyValueStorage(context: Context, storage: ZmsDatabase) extends CachedStor
   def lastSlowSyncTimestamp = decodePref(LastSlowSyncTimeKey, java.lang.Long.parseLong)
   def lastSlowSyncTimestamp_=(time: Long): Unit = setPref(LastSlowSyncTimeKey, String.valueOf(time))
 
+  def shouldSyncConversations = decodePref(ShouldSyncConversations, java.lang.Boolean.parseBoolean)
+  def shouldSyncConversations_=(should: Boolean): Unit = setPref(ShouldSyncConversations, String.valueOf(should))
+
   def keyValuePref[A: PrefCodec](key: String, default: A) = new KeyValuePref[A](this, key, default)
 }
 
@@ -51,6 +54,7 @@ object KeyValueStorage {
   val Verified = "verified"
   val SelectedConvId = "selected_conv_id"
   val SpotifyRefreshToken = "spotify_refresh_token"
+  val ShouldSyncConversations = "should_sync_conversations"
 
   class KeyValuePref[A](storage: KeyValueStorage, key: String, val default: A)(implicit val trans: PrefCodec[A], implicit val dispatcher: ExecutionContext) extends Preference[A] {
     def apply(): Future[A] = storage.decodePref(key, trans.decode).map(_.getOrElse(default))

@@ -75,6 +75,13 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     } yield ()
   }
 
+  kvService.shouldSyncConversations.map{
+    case Some(true) =>
+      sync.syncConversations()
+      kvService.shouldSyncConversations = false
+    case _ =>
+  }
+
   errors.onErrorDismissed {
     case ErrorData(_, ErrorType.CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER, _, _, Some(convId), _, _, _, _) =>
       deleteConversation(convId)
