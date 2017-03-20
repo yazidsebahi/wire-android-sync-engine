@@ -26,8 +26,8 @@ case class ContentSearchQuery(originalString: String){
     originalString
       .replaceAll("[,'*]"," ")
       .split(" ")
-      .map(transliterated)
       .filter(_.nonEmpty)
+      .map(transliterated)
       .toSet
 
   override def toString = elements.mkString(" ")
@@ -43,4 +43,6 @@ object ContentSearchQuery {
   val empty = ContentSearchQuery("")
 
   def transliterated(s: String): String = transliteration.transliterate(s).trim
+
+  def preloadTransliteration() = transliteration
 }

@@ -20,6 +20,7 @@ package com.waz.service
 import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.ZLog._
+import com.waz.api.ContentSearchQuery
 import com.waz.api.impl.LogLevel
 import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
@@ -342,7 +343,7 @@ object ZMessaging { self =>
       currentUi = ui
       currentGlobal = global
       currentAccounts = accounts
-      Threading.Background { Locales.preloadTransliterator() } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
+      Threading.Background { Locales.preloadTransliterator(); ContentSearchQuery.preloadTransliteration(); } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
   }
 }
