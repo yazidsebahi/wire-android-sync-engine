@@ -50,7 +50,7 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
         verbose(s"$query local search")
         val connectedUsers = usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
         val usersAndMessageCount = connectedUsers.flatMap(users => Future.sequence(users.map(u => messages.countLaterThan(ConvId(u.id.str), Instant.now - topPeopleMessageInterval).map(count => (u, count)))))
-        Signal.future(usersAndMessageCount.map(_.sortBy(_._2)(Ordering[Long].reverse).map(_._1)))
+        Signal.future(usersAndMessageCount.map(_.filter(_._2 > 0).sortBy(_._2)(Ordering[Long].reverse).take(MaxTopPeople).map(_._1)))
       case r if r.forall(cached => (cacheExpiryTime elapsedSince cached.timestamp) || cached.entries.isEmpty) =>
         verbose(s"no cached entries for query $query")
 
@@ -59,6 +59,7 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
             usersStorage.find[UserData, Vector[UserData]](recommendedPredicate(prefix, withinThreeLevels), db => UserDataDao.recommendedPeople(prefix)(db), identity)
           case RecommendedHandle(prefix) =>
             usersStorage.find[UserData, Vector[UserData]](recommendedHandlePredicate(prefix), db => UserDataDao.recommendedPeople(prefix)(db), identity)
+          case _ => Future.successful(Vector())
         }
 
         fallbackToLocal.map(_.sortBy(_.name)(currentLocaleOrdering)).flatMap { users =>
@@ -135,4 +136,5 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
 object UserSearchService {
   private implicit val tag: LogTag = logTagFor[UserSearchService]
   val MinCommonConnections = 4
+  val MaxTopPeople = 10
 }
