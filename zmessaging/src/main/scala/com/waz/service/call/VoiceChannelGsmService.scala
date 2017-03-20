@@ -38,16 +38,17 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
 
   lazy val listener = new PhoneStateListener {
     override def onCallStateChanged(state: Int, incomingNumber: String): Unit = {
-      if (state == TelephonyManager.CALL_STATE_OFFHOOK) {
-        info(s"Received GSM call, will leave all voice channels")
-        dropWireCalls()
-      }
-    }
-  }
 
-  lifecycle.lifecycleState.on(dispatcher) {
-    case LifecycleState.Idle if listening => stopListening()
-    case _ =>
+      import TelephonyManager._
+      val stateStr = state match {
+        case CALL_STATE_IDLE    => "idle"
+        case CALL_STATE_RINGING => "ringing"
+        case CALL_STATE_OFFHOOK => "offhook"
+      }
+
+      info(s"GSM call state changed: $stateStr")
+      if (state == CALL_STATE_OFFHOOK) dropWireCalls()
+    }
   }
 
   (for {
@@ -66,11 +67,13 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
   voice.content.activeChannels.map(_.incoming.headOption).on(dispatcher)(_ foreach { _ => if (hasGsmCall) dropWireCalls() })
 
   private def startListening() = if (!listening) {
+    info("startListening")
     telephonyManager.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
     listening = true
   }
 
   private def stopListening() = if (listening) {
+    info("stopListening")
     telephonyManager.listen(listener, PhoneStateListener.LISTEN_NONE)
     listening = false
   }
