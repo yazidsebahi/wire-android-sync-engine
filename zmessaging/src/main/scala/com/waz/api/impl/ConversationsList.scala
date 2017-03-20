@@ -96,6 +96,8 @@ class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList
   override def getEstablishedConversations = established
 
   override def getState = ui.cached(Uris.ConversationsStateUri, new ConversationsListState)
+
+  override def onVerificationStateChange(callback: VerificationStateCallback): Unit = conversations.onVerificationStateChange(callback)
 }
 
 object ConversationsList {
