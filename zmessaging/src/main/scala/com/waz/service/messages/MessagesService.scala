@@ -192,6 +192,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(AssetData.IsImage(), _) | ImageAsset(AssetData.IsImage()) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case a@Asset(_, _) if a.original == null =>
+        MessageData(id, convId, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(_, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Location(_, _, _, _) =>
@@ -221,6 +223,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData.Empty
       case Asset(AssetData.IsImage(), _) | ImageAsset(AssetData.IsImage()) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case a@Asset(_, _) if a.original == null =>
+        MessageData(id, convId, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(_, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Ephemeral(expiry, ect) =>
