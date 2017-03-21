@@ -175,7 +175,8 @@ class CallingService(context:             Context,
   } yield n).onChanged { _ =>
     init.map { _ =>
       verbose("network mode changed during call - informing AVS")
-      Calling.wcall_network_changed()
+      // Reverting AVS to 3.2, uncomment this once updating to 3.3
+      //Calling.wcall_network_changed()
     }
   }
 
