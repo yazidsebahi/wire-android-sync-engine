@@ -69,6 +69,8 @@ object Calling {
 
   @native def wcall_enable_audio_cbr(enabled: Int): Unit
 
+  @native def wcall_set_audio_cbr_enabled_handler(wcall_audio_cbr_enabled_h: BitRateStateHandler): Unit
+
   val WCALL_REASON_NORMAL             = 0
   val WCALL_REASON_ERROR              = 1
   val WCALL_REASON_TIMEOUT            = 2
@@ -137,4 +139,7 @@ object Calling {
     def invoke(state: Int, arg: Pointer): Unit
   }
 
+  trait BitRateStateHandler extends Callback {
+    def invoke(arg: Pointer): Unit
+  }
 }
