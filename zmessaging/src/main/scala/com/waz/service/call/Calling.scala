@@ -40,7 +40,8 @@ object Calling {
       available.failure(e)
   }
 
-  @native def wcall_network_changed(): Unit
+  // Reverting AVS to 3.2, uncomment this once updating to 3.3
+  //@native def wcall_network_changed(): Unit
 
   @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
 
