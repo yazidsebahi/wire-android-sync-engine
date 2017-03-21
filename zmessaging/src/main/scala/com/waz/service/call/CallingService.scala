@@ -169,14 +169,18 @@ class CallingService(context:             Context,
     error("Error initialising calling v3", e)
   }
 
-  (for {
-    c <- currentCall if c.state != NO_ACTIVE_USERS
-    n <- network.networkMode
-  } yield n).onChanged { _ =>
-    init.map { _ =>
-      verbose("network mode changed during call - informing AVS")
-      // Reverting AVS to 3.2, uncomment this once updating to 3.3
-      //Calling.wcall_network_changed()
+  network.networkMode.onChanged { _ =>
+    currentCall.head.flatMap{
+      _.state match {
+        case s if s != NO_ACTIVE_USERS =>
+          init.map { _ =>
+            verbose("network mode changed during call - informing AVS")
+            // Reverting AVS to 3.2, uncomment this once updating to 3.3
+            //Calling.wcall_network_changed()
+          }
+        case _ =>
+          Future.successful[Unit](())
+      }
     }
   }
 
