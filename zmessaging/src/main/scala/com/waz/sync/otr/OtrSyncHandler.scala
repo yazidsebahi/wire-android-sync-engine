@@ -74,6 +74,8 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
   // in last try we will use 'ignore_missing' flag
   private def postEncryptedMessage(convId: ConvId, message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty, recipients: Option[Set[UserId]] = None)(f: (EncryptedContent, Int) => ErrorOrResponse[MessageResponse]): Future[Either[ErrorResponse, Date]] =
   convStorage.get(convId) flatMap {
+    case Some(conv) if conv.verified == Verification.UNVERIFIED && message.hasCalling =>
+      successful(Left(ErrorResponse.Unverified))
     case Some(conv) if conv.verified == Verification.UNVERIFIED =>
       // refusing to send messages to 'degraded' conversation, UI should show error and ask user to verify devices (or ignore it - which will change state to UNKNOWN)
       errors.addConvUnverifiedError(convId, MessageId(message.messageId)) map { _ => Left(ErrorResponse.Unverified) }
