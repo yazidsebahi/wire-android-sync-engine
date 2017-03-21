@@ -78,6 +78,7 @@ class CallingService(context:             Context,
 
   val v3Available = Signal.future(Calling.v3Available.map(_ => true).recover { case _ => false })
   val currentCall = Signal(IdleCall)
+  val otherSideCBR = Signal(false) // by default we assume the call is VBR
 
   val requestedCallVersion = Signal(-1)
 
@@ -101,6 +102,7 @@ class CallingService(context:             Context,
       },
       new SendHandler {
         override def invoke(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int = {
+          otherSideCBR.mutate(_ => false)
           val msg = data.getString(0, "UTF-8") //be sure to fetch the message on the callback thread!
           withConversationFromPointer(convId) { conv =>
             sendCallMessage(conv.id, GenericMessage(Uid(), GenericContent.Calling(msg)), ctx)
@@ -112,6 +114,7 @@ class CallingService(context:             Context,
         override def invoke(convId: String, userId: String, video_call: Boolean, arg: Pointer): Unit = withConversationFromPointer(convId) { conv =>
           val user = UserId(userId)
           verbose(s"Incoming call from $user in conv: $convId")
+          otherSideCBR.mutate(_ => false)
           currentCall.mutate {
             //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
             case IsIdle() => CallInfo(Some(conv.id), user, Set(user), OTHER_CALLING, isVideoCall = video_call, videoSendState = if(video_call) PREVIEW else DONT_SEND)
@@ -155,7 +158,7 @@ class CallingService(context:             Context,
       null
     )
     callingReady.future
-  }.map { _ =>
+  }.map( _ => {
     //Handles the state of received video, not sent video
     Calling.wcall_set_video_state_handler(new VideoStateHandler {
       override def invoke(state: Int, arg: Pointer): Unit = dispatcher { //ensure call state change is posted to dispatch queue
@@ -163,7 +166,12 @@ class CallingService(context:             Context,
         currentCall.mutate(_.copy(videoReceiveState = VideoReceiveState(state)))
       }
     })
-  }
+
+    Calling.wcall_set_audio_cbr_enabled_handler(new BitRateStateHandler {
+      override def invoke(arg: Pointer): Unit = otherSideCBR.mutate(_ => true)
+    })
+
+  })
 
   init.onFailure { case e =>
     error("Error initialising calling v3", e)
