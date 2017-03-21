@@ -45,7 +45,7 @@ class ErrorsList(implicit ui: UiModule) extends com.waz.api.ErrorsList with Core
         override def getResponse: ErrorResponse = ErrorResponse(err.responseCode, err.responseMessage, err.responseLabel)
       }
     }.toArray
-    errors.foreach(e => if (!prev(e.getId)) listeners.foreach(_.onError(e)))
+    errors.foreach(e => listeners.foreach(_.onError(e)))
     prev = errors.map(_.getId).toSet
     notifyChanged()
   }
