@@ -78,7 +78,7 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue:
 
   private def resolveId(content: String): Option[SpotifyId] = {
     val uri = Uri.parse(content)
-    if (uri.getHost.toLowerCase(Locale.ENGLISH) != "open.spotify.com") None else {
+    if (!SpotifyClient.domainNames.contains(uri.getHost.toLowerCase(Locale.ENGLISH))) None else {
       uri.getPathSegments.asScala match {
         case Seq("track", id) =>
           verbose(s"resolved track id (from $content): $id")

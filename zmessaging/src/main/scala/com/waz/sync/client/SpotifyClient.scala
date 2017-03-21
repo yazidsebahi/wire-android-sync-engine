@@ -72,6 +72,8 @@ class SpotifyClient(netClient: ZNetClient, val clientId: SpotifyClientId) {
 object SpotifyClient {
   import JsonDecoder._
 
+  val domainNames = Set("open.spotify.com", "play.spotify.com")
+
   implicit val logTag = logTagFor[SpotifyClient]
 
   private val Base = "https://api.spotify.com/v1"

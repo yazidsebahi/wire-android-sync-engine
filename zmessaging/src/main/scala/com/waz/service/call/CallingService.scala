@@ -35,7 +35,7 @@ import com.waz.service.call.Calling._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
-import com.waz.service.{ErrorsService, EventScheduler, MediaManagerService}
+import com.waz.service.{ErrorsService, EventScheduler, MediaManagerService, NetworkModeService}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
@@ -66,6 +66,7 @@ class CallingService(context:             Context,
                      mediaManagerService: MediaManagerService,
                      pushService:         PushService,
                      callLogService:      CallLogService,
+                     network: NetworkModeService,
                      errors:              ErrorsService) {
 
   private implicit val eventContext = EventContext.Global
@@ -168,6 +169,16 @@ class CallingService(context:             Context,
     error("Error initialising calling v3", e)
   }
 
+  (for {
+    c <- currentCall if c.state != NO_ACTIVE_USERS
+    n <- network.networkMode
+  } yield n).onChanged { _ =>
+    init.map { _ =>
+      verbose("network mode changed during call - informing AVS")
+      Calling.wcall_network_changed()
+    }
+  }
+
   def startCall(convId: ConvId, isVideo: Boolean = false): Unit = withConvWhenReady(convId) { conv =>
     membersStorage.getByConv(conv.id).map { members =>
       verbose(s"startCall convId: $convId, isVideo: $isVideo")
@@ -268,6 +279,11 @@ class CallingService(context:             Context,
       Calling.wcall_set_video_send_active(conv.remoteId.str, send)
       currentCall.mutate(_.copy(videoSendState = if (send) SEND else DONT_SEND))
     }
+  }
+
+  def setAudioConstantBitRateEnabled(enabled: Int): Unit = {
+    verbose(s"setting the audio cbr to $enabled")
+    Calling.wcall_enable_audio_cbr(enabled)
   }
 
   val callMessagesStage = EventScheduler.Stage[CallMessageEvent] {

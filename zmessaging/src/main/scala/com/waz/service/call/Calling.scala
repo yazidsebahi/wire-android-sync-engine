@@ -40,6 +40,8 @@ object Calling {
       available.failure(e)
   }
 
+  @native def wcall_network_changed(): Unit
+
   @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
 
   @native def wcall_close(): Unit
@@ -64,6 +66,7 @@ object Calling {
 
   @native def wcall_get_state(convid: String): Int
 
+  @native def wcall_enable_audio_cbr(enabled: Int): Unit
 
   val WCALL_REASON_NORMAL             = 0
   val WCALL_REASON_ERROR              = 1
