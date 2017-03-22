@@ -183,8 +183,7 @@ class CallingService(context:             Context,
         case s if s != NO_ACTIVE_USERS =>
           init.map { _ =>
             verbose("network mode changed during call - informing AVS")
-            // Reverting AVS to 3.2, uncomment this once updating to 3.3
-            //Calling.wcall_network_changed()
+            Calling.wcall_network_changed()
           }
         case _ =>
           Future.successful[Unit](())
