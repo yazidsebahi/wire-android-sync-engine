@@ -20,7 +20,7 @@ package com.waz.utils
 import android.content.Context
 import android.os.PowerManager
 import com.waz.ZLog.{LogTag, verbose}
-import com.waz.threading.CancellableFuture
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.utils.events.Signal
@@ -36,7 +36,7 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
 
   protected val count = Signal[Int]()
 
-  count {
+  count.on(Threading.Ui) {
     case 0 if wakeLock.isHeld =>
       verbose("releasing wakelock")
       wakeLock.release()
