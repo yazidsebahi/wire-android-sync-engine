@@ -49,12 +49,14 @@ class WebSocketClientService(context: Context,
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  // true if websocket should be active,
+  val useWebSocketFallback = gcmService.gcmActive.map(!_)
+
+  // true if web socket should be active,
   val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
     case _ => lifecycle.lifecycleState.flatMap {
       case Stopped => Signal const false
-      case Idle => gcmService.gcmActive.map(!_)
+      case Idle => useWebSocketFallback
       case Active | UiActive => Signal const true
     }.flatMap {
       case true => Signal.const(true)
