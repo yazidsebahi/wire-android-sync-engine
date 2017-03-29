@@ -29,7 +29,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 object UserSearchSyncHandler {
-  val DefaultLimit = 50
+  val DefaultLimit = 30
 }
 
 class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient) {
