@@ -60,7 +60,7 @@ abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
 
   /*
    * Tries loading and processing of full cached image first
-   * If loading (od processing) from cache fails does following:
+   * If loading (or processing) from cache fails does following:
    * - starts preview loading / processing
    * - start full image loading
    * - cancels preview when full image is loaded
@@ -149,7 +149,6 @@ object BitmapSignal {
     def id: AssetId
 
     override def process(result: Bitmap, signal: BitmapSignal) = {
-
       def generateResult: CancellableFuture[Bitmap] = {
         if (result == bitmap.EmptyBitmap) CancellableFuture.successful(result)
         else req match {
@@ -233,7 +232,10 @@ class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: Image
   override protected def previewLoader(req: BitmapRequest): Loader =
     req match {
       case Single(_, _) => EmptyLoader
-      case _ => new AssetBitmapLoader(asset, req, imageLoader, cache)
+      case _ => asset.mime match {
+        case Mime.Image.Gif | Mime.Image.Unknown => new AssetBitmapLoader(asset, req, imageLoader, cache)
+        case _ => EmptyLoader
+      }
     }
 
   override protected def fullLoader(req: BitmapRequest): Loader =
