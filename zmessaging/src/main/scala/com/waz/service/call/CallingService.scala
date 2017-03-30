@@ -144,6 +144,7 @@ class CallingService(context:             Context,
           verbose(s"call established for conv: ${conv.id}, userId: $userId")
           currentCall.mutate{ c =>
             setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
+            setCallMuted(c.muted) //Need to set muted only after call is established
             c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now))
           }
         }
