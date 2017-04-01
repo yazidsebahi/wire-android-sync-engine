@@ -22,7 +22,7 @@ lazy val root = Project("wire-external", file("."))
     publish := { },
     publishLocal := { }
   )
-  .aggregate(icu4j, spotifyPlayer, spotifyAuth)
+  .aggregate(icu4j, spotifyPlayer)
 
 lazy val icu4j = project
   .settings(proguardSettings:_ *)
@@ -70,8 +70,6 @@ lazy val spotifySettings = commonSettings ++ Seq(
 )
 
 lazy val spotifyPlayer = project.settings(spotifySettings: _*).settings(name := "spotify-player")
-
-lazy val spotifyAuth = project.settings(spotifySettings: _*).settings(name := "spotify-auth")
 
 
 def cryptoboxDownloadUrl(version: String, artifact: String = "cryptobox-android", ext: String = "aar") =
