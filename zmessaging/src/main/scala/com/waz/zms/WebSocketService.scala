@@ -80,13 +80,16 @@ class WebSocketService extends FutureService with ServiceEventContext {
       verbose(s"scheduling restarts with interval: $interval")
       alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + interval.toMillis, interval.toMillis, restartIntent)
     case None =>
+      verbose("cancel restarts")
       alarmService.cancel(restartIntent)
   }
 
   notificationsState.orElse(Signal const None).on(Threading.Ui) {
     case None =>
+      verbose("stopForeground")
       stopForeground(true)
     case Some(state) =>
+      verbose(s"startForeground $state")
       startForeground(ForegroundId, new NotificationCompat.Builder(context)
         .setSmallIcon(R.drawable.ic_menu_logo)
         .setContentTitle(context.getResources.getString(state))
