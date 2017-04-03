@@ -48,7 +48,7 @@ class PreferenceService(context: Context) {
 
   lazy val wsForegroundEnabledPref = uiPreferenceBooleanSignal(wsForegroundKey)
 
-  def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, false) //false by default for production
+  def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, ZmsVersion.DEBUG) //false by default for production
   def callingV3  = uiPreferences.getString(callingV3Key,         if (ZmsVersion.DEBUG) "2" else "0") //0 (calling v2) by default for production, v3 (2) for debug
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey,       true) //true by default for production
 
