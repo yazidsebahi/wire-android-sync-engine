@@ -144,6 +144,7 @@ class CallingService(context:             Context,
           verbose(s"call established for conv: ${conv.id}, userId: $userId")
           currentCall.mutate{ c =>
             setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
+            setCallMuted(c.muted) //Need to set muted only after call is established
             c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now))
           }
         }
@@ -183,8 +184,7 @@ class CallingService(context:             Context,
         case s if s != NO_ACTIVE_USERS =>
           init.map { _ =>
             verbose("network mode changed during call - informing AVS")
-            // Reverting AVS to 3.2, uncomment this once updating to 3.3
-            //Calling.wcall_network_changed()
+            Calling.wcall_network_changed()
           }
         case _ =>
           Future.successful[Unit](())

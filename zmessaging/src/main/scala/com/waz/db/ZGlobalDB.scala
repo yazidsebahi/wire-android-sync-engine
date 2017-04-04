@@ -50,7 +50,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 15
+  val DbVersion = 16
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao)
 
@@ -92,6 +92,10 @@ object ZGlobalDB {
       Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
         val prefs = new PreferenceService(context)
         prefs.editUiPreferences(_.putString(prefs.callingV3Key, "2")) //force update debug builds to calling v3
+      }},
+      Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
+        val prefs = new PreferenceService(context)
+        prefs.editUiPreferences(_.putBoolean(prefs.sendWithAssetsV3Key, true))
       }}
     )
 

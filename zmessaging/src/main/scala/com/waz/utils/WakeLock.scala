@@ -22,8 +22,6 @@ import android.os.PowerManager
 import com.waz.ZLog.{LogTag, verbose}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
-import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.utils.events.Signal
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -34,30 +32,28 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
   protected lazy val powerManager = appContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
   protected lazy val wakeLock = powerManager.newWakeLock(level, tag)
 
-  protected val count = Signal[Int]()
+  protected def acquire(): Unit = {
+    verbose("acquiring wakelock")
+    wakeLock.acquire()
+  }
 
-  count {
-    case 0 if wakeLock.isHeld =>
-      verbose("releasing wakelock")
-      wakeLock.release()
-    case 1 if !wakeLock.isHeld =>
-      verbose("acquiring wakelock")
-      wakeLock.acquire()
-    case _ =>
+  protected def release(): Unit = {
+    verbose("releasing wakelock")
+    wakeLock.release()
   }
 
   def apply[A](body: => A): A = {
-    count.mutateOrDefault(_ + 1, 1)
+    acquire()
     try {
       body
     } finally {
-      count.mutate(_ - 1)
+      release()
     }
   }
 
   def async[A](body: Future[A]): Future[A] = {
-    count.mutateOrDefault(_ + 1, 1)
-    returning(body) { _.onComplete(_ => count.mutate(_ - 1)) }
+    acquire()
+    returning(body) { _.onComplete(_ => release()) }
   }
 }
 
@@ -65,7 +61,7 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
 class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: LogTag) extends WakeLock(context) {
 
   override def apply[A](body: => A): A = {
-    count.mutateOrDefault(_ + 1, 1)
+    acquire()
     try {
       body
     } finally {
@@ -74,9 +70,9 @@ class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: Lo
   }
 
   override def async[A](body: Future[A]): Future[A] = {
-    count.mutateOrDefault(_ + 1, 1)
+    acquire()
     returning(body) { _.onComplete(_ => releaseAfterDuration()) }
   }
 
-  private def releaseAfterDuration(): Unit = CancellableFuture.delay(duration).onComplete(_ => count.mutate(_ - 1))
+  private def releaseAfterDuration(): Unit = CancellableFuture.delay(duration).onComplete(_ => release())
 }
