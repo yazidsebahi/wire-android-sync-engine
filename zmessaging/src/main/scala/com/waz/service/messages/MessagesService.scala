@@ -44,8 +44,9 @@ import scala.concurrent.Future
 import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
-class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
-    reactions: ReactionsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts) {
+class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
+                      prefs: PreferenceService, users: UserService, convs: ConversationsContentUpdater, reactions: ReactionsStorage,
+                      network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts) {
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[MessagesService]
   private implicit val ec = EventContext.Global
@@ -87,7 +88,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
 
   private def updateAssets(events: Seq[MessageEvent]) = {
 
-    def decryptData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = {
+    def decryptDataCBC(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = {
       data.flatMap { arr =>
         otrKey.map { key =>
           if (sha.forall(_.str == com.waz.utils.sha2(arr))) LoggedTry(AESUtils.decrypt(key, arr)).toOption else None
@@ -96,6 +97,14 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           Some(arr)
         }
       }.filter(_.nonEmpty)
+    }
+
+    // throws a NotImplementedError when called; to be implemented later
+    def decryptDataGCM(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = ???
+
+    def decryptData(assetData: AssetData, data: Option[Array[Byte]]): Option[Array[Byte]] = (prefs.v31AssetsEnabled, assetData.encryption) match {
+      case (true, Some(EncryptionAlgorithm.AES_GCM)) => decryptDataGCM(assetData.id, assetData.otrKey, assetData.sha, data)
+      case _ => decryptDataCBC(assetData.id, assetData.otrKey, assetData.sha, data)
     }
 
     //ensure we always save the preview to the same id (GenericContent.Asset.unapply always creates new assets and previews))
@@ -127,15 +136,15 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           }
         case (Asset(a, p), Some(rId)) =>
           val forPreview = a.otrKey.isEmpty //For assets containing previews, the second GenericMessage contains remote information about the preview, not the asset
-          val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptData(a.id, a.otrKey, a.sha, data))
-          val preview = p.map(_.copy(remoteId = if (forPreview) Some(rId) else None, convId = convId, data = if (forPreview) decryptData(a.id, a.otrKey, a.sha, data) else None))
+          val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptData(a, data))
+          val preview = p.map(_.copy(remoteId = if (forPreview) Some(rId) else None, convId = convId, data = if (forPreview) decryptData(a, data) else None))
           verbose(s"Received asset v2 non-image (forPreview?: $forPreview): $asset with preview: $preview")
           saveAssetAndPreview(asset, preview)
         case (ImageAsset(a@AssetData.IsImageWithTag(Preview)), _) =>
           verbose(s"Received image preview for msg: $id. Dropping")
           Future successful None
         case (ImageAsset(a@AssetData.IsImageWithTag(Medium)), Some(rId)) =>
-          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
+          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a, data))
           verbose(s"Received asset v2 image: $asset")
           assets.storage.mergeOrCreateAsset(asset)
         case (Asset(a, preview), _ ) =>

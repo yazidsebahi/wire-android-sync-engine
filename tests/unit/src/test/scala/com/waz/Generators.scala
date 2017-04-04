@@ -26,7 +26,7 @@ import android.net.Uri
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
-import com.waz.model.GenericContent.Text
+import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserData.ConnectionStatus.{Accepted, PendingFromOther}
@@ -144,6 +144,7 @@ object Generators {
     token         <- optGen(arbitrary[AssetToken])
     otrKey        <- optGen(arbitrary[AESKey])
     sha           <- optGen(arbitrary[Sha256])
+    encryption    <- optGen(oneOf(EncryptionAlgorithm.AES_GCM, EncryptionAlgorithm.AES_CBC))
     name          <- optGen(alphaNumStr)
     previewId     <- optGen(arbitrary[AssetId])
     metaData      <- optGen(arbitrary[AssetMetaData])
@@ -151,7 +152,7 @@ object Generators {
     proxyPath     <- optGen(arbitrary[String])
     convId        <- optGen(arbitrary[RConvId])
     data <- optGen(arbitrary[Array[Byte]])
-  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, name, previewId, metaData, source, proxyPath, convId, data))
+  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, encryption, name, previewId, metaData, source, proxyPath, convId, data))
 
 
   implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(frequency((2, oneOf[AssetStatus](AssetStatus.UploadNotStarted,
