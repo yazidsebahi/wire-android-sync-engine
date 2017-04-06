@@ -155,6 +155,7 @@ object GenericContent {
           ak.token.foreach(v => rData.assetToken = v.str)
           ak.otrKey.foreach(v => rData.otrKey = v.bytes)
           ak.sha256.foreach(v => rData.sha256 = v.bytes)
+          ak.encryption.foreach(v => rData.encryption = v.value)
         }
 
       def unapply(remoteData: RemoteData): Option[AssetData.RemoteData] = Option(remoteData) map { rData =>
@@ -162,7 +163,8 @@ object GenericContent {
           Option(rData.assetId).filter(_.nonEmpty).map(RAssetId),
           Option(rData.assetToken).filter(_.nonEmpty).map(AssetToken),
           Some(AESKey(rData.otrKey)).filter(_ != AESKey.Empty),
-          Some(Sha256(rData.sha256)).filter(_ != Sha256.Empty))
+          Some(Sha256(rData.sha256)).filter(_ != Sha256.Empty),
+          Some(EncryptionAlgorithm(rData.encryption)))
       }
     }
 
@@ -492,11 +494,11 @@ object GenericContent {
     override def set(msg: GenericMessage) = msg.setConfirmation
 
     def apply(msg: MessageId) = returning(new Messages.Confirmation) { c =>
-      c.messageId = msg.str
+      c.firstMessageId = msg.str
       c.`type` = Messages.Confirmation.DELIVERED
     }
 
-    def unapply(proto: Receipt): Option[MessageId] = if (proto.`type` == Messages.Confirmation.DELIVERED) Some(MessageId(proto.messageId)) else None
+    def unapply(proto: Receipt): Option[MessageId] = if (proto.`type` == Messages.Confirmation.DELIVERED) Some(MessageId(proto.firstMessageId)) else None
   }
 
   type External = Messages.External
@@ -576,6 +578,31 @@ object GenericContent {
     }
 
     def unapply(calling: Calling): Option[String] = Option(calling.content)
+  }
+
+  sealed trait EncryptionAlgorithm {
+    val value: Int
+  }
+
+  implicit object EncryptionAlgorithm {
+
+    case object AES_CBC extends EncryptionAlgorithm {
+      override val value: Int = Messages.AES_CBC
+    }
+
+    case object AES_GCM extends EncryptionAlgorithm {
+      override val value: Int = Messages.AES_GCM
+    }
+
+    def apply(v: Int) = v match {
+      case Messages.AES_GCM => AES_GCM
+      case other => AES_CBC
+    }
+
+    def unapply(encryption: EncryptionAlgorithm): Option[Int] = encryption match {
+      case AES_GCM => Some(Messages.AES_GCM)
+      case _ => Some(Messages.AES_CBC)
+    }
   }
 
 }

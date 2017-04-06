@@ -27,6 +27,7 @@ import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetStatus.UploadDone
+import com.waz.model.GenericContent.EncryptionAlgorithm
 import com.waz.model.otr.SignalingKey
 import com.waz.service.ZMessaging
 import com.waz.service.downloads.DownloadRequest._
@@ -45,6 +46,7 @@ case class AssetData(id:          AssetId               = AssetId(),
                      token:       Option[AssetToken]    = None,
                      otrKey:      Option[AESKey]        = None,
                      sha:         Option[Sha256]        = None,
+                     encryption:  Option[EncryptionAlgorithm] = None,
                      name:        Option[String]        = None,
                      previewId:   Option[AssetId]       = None,
                      metaData:    Option[AssetMetaData] = None,
@@ -72,6 +74,7 @@ case class AssetData(id:          AssetId               = AssetId(),
        | token:         $token
        | otrKey:        $otrKey
        | sha:           $sha
+       | encryption     $encryption
        | preview:       $previewId
        | metaData:      $metaData
        | convId:        $convId
@@ -86,9 +89,9 @@ case class AssetData(id:          AssetId               = AssetId(),
 
   lazy val fileExtension = mime.extension
 
-  lazy val remoteData = (remoteId, token, otrKey, sha) match {
-    case (None, None, None, None) => Option.empty[RemoteData]
-    case _ => Some(RemoteData(remoteId, token, otrKey, sha))
+  lazy val remoteData = (remoteId, token, otrKey, sha, encryption) match {
+    case (None, None, None, None, None) => Option.empty[RemoteData]
+    case _ => Some(RemoteData(remoteId, token, otrKey, sha, encryption))
   }
 
   lazy val cacheKey = {
@@ -161,10 +164,11 @@ object AssetData {
   def isExternalUri(uri: Uri): Boolean = Option(uri.getScheme).forall(_.startsWith("http"))
 
   //simplify handling remote data from asset data
-  case class RemoteData(remoteId: Option[RAssetId]    = None,
-                        token:    Option[AssetToken]  = None,
-                        otrKey:   Option[AESKey]      = None,
-                        sha256:   Option[Sha256]      = None
+  case class RemoteData(remoteId:   Option[RAssetId]            = None,
+                        token:      Option[AssetToken]          = None,
+                        otrKey:     Option[AESKey]              = None,
+                        sha256:     Option[Sha256]              = None,
+                        encryption: Option[EncryptionAlgorithm] = None
                        )
 
   //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
@@ -297,6 +301,7 @@ object AssetData {
         decodeOptString('token).map(AssetToken(_)),
         decodeOptString('otrKey).map(AESKey(_)),
         decodeOptString('sha256).map(Sha256(_)),
+        decodeOptInt('encryption).map(EncryptionAlgorithm(_)),
         'name,
         'preview,
         opt[AssetMetaData]('metaData),

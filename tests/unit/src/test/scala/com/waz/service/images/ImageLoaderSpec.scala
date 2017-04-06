@@ -61,7 +61,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       override def download[A <: DownloadRequest](req: A, force: Boolean)(implicit loader: downloads.Downloader[A], expires: Expiration): CancellableFuture[Option[CacheEntry]] = {
         downloadRequest = downloadRequest :+ req
         req match {
-          case WireAssetRequest(_, _, RemoteData(Some(id), _, _, _), _, _, _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
+          case WireAssetRequest(_, _, RemoteData(Some(id), _, _, _, _), _, _, _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
           case _ => CancellableFuture.successful(None)
         }
       }
@@ -128,7 +128,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       image.getWidth shouldEqual 240
 
       downloadRequest should beMatching({
-        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _)) => true
+        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _)) => true
       })
     }
 
@@ -155,7 +155,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       downloadRequest.size shouldEqual (REPEATS)
 
       downloadRequest.foreach{ _ should beMatching({
-        case WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _) => true
+        case WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _) => true
       })}
     }
   }
@@ -168,7 +168,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       assertResults(BitmapRequest.Regular(300)) { results =>
         results should have size 1
         downloadRequest should beMatching({
-          case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _)) => true
+          case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _)) => true
         })
       }
     }
@@ -194,7 +194,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
 
       downloadRequest should beMatching({
-        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _)) => true
+        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _)) => true
       })
     }
 

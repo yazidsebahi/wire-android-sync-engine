@@ -273,7 +273,7 @@ class MessagesSyncHandler(context: Context, service: MessagesService, msgContent
                 Some(data) <- assets.getAssetData(asset.id)
                 res <- otrSync.postAssetDataV2(conv, key, proto, data, recipients = rcps)
               } yield res).flatMap {
-                case Right((r@RemoteData(_, _, _, sha), date)) =>
+                case Right((r@RemoteData(_, _, _, sha, _), date)) =>
                   val updated = asset.copyWithRemoteData(r)
                   CancellableFuture lift (for {
                     _ <- assets.storage.mergeOrCreateAsset(updated)
