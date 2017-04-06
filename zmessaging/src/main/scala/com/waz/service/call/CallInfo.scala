@@ -35,7 +35,9 @@ case class CallInfo(convId:            Option[ConvId]                    = None,
                     caller:            UserId                            = UserId.Zero,
                     others:            Set[UserId]                       = Set.empty,
                     state:             VoiceChannelState                 = NO_ACTIVE_USERS,
+                    shouldRing:        Boolean                           = false,
                     muted:             Boolean                           = false,
+                    isGroupConv:       Boolean                           = false,
                     isVideoCall:       Boolean                           = false,
                     videoSendState:    VideoSendState                    = DONT_SEND,
                     videoReceiveState: VideoReceiveState                 = Stopped,
@@ -51,6 +53,7 @@ case class CallInfo(convId:            Option[ConvId]                    = None,
        | others:            $others
        | state:             $state
        | muted:             $muted
+       | isGroupConv:       $isGroupConv
        | isVideoCall:       $isVideoCall
        | videoSendState:    $videoSendState
        | videoReceiveState: $videoReceiveState

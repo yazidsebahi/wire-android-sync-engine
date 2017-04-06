@@ -526,7 +526,7 @@ class DeviceActor(val deviceName: String,
 
     case StartCall(remoteId) =>
       whenConversationExists(remoteId) { conv =>
-        if (prefs.callingV3 == "2") zmessaging.calling.startCall(conv.id)
+        if (prefs.callingV3 == "2") zmessaging.calling.startCall(conv.id, isGroup = false)
         else {
           conv.getVoiceChannel.join(spy.joinCallback)
         }

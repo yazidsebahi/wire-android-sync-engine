@@ -17,7 +17,8 @@
  */
 package com.waz.service.call
 
-import com.sun.jna.{Callback, Native, Pointer}
+import com.sun.jna.{Callback, Native, Pointer, Structure}
+import com.waz.CLibrary.Members
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.utils.jna.{Size_t, Uint32_t}
@@ -46,17 +47,17 @@ object Calling {
 
   @native def wcall_close(): Unit
 
-  @native def wcall_start(convid: String, is_video_call: Boolean): Int
+  @native def wcall_start(convid: String, is_video_call: Boolean, is_group: Boolean): Int
 
-  @native def wcall_answer(convid: String): Unit
+  @native def wcall_answer(convid: String, is_group: Boolean): Unit
 
   @native def wcall_resp(status: Int, reason: String, arg: Pointer): Int
 
   @native def wcall_recv_msg(msg: Array[Byte], len: Int, curr_time: Uint32_t, msg_time: Uint32_t, convId: String, userId: String, clientId: String): Int
 
-  @native def wcall_end(convId: String): Unit
+  @native def wcall_end(convId: String, is_group: Boolean): Unit
 
-  @native def wcall_reject(convId: String): Unit
+  @native def wcall_reject(convId: String, is_group: Boolean): Unit
 
   @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoStateHandler): Unit
 
@@ -69,6 +70,14 @@ object Calling {
   @native def wcall_enable_audio_cbr(enabled: Int): Unit
 
   @native def wcall_set_audio_cbr_enabled_handler(wcall_audio_cbr_enabled_h: BitRateStateHandler): Unit
+
+  @native def wcall_set_group_changed_handler(wcall_group_changed_h: GroupChangedHandler): Unit
+
+  @native def wcall_get_members(convid: String): Members
+
+  @native def wcall_free_members(pointer: Pointer): Unit
+
+  @native def wcall_set_state_handler(wcall_state_change_h: StateChangeHandler): Unit
 
   val WCALL_REASON_NORMAL             = 0
   val WCALL_REASON_ERROR              = 1
@@ -105,7 +114,7 @@ object Calling {
 
   /* Incoming call */
   trait IncomingCallHandler extends Callback {
-    def invoke(convid: String, userid: String, video_call: Boolean, arg: Pointer): Unit
+    def invoke(convid: String, userid: String, video_call: Boolean, should_ring: Boolean, arg: Pointer): Unit
   }
 
   /* Missed call */
@@ -141,4 +150,25 @@ object Calling {
   trait BitRateStateHandler extends Callback {
     def invoke(arg: Pointer): Unit
   }
+
+  trait GroupChangedHandler extends Callback {
+    def invoke(convId: String, arg: Pointer): Unit
+  }
+
+  /**
+    * Call state callback
+    *
+    *   WCALL_STATE_NONE         0 There is no call
+    *   WCALL_STATE_OUTGOING     1 Outgoing call is pending
+    *   WCALL_STATE_INCOMING     2 Incoming call is pending
+    *   WCALL_STATE_ANSWERED     3 Call has been answered, but no media
+    *   WCALL_STATE_MEDIA_ESTAB  4 Call has been answered, with media
+    *   WCALL_STATE_TERM_LOCAL   6 Call was locally terminated
+    *   WCALL_STATE_TERM_REMOTE  7 Call was remotely terminated
+    *   WCALL_STATE_UNKNOWN      8 Unknown
+    */
+  trait StateChangeHandler extends Callback {
+    def invoke(convId: String, state: Int, arg: Pointer): Unit
+  }
+
 }

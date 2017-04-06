@@ -19,7 +19,6 @@ package com.waz.zms
 
 import android.content.{Context, Intent}
 import com.waz.ZLog._
-import com.waz.api.VoiceChannelState
 import com.waz.api.VoiceChannelState._
 import com.waz.model.ConvId
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
@@ -48,8 +47,10 @@ class CallService extends FutureService {
       debug(s"convId: $convId")
 
       intent.getAction match {
-        case ActionJoin => executor.join(convId, id, withVideo = false)
-        case ActionJoinWithVideo => executor.join(convId, id, withVideo = true)
+        case ActionJoin => executor.join(convId, id, withVideo = false, isGroup = false)
+        case ActionJoinGroup => executor.join(convId, id, withVideo = false, isGroup = true)
+        case ActionJoinWithVideo => executor.join(convId, id, withVideo = true, isGroup = false)
+        case ActionJoinGroupWithVideo => executor.join(convId, id, withVideo = true, isGroup = true)
         case ActionLeave => executor.leave(convId, id)
         case ActionSilence => executor.silence(convId, id)
         case _ => executor.track(convId, id)
@@ -67,7 +68,9 @@ object CallService {
 
   val ActionTrack = "com.waz.zclient.call.ACTION_TRACK"
   val ActionJoin = "com.waz.zclient.call.ACTION_JOIN"
+  val ActionJoinGroup = "com.waz.zclient.call.ACTION_JOIN_GROUP"
   val ActionJoinWithVideo = "com.waz.zclient.call.ACTION_JOIN_WITH_VIDEO"
+  val ActionJoinGroupWithVideo = "com.waz.zclient.call.ACTION_JOIN_GROUP_WITH_VIDEO"
   val ActionLeave = "com.waz.zclient.call.ACTION_LEAVE"
   val ActionSilence = "com.waz.zclient.call.ACTION_SILENCE"
 
@@ -86,7 +89,9 @@ object CallService {
   def trackIntent(context: Context, conv: ConvId) = intent(context, conv, ActionTrack)
 
   def joinIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoin)
+  def joinGroupIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroup)
   def joinWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
+  def joinGroupWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
 
   def leaveIntent(context: Context, conv: ConvId) = intent(context, conv, ActionLeave)
 
@@ -98,9 +103,9 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
   private implicit val logTag: LogTag = logTagFor[CallExecutor]
   import Threading.Implicits.Background
 
-  def join(conv: ConvId, id: Int, withVideo: Boolean) = execute { zms =>
+  def join(conv: ConvId, id: Int, withVideo: Boolean, isGroup: Boolean) = execute { zms =>
     isV3Call(zms).flatMap {
-      case true => Future.successful(zms.calling.acceptCall(conv))
+      case true => Future.successful(zms.calling.acceptCall(conv, isGroup))
       case _ => zms.voice.joinVoiceChannel(conv, withVideo) flatMap (_ => track(conv, zms))
     }
   }(s"CallExecutor.join($id, withVideo = $withVideo)")
