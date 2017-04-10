@@ -177,21 +177,36 @@ class CallingService(context:             Context,
     Calling.wcall_set_group_changed_handler(new GroupChangedHandler {
       override def invoke(convId: String, arg: Pointer): Unit = dispatcher {
         verbose(s"group members changed, convId: $convId")
-        val members = Calling.wcall_get_members(convId)
-        if (members.membc.intValue() > 0) {
-          val memberArray = members.toArray(members.membc.intValue())
-          currentCall.mutate(_.copy(others = memberArray.map(u => UserId(u.userid)).toSet))
-        } else {
-          currentCall.mutate(_.copy(others = Set.empty))
+        currentCall map {
+          case call if call.convId.contains(convId) =>
+            val members = Calling.wcall_get_members(convId)
+            if (members.membc.intValue() > 0) {
+              val memberArray = members.toArray(members.membc.intValue())
+              currentCall.mutate(_.copy(others = memberArray.map(u => UserId(u.userid)).toSet))
+            } else {
+              currentCall.mutate(_.copy(others = Set.empty))
+            }
+            Calling.wcall_free_members(members.getPointer)
+            call.estabTime.foreach { est =>
+              messagesService.addSuccessfulCallMessage(ConvId(convId), call.caller, est, est.until(Instant.now))
+              callLogService.addEstablishedCall(None, ConvId(convId), call.isVideoCall)
+            }
+          case _ => //ignore
         }
-        Calling.wcall_free_members(members.getPointer)
       }
     })
 
     Calling.wcall_set_state_handler(new StateChangeHandler {
       override def invoke(convId: String, state: Int, arg: Pointer): Unit = dispatcher {
-        // TODO fix self leaving
         verbose(s"call state changed, convId: $convId, state: $state")
+        if (state == 2)
+          currentCall.head.map {
+            _.state match {
+              case VoiceChannelState.SELF_CONNECTED =>
+                currentCall.mutate(_.copy(shouldRing = false, state = VoiceChannelState.OTHER_CALLING))
+              case _ => // Ignore
+            }
+          }
       }
     })
 
@@ -216,20 +231,30 @@ class CallingService(context:             Context,
   }
 
   def startCall(convId: ConvId, isVideo: Boolean = false, isGroup: Boolean): Unit = withConvWhenReady(convId) { conv =>
-    membersStorage.getByConv(conv.id).map { members =>
-      verbose(s"startCall convId: $convId, isVideo: $isVideo, isGroup: $isGroup")
-      Calling.wcall_start(conv.remoteId.str, isVideo, isGroup) match {
-        case 0 =>
-          currentCall.mutate {
-            case IsIdle() =>
-              val others = members.map(_.userId).find(_ != selfUserId).toSet
-              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              CallInfo(Some(conv.id), selfUserId, others, SELF_CALLING, isGroupConv = isGroup, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
-            case cur =>
-              error("Call already in progress, not updating")
-              cur
+    currentCall.head.map { callInfo =>
+      verbose(s"startCall currentState: ${callInfo.state}, currentConvId: ${callInfo.convId}")
+      callInfo.state match {
+        case OTHER_CALLING if callInfo.convId.contains(convId) =>
+          acceptCall(convId, isGroup)
+        case _ =>
+          verbose(s"startCall convId: $convId, isVideo: $isVideo, isGroup: $isGroup")
+          membersStorage.getByConv(conv.id).map { members =>
+            Calling.wcall_start(conv.remoteId.str, isVideo, isGroup) match {
+              case 0 =>
+                currentCall.mutate {
+                  case IsIdle() =>
+                    val others = members.map(_.userId).find(_ != selfUserId).toSet
+                    //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+                    CallInfo(Some(conv.id), selfUserId, others, SELF_CALLING, isGroupConv = isGroup, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+                  case cur if cur.state == OTHER_CALLING && cur.convId.contains(convId) =>
+                    cur
+                  case cur =>
+                    error("Call already in progress, not updating")
+                    cur
+                }
+              case err => warn(s"Unable to start call, reason: errno: $err")
+            }
           }
-        case err => warn(s"Unable to start call, reason: errno: $err")
       }
     }
   }
@@ -332,7 +357,7 @@ class CallingService(context:             Context,
           case SELF_CALLING =>
             verbose("Call timed out out the other didn't answer - add a \"you called\" message")
             messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
-          case OTHER_CALLING | SELF_JOINING =>
+          case OTHER_CALLING | SELF_JOINING if currentCall.shouldRing =>
             verbose("Call timed out out and we didn't answer - mark as missed call")
             messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
           case SELF_CONNECTED =>
