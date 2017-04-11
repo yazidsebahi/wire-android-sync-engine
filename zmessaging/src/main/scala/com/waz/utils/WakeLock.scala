@@ -32,47 +32,47 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
   protected lazy val powerManager = appContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
   protected lazy val wakeLock = powerManager.newWakeLock(level, tag)
 
-  protected def acquire(): Unit = {
-    verbose("acquiring wakelock")
+  protected def acquire()(implicit srcTag: LogTag): Unit = {
+    verbose(s"acquiring wakelock, src: $srcTag")(tag)
     wakeLock.acquire()
   }
 
-  protected def release(): Unit = {
-    verbose("releasing wakelock")
+  protected def release()(implicit srcTag: LogTag): Unit = {
+    verbose(s"releasing wakelock, src: $srcTag")(tag)
     wakeLock.release()
   }
 
-  def apply[A](body: => A): A = {
-    acquire()
+  def apply[A](body: => A)(implicit srcTag: LogTag): A = {
+    acquire()(srcTag)
     try {
       body
     } finally {
-      release()
+      release()(srcTag)
     }
   }
 
-  def async[A](body: Future[A]): Future[A] = {
-    acquire()
-    returning(body) { _.onComplete(_ => release()) }
+  def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A] = {
+    acquire()(s"async[$srcTag]")
+    returning(body) { _.onComplete(_ => release()(s"async[$srcTag]")) }
   }
 }
 
 //To keep wakelock for a given period of time after executing it's code
 class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: LogTag) extends WakeLock(context) {
 
-  override def apply[A](body: => A): A = {
-    acquire()
+  override def apply[A](body: => A)(implicit srcTag: LogTag): A = {
+    acquire()(srcTag)
     try {
       body
     } finally {
-      releaseAfterDuration()
+      releaseAfterDuration()(srcTag)
     }
   }
 
-  override def async[A](body: Future[A]): Future[A] = {
-    acquire()
-    returning(body) { _.onComplete(_ => releaseAfterDuration()) }
+  override def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A] = {
+    acquire()(s"async[$srcTag]")
+    returning(body) { _.onComplete(_ => releaseAfterDuration()(srcTag)) }
   }
 
-  private def releaseAfterDuration(): Unit = CancellableFuture.delay(duration).onComplete(_ => release())
+  private def releaseAfterDuration()(implicit srcTag: LogTag): Unit = CancellableFuture.delay(duration).onComplete(_ => release()(s"delayed[$srcTag]"))
 }

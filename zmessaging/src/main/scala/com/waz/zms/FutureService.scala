@@ -39,7 +39,11 @@ abstract class FutureService extends Service {
     debug(s"onStartCommand: $startId, intent: $intent")
     Option(intent) foreach WakefulBroadcastReceiver.completeWakefulIntent
 
-    val future = if (intent == null) Future.successful({}) else onIntent(intent, startId).recover { case ex => error("onIntent failed", ex) } (Threading.Background)
+    val future =
+      if (intent == null) Future.successful({})
+      else wakeLock async {
+        onIntent(intent, startId).recover { case ex => error("onIntent failed", ex) } (Threading.Background)
+      }
     future.onComplete { _ => onComplete(startId) }(Threading.Ui)
 
     Service.START_REDELIVER_INTENT

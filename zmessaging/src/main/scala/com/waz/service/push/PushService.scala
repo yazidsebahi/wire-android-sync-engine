@@ -134,7 +134,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
     }
   }
 
-  private def processNotifications(notifications: Seq[PushNotification]) = wakeLock {
+  private def processNotifications(notifications: Seq[PushNotification]) = wakeLock.async {
     pipeline {
       returning(notifications.flatMap(_.eventsForClient(clientId))) {
         _.foreach { ev =>
