@@ -39,7 +39,6 @@ class PreferenceService(context: Context) {
   lazy val analyticsEnabledPref = uiPreferenceBooleanSignal(analyticsEnabledPrefKey)
 
   lazy val autoAnswerCallPrefKey    = Try(context.getResources.getString(R.string.zms_auto_answer_key)).getOrElse("PREF_KEY_AUTO_ANSWER_ENABLED")
-  lazy val sendWithAssetsV3Key      = Try(context.getResources.getString(R.string.zms_assets_v3)).getOrElse("PREF_KEY_SEND_WITH_ASSETS_V3")
   lazy val callingV3Key             = Try(context.getResources.getString(R.string.zms_calling_v3)).getOrElse("PREF_KEY_CALLING_V3")
   lazy val gcmEnabledKey            = Try(context.getResources.getString(R.string.zms_gcm_enabled)).getOrElse("PREF_KEY_GCM_ENABLED")
   lazy val v31AssetsEnabledKey      = Try(context.getResources.getString(R.string.zms_v31_assets_enabled)).getOrElse("PREF_V31_ASSETS_ENABLED")
@@ -49,7 +48,6 @@ class PreferenceService(context: Context) {
 
   lazy val wsForegroundEnabledPref = uiPreferenceBooleanSignal(wsForegroundKey)
 
-  def sendWithV3 = uiPreferences.getBoolean(sendWithAssetsV3Key, ZmsVersion.DEBUG) //false by default for production
   def callingV3  = uiPreferences.getString(callingV3Key,         if (ZmsVersion.DEBUG) "2" else "0") //0 (calling v2) by default for production, v3 (2) for debug
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey,       true) //true by default for production
   def v31AssetsEnabled = uiPreferences.getBoolean(gcmEnabledKey, false)
