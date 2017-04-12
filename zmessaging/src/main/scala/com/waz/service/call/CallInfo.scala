@@ -52,6 +52,7 @@ case class CallInfo(convId:            Option[ConvId]                    = None,
        | caller:            $caller
        | others:            $others
        | state:             $state
+       | shouldRing:        $shouldRing
        | muted:             $muted
        | isGroupConv:       $isGroupConv
        | isVideoCall:       $isVideoCall
