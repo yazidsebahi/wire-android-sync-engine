@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{Date, Locale}
 
-import android.net.Uri
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
@@ -40,7 +39,7 @@ import com.waz.service.messages.MessageAndLikes
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
-import com.waz.utils.sha2
+import com.waz.utils.{URI, sha2}
 import com.waz.znet.AuthenticationManager.Token
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen._
@@ -68,10 +67,10 @@ object Generators {
 
   lazy val alphaNumStr = listOf(alphaNumChar).map(_.mkString)
 
-  implicit lazy val arbUri: Arbitrary[Uri] = Arbitrary(for {
+  implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
     scheme <- oneOf("file", "content", "http")
     path <- alphaNumStr
-  } yield Uri.parse(s"$scheme://$path"))
+  } yield utils.URI.parse(s"$scheme://$path"))
 
   implicit lazy val arbConversationData: Arbitrary[ConversationData] = Arbitrary(for {
     id <- arbitrary[ConvId]
@@ -127,6 +126,7 @@ object Generators {
   implicit lazy val arbVoiceParticipantData: Arbitrary[VoiceParticipantData] = Arbitrary(resultOf(VoiceParticipantData))
 
   implicit lazy val arbOpenGraphData: Arbitrary[OpenGraphData] = Arbitrary(resultOf(OpenGraphData))
+
   implicit lazy val arbMessageContent: Arbitrary[MessageContent] = Arbitrary(resultOf(MessageContent))
   implicit lazy val arbGenericMessage: Arbitrary[GenericMessage] = Arbitrary(for {
     id <- arbitrary[Uid]
@@ -148,7 +148,7 @@ object Generators {
     name          <- optGen(alphaNumStr)
     previewId     <- optGen(arbitrary[AssetId])
     metaData      <- optGen(arbitrary[AssetMetaData])
-    source        <- optGen(arbitrary[Uri])
+    source        <- optGen(arbitrary[URI])
     proxyPath     <- optGen(arbitrary[String])
     convId        <- optGen(arbitrary[RConvId])
     data <- optGen(arbitrary[Array[Byte]])

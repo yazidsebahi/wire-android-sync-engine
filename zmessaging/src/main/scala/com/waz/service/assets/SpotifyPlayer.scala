@@ -20,10 +20,10 @@ package com.waz.service.assets
 import java.util.concurrent.TimeUnit
 
 import android.content.Context
-import android.net.Uri
 import com.spotify.sdk.android.player.Player.InitializationObserver
 import com.spotify.sdk.android.player.PlayerNotificationCallback.{ErrorType, EventType}
 import com.spotify.sdk.android.player.{Player => SPlayer, _}
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.service.assets.GlobalRecordAndPlayService.{MediaPointer, SpotifyContent, UnauthenticatedContent}
 import com.waz.service.media.SpotifyMediaService.Authentication
@@ -40,10 +40,9 @@ import scala.ref.WeakReference
 import scala.{PartialFunction => =/>}
 
 
-class SpotifyPlayer private (delegate: SPlayer, ownerToken: AnyRef, initialUri: Uri, oauthToken: AccessToken, auth: () => Future[Authentication], observer: Player.Observer) extends Player {
+class SpotifyPlayer private (delegate: SPlayer, ownerToken: AnyRef, initialUri: URI, oauthToken: AccessToken, auth: () => Future[Authentication], observer: Player.Observer) extends Player {
   import Threading.Implicits.Background
 
-  private implicit val logTag: LogTag = logTagFor[SpotifyPlayer]
   private val callback = returning(new SpotifyCallback(WeakReference(this)))(cb => delegate.addPlayerNotificationCallback(cb))
   @volatile private var reaction = Option.empty[PlayerNotificationCallback]
 
@@ -82,7 +81,7 @@ class SpotifyPlayer private (delegate: SPlayer, ownerToken: AnyRef, initialUri: 
     val promisedPause = Promise[MediaPointer]
 
     react { case (EventType.PAUSE, state) =>
-      promisedPause.success(MediaPointer(SpotifyContent(Uri.parse(state.trackUri), auth), bp.Duration.ofMillis(state.positionInMs)))
+      promisedPause.success(MediaPointer(SpotifyContent(URI.parse(state.trackUri), auth), bp.Duration.ofMillis(state.positionInMs)))
     }(errorMsg => promisedPause.failure(new RuntimeException(errorMsg)))
 
     promisedPause.future
@@ -164,7 +163,7 @@ object SpotifyPlayer {
       token => create(content.uri, token, auth.clientId, content.auth, observer))
   }
 
-  private def create(uri: Uri, oauthToken: AccessToken, clientId: ClientId, auth: () => Future[Authentication], observer: Player.Observer)(implicit context: Context): Future[SpotifyPlayer] = Threading.BackgroundHandler.flatMap { handler =>
+  private def create(uri: URI, oauthToken: AccessToken, clientId: ClientId, auth: () => Future[Authentication], observer: Player.Observer)(implicit context: Context): Future[SpotifyPlayer] = Threading.BackgroundHandler.flatMap { handler =>
     val config = returning(new Config(context, oauthToken.token, clientId.str, Config.DeviceType.SMARTPHONE))(_.useCache(true))
     val builder = new SPlayer.Builder(config).setCallbackHandler(handler)
     val ownerToken = new AnyRef

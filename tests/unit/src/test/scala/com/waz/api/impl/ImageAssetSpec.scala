@@ -17,9 +17,8 @@
  */
 package com.waz.api.impl
 
-import android.net.Uri
 import android.os.Parcel
-import com.waz.RobolectricUtils
+import com.waz.{RobolectricUtils, utils}
 import com.waz.api.ImageAssetFactory
 import com.waz.model.AssetId
 import com.waz.service.ZMessaging
@@ -50,7 +49,7 @@ class ImageAssetSpec extends FeatureSpec with Matchers with BeforeAndAfter with 
 
     scenario("Write and read local image") {
       val p = Parcel.obtain()
-      val im = ImageAssetFactory.getImageAsset(Uri.parse("content://test"))
+      val im = ImageAssetFactory.getImageAsset(utils.URI.parse("content://test"))
       im.writeToParcel(p, 0)
       p.setDataPosition(0)
       ui.images.getImageAsset(p) shouldEqual im

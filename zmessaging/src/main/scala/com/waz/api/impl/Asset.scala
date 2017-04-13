@@ -17,7 +17,6 @@
  */
 package com.waz.api.impl
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
@@ -26,6 +25,7 @@ import com.waz.model.{Mime, _}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, Content, MediaKey, UnauthenticatedContent}
 import com.waz.ui.{SignalLoading, UiModule}
+import com.waz.utils.URI
 import com.waz.utils.events.Signal
 import org.threeten.bp.Duration
 
@@ -54,15 +54,15 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
   override def getId: String = id.str
   override def isEmpty: Boolean = false
 
-  override def getContentUri(callback: LoadCallback[Uri]): Unit =
+  override def getContentUri(callback: LoadCallback[URI]): Unit =
     ui.zms.flatMap(_.assets.getContentUri(id)).onComplete {
       case Success(Some(uri)) => callback.onLoaded(uri)
       case _ => callback.onLoadFailed()
     }
 
-  override def saveToDownloads(callback: LoadCallback[Uri]): Unit =
+  override def saveToDownloads(callback: LoadCallback[URI]): Unit =
     ui.zms.flatMapFuture(_.assets.saveAssetToDownloads(id)).onComplete {
-      case Success(Some(file)) => callback.onLoaded(Uri.fromFile(file))
+      case Success(Some(file)) => callback.onLoaded(URI.fromFile(file))
       case _ => callback.onLoadFailed()
     }
 
@@ -102,8 +102,8 @@ object Asset {
     override def getDuration: Duration = Duration.ZERO
     override def getWidth: Int = 0
     override def getHeight: Int = 0
-    override def getContentUri(callback: LoadCallback[Uri]): Unit = callback.onLoadFailed()
-    override def saveToDownloads(callback: LoadCallback[Uri]): Unit = callback.onLoadFailed()
+    override def getContentUri(callback: LoadCallback[URI]): Unit = callback.onLoadFailed()
+    override def saveToDownloads(callback: LoadCallback[URI]): Unit = callback.onLoadFailed()
     override def getDownloadProgress: api.ProgressIndicator = ProgressIndicator.Empty
     override def getUploadProgress: api.ProgressIndicator = ProgressIndicator.Empty
     override def getPlaybackControls(callback: LoadCallback[api.PlaybackControls]): Unit = callback.onLoadFailed()

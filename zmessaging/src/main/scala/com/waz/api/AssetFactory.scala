@@ -17,8 +17,8 @@
  */
 package com.waz.api
 
-import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ProgressIndicator.ProgressData
 import com.waz.api.impl.{ContentUriAssetForUpload, RecordingLevels, TranscodedVideoAsset}
 import com.waz.bitmap.video.VideoTranscoder
@@ -27,15 +27,14 @@ import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, RecordingCancelled, RecordingSuccessful}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.SignalLoading
-import com.waz.utils.ContentURIs
 import com.waz.utils.events.Signal
+import com.waz.utils.{ContentURIs, URI}
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 object AssetFactory {
-  private implicit val logTag: LogTag = logTagFor(AssetFactory)
 
   trait LoadCallback {
     def onLoaded(asset: AssetForUpload): Unit
@@ -47,11 +46,11 @@ object AssetFactory {
   /**
     * Gets an asset from a URI. Only the "content" scheme is supported
     */
-  def fromContentUri(uri: Uri): AssetForUpload = {
+  def fromContentUri(uri: URI): AssetForUpload = {
     ContentUriAssetForUpload(AssetId(), uri)
   }
 
-  def videoAsset(uri: Uri, callback: LoadCallback): ProgressIndicator = {
+  def videoAsset(uri: URI, callback: LoadCallback): ProgressIndicator = {
     import Threading.Implicits.Background
 
     val progress = Signal[ProgressData]()

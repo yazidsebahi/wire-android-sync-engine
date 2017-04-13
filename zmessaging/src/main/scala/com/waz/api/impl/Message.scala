@@ -17,7 +17,6 @@
  */
 package com.waz.api.impl
 
-import android.net.Uri
 import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
@@ -244,8 +243,8 @@ class MessagePart(content: MessageContent, message: MessageData, index: Int)(imp
 
   override def getTitle = openGraph.title
   override def getDescription = openGraph.description
-  override def getPermanentUri: Uri = openGraph.permanentUrl.orNull
-  override def getContentUri: Uri = content.contentAsUri
+  override def getPermanentUri: URI = openGraph.permanentUrl.orNull
+  override def getContentUri: URI = content.contentAsUri
 
   override lazy val getMediaAsset: api.MediaAsset = content.richMedia .map { media =>
     if (media.hasExpired) ui.zms(_.sync.syncRichMedia(message.id, Priority.High))

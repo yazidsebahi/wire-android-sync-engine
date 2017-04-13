@@ -28,7 +28,7 @@ import com.waz.model.CacheKey
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
-import com.waz.utils.returning
+import com.waz.utils.{URI, returning}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -117,7 +117,7 @@ class WireContentProvider extends ContentProvider {
   object CacheUriExtractor {
     val extractor = CacheUri.unapply(getContext) _
 
-    def unapply(uri: Uri): Option[CacheKey] = extractor(uri)
+    def unapply(uri: URI): Option[CacheKey] = extractor(uri)
   }
 }
 
@@ -127,21 +127,21 @@ object WireContentProvider {
 
   object CacheUri {
 
-    def builder(context: Context) = Uri.parse(ContentResolver.SCHEME_CONTENT + "://" + context.getPackageName).buildUpon()
+    def builder(context: Context) = URI.parse(ContentResolver.SCHEME_CONTENT + "://" + context.getPackageName).buildUpon
 
-    def apply(key: CacheKey, context: Context): Uri = builder(context).appendEncodedPath(Cache).appendPath(key.str).build()
+    def apply(key: CacheKey, context: Context): URI = builder(context).appendEncodedPath(Cache).appendPath(key.str).build
 
-    def apply(entry: CacheEntryData, context: Context): Uri = {
+    def apply(entry: CacheEntryData, context: Context): URI = {
       val b = builder(context).appendEncodedPath(Cache).appendPath(entry.key.str)
       entry.fileName foreach b.appendPath
-      b.build()
+      b.build
     }
 
-    def unapply(context: Context)(uri: Uri): Option[CacheKey] =
+    def unapply(context: Context)(uri: URI): Option[CacheKey] =
       if (uri.getScheme != ContentResolver.SCHEME_CONTENT || uri.getAuthority != context.getPackageName) None
       else {
         val path = uri.getPathSegments
-        if (path.size() >= 2 && path.get(0) == "cache") Some(CacheKey(path.get(1))) else None
+        if (path.size >= 2 && path.head == "cache") Some(CacheKey(path(1))) else None
       }
   }
 }

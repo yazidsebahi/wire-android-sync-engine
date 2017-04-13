@@ -56,7 +56,7 @@ class DefaultPlayer private (delegate: MediaPlayer, initialContent: Unauthentica
 
 object DefaultPlayer {
   def apply(content: UnauthenticatedContent, observer: Player.Observer)(implicit context: Context): DefaultPlayer = {
-    val delegate = MediaPlayer.create(context, content.uri)
+    val delegate = MediaPlayer.create(context, URI.unwrap(content.uri))
 
     delegate.setOnCompletionListener(new MediaPlayer.OnCompletionListener {
       override def onCompletion(mp: MediaPlayer): Unit = {

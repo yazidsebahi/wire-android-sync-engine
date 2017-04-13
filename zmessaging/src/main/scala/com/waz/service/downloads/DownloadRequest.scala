@@ -19,8 +19,8 @@ package com.waz.service.downloads
 
 import java.io.InputStream
 
-import android.net.Uri
 import com.waz.model.{Mime, _}
+import com.waz.utils.URI
 import com.waz.znet.Request
 
 sealed trait DownloadRequest {
@@ -36,7 +36,7 @@ object DownloadRequest {
 
   case class CachedAssetRequest(cacheKey: CacheKey, mime: Mime, name: Option[String]) extends AssetRequest
 
-  case class LocalAssetRequest(cacheKey: CacheKey, uri: Uri, mime: Mime, name: Option[String]) extends AssetRequest
+  case class LocalAssetRequest(cacheKey: CacheKey, uri: URI, mime: Mime, name: Option[String]) extends AssetRequest
 
   sealed trait ExternalAssetRequest extends AssetRequest {
     def request: Request[Unit]
@@ -49,11 +49,11 @@ object DownloadRequest {
 
   case class AssetFromInputStream(cacheKey: CacheKey, stream: () => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 
-  case class VideoAsset(cacheKey: CacheKey, uri: Uri, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
+  case class VideoAsset(cacheKey: CacheKey, uri: URI, mime: Mime = Mime.Unknown, name: Option[String] = None) extends DownloadRequest
 
   case class UnencodedAudioAsset(cacheKey: CacheKey, name: Option[String]) extends DownloadRequest
 
-  case class External(cacheKey: CacheKey, uri: Uri) extends ExternalAssetRequest {
+  case class External(cacheKey: CacheKey, uri: URI) extends ExternalAssetRequest {
     override def request: Request[Unit] = Request[Unit](absoluteUri = Some(uri), requiresAuthentication = false)
   }
 

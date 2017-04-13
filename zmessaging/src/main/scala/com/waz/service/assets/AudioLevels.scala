@@ -23,14 +23,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import android.content.Context
 import android.media.{MediaCodec, MediaExtractor, MediaFormat}
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.bitmap.video.{MediaCodecHelper, TrackDecoder}
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.Mime
 import com.waz.threading.CancellableFuture.{CancelException, DefaultCancelException}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, returning}
+import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, URI, returning}
 import libcore.io.SizeOf
 
 import scala.concurrent.duration._
@@ -41,11 +40,11 @@ case class AudioLevels(context: Context) {
   import AudioLevels._
   import Threading.Implicits.Background
 
-  def createAudioOverview(content: Uri, mime: Mime, numBars: Int = 100): CancellableFuture[Option[Loudness]] =
+  def createAudioOverview(content: URI, mime: Mime, numBars: Int = 100): CancellableFuture[Option[Loudness]] =
     if (mime == Mime.Audio.PCM) createPCMAudioOverview(content, numBars)
     else createOtherAudioOverview(content, numBars)
 
-  private def createPCMAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[Loudness]] =
+  private def createPCMAudioOverview(content: URI, numBars: Int): CancellableFuture[Option[Loudness]] =
     ContentURIs.queryContentUriMetaData(context, content).map(_.size).lift.flatMap {
       case None =>
         warn(s"cannot generate preview: no length available for $content")
@@ -54,7 +53,7 @@ case class AudioLevels(context: Context) {
         val samples = length / SizeOf.SHORT
         val cancelRequested = new AtomicBoolean
         returning(CancellableFuture {
-          val overview = Managed(context.getContentResolver.openInputStream(content)) map { stream =>
+          val overview = Managed(context.getContentResolver.openInputStream(URI.unwrap(content))) map { stream =>
             val estimatedBucketSize = round(samples / numBars.toDouble)
             val buffer = ByteBuffer.wrap(Array.ofDim[Byte](8 << 10))
 
@@ -77,7 +76,7 @@ case class AudioLevels(context: Context) {
         })(_.onCancelled(cancelRequested.set(true)))
     }
 
-  private def createOtherAudioOverview(content: Uri, numBars: Int): CancellableFuture[Option[Loudness]] = {
+  private def createOtherAudioOverview(content: URI, numBars: Int): CancellableFuture[Option[Loudness]] = {
     val cancelRequested = new AtomicBoolean
     returning(CancellableFuture {
       val overview = for {
@@ -107,9 +106,9 @@ case class AudioLevels(context: Context) {
     })(_.onCancelled(cancelRequested.set(true)))
   }
 
-  private def extractAudioTrackInfo(extractor: MediaExtractor, content: Uri): TrackInfo = {
+  private def extractAudioTrackInfo(extractor: MediaExtractor, content: URI): TrackInfo = {
     debug(s"data source: $content")
-    extractor.setDataSource(context, content, null)
+    extractor.setDataSource(context, URI.unwrap(content), null)
     debug(s"track count: ${extractor.getTrackCount}")
 
     val audioTrack = Iterator.range(0, extractor.getTrackCount).map { n =>

@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 
 import android.content.Context
 import android.media._
-import android.net.Uri
 import android.os.Build
 import android.view.Surface
 import com.waz.ZLog._
@@ -32,13 +31,13 @@ import com.waz.bitmap.video.VideoTranscoder.{CodecResponse, MediaCodecIterator}
 import com.waz.model.{AssetMetaData, Dim2}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.Deprecated.{codecInfoAtIndex, numberOfCodecs}
-import com.waz.utils.{Cleanup, Managed, returning}
+import com.waz.utils.{Cleanup, Managed, URI, returning}
 
 import scala.concurrent.Promise
 import scala.util.Try
 
 trait VideoTranscoder {
-  def apply(input: Uri, out: File, callback: ProgressData => Unit): CancellableFuture[File]
+  def apply(input: URI, out: File, callback: ProgressData => Unit): CancellableFuture[File]
 }
 
 object VideoTranscoder {
@@ -92,7 +91,7 @@ object VideoTranscoder {
 }
 
 class FallbackTranscoder(context: Context) extends VideoTranscoder {
-  override def apply(input: Uri, out: File, callback: ProgressData => Unit): CancellableFuture[File] =
+  override def apply(input: URI, out: File, callback: ProgressData => Unit): CancellableFuture[File] =
     CancellableFuture.failed(new UnsupportedOperationException("Transcoding not available in this android version"))
 }
 
@@ -100,10 +99,10 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
   import VideoTranscoder._
   private implicit val ec = com.waz.threading.Threading.BlockingIO
 
-  def apply(input: Uri, out: File, callback: ProgressData => Unit): CancellableFuture[File] = CancellableFuture {
+  def apply(input: URI, out: File, callback: ProgressData => Unit): CancellableFuture[File] = CancellableFuture {
 
     for {
-      extractor   <- Managed(returning(new MediaExtractor()) { _.setDataSource(context, input, null)})
+      extractor   <- Managed(returning(new MediaExtractor()) { _.setDataSource(context, URI.unwrap(input), null)})
       videoTrack  = videoTrackIndex(extractor)
       audioTrack  = audioTrackIndex(extractor)
       _           = extractor.selectTrack(videoTrack)
@@ -128,7 +127,7 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
     new CancellableFuture(p)
   }
 
-  def audioStream(input: Uri, audioTrack: Int): Managed[MediaCodecIterator] = {
+  def audioStream(input: URI, audioTrack: Int): Managed[MediaCodecIterator] = {
     def outputAudioFormat(inputFormat: MediaFormat) = {
       val inputChannels = Try(inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)) getOrElse 1
       val inputSampleRate = Try(inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)) getOrElse SAMPLE_RATE_48KHZ
@@ -156,7 +155,7 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
 
 
     for {
-      extractor   <- Managed(returning(new MediaExtractor()) { _.setDataSource(context, input, null) })
+      extractor   <- Managed(returning(new MediaExtractor()) { _.setDataSource(context, URI.unwrap(input), null) })
       _           = extractor.selectTrack(audioTrack)
       inputFormat = extractor.getTrackFormat(audioTrack)
       (outputFormat, dupSamples) = outputAudioFormat(inputFormat)
@@ -206,10 +205,10 @@ abstract class BaseTranscoder(context: Context) extends VideoTranscoder {
     }
   }
 
-  def getVideoMeta(uri: Uri) = {
+  def getVideoMeta(uri: URI) = {
     val retriever = new MediaMetadataRetriever
     try {
-      retriever.setDataSource(context, uri)
+      retriever.setDataSource(context, URI.unwrap(uri))
       AssetMetaData.Video(retriever)
     } finally
       retriever.release()

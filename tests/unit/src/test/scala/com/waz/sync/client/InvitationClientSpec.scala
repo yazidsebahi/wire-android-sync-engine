@@ -19,15 +19,15 @@ package com.waz.sync.client
 
 import java.util.Locale
 
-import android.net.Uri
 import com.waz.client.RegistrationClient
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.CancellableFuture
-import com.waz.znet.ContentEncoder.{RequestContent, ByteArrayRequestContent}
+import com.waz.utils.URI
+import com.waz.znet.ContentEncoder.{ByteArrayRequestContent, RequestContent}
 import com.waz.znet.Request._
-import com.waz.znet.Response.{ResponseBodyDecoder, HttpStatus, Status}
+import com.waz.znet.Response.{HttpStatus, ResponseBodyDecoder, Status}
 import com.waz.znet.ZNetClient.{EmptyAsyncClient, EmptyClient}
 import com.waz.znet._
 import org.json.JSONObject
@@ -120,7 +120,7 @@ class InvitationClientSpec extends FeatureSpec with Matchers with Inside with Sc
   )
 
   lazy val registrationClient = new RegistrationClient(new EmptyAsyncClient {
-    override def apply(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
+    override def apply(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
       CancellableFuture.successful(nextResponse)
   }, BackendConfig.StagingBackend)
 

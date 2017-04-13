@@ -25,7 +25,6 @@ import android.content.Context
 import android.media.MediaCodec.{BUFFER_FLAG_CODEC_CONFIG, BUFFER_FLAG_END_OF_STREAM, CONFIGURE_FLAG_ENCODE}
 import android.media.MediaFormat._
 import android.media.{MediaCodec, MediaCodecInfo, MediaFormat}
-import android.net.Uri
 import com.googlecode.mp4parser.FileDataSourceImpl
 import com.googlecode.mp4parser.authoring.Movie
 import com.googlecode.mp4parser.authoring.builder.DefaultMp4Builder
@@ -47,7 +46,7 @@ class AudioTranscoder(tempFiles: TempFileService, context: Context) {
   import AudioTranscoder._
   import Threading.Implicits.Background
 
-  def apply(uri: Uri, mp4File: File, callback: ProgressIndicator.Callback): CancellableFuture[File] =
+  def apply(uri: URI, mp4File: File, callback: ProgressIndicator.Callback): CancellableFuture[File] =
     ContentURIs.queryContentUriMetaData(context, uri).map(_.size.getOrElse(0L)).lift.flatMap { size =>
       val promisedFile = Promise[File]
 
@@ -77,9 +76,9 @@ class AudioTranscoder(tempFiles: TempFileService, context: Context) {
 
   import AudioLevels.MediaCodecCleanedUp
 
-  private def transcodeToAAC(uri: Uri, aacFile: File, reporter: Option[ProgressReporter], hasBeenCancelled: => Boolean): Unit =
+  private def transcodeToAAC(uri: URI, aacFile: File, reporter: Option[ProgressReporter], hasBeenCancelled: => Boolean): Unit =
     for {
-      in <- Managed(context.getContentResolver.openInputStream(uri))
+      in <- Managed(context.getContentResolver.openInputStream(URI.unwrap(uri)))
       outStream <- Managed(new FileOutputStream(aacFile))
       out = outStream.getChannel
       encoder <- Managed(audioEncoder)

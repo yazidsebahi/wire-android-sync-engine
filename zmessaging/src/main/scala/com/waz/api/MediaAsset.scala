@@ -17,13 +17,13 @@
  */
 package com.waz.api
 
-import android.net.Uri
 import com.waz.api.Asset.LoadCallback
+import com.waz.utils.URI
 import org.threeten.bp.Duration
 
 object MediaAsset {
   trait StreamingCallback {
-    def onSuccess(uris: java.util.List[Uri]): Unit
+    def onSuccess(uris: java.util.List[URI]): Unit
     def onFailure(code: Int, message: String, label: String): Unit
   }
 }
@@ -37,7 +37,7 @@ trait MediaAsset {
   def getTitle: String
   def getDuration: Duration // should always be available
 
-  def getLinkUri: Uri // should always be available
+  def getLinkUri: URI // should always be available
   def getArtwork: ImageAsset // optional
 
   def getArtistName: String // should always be available

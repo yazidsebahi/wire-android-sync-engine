@@ -17,7 +17,6 @@
  */
 package com.waz.client
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
@@ -25,7 +24,7 @@ import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.UsersClient.UserResponseExtractor
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.JsonEncoder
+import com.waz.utils.{JsonEncoder, URI}
 import com.waz.utils.Locales._
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
@@ -118,7 +117,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
     }
   }
 
-  private def absoluteUri(path: String): Uri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(path).build()
+  private def absoluteUri(path: String): URI = URI.parse(backend.baseUrl).buildUpon.encodedPath(path).build
 
   import com.waz.sync.client.InvitationClient._
 
@@ -134,7 +133,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
         ZNetClient.errorHandling("getInvitationInfo")(tag)(other)
     }
 
-  private def infoPath(token: PersonalInvitationToken): Uri = Uri.parse(backend.baseUrl).buildUpon.encodedPath(InvitationPath).appendPath("info").appendQueryParameter("code", token.code).build
+  private def infoPath(token: PersonalInvitationToken): URI = URI.parse(backend.baseUrl).buildUpon.encodedPath(InvitationPath).appendPath("info").appendQueryParameter("code", token.code).build
 }
 
 object RegistrationClient {

@@ -17,11 +17,11 @@
  */
 package com.waz.sync.client
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.threading.Threading
+import com.waz.utils.URI
 import com.waz.znet.ContentEncoder.EmptyContentEncoder
 import com.waz.znet.Response.{ResponseBodyDecoder, SuccessHttpStatus}
 import com.waz.znet.ResponseConsumer.JsonConsumer
@@ -41,7 +41,7 @@ class VersionBlacklistClient(netClient: ZNetClient, backendConfig: BackendConfig
     }
   }
 
-  def blacklistsUrl(env: String) = Uri.parse(s"https://clientblacklist.wire.com/${Option(env) filterNot (_.isEmpty) getOrElse "prod"}/android")
+  def blacklistsUrl(env: String) = URI.parse(s"https://clientblacklist.wire.com/${Option(env) filterNot (_.isEmpty) getOrElse "prod"}/android")
 }
 
 object VersionBlacklistClient {

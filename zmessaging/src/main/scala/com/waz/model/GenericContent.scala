@@ -18,7 +18,6 @@
 package com.waz.model
 
 
-import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
 import com.waz.api.EphemeralExpiration
@@ -276,12 +275,12 @@ object GenericContent {
       override def apply(preview: LinkPreview, meta: Tweet): LinkPreview = returning(preview) {_.setTweet(meta)}
     }
 
-    def apply(uri: Uri, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
+    def apply(uri: URI, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
       p.url = uri.toString
       p.urlOffset = offset
     }
 
-    def apply(uri: Uri, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[Uri]): LinkPreview =
+    def apply(uri: URI, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[URI]): LinkPreview =
       returning(new Messages.LinkPreview) { p =>
         p.url = uri.toString
         p.urlOffset = offset
@@ -294,7 +293,7 @@ object GenericContent {
         p.setArticle(article(title, summary, image, permanentUrl))
       }
 
-    def apply[Meta: PreviewMeta](uri: Uri, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[Uri], meta: Meta): LinkPreview =
+    def apply[Meta: PreviewMeta](uri: URI, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[URI], meta: Meta): LinkPreview =
       returning(apply(uri, offset, title, summary, image, permanentUrl)) { p =>
         implicitly[PreviewMeta[Meta]].apply(p, meta)
       }
@@ -305,7 +304,7 @@ object GenericContent {
 
     }
 
-    private def article(title: String, summary: String, image: Option[Asset], uri: Option[Uri]) = returning(new Messages.Article) { p =>
+    private def article(title: String, summary: String, image: Option[Asset], uri: Option[URI]) = returning(new Messages.Article) { p =>
       p.title = title
       p.summary = summary
       uri foreach { u => p.permanentUrl = u.toString }

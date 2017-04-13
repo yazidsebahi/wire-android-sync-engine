@@ -21,13 +21,12 @@ import java.io.{File, FileNotFoundException}
 
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
 import android.media.AudioManager
-import android.net.Uri
 import android.telephony.TelephonyManager
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.{AudioEffect, ErrorType}
 import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
+import com.waz.api.{AudioEffect, ErrorType}
 import com.waz.audioeffect.{AudioEffect => AVSEffect}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
 import com.waz.model._
@@ -437,12 +436,12 @@ object GlobalRecordAndPlayService {
 
   sealed trait MediaKey
   case class AssetMediaKey(id: AssetId) extends MediaKey
-  case class UriMediaKey(uri: Uri) extends MediaKey
+  case class UriMediaKey(uri: URI) extends MediaKey
 
   sealed trait Content
-  case class UnauthenticatedContent(uri: Uri) extends Content
+  case class UnauthenticatedContent(uri: URI) extends Content
   case class PCMContent(file: File) extends Content
-  case class SpotifyContent(uri: Uri, auth: () => Future[Authentication]) extends Content
+  case class SpotifyContent(uri: URI, auth: () => Future[Authentication]) extends Content
 
   case class MediaPointer(content: Content, playhead: bp.Duration)
 

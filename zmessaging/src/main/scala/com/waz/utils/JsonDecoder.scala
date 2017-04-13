@@ -21,7 +21,6 @@ import java.text.SimpleDateFormat
 import java.util.concurrent.TimeUnit
 import java.util.{Date, Locale, TimeZone}
 
-import android.net.Uri
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.push.GcmGlobalService.GcmSenderId
@@ -134,7 +133,7 @@ object JsonDecoder {
   implicit def decodeOptUtcDate(s: Symbol)(implicit js: JSONObject): Option[Date] = opt(s, decodeUtcDate(s)(_))
   implicit def decodeOptInstant(s: Symbol)(implicit js: JSONObject): Option[Instant] = opt(s, decodeInstant(s)(_))
   implicit def decodeOptDuration(s: Symbol)(implicit js: JSONObject): Option[Duration] = opt(s, decodeDuration(s)(_))
-  implicit def decodeUri(s: Symbol)(implicit js: JSONObject): Uri = Uri.parse(js.getString(s.name))
+  implicit def decodeUri(s: Symbol)(implicit js: JSONObject): URI = URI.parse(js.getString(s.name))
 
   implicit def decodeSeq[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A]): Vector[A] = decodeColl[A, Vector](s)
   implicit def decodeArray[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A], ct: ClassTag[A]): Array[A] = decodeColl[A, Array](s)

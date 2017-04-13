@@ -18,8 +18,8 @@
 package com.waz.api
 
 import android.graphics.Bitmap
-import android.net.Uri
 import com.waz.service.ZMessaging
+import com.waz.utils.URI
 
 object ImageAssetFactory {
 
@@ -27,7 +27,7 @@ object ImageAssetFactory {
    * Retrieve an image asset from a URI. The content, file and http/https schemes are supported.
    * This will handle caching, orientation (according to exif data if available) and sampling.
    */
-  def getImageAsset(uri: Uri): ImageAsset = ZMessaging.currentUi.images.getOrCreateUriImageAsset(uri)
+  def getImageAsset(uri: URI): ImageAsset = ZMessaging.currentUi.images.getOrCreateUriImageAsset(uri)
 
   /**
    * Retrieve an image asset from a byte array.

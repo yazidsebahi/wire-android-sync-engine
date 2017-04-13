@@ -90,7 +90,7 @@ class EmptyTestActivity extends Activity with ActivityEventContext {
       (for {
        meta1 <- AssetMetaData.Video(this, data.getData)
         _ = info(s"captured video meta: $meta1")
-        _ <- VideoTranscoder(this).apply(data.getData, file, { data => verbose(s"transcoding $data") }).future
+        _ <- VideoTranscoder(this).apply(new AndroidURI(data.getData), file, { data => verbose(s"transcoding $data") }).future
         meta2 <- AssetMetaData.Video(file)
       } yield {
         info(s"transcoded video meta: $meta2")

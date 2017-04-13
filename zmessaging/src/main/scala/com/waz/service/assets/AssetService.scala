@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicReference
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Environment
 import com.waz.ZLog._
 import com.waz.api.Permission
@@ -230,7 +229,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.copy(status = UploadDone))
 
-  def getContentUri(id: AssetId): CancellableFuture[Option[Uri]] =
+  def getContentUri(id: AssetId): CancellableFuture[Option[URI]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
       case Some(a: AssetData) =>
         verbose(s"getContentUri for: $a")

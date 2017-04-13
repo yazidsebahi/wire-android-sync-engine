@@ -17,8 +17,8 @@
  */
 package com.waz.api
 
-import android.net.Uri
 import com.waz.service.ZMessaging
+import com.waz.utils.URI
 
 object BugReporter {
   import com.waz.threading.Threading.Implicits.Ui
@@ -31,5 +31,5 @@ object BugReporter {
 }
 
 trait ReportListener {
-  def onReportGenerated(fileUri: Uri): Unit
+  def onReportGenerated(fileUri: URI): Unit
 }

@@ -17,7 +17,6 @@
  */
 package com.waz.sync.handler
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.Message.Part
@@ -34,7 +33,7 @@ import com.waz.sync.SyncResult
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
-import com.waz.utils.RichFuture
+import com.waz.utils.{RichFuture, URI}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -117,7 +116,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       links map { l =>
         offset = content.indexOf(l.content, offset + 1)
         assert(offset >= 0) // XXX: link has to be present in original content, parts are taken directly from it
-        LinkPreview(Uri.parse(l.content), offset)
+        LinkPreview(URI.parse(l.content), offset)
       }
     }
 
@@ -165,7 +164,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       uploadImage map {
         case Left(error) => Left(error)
         case Right(imageAsset) =>
-          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
+          Right(LinkPreview(URI.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
       }
   }
 }

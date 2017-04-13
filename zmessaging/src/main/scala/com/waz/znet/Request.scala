@@ -20,7 +20,6 @@ package com.waz.znet
 import java.io.{File, InputStream}
 import java.net.URLEncoder
 
-import android.net.Uri
 import android.net.http.AndroidHttpClient
 import com.google.protobuf.nano.MessageNano
 import com.koushikdutta.async.callback.CompletedCallback
@@ -29,7 +28,7 @@ import com.koushikdutta.async.http.body._
 import com.koushikdutta.async.{DataEmitter, DataSink, Util}
 import com.waz.api.impl.ProgressIndicator
 import com.waz.utils
-import com.waz.utils.{ExponentialBackoff, IoUtils, JsonEncoder}
+import com.waz.utils.{ExponentialBackoff, IoUtils, JsonEncoder, URI}
 import com.waz.znet.ContentEncoder.{EmptyContentEncoder, EmptyRequestContent, RequestContent}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{ResponseBodyDecoder, Status}
@@ -40,7 +39,7 @@ import scala.concurrent.duration._
 case class Request[A: ContentEncoder](
       httpMethod: String = Request.GetMethod,
       resourcePath: Option[String] = None,
-      absoluteUri: Option[Uri] = None,
+      absoluteUri: Option[URI] = None,
       data: Option[A] = None,
       decoder: Option[ResponseBodyDecoder] = None,
       uploadCallback: Option[ProgressCallback] = None,
@@ -214,20 +213,20 @@ object ContentEncoder {
   }
 
   implicit object StringContentEncoder extends ContentEncoder[String] {
-    override def apply(data: String) = new BinaryRequestContent(data.getBytes("utf8"), "text/plain")
+    override def apply(data: String) = BinaryRequestContent(data.getBytes("utf8"), "text/plain")
   }
 
   implicit object JsonContentEncoder extends ContentEncoder[JSONObject] {
-    override def apply(data: JSONObject) = new GzippedRequestContent(data.toString.getBytes("utf8"), "application/json")
+    override def apply(data: JSONObject) = GzippedRequestContent(data.toString.getBytes("utf8"), "application/json")
   }
 
   implicit def json[A: JsonEncoder]: ContentEncoder[A] = JsonContentEncoder.map(implicitly[JsonEncoder[A]].apply)
 
   def gzipJson[A: JsonEncoder]: ContentEncoder[A] = new ContentEncoder[A] {
-    override def apply(data: A): RequestContent = new GzippedRequestContent(implicitly[JsonEncoder[A]].apply(data).toString.getBytes("utf8"), "application/json")
+    override def apply(data: A): RequestContent = GzippedRequestContent(implicitly[JsonEncoder[A]].apply(data).toString.getBytes("utf8"), "application/json")
   }
 
-  def protobuf(msg: MessageNano) =  new BinaryRequestContent(MessageNano.toByteArray(msg), "application/x-protobuf")
+  def protobuf(msg: MessageNano) = BinaryRequestContent(MessageNano.toByteArray(msg), "application/x-protobuf")
 }
 
 trait RetryPolicy {

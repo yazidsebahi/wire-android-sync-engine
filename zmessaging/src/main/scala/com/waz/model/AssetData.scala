@@ -18,7 +18,6 @@
 package com.waz.model
 
 import android.database.Cursor
-import android.net.Uri
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.verbose
@@ -31,6 +30,7 @@ import com.waz.model.GenericContent.EncryptionAlgorithm
 import com.waz.model.otr.SignalingKey
 import com.waz.service.ZMessaging
 import com.waz.service.downloads.DownloadRequest._
+import com.waz.utils
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import org.json.JSONObject
@@ -50,7 +50,7 @@ case class AssetData(id:          AssetId               = AssetId(),
                      name:        Option[String]        = None,
                      previewId:   Option[AssetId]       = None,
                      metaData:    Option[AssetMetaData] = None,
-                     source:      Option[Uri]           = None,
+                     source:      Option[URI]           = None,
                      proxyPath:   Option[String]        = None,
                      //TODO remove v2 attributes when transition period is over
                      convId:      Option[RConvId]       = None,
@@ -155,13 +155,13 @@ object AssetData {
     */
   val NonKeyURIs = Set(
     "https://source.unsplash.com/800x800/?landscape"
-  ).map(Uri.parse)
+  ).map(utils.URI.parse)
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
 
-  def cacheKeyFrom(uri: Uri): CacheKey = WireContentProvider.CacheUri.unapply(ZMessaging.context)(uri).getOrElse(CacheKey(uri.toString))
+  def cacheKeyFrom(uri: URI): CacheKey = WireContentProvider.CacheUri.unapply(ZMessaging.context)(uri).getOrElse(CacheKey(uri.toString))
 
-  def isExternalUri(uri: Uri): Boolean = Option(uri.getScheme).forall(_.startsWith("http"))
+  def isExternalUri(uri: URI): Boolean = Option(uri.getScheme).forall(_.startsWith("http"))
 
   //simplify handling remote data from asset data
   case class RemoteData(remoteId:   Option[RAssetId]            = None,
@@ -174,7 +174,7 @@ object AssetData {
   //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
   def newImageAsset(id: AssetId = AssetId(), tag: Image.Tag) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), tag)))
 
-  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag, uri: Uri) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
+  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag, uri: URI) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
 
   val Empty = AssetData()
 
@@ -237,7 +237,7 @@ object AssetData {
   }
 
   object WithSource {
-    def unapply(asset: AssetData): Option[Uri] = asset.source
+    def unapply(asset: AssetData): Option[URI] = asset.source
   }
 
   val MaxAllowedAssetSizeInBytes = 26214383L
@@ -305,7 +305,7 @@ object AssetData {
         'name,
         'preview,
         opt[AssetMetaData]('metaData),
-        decodeOptString('source).map(Uri.parse),
+        decodeOptString('source).map(URI.parse),
         'proxyPath,
         'convId,
         decodeOptString('data).map(decodeData),
@@ -350,7 +350,7 @@ object AssetData {
         mime = Mime('mime),
         sizeInBytes = 'size,
         metaData = Some(AssetMetaData.Image(Dim2('width, 'height), Image.Tag('tag))),
-        source = decodeOptString('url).map(Uri.parse),
+        source = decodeOptString('url).map(URI.parse),
         proxyPath = decodeOptString('proxyPath)
       ).copyWithRemoteData(RemoteData('remoteId, None, otrKey, decodeOptString('sha256).map(Sha256(_))))
     }
@@ -373,7 +373,7 @@ object AssetData {
       val mime = Mime('mimeType)
       val source = mime match {
         case Mime.Audio() => None //we don't want the unencoded url stored previously - use id as cache key instead
-        case _ => decodeOptString('source).map(Uri.parse)
+        case _ => decodeOptString('source).map(URI.parse)
       }
 
       val asset = AssetData(

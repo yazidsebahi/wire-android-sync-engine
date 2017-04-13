@@ -17,7 +17,6 @@
  */
 package com.waz.service.media
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.model.messages.media.MediaAssetData
@@ -25,6 +24,7 @@ import com.waz.model.{MessageContent, MessageData}
 import com.waz.service.assets.AssetService
 import com.waz.sync.client.SoundCloudClient
 import com.waz.threading.Threading
+import com.waz.utils.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
@@ -50,7 +50,7 @@ class SoundCloudMediaService(client: SoundCloudClient, assets: AssetService) {
         Left(error)
     }
 
-  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[Uri]] = Future.traverse(media.tracks flatMap (_.streamUrl)) { client.streamingLocation } map { ids =>
+  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[URI]] = Future.traverse(media.tracks flatMap (_.streamUrl)) { client.streamingLocation } map { ids =>
     if (ids.nonEmpty && ids.forall(_.isLeft)) Left(ids.head.left.get) else Right(ids collect { case Right(uri) => uri })
   }
 }

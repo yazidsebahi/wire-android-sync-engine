@@ -24,7 +24,7 @@ import android.provider.OpenableColumns._
 import android.webkit.MimeTypeMap
 import com.waz.model.Mime
 import com.waz.utils
-import com.waz.utils.IoUtils
+import com.waz.utils.{AndroidURI, IoUtils, URI}
 import org.robolectric.Robolectric._
 import org.robolectric.shadows.ShadowContentResolver2
 
@@ -55,32 +55,32 @@ class TestResourceContentProvider(val authority: String = "com.waz.testresources
   mimeMap.addExtensionMimeTypMapping("mp4", Mime.Video.MP4.str)
   mimeMap.addExtensionMimeTypMapping("m4a", Mime.Audio.MP4.str)
 
-  case class Resource(uri: Uri, mime: Mime, size: Long) {
+  case class Resource(uri: URI, mime: Mime, size: Long) {
     def inputStream = getClass.getResourceAsStream(uri.getPath)
-    def registerStream() = resolver.registerInputStream(uri, () => inputStream)
+    def registerStream() = resolver.registerInputStream(utils.URI.unwrap(uri), () => inputStream)
     def isEmpty = uri.toString.isEmpty
     def name = uri.getLastPathSegment
   }
 
-  val Empty = Resource(Uri.parse(""), Mime.Unknown, 0)
+  val Empty = Resource(utils.URI.parse(""), Mime.Unknown, 0)
 
-  def resourceUri(path: String) = Uri.parse(s"content://$authority$path")
+  def resourceUri(path: String) = utils.URI.parse(s"content://$authority$path")
 
   lazy val resolver = shadowOf_(getShadowApplication.getContentResolver).asInstanceOf[ShadowContentResolver2]
 
-  val resources = new scala.collection.mutable.HashMap[Uri, Resource]
+  val resources = new scala.collection.mutable.HashMap[URI, Resource]
 
-  def getResource(uri: Uri) = resources.getOrElseUpdate(uri, {
+  def getResource(uri: URI) = resources.getOrElseUpdate(uri, {
     Try {
       val len = IoUtils.toByteArray(getClass.getResourceAsStream(uri.getPath)).length
       Resource(uri, Mime.fromFileName(uri.getLastPathSegment), len)
     } getOrElse Empty
   })
 
-  override def getType(uri: Uri): String = getResource(uri).mime.str
+  override def getType(uri: Uri): String = getResource(new AndroidURI(uri)).mime.str
 
   override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor =
-    getResource(uri) match {
+    getResource(new AndroidURI(uri)) match {
       case `Empty` => null
       case res => cursor(Vector(DISPLAY_NAME, SIZE), Vector(Vector(res.name, res.size.toString)))
     }

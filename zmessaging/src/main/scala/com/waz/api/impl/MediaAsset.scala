@@ -19,7 +19,6 @@ package com.waz.api.impl
 
 import java.util
 
-import android.net.Uri
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
 import com.waz.api.MediaAsset.StreamingCallback
@@ -28,6 +27,7 @@ import com.waz.model.messages.media.{EmptyMediaAssetData, MediaAssetData, Playli
 import com.waz.service.assets.GlobalRecordAndPlayService.{Content, SpotifyContent, UnauthenticatedContent, UriMediaKey}
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
+import com.waz.utils.URI
 import com.waz.utils.events.Signal
 import org.threeten.bp.Duration
 
@@ -38,7 +38,7 @@ abstract class BaseMediaAsset(protected val data: MediaAssetData) extends api.Me
   override def getKind: KindOfMedia = data.kind
   override def getProvider: MediaProvider = data.provider
   override def getTitle: String = data.title
-  override def getLinkUri: Uri = Uri.parse(data.linkUrl)
+  override def getLinkUri: URI = URI.parse(data.linkUrl)
   override def getDuration: Duration = data.duration.orNull
   override def getArtistName: String = data.artist.map(_.name).getOrElse("")
   override def isStreamable: Boolean = data match {

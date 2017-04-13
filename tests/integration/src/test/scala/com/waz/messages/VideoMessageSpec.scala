@@ -182,8 +182,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   def contentCacheKey(asset: com.waz.api.Asset) = {
     val p = Promise[CacheKey]
-    asset.getContentUri(new com.waz.api.Asset.LoadCallback[Uri]() {
-      override def onLoaded(uri: Uri): Unit = CacheUri.unapply(context)(uri) match {
+    asset.getContentUri(new com.waz.api.Asset.LoadCallback[URI]() {
+      override def onLoaded(uri: URI): Unit = CacheUri.unapply(context)(uri) match {
         case Some(key) => p.success(key)
         case None => p.failure(new Exception(s"Returned uri is not CacheUri: $uri"))
       }

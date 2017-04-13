@@ -21,7 +21,6 @@ import java.io.ByteArrayOutputStream
 
 import android.graphics.Bitmap
 import android.media.ExifInterface
-import android.net.Uri
 import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -223,7 +222,7 @@ object ImageAsset {
   }
 
   object EmptySaveCallback extends SaveCallback {
-    override def imageSaved(uri: Uri): Unit = ()
+    override def imageSaved(uri: URI): Unit = ()
     override def imageSavingFailed(ex: Exception): Unit = ()
   }
 
@@ -292,10 +291,10 @@ trait SavingToGallery {
 
   override def saveImageToGallery(): Unit = saveImageToGallery(new SaveCallback {
     override def imageSavingFailed(ex: Exception): Unit = ()
-    override def imageSaved(uri: Uri): Unit = ()
+    override def imageSaved(uri: URI): Unit = ()
   })
 
-  protected def imageSaveHandler(callback: SaveCallback): (Try[Option[Uri]] => Unit) = {
+  protected def imageSaveHandler(callback: SaveCallback): (Try[Option[URI]] => Unit) = {
     case Success(Some(uri)) => callback.imageSaved(uri)
     case Success(None) =>
       info(s"saveImageToGallery($this) failed")

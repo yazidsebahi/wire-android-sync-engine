@@ -159,8 +159,8 @@ object AssetMetaData {
     def apply(file: File): Option[Image] = apply(file, Tag.Empty)
     def apply(file: File, tag: Tag): Option[Image] = apply(new FileInputStream(file), tag)
 
-    def apply(context: Context, uri: Uri): Option[Image] = apply(context, uri, Tag.Empty)
-    def apply(context: Context, uri: Uri, tag: Tag): Option[Image] = apply(context.getContentResolver.openInputStream(uri), tag)
+    def apply(context: Context, uri: URI): Option[Image] = apply(context, uri, Tag.Empty)
+    def apply(context: Context, uri: URI, tag: Tag): Option[Image] = apply(context.getContentResolver.openInputStream(URI.unwrap(uri)), tag)
 
     def apply(stream: => InputStream, tag: Tag): Option[Image] = Try(Managed(stream).acquire { is =>
       val opts = new BitmapFactory.Options
