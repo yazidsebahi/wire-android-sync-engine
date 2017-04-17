@@ -63,10 +63,6 @@ object Calling {
 
   @native def wcall_set_video_send_active(convid: String, active: Boolean): Unit
 
-  @native def wcall_is_video_call(convid: String): Int
-
-  @native def wcall_get_state(convid: String): Int
-
   @native def wcall_enable_audio_cbr(enabled: Int): Unit
 
   @native def wcall_set_audio_cbr_enabled_handler(wcall_audio_cbr_enabled_h: BitRateStateHandler): Unit
@@ -104,36 +100,36 @@ object Calling {
      * for calling.
      */
   trait ReadyHandler extends Callback {
-    def invoke(version: Int, arg: Pointer): Unit
+    def onReady(version: Int, arg: Pointer): Unit
   }
 
   /* Send calling message otr data */
   trait SendHandler extends Callback {
-    def invoke(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int
+    def onSend(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int
   }
 
   /* Incoming call */
   trait IncomingCallHandler extends Callback {
-    def invoke(convid: String, userid: String, video_call: Boolean, should_ring: Boolean, arg: Pointer): Unit
+    def onIncomingCall(convid: String, userid: String, video_call: Boolean, should_ring: Boolean, arg: Pointer): Unit
   }
 
   /* Missed call */
   trait MissedCallHandler extends Callback {
-    def invoke(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, arg: Pointer): Unit
+    def onMissedCall(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, arg: Pointer): Unit
   }
 
   trait AnsweredCallHandler extends Callback {
-    def invoke(convId: String, arg: Pointer): Unit
+    def onAnsweredCall(convId: String, arg: Pointer): Unit
   }
 
   /* Call established (with media) */
   trait EstablishedCallHandler extends Callback {
-    def invoke(convId: String, userId: String, arg: Pointer): Unit
+    def onEstablishedCall(convId: String, userId: String, arg: Pointer): Unit
   }
 
   /* Call terminated */
   trait CloseCallHandler extends Callback {
-    def invoke(reason: Int /* see constants above */ , convid: String, userid: String, metrics_json: String, arg: Pointer): Unit
+    def onClosedCall(reason: Int /* see constants above */ , convid: String, userid: String, metrics_json: String, arg: Pointer): Unit
   }
 
   /**
@@ -144,15 +140,15 @@ object Calling {
     * @param arg    The handler argument passed when registering
     */
   trait VideoStateHandler extends Callback {
-    def invoke(state: Int, arg: Pointer): Unit
+    def onVideoStateChanged(state: Int, arg: Pointer): Unit
   }
 
   trait BitRateStateHandler extends Callback {
-    def invoke(arg: Pointer): Unit
+    def onBitRateStateChanged(arg: Pointer): Unit
   }
 
   trait GroupChangedHandler extends Callback {
-    def invoke(convId: String, arg: Pointer): Unit
+    def onGroupChanged(convId: String, arg: Pointer): Unit
   }
 
   /**
@@ -168,7 +164,7 @@ object Calling {
     *   WCALL_STATE_UNKNOWN      8 Unknown
     */
   trait StateChangeHandler extends Callback {
-    def invoke(convId: String, state: Int, arg: Pointer): Unit
+    def onCallStateChanged(convId: String, state: Int, arg: Pointer): Unit
   }
 
 }

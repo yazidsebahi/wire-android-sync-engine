@@ -25,7 +25,7 @@ import com.waz.service.LifecycleState
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 
-class VoiceChannelGsmService(voice: VoiceChannelService, callingService: CallingService) {
+class VoiceChannelGsmService(voice: VoiceChannelService, callingService: DefaultCallingService) {
   import voice._
 
   private implicit val eventContext = EventContext.Global
