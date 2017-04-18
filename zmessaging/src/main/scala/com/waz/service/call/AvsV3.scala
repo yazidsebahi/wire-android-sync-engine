@@ -44,7 +44,7 @@ trait CallingService {
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
   def onBitRateStateChanged(): Unit
   def onCallStateChanged(convId: RConvId, state: Int): Unit
-  def onGroupChanged(convId: RConvId): Unit
+  def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
 }
 
 trait AvsV3 {
@@ -64,8 +64,6 @@ trait AvsV3 {
   def enableAudioCbr(enabled: Int): Unit
   def setAudioCbrEnabledHandler(handler: BitRateStateHandler): Unit
   def setGroupChangedHandler(handler: GroupChangedHandler): Unit
-  def getCallMembers(convId: RConvId): Future[Members]
-  def freeCallMembers(arg: Pointer): Unit
   def setCallStateHandler(handler: StateChangeHandler): Unit
 }
 
@@ -135,7 +133,13 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
     })
 
     Calling.wcall_set_group_changed_handler(new GroupChangedHandler {
-      override def onGroupChanged(convId: String, arg: Pointer) = callingService.onGroupChanged(RConvId(convId))
+      override def onGroupChanged(convId: String, arg: Pointer) = {
+        //TODO change this set to an ordered set to for special audio effects?
+        val mStruct = wcall_get_members(convId)
+        val members = if (mStruct.membc.intValue() > 0) mStruct.toArray(mStruct.membc.intValue()).map(u => UserId(u.userid)).toSet else Set.empty[UserId]
+        wcall_free_members(mStruct.getPointer)
+        callingService.onGroupChanged(RConvId(convId), members)
+      }
     })
 
     Calling.wcall_set_state_handler(new StateChangeHandler {

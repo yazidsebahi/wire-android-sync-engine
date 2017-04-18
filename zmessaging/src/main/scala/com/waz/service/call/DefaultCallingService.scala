@@ -38,7 +38,7 @@ import com.waz.service._
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.utils.{RichDate, RichInstant}
+import com.waz.utils.{RichDate, RichInstant, returning}
 import com.waz.zms.CallService
 import org.threeten.bp.{Duration, Instant}
 
@@ -168,22 +168,14 @@ class DefaultCallingService(context:             Context,
       }
   }
 
-  override def onGroupChanged(convId: RConvId) = withConv(convId) { conv =>
-    verbose(s"group members changed, convId: $convId")
+  override def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { conv =>
+    verbose(s"group members changed, convId: $convId, other members: $members")
     currentCall.head.map {
       case call if call.convId.contains(conv.id) =>
-        avs.getCallMembers(convId).map { members =>
-          if (members.membc.intValue() > 0) {
-            val memberArray = members.toArray(members.membc.intValue())
-            currentCall.mutate(_.copy(others = memberArray.map(u => UserId(u.userid)).toSet))
-          } else
-            currentCall.mutate(_.copy(others = Set.empty))
-
-          avs.freeCallMembers(members.getPointer)
-          call.estabTime.foreach { est =>
-            messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
-            callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
-          }
+        currentCall.mutate(_.copy(others = members))
+        call.estabTime.foreach { est =>
+          messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
+          callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
         }
       case _ => //ignore
     }
