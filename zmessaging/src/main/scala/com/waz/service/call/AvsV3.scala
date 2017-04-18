@@ -18,13 +18,12 @@
 package com.waz.service.call
 
 import com.sun.jna.Pointer
-import com.waz.CLibrary.Members
 import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.call.CallInfo.{ClosedReason, VideoReceiveState}
+import com.waz.service.call.AvsV3.{CallState, ClosedReason, VideoReceiveState}
 import com.waz.service.call.Calling._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.jna.{Size_t, Uint32_t}
@@ -43,7 +42,7 @@ trait CallingService {
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
   def onBitRateStateChanged(): Unit
-  def onCallStateChanged(convId: RConvId, state: Int): Unit
+  def onCallStateChanged(convId: RConvId, state: CallState): Unit
   def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
 }
 
@@ -58,13 +57,13 @@ trait AvsV3 {
   def onReceiveMessage(msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
   def endCall(convId: RConvId, isGroup: Boolean): Unit
   def rejectCall(convId: RConvId, isGroup: Boolean): Unit
-  def setVideoStateHandler(handler: VideoStateHandler): Unit
+  def setVideoStateHandler(handler: VideoReceiveStateHandler): Unit
   def setVideoSendActive(convId: RConvId, active: Boolean): Unit
   //cbr = constant bit rate
   def enableAudioCbr(enabled: Int): Unit
   def setAudioCbrEnabledHandler(handler: BitRateStateHandler): Unit
   def setGroupChangedHandler(handler: GroupChangedHandler): Unit
-  def setCallStateHandler(handler: StateChangeHandler): Unit
+  def setCallStateHandler(handler: CallStateChangeHandler): Unit
 }
 
 /**
@@ -124,8 +123,8 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
     _init
   }.map( _ => {
     //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
-    Calling.wcall_set_video_state_handler(new VideoStateHandler {
-      override def onVideoStateChanged(state: Int, arg: Pointer) = callingService.onVideoReceiveStateChanged(VideoReceiveState(state))
+    Calling.wcall_set_video_state_handler(new VideoReceiveStateHandler {
+      override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = callingService.onVideoReceiveStateChanged(VideoReceiveState(state))
     })
 
     Calling.wcall_set_audio_cbr_enabled_handler(new BitRateStateHandler {
@@ -142,8 +141,8 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
       }
     })
 
-    Calling.wcall_set_state_handler(new StateChangeHandler {
-      override def onCallStateChanged(convId: String, state: Int, arg: Pointer) = callingService.onCallStateChanged(RConvId(convId), state)
+    Calling.wcall_set_state_handler(new CallStateChangeHandler {
+      override def onCallStateChanged(convId: String, state: Int, arg: Pointer) = callingService.onCallStateChanged(RConvId(convId), CallState(state))
     })
   })
 
@@ -178,7 +177,7 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
 
   override def rejectCall(convId: RConvId, isGroup: Boolean) = withAvs(wcall_reject(convId.str, isGroup))
 
-  override def setVideoStateHandler(handler: VideoStateHandler) = withAvs(wcall_set_video_state_handler(handler))
+  override def setVideoStateHandler(handler: VideoReceiveStateHandler) = withAvs(wcall_set_video_state_handler(handler))
 
   override def setVideoSendActive(convId: RConvId, active: Boolean) = withAvs(wcall_set_video_send_active(convId.str, active))
 
@@ -188,12 +187,7 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
 
   override def setGroupChangedHandler(handler: GroupChangedHandler) = withAvs(wcall_set_group_changed_handler(handler))
 
-  //TODO can we make Members a more friendly class?
-  override def getCallMembers(convId: RConvId) = withAvsReturning(wcall_get_members(convId.str), null)
-
-  override def freeCallMembers(arg: Pointer) = withAvs(wcall_free_members(arg))
-
-  override def setCallStateHandler(handler: StateChangeHandler) = withAvs(wcall_set_state_handler(handler))
+  override def setCallStateHandler(handler: CallStateChangeHandler) = withAvs(wcall_set_state_handler(handler))
 }
 
 object AvsV3 {
@@ -201,4 +195,42 @@ object AvsV3 {
 
   def uint32_tTime(instant: Instant) =
     returning(Uint32_t((Instant.now.toEpochMilli / 1000).toInt))(t => verbose(s"uint32_tTime for $instant = ${t.value}"))
+
+  /**
+    *   WCALL_STATE_NONE         0 There is no call
+    *   WCALL_STATE_OUTGOING     1 Outgoing call is pending
+    *   WCALL_STATE_INCOMING     2 Incoming call is pending
+    *   WCALL_STATE_ANSWERED     3 Call has been answered, but no media
+    *   WCALL_STATE_MEDIA_ESTAB  4 Call has been answered, with media
+    *   WCALL_STATE_TERM_LOCAL   6 Call was locally terminated
+    *   WCALL_STATE_TERM_REMOTE  7 Call was remotely terminated
+    *   WCALL_STATE_UNKNOWN      8 Unknown
+    */
+  type CallState = CallState.Value
+  object CallState extends Enumeration {
+    val None, Outgoing, Incoming, Answered, MediaEstablished, TerminatingLocal, TerminationRemote, Unknown = Value
+  }
+
+  /**
+    *   WCALL_REASON_NORMAL              0
+    *   WCALL_REASON_ERROR               1
+    *   WCALL_REASON_TIMEOUT             2
+    *   WCALL_REASON_LOST_MEDIA          3
+    *   WCALL_REASON_CANCELED            4
+    *   WCALL_REASON_ANSWERED_ELSEWHERE  5
+    */
+  type ClosedReason = ClosedReason.Value
+  object ClosedReason extends Enumeration {
+    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, Interrupted = Value
+  }
+
+  /**
+    *   WCALL_VIDEO_RECEIVE_STOPPED  0
+    *   WCALL_VIDEO_RECEIVE_STARTED  1
+    *   WCALL_VIDEO_RECEIVE_BAD_CONN 2
+    */
+  type VideoReceiveState = VideoReceiveState.Value
+  object VideoReceiveState extends Enumeration {
+    val Stopped, Started, BadConnection = Value
+  }
 }

@@ -17,7 +17,7 @@
  */
 package com.waz.service.call
 
-import com.sun.jna.{Callback, Native, Pointer, Structure}
+import com.sun.jna.{Callback, Native, Pointer}
 import com.waz.CLibrary.Members
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -59,7 +59,7 @@ object Calling {
 
   @native def wcall_reject(convId: String, is_group: Boolean): Unit
 
-  @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoStateHandler): Unit
+  @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoReceiveStateHandler): Unit
 
   @native def wcall_set_video_send_active(convid: String, active: Boolean): Unit
 
@@ -73,27 +73,7 @@ object Calling {
 
   @native def wcall_free_members(pointer: Pointer): Unit
 
-  @native def wcall_set_state_handler(wcall_state_change_h: StateChangeHandler): Unit
-
-  val WCALL_REASON_NORMAL             = 0
-  val WCALL_REASON_ERROR              = 1
-  val WCALL_REASON_TIMEOUT            = 2
-  val WCALL_REASON_LOST_MEDIA         = 3
-  val WCALL_REASON_CANCELED           = 4
-  val WCALL_REASON_ANSWERED_ELSEWHERE = 5
-
-  val WCALL_VIDEO_RECEIVE_STOPPED  = 0
-  val WCALL_VIDEO_RECEIVE_STARTED  = 1
-  val WCALL_VIDEO_RECEIVE_BAD_CONN = 2
-
-
-  val WCALL_STATE_NONE        = 0
-  val WCALL_STATE_OUTGOING    = 1
-  val WCALL_STATE_INCOMING    = 2
-  val WCALL_STATE_ANSWERED    = 3
-  val WCALL_STATE_MEDIA_ESTAB = 4
-  val WCALL_STATE_TERMINATING = 5
-  val WCALL_STATE_UNKNOWN     = 6
+  @native def wcall_set_state_handler(wcall_state_change_h: CallStateChangeHandler): Unit
 
   /* This will be called when the calling system is ready for calling.
      * The version parameter specifies the config obtained version to use
@@ -127,44 +107,24 @@ object Calling {
     def onEstablishedCall(convId: String, userId: String, arg: Pointer): Unit
   }
 
-  /* Call terminated */
   trait CloseCallHandler extends Callback {
-    def onClosedCall(reason: Int /* see constants above */ , convid: String, userid: String, metrics_json: String, arg: Pointer): Unit
-  }
-
-  /**
-    * Callback used to inform user that received video has started
-    * or stopped
-    *
-    * @param state  New video state start/stopped
-    * @param arg    The handler argument passed when registering
-    */
-  trait VideoStateHandler extends Callback {
-    def onVideoStateChanged(state: Int, arg: Pointer): Unit
+    def onClosedCall(reason: Int, convid: String, userid: String, metrics_json: String, arg: Pointer): Unit
   }
 
   trait BitRateStateHandler extends Callback {
     def onBitRateStateChanged(arg: Pointer): Unit
   }
 
-  trait GroupChangedHandler extends Callback {
-    def onGroupChanged(convId: String, arg: Pointer): Unit
+  trait CallStateChangeHandler extends Callback {
+    def onCallStateChanged(convId: String, state: Int, arg: Pointer): Unit
   }
 
-  /**
-    * Call state callback
-    *
-    *   WCALL_STATE_NONE         0 There is no call
-    *   WCALL_STATE_OUTGOING     1 Outgoing call is pending
-    *   WCALL_STATE_INCOMING     2 Incoming call is pending
-    *   WCALL_STATE_ANSWERED     3 Call has been answered, but no media
-    *   WCALL_STATE_MEDIA_ESTAB  4 Call has been answered, with media
-    *   WCALL_STATE_TERM_LOCAL   6 Call was locally terminated
-    *   WCALL_STATE_TERM_REMOTE  7 Call was remotely terminated
-    *   WCALL_STATE_UNKNOWN      8 Unknown
-    */
-  trait StateChangeHandler extends Callback {
-    def onCallStateChanged(convId: String, state: Int, arg: Pointer): Unit
+  trait VideoReceiveStateHandler extends Callback {
+    def onVideoReceiveStateChanged(state: Int, arg: Pointer): Unit
+  }
+
+  trait GroupChangedHandler extends Callback {
+    def onGroupChanged(convId: String, arg: Pointer): Unit
   }
 
 }

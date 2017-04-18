@@ -29,16 +29,17 @@ import com.waz.api.{IConversation, VoiceChannelState}
 import com.waz.content.MembersStorage
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
-import com.waz.service.call.CallInfo.ClosedReason.{AnsweredElsewhere, Interrupted}
+import com.waz.service._
+import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted}
+import com.waz.service.call.AvsV3.{CallState, ClosedReason, VideoReceiveState}
 import com.waz.service.call.CallInfo._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
-import com.waz.service._
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.utils.{RichDate, RichInstant, returning}
+import com.waz.utils.{RichDate, RichInstant}
 import com.waz.zms.CallService
 import org.threeten.bp.{Duration, Instant}
 
@@ -156,9 +157,9 @@ class DefaultCallingService(context:             Context,
   //TODO should this be synchronised too?
   override def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
 
-  override def onCallStateChanged(convId: RConvId, state: Int) = dispatcher {
+  override def onCallStateChanged(convId: RConvId, state: CallState) = dispatcher {
     verbose(s"call state changed, convId: $convId, state: $state")
-    if (state == 2)
+    if (state == CallState.Incoming)
       currentCall.head.map {
         _.state match {
           case VoiceChannelState.SELF_CONNECTED =>
