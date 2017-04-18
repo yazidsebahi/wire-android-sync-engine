@@ -17,15 +17,41 @@
  */
 package com.waz.service.call
 
-import org.scalatest.{OptionValues, FeatureSpec, Matchers}
+import com.waz.api.NetworkMode
+import com.waz.model.UserId
+import com.waz.service.{MediaManagerService, NetworkModeService}
+import com.waz.utils.events.Signal
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FeatureSpec, Matchers}
 
-class CallingServiceSpec extends FeatureSpec with Matchers {
+import scala.concurrent.Future
 
+class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory {
+
+
+  val avsMock = mock[AvsV3]
+  val flows   = mock[FlowManagerService]
+  val mm      = mock[MediaManagerService]
+  val network = mock[NetworkModeService]
 
   feature("Group tests with features") {
-    scenario("Your test here") {
+    scenario("CallingService intialization") {
       println("hello")
       1 shouldEqual 1
+
+      (avsMock.available _).expects().once().returning(Future.successful({}))
+
+      (flows.flowManager _).expects().once().returning(None)
+      (mm.mediaManager _).expects().once().returning(None)
+      (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
+
+      (avsMock.init _).expects(*).once().onCall{ service: CallingService =>
+        println("Init was called, horray!")
+        Future.successful({})
+      }
+
+      new DefaultCallingService(null, UserId(), avsMock, null, null, null, flows, null, mm, null, null, network, null)
+
     }
   }
 

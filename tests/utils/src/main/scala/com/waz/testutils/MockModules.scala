@@ -61,7 +61,7 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
 
-  override lazy val mediaManager = new MediaManagerService(context, prefs) {
+  override lazy val mediaManager = new DefaultMediaManagerService(context, prefs) {
     override lazy val mediaManager = None
   }
 }

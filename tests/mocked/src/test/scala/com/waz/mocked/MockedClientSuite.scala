@@ -31,7 +31,7 @@ import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service
 import com.waz.service._
-import com.waz.service.call.FlowManagerService
+import com.waz.service.call.DefaultFlowManagerService$
 import com.waz.service.push.PushService
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -72,8 +72,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
   class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends ZMessaging(clientId, userModule) {
 
-    override lazy val flowmanager: FlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
-    override lazy val mediamanager: MediaManagerService = new MockedMediaManagerService(context, prefs)
+    override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
+    override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
 
     override lazy val assetClient        = new AssetClient(zNetClient) {
       override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = suite.postImageAssetData(asset, convId, data, nativePush)

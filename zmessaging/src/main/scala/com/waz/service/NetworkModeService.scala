@@ -21,20 +21,27 @@ import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
 import android.net.{ConnectivityManager, NetworkInfo}
 import android.telephony.TelephonyManager
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.NetworkMode
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
 
-class NetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) {
-  import NetworkModeService._
+trait NetworkModeService {
+  def networkMode: Signal[NetworkMode]
+  def isOfflineMode: Boolean
+  def isOnlineMode: Boolean
+}
+
+class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) extends NetworkModeService {
+  import DefaultNetworkModeService._
 
   private implicit val ev = EventContext.Global
 
   private lazy val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE).asInstanceOf[ConnectivityManager]
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
 
-  val networkMode = returning(Signal[NetworkMode](NetworkMode.OFFLINE)) { _.disableAutowiring() }
+  override val networkMode = returning(Signal[NetworkMode](NetworkMode.OFFLINE)) { _.disableAutowiring() }
 
   zmsLifecycle.lifecycleState { state => if (state == LifecycleState.UiActive) updateNetworkMode() }
 
@@ -57,8 +64,7 @@ class NetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) {
   def isOnlineMode = !isOfflineMode
 }
 
-object NetworkModeService {
-  private implicit val logTag: LogTag = logTagFor(NetworkModeService)
+object DefaultNetworkModeService {
 
   /*
    * This part (the mapping of mobile data network types to the networkMode enum) of the Wire software

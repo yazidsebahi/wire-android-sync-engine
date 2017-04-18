@@ -77,7 +77,7 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
       override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean) = postMessageResponse
     }
 
-    override lazy val network: NetworkModeService = new NetworkModeService(context, lifecycle) {
+    override lazy val network: DefaultNetworkModeService = new DefaultNetworkModeService(context, lifecycle) {
       override def updateNetworkMode(): Unit = ()
     }
 

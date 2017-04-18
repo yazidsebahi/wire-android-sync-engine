@@ -52,7 +52,7 @@ import scala.concurrent.Future.successful
 
 class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
                           client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
-                          assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
+                          assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
                           sync: SyncServiceHandle, assets: AssetService, users: UserService, cache: CacheService,
                           members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
 

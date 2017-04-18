@@ -33,14 +33,18 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.util.Try
 
-class MediaManagerService(context: Context, prefs: PreferenceService) {
-  import com.waz.service.MediaManagerService._
+trait MediaManagerService {
+  def mediaManager: Option[MediaManager]
+}
+
+class DefaultMediaManagerService(context: Context, prefs: PreferenceService) extends MediaManagerService {
+  import com.waz.service.DefaultMediaManagerService._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
 
   lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
-  
+
   lazy val mediaManager = LoggedTry {
     val manager = MediaManager.getInstance(context.getApplicationContext)
     manager.addListener(listener)
@@ -89,8 +93,8 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
   private def withMedia[T](op: MediaManager => T): Future[Option[T]] = mediaManager.mapFuture(m => Future(op(m)))
 }
 
-object MediaManagerService {
-  private implicit val logTag: LogTag = logTagFor[MediaManagerService]
+object DefaultMediaManagerService {
+  private implicit val logTag: LogTag = logTagFor[DefaultMediaManagerService]
 
   private val AudioConfigAsset = "android.json"
 }

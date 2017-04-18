@@ -19,9 +19,9 @@ package com.waz.mocked
 
 import android.content.Context
 import com.waz.media.manager.MediaManager
-import com.waz.service.{PlaybackRoute, PreferenceService, MediaManagerService}
+import com.waz.service.{PlaybackRoute, PreferenceService, DefaultMediaManagerService$}
 
-class MockedMediaManagerService(context: Context, prefs: PreferenceService) extends MediaManagerService(context, prefs) {
+class MockedMediaManagerService(context: Context, prefs: PreferenceService) extends DefaultMediaManagerService(context, prefs) {
 
   def changePlaybackRoute(route: PlaybackRoute): Unit = mediaManager foreach (_.onPlaybackRouteChanged(route.avsIndex))
 

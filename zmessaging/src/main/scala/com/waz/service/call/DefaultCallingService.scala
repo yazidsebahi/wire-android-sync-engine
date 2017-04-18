@@ -34,7 +34,7 @@ import com.waz.service.call.CallInfo._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
-import com.waz.service.{ErrorsService, EventScheduler, MediaManagerService, NetworkModeService}
+import com.waz.service._
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
@@ -74,7 +74,7 @@ class DefaultCallingService(context:             Context,
   private val fm = flowManagerService.flowManager
   private val mm = mediaManagerService.mediaManager
 
-  val v3Available = Signal.future(Calling.v3Available.map(_ => true).recover { case _ => false })
+  val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
   val currentCall = Signal(IdleCall)
   val otherSideCBR = Signal(false) // by default we assume the call is VBR
 

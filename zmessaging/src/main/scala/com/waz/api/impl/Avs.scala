@@ -19,8 +19,8 @@ package com.waz.api.impl
 
 import com.waz.ZLog._
 import com.waz.api.AvsLogLevel
-import com.waz.service.call.FlowManagerService
-import com.waz.service.call.FlowManagerService.AvsLogData
+import com.waz.service.call.{DefaultFlowManagerService}
+import com.waz.service.call.DefaultFlowManagerService.AvsLogData
 import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 
@@ -46,5 +46,5 @@ class Avs(implicit ui: UiModule) extends com.waz.api.Avs  with UiObservable with
   override def setLogLevel(logLevel: AvsLogLevel): Unit = withFlowManagerService { _.setLogLevel(logLevel) }
   override def getLogLevel: AvsLogLevel = logData.logLevel
 
-  private def withFlowManagerService(op: FlowManagerService => Unit): Unit = ui.zms { zms => op(zms.flowmanager) }
+  private def withFlowManagerService(op: DefaultFlowManagerService => Unit): Unit = ui.zms { zms => op(zms.flowmanager) }
 }

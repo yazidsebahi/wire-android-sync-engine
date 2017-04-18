@@ -22,8 +22,8 @@ import com.waz.RobolectricUtils
 import com.waz.api.{AvsLogLevel, NetworkMode}
 import com.waz.call.FlowManager
 import com.waz.model.UserId
-import com.waz.service.call.FlowManagerService
-import com.waz.service.call.FlowManagerService.AvsLogData
+import com.waz.service.call.DefaultFlowManagerService
+import com.waz.service.call.DefaultFlowManagerService.AvsLogData
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.{EventContext, Signal}
@@ -41,7 +41,7 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
   @volatile var notified = false
 
   lazy val zms = new MockZMessaging() {
-    override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, websocket, prefs, network) {
+    override lazy val flowmanager: DefaultFlowManagerService = new DefaultFlowManagerService(context, zNetClient, websocket, prefs, network) {
       override lazy val flowManager = Some(new FlowManager(context, requestHandler) {
         override def networkChanged(): Unit = notified = true
       })

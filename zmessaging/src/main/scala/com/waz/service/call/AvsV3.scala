@@ -20,8 +20,8 @@ package com.waz.service.call
 import com.sun.jna.Pointer
 import com.waz.CLibrary.Members
 import com.waz.ZLog
-import com.waz.ZLog.{error, verbose}
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.{error, verbose}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.call.CallInfo.{ClosedReason, VideoReceiveState}
@@ -34,20 +34,21 @@ import org.threeten.bp.Instant
 import scala.concurrent.{Future, Promise}
 
 trait CallingService {
-  def onReady(version: Int)
-  def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean)
-  def onAnsweredCall(convId: RConvId)
-  def onEstablishedCall(convId: RConvId, userId: UserId)
-  def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String)
-  def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean)
-  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState)
-  def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String)
-  def onBitRateStateChanged()
-  def onCallStateChanged(convId: RConvId, state: Int)
-  def onGroupChanged(convId: RConvId)
+  def onReady(version: Int): Unit
+  def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
+  def onAnsweredCall(convId: RConvId): Unit
+  def onEstablishedCall(convId: RConvId, userId: UserId): Unit
+  def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String): Unit
+  def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean): Unit
+  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
+  def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
+  def onBitRateStateChanged(): Unit
+  def onCallStateChanged(convId: RConvId, state: Int): Unit
+  def onGroupChanged(convId: RConvId): Unit
 }
 
 trait AvsV3 {
+  def available: Future[Unit] //Fails if not available
   def onNetworkChanged(): Future[Unit]
   def init(callingService: CallingService): Future[Unit]
   def close(): Unit
@@ -81,7 +82,9 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
   private val callingReady = Promise[Unit]()
   private val _init = callingReady.future
 
-  override def init(callingService: CallingService) = Calling.v3Available.flatMap { _ =>
+  override lazy val available = Calling.v3Available
+
+  override def init(callingService: CallingService) = available.flatMap { _ =>
     verbose(s"Initialising calling for self: $selfUserId and current client: $clientId")
     Calling.wcall_init(
       selfUserId.str,
