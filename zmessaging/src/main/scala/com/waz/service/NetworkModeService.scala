@@ -34,7 +34,7 @@ trait NetworkModeService {
 }
 
 class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) extends NetworkModeService {
-  import DefaultNetworkModeService._
+  import NetworkModeService._
 
   private implicit val ev = EventContext.Global
 
@@ -64,7 +64,7 @@ class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) ex
   def isOnlineMode = !isOfflineMode
 }
 
-object DefaultNetworkModeService {
+object NetworkModeService {
 
   /*
    * This part (the mapping of mobile data network types to the networkMode enum) of the Wire software

@@ -20,6 +20,7 @@ package com.waz.service
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
@@ -38,7 +39,7 @@ trait MediaManagerService {
 }
 
 class DefaultMediaManagerService(context: Context, prefs: PreferenceService) extends MediaManagerService {
-  import com.waz.service.DefaultMediaManagerService._
+  import com.waz.service.MediaManagerService._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
@@ -93,8 +94,6 @@ class DefaultMediaManagerService(context: Context, prefs: PreferenceService) ext
   private def withMedia[T](op: MediaManager => T): Future[Option[T]] = mediaManager.mapFuture(m => Future(op(m)))
 }
 
-object DefaultMediaManagerService {
-  private implicit val logTag: LogTag = logTagFor[DefaultMediaManagerService]
-
-  private val AudioConfigAsset = "android.json"
+object MediaManagerService {
+  val AudioConfigAsset = "android.json"
 }

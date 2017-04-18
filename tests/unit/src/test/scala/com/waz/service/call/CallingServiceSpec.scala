@@ -51,8 +51,6 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory {
       }
 
       new DefaultCallingService(null, UserId(), avsMock, null, null, null, flows, null, mm, null, null, network, null)
-
     }
   }
-
 }
