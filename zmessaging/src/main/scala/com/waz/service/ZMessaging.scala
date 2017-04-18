@@ -173,7 +173,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
   lazy val handlesClient      = wire[HandlesClient]
 
-  lazy val convsContent: ConversationsContentUpdater = wire[ConversationsContentUpdater]
+  lazy val convsContent: DefaultConversationsContentUpdater = wire[DefaultConversationsContentUpdater]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
 
   lazy val assetDownloader = wire[AssetDownloader]

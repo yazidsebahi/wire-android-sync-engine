@@ -49,7 +49,7 @@ trait FlowManagerService {
 }
 
 class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: PreferenceService, network: DefaultNetworkModeService) extends FlowManagerService {
-  import FlowManagerService._
+  import DefaultFlowManagerService._
 
   val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
   val avsAudioTestFlag: Long = 1 << 1
@@ -331,7 +331,7 @@ case class AvsMetrics(rConvId: RConvId, private val bytes: Array[Byte]) {
   override def toString = s"AvsMetrics($rConvId, isVideoCall: $isVideoCall, kindOfCall: $kindOfCall, ${json.toString})"
 }
 
-object FlowManagerService {
+object DefaultFlowManagerService {
 
   case class AvsLogData(metricsEnabled: Boolean, loggingEnabled: Boolean, logLevel: AvsLogLevel)
   case class EstablishedFlows(convId: RConvId, users: Set[UserId])

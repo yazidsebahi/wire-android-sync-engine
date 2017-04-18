@@ -26,6 +26,7 @@ import com.waz.model.otr.ClientId
 import com.waz.service.call.AvsV3.{CallState, ClosedReason, VideoReceiveState}
 import com.waz.service.call.Calling._
 import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.events.Signal
 import com.waz.utils.jna.{Size_t, Uint32_t}
 import com.waz.utils.returning
 import org.threeten.bp.Instant
@@ -44,6 +45,7 @@ trait CallingService {
   def onBitRateStateChanged(): Unit
   def onCallStateChanged(convId: RConvId, state: CallState): Unit
   def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
+  def currentCall: Signal[CallInfo]
 }
 
 trait AvsV3 {

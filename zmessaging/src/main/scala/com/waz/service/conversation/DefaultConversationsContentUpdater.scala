@@ -31,9 +31,15 @@ import org.threeten.bp.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NoStackTrace
 
-class ConversationsContentUpdater(val storage: ConversationStorage, users: UserService, membersStorage: MembersStorage, messagesStorage: => MessagesStorage) {
+trait ConversationsContentUpdater {
+  def convById(id: ConvId): Future[Option[ConversationData]]
+  def convByRemoteId(id: RConvId): Future[Option[ConversationData]]
+  def storage: ConversationStorage
+}
+
+class DefaultConversationsContentUpdater(val storage: ConversationStorage, users: UserService, membersStorage: MembersStorage, messagesStorage: => MessagesStorage) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
-  private implicit val tag: LogTag = logTagFor[ConversationsContentUpdater]
+  private implicit val tag: LogTag = logTagFor[DefaultConversationsContentUpdater]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
 
   val conversationsSignal: Signal[ConversationsSet] = storage.convsSignal

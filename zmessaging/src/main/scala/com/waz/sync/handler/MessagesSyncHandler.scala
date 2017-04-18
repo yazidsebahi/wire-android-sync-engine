@@ -32,7 +32,7 @@ import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
+import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.service.otr.OtrService
 import com.waz.service.{MetaDataService, _}
@@ -51,7 +51,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
+                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: DefaultConversationsContentUpdater, storage: MessagesStorage,
                           assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
                           sync: SyncServiceHandle, assets: AssetService, users: UserService, cache: CacheService,
                           members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {

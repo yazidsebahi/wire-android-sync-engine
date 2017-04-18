@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.content.KeyValueStorage
 import com.waz.model._
 import com.waz.service._
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.DefaultConversationsContentUpdater
 import com.waz.service.push.GcmGlobalService.GcmRegistration
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.{EventsClient, PushNotification}
@@ -40,7 +40,7 @@ trait IGcmService {
 class GcmService(accountId:         AccountId,
                  val gcmGlobalService:  GcmGlobalService,
                  keyVal:            KeyValueStorage,
-                 convsContent:      ConversationsContentUpdater,
+                 convsContent:      DefaultConversationsContentUpdater,
                  eventsClient:      EventsClient,
                  eventPipeline:     EventPipeline,
                  sync:              SyncServiceHandle,

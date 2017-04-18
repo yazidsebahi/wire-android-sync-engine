@@ -45,7 +45,7 @@ import scala.util.control.NoStackTrace
 
 class ConversationsService(context: Context, push: PushServiceSignals, users: UserService, usersStorage: UsersStorage,
                            messagesStorage: MessagesStorage, membersStorage: MembersStorage,
-                           convsStorage: ConversationStorage, val content: ConversationsContentUpdater, listState: ConversationsListStateService,
+                           convsStorage: ConversationStorage, val content: DefaultConversationsContentUpdater, listState: ConversationsListStateService,
                            sync: SyncServiceHandle, errors: ErrorsService,
                            messages: MessagesService, assets: AssetService, storage: ZmsDatabase,
                            msgContent: MessagesContentUpdater, kvService: KeyValueStorage, eventScheduler: => EventScheduler) {

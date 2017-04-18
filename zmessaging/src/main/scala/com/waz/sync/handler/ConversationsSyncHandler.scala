@@ -26,7 +26,7 @@ import com.waz.content.MessagesStorage
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater, ConversationsService}
+import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.ConversationsClient
@@ -43,7 +43,7 @@ object ConversationsSyncHandler {
 
 class ConversationsSyncHandler(assetSync: AssetSyncHandler,
                                userService: UserService, messagesStorage: MessagesStorage, messagesService: MessagesService,
-                               convService: ConversationsService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService,
+                               convService: ConversationsService, convs: DefaultConversationsContentUpdater, convEvents: ConversationEventsService,
                                errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
 
   import Threading.Implicits.Background
