@@ -17,21 +17,27 @@
  */
 package com.waz.service.call
 
-import com.waz.ZLog._
+import com.waz.ZLog
+import com.waz.ZLog.LogLevel
 import com.waz.api.{NetworkMode, VoiceChannelState}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{UserId, _}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{MediaManagerService, NetworkModeService}
-import com.waz.utils.events.Signal
+import com.waz.threading.SerialDispatchQueue
+import com.waz.utils._
+import com.waz.utils.events.{EventContext, Signal}
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FeatureSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 
-import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future, Promise}
 
-class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory {
+class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with BeforeAndAfterAll {
 
-  private implicit val tag: LogTag = logTagFor[CallingServiceSpec]
+  val defaultDuration = 5.seconds
+  implicit val eventContext = EventContext.Implicits.global
+  implicit val executionContext = new SerialDispatchQueue(name = "CallingServiceSpec")
 
   val avsMock = mock[AvsV3]
   val flows   = mock[FlowManagerService]
@@ -39,56 +45,57 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory {
   val network = mock[NetworkModeService]
   val convs   = mock[ConversationsContentUpdater]
 
-
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("Johnny Cash")
   lazy val conv1 = ConversationData(ConvId(user1.id.str), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
 
+  override def beforeAll = {
+    isTest = true
+    ZLog.testLogLevel = LogLevel.Verbose
+  }
 
   feature("Group tests with features") {
     scenario("CallingService intialization") {
-      (avsMock.available _).expects().once().returning(Future.successful({}))
-      (flows.flowManager _).expects().once().returning(None)
-      (mm.mediaManager _).expects().once().returning(None)
-      (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
-      (avsMock.init _).expects(*).once().onCall{ service: CallingService =>
-        println("Init was called, hurray!")
-        Future.successful({})
-      }
-      new DefaultCallingService(null, UserId(), avsMock, null, null, null, flows, null, mm, null, null, network, null)
+      val service = initCallingService()
+      service.onReady(3)
+      Await.result(service.v3Available.head, defaultDuration) shouldEqual true
+      Await.result(service.requestedCallVersion.head, defaultDuration) shouldEqual 3
     }
 
     scenario("Incoming call") {
-      (avsMock.available _).expects().once().returning(Future.successful({}))
-      (flows.flowManager _).expects().once().returning(None)
-      (mm.mediaManager _).expects().once().returning(None)
-      (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
       (convs.convByRemoteId _).expects(*).once().returning(Future.successful(Some(conv1)))
 
-      (avsMock.init _).expects(*).once().onCall{ service: CallingService =>
-        service.currentCall.disableAutowiring()
+      val service = initCallingService()
 
-        service.currentCall.currentValue.get.state shouldEqual VoiceChannelState.NO_ACTIVE_USERS
-
+      signalTest(service.currentCall.map(_.state)) (_ == VoiceChannelState.OTHER_CALLING ) {
         service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
-        Thread.sleep(50)
-        service.currentCall.currentValue.get.state shouldEqual VoiceChannelState.OTHER_CALLING
-        Future.successful({})
       }
-
-      new DefaultCallingService(null, UserId(), avsMock, convs, null, null, flows, null, mm, null, null, network, null)
     }
-
   }
 
-  def initCallingService() = {
-    (avsMock.available _).expects().once().returning(Future.successful({}))
+  def signalTest[A](signal: Signal[A])(test: A => Boolean)(trigger: => Unit): Unit = {
+    signal.disableAutowiring()
+    trigger
+    Await.ready(signal.filter(test).head, defaultDuration)
+  }
+
+  def initCallingService(self:    UserId                      = UserId(),
+                         avs:     AvsV3                       = avsMock,
+                         convs:   ConversationsContentUpdater = convs,
+                         flows:   FlowManagerService          = flows,
+                         media:   MediaManagerService         = mm,
+                         network: NetworkModeService          = network) = {
+    val initPromise = Promise[Unit]()
+    (avs.available _).expects().once().returning(Future.successful({}))
     (flows.flowManager _).expects().once().returning(None)
-    (mm.mediaManager _).expects().once().returning(None)
+    (media.mediaManager _).expects().once().returning(None)
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
-    (avsMock.init _).expects(*).once().onCall{ service: CallingService =>
-      println("Init was called, hurray!")
-      Future.successful({})
+    (avs.init _).expects(*).once().onCall{ service: CallingService =>
+      initPromise.success({})
+      initPromise.future
     }
+    val service = new DefaultCallingService(null, self, avs, convs, null, null, flows, null, media, null, null, network, null)
+    Await.ready(initPromise.future, defaultDuration)
+    service
   }
 }

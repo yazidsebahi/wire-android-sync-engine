@@ -92,8 +92,7 @@ class DefaultCallingService(context:             Context,
   }
 
   override def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
-    //TODO Dean: Commented out logging to get tests to run, need to fix this
-    //verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
+    verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
     otherSideCBR.mutate(_ => false)
     currentCall.mutate {
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
