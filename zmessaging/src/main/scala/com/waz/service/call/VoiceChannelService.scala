@@ -17,7 +17,6 @@
  */
 package com.waz.service.call
 
-import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.CauseForCallStateEvent
 import com.waz.api.impl.ErrorResponse
@@ -34,6 +33,7 @@ import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, SourceSignal}
 import com.waz.utils.returning
+import com.waz.utils.wrappers.Context
 import org.threeten.bp.{Instant, Duration => Duration310}
 
 import scala.collection.breakOut

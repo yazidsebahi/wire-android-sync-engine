@@ -32,7 +32,7 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Default
   private implicit val dispatcher = Threading.Ui
   private implicit val logTag: LogTag = logTagFor[VoiceChannelGsmService]
 
-  private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
+  private lazy val telephonyManager = context.getSystemService[TelephonyManager](Context.TELEPHONY_SERVICE)
 
   private var listening = false
 

@@ -17,11 +17,6 @@
  */
 package com.waz.utils
 
-/**
-  * Created by admin on 19/04/17.
-  */
 package object wrappers {
   var URI: URIUtil = AndroidURIUtil
-
-
 }

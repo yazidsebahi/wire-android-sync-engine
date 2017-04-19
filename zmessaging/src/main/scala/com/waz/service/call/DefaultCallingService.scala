@@ -18,7 +18,6 @@
 package com.waz.service.call
 
 
-import android.content.Context
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -39,6 +38,7 @@ import com.waz.service.push.PushService
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichDate, RichInstant}
 import com.waz.zms.CallService
 import org.threeten.bp.{Duration, Instant}

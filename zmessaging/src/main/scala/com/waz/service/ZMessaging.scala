@@ -43,6 +43,7 @@ import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.AndroidContext
 import com.waz.znet.{CredentialsHandler, _}
 import net.hockeyapp.android.Constants
 import org.threeten.bp.Instant
@@ -111,6 +112,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val verificationUpdater  = userModule.verificationUpdater
 
   def context           = global.context
+  def contextWrapper    = new AndroidContext(context)
   def imageCache        = global.imageCache
   def permissions       = global.permissions
   def phoneNumbers      = global.phoneNumbers

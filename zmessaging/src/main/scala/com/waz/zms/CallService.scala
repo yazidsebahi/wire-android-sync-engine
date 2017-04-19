@@ -17,7 +17,7 @@
  */
 package com.waz.zms
 
-import android.content.{Context, Intent}
+import android.content.{Intent, Context => AContext}
 import com.waz.ZLog._
 import com.waz.api.VoiceChannelState._
 import com.waz.model.ConvId
@@ -27,6 +27,8 @@ import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.Context
+import com.waz.utils.wrappers.ContextUtil._
 
 import scala.concurrent.{Future, Promise}
 
@@ -80,25 +82,25 @@ object CallService {
     }
   }
 
-  def intent(context: Context, conv: ConvId, action: String = ActionTrack) = {
+  def intent(context: AContext, conv: ConvId, action: String = ActionTrack) = {
     val intent = new Intent(context, classOf[CallService])
     intent.setAction(action)
     intent.putExtra(ConvIdExtra, conv.str)
   }
 
-  def trackIntent(context: Context, conv: ConvId) = intent(context, conv, ActionTrack)
+  def trackIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionTrack)
 
-  def joinIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoin)
-  def joinGroupIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroup)
-  def joinWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
-  def joinGroupWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
+  def joinIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoin)
+  def joinGroupIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoinGroup)
+  def joinWithVideoIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
+  def joinGroupWithVideoIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
 
-  def leaveIntent(context: Context, conv: ConvId) = intent(context, conv, ActionLeave)
+  def leaveIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionLeave)
 
-  def silenceIntent(context: Context, conv: ConvId) = intent(context, conv, ActionSilence)
+  def silenceIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionSilence)
 }
 
-class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
+class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
 
   private implicit val logTag: LogTag = logTagFor[CallExecutor]
   import Threading.Implicits.Background
