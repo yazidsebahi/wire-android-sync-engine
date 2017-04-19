@@ -45,15 +45,6 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
 
-/**
-  * Implementation notes:
-  *  - The void *arg, here represented in the native methods as a Pointer, is a reference to the object that handles the callbacks and native
-  *    method calls. Since we know which class is doing the calling and handling, we don't really need to use it and so pass and receive null
-  *
-  *  - All modifications to the current call state should be done INSIDE a future to the serial dispatch queue - best is to perform any
-  *  mutations inside `withConvWhenReady` or `withConvFromPointer`. This should ensure that all state changes are performed serially to
-  *  the currentCall state in the order the user/AVS triggers the callbacks.
-  */
 class DefaultCallingService(context:             Context,
                             selfUserId:          UserId,
                             avs:                 AvsV3,

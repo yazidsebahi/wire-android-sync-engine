@@ -70,7 +70,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory {
 
         service.currentCall.currentValue.get.state shouldEqual VoiceChannelState.NO_ACTIVE_USERS
 
-        service.onIncomingCall(conv1.remoteId, user1.id, false, true)
+        service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
         Thread.sleep(50)
         service.currentCall.currentValue.get.state shouldEqual VoiceChannelState.OTHER_CALLING
         Future.successful({})
@@ -79,5 +79,16 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory {
       new DefaultCallingService(null, UserId(), avsMock, convs, null, null, flows, null, mm, null, null, network, null)
     }
 
+  }
+
+  def initCallingService() = {
+    (avsMock.available _).expects().once().returning(Future.successful({}))
+    (flows.flowManager _).expects().once().returning(None)
+    (mm.mediaManager _).expects().once().returning(None)
+    (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
+    (avsMock.init _).expects(*).once().onCall{ service: CallingService =>
+      println("Init was called, hurray!")
+      Future.successful({})
+    }
   }
 }
