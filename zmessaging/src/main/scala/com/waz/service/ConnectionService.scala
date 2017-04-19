@@ -18,7 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
-import com.waz.content.{MembersStorage, MessagesStorage, UsersStorage}
+import com.waz.content.{DefaultMembersStorage, MessagesStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -33,7 +33,7 @@ import com.waz.utils.events.EventContext
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class ConnectionService(push: PushService, convs: DefaultConversationsContentUpdater, members: MembersStorage,
+class ConnectionService(push: PushService, convs: DefaultConversationsContentUpdater, members: DefaultMembersStorage,
                         messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
                         sync: SyncServiceHandle, scheduler: => EventScheduler) {
 

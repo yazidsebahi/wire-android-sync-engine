@@ -45,7 +45,7 @@ import scala.concurrent.duration._
 import scala.language.higherKinds
 
 class ConversationsUiService(assets: AssetService, users: UserService, usersStorage: UsersStorage,
-                             storage: ZmsDatabase, messages: MessagesService, members: MembersStorage, assetStorage: AssetsStorage,
+                             storage: ZmsDatabase, messages: MessagesService, members: DefaultMembersStorage, assetStorage: AssetsStorage,
                              convsContent: DefaultConversationsContentUpdater, convStorage: ConversationStorage, network: DefaultNetworkModeService,
                              convs: ConversationsService, voice: VoiceChannelService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle,
                              errors: ErrorsService) {

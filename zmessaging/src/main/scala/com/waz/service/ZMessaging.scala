@@ -22,7 +22,7 @@ import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
 import com.waz.api.impl.LogLevel
-import com.waz.content.{MembersStorage, UsersStorage, ZmsDatabase, _}
+import com.waz.content.{DefaultMembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
@@ -74,7 +74,7 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val kvStorage         = wire[KeyValueStorage]
   lazy val usersStorage      = wire[UsersStorage]
   lazy val otrClientsStorage = wire[OtrClientsStorage]
-  lazy val membersStorage    = wire[MembersStorage]
+  lazy val membersStorage    = wire[DefaultMembersStorage]
   lazy val assetsStorage     = wire[AssetsStorage]
   lazy val voiceStorage      = wire[VoiceChannelStorage]
   lazy val reactionsStorage  = wire[ReactionsStorage]

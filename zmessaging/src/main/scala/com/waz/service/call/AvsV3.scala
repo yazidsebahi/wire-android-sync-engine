@@ -46,6 +46,7 @@ trait CallingService {
   def onCallStateChanged(convId: RConvId, state: CallState): Unit
   def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
   def currentCall: Signal[CallInfo]
+  def startCall(convId: ConvId, isVideo: Boolean = false, isGroup: Boolean): Unit
 }
 
 trait AvsV3 {

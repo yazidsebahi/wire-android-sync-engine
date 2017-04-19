@@ -18,6 +18,7 @@
 package com.waz.service.call
 
 import com.waz.api.{NetworkMode, VoiceChannelState}
+import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{UserId, _}
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -44,10 +45,12 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
   val mm      = mock[MediaManagerService]
   val network = mock[NetworkModeService]
   val convs   = mock[ConversationsContentUpdater]
+  val members = mock[MembersStorage]
 
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("Johnny Cash")
-  lazy val conv1 = ConversationData(ConvId(user1.id.str), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
+  lazy val groupId1 = RConvId()
+  lazy val conv1 = ConversationData(ConvId(groupId1.str), groupId1, Some("convName"), selfUser.id, ConversationType.Group)
 
   feature("Group tests with features") {
     scenario("CallingService intialization") {
@@ -58,14 +61,28 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
     }
 
     scenario("Incoming call") {
-
       (convs.convByRemoteId _).expects(*).once().returning(Future.successful(Some(conv1)))
-      (context.startService _).expects(*).once().returning(null)
+      val service = initCallingService()
+
+      signalTest(service.currentCall) { info =>
+        info.state == VoiceChannelState.OTHER_CALLING && info.convId.contains(ConvId(groupId1.str))
+      } {
+        service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
+      }
+    }
+
+    scenario("Outgoing call") {
+      (avsMock.startCall _).expects(groupId1, false, true).once().returning(Future.successful(0))
+      (convs.convById _).expects(*).once().returning(Future.successful(Some(conv1)))
+      (members.getByConv _).expects(*).once().returning(Future.successful(scala.collection.immutable.IndexedSeq(ConversationMemberData(user1.id, conv1.id))))
 
       val service = initCallingService()
 
-      signalTest(service.currentCall.map(_.state)) (_ == VoiceChannelState.OTHER_CALLING ) {
-        service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
+      signalTest(service.currentCall) { info =>
+        info.state == VoiceChannelState.SELF_CALLING
+        info.convId.contains(ConvId(groupId1.str))
+      } {
+        service.startCall(ConvId(groupId1.str), isVideo = false, isGroup = true)
       }
     }
   }
@@ -80,10 +97,12 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
                          self:    UserId                      = UserId(),
                          avs:     AvsV3                       = avsMock,
                          convs:   ConversationsContentUpdater = convs,
+                         members: MembersStorage = members,
                          flows:   FlowManagerService          = flows,
                          media:   MediaManagerService         = mm,
                          network: NetworkModeService          = network) = {
     val initPromise = Promise[Unit]()
+    (context.startService _).expects(*).anyNumberOfTimes().returning(null)
     (avs.available _).expects().once().returning(Future.successful({}))
     (flows.flowManager _).expects().once().returning(None)
     (media.mediaManager _).expects().once().returning(None)
@@ -92,7 +111,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       initPromise.success({})
       initPromise.future
     }
-    val service = new DefaultCallingService(context, self, avs, convs, null, null, flows, null, media, null, null, network, null)
+    val service = new DefaultCallingService(context, self, avs, convs, members, null, flows, null, media, null, null, network, null)
     Await.ready(initPromise.future, defaultDuration)
     service
   }

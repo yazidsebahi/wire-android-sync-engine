@@ -37,7 +37,7 @@ trait ConversationsContentUpdater {
   def storage: ConversationStorage
 }
 
-class DefaultConversationsContentUpdater(val storage: ConversationStorage, users: UserService, membersStorage: MembersStorage, messagesStorage: => MessagesStorage) extends ConversationsContentUpdater {
+class DefaultConversationsContentUpdater(val storage: ConversationStorage, users: UserService, membersStorage: DefaultMembersStorage, messagesStorage: => MessagesStorage) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val tag: LogTag = logTagFor[DefaultConversationsContentUpdater]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
