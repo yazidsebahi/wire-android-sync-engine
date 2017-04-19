@@ -127,7 +127,7 @@ class DefaultCallingService(context:             Context,
   override def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { conv =>
     verbose(s"call established for conv: ${conv.id}, userId: $userId")
     currentCall.mutate{ c =>
-      setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
+      setVideoSendActive(conv, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
       setCallMuted(c.muted) //Need to set muted only after call is established
       c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now))
     }
@@ -284,12 +284,11 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  def setVideoSendActive(convId: ConvId, send: Boolean): Unit = {
-    verbose(s"setVideoSendActive: $convId, $send")
-    withConv(convId) { conv =>
-      avs.setVideoSendActive(conv.remoteId, send)
-      currentCall.mutate(_.copy(videoSendState = if (send) SEND else DONT_SEND))
-    }
+  //only call from within dispatcher
+  def setVideoSendActive(conv: ConversationData, send: Boolean): Unit = {
+    verbose(s"setVideoSendActive: ${conv.id}, $send")
+    avs.setVideoSendActive(conv.remoteId, send)
+    currentCall.mutate(_.copy(videoSendState = if (send) SEND else DONT_SEND))
   }
 
   def setAudioConstantBitRateEnabled(enabled: Int): Unit = {

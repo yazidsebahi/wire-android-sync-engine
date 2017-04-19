@@ -17,6 +17,7 @@
  */
 package com.waz.service.call
 
+import com.waz.api.VoiceChannelState.{OTHER_CALLING, SELF_CALLING, SELF_CONNECTED}
 import com.waz.api.{NetworkMode, VoiceChannelState}
 import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
@@ -52,7 +53,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
   lazy val groupId1 = RConvId()
   lazy val conv1 = ConversationData(ConvId(groupId1.str), groupId1, Some("convName"), selfUser.id, ConversationType.Group)
 
-  feature("Group tests with features") {
+  feature("Basics") {
     scenario("CallingService intialization") {
       val service = initCallingService()
       service.onReady(3)
@@ -65,7 +66,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       signalTest(service.currentCall) { info =>
-        info.state == VoiceChannelState.OTHER_CALLING &&
+        info.state == OTHER_CALLING &&
           info.convId.contains(ConvId(groupId1.str))
       } {
         service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
@@ -80,10 +81,47 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       signalTest(service.currentCall) { info =>
-        info.state == VoiceChannelState.SELF_CALLING &&
+        info.state == SELF_CALLING &&
           info.convId.contains(ConvId(groupId1.str))
       } {
         service.startCall(ConvId(groupId1.str), isVideo = false, isGroup = true)
+      }
+    }
+  }
+
+  feature("Simultaneous calls") {
+
+    scenario("Receive incoming call while 1:1 call ongoing") {
+
+      val ongoingUserId = UserId("user1")
+      val ongoingConv = ConversationData(ConvId(ongoingUserId.str), RConvId(ongoingUserId.str), Some("Ongoing Conv"), selfUser.id, ConversationType.OneToOne)
+
+      val incomingUserId = UserId("user2")
+      val incomingConv = ConversationData(ConvId(incomingUserId.str), RConvId(incomingUserId.str), Some("Incoming Conv"), selfUser.id, ConversationType.OneToOne)
+
+      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().onCall { rConvId: RConvId =>
+        Future.successful(rConvId match {
+          case ongoingConv.remoteId => Some(ongoingConv)
+          case incomingConv.remoteId => Some(incomingConv)
+          case _ => None
+        })
+      }
+      (convs.convById _).expects(ConvId(ongoingUserId.str)).once().returning(Future.successful(Some(ongoingConv)))
+      (avsMock.answerCall _).expects(ongoingConv.remoteId, false).once()
+      (avsMock.setVideoSendActive _).expects(ongoingConv.remoteId, false).once()
+
+      val service = initCallingService()
+
+      signalTest(service.currentCall) { info =>
+        info.state == SELF_CONNECTED &&
+          info.others.contains(ongoingUserId) &&
+          !info.others.contains(incomingUserId)
+      } {
+        service.onIncomingCall(ongoingConv.remoteId, ongoingUserId, videoCall = false, shouldRing = true)
+        service.acceptCall(ongoingConv.id, isGroup = false)
+        service.onEstablishedCall(ongoingConv.remoteId, ongoingUserId)
+        //Receive the second call after first is established
+        service.onIncomingCall(incomingConv.remoteId, incomingUserId, videoCall = false, shouldRing = false)
       }
     }
   }
