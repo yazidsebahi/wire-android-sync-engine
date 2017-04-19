@@ -20,9 +20,9 @@ package com.waz.mocked
 import android.content.Context
 import com.waz.api.VideoSendState
 import com.waz.model.{CallSessionId, CaptureDeviceData, RConvId, UserId}
-import com.waz.service.call.DefaultFlowManagerService$
+import com.waz.service.call.DefaultFlowManagerService
 import com.waz.service.push.WebSocketClientService
-import com.waz.service.{DefaultNetworkModeService$, PreferenceService}
+import com.waz.service.{DefaultNetworkModeService, PreferenceService}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.znet.ZNetClient
 

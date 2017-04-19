@@ -19,7 +19,7 @@ package com.waz.mocked
 
 import android.content.Context
 import com.waz.media.manager.MediaManager
-import com.waz.service.{PlaybackRoute, PreferenceService, DefaultMediaManagerService$}
+import com.waz.service.{DefaultMediaManagerService, PlaybackRoute, PreferenceService}
 
 class MockedMediaManagerService(context: Context, prefs: PreferenceService) extends DefaultMediaManagerService(context, prefs) {
 

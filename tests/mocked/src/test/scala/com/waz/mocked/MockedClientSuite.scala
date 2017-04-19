@@ -31,7 +31,7 @@ import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service
 import com.waz.service._
-import com.waz.service.call.DefaultFlowManagerService$
+import com.waz.service.call.DefaultFlowManagerService
 import com.waz.service.push.PushService
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse

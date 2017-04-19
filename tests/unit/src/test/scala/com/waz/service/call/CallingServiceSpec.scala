@@ -65,7 +65,8 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       signalTest(service.currentCall) { info =>
-        info.state == VoiceChannelState.OTHER_CALLING && info.convId.contains(ConvId(groupId1.str))
+        info.state == VoiceChannelState.OTHER_CALLING &&
+          info.convId.contains(ConvId(groupId1.str))
       } {
         service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
       }
@@ -79,8 +80,8 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       signalTest(service.currentCall) { info =>
-        info.state == VoiceChannelState.SELF_CALLING
-        info.convId.contains(ConvId(groupId1.str))
+        info.state == VoiceChannelState.SELF_CALLING &&
+          info.convId.contains(ConvId(groupId1.str))
       } {
         service.startCall(ConvId(groupId1.str), isVideo = false, isGroup = true)
       }
@@ -97,7 +98,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
                          self:    UserId                      = UserId(),
                          avs:     AvsV3                       = avsMock,
                          convs:   ConversationsContentUpdater = convs,
-                         members: MembersStorage = members,
+                         members: MembersStorage              = members,
                          flows:   FlowManagerService          = flows,
                          media:   MediaManagerService         = mm,
                          network: NetworkModeService          = network) = {
