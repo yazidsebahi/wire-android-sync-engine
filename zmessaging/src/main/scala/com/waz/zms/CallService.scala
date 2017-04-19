@@ -17,7 +17,7 @@
  */
 package com.waz.zms
 
-import android.content.{Intent, Context => AContext}
+import android.content.{Context => AContext, Intent => AIntent}
 import com.waz.ZLog._
 import com.waz.api.VoiceChannelState._
 import com.waz.model.ConvId
@@ -27,8 +27,8 @@ import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
-import com.waz.utils.wrappers.Context
-import com.waz.utils.wrappers.ContextUtil._
+import com.waz.utils.returning
+import com.waz.utils.wrappers.{Context, Intent}
 
 import scala.concurrent.{Future, Promise}
 
@@ -42,7 +42,7 @@ class CallService extends FutureService {
 
   lazy val executor = new CallExecutor(getApplicationContext, ZMessaging.currentAccounts)
 
-  override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
+  override protected def onIntent(intent: AIntent, id: Int): Future[Any] = wakeLock.async {
     debug(s"onIntent $intent")
     if (intent != null && intent.hasExtra(ConvIdExtra)) {
       val convId = ConvId(intent.getStringExtra(ConvIdExtra))
@@ -82,22 +82,23 @@ object CallService {
     }
   }
 
-  def intent(context: AContext, conv: ConvId, action: String = ActionTrack) = {
-    val intent = new Intent(context, classOf[CallService])
-    intent.setAction(action)
-    intent.putExtra(ConvIdExtra, conv.str)
+  def intent(context: Context, conv: ConvId, action: String = ActionTrack) = {
+    returning(Intent(context, classOf[CallService])) { i =>
+      i.setAction(action)
+      i.putExtra(ConvIdExtra, conv.str)
+    }
   }
 
-  def trackIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionTrack)
+  def trackIntent(context: Context, conv: ConvId) = intent(context, conv, ActionTrack)
 
-  def joinIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoin)
-  def joinGroupIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoinGroup)
-  def joinWithVideoIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
-  def joinGroupWithVideoIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
+  def joinIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoin)
+  def joinGroupIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroup)
+  def joinWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
+  def joinGroupWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
 
-  def leaveIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionLeave)
+  def leaveIntent(context: Context, conv: ConvId) = intent(context, conv, ActionLeave)
 
-  def silenceIntent(context: AContext, conv: ConvId) = intent(context, conv, ActionSilence)
+  def silenceIntent(context: Context, conv: ConvId) = intent(context, conv, ActionSilence)
 }
 
 class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {

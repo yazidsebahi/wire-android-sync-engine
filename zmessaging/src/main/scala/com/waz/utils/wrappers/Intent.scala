@@ -17,25 +17,29 @@
  */
 package com.waz.utils.wrappers
 
-import android.content.{ComponentName, Intent => AIntent, Context => AContext}
+import android.content.{Intent => AIntent}
 import scala.language.implicitConversions
-import AndroidIntentBuilder._
 
-//TODO break up the context into smaller wrappers and also wrap other objects used here.
-trait Context {
-  def startService(intent: Intent): ComponentName
-  def getSystemService[A](name: String): A
+trait Intent {
+  def setAction(action: String): Unit
+  def putExtra(key: String, extra: String): Unit
 }
 
-class AndroidContext(val context: AContext) extends Context {
-  override def startService(intent: Intent) = context.startService(intent)
-  override def getSystemService[A](name: String) = context.getSystemService(name).asInstanceOf[A]
+class AndroidIntent(val intent: AIntent) extends Intent {
+  override def setAction(action: String) = intent.setAction(action)
+  override def putExtra(key: String, extra: String) = intent.putExtra(key, extra)
 }
 
-object ContextBuilder {
-  implicit def wrap(aContext: AContext): Context = new AndroidContext(aContext)
-  implicit def unwrap(context: Context): AContext = context match {
-    case a:AndroidContext => a.context
+trait IntentBuilder {
+  def apply(context: Context, clazz: Class[_]): Intent
+
+  implicit def wrap(aIntent: AIntent): Intent = new AndroidIntent(aIntent)
+  implicit def unwrap(intent: Intent): AIntent = intent match {
+    case i:AndroidIntent => i.intent
     case _ => null
   }
+}
+
+object AndroidIntentBuilder extends IntentBuilder {
+  override def apply(context: Context, clazz: Class[_]) = new AndroidIntent(new AIntent(ContextBuilder.unwrap(context), clazz))
 }

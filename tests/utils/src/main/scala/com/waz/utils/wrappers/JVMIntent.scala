@@ -15,9 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.utils
+package com.waz.utils.wrappers
 
-package object wrappers {
-  var URI:    URIUtil       = AndroidURIUtil
-  var Intent: IntentBuilder = AndroidIntentBuilder
+class JVMIntent(context: Context, clazz: Class[_]) extends Intent {
+
+  private var action: Option[String] = None
+  private var extras: Map[String, AnyRef] = Map.empty
+
+  override def setAction(action: String) = this.action = Some(action)
+  override def putExtra(key: String, extra: String) = extras = extras + (key -> extra)
+
+  override def toString = s"$context, $clazz, $action, $extras"
+}
+
+object JVMIntentBuilder extends IntentBuilder {
+  override def apply(context: Context, clazz: Class[_]) = new JVMIntent(context, clazz)
 }
