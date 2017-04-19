@@ -24,6 +24,7 @@ import com.waz.model.{AssetId, Mime}
 import com.waz.service.ZMessaging
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestContentProvider
+import com.waz.utils.wrappers.URI
 import org.robolectric.Robolectric
 import org.robolectric.shadows.{ShadowContentResolver2, ShadowLog}
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -35,21 +36,21 @@ class AssetForUploadSpec extends FeatureSpec with Matchers with RobolectricTests
     ShadowLog.stream = System.out
 
     forAll (Table(("URI", "expected MIME type"),
-      (Uri.parse("content://my-provider/something/my-file.txt"), plainText),
-      (Uri.parse("content://my-provider/something/my-file.pdf"), pdf),
-      (Uri.parse("content://my-provider/something/my-file.txt.pdf"), pdf),
-      (Uri.parse("content://my-provider/something/my-file.txt?option=3"), plainText),
-      (Uri.parse("file:///data/my-file.txt"), plainText),
-      (Uri.parse("file:/data/my-file.txt"), plainText),
-      (Uri.parse("file:///data/my-file.txt?option=3&size=42"), plainText),
-      (Uri.parse("file:/data/my-file.doc.txt"), plainText),
-      (Uri.parse("file:/data/.my-file.txt"), plainText),
-      (Uri.parse("file:/data/.txt"), Mime.Default),
-      (Uri.parse("file:/data/txt"), Mime.Default),
-      (Uri.parse("file:/data/my-file"), Mime.Default),
-      (Uri.parse("file:/data/my-file.doc"), Mime.Default),
-      (Uri.parse("file:/data/my-file.txt.doc"), Mime.Default)
-    )) { (uri: Uri, expectedMime: Mime) =>
+      (URI.parse("content://my-provider/something/my-file.txt"), plainText),
+      (URI.parse("content://my-provider/something/my-file.pdf"), pdf),
+      (URI.parse("content://my-provider/something/my-file.txt.pdf"), pdf),
+      (URI.parse("content://my-provider/something/my-file.txt?option=3"), plainText),
+      (URI.parse("file:///data/my-file.txt"), plainText),
+      (URI.parse("file:/data/my-file.txt"), plainText),
+      (URI.parse("file:///data/my-file.txt?option=3&size=42"), plainText),
+      (URI.parse("file:/data/my-file.doc.txt"), plainText),
+      (URI.parse("file:/data/.my-file.txt"), plainText),
+      (URI.parse("file:/data/.txt"), Mime.Default),
+      (URI.parse("file:/data/txt"), Mime.Default),
+      (URI.parse("file:/data/my-file"), Mime.Default),
+      (URI.parse("file:/data/my-file.doc"), Mime.Default),
+      (URI.parse("file:/data/my-file.txt.doc"), Mime.Default)
+    )) { (uri: URI, expectedMime: Mime) =>
       val asset = new ContentUriAssetForUpload(AssetId(), uri)
       asset.mimeType.await() shouldEqual expectedMime
     }

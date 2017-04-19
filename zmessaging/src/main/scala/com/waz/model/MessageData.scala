@@ -20,7 +20,6 @@ package com.waz.model
 import android.database.Cursor
 import android.database.DatabaseUtils.queryNumEntries
 import android.database.sqlite.{SQLiteDatabase, SQLiteQueryBuilder}
-import android.net.Uri
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
@@ -35,6 +34,7 @@ import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
 import com.waz.service.media.{MessageContentBuilder, RichMediaContentParser}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder, returning}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
@@ -145,7 +145,7 @@ case class MessageContent(
                            mentions: Map[UserId, String]
                          ) {
 
-  def contentAsUri: Uri = RichMediaContentParser.parseUriWithScheme(content)
+  def contentAsUri: URI = RichMediaContentParser.parseUriWithScheme(content)
 }
 
 object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData], Option[OpenGraphData], Option[AssetId], Int, Int, Boolean, Map[UserId, String]) => MessageContent) {
@@ -466,7 +466,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
         returning(linkEnd(link.urlOffset)) { end =>
           if (end > link.urlOffset) {
-            val openGraph = Option(link.getArticle).map { a => OpenGraphData(a.title, a.summary, None, "", Option(a.permanentUrl).filter(_.nonEmpty).map(Uri.parse)) }
+            val openGraph = Option(link.getArticle).map { a => OpenGraphData(a.title, a.summary, None, "", Option(a.permanentUrl).filter(_.nonEmpty).map(URI.parse)) }
             res += MessageContent(Message.Part.Type.WEB_LINK, message.substring(link.urlOffset, end), openGraph)
           }
         }

@@ -19,10 +19,11 @@ package com.waz.api
 
 import java.io.File
 
-import android.net.Uri
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.MultipartRequestContent
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.{Request, Response}
@@ -30,13 +31,12 @@ import com.waz.znet.{Request, Response}
 import scala.concurrent.duration._
 
 object HockeyCrashReporter {
-  private implicit val logTag: LogTag = logTagFor(HockeyCrashReporter)
   import Threading.Implicits.Background
 
   def uploadCrashReport(hockeyId: String, dump: File, log: File) = {
     val url = s"https://rink.hockeyapp.net/api/2/apps/$hockeyId/crashes/upload"
 
-    ZMessaging.currentGlobal.client(Uri.parse(url), Request.PostMethod, MultipartRequestContent(Seq("attachment0" -> dump, "log" -> log)), timeout = 1.minute) map {
+    ZMessaging.currentGlobal.client(URI.parse(url), Request.PostMethod, MultipartRequestContent(Seq("attachment0" -> dump, "log" -> log)), timeout = 1.minute) map {
       case Response(SuccessHttpStatus(), _, _) => verbose("crash report successfully sent")
       case resp => error(s"Unexpected response from hockey crash report request: $resp")
     } map { _ =>

@@ -19,7 +19,6 @@ package com.waz.sync.client
 
 import java.net.URLEncoder
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
@@ -28,6 +27,8 @@ import com.waz.threading.CancellableFuture
 import com.waz.utils.{JsonDecoder, LoggedTry}
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
+import com.waz.utils.wrappers.URI
+
 import org.json.JSONObject
 
 import scala.util.Try
@@ -140,7 +141,7 @@ object GiphyClient {
       import JsonDecoder._
 
       override def apply(implicit js: JSONObject): Option[AssetData] = {
-        val uri = decodeOptString('url).map(Uri.parse)
+        val uri = decodeOptString('url).map(URI.parse)
         uri map (uri => AssetData(mime = Mime.Image.Gif, metaData = Some(AssetMetaData.Image(Dim2('width, 'height))), sizeInBytes = 'size, source = Some(uri)))
       }
     }

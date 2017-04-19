@@ -17,10 +17,10 @@
  */
 package com.waz.api;
 
-import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
 import com.waz.service.ZMessaging$;
+import com.waz.utils.wrappers.URI;
 import org.threeten.bp.Instant;
 
 public interface Message extends UiObservable, Parcelable {
@@ -87,12 +87,12 @@ public interface Message extends UiObservable, Parcelable {
         /**
          * Returns Uri parsed from part body, will only be valid for WEB_LINK parts.
          */
-        Uri getContentUri();
+        URI getContentUri();
 
         /**
          * Returns permanen url property from open graph data, if available.
          */
-        Uri getPermanentUri();
+        URI getPermanentUri();
 
         ImageAsset getImage();
         int getImageWidth();

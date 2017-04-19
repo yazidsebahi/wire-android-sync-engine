@@ -19,7 +19,6 @@ package com.waz.service.media
 
 import java.util.Locale
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.content.KeyValueStorage
@@ -33,9 +32,9 @@ import com.waz.sync.client.SpotifyClient
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.{Signal, SourceSignal}
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
 class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue: KeyValueStorage) {
@@ -77,9 +76,9 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue:
   })
 
   private def resolveId(content: String): Option[SpotifyId] = {
-    val uri = Uri.parse(content)
+    val uri = URI.parse(content)
     if (!SpotifyClient.domainNames.contains(uri.getHost.toLowerCase(Locale.ENGLISH))) None else {
-      uri.getPathSegments.asScala match {
+      uri.getPathSegments match {
         case Seq("track", id) =>
           verbose(s"resolved track id (from $content): $id")
           Some(TrackId(id))
@@ -96,11 +95,11 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue:
     }
   }
 
-  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[Uri]] = for {
+  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[URI]] = for {
     refresh <- spotifyRefreshTokenPref()
     access <- client.refreshAccessToken(refresh)
     _ = accessToken ! access
-  } yield Right(media.tracks flatMap { t => if (refresh.isDefined) t.streamUrl else t.previewUrl } map Uri.parse)
+  } yield Right(media.tracks flatMap { t => if (refresh.isDefined) t.streamUrl else t.previewUrl } map URI.parse)
 }
 
 object SpotifyMediaService {

@@ -18,7 +18,6 @@
 package com.waz.messages
 
 import akka.pattern.ask
-import android.net.Uri
 import com.waz.api.Asset.LoadCallback
 import com.waz.api.MessageContent.Text
 import com.waz.api._
@@ -27,6 +26,7 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, returning}
 import org.robolectric.shadows.ShadowContentResolver
 import org.scalatest._
@@ -173,8 +173,8 @@ class AssetReceivingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
       soon { asset.getWidth shouldEqual 0 }
 
-      asset.getContentUri(new LoadCallback[Uri] {
-        override def onLoaded(a: Uri): Unit = info(s"loaded $a")
+      asset.getContentUri(new LoadCallback[URI] {
+        override def onLoaded(a: URI): Unit = info(s"loaded $a")
         override def onLoadFailed(): Unit = fail("load failed")
       })
 

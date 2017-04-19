@@ -23,7 +23,6 @@ import android.content.{ContentResolver, Context, Intent}
 import android.graphics.{Bitmap, BitmapFactory}
 import android.media.ExifInterface
 import android.media.ExifInterface._
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Permission
 import com.waz.bitmap.gif.{Gif, GifReader}
@@ -37,8 +36,9 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.utils.IoUtils._
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, Serialized, returning}
-import com.waz.{PermissionsService, bitmap}
+import com.waz.{PermissionsService, bitmap, utils}
 
 import scala.concurrent.Future
 
@@ -113,7 +113,7 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
     }
   }
 
-  def saveImageToGallery(asset: AssetData): Future[Option[Uri]] = ifIsImage(asset) { _ =>
+  def saveImageToGallery(asset: AssetData): Future[Option[URI]] = ifIsImage(asset) { _ =>
     loadRawImageData(asset).future flatMap {
       case Some(data) =>
         saveImageToGallery(data, asset.mime)
@@ -132,8 +132,8 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
     Future {
       val newFile = AssetService.saveImageFile(mime)
       IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
-      val uri = Uri.fromFile(newFile)
-      context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, uri))
+      val uri = URI.fromFile(newFile)
+      context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, URI.unwrap(uri)))
       Some(uri)
     }(Threading.IO)
     )
@@ -176,7 +176,7 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
     case _ => throw new IllegalArgumentException(s"Asset is not an image: $asset")
   }
 
-  private def isLocalUri(uri: Uri) = uri.getScheme match {
+  private def isLocalUri(uri: URI) = uri.getScheme match {
     case ContentResolver.SCHEME_FILE | ContentResolver.SCHEME_ANDROID_RESOURCE => true
     case _ => false
   }

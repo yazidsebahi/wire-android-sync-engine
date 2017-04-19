@@ -17,11 +17,11 @@
  */
 package com.waz.sync.client
 
-import android.net.Uri
 import com.waz.api.ProvisionedApiSpec
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.URI
 import com.waz.znet.Response.SuccessStatus
 import com.waz.znet._
 import org.scalatest._
@@ -39,7 +39,7 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with ProvisionedApiS
   def client = zmessaging.openGraphClient
 
   scenario("Fetch header of large website, should stop download early") {
-    lazy val LargeWebsiteLink = Uri.parse("http://unicode.org/emoji/charts/full-emoji-list.html")
+    lazy val LargeWebsiteLink = URI.parse("http://unicode.org/emoji/charts/full-emoji-list.html")
 
     val resp = zmessaging.zNetClient(new Request[Unit](absoluteUri = Some(LargeWebsiteLink), requiresAuthentication = false, decoder = Some(OpenGraphClient.ResponseDecoder))).await()
 
@@ -49,7 +49,7 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with ProvisionedApiS
   }
 
   scenario("Load open graph data from wire.com") {
-    val resp = client.loadMetadata(Uri.parse("http://www.wire.com")).await()
+    val resp = client.loadMetadata(URI.parse("http://www.wire.com")).await()
     resp shouldBe 'right
     resp.right.get shouldBe defined
     val data = resp.right.get.get
@@ -57,7 +57,7 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with ProvisionedApiS
   }
 
   scenario("Load open graph data from twitter") {
-    val resp = client.loadMetadata(Uri.parse("https://twitter.com/SoundCloud/status/750403925585432576")).await()
+    val resp = client.loadMetadata(URI.parse("https://twitter.com/SoundCloud/status/750403925585432576")).await()
     resp shouldBe 'right
     resp.right.get shouldBe defined
     val data = resp.right.get.get
@@ -65,7 +65,7 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with ProvisionedApiS
   }
 
   scenario("Load open graph data from nytimes") {
-    val resp = client.loadMetadata(Uri.parse("http://nytimes.com/2016/07/11/business/front-page-editorials-aim-to-soothe-the-grief-stricken.html")).await()
+    val resp = client.loadMetadata(URI.parse("http://nytimes.com/2016/07/11/business/front-page-editorials-aim-to-soothe-the-grief-stricken.html")).await()
     resp shouldBe 'right
     resp.right.get shouldBe defined
     val data = resp.right.get.get

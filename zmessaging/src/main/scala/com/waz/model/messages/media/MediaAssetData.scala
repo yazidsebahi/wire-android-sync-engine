@@ -17,10 +17,10 @@
  */
 package com.waz.model.messages.media
 
-import android.net.Uri
 import com.waz.api.{KindOfMedia, MediaProvider, Message}
 import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model._
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.duration._
@@ -97,7 +97,7 @@ object MediaAssetData {
     AssetData(
       mime = Mime.Image.Jpg,
       metaData = orig.map(o => AssetMetaData.Image(Dim2(o.width, o.height), Tag(o.tag))),
-      source = orig.map(o => Uri.parse(o.url)))
+      source = orig.map(o => URI.parse(o.url)))
   }
 
   def extractImageAssets[T <: MediaAssetData](src: Vector[MediaWithImages[T]]) = src.foldLeft((Vector.empty[T], Set.empty[AssetData])) { case ((tracks, images), MediaWithImages(track, image)) => (tracks :+ track, images ++ image) }

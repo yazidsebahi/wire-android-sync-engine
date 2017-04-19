@@ -21,8 +21,8 @@ import android.content.ContentValues
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
-import android.net.Uri
 import com.waz.Generators
+import com.waz.utils.wrappers.URI
 import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
@@ -105,7 +105,7 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
       assets should have size 57
       forAll(assets) { _.isInstanceOf[AssetData] shouldEqual true }
 
-      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), Medium)), source = Some(Uri.parse("url")))
+      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), Medium)), source = Some(URI.parse("url")))
       val im = AssetDataDao.insertOrReplace(data)
       im shouldEqual data
       AssetDataDao.list should have size 58

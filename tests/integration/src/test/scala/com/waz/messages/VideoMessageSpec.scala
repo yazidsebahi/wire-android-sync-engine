@@ -40,7 +40,7 @@ import com.waz.testutils.{DefaultPatienceConfig, ReusableCountDownLatch}
 import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils.toByteArray
-import com.waz.utils._
+import com.waz.utils.{wrappers, _}
 import com.waz.znet.ZNetClient._
 import org.robolectric.Robolectric.{getShadowApplication, shadowOf}
 import org.robolectric.shadows.ShadowMediaMetadataRetriever
@@ -182,8 +182,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   def contentCacheKey(asset: com.waz.api.Asset) = {
     val p = Promise[CacheKey]
-    asset.getContentUri(new com.waz.api.Asset.LoadCallback[Uri]() {
-      override def onLoaded(uri: Uri): Unit = CacheUri.unapply(context)(uri) match {
+    asset.getContentUri(new com.waz.api.Asset.LoadCallback[wrappers.URI]() {
+      override def onLoaded(uri: wrappers.URI): Unit = CacheUri.unapply(context)(uri) match {
         case Some(key) => p.success(key)
         case None => p.failure(new Exception(s"Returned uri is not CacheUri: $uri"))
       }

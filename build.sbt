@@ -2,7 +2,7 @@ import java.lang.Runtime._
 
 import android.Keys._
 import com.android.tools.lint.checks.ApiDetector
-import sbt.Keys._
+import sbt.Keys.{libraryDependencies, _}
 import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
@@ -127,6 +127,16 @@ lazy val zmessaging = project
     )
   )
 
+//TODO Rename to unit once migraton is complete (or moved to develop)
+//This will become the new Robolectric-free test module
+lazy val playground = project.in(file("tests") / "playground")
+  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+  .dependsOn(testutils % Test)
+  .settings(
+    parallelExecution in Test := true,
+    libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.5"
+  )
+
 lazy val unit = project.in(file("tests") / "unit")
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
   .androidBuildWith(zmessaging)
@@ -184,6 +194,9 @@ lazy val testutils = project.in(file("tests") / "utils")
     crossPaths := false,
     exportJars := false,
     libraryDependencies ++= Seq(
+      //Replacements for Android Dependencies
+      "org.apache.httpcomponents" % "httpclient" % "4.5.3",
+      Deps.scalaCheck,
       "org.scalatest" %% "scalatest" % "2.2.6",
       "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",
       "com.wire" %% "robotest" % "0.7" exclude("org.scalatest", "scalatest"),

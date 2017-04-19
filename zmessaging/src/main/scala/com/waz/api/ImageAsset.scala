@@ -17,16 +17,16 @@
  */
 package com.waz.api
 
-import android.net.Uri
 import android.os.Parcelable.Creator
 import android.os.{Parcel, Parcelable}
 import com.waz.api.ImageAsset.SaveCallback
 import com.waz.service.ZMessaging
+import com.waz.utils.wrappers.URI
 
 object ImageAsset {
 
   trait SaveCallback {
-    def imageSaved(uri: Uri): Unit
+    def imageSaved(uri: URI): Unit
     def imageSavingFailed(ex: Exception): Unit
   }
 

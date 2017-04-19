@@ -17,12 +17,12 @@
  */
 package com.waz.znet
 
-import android.net.Uri
 import com.koushikdutta.async.{AsyncServer, ByteBufferList, DataEmitter}
 import com.koushikdutta.async.callback.DataCallback
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.AsyncHttpClient.{StringCallback, WebSocketConnectCallback}
 import com.waz.utils.{IoUtils, returning}
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, StreamRequestContent}
 import com.waz.znet.Response.HttpStatus
 import org.scalatest.{BeforeAndAfter, FeatureSpecLike, Matchers, RobolectricTests}
@@ -79,25 +79,25 @@ class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAft
     }
 
     scenario("GET https from https://wire.com") {
-      Await.result(client(Uri.parse("https://www.wire.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
+      Await.result(client(URI.parse("https://www.wire.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
         case Response(HttpStatus(200, _), _, _) => //expected
         case res => fail(s"got unexpected response: $res")
       }
 
-      Await.result(client(Uri.parse("https://www.wire.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
+      Await.result(client(URI.parse("https://www.wire.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
         case Response(HttpStatus(200, _), _, _) => //expected
         case res => fail(s"got unexpected response: $res")
       }
     }
 
     scenario("Get gzipped content from www.gradle.com") {
-      Await.result(client(Uri.parse("http://www.gradle.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
+      Await.result(client(URI.parse("http://www.gradle.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
         case Response(HttpStatus(200, _), _, _) => //expected
         case res => fail(s"got unexpected response: $res")
       }
     }
     scenario("Get gzipped chunked content from www.clockworkmod.com") {
-      Await.result(client(Uri.parse("http://www.clockworkmod.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
+      Await.result(client(URI.parse("http://www.clockworkmod.com"), timeout = AsyncClient.DefaultTimeout), 5.second) match {
         case Response(HttpStatus(200, _), _, _) => //expected
         case res => fail(s"got unexpected response: $res")
       }
@@ -109,7 +109,7 @@ class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAft
     scenario("post data") {
       val data = (0 to 100).map("test_" + _).mkString(", ").getBytes("utf8")
 
-      Await.result(client(Uri.parse("http://posttestserver.com/post.php"), "POST", new BinaryRequestContent(data, "text/plain"), timeout = AsyncClient.DefaultTimeout), 45.seconds) match {
+      Await.result(client(URI.parse("http://posttestserver.com/post.php"), "POST", new BinaryRequestContent(data, "text/plain"), timeout = AsyncClient.DefaultTimeout), 45.seconds) match {
         case Response(HttpStatus(200, _), _, _) => //expected
         case res => fail(s"got unexpected response: $res")
       }
@@ -118,7 +118,7 @@ class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAft
     scenario("post file with len") {
       val file = returning(File.createTempFile("meep", "png"))(_.deleteOnExit())
       IoUtils.copy(getClass.getResourceAsStream("/images/penguin.png"), file)
-      Await.result(client(Uri.parse("http://posttestserver.com/post.php"), "POST", new StreamRequestContent(new FileInputStream(file), "image/png", file.length.toInt), timeout = AsyncClient.DefaultTimeout), 45.seconds) match {
+      Await.result(client(URI.parse("http://posttestserver.com/post.php"), "POST", new StreamRequestContent(new FileInputStream(file), "image/png", file.length.toInt), timeout = AsyncClient.DefaultTimeout), 45.seconds) match {
         case Response(HttpStatus(200, _), _, _) => //expected
         case res => fail(s"got unexpected response: $res")
       }

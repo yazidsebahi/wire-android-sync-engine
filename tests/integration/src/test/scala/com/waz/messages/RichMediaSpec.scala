@@ -20,7 +20,6 @@ package com.waz.messages
 import java.util
 
 import akka.pattern.ask
-import android.net.Uri
 import com.waz.api.MediaAsset.StreamingCallback
 import com.waz.api.Message.Part
 import com.waz.api.MessageContent.Text
@@ -31,6 +30,7 @@ import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils.returning
 import com.waz.ZLog.ImplicitTag._
+import com.waz.utils.wrappers.URI
 import org.scalatest.{BeforeAndAfter, EitherValues, FeatureSpec, Matchers}
 
 import scala.collection.JavaConverters._
@@ -266,14 +266,14 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
         img should not be empty
       }
 
-      var uris = Option.empty[Seq[Uri]]
+      var uris = Option.empty[Seq[URI]]
 
       media.prepareStreaming(new StreamingCallback {
         override def onFailure(code: Int, message: String, label: String): Unit = {
           uris = Some(Nil)
           fail(s"$code, $message, $label")
         }
-        override def onSuccess(us: util.List[Uri]): Unit = uris = Some(us.asScala)
+        override def onSuccess(us: util.List[URI]): Unit = uris = Some(us.asScala)
       })
 
       withDelay {
@@ -310,14 +310,14 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
         img should not be empty
       }
 
-      var uris = Option.empty[Seq[Uri]]
+      var uris = Option.empty[Seq[URI]]
 
       media.prepareStreaming(new StreamingCallback {
         override def onFailure(code: Int, message: String, label: String): Unit = {
           uris = Some(Nil)
           fail(s"$code, $message, $label")
         }
-        override def onSuccess(us: util.List[Uri]): Unit = uris = Some(us.asScala)
+        override def onSuccess(us: util.List[URI]): Unit = uris = Some(us.asScala)
       })
 
       withDelay {

@@ -21,7 +21,6 @@ import java.net.{ConnectException, UnknownHostException}
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
-import android.net.Uri
 import com.koushikdutta.async._
 import com.koushikdutta.async.callback.CompletedCallback.NullCompletedCallback
 import com.koushikdutta.async.callback.DataCallback.NullDataCallback
@@ -35,6 +34,7 @@ import com.waz.api.impl.ProgressIndicator
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.returning
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.{MultipartRequestContent, _}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, Headers, HttpStatus, ResponseBodyDecoder}
@@ -52,7 +52,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
   val client = wrapper(new AsyncHttpClient(new AsyncServer))
 
-  def apply(uri: Uri, method: String = Request.GetMethod, body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
+  def apply(uri: URI, method: String = Request.GetMethod, body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
     debug(s"Starting request[$method]($uri) with body: '${if (body.toString.contains("password")) "<body>" else body}', headers: '$headers'")
 
     val requestTimeout = if (method != Request.PostMethod) timeout else body match {
@@ -117,8 +117,8 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
   def close(): Unit = client foreach { _.getServer.stop() }
 
-  private def buildHttpRequest(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration): AsyncHttpRequest = {
-    val r = new AsyncHttpRequest(uri.normalizeScheme(), method)
+  private def buildHttpRequest(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration): AsyncHttpRequest = {
+    val r = new AsyncHttpRequest(URI.unwrap(uri.normalizeScheme), method)
     r.setTimeout(timeout.toMillis.toInt)
     r.setFollowRedirect(followRedirect)
     r.getHeaders.set(UserAgentHeader, userAgent)
@@ -127,7 +127,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
   }
 
   //XXX: has to be executed on Http thread (inside onConnectCompleted), since data callbacks have to be set before this callback completes,
-  private def processResponse(uri: Uri, response: AsyncHttpResponse, decoder: ResponseBodyDecoder = bodyDecoder, progressCallback: Option[ProgressCallback], networkActivityCallback: () => Unit): CancellableFuture[Response] = {
+  private def processResponse(uri: URI, response: AsyncHttpResponse, decoder: ResponseBodyDecoder = bodyDecoder, progressCallback: Option[ProgressCallback], networkActivityCallback: () => Unit): CancellableFuture[Response] = {
     val httpStatus = HttpStatus(response.code(), response.message())
     val contentLength = HttpUtil.contentLength(response.headers())
     val contentType = Option(response.headers().get(ContentTypeHeader)).getOrElse("")
