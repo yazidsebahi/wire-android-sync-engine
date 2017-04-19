@@ -31,7 +31,8 @@ import com.waz.bitmap.video.VideoTranscoder.{CodecResponse, MediaCodecIterator}
 import com.waz.model.{AssetMetaData, Dim2}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.Deprecated.{codecInfoAtIndex, numberOfCodecs}
-import com.waz.utils.{Cleanup, Managed, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{Cleanup, Managed, returning}
 
 import scala.concurrent.Promise
 import scala.util.Try

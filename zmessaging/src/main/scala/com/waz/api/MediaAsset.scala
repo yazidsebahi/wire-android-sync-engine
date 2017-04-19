@@ -18,7 +18,7 @@
 package com.waz.api
 
 import com.waz.api.Asset.LoadCallback
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Duration
 
 object MediaAsset {

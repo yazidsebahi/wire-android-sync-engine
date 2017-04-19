@@ -27,6 +27,7 @@ import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, U
 import com.waz.model.nano.Messages
 import com.waz.model.nano.Messages.MessageEdit
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 

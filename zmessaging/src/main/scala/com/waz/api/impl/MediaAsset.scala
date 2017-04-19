@@ -27,8 +27,8 @@ import com.waz.model.messages.media.{EmptyMediaAssetData, MediaAssetData, Playli
 import com.waz.service.assets.GlobalRecordAndPlayService.{Content, SpotifyContent, UnauthenticatedContent, UriMediaKey}
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
-import com.waz.utils.URI
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Duration
 
 import scala.collection.JavaConverters._

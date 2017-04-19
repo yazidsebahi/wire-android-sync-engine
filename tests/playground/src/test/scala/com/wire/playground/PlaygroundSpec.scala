@@ -19,7 +19,7 @@ package com.wire.playground
 
 import com.waz.model.AssetData
 import com.waz.specs.AndroidFreeSpec
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import org.scalatest.FeatureSpec
 
 class PlaygroundSpec extends FeatureSpec with AndroidFreeSpec {

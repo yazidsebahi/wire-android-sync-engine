@@ -20,7 +20,7 @@ package com.waz.testutils
 import java.io.File
 import java.net.{URI => JURI}
 
-import com.waz.utils.{URI, URIBuilder, URIUtil}
+import com.waz.utils.wrappers.{URI, URIBuilder, URIUtil}
 import org.apache.http.client.utils.{URIBuilder => JURIBuilder}
 
 class JavaURIBuilder(uriBuilder: JURIBuilder) extends URIBuilder {

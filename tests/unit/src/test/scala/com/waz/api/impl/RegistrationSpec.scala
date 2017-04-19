@@ -33,7 +33,7 @@ import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccounts,
 import com.waz.threading.CancellableFuture
 import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
-import com.waz.utils.{IoUtils, Json, URI}
+import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
 import com.waz.znet.Request._
@@ -45,6 +45,7 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import com.waz.ZLog.ImplicitTag._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.LoginClient.LoginResult
 
 import scala.concurrent.duration._

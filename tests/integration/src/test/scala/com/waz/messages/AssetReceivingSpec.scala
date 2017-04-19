@@ -26,7 +26,8 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.utils.{IoUtils, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{IoUtils, returning}
 import org.robolectric.shadows.ShadowContentResolver
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures

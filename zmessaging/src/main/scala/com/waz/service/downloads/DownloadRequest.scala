@@ -20,7 +20,7 @@ package com.waz.service.downloads
 import java.io.InputStream
 
 import com.waz.model.{Mime, _}
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import com.waz.znet.Request
 
 sealed trait DownloadRequest {

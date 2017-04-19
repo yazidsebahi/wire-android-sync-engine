@@ -24,9 +24,11 @@ import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.{AssetData, AssetMetaData, Dim2, Mime}
 import com.waz.threading.CancellableFuture
-import com.waz.utils.{JsonDecoder, LoggedTry, URI}
+import com.waz.utils.{JsonDecoder, LoggedTry}
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
+import com.waz.utils.wrappers.URI
+
 import org.json.JSONObject
 
 import scala.util.Try

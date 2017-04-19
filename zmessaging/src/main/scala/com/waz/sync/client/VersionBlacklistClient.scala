@@ -21,7 +21,7 @@ import com.waz.ZLog._
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.threading.Threading
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.EmptyContentEncoder
 import com.waz.znet.Response.{ResponseBodyDecoder, SuccessHttpStatus}
 import com.waz.znet.ResponseConsumer.JsonConsumer

@@ -34,7 +34,8 @@ import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
 import com.waz.service.media.{MessageContentBuilder, RichMediaContentParser}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
-import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder, returning}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 

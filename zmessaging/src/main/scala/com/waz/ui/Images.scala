@@ -29,7 +29,8 @@ import com.waz.bitmap.BitmapDecoder
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.threading.Threading
-import com.waz.utils.{JsonDecoder, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{JsonDecoder, returning}
 import com.waz.{HockeyApp, api, bitmap}
 
 import scala.util.Try

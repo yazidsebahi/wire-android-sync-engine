@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.sync.client.OpenGraphClient.{OpenGraphData, OpenGraphDataResponse}
-import com.waz.utils
+import com.waz.utils.wrappers.URI
 import com.waz.znet.StringResponse
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
@@ -30,8 +30,8 @@ class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTest
       OpenGraphDataResponse.unapply(StringResponse(WireHtmlHeader)) shouldEqual
         Some(OpenGraphData("Wire — modern, private communication. For iOS, Android, OS X, Windows and web.",
           "HD quality calls, private and group chats with inline photos, music and video. Secure and perfectly synced across your devices.",
-          Some(utils.URI.parse("https://lh3.ggpht.com/gbxDT30ZwpwYMCF7ilrSaIpRQP3Z1Xdx2WUcyW5x_e8FDN8kA4CJGQQ0fFpVhKiGnPkAIOEf7S1_9cNi684Be-OY=s1024")),
-          "website", Some(utils.URI.parse("https://wire.com/"))))
+          Some(URI.parse("https://lh3.ggpht.com/gbxDT30ZwpwYMCF7ilrSaIpRQP3Z1Xdx2WUcyW5x_e8FDN8kA4CJGQQ0fFpVhKiGnPkAIOEf7S1_9cNi684Be-OY=s1024")),
+          "website", Some(URI.parse("https://wire.com/"))))
     }
 
     scenario("Parse website without OG info") {

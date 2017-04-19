@@ -33,7 +33,8 @@ import com.waz.api
 import com.waz.api.impl.ProgressIndicator
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.utils.{URI, returning}
+import com.waz.utils.returning
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.{MultipartRequestContent, _}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, Headers, HttpStatus, ResponseBodyDecoder}

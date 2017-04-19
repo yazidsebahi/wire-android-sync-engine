@@ -28,7 +28,8 @@ import com.koushikdutta.async.http.body._
 import com.koushikdutta.async.{DataEmitter, DataSink, Util}
 import com.waz.api.impl.ProgressIndicator
 import com.waz.utils
-import com.waz.utils.{ExponentialBackoff, IoUtils, JsonEncoder, URI}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{ExponentialBackoff, IoUtils, JsonEncoder}
 import com.waz.znet.ContentEncoder.{EmptyContentEncoder, EmptyRequestContent, RequestContent}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{ResponseBodyDecoder, Status}

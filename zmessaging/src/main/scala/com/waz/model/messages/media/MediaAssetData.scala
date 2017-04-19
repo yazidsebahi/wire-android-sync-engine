@@ -20,6 +20,7 @@ package com.waz.model.messages.media
 import com.waz.api.{KindOfMedia, MediaProvider, Message}
 import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model._
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.duration._

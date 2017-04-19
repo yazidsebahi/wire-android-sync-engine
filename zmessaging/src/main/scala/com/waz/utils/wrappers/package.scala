@@ -15,21 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.utils
 
-import com.waz.service.ZMessaging
-import com.waz.utils.wrappers.URI
+/**
+  * Created by admin on 19/04/17.
+  */
+package object wrappers {
+  var URI: URIUtil = AndroidURIUtil
 
-object BugReporter {
-  import com.waz.threading.Threading.Implicits.Ui
 
-  def generateReport(listener: ReportListener): Unit = {
-    ZMessaging.currentGlobal.reporting.generateReport().onSuccess {
-      case fileUri => listener.onReportGenerated(fileUri)
-    }
-  }
-}
-
-trait ReportListener {
-  def onReportGenerated(fileUri: URI): Unit
 }

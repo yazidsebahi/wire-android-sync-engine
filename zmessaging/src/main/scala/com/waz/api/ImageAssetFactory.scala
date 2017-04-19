@@ -19,7 +19,7 @@ package com.waz.api
 
 import android.graphics.Bitmap
 import com.waz.service.ZMessaging
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 
 object ImageAssetFactory {
 

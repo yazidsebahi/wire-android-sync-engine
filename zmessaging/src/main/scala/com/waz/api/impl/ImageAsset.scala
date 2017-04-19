@@ -42,6 +42,7 @@ import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

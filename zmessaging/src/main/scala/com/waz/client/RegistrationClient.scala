@@ -24,8 +24,9 @@ import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.UsersClient.UserResponseExtractor
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{JsonEncoder, URI}
+import com.waz.utils.JsonEncoder
 import com.waz.utils.Locales._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.Status._

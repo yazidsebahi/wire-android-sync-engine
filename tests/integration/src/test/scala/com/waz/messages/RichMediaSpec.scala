@@ -28,8 +28,9 @@ import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Succ
 import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.utils.{URI, returning}
+import com.waz.utils.returning
 import com.waz.ZLog.ImplicitTag._
+import com.waz.utils.wrappers.URI
 import org.scalatest.{BeforeAndAfter, EitherValues, FeatureSpec, Matchers}
 
 import scala.collection.JavaConverters._

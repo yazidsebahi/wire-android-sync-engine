@@ -30,6 +30,7 @@ import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.sync.client.OAuth2Client.{AccessToken, ClientId}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import org.threeten.bp
 import org.threeten.bp.Duration
 

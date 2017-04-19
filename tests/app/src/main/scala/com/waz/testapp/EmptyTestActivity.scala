@@ -33,7 +33,7 @@ import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api._
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.model.{AssetMetaData, Mime}
-import com.waz.utils._
+import com.waz.utils.{wrappers, _}
 import com.waz.utils.events.ActivityEventContext
 
 class EmptyTestActivity extends Activity with ActivityEventContext {
@@ -90,7 +90,7 @@ class EmptyTestActivity extends Activity with ActivityEventContext {
       (for {
        meta1 <- AssetMetaData.Video(this, data.getData)
         _ = info(s"captured video meta: $meta1")
-        _ <- VideoTranscoder(this).apply(new AndroidURI(data.getData), file, { data => verbose(s"transcoding $data") }).future
+        _ <- VideoTranscoder(this).apply(new wrappers.AndroidURI(data.getData), file, { data => verbose(s"transcoding $data") }).future
         meta2 <- AssetMetaData.Video(file)
       } yield {
         info(s"transcoded video meta: $meta2")

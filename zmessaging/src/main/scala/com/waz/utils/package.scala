@@ -26,6 +26,7 @@ import android.util.Base64
 import com.waz.ZLog.LogTag
 import com.waz.api.UpdateListener
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.wrappers.{URI, URIBuilder}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
@@ -43,8 +44,6 @@ import scala.util.{Failure, Success, Try}
 import scala.{PartialFunction => =/>}
 
 package object utils {
-
-  var URI: URIUtil = AndroidURIUtil
 
   //collection string representation formatted one item per line
   //TODO make into a macro or compiler plugin etc.

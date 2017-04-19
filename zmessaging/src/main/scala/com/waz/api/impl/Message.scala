@@ -35,6 +35,7 @@ import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut

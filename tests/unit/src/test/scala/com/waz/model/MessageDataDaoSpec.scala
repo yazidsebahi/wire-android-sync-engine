@@ -23,7 +23,7 @@ import com.waz.api.{MediaProvider, Message}
 import com.waz.db.ZMessagingDB
 import com.waz.model.messages.media.{MediaAssetData, TrackData}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
-import com.waz.utils
+import com.waz.utils.wrappers.URI
 import com.waz.utils._
 import org.json.JSONArray
 import org.robolectric.Robolectric
@@ -97,7 +97,7 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       ) -> MessageContent(
             Message.Part.Type.YOUTUBE, "youtube link",
             richMedia = Option[MediaAssetData](TrackData(MediaProvider.YOUTUBE, "title", None, "link-url", None, Some(bp.Duration.ofMillis(123L)), streamable = true, None, Some("preview-url"), now)),
-            openGraph = Some(OpenGraphData("wire", "descr", Some(utils.URI.parse("http://www.wire.com")), "website", None)), Some(assetId), 100, 80, syncNeeded = true, mentions = Map.empty[UserId, String])
+            openGraph = Some(OpenGraphData("wire", "descr", Some(URI.parse("http://www.wire.com")), "website", None)), Some(assetId), 100, 80, syncNeeded = true, mentions = Map.empty[UserId, String])
     )
 
     scenario("Decode message content") {

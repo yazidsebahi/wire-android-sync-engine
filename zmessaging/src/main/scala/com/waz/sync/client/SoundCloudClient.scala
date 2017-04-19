@@ -27,6 +27,7 @@ import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
 import com.waz.model.messages.media.{ArtistData, MediaAssetData, PlaylistData, TrackData}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.Response.{ResponseBodyDecoder, SuccessHttpStatus}
 import com.waz.znet.ResponseConsumer.JsonConsumer
 import com.waz.znet.ZNetClient.ErrorOr

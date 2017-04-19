@@ -37,6 +37,7 @@ import com.waz.service.TempFileService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.Deprecated.{INFO_OUTPUT_BUFFERS_CHANGED, inputBuffersOf, outputBuffersOf}
+import com.waz.utils.wrappers.URI
 import libcore.io.SizeOf
 
 import scala.concurrent.Promise

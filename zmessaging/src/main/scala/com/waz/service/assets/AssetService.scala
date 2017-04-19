@@ -45,6 +45,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import com.waz.{PermissionsService, api}
 
 import scala.collection.breakOut

@@ -30,8 +30,8 @@ import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, PCMContent}
 import com.waz.threading.Threading
 import com.waz.utils.ContentURIs.queryContentUriMetaData
-import com.waz.utils.URI
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import org.threeten.bp
 
 import scala.concurrent.Future

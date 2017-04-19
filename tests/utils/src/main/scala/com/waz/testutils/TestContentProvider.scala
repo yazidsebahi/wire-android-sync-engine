@@ -24,7 +24,8 @@ import android.provider.OpenableColumns._
 import android.webkit.MimeTypeMap
 import com.waz.model.Mime
 import com.waz.utils
-import com.waz.utils.{AndroidURI, IoUtils, URI}
+import com.waz.utils.wrappers.{AndroidURI, URI}
+import com.waz.utils.IoUtils
 import org.robolectric.Robolectric._
 import org.robolectric.shadows.ShadowContentResolver2
 
@@ -57,14 +58,14 @@ class TestResourceContentProvider(val authority: String = "com.waz.testresources
 
   case class Resource(uri: URI, mime: Mime, size: Long) {
     def inputStream = getClass.getResourceAsStream(uri.getPath)
-    def registerStream() = resolver.registerInputStream(utils.URI.unwrap(uri), () => inputStream)
+    def registerStream() = resolver.registerInputStream(URI.unwrap(uri), () => inputStream)
     def isEmpty = uri.toString.isEmpty
     def name = uri.getLastPathSegment
   }
 
-  val Empty = Resource(utils.URI.parse(""), Mime.Unknown, 0)
+  val Empty = Resource(URI.parse(""), Mime.Unknown, 0)
 
-  def resourceUri(path: String) = utils.URI.parse(s"content://$authority$path")
+  def resourceUri(path: String) = URI.parse(s"content://$authority$path")
 
   lazy val resolver = shadowOf_(getShadowApplication.getContentResolver).asInstanceOf[ShadowContentResolver2]
 

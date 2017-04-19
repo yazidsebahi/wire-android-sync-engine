@@ -28,7 +28,8 @@ import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, Recordi
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.SignalLoading
 import com.waz.utils.events.Signal
-import com.waz.utils.{ContentURIs, URI}
+import com.waz.utils.ContentURIs
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._

@@ -22,7 +22,8 @@ import android.media.MediaPlayer
 import android.media.MediaPlayer.OnSeekCompleteListener
 import com.waz.service.assets.GlobalRecordAndPlayService.{MediaPointer, UnauthenticatedContent}
 import com.waz.threading.Threading
-import com.waz.utils._
+import com.waz.utils.wrappers.URI
+import com.waz.utils.returning
 import org.threeten.bp
 
 import scala.concurrent.{Future, Promise}

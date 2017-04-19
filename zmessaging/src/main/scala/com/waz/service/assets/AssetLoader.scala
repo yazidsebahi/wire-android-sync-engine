@@ -27,7 +27,7 @@ import com.waz.model.Mime
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads.{Downloader, DownloaderService}
 import com.waz.threading.CancellableFuture
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 
 class AssetLoader(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
     streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],

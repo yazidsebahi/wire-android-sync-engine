@@ -24,7 +24,7 @@ import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.CancellableFuture
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.{ByteArrayRequestContent, RequestContent}
 import com.waz.znet.Request._
 import com.waz.znet.Response.{HttpStatus, ResponseBodyDecoder, Status}

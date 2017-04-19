@@ -30,9 +30,9 @@ import com.waz.model.GenericContent.EncryptionAlgorithm
 import com.waz.model.otr.SignalingKey
 import com.waz.service.ZMessaging
 import com.waz.service.downloads.DownloadRequest._
-import com.waz.utils
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import org.json.JSONObject
 import org.threeten.bp.Duration
 
@@ -155,7 +155,7 @@ object AssetData {
     */
   val NonKeyURIs = Set(
     "https://source.unsplash.com/800x800/?landscape"
-  ).map(utils.URI.parse)
+  ).map(URI.parse)
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
 

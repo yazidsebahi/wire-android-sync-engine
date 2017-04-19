@@ -29,7 +29,8 @@ import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.{AccountId, Mime}
 import com.waz.service.push.GcmGlobalService
 import com.waz.threading.{SerialDispatchQueue, Threading}
-import com.waz.utils.{IoUtils, RichFuture, URI}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{IoUtils, RichFuture}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future

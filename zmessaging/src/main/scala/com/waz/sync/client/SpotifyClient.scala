@@ -23,11 +23,12 @@ import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.AssetData
 import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
-import com.waz.model.messages.media.{PlaylistData, ArtistData, TrackData, MediaAssetData}
-import com.waz.service.media.SpotifyMediaService.{AlbumId, PlaylistId, TrackId, SpotifyId}
+import com.waz.model.messages.media.{ArtistData, MediaAssetData, PlaylistData, TrackData}
+import com.waz.service.media.SpotifyMediaService.{AlbumId, PlaylistId, SpotifyId, TrackId}
 import com.waz.sync.client.OAuth2Client._
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.JsonObjectResponse
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._

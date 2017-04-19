@@ -25,7 +25,7 @@ import com.waz.api.Message.Part
 import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
 import com.waz.sync.client.{SoundCloudClient, SpotifyClient, YouTubeClient}
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal

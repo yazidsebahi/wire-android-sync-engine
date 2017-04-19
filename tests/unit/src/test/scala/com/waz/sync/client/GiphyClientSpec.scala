@@ -23,7 +23,7 @@ import com.waz.model.{AssetData, Dim2, Mime}
 import com.waz.sync.client.GiphyClient.{RandomGiphyResponse, SearchGiphyResponse}
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture
-import com.waz.utils
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet.{JsonObjectResponse, Request, Response, StringResponse}
 import org.json.JSONObject
@@ -33,19 +33,19 @@ class GiphyClientSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   val randomSeqResponse = {
     val fullResp = Seq(
-      AssetData(metaData = Some(Image(Dim2(500, 256), Medium)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/giphy.gif"))),
-      AssetData(metaData = Some(Image(Dim2(391, 200), Medium)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif"))),
-      AssetData(metaData = Some(Image(Dim2(200, 102), Medium)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200w_d.gif"))),
-      AssetData(metaData = Some(Image(Dim2(195, 100), Preview)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100_s.gif"))),
-      AssetData(metaData = Some(Image(Dim2(100, 51), Preview)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100w_s.gif")))
+      AssetData(metaData = Some(Image(Dim2(500, 256), Medium)), mime = Mime("image/gif"), source = Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/giphy.gif"))),
+      AssetData(metaData = Some(Image(Dim2(391, 200), Medium)), mime = Mime("image/gif"), source = Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif"))),
+      AssetData(metaData = Some(Image(Dim2(200, 102), Medium)), mime = Mime("image/gif"), source = Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200w_d.gif"))),
+      AssetData(metaData = Some(Image(Dim2(195, 100), Preview)), mime = Mime("image/gif"), source = Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100_s.gif"))),
+      AssetData(metaData = Some(Image(Dim2(100, 51), Preview)), mime = Mime("image/gif"), source = Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100w_s.gif")))
     )
     (Some(fullResp.last), fullResp.head)
   }
 
   val sampleGifRespone = {
     val fullResponse = Seq(
-      AssetData(metaData = Some(Image(Dim2(358, 200), Medium)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://media3.giphy.com/media/wWAIKcFASEFz2/200.gif"))),
-      AssetData(metaData = Some(Image(Dim2(358, 200), Preview)), mime = Mime("image/gif"), source = Some(utils.URI.parse("http://media2.giphy.com/media/wWAIKcFASEFz2/200_s.gif")))
+      AssetData(metaData = Some(Image(Dim2(358, 200), Medium)), mime = Mime("image/gif"), source = Some(URI.parse("http://media3.giphy.com/media/wWAIKcFASEFz2/200.gif"))),
+      AssetData(metaData = Some(Image(Dim2(358, 200), Preview)), mime = Mime("image/gif"), source = Some(URI.parse("http://media2.giphy.com/media/wWAIKcFASEFz2/200_s.gif")))
     )
     (Some(fullResponse.last), fullResponse.head)
   }

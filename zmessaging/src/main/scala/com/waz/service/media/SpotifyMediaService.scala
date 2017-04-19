@@ -32,6 +32,7 @@ import com.waz.sync.client.SpotifyClient
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.{Signal, SourceSignal}
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future

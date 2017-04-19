@@ -20,7 +20,7 @@ package com.waz.api;
 import android.os.Parcel;
 import android.os.Parcelable;
 import com.waz.service.ZMessaging$;
-import com.waz.utils.URI;
+import com.waz.utils.wrappers.URI;
 import org.threeten.bp.Instant;
 
 public interface Message extends UiObservable, Parcelable {

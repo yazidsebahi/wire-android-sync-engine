@@ -18,14 +18,14 @@
 package com.waz.specs
 
 import com.waz.testutils.JavaURIUtil
-import com.waz.utils
+import com.waz.utils.wrappers.URI
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
 
   //Ensures that Android wrappers are assigned with a non-Android implementation so that tests can run on the JVM
   override protected def beforeAll() = {
-    utils.URI = JavaURIUtil
+    URI = JavaURIUtil
   }
 
 }

@@ -26,10 +26,12 @@ import com.waz.model.{AccountId, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.{ExponentialBackoff, JsonEncoder, URI}
+import com.waz.utils.{ExponentialBackoff, JsonEncoder}
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
+import com.waz.utils.wrappers.URI
+
 import org.json.JSONObject
 
 import scala.concurrent.duration._

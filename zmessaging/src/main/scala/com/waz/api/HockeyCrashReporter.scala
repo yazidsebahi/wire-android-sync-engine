@@ -23,7 +23,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.MultipartRequestContent
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.{Request, Response}

@@ -23,6 +23,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model.Mime
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.URI
 
 import scala.concurrent.Future
 import scala.util.Try

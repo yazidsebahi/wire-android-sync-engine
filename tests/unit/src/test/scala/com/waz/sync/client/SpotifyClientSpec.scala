@@ -23,7 +23,7 @@ import com.waz.model.{AssetData, AssetMetaData, Dim2}
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
-import com.waz.utils
+import com.waz.utils.wrappers.URI
 import com.waz.znet.JsonResponseFromResources
 import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
 import org.threeten.bp.Duration
@@ -39,7 +39,7 @@ class SpotifyClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
 
       val asset = TrackResponse.unapply(sampleTrackResponse).value.images.headOption.value
 
-      asset shouldEqual AssetData(metaData = Some(AssetMetaData.Image(Dim2(640, 640), Medium)), source = Some(utils.URI.parse("https://i.scdn.co/image/64a7ae4a4804ae88f3b93af220c2eff8ee9b2882")))
+      asset shouldEqual AssetData(metaData = Some(AssetMetaData.Image(Dim2(640, 640), Medium)), source = Some(URI.parse("https://i.scdn.co/image/64a7ae4a4804ae88f3b93af220c2eff8ee9b2882")))
 
 //      asset.map(img => (img.tag, img.url.value, img.width, img.height)) should contain theSameElementsInOrderAs Seq(
 //        ("0", "https://i.scdn.co/image/1c7c821199e9ca963108f6d7b99dede10b19605e", 64, 64),
@@ -60,7 +60,7 @@ class SpotifyClientSpec extends FeatureSpec with Matchers with JsonResponseFromR
 
       val MediaWithImages(pl, assets) = PlaylistResponse.unapply(samplePlaylistResponse).value
       val image = assets.find(a => pl.artwork.contains(a.id)).value
-      image shouldEqual AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0), Medium)), source = Some(utils.URI.parse("https://u.scdn.co/images/pl/default/02c1007d606188e383f00571520d97e488c7dc28")))
+      image shouldEqual AssetData(metaData = Some(AssetMetaData.Image(Dim2(0, 0), Medium)), source = Some(URI.parse("https://u.scdn.co/images/pl/default/02c1007d606188e383f00571520d97e488c7dc28")))
     }
   }
 

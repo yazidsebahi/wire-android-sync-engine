@@ -21,7 +21,8 @@ import com.koushikdutta.async.ByteBufferList
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.threading.CancellableFuture
-import com.waz.utils.{JsonDecoder, JsonEncoder, URI}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response._
 import com.waz.znet.ResponseConsumer.{ConsumerState, EmptyResponseConsumer, StringConsumer}
 import com.waz.znet.ZNetClient.ErrorOrResponse

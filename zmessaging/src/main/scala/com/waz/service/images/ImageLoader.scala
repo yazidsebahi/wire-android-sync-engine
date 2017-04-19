@@ -36,7 +36,8 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.utils.IoUtils._
-import com.waz.utils.{IoUtils, Serialized, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{IoUtils, Serialized, returning}
 import com.waz.{PermissionsService, bitmap, utils}
 
 import scala.concurrent.Future
@@ -131,8 +132,8 @@ class ImageLoader(val context: Context, fileCache: CacheService, val imageCache:
     Future {
       val newFile = AssetService.saveImageFile(mime)
       IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
-      val uri = utils.URI.fromFile(newFile)
-      context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, utils.URI.unwrap(uri)))
+      val uri = URI.fromFile(newFile)
+      context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, URI.unwrap(uri)))
       Some(uri)
     }(Threading.IO)
     )

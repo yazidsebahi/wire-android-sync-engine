@@ -26,6 +26,7 @@ import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.service.assets.MetaDataRetriever
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp

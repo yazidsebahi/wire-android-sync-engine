@@ -36,6 +36,7 @@ import com.waz.service.{ErrorsService, ZmsLifecycle}
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.{ClockSignal, EventContext, EventStream, Signal}
+import com.waz.utils.wrappers.URI
 import org.threeten.bp
 import org.threeten.bp.Instant
 

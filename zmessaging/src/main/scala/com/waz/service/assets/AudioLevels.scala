@@ -29,7 +29,8 @@ import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.Mime
 import com.waz.threading.CancellableFuture.{CancelException, DefaultCancelException}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{Cleanup, ContentURIs, Managed, RichFuture, returning}
 import libcore.io.SizeOf
 
 import scala.concurrent.duration._

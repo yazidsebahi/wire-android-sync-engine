@@ -25,7 +25,7 @@ import com.waz.model.EmailAddress
 import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.utils.URI
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.RequestContent
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response._

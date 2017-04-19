@@ -28,7 +28,8 @@ import com.waz.model.CacheKey
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
-import com.waz.utils.{URI, returning}
+import com.waz.utils.returning
+import com.waz.utils.wrappers.URI
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

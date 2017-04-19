@@ -26,8 +26,8 @@ import com.waz.service.assets.AssetService
 import com.waz.service.messages.MessagesContentUpdater
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
-import com.waz.utils.URI
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future

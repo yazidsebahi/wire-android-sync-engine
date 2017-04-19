@@ -29,7 +29,8 @@ import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendAsset, Suc
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.utils.{IoUtils, URI, returning}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{IoUtils, returning}
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 

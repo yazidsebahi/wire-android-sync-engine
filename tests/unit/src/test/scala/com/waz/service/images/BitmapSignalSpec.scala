@@ -19,7 +19,8 @@ package com.waz.service.images
 
 import android.graphics.Bitmap
 import android.support.v4.content.ContextCompat
-import com.waz.{RobolectricUtils, utils}
+import com.waz.RobolectricUtils
+import com.waz.utils.wrappers.URI
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model.AssetMetaData.Image
@@ -151,7 +152,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     def gif = GifReader(gifStream).get
 
     scenario("Load gif from local source") {
-      lazy val asset = AssetData(AssetId(), metaData = Some(Image(Dim2(0, 0), Medium)), source = Some(utils.URI.parse("content://test")), convId = Some(RConvId()))
+      lazy val asset = AssetData(AssetId(), metaData = Some(Image(Dim2(0, 0), Medium)), source = Some(URI.parse("content://test")), convId = Some(RConvId()))
       gifResult = { _ => Some(gif) }
       rawDataResult = { _ => Some(LocalData(gifStream, -1))}
       val listener = new SignalListener(asset, Regular(200))

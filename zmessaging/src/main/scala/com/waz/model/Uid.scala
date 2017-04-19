@@ -22,7 +22,8 @@ import java.util.UUID
 
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
-import com.waz.utils.{JsonDecoder, JsonEncoder, URI}
+import com.waz.utils.wrappers.URI
+import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
 import scala.util.Random

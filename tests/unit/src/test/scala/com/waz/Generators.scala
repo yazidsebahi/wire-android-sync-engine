@@ -39,7 +39,8 @@ import com.waz.service.messages.MessageAndLikes
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
-import com.waz.utils.{URI, sha2}
+import com.waz.utils.sha2
+import com.waz.utils.wrappers.URI
 import com.waz.znet.AuthenticationManager.Token
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen._
@@ -70,7 +71,7 @@ object Generators {
   implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
     scheme <- oneOf("file", "content", "http")
     path <- alphaNumStr
-  } yield utils.URI.parse(s"$scheme://$path"))
+  } yield URI.parse(s"$scheme://$path"))
 
   implicit lazy val arbConversationData: Arbitrary[ConversationData] = Arbitrary(for {
     id <- arbitrary[ConvId]

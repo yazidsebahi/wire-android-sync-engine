@@ -33,7 +33,8 @@ import com.waz.sync.SyncResult
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
-import com.waz.utils.{RichFuture, URI}
+import com.waz.utils.RichFuture
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future

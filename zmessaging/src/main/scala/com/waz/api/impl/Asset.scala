@@ -25,8 +25,8 @@ import com.waz.model.{Mime, _}
 import com.waz.service.ZMessaging
 import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, Content, MediaKey, UnauthenticatedContent}
 import com.waz.ui.{SignalLoading, UiModule}
-import com.waz.utils.URI
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Duration
 
 import scala.PartialFunction.cond
