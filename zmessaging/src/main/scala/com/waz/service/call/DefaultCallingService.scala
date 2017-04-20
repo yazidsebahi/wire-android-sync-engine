@@ -229,15 +229,7 @@ class DefaultCallingService(context:             Context,
         }
     }
   }
-
-  def acceptCall(convId: ConvId, isGroup: Boolean): Unit = withConv(convId) { conv =>
-    verbose(s"answerCall: $convId")
-    avs.answerCall(conv.remoteId, isGroup)
-    currentCall.mutate {
-      case call if call.convId.contains(conv.id) => call.copy(state = SELF_JOINING)
-    }
-  }
-
+  
   def endCall(convId: ConvId): Unit = withConv(convId) { conv =>
     verbose(s"endCall: $convId")
     currentCall.mutate { call =>
