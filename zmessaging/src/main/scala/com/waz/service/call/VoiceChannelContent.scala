@@ -34,7 +34,7 @@ import scala.concurrent.duration._
 case class ActiveChannels(ongoing: Option[VoiceChannelData], incoming: Vector[VoiceChannelData])
 case class ChannelUpdate(before: VoiceChannelData, updated: VoiceChannelData, timestamp: Option[Instant])
 
-class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, convs: ConversationStorage, users: UsersStorage, callLog: CallLogService) { self =>
+class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, convs: ConversationStorage, users: UsersStorage, callLog: DefaultCallLogService) { self =>
 
   import VoiceChannelContent._
 

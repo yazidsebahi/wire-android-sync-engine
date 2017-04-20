@@ -23,7 +23,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.call.AvsV3.{CallState, ClosedReason, VideoReceiveState}
+import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.call.Calling._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
@@ -34,6 +34,8 @@ import org.threeten.bp.Instant
 import scala.concurrent.{Future, Promise}
 
 trait CallingService {
+  def currentCall: Signal[CallInfo]
+  def activeCalls: Signal[Set[ConvId]]
   def onReady(version: Int): Unit
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
   def onAnsweredCall(convId: RConvId): Unit
@@ -43,9 +45,7 @@ trait CallingService {
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
   def onBitRateStateChanged(): Unit
-  def onCallStateChanged(convId: RConvId, state: CallState): Unit
   def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
-  def currentCall: Signal[CallInfo]
   def startCall(convId: ConvId, isVideo: Boolean = false, isGroup: Boolean): Unit
   def acceptCall(convId: ConvId, isGroup: Boolean): Unit
   def endCall(convId: ConvId): Unit
@@ -146,10 +146,6 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
         callingService.onGroupChanged(RConvId(convId), members)
       }
     })
-
-    Calling.wcall_set_state_handler(new CallStateChangeHandler {
-      override def onCallStateChanged(convId: String, state: Int, arg: Pointer) = callingService.onCallStateChanged(RConvId(convId), CallState(state))
-    })
   })
 
   _init.onFailure { case e =>
@@ -201,21 +197,6 @@ object AvsV3 {
 
   def uint32_tTime(instant: Instant) =
     returning(Uint32_t((Instant.now.toEpochMilli / 1000).toInt))(t => verbose(s"uint32_tTime for $instant = ${t.value}"))
-
-  /**
-    *   WCALL_STATE_NONE         0 There is no call
-    *   WCALL_STATE_OUTGOING     1 Outgoing call is pending
-    *   WCALL_STATE_INCOMING     2 Incoming call is pending
-    *   WCALL_STATE_ANSWERED     3 Call has been answered, but no media
-    *   WCALL_STATE_MEDIA_ESTAB  4 Call has been answered, with media
-    *   WCALL_STATE_TERM_LOCAL   6 Call was locally terminated
-    *   WCALL_STATE_TERM_REMOTE  7 Call was remotely terminated
-    *   WCALL_STATE_UNKNOWN      8 Unknown
-    */
-  type CallState = CallState.Value
-  object CallState extends Enumeration {
-    val None, Outgoing, Incoming, Answered, MediaEstablished, TerminatingLocal, TerminationRemote, Unknown = Value
-  }
 
   /**
     *   WCALL_REASON_NORMAL              0

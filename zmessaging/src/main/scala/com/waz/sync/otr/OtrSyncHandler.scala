@@ -30,7 +30,7 @@ import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
-import com.waz.service.messages.MessagesService
+import com.waz.service.messages.DefaultMessagesService
 import com.waz.service.otr.OtrService
 import com.waz.service.{ErrorsService, UserService}
 import com.waz.sync.SyncResult
@@ -46,7 +46,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-                     convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: MessagesService,
+                     convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: DefaultMessagesService,
                      errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) {
 
   import OtrSyncHandler._

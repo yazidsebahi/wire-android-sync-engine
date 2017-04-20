@@ -29,7 +29,7 @@ import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.service.messages.{MessagesContentUpdater, DefaultMessagesService}
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -47,7 +47,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
                            messagesStorage: MessagesStorage, membersStorage: DefaultMembersStorage,
                            convsStorage: ConversationStorage, val content: DefaultConversationsContentUpdater, listState: ConversationsListStateService,
                            sync: SyncServiceHandle, errors: ErrorsService,
-                           messages: MessagesService, assets: AssetService, storage: ZmsDatabase,
+                           messages: DefaultMessagesService, assets: AssetService, storage: ZmsDatabase,
                            msgContent: MessagesContentUpdater, kvService: KeyValueStorage, eventScheduler: => EventScheduler) {
 
   private implicit val tag: LogTag = logTagFor[ConversationsService]

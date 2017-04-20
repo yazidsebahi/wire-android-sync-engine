@@ -23,7 +23,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.conversation.DefaultConversationsContentUpdater
-import com.waz.service.messages.MessagesService
+import com.waz.service.messages.DefaultMessagesService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -34,7 +34,7 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 
 class ConnectionService(push: PushService, convs: DefaultConversationsContentUpdater, members: DefaultMembersStorage,
-                        messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
+                        messages: DefaultMessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
                         sync: SyncServiceHandle, scheduler: => EventScheduler) {
 
   private implicit val logTag: LogTag = logTagFor[ConnectionService]

@@ -30,7 +30,7 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service._
 import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted}
-import com.waz.service.call.AvsV3.{CallState, ClosedReason, VideoReceiveState}
+import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.call.CallInfo._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
@@ -67,12 +67,17 @@ class DefaultCallingService(context:             Context,
   private val mm = mediaManagerService.mediaManager
 
   val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
-  val currentCall = Signal(IdleCall)
+  val activeCalls = Signal(Set.empty[ConvId]) //any call a user can potentially join
+  val currentCall = Signal(IdleCall) //state about any call for which we should show the CallingActivity
   val otherSideCBR = Signal(false) // by default we assume the call is VBR
 
   val requestedCallVersion = Signal(-1)
 
   avs.init(this)
+
+  activeCalls.onChanged { cs =>
+    verbose(s"Active calls: $cs")
+  }
 
   currentCall.onChanged { i =>
     verbose(s"Calling information changed: $i")
@@ -94,6 +99,7 @@ class DefaultCallingService(context:             Context,
   override def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
     verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
     otherSideCBR.mutate(_ => false)
+    activeCalls.mutate(calls => calls + conv.id)
     currentCall.mutate {
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
       case IsIdle() =>
@@ -135,6 +141,7 @@ class DefaultCallingService(context:             Context,
 
   override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id}, userId: $userId")
+    activeCalls.mutate(calls => calls - conv.id)
     currentCall.mutate { call =>
       onCallClosed(call, reason, conv, userId)
     }
@@ -147,18 +154,6 @@ class DefaultCallingService(context:             Context,
 
   //TODO should this be synchronised too?
   override def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
-
-  override def onCallStateChanged(convId: RConvId, state: CallState) = dispatcher {
-    verbose(s"call state changed, convId: $convId, state: $state")
-    if (state == CallState.Incoming)
-      currentCall.head.map {
-        _.state match {
-          case VoiceChannelState.SELF_CONNECTED =>
-            currentCall.mutate(_.copy(shouldRing = false, state = VoiceChannelState.OTHER_CALLING))
-          case _ => // Ignore
-        }
-      }
-  }
 
   override def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { conv =>
     verbose(s"group members changed, convId: $convId, other members: $members")
@@ -284,7 +279,6 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  //only call from within dispatcher
   def setVideoSendActive(convId: ConvId, send: Boolean): Unit = {
     verbose(s"setVideoSendActive: $convId, $send")
     withConv(convId) { conv =>
