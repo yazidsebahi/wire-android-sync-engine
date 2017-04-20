@@ -26,6 +26,7 @@ import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{IConversation, VoiceChannelState}
 import com.waz.content.MembersStorage
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service._
@@ -67,7 +68,7 @@ class DefaultCallingService(context:             Context,
   private val mm = mediaManagerService.mediaManager
 
   val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
-  val activeCalls = Signal(Set.empty[ConvId]) //any call a user can potentially join
+  val activeCalls = Signal(Map.empty[ConvId, CallInfo]) //any call a user can potentially join
   val currentCall = Signal(IdleCall) //state about any call for which we should show the CallingActivity
   val otherSideCBR = Signal(false) // by default we assume the call is VBR
 
@@ -76,7 +77,8 @@ class DefaultCallingService(context:             Context,
   avs.init(this)
 
   activeCalls.onChanged { cs =>
-    verbose(s"Active calls: $cs")
+    val ids = cs.map{case (cId, _) => cId}
+    verbose(s"Active calls: $ids")
   }
 
   currentCall.onChanged { i =>
@@ -99,26 +101,29 @@ class DefaultCallingService(context:             Context,
   override def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
     verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
     otherSideCBR.mutate(_ => false)
-    activeCalls.mutate(calls => calls + conv.id)
-    currentCall.mutate {
+
+    val callInfo = CallInfo(
+      Some(conv.id),
+      userId,
+      Set(userId),
+      OTHER_CALLING,
+      shouldRing = shouldRing,
+      isGroupConv = conv.convType == IConversation.Type.GROUP,
+      isVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+      videoSendState = if(videoCall) PREVIEW else DONT_SEND)
+
+    activeCalls.mutate(calls => calls + (conv.id -> callInfo))
+    currentCall.mutate {
       case IsIdle() =>
-        CallInfo(
-          Some(conv.id),
-          userId,
-          Set(userId),
-          OTHER_CALLING,
-          shouldRing = shouldRing,
-          isGroupConv = conv.convType == IConversation.Type.GROUP,
-          isVideoCall = videoCall,
-          videoSendState = if(videoCall) PREVIEW else DONT_SEND)
+        callInfo
       case cur =>
         verbose(s"Incoming call from $userId while in a call - ignoring")
         cur
     }
   }
 
-  override def onAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
+  override def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     currentCall.mutate {
       case call if call.convId.contains(conv.id) => call.copy(state = SELF_JOINING)
@@ -180,38 +185,61 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  def startCall(convId: ConvId, isVideo: Boolean = false, isGroup: Boolean): Unit = withConv(convId) { conv =>
-    currentCall.head.map { callInfo =>
-      verbose(s"startCall currentState: ${callInfo.state}, currentConvId: ${callInfo.convId}")
-      callInfo.state match {
-        case OTHER_CALLING if callInfo.convId.contains(convId) =>
-          acceptCall(convId, isGroup)
-        case _ =>
-          verbose(s"startCall convId: $convId, isVideo: $isVideo, isGroup: $isGroup")
-          membersStorage.getByConv(conv.id).map { members =>
-            avs.startCall(conv.remoteId, isVideo, isGroup).map {
-              case 0 =>
-                currentCall.mutate {
-                  case IsIdle() =>
-                    val others = members.map(_.userId).find(_ != selfUserId).toSet
-                    //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-                    CallInfo(Some(conv.id), selfUserId, others, SELF_CALLING, isGroupConv = isGroup, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
-                  case cur if cur.state == OTHER_CALLING && cur.convId.contains(convId) =>
-                    cur
-                  case cur =>
-                    error("Call already in progress, not updating")
-                    cur
-                }
-              case err => warn(s"Unable to start call, reason: errno: $err")
-            }
+  /**
+    * Either start a new call or join an active call (incoming/ongoing)
+    * @param isVideo will be discarded if call is already active
+    */
+  def startCall(convId: ConvId, isVideo: Boolean = false): Unit = withConv(convId) { conv =>
+    verbose(s"startCall $convId, $isVideo")
+    val isGroup = conv.convType == ConversationType.Group
+
+    (for {
+      current <- currentCall
+      active <- activeCalls
+    } yield (current, active)).head.map {
+
+      case (cur, _) if cur.isActive && cur.convId.contains(convId) =>
+        cur.state match {
+          case OTHER_CALLING =>
+            verbose(s"Answering call")
+            avs.answerCall(conv.remoteId, isGroup)
+            currentCall.mutate(_.copy(state = SELF_JOINING))
+          case _ =>
+            warn("Tried to join an already joined/connecting call - ignoring")
+        }
+
+      case (cur, _) if cur.isActive =>
+        warn("Tried to start a new call while already in a call - ignoring")
+
+      case (_, active) if active.contains(convId) =>
+        verbose("Joining an ongoing background call")
+        avs.answerCall(conv.remoteId, isGroup)
+        currentCall ! active(convId)
+
+      case _ =>
+        verbose("No active call, starting new call")
+        membersStorage.getByConv(conv.id).map { members =>
+          avs.startCall(conv.remoteId, isVideo, isGroup).map {
+            case 0 =>
+              val others = members.map(_.userId).find(_ != selfUserId).toSet
+              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+              currentCall ! CallInfo(Some(conv.id), selfUserId, others, SELF_CALLING, isGroupConv = isGroup, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+            case err => warn(s"Unable to start call, reason: errno: $err")
           }
-      }
+        }
+    }
+  }
+
+  def acceptCall(convId: ConvId, isGroup: Boolean): Unit = withConv(convId) { conv =>
+    verbose(s"answerCall: $convId")
+    avs.answerCall(conv.remoteId, isGroup)
+    currentCall.mutate {
+      case call if call.convId.contains(conv.id) => call.copy(state = SELF_JOINING)
     }
   }
 
   def endCall(convId: ConvId): Unit = withConv(convId) { conv =>
     verbose(s"endCall: $convId")
-    //wcall_end will always(???) lead to the CloseCall handler - we handle state there
     currentCall.mutate { call =>
       if (call.state == VoiceChannelState.OTHER_CALLING) {
         verbose("Incoming call ended - performing reject instead")
@@ -219,6 +247,7 @@ class DefaultCallingService(context:             Context,
         onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller)
       } else {
         verbose(s"Call ended in other state: ${call.state}, ending normally")
+        //wcall_end will always(???) lead to the CloseCall handler - we handle state there
         avs.endCall(conv.remoteId, call.isGroupConv)
         call.copy(hangupRequested = true)
       }
@@ -256,14 +285,6 @@ class DefaultCallingService(context:             Context,
         avs.endCall(conv.remoteId, conv.convType == IConversation.Type.GROUP)
         currentCall.mutate(_.copy(closedReason = Interrupted))
       }
-    }
-  }
-
-  def acceptCall(convId: ConvId, isGroup: Boolean): Unit = withConv(convId) { conv =>
-    verbose(s"answerCall: $convId")
-    avs.answerCall(conv.remoteId, isGroup)
-    currentCall.mutate {
-      case call if call.convId.contains(conv.id) => call.copy(state = SELF_JOINING)
     }
   }
 

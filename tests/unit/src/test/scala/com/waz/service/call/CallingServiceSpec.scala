@@ -89,7 +89,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
         info.state == SELF_CALLING &&
           info.convId.contains(ConvId(groupId1.str))
       } {
-        service.startCall(ConvId(groupId1.str), isVideo = false, isGroup = true)
+        service.startCall(ConvId(groupId1.str), isVideo = false)
       }
     }
   }
@@ -154,16 +154,15 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
         })
 
       }
-      (avsMock.answerCall _).expects(otoConv.remoteId, false).once()
-      (avsMock.setVideoSendActive _).expects(otoConv.remoteId, false).once()
-      (avsMock.rejectCall _).expects(*, *).anyNumberOfTimes()
 
+      (avsMock.setVideoSendActive _).expects(otoConv.remoteId, false).anyNumberOfTimes()
       val service = initCallingService()
 
       //Checkpoint 1: Receive and reject a group call
       val checkpoint1 = callCheckpoint(service)(_.contains(groupConv.id))(CallInfo.IsIdle.unapply)
 
       service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
+      (avsMock.rejectCall _).expects(*, *).anyNumberOfTimes()
       service.endCall(groupConv.id) //user rejects the group call
 
 
@@ -171,24 +170,29 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       Await.ready(checkpoint1.head, defaultDuration)
 
       //Checkpoint 2: Receive and accept a 1:1 call
-      val checkpoint2 = callCheckpoint(service)(_ == Set(groupConv.id, otoConv.id))(curr => curr.others.contains(otoUser) && curr.state == VoiceChannelState.SELF_CONNECTED)
+      val checkpoint2 = callCheckpoint(service)(act => act.contains(groupConv.id) && act.contains(otoConv.id))(curr => curr.others.contains(otoUser) && curr.state == VoiceChannelState.SELF_CONNECTED)
 
       service.onIncomingCall(otoConv.remoteId, otoUser, videoCall = false, shouldRing = true)
+      (avsMock.answerCall _).expects(*, *).once().onCall { (rId, _) =>
+        service.onEstablishedCall(otoConv.remoteId, otoUser)
+      }
       service.acceptCall(otoConv.id, isGroup = false) //user accepts 1:1 call
-      service.onEstablishedCall(otoConv.remoteId, otoUser)
 
       println("checkpoint2")
       Await.ready(checkpoint2.head, defaultDuration)
 
-      val checkpoint3 = callCheckpoint(service)(_ == Set(groupConv.id))(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == VoiceChannelState.SELF_CONNECTED)
-
-      (avsMock.startCall _).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(0))
-      (members.getByConv _).expects(*).once().returning(Future.successful(IndexedSeq(ConversationMemberData(groupMember1, groupConv.id), ConversationMemberData(groupMember2, groupConv.id))))
-
+      val checkpoint3 = callCheckpoint(service)(_.contains(groupConv.id))(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == VoiceChannelState.SELF_CONNECTED)
+      
+      (avsMock.endCall _).expects(*, *).once().onCall { (rId, _) =>
+        service.onClosedCall(ClosedReason.Normal, otoConv.remoteId, otoUser, "")
+      }
       service.endCall(otoConv.id)
-      service.onClosedCall(ClosedReason.Normal, otoConv.remoteId, otoUser, "")
-      service.startCall(groupConv.id, isGroup = true)
-      service.onEstablishedCall(groupConv.remoteId, groupMember1)
+
+      (avsMock.answerCall _).expects(*, *).once().onCall { (rId, _) =>
+        service.onEstablishedCall(groupConv.remoteId, groupMember1)
+        service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
+      }
+      service.startCall(groupConv.id)
 
       println("checkpoint3")
       Await.ready(checkpoint3.head, defaultDuration)
@@ -196,7 +200,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
     }
   }
 
-  def callCheckpoint(service: CallingService)(activeCheck: Set[ConvId] => Boolean)(currentCheck: CallInfo => Boolean) =
+  def callCheckpoint(service: CallingService)(activeCheck: Map[ConvId, CallInfo] => Boolean)(currentCheck: CallInfo => Boolean) =
     (for {
       active <- service.activeCalls
       current <- service.currentCall

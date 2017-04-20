@@ -25,6 +25,7 @@ import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.call.AvsV3.ClosedReason.Normal
 import com.waz.service.call.AvsV3.VideoReceiveState.Stopped
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
+import com.waz.service.call.CallInfo.{IsActive, IsIdle}
 import org.threeten.bp.Instant
 
 /**
@@ -63,6 +64,10 @@ case class CallInfo(convId:            Option[ConvId]                    = None,
        | closedReason       $closedReason
        | hasOutstandingMsg: ${outstandingMsg.isDefined}
     """.stripMargin
+
+  def isActive = IsActive.unapply(this)
+
+  def isIdle = IsIdle.unapply(this)
 }
 
 object CallInfo {

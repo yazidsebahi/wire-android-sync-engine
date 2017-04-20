@@ -35,10 +35,10 @@ import scala.concurrent.{Future, Promise}
 
 trait CallingService {
   def currentCall: Signal[CallInfo]
-  def activeCalls: Signal[Set[ConvId]]
+  def activeCalls: Signal[Map[ConvId, CallInfo]]
   def onReady(version: Int): Unit
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
-  def onAnsweredCall(convId: RConvId): Unit
+  def onOtherSideAnsweredCall(convId: RConvId): Unit
   def onEstablishedCall(convId: RConvId, userId: UserId): Unit
   def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String): Unit
   def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean): Unit
@@ -46,8 +46,7 @@ trait CallingService {
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
   def onBitRateStateChanged(): Unit
   def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
-  def startCall(convId: ConvId, isVideo: Boolean = false, isGroup: Boolean): Unit
-  def acceptCall(convId: ConvId, isGroup: Boolean): Unit
+  def startCall(convId: ConvId, isVideo: Boolean = false): Unit
   def endCall(convId: ConvId): Unit
   def setVideoSendActive(convId: ConvId, send: Boolean): Unit
 }
@@ -114,7 +113,7 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
 
       },
       new AnsweredCallHandler {
-        override def onAnsweredCall(convId: String, arg: Pointer) = callingService.onAnsweredCall(RConvId(convId))
+        override def onAnsweredCall(convId: String, arg: Pointer) = callingService.onOtherSideAnsweredCall(RConvId(convId))
       },
       new EstablishedCallHandler {
         override def onEstablishedCall(convId: String, userId: String, arg: Pointer) =
