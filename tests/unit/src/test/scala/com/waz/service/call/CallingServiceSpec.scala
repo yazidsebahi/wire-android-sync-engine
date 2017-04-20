@@ -106,9 +106,8 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
           case _ => None
         })
       }
-      (convs.convById _).expects(ConvId(ongoingUserId.str)).once().returning(Future.successful(Some(ongoingConv)))
+      (convs.convById _).expects(ConvId(ongoingUserId.str)).anyNumberOfTimes().returning(Future.successful(Some(ongoingConv)))
       (avsMock.answerCall _).expects(ongoingConv.remoteId, false).once()
-      (avsMock.setVideoSendActive _).expects(ongoingConv.remoteId, false).once()
 
       val service = initCallingService()
 
