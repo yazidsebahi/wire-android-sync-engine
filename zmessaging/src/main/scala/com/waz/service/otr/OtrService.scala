@@ -276,7 +276,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
     }.filter(_.nonEmpty)
   }
 
-  // throws a NotImplementedError when called; to be implemented later
+  // TODO: AN-5167. Right now throws a NotImplementedError when called; to be implemented later
   def decryptAssetDataGCM(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = ???
 
   def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]): Option[Array[Byte]] =
