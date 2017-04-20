@@ -258,7 +258,7 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
     data.byteArray.fold(encryptFile()){ _ => encryptBytes() }
   }
 
-  // throws a NotImplementedError when called; to be implemented later
+  // TODO: AN-5168. Right now throws a NotImplementedError when called; to be implemented later
   def encryptAssetDataGCM(key: AESKey, data: LocalData): Future[(Sha256, LocalData, EncryptionAlgorithm)] = ???
 
   def encryptAssetData(key: AESKey, data: LocalData):Future[(Sha256, LocalData, EncryptionAlgorithm)] =
