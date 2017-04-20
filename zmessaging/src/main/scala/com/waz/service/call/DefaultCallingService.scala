@@ -217,7 +217,7 @@ class DefaultCallingService(context:             Context,
       case (_, active) if active.contains(convId) =>
         verbose("Joining an ongoing background call")
         avs.answerCall(conv.remoteId, isGroup)
-        currentCall ! active(convId)
+        currentCall ! active(convId).copy(state = SELF_JOINING)
 
       case _ =>
         verbose("No active call, starting new call")
