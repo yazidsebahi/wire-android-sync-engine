@@ -49,10 +49,10 @@ class CallService extends FutureService {
       debug(s"convId: $convId")
 
       intent.getAction match {
-        case ActionJoin => executor.join(convId, id, withVideo = false, isGroup = false)
-        case ActionJoinGroup => executor.join(convId, id, withVideo = false, isGroup = true)
-        case ActionJoinWithVideo => executor.join(convId, id, withVideo = true, isGroup = false)
-        case ActionJoinGroupWithVideo => executor.join(convId, id, withVideo = true, isGroup = true)
+        case ActionJoin => executor.join(convId, id, withVideo = false)
+        case ActionJoinGroup => executor.join(convId, id, withVideo = false)
+        case ActionJoinWithVideo => executor.join(convId, id, withVideo = true)
+        case ActionJoinGroupWithVideo => executor.join(convId, id, withVideo = true)
         case ActionLeave => executor.leave(convId, id)
         case ActionSilence => executor.silence(convId, id)
         case _ => executor.track(convId, id)
@@ -106,9 +106,9 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
   private implicit val logTag: LogTag = logTagFor[CallExecutor]
   import Threading.Implicits.Background
 
-  def join(conv: ConvId, id: Int, withVideo: Boolean, isGroup: Boolean) = execute { zms =>
+  def join(conv: ConvId, id: Int, withVideo: Boolean) = execute { zms =>
     isV3Call(zms).flatMap {
-      case true => Future.successful(zms.calling.acceptCall(conv, isGroup))
+      case true => Future.successful(zms.calling.startCall(conv))
       case _ => zms.voice.joinVoiceChannel(conv, withVideo) flatMap (_ => track(conv, zms))
     }
   }(s"CallExecutor.join($id, withVideo = $withVideo)")

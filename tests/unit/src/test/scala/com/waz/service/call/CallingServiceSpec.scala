@@ -96,12 +96,12 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
 
   feature("Simultaneous calls") {
 
-    scenario("Receive incoming call while 1:1 call ongoing") {
+    scenario("Current: Receive incoming call while 1:1 call ongoing") {
 
-      val ongoingUserId = UserId("user1")
+      val ongoingUserId = UserId()
       val ongoingConv = ConversationData(ConvId(ongoingUserId.str), RConvId(ongoingUserId.str), Some("Ongoing Conv"), selfUser.id, ConversationType.OneToOne)
 
-      val incomingUserId = UserId("user2")
+      val incomingUserId = UserId()
       val incomingConv = ConversationData(ConvId(incomingUserId.str), RConvId(incomingUserId.str), Some("Incoming Conv"), selfUser.id, ConversationType.OneToOne)
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().onCall { rConvId: RConvId =>
@@ -112,21 +112,19 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
         })
       }
       (convs.convById _).expects(ConvId(ongoingUserId.str)).anyNumberOfTimes().returning(Future.successful(Some(ongoingConv)))
-      (avsMock.answerCall _).expects(ongoingConv.remoteId, false).once()
 
       val service = initCallingService()
 
-      signalTest(service.currentCall) { info =>
-        info.state == SELF_CONNECTED &&
-          info.others.contains(ongoingUserId) &&
-          !info.others.contains(incomingUserId)
-      } {
-        service.onIncomingCall(ongoingConv.remoteId, ongoingUserId, videoCall = false, shouldRing = true)
-        service.acceptCall(ongoingConv.id, isGroup = false)
+      val checkpoint = callCheckpoint(service)(_.contains(ongoingConv.id))(cur => cur.state == SELF_CONNECTED && cur.others.contains(ongoingUserId))
+
+      service.onIncomingCall(ongoingConv.remoteId, ongoingUserId, videoCall = false, shouldRing = true)
+      (avsMock.answerCall _).expects(*, *).once().onCall { (_, _) =>
         service.onEstablishedCall(ongoingConv.remoteId, ongoingUserId)
-        //Receive the second call after first is established
-        service.onIncomingCall(incomingConv.remoteId, incomingUserId, videoCall = false, shouldRing = false)
       }
+      service.startCall(ongoingConv.id)
+      service.onIncomingCall(incomingConv.remoteId, incomingUserId, videoCall = false, shouldRing = false) //Receive the second call after first is established
+
+      Await.ready(checkpoint.head, defaultDuration)
     }
 
     scenario("With a background group call, receive a 1:1 call, finish it, and then still join the group call afterwards") {
@@ -176,7 +174,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       (avsMock.answerCall _).expects(*, *).once().onCall { (rId, _) =>
         service.onEstablishedCall(otoConv.remoteId, otoUser)
       }
-      service.acceptCall(otoConv.id, isGroup = false) //user accepts 1:1 call
+      service.startCall(otoConv.id) //user accepts 1:1 call
 
       println("checkpoint2")
       Await.ready(checkpoint2.head, defaultDuration)

@@ -26,7 +26,7 @@ import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{IConversation, VoiceChannelState}
 import com.waz.content.MembersStorage
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service._
@@ -98,6 +98,11 @@ class DefaultCallingService(context:             Context,
     }
   }
 
+  /**
+    * @param shouldRing "Also we give you a bool to indicate whether you should ring in incoming. its always true in 1:1,
+    *                   true if someone called recently for group but false if the call was started more than 30 seconds ago"
+    *                                                                                                               - Chris the All-Knowing.
+    */
   override def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
     verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
     otherSideCBR.mutate(_ => false)
@@ -107,18 +112,16 @@ class DefaultCallingService(context:             Context,
       userId,
       Set(userId),
       OTHER_CALLING,
-      shouldRing = shouldRing,
-      isGroupConv = conv.convType == IConversation.Type.GROUP,
       isVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
       videoSendState = if(videoCall) PREVIEW else DONT_SEND)
 
     activeCalls.mutate(calls => calls + (conv.id -> callInfo))
     currentCall.mutate {
-      case IsIdle() =>
+      case IsIdle() if shouldRing =>
         callInfo
       case cur =>
-        verbose(s"Incoming call from $userId while in a call - ignoring")
+        verbose(s"Incoming call from $userId while in a call or call shouldn't ring - ignoring")
         cur
     }
   }
@@ -191,7 +194,7 @@ class DefaultCallingService(context:             Context,
     */
   def startCall(convId: ConvId, isVideo: Boolean = false): Unit = withConv(convId) { conv =>
     verbose(s"startCall $convId, $isVideo")
-    val isGroup = conv.convType == ConversationType.Group
+    val isGroup = conv.convType == Group
 
     (for {
       current <- currentCall
@@ -223,24 +226,24 @@ class DefaultCallingService(context:             Context,
             case 0 =>
               val others = members.map(_.userId).find(_ != selfUserId).toSet
               //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              currentCall ! CallInfo(Some(conv.id), selfUserId, others, SELF_CALLING, isGroupConv = isGroup, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+              currentCall ! CallInfo(Some(conv.id), selfUserId, others, SELF_CALLING, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND)
             case err => warn(s"Unable to start call, reason: errno: $err")
           }
         }
     }
   }
-  
+
   def endCall(convId: ConvId): Unit = withConv(convId) { conv =>
     verbose(s"endCall: $convId")
     currentCall.mutate { call =>
       if (call.state == VoiceChannelState.OTHER_CALLING) {
         verbose("Incoming call ended - performing reject instead")
-        avs.rejectCall(conv.remoteId, call.isGroupConv)
+        avs.rejectCall(conv.remoteId, conv.convType == Group)
         onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller)
       } else {
         verbose(s"Call ended in other state: ${call.state}, ending normally")
         //wcall_end will always(???) lead to the CloseCall handler - we handle state there
-        avs.endCall(conv.remoteId, call.isGroupConv)
+        avs.endCall(conv.remoteId, conv.convType == Group)
         call.copy(hangupRequested = true)
       }
     }
@@ -248,7 +251,7 @@ class DefaultCallingService(context:             Context,
 
   def continueDegradedCall(): Unit = currentCall.head.map(info => (info.convId, info.outstandingMsg, info.state) match {
     case (Some(cId), Some((msg, ctx)), _) => convs.storage.setUnknownVerification(cId).map(_ => sendCallMessage(cId, msg, ctx))
-    case (Some(cId), None, OTHER_CALLING) => convs.storage.setUnknownVerification(cId).map(_ => acceptCall(cId, info.isGroupConv))
+    case (Some(cId), None, OTHER_CALLING) => convs.storage.setUnknownVerification(cId).map(_ => startCall(cId))
     case _ => error(s"Tried resending message on invalid info: ${info.convId} in state ${info.state} with msg: ${info.outstandingMsg}")
   })
 
@@ -320,7 +323,7 @@ class DefaultCallingService(context:             Context,
           case SELF_CALLING =>
             verbose("Call timed out out the other didn't answer - add a \"you called\" message")
             messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
-          case OTHER_CALLING | SELF_JOINING if currentCall.shouldRing =>
+          case OTHER_CALLING | SELF_JOINING =>
             verbose("Call timed out out and we didn't answer - mark as missed call")
             messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
           case SELF_CONNECTED =>
