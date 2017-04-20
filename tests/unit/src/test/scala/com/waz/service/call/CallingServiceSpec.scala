@@ -124,6 +124,43 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
         service.onIncomingCall(incomingConv.remoteId, incomingUserId, videoCall = false, shouldRing = false)
       }
     }
+
+    /**
+      * TODO Discuss with avs and fix
+      * A call is marked as closed after rejecting - making it impossible to keep track of which calls are active in the background.
+      * Without this, we have no way of knowing whether there are group calls a user can join.
+      */
+//    scenario("With a background group call, receive a 1:1 call, finish it, and then still join the group call afterwards") {
+//
+//      val groupMember1 = UserId("groupUser1")
+//      val groupMember2 = UserId("groupUser2")
+//      val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), selfUser.id, ConversationType.Group)
+//
+//      val otoUser = UserId("otoUser")
+//      val otoConv = ConversationData(ConvId(otoUser.str), RConvId(otoUser.str), Some("1:1 Conv"), selfUser.id, ConversationType.OneToOne)
+//
+//      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().onCall { rConvId: RConvId =>
+//        Future.successful(rConvId match {
+//          case groupConv.remoteId => Some(groupConv)
+//          case otoConv.remoteId => Some(otoConv)
+//          case _ => None
+//        })
+//      }
+//
+//      (convs.convById _).expects(groupConv.id).once().returning(Future.successful(Some(groupConv)))
+//      (avsMock.answerCall _).expects(groupConv.remoteId, false).once()
+//      (avsMock.setVideoSendActive _).expects(groupConv.remoteId, false).once()
+//
+//      val service = initCallingService()
+//
+//      val state1 = service.ongoingCalls.filter { _.contains(groupConv.id) }
+//
+//      service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
+//      service.endCall(groupConv.id) //user rejects the group call
+//
+//      Await.ready(state1.head, defaultDuration)
+//
+//    }
   }
 
   def signalTest[A](signal: Signal[A])(test: A => Boolean)(trigger: => Unit): Unit = {
