@@ -32,7 +32,7 @@ import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.MessagesService
 import com.waz.service.otr.OtrService
-import com.waz.service.{ErrorsService, PreferenceService, UserService}
+import com.waz.service.{ErrorsService, UserService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient.UploadResponse
 import com.waz.sync.client.MessagesClient.OtrMessage
@@ -47,7 +47,7 @@ import scala.concurrent.Future.successful
 
 class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
                      convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: MessagesService,
-                     errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService, prefs: PreferenceService) {
+                     errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) {
 
   import OtrSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
@@ -131,8 +131,8 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
       case Some(otrClient) =>
         key match {
           case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
-            case (sha, encrypted) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
-              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha)))
+            case (sha, encrypted, encryptionAlg) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
+              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha), Some(encryptionAlg)))
               case Left(err) => Left(err)
             }
           }
