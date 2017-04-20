@@ -17,9 +17,9 @@
  */
 package com.waz.db
 
-import android.database.Cursor
 import com.waz.Generators._
 import com.waz.model.UserId
+import com.waz.utils.wrappers.DBCursor
 import org.scalacheck.Arbitrary
 import org.scalacheck.Arbitrary._
 import org.threeten.bp.Instant
@@ -42,7 +42,7 @@ object CompositeKeyTestItem {
     override lazy val idCol = (User, Timestamp, MeepIndex)
     override lazy val table = new Table("CompositeKeyItems", User, Timestamp, MeepIndex, Str, Int)
 
-    override def apply(implicit cursor: Cursor): CompositeKeyTestItem = CompositeKeyTestItem(User, Timestamp, MeepIndex, Str, Int)
+    override def apply(implicit cursor: DBCursor): CompositeKeyTestItem = CompositeKeyTestItem(User, Timestamp, MeepIndex, Str, Int)
   }
 
   implicit val itemArbitrary = Arbitrary(for {

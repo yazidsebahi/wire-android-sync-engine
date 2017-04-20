@@ -17,10 +17,10 @@
  */
 package com.waz.model
 
-import android.database.Cursor
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.DBCursor
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -70,7 +70,7 @@ object NotificationData {
     override val idCol = Id
     override val table = Table("NotificationData", Id, Data)
 
-    override def apply(implicit cursor: Cursor): NotificationData = JsonDecoder.decode(cursor.getString(1))
+    override def apply(implicit cursor: DBCursor): NotificationData = JsonDecoder.decode(cursor.getString(1))
   }
 
   implicit val NotificationOrdering: Ordering[NotificationData] = Ordering.by((data: NotificationData) => (data.time, data.id))

@@ -18,7 +18,6 @@
 package com.waz.users
 
 import akka.pattern.ask
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.{UpdateListener, VoiceChannel, _}
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.MessageData.MessageDataDao
@@ -28,6 +27,7 @@ import com.waz.model.{ConvId, RConvId, UserId}
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
+import com.waz.utils.wrappers.DB
 import org.scalatest.{FeatureSpec, Matchers}
 
 import scala.concurrent.duration._
@@ -37,7 +37,7 @@ class BlockingSpec extends FeatureSpec with Matchers with ProvisionedApiSpec wit
 
   override val provisionFile = "/two_users_connected.json"
 
-  implicit def zmsDb: SQLiteDatabase = zmessaging.db.dbHelper.getWritableDatabase
+  implicit def zmsDb: DB = zmessaging.db.dbHelper.getWritableDatabase
 
   val msgHex = Random.nextInt().toHexString
 

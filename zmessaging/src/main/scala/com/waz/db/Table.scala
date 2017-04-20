@@ -17,8 +17,7 @@
  */
 package com.waz.db
 
-import android.content.ContentValues
-import android.database.sqlite.SQLiteProgram
+import com.waz.utils.wrappers.{DB, DBContentValues, DBProgram}
 
 class Table[A](val name: String, val columns: ColBinder[_, A]*) {
   require(columns.nonEmpty)
@@ -34,13 +33,13 @@ class Table[A](val name: String, val columns: ColBinder[_, A]*) {
 
   private def insertOr(onConflict: String) = s"INSERT OR $onConflict INTO $name (${columns.map(_.name).mkString(",")}) VALUES (${columns.map(c => "?").mkString(",")});"
 
-  def save(obj: A): ContentValues = {
-    val values = new ContentValues()
+  def save(obj: A): DBContentValues = {
+    val values = DB.ContentValues()
     columns.foreach(_.save(obj, values))
     values
   }
 
-  def bind(obj: A, stmt: SQLiteProgram) = columns.foreach(_.bind(obj, stmt))
+  def bind(obj: A, stmt: DBProgram) = columns.foreach(_.bind(obj, stmt))
 }
 
 class TableWithId[A](name: String, columns: ColBinder[_, A]*)(idCols: => Seq[ColBinder[_, A]]) extends Table[A](name, columns:_*) {

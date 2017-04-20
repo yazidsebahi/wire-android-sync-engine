@@ -21,6 +21,7 @@ import com.waz.db.ZMessagingDB
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.utils._
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest._
 import org.threeten.bp.Instant.now
@@ -30,7 +31,7 @@ import scala.concurrent.duration._
 class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAndAfter with Matchers with RobolectricTests {
 
   lazy val dbHelper = new ZMessagingDB(Robolectric.application, "dbName")
-  implicit def db = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
 
   after {
     dbHelper.close()

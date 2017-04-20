@@ -19,12 +19,11 @@ package com.waz.model.otr
 
 import java.math.BigInteger
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.{Id, UserId}
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -166,9 +165,9 @@ object UserClients {
     override val idCol = Id
     override val table = Table("Clients", Id, Data)
 
-    override def apply(implicit cursor: Cursor): UserClients = JsonDecoder.decode(Data)(Decoder)
+    override def apply(implicit cursor: DBCursor): UserClients = JsonDecoder.decode(Data)(Decoder)
 
-    def find(ids: Traversable[UserId])(implicit db: SQLiteDatabase): Vector[UserClients] =
+    def find(ids: Traversable[UserId])(implicit db: DB): Vector[UserClients] =
       if (ids.isEmpty) Vector.empty
       else list(db.query(table.name, null, s"${Id.name} in (${ids.map(_.str).mkString("'", "','", "'")})", null, null, null, null))
   }

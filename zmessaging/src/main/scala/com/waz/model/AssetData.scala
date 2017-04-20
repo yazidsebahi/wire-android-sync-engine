@@ -17,10 +17,10 @@
  */
 package com.waz.model
 
-import android.database.Cursor
 import android.util.Base64
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.verbose
+import com.waz.utils.wrappers.DBCursor
+//import com.waz.ZLog.ImplicitTag._
+//import com.waz.ZLog.verbose
 import com.waz.content.WireContentProvider
 import com.waz.db.Col._
 import com.waz.db.Dao
@@ -100,7 +100,7 @@ case class AssetData(id:          AssetId               = AssetId(),
       case (_, Some(uri)) if !NonKeyURIs.contains(uri) => CacheKey.fromUri(uri)
       case _ => CacheKey.fromAssetId(id)
     }
-    verbose(s"created cache key: $key for asset: $id")
+    //verbose(s"created cache key: $key for asset: $id")
     key
   }
 
@@ -113,7 +113,7 @@ case class AssetData(id:          AssetId               = AssetId(),
       case (_, _, None, Some(path))                    => Proxied(cacheKey, path)
       case _                                           => CachedAssetRequest(cacheKey, mime, name)
     }
-    verbose(s"loadRequest returning: $req")
+    //verbose(s"loadRequest returning: $req")
     req
   }
 
@@ -258,7 +258,7 @@ object AssetData {
     override val idCol = Id
     override val table = Table("Assets", Id, Asset, Data)
 
-    override def apply(implicit cursor: Cursor): AssetData = {
+    override def apply(implicit cursor: DBCursor): AssetData = {
       val tpe: AssetType = Asset
       tpe match {
         case AssetType.Image => JsonDecoder.decode(Data)(ImageAssetDataDecoder)
@@ -291,7 +291,7 @@ object AssetData {
 
   lazy val AssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
     import JsonDecoder._
-    override def apply(implicit js: JSONObject): AssetData =
+    override def apply(implicit js: JSONObject): AssetData = {
       AssetData(
         'id,
         Mime('mime),
@@ -311,6 +311,7 @@ object AssetData {
         decodeOptString('data).map(decodeData),
         decodeOptRAssetId('v2ProfileId)
       )
+    }
   }
 
 
@@ -319,13 +320,13 @@ object AssetData {
   lazy val ImageAssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): AssetData = {
-      verbose(s"decoding ImageAssetData: $js")
+      //verbose(s"decoding ImageAssetData: $js")
       val id = decodeId[AssetId]('id)
       val convId = decodeOptRConvId('convId)
 
       Try(js.getJSONArray("versions")).toOption.flatMap { arr =>
         Seq.tabulate(arr.length())(arr.getJSONObject).map{ obj =>
-          verbose(s"applying ImageDataDecoder to $obj")
+          //verbose(s"applying ImageDataDecoder to $obj")
           ImageDataDecoder.apply(obj)
         }.collect {
           case a@AssetData.IsImageWithTag(Image.Tag.Medium) => a.copy(id = id, convId = convId)
@@ -339,7 +340,7 @@ object AssetData {
   lazy val ImageDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): AssetData = {
-      verbose(s"decoding ImageData: $js")
+      //verbose(s"decoding ImageData: $js")
       val otrKey = js.opt("otrKey") match {
         case o: JSONObject => Try(implicitly[JsonDecoder[SignalingKey]].apply(o).encKey).toOption
         case str: String => Some(AESKey(str))
@@ -361,7 +362,8 @@ object AssetData {
   implicit lazy val AnyAssetDataDecoder: JsonDecoder[AssetData] = new JsonDecoder[AssetData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): AssetData = {
-      verbose(s"decoding AnyAssetData: $js")
+      //verbose(s"decoding AnyAssetData: $js")
+
       val remoteData = decodeOptObject('key)(js.getJSONObject("status")).map { key =>
         val remoteId = decodeOptRAssetId('remoteId)(key).orElse(decodeOptRAssetId('remoteKey)(key))
         val token = decodeOptString('token)(key).map(AssetToken)
@@ -370,7 +372,11 @@ object AssetData {
         RemoteData(remoteId, token, otrKey, sha)
       }
 
-      val mime = Mime('mimeType)
+      val mime = Mime('mime) match {
+        case Mime.Unknown => Mime('mimeType)
+        case m: Mime => m
+      }
+
       val source = mime match {
         case Mime.Audio() => None //we don't want the unencoded url stored previously - use id as cache key instead
         case _ => decodeOptString('source).map(URI.parse)

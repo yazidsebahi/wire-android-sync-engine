@@ -18,12 +18,11 @@
 package com.waz.model
 
 import android.content.ContentValues
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.{MediaProvider, Message}
 import com.waz.db.ZMessagingDB
 import com.waz.model.messages.media.{MediaAssetData, TrackData}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
-import com.waz.utils.wrappers.URI
+import com.waz.utils.wrappers.{DB, URI}
 import com.waz.utils._
 import org.json.JSONArray
 import org.robolectric.Robolectric
@@ -53,7 +52,7 @@ class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     dbHelper.close()
   }
 
-  implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
   import com.waz.model.MessageData.MessageDataDao._
 
   scenario("find messages returns events ordered by time") {

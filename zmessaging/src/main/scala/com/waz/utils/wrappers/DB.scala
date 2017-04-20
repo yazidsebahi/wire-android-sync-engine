@@ -17,11 +17,15 @@
  */
 package com.waz.utils.wrappers
 
-import android.database.sqlite.SQLiteDatabase
+import java.io.Closeable
+
+import android.content.ContentValues
+import android.database.MatrixCursor
+import android.database.sqlite.{SQLiteDatabase, SQLiteSession}
 
 import scala.language.implicitConversions
 
-trait DB {
+trait DB extends Closeable {
 
   // see SQLLiteClosable for comments how these should be used
 
@@ -29,7 +33,7 @@ trait DB {
 
   def releaseReference(): Unit
 
-  def close() = releaseReference()
+  override def close() = releaseReference()
 
   // see SQLLiteDatabase for comments how these should be used
 
@@ -85,6 +89,12 @@ trait DB {
   def enableWriteAheadLogging(): Boolean
 
   def disableWriteAheadLogging(): Unit
+
+  def getThreadSession: DBSession
+
+  def insertOrIgnore(tableName: String, values: DBContentValues): Unit
+
+  def insertOrReplace(tableName: String, values: DBContentValues): Unit
 }
 
 class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
@@ -145,10 +155,43 @@ class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
   override def enableWriteAheadLogging() = db.enableWriteAheadLogging()
 
   override def disableWriteAheadLogging() = db.disableWriteAheadLogging()
+
+  override def getThreadSession = {
+    val method = classOf[SQLiteDatabase].getDeclaredMethod("getThreadSession")
+    method.setAccessible(true)
+    method.invoke(db).asInstanceOf[SQLiteSession]
+  }
+
+  override def insertOrIgnore(tableName: String, values: DBContentValues): Unit = db.insertWithOnConflict(tableName, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+
+  override def insertOrReplace(tableName: String, values: DBContentValues): Unit = db.insertWithOnConflict(tableName, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+}
+
+trait DBUtil {
+  def Cursor(): DBCursor
+  def ContentValues(): DBContentValues
+}
+
+object AndroidDBUtil extends DBUtil {
+  override def Cursor() = new MatrixCursor(Array())
+  override def ContentValues() = new ContentValues()
 }
 
 object DB {
+  private var util: DBUtil = AndroidDBUtil
+
+  def setUtil(util: DBUtil) = { this.util = util }
+
+  def Cursor() = util.Cursor()
+
+  def ContentValues() = util.ContentValues()
+
   def apply(db: SQLiteDatabase) = new SQLiteDBWrapper(db)
 
   implicit def fromAndroid(db: SQLiteDatabase) = apply(db)
+
+  implicit def toAndroid(db: DB): SQLiteDatabase = db match {
+    case wrapper: SQLiteDBWrapper => wrapper.db
+    case _ => throw new IllegalArgumentException(s"Expected Android DB, but tried to unwrap: ${db.getClass.getName}")
+  }
 }

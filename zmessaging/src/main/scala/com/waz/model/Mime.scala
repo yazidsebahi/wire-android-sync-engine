@@ -53,6 +53,8 @@ object Mime {
       case `3GPP` => true
       case WebM => true
     }
+
+    val supported = Set(MP4, `3GPP`, WebM)
   }
 
   object Image {
@@ -65,6 +67,8 @@ object Mime {
     val Unknown = Mime("image/*")
 
     def unapply(mime: Mime): Boolean = mime.str.startsWith("image/")
+
+    val supported = Set(Gif, Jpg, Png, WebP, Bmp, Tiff)
   }
 
   object Audio {
@@ -83,4 +87,5 @@ object Mime {
 
     val supported = Set(MP3, Mime("audio/mpeg3"), Mime("audio/mpeg"), MP4, Mime("audio/x-m4a"), AAC, `3GPP`, AMR_NB, AMR_WB, Ogg, FLAC, WAV)
   }
+
 }

@@ -22,26 +22,18 @@ import java.io.{ByteArrayInputStream, File, InputStream}
 import akka.pattern.ask
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever.{METADATA_KEY_DURATION, METADATA_KEY_VIDEO_HEIGHT, METADATA_KEY_VIDEO_ROTATION, METADATA_KEY_VIDEO_WIDTH}
-import android.net.Uri
 import com.waz.api._
 import com.waz.api.impl.DoNothingAndProceed
 import com.waz.cache._
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.otr.ClientId
 import com.waz.model.{Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
-import com.waz.service
-import com.waz.service.{UserModule, ZMessagingFactory}
-import com.waz.sync.client.AssetClient
-import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, ReusableCountDownLatch}
-import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils.toByteArray
 import com.waz.utils.{wrappers, _}
-import com.waz.znet.ZNetClient._
 import org.robolectric.Robolectric.{getShadowApplication, shadowOf}
 import org.robolectric.shadows.ShadowMediaMetadataRetriever
 import org.scalatest._

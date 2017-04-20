@@ -17,10 +17,10 @@
  */
 package com.waz.db.migrate
 
-import android.database.sqlite.SQLiteDatabase
+import com.waz.utils.wrappers.DB
 
 object LikingsMigration {
-  lazy val v67: SQLiteDatabase => Unit = { db =>
+  lazy val v67: DB => Unit = { db =>
     // likes were not really used so far (not implemented on UI), so we can just drop the empty table, no need to copy data
     db.execSQL("DROP TABLE IF EXISTS Likings")
     db.execSQL("CREATE TABLE Likings (message_id TEXT, user_id TEXT, action INTEGER, timestamp INTEGER, PRIMARY KEY (message_id, user_id))")

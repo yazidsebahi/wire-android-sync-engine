@@ -17,12 +17,11 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog._
 import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.{DB, DBCursor}
 import org.threeten.bp.Instant
 
 case class MessageContentIndexEntry(messageId: MessageId, convId: ConvId, content: String, time: Instant)
@@ -36,18 +35,18 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
   val Content = text('content)(_.content)
   val Time = timestamp('time)(_.time)
 
-  override def onCreate(db: SQLiteDatabase) = {
+  override def onCreate(db: DB) = {
     db.execSQL(table.createFtsSql)
   }
   override val idCol = MessageId
   override val table = Table("MessageContentIndex", MessageId, Conv, Content, Time)
 
-  override def apply(implicit c: Cursor): MessageContentIndexEntry =
+  override def apply(implicit c: DBCursor): MessageContentIndexEntry =
     MessageContentIndexEntry(MessageId, Conv, Content, Time)
 
   private val IndexColumns = Array(MessageId.name, Time.name)
 
-  def findContent(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId])(implicit db: SQLiteDatabase): Cursor ={
+  def findContent(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId])(implicit db: DB): DBCursor ={
     if (UsingFTS) {
       findContentFts(contentSearchQuery.toFtsQuery, convId)
     } else {
@@ -55,7 +54,7 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
     }
   }
 
-  def findContentFts(queryText: String, convId: Option[ConvId])(implicit db: SQLiteDatabase): Cursor ={
+  def findContentFts(queryText: String, convId: Option[ConvId])(implicit db: DB): DBCursor ={
     convId match {
       case Some(conv) =>
         db.query(table.name, IndexColumns, s"${Conv.name} = '$conv' AND ${Content.name} MATCH '$queryText'", null, null, null, s"${Time.name} DESC", SearchLimit)
@@ -64,7 +63,7 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
     }
   }
 
-  def findContentSimple(queries: Set[String], convId: Option[ConvId])(implicit db: SQLiteDatabase): Cursor ={
+  def findContentSimple(queries: Set[String], convId: Option[ConvId])(implicit db: DB): DBCursor ={
     val likeQuery = queries.map(q => s"${Content.name} LIKE '%$q%'").mkString("(", " AND ", ")")
     convId match {
       case Some(conv) =>

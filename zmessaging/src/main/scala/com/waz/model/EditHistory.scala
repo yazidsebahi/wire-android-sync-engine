@@ -17,10 +17,9 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.{DB, DBCursor}
 import org.threeten.bp.Instant
 
 
@@ -36,9 +35,9 @@ object EditHistory {
     override val idCol = Original
     override val table = Table("EditHistory", Original, Updated, Timestamp)
 
-    override def apply(implicit cursor: Cursor) = EditHistory(Original, Updated, Timestamp)
+    override def apply(implicit cursor: DBCursor) = EditHistory(Original, Updated, Timestamp)
 
-    def deleteOlder(time: Instant)(implicit db: SQLiteDatabase) =
+    def deleteOlder(time: Instant)(implicit db: DB) =
       db.delete(table.name, s"${Timestamp.name} < ${time.toEpochMilli}", null)
   }
 }

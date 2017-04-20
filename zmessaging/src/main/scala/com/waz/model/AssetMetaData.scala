@@ -64,8 +64,7 @@ object AssetMetaData {
       case 'video =>
         Video(opt[Dim2]('dimensions).getOrElse(Dim2(0, 0)), Duration.ofMillis('duration))
       case 'audio =>
-        Audio(Duration.ofMillis('duration),
-          Try(JsonDecoder.array[Float]('levels)((arr, i) => arr.getDouble(i).toFloat)).toOption.map(Loudness))
+        Audio(Duration.ofMillis('duration), decodeOptLoudness('levels))
       case 'image =>
         Image(JsonDecoder[Dim2]('dimensions), Image.Tag(decodeString('tag)))
       case other =>

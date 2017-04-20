@@ -17,11 +17,11 @@
  */
 package com.waz.model
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.Generators._
 import com.waz.db.ZMessagingDB
 import com.waz.model.AssetStatus.UploadInProgress
 import com.waz.testutils.Matchers._
+import com.waz.utils.wrappers.{DB, DBHelper}
 import org.robolectric.Robolectric
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -30,7 +30,7 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
 
   import AssetData._
 
-  var dbHelper: ZMessagingDB = _
+  var dbHelper: DBHelper = _
 
   before {
     dbHelper = new ZMessagingDB(Robolectric.application, "dbName")
@@ -41,7 +41,7 @@ class AssetDataSpec extends FeatureSpec with Matchers with TableDrivenPropertyCh
     Robolectric.application.getDatabasePath("dbName").delete()
   }
 
-  implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
 
   feature("json serialization") {
     scenario("Random metadata") {

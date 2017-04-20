@@ -21,20 +21,24 @@ import android.database.sqlite.SQLiteStatement
 
 import scala.language.implicitConversions
 
-trait DBStatement {
+trait DBStatement extends DBProgram {
+  def clearBindings(): Unit
   def execute(): Unit
   def executeUpdateDelete(): Int
   def executeInsert(): Long
   def simpleQueryForLong(): Long
   def simpleQueryForString(): String
+  def close(): Unit
 }
 
-class SQLiteStatementWrapper(val statement: SQLiteStatement) extends DBStatement {
+class SQLiteStatementWrapper(val statement: SQLiteStatement) extends SQLiteProgramWrapper(statement) with DBStatement {
+  def clearBindings() = statement.clearBindings()
   def execute() = statement.execute()
   def executeUpdateDelete = statement.executeUpdateDelete()
   def executeInsert = statement.executeInsert()
   def simpleQueryForLong = statement.simpleQueryForLong()
   def simpleQueryForString = statement.simpleQueryForString()
+  def close() = statement.close()
 }
 
 object DBStatement {

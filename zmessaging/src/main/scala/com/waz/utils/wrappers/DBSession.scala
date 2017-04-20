@@ -15,13 +15,23 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.utils
+package com.waz.utils.wrappers
 
-/**
-  * Created by admin on 19/04/17.
-  */
-package object wrappers {
-  var URI: URIUtil = AndroidURIUtil
+import android.database.sqlite.{SQLiteConnectionPool, SQLiteSession}
 
+import scala.language.implicitConversions
 
+trait DBSession {
+  def beginTransaction(): Unit
+
+}
+
+class SQLiteSessionWrapper(val session: SQLiteSession) extends DBSession {
+  override def beginTransaction(): Unit = session.beginTransaction(SQLiteSession.TRANSACTION_MODE_DEFERRED, null, SQLiteConnectionPool.CONNECTION_FLAG_READ_ONLY, null)
+}
+
+object DBSession {
+  def apply(session: SQLiteSession): DBSession = new SQLiteSessionWrapper(session)
+
+  implicit def fromAndroid(session: SQLiteSession): DBSession = apply(session)
 }

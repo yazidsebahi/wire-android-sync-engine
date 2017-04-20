@@ -17,14 +17,13 @@
  */
 package com.waz.model
 
-import android.database.Cursor
 import android.database.DatabaseUtils._
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.KindOfCallingEvent
 import com.waz.api.KindOfCallingEvent._
 import com.waz.db.BaseDao
 import com.waz.db.Col._
 import com.waz.utils.EnumCodec.injective
+import com.waz.utils.wrappers.{DB, DBCursor}
 import org.threeten.bp.Instant
 
 case class CallLogEntry(event: KindOfCallingEvent, session: Option[CallSessionId], conv: ConvId, timestamp: Instant, isVideo: Boolean)
@@ -39,9 +38,9 @@ object CallLogEntry extends ((KindOfCallingEvent, Option[CallSessionId], ConvId,
     val IsVideo = bool('is_video)(_.isVideo)
 
     override val table = Table("CallLog", Event, Session, Conv, Timestamp, IsVideo)
-    override def apply(implicit c: Cursor): CallLogEntry = CallLogEntry(Event, Session, Conv, Timestamp, IsVideo)
+    override def apply(implicit c: DBCursor): CallLogEntry = CallLogEntry(Event, Session, Conv, Timestamp, IsVideo)
 
-    def countEstablished(video: Boolean)(implicit db: SQLiteDatabase) =
+    def countEstablished(video: Boolean)(implicit db: DB) =
       queryNumEntries(db, table.name, s"${Event.name} = ${Event(CALL_ESTABLISHED)} AND ${IsVideo.name} = ${IsVideo(video)}").toInt
   }
 

@@ -21,10 +21,11 @@ import java.io.File
 
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
+import com.waz.utils.wrappers.DB
 import org.scalatest.Matchers
 
 trait DbLoader { self: Matchers =>
-  def loadDb(path: String) = {
+  def loadDb(path: String): DB = {
     val input = new File(getClass.getResource(path).getFile)
     input should exist
     val file = File.createTempFile("temp", ".db")
