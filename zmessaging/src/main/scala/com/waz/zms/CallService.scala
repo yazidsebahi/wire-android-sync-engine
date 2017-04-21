@@ -22,7 +22,6 @@ import com.waz.ZLog._
 import com.waz.api.VoiceChannelState._
 import com.waz.model.ConvId
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
-import com.waz.service.call.CallInfo.IsActive
 import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
@@ -129,7 +128,7 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
 
   def track(conv: ConvId, id: Int): Future[Unit] = execute(track(conv, _)) (s"CallExecutor.track $id")
 
-  private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case IsActive() => true; case _ => false }.head
+  private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case Some(_) => true; case _ => false }.head
 
   /**
     * Sets up a cancellable future which will end the call after the `callConnectingTimeout`, unless
@@ -142,7 +141,7 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
       CancellableFuture.lift(isV3Call(zms)).flatMap {
         case true =>
-          CancellableFuture.lift(zms.calling.currentCall.head.map(_.state).map(ChannelState.isConnecting).map {
+          CancellableFuture.lift(zms.calling.currentCall.head.collect{case Some(i) => i.state}.map(ChannelState.isConnecting).map {
             case true => zms.calling.endCall(conv)
             case _ =>
           })
@@ -157,7 +156,7 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
     def check() = isV3Call(zms).flatMap {
       case true =>
         zms.calling.currentCall.head map {
-          case info if info.state == SELF_CALLING =>
+          case Some(info) if info.state == SELF_CALLING =>
             verbose(s"call in progress: $info")
           case _ => promise.trySuccess({})
         }
@@ -171,7 +170,7 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
       }
 
     val subscriberV2 = zms.voiceContent.activeChannel { _ => check() }
-    val subscriberV3 = zms.calling.currentCall.map(_.state) { _ => check()}
+    val subscriberV3 = zms.calling.currentCall.map(_.map(_.state)) { _ => check()}
 
     check()
 

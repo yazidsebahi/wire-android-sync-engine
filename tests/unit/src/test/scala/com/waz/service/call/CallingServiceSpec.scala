@@ -71,8 +71,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       signalTest(service.currentCall) { info =>
-        info.state == OTHER_CALLING &&
-          info.convId.contains(ConvId(groupId1.str))
+        info.exists(_.state == OTHER_CALLING) && info.exists(_.convId == ConvId(groupId1.str))
       } {
         service.onIncomingCall(conv1.remoteId, user1.id, videoCall = false, shouldRing = true)
       }
@@ -86,8 +85,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       signalTest(service.currentCall) { info =>
-        info.state == SELF_CALLING &&
-          info.convId.contains(ConvId(groupId1.str))
+        info.exists(_.state == SELF_CALLING) && info.exists(_.convId == ConvId(groupId1.str))
       } {
         service.startCall(ConvId(groupId1.str), isVideo = false)
       }
@@ -115,7 +113,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
 
       val service = initCallingService()
 
-      val checkpoint = callCheckpoint(service)(_.contains(ongoingConv.id))(cur => cur.state == SELF_CONNECTED && cur.others.contains(ongoingUserId))
+      val checkpoint = callCheckpoint(service, _.contains(ongoingConv.id), cur => cur.exists(_.state == SELF_CONNECTED) && cur.exists(_.others.contains(ongoingUserId)))
 
       service.onIncomingCall(ongoingConv.remoteId, ongoingUserId, videoCall = false, shouldRing = true)
       (avsMock.answerCall _).expects(*, *).once().onCall { (_, _) =>
@@ -157,7 +155,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val service = initCallingService()
 
       //Checkpoint 1: Receive and reject a group call
-      val checkpoint1 = callCheckpoint(service)(_.contains(groupConv.id))(CallInfo.IsIdle.unapply)
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.isEmpty)
 
       service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
       (avsMock.rejectCall _).expects(*, *).anyNumberOfTimes()
@@ -168,7 +166,9 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       Await.ready(checkpoint1.head, defaultDuration)
 
       //Checkpoint 2: Receive and accept a 1:1 call
-      val checkpoint2 = callCheckpoint(service)(act => act.contains(groupConv.id) && act.contains(otoConv.id))(curr => curr.others.contains(otoUser) && curr.state == VoiceChannelState.SELF_CONNECTED)
+      val checkpoint2 = callCheckpoint(service,
+        act => act.contains(groupConv.id) && act.contains(otoConv.id),
+        _.exists(curr => curr.others.contains(otoUser) && curr.state == VoiceChannelState.SELF_CONNECTED))
 
       service.onIncomingCall(otoConv.remoteId, otoUser, videoCall = false, shouldRing = true)
       (avsMock.answerCall _).expects(*, *).once().onCall { (rId, _) =>
@@ -179,7 +179,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       println("checkpoint2")
       Await.ready(checkpoint2.head, defaultDuration)
 
-      val checkpoint3 = callCheckpoint(service)(_.contains(groupConv.id))(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == VoiceChannelState.SELF_CONNECTED)
+      val checkpoint3 = callCheckpoint(service, _.contains(groupConv.id), _.exists(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == VoiceChannelState.SELF_CONNECTED))
       
       (avsMock.endCall _).expects(*, *).once().onCall { (rId, _) =>
         service.onClosedCall(ClosedReason.Normal, otoConv.remoteId, otoUser, "")
@@ -198,7 +198,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
     }
   }
 
-  def callCheckpoint(service: CallingService)(activeCheck: Map[ConvId, CallInfo] => Boolean)(currentCheck: CallInfo => Boolean) =
+  def callCheckpoint(service: CallingService, activeCheck: Map[ConvId, CallInfo] => Boolean, currentCheck: Option[CallInfo] => Boolean) =
     (for {
       active <- service.availableCalls
       current <- service.currentCall

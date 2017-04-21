@@ -34,7 +34,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.{Future, Promise}
 
 trait CallingService {
-  def currentCall: Signal[CallInfo]
+  def currentCall: Signal[Option[CallInfo]]
   def availableCalls: Signal[Map[ConvId, CallInfo]]
   def onReady(version: Int): Unit
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit

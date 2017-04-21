@@ -25,17 +25,16 @@ import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.call.AvsV3.ClosedReason.Normal
 import com.waz.service.call.AvsV3.VideoReceiveState.Stopped
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
-import com.waz.service.call.CallInfo.{IsActive, IsIdle}
 import org.threeten.bp.Instant
 
 /**
   * Note - We use the v2 `VoiceChannelState` here to simplify state handling in the UI, however we only use
   * a subset of them, namely: NO_ACTIVE_USERS, SELF_CALLING, OTHER_CALLING, SELF_JOINING and SELF_CONNECTED.
   */
-case class CallInfo(convId:            Option[ConvId]                    = None,
-                    caller:            UserId                            = UserId.Zero,
+case class CallInfo(convId:            ConvId,
+                    caller:            UserId,
+                    state:             VoiceChannelState,
                     others:            Set[UserId]                       = Set.empty,
-                    state:             VoiceChannelState                 = NO_ACTIVE_USERS,
                     muted:             Boolean                           = false,
                     isVideoCall:       Boolean                           = false,
                     videoSendState:    VideoSendState                    = DONT_SEND,
@@ -44,6 +43,7 @@ case class CallInfo(convId:            Option[ConvId]                    = None,
                     hangupRequested:   Boolean                           = false, //whether selfUser called end call, or some other reason
                     closedReason:      ClosedReason                      = Normal,
                     outstandingMsg:    Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
+
   override def toString: String =
     s"""
        |CallInfo:
@@ -61,20 +61,4 @@ case class CallInfo(convId:            Option[ConvId]                    = None,
        | hasOutstandingMsg: ${outstandingMsg.isDefined}
     """.stripMargin
 
-  def isActive = IsActive.unapply(this)
-
-  def isIdle = IsIdle.unapply(this)
-}
-
-object CallInfo {
-
-  val IdleCall = CallInfo()
-
-  object IsIdle {
-    def unapply(arg: CallInfo): Boolean = arg.state == NO_ACTIVE_USERS
-  }
-
-  object IsActive {
-    def unapply(arg: CallInfo): Boolean = !IsIdle.unapply(arg)
-  }
 }
