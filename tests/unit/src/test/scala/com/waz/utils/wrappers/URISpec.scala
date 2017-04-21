@@ -15,14 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.wire.playground
+package com.waz.utils.wrappers
 
 import com.waz.model.AssetData
 import com.waz.specs.AndroidFreeSpec
-import com.waz.utils.wrappers.URI
 import org.scalatest.FeatureSpec
 
-class PlaygroundSpec extends FeatureSpec with AndroidFreeSpec {
+class URISpec extends FeatureSpec with AndroidFreeSpec {
 
   scenario("Hello") {
 

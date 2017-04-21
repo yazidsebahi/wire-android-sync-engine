@@ -26,8 +26,6 @@ import scala.language.implicitConversions
 import scala.util.Try
 
 package object db {
-  val EmptyCursor: DBCursor = DB.Cursor()
-
   implicit def iterate[A](c: DBCursor)(implicit read: Reader[A]): Iterator[A] = new CursorIterator[A](c)
 
   def iteratingWithReader[A](reader: Reader[A])(c: => DBCursor): Managed[Iterator[A]] = Managed(c).map(new CursorIterator(_)(reader))

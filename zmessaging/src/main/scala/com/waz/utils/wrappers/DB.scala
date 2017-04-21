@@ -20,7 +20,6 @@ package com.waz.utils.wrappers
 import java.io.Closeable
 
 import android.content.ContentValues
-import android.database.MatrixCursor
 import android.database.sqlite.{SQLiteDatabase, SQLiteSession}
 
 import scala.language.implicitConversions
@@ -55,16 +54,8 @@ trait DB extends Closeable {
             selectionArgs: Array[String],
             groupBy: String,
             having: String,
-            orderBy: String): DBCursor
-
-  def query(table: String,
-            columns: Array[String],
-            selection: String,
-            selectionArgs: Array[String],
-            groupBy: String,
-            having: String,
             orderBy: String,
-            limit: String): DBCursor
+            limit: String = null): DBCursor
 
   def rawQuery(sql: String, selectionArgs: Array[String]): DBCursor
 
@@ -120,16 +111,8 @@ class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
                      selectionArgs: Array[String],
                      groupBy: String,
                      having: String,
-                     orderBy: String) = db.query(table, columns, selection, selectionArgs, groupBy, having, orderBy)
-
-  override def query(table: String,
-                     columns: Array[String],
-                     selection: String,
-                     selectionArgs: Array[String],
-                     groupBy: String,
-                     having: String,
                      orderBy: String,
-                     limit: String) = db.query(table, columns, selection, selectionArgs, groupBy, having, orderBy, limit)
+                     limit: String = null) = db.query(table, columns, selection, selectionArgs, groupBy, having, orderBy, limit)
 
   override def rawQuery(sql: String, selectionArgs: Array[String]) = db.rawQuery(sql, selectionArgs)
 
@@ -168,21 +151,19 @@ class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
 }
 
 trait DBUtil {
-  def Cursor(): DBCursor
   def ContentValues(): DBContentValues
 }
 
 object AndroidDBUtil extends DBUtil {
-  override def Cursor() = new MatrixCursor(Array())
   override def ContentValues() = new ContentValues()
 }
 
 object DB {
   private var util: DBUtil = AndroidDBUtil
 
-  def setUtil(util: DBUtil) = { this.util = util }
-
-  def Cursor() = util.Cursor()
+  def setUtil(util: DBUtil) = {
+    this.util = util
+  }
 
   def ContentValues() = util.ContentValues()
 

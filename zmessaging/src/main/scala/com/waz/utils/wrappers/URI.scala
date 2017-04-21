@@ -96,7 +96,9 @@ object AndroidURIUtil extends URIUtil {
 object URI {
   private var util: URIUtil = AndroidURIUtil
 
-  def setUtil(util: URIUtil) = { this.util = util }
+  def setUtil(util: URIUtil) = {
+    this.util = util
+  }
 
   def parse(uri: String) = util.parse(uri)
 
