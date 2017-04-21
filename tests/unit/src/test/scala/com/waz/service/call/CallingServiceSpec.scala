@@ -17,7 +17,7 @@
  */
 package com.waz.service.call
 
-import com.waz.api.VoiceChannelState.{OTHER_CALLING, SELF_CALLING, SELF_CONNECTED}
+import com.waz.api.VoiceChannelState.{OTHER_CALLING, SELF_CALLING, SELF_CONNECTED, SELF_JOINING}
 import com.waz.api.{NetworkMode, VoiceChannelState}
 import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
@@ -77,6 +77,29 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       }
     }
 
+    scenario("Incoming group call goes through SELF_JOINING to become SELF_CONNECTED") {
+      val groupMember1 = UserId("groupUser1")
+      val groupMember2 = UserId("groupUser2")
+      val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), selfUser.id, ConversationType.Group)
+
+      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+
+      val service = initCallingService()
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_JOINING))
+      val checkpoint2 = callCheckpoint(service, _.contains(groupConv.id),
+        _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CONNECTED && cur.others == Set(groupMember1, groupMember2)))
+
+      service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
+      (avsMock.answerCall _).expects(*, *).once().onCall { (_, _) =>
+        service.onEstablishedCall(groupConv.remoteId, groupMember1)
+        service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
+      }
+      service.startCall(groupConv.id)
+      Await.ready(checkpoint1.head, defaultDuration)
+      Await.ready(checkpoint2.head, defaultDuration)
+    }
+
     scenario("Outgoing call") {
       (avsMock.startCall _).expects(groupId1, false, true).once().returning(Future.successful(0))
       (convs.convById _).expects(*).once().returning(Future.successful(Some(conv1)))
@@ -92,9 +115,36 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
     }
   }
 
+  feature("Ending calls") {
+    scenario("Current: Leave group call that will continue running in the background") {
+      val groupMember1 = UserId("groupUser1")
+      val groupMember2 = UserId("groupUser2")
+      val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), selfUser.id, ConversationType.Group)
+
+      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+
+      val service = initCallingService()
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(_.state == SELF_CONNECTED))
+      val checkpoint2 = callCheckpoint(service, _.contains(groupConv.id), _.isEmpty)
+
+      service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
+      (avsMock.answerCall _).expects(*, *).once().onCall { (_, _) =>
+        service.onEstablishedCall(groupConv.remoteId, groupMember1)
+        service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
+      }
+      service.startCall(groupConv.id)
+      Await.ready(checkpoint1.head, defaultDuration)
+
+      (avsMock.endCall _).expects(*, *).once()
+      service.endCall(groupConv.id) //avs won't call the ClosedHandler if a group call is still ongoing in the background
+      Await.ready(checkpoint2.head, defaultDuration)
+    }
+  }
+
   feature("Simultaneous calls") {
 
-    scenario("Current: Receive incoming call while 1:1 call ongoing") {
+    scenario("Receive incoming call while 1:1 call ongoing") {
 
       val ongoingUserId = UserId()
       val ongoingConv = ConversationData(ConvId(ongoingUserId.str), RConvId(ongoingUserId.str), Some("Ongoing Conv"), selfUser.id, ConversationType.OneToOne)

@@ -247,9 +247,13 @@ class DefaultCallingService(context:             Context,
         verbose("Incoming call ended - performing reject instead")
         avs.rejectCall(conv.remoteId, conv.convType == Group)
         onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller) //rejectCall doesn't trigger CloseCall handler. Do it ourselves
+      case Some(call) if conv.convType == Group =>
+        verbose(s"Ended group call from: ${call.state}")
+        avs.endCall(conv.remoteId, conv.convType == Group) //wcall_end will always(???) lead to the CloseCall handler - we handle state there
+        onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller) //rejectCall doesn't trigger CloseCall handler. Do it ourselves
       case Some(call) =>
         verbose(s"Call ended in other state: ${call.state}, ending normally")
-        avs.endCall(conv.remoteId, conv.convType == Group) //wcall_end will always(???) lead to the CloseCall handler - we handle state there
+        avs.endCall(conv.remoteId, conv.convType == Group)
         Some(call.copy(hangupRequested = true))
       case None => warn("Tried to endCall without a current active call"); None
     }
