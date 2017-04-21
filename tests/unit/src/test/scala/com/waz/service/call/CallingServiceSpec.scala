@@ -200,7 +200,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
 
   def callCheckpoint(service: CallingService)(activeCheck: Map[ConvId, CallInfo] => Boolean)(currentCheck: CallInfo => Boolean) =
     (for {
-      active <- service.activeCalls
+      active <- service.availableCalls
       current <- service.currentCall
     } yield (active, current)).filter { case (active, current) =>
       activeCheck(active) && currentCheck(current)

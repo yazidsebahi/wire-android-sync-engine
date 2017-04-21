@@ -68,7 +68,7 @@ class DefaultCallingService(context:             Context,
   private val mm = mediaManagerService.mediaManager
 
   val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
-  val activeCalls = Signal(Map.empty[ConvId, CallInfo]) //any call a user can potentially join
+  val availableCalls = Signal(Map.empty[ConvId, CallInfo]) //any call a user can potentially join
   val currentCall = Signal(IdleCall) //state about any call for which we should show the CallingActivity
   val otherSideCBR = Signal(false) // by default we assume the call is VBR
 
@@ -76,7 +76,7 @@ class DefaultCallingService(context:             Context,
 
   avs.init(this)
 
-  activeCalls.onChanged { cs =>
+  availableCalls.onChanged { cs =>
     val ids = cs.map{case (cId, _) => cId}
     verbose(s"Active calls: $ids")
   }
@@ -116,7 +116,7 @@ class DefaultCallingService(context:             Context,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
       videoSendState = if(videoCall) PREVIEW else DONT_SEND)
 
-    activeCalls.mutate(calls => calls + (conv.id -> callInfo))
+    availableCalls.mutate(calls => calls + (conv.id -> callInfo))
     currentCall.mutate {
       case IsIdle() if shouldRing =>
         callInfo
@@ -149,7 +149,7 @@ class DefaultCallingService(context:             Context,
 
   override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id}, userId: $userId")
-    activeCalls.mutate(calls => calls - conv.id)
+    availableCalls.mutate(calls => calls - conv.id)
     currentCall.mutate { call =>
       onCallClosed(call, reason, conv, userId)
     }
@@ -198,7 +198,7 @@ class DefaultCallingService(context:             Context,
 
     (for {
       current <- currentCall
-      active <- activeCalls
+      active <- availableCalls
     } yield (current, active)).head.map {
 
       case (cur, _) if cur.isActive && cur.convId.contains(convId) =>

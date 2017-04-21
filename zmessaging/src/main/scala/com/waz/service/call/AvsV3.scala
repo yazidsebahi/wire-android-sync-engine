@@ -35,7 +35,7 @@ import scala.concurrent.{Future, Promise}
 
 trait CallingService {
   def currentCall: Signal[CallInfo]
-  def activeCalls: Signal[Map[ConvId, CallInfo]]
+  def availableCalls: Signal[Map[ConvId, CallInfo]]
   def onReady(version: Int): Unit
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
   def onOtherSideAnsweredCall(convId: RConvId): Unit
