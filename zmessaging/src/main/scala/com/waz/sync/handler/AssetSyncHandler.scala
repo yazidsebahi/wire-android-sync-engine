@@ -24,7 +24,7 @@ import com.waz.model.AssetStatus.UploadInProgress
 import com.waz.model._
 import com.waz.service.PreferenceService
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
+import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
 import com.waz.service.images.ImageLoader
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient
@@ -35,7 +35,7 @@ import com.waz.znet.ZNetClient._
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
-class AssetSyncHandler(cache: CacheService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,
+class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,
                        assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler, prefs: PreferenceService) {
 
   import Threading.Implicits.Background

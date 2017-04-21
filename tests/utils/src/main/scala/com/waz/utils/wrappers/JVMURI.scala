@@ -15,12 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.testutils
+package com.waz.utils.wrappers
 
 import java.io.File
 import java.net.{URI => JURI}
 
-import com.waz.utils.wrappers.{URI, URIBuilder, URIUtil}
 import org.apache.http.client.utils.{URIBuilder => JURIBuilder}
 
 class JavaURIBuilder(uriBuilder: JURIBuilder) extends URIBuilder {

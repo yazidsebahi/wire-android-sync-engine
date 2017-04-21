@@ -21,6 +21,7 @@ import android.content.Context
 import android.view.View
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api._
 import com.waz.call._
 import com.waz.log.LogHandler
@@ -43,8 +44,12 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-class FlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: PreferenceService, network: NetworkModeService) {
-  import FlowManagerService._
+trait FlowManagerService {
+  def flowManager: Option[FlowManager]
+}
+
+class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: PreferenceService, network: DefaultNetworkModeService) extends FlowManagerService {
+  import DefaultFlowManagerService._
 
   val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
   val avsAudioTestFlag: Long = 1 << 1
@@ -326,8 +331,7 @@ case class AvsMetrics(rConvId: RConvId, private val bytes: Array[Byte]) {
   override def toString = s"AvsMetrics($rConvId, isVideoCall: $isVideoCall, kindOfCall: $kindOfCall, ${json.toString})"
 }
 
-object FlowManagerService {
-  private implicit val logTag: LogTag = logTagFor(FlowManagerService)
+object DefaultFlowManagerService {
 
   case class AvsLogData(metricsEnabled: Boolean, loggingEnabled: Boolean, logLevel: AvsLogLevel)
   case class EstablishedFlows(convId: RConvId, users: Set[UserId])

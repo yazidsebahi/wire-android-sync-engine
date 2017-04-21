@@ -45,6 +45,8 @@ import scala.{PartialFunction => =/>}
 
 package object utils {
 
+  var isTest = false
+
   //collection string representation formatted one item per line
   //TODO make into a macro or compiler plugin etc.
   //TODO find the general collection name (currently prints specific implementation name, e.g. HashTrieMap instead of Map)

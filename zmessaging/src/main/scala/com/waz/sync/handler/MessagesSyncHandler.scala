@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
-import com.waz.content.{MembersStorage, MessagesStorage}
+import com.waz.content.{DefaultMembersStorage, MessagesStorage}
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -32,8 +32,8 @@ import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater}
-import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
+import com.waz.service.messages.{MessagesContentUpdater, DefaultMessagesService}
 import com.waz.service.otr.OtrService
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
@@ -50,11 +50,11 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class MessagesSyncHandler(context: Context, service: MessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorage,
-                          assetSync: AssetSyncHandler, network: NetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
+class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
+                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: DefaultConversationsContentUpdater, storage: MessagesStorage,
+                          assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
                           sync: SyncServiceHandle, assets: AssetService, users: UserService, cache: CacheService,
-                          members: MembersStorage, errors: ErrorsService, timeouts: Timeouts) {
+                          members: DefaultMembersStorage, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
 
