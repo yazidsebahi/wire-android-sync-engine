@@ -42,7 +42,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val gcmGlobal = wire[GcmGlobalService]
   lazy val bitmapDecoder: BitmapDecoder = wire[BitmapDecoder]
   lazy val imageCache: MemoryImageCache = wire[MemoryImageCache]
-  lazy val network = wire[NetworkModeService]
+  lazy val network = wire[DefaultNetworkModeService]
   lazy val phoneNumbers: PhoneNumberService = wire[PhoneNumberService]
   lazy val timeouts = wire[Timeouts]
   lazy val permissions: PermissionsService = wire[PermissionsService]
@@ -60,7 +60,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val cacheCleanup = wire[CacheCleaningService]
 
   lazy val accountsStorage = wire[AccountsStorage]
-  lazy val mediaManager = wire[MediaManagerService]
+  lazy val mediaManager = wire[DefaultMediaManagerService]
   lazy val recordingAndPlayback = wire[GlobalRecordAndPlayService]
   lazy val tempFiles: TempFileService = wire[TempFileService]
 

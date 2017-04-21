@@ -17,22 +17,25 @@
  */
 package com.waz.utils.wrappers
 
-import android.database.sqlite.{SQLiteConnectionPool, SQLiteSession}
-
+import android.content.{ComponentName, Intent => AIntent, Context => AContext}
 import scala.language.implicitConversions
+import AndroidIntentBuilder._
 
-trait DBSession {
-  def beginTransaction(): Unit
-
+//TODO break up the context into smaller wrappers and also wrap other objects used here.
+trait Context {
+  def startService(intent: Intent): ComponentName
+  def getSystemService[A](name: String): A
 }
 
-class SQLiteSessionWrapper(val session: SQLiteSession) extends DBSession {
-  override def beginTransaction(): Unit = session.beginTransaction(SQLiteSession.TRANSACTION_MODE_DEFERRED, null, SQLiteConnectionPool.CONNECTION_FLAG_READ_ONLY, null)
+class AndroidContext(val context: AContext) extends Context {
+  override def startService(intent: Intent) = context.startService(intent)
+  override def getSystemService[A](name: String) = context.getSystemService(name).asInstanceOf[A]
 }
 
-object DBSession {
-  def apply(session: SQLiteSession): DBSession = new SQLiteSessionWrapper(session)
-
-  implicit def fromAndroid(session: SQLiteSession): DBSession = apply(session)
-
+object ContextBuilder {
+  implicit def wrap(aContext: AContext): Context = new AndroidContext(aContext)
+  implicit def unwrap(context: Context): AContext = context match {
+    case a:AndroidContext => a.context
+    case _ => null
+  }
 }

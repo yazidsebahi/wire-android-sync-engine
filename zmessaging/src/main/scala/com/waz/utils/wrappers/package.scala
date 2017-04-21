@@ -15,15 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.mocked
+package com.waz.utils
 
-import android.content.Context
-import com.waz.media.manager.MediaManager
-import com.waz.service.{DefaultMediaManagerService, PlaybackRoute, PreferenceService}
-
-class MockedMediaManagerService(context: Context, prefs: PreferenceService) extends DefaultMediaManagerService(context, prefs) {
-
-  def changePlaybackRoute(route: PlaybackRoute): Unit = mediaManager foreach (_.onPlaybackRouteChanged(route.avsIndex))
-
-  override lazy val mediaManager: Option[MediaManager] = None
+package object wrappers {
+  var Intent: IntentBuilder = AndroidIntentBuilder
 }

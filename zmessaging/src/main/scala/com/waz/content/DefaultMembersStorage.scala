@@ -29,7 +29,11 @@ import com.waz.utils.{CachedStorage, TrimmingLruCache}
 import scala.collection._
 import scala.concurrent.Future
 
-class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") {
+trait MembersStorage {
+  def getByConv(conv: ConvId): Future[IndexedSeq[ConversationMemberData]]
+}
+
+class DefaultMembersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {
   private implicit val dispatcher = new SerialDispatchQueue(name = "MembersStorage")
 
   def getByConv(conv: ConvId) = find(_.convId == conv, ConversationMemberDataDao.findForConv(conv)(_), identity)
@@ -73,6 +77,6 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
   def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
 }
 
-object MembersStorage {
-  private implicit val tag: LogTag = logTagFor[MembersStorage]
+object DefaultMembersStorage {
+  private implicit val tag: LogTag = logTagFor[DefaultMembersStorage]
 }

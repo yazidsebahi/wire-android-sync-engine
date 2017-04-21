@@ -21,7 +21,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.model.GenericContent.Reaction
 import com.waz.model._
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.DefaultConversationsContentUpdater
 import com.waz.service.messages.ReactionsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.MessagesClient
@@ -30,7 +30,7 @@ import com.waz.utils._
 
 import scala.concurrent.Future
 
-class ReactionsSyncHandler(client: MessagesClient, convs: ConversationsContentUpdater, service: ReactionsService, otrSync: OtrSyncHandler) {
+class ReactionsSyncHandler(client: MessagesClient, convs: DefaultConversationsContentUpdater, service: ReactionsService, otrSync: OtrSyncHandler) {
 
   private implicit val logTag: LogTag = logTagFor[ReactionsSyncHandler]
   import com.waz.threading.Threading.Implicits.Background

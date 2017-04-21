@@ -37,7 +37,7 @@ import scala.concurrent.duration._
 class WebSocketClientService(context: Context,
                              lifecycle: ZmsLifecycle,
                              netClient: ZNetClient,
-                             val network: NetworkModeService,
+                             val network: DefaultNetworkModeService,
                              backend: BackendConfig,
                              clientId: ClientId,
                              timeouts: Timeouts,
@@ -142,7 +142,7 @@ class WebSocketClientService(context: Context,
 object WebSocketClientService {
 
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
-  class ConnectionStats(network: NetworkModeService,
+  class ConnectionStats(network: DefaultNetworkModeService,
                         client: WebSocketClient) {
 
     import com.waz.utils._

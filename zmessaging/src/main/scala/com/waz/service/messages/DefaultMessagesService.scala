@@ -28,7 +28,7 @@ import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.DefaultConversationsContentUpdater
 import com.waz.service.otr.{OtrService, VerificationStateUpdater}
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
@@ -43,12 +43,18 @@ import scala.concurrent.Future
 import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
-class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
-                      users: UserService, convs: ConversationsContentUpdater, reactions: ReactionsStorage,
-                      network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
-                      otr: OtrService) {
+trait MessagesService {
+  def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]]
+  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]]
+  def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration): Future[Option[MessageData]]
+}
+
+class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
+                             prefs: PreferenceService, users: UserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
+                             network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
+                             otr: OtrService) extends MessagesService {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[MessagesService]
+  private implicit val logTag: LogTag = logTagFor[DefaultMessagesService]
   private implicit val ec = EventContext.Global
 
   import content._
@@ -526,7 +532,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
   }
 
-  def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+  override def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
     convs.convByRemoteId(rConvId).flatMap {
       case Some(conv) => addMissedCallMessage(conv.id, from, time)
       case None =>
@@ -534,10 +540,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         Future.successful(None)
     }
 
-  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+  override def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
     addMessage(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, from, time = time))
 
-  def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
+  override def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
     addMessage(MessageData(MessageId(), convId, Message.Type.SUCCESSFUL_CALL, from, time = time, duration = duration))
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
