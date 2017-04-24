@@ -30,7 +30,7 @@ import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service._
-import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted}
+import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted, StillOngoing}
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
@@ -152,7 +152,7 @@ class DefaultCallingService(context:             Context,
 
   override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id}, userId: $userId")
-    availableCalls.mutate(calls => calls - conv.id)
+    if (reason != StillOngoing) availableCalls.mutate(calls => calls - conv.id)
     currentCall.mutate(onCallClosed(_, reason, conv, userId))
   }
 
@@ -244,10 +244,10 @@ class DefaultCallingService(context:             Context,
     verbose(s"endCall: $convId")
     currentCall.mutate {
       case Some(call) =>
-        verbose(s"Call ended in other state: ${call.state}")
+        verbose(s"Call ended in state: ${call.state}")
+        //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
         if (call.state == OTHER_CALLING) avs.rejectCall(conv.remoteId, conv.convType == Group) else avs.endCall(conv.remoteId, conv.convType == Group)
-        if (conv.convType != Group || call.state == SELF_CALLING) availableCalls.mutate(calls => calls - conv.id)
-        onCallClosed(Some(call.copy(hangupRequested = true)), ClosedReason.Normal, conv, call.caller)
+        Some(call.copy(hangupRequested = true))
       case None => warn("Tried to endCall without a current active call"); None
     }
   }

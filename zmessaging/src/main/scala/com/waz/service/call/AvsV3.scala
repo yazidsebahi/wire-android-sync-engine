@@ -204,10 +204,12 @@ object AvsV3 {
     *   WCALL_REASON_LOST_MEDIA          3
     *   WCALL_REASON_CANCELED            4
     *   WCALL_REASON_ANSWERED_ELSEWHERE  5
+    *   ??? TODO what's this reason?
+    *   WCALL_REASON_STILL_ONGOING       7
     */
   type ClosedReason = ClosedReason.Value
   object ClosedReason extends Enumeration {
-    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, Interrupted = Value
+    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, WhoKnows, StillOngoing, Interrupted = Value
   }
 
   /**
