@@ -23,31 +23,19 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 abstract class DBContentValues {
-  import DBContentValues.SupportedType._
+  def containsKey(key: String): Boolean
+  def size: Int
+  def keySet: Set[String]
 
-  private val typeMap = mutable.HashMap[String, SupportedType]()
+  def put(key: String, value: Int): Unit
+  def put(key: String, value: Long): Unit
+  def put(key: String, value: String): Unit
+  def put(key: String, value: Boolean): Unit
+  def put(key: String, value: Double): Unit
+  def put(key: String, value: Float): Unit
 
-  def containsKey(key: String) = typeMap.contains(key)
-  def size = typeMap.size
-  def keySet = typeMap.toMap.keySet
-  def remove(key: String) = { typeMap.remove(key); _remove(key) }
-  def clear() = { typeMap.clear(); _clear() }
-  def put(key: String, value: Int) = { typeMap.put(key, INT); _put(key, value) }
-  def put(key: String, value: Long) = { typeMap.put(key, LONG); _put(key, value) }
-  def put(key: String, value: String) = { typeMap.put(key, STRING); _put(key, value) }
-  def put(key: String, value: Boolean) = { typeMap.put(key, BOOLEAN); _put(key, value) }
-  def put(key: String, value: Double) = { typeMap.put(key, DOUBLE); _put(key, value) }
-  def put(key: String, value: Float) = { typeMap.put(key, FLOAT); _put(key, value) }
-
-  protected def _put(key: String, value: Int): Unit
-  protected def _put(key: String, value: Long): Unit
-  protected def _put(key: String, value: String): Unit
-  protected def _put(key: String, value: Boolean): Unit
-  protected def _put(key: String, value: Double): Unit
-  protected def _put(key: String, value: Float): Unit
-
-  protected def _remove(key: String): Unit
-  protected def _clear(): Unit
+  protected def remove(key: String): Unit
+  protected def clear(): Unit
 
   def getAsInt(key: String): Int
   def getAsLong(key: String): Long
@@ -55,15 +43,26 @@ abstract class DBContentValues {
   def getAsBoolean(key: String): Boolean
   def getAsDouble(key: String): Double
   def getAsFloat(key: String): Float
+
+  override def toString = "{" + keySet.map( key => s"$key:${getAsString(key)}" + "}" ).mkString(",")
 }
 
 class DBContentValuesWrapper(val values: ContentValues) extends DBContentValues {
-  override protected def _put(key: String, value: Int) = values.put(key, java.lang.Integer.valueOf(value))
-  override protected def _put(key: String, value: Long) = values.put(key, java.lang.Long.valueOf(value))
-  override protected def _put(key: String, value: String) = values.put(key, java.lang.String.valueOf(value))
-  override protected def _put(key: String, value: Boolean) = values.put(key, java.lang.Boolean.valueOf(value))
-  override protected def _put(key: String, value: Double) = values.put(key, java.lang.Double.valueOf(value))
-  override protected def _put(key: String, value: Float) = values.put(key, java.lang.Float.valueOf(value))
+  def containsKey(key: String) = values.containsKey(key)
+  def size = values.size
+  def keySet = {
+    val set = mutable.HashSet[String]()
+    val it = values.keySet().iterator()
+    while(it.hasNext) set += it.next()
+    set.toSet
+  }
+
+  override def put(key: String, value: Int) = values.put(key, java.lang.Integer.valueOf(value))
+  override def put(key: String, value: Long) = values.put(key, java.lang.Long.valueOf(value))
+  override def put(key: String, value: String) = values.put(key, java.lang.String.valueOf(value))
+  override def put(key: String, value: Boolean) = values.put(key, java.lang.Boolean.valueOf(value))
+  override def put(key: String, value: Double) = values.put(key, java.lang.Double.valueOf(value))
+  override def put(key: String, value: Float) = values.put(key, java.lang.Float.valueOf(value))
 
   override def getAsInt(key: String) = values.getAsInteger(key)
   override def getAsLong(key: String) = values.getAsLong(key)
@@ -72,50 +71,44 @@ class DBContentValuesWrapper(val values: ContentValues) extends DBContentValues 
   override def getAsDouble(key: String) = values.getAsDouble(key)
   override def getAsFloat(key: String) = values.getAsFloat(key)
 
-  override def _remove(key: String) = values.remove(key)
-  override def _clear() = values.clear()
+  override def remove(key: String) = values.remove(key)
+  override def clear() = values.clear()
 }
 
 class DBContentValuesMap(private val map: mutable.HashMap[String, Any]) extends DBContentValues {
-  override protected def _put(key: String, value: Int) = map.put(key, value)
-  override protected def _put(key: String, value: Long) = map.put(key, value)
-  override protected def _put(key: String, value: String) = map.put(key, value)
-  override protected def _put(key: String, value: Boolean) = map.put(key, value)
-  override protected def _put(key: String, value: Double) = map.put(key, value)
-  override protected def _put(key: String, value: Float) = map.put(key, value)
+  override def containsKey(key: String) = map.contains(key)
+  override def size = map.size
+  override def keySet = map.keySet.toSet
 
-  override def getAsInt(key: String) = map.get(key).asInstanceOf[Int]
-  override def getAsLong(key: String) = map.get(key).asInstanceOf[Long]
-  override def getAsString(key: String) = map.get(key).asInstanceOf[String]
-  override def getAsBoolean(key: String) = map.get(key).asInstanceOf[Boolean]
-  override def getAsDouble(key: String) = map.get(key).asInstanceOf[Double]
-  override def getAsFloat(key: String) = map.get(key).asInstanceOf[Float]
+  override def put(key: String, value: Int) = map.put(key, value)
+  override def put(key: String, value: Long) = map.put(key, value)
+  override def put(key: String, value: String) = map.put(key, value)
+  override def put(key: String, value: Boolean) = map.put(key, value)
+  override def put(key: String, value: Double) = map.put(key, value)
+  override def put(key: String, value: Float) = map.put(key, value)
 
-  override protected def _remove(key: String) = map.remove(key)
-  override protected def _clear() = map.clear()
+  override def getAsInt(key: String) = map(key).asInstanceOf[Int]
+  override def getAsLong(key: String) = map(key).asInstanceOf[Long]
+  override def getAsString(key: String) = map(key).asInstanceOf[String]
+  override def getAsBoolean(key: String) = map(key).asInstanceOf[Boolean]
+  override def getAsDouble(key: String) = map(key).asInstanceOf[Double]
+  override def getAsFloat(key: String) = map(key).asInstanceOf[Float]
+
+  override protected def remove(key: String) = map.remove(key)
+  override protected def clear() = map.clear()
+}
+
+object DBContentValuesMap {
+  def apply() = new DBContentValuesMap(mutable.HashMap[String, Any]())
 }
 
 object DBContentValues {
-  object SupportedType extends Enumeration {
-    type SupportedType = Value
-    val INT, LONG, STRING, BOOLEAN, DOUBLE, FLOAT = Value
-  }
-  import SupportedType._
-
   def apply(values: ContentValues) = new DBContentValuesWrapper(values)
   def apply() = new DBContentValuesMap(mutable.HashMap())
 
   implicit def fromAndroid(values: ContentValues): DBContentValues = apply(values)
-  implicit def toAndroid(values: DBContentValues): ContentValues = {
-    val androidValues = new ContentValues()
-    values.typeMap.foreach {
-      case (key, INT) => androidValues.put(key, java.lang.Integer.valueOf(values.getAsInt(key)))
-      case (key, LONG) => androidValues.put(key, java.lang.Long.valueOf(values.getAsLong(key)))
-      case (key, STRING) => androidValues.put(key, java.lang.String.valueOf(values.getAsString(key)))
-      case (key, BOOLEAN) => androidValues.put(key, java.lang.Boolean.valueOf(values.getAsBoolean(key)))
-      case (key, DOUBLE) => androidValues.put(key, java.lang.Double.valueOf(values.getAsDouble(key)))
-      case (key, FLOAT) => androidValues.put(key, java.lang.Float.valueOf(values.getAsFloat(key)))
-    }
-    androidValues
+  implicit def toAndroid(values: DBContentValues): ContentValues = values match {
+    case wrapper: DBContentValuesWrapper => wrapper.values
+    case _ => throw new IllegalArgumentException(s"Expected Android ContentValues, but tried to unwrap: ${values.getClass.getName}")
   }
 }

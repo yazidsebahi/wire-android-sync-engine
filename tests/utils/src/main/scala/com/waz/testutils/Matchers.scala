@@ -102,14 +102,14 @@ object Matchers {
   def beLikedByThisUser = be('likedByThisUser)
   def haveLikesFrom(ids: UserId*): Matcher[Message] = contain.theSameElementsInOrderAs(ids).matcher[Seq[UserId]] compose ((_: Message).getLikes.map(_.data.id))
   def notHaveLikes: Matcher[Message] = be(empty).matcher[Seq[User]] compose ((_: Message).getLikes)
-  def beUnchangedByEncodingAndDecoding[A : JsonDecoder : JsonEncoder : Manifest] = Matcher[A] { left =>
-    val json = encode(left)
+  def beUnchangedByEncodingAndDecoding[A : JsonDecoder : JsonEncoder : Manifest] = Matcher[A] { orig =>
+    val json = encode(orig)
     val decoded = decode[A](json.toString)
     val encoded = encode(decoded)
     MatchResult(
-      decoded == left && encode(decoded).toString == json.toString,
-      s"$left was not equal to $decoded, or ${json.toString(2)} was not equal to ${encoded.toString(2)}",
-      s"$left staid the same after encoding, decoding and re-encoding."
+      decoded == orig && encoded.toString == json.toString,
+      s"$orig was not equal to \n$decoded, or ${json.toString(2)} was not equal to ${encoded.toString(2)}",
+      s"$orig stayed the same after encoding, decoding and re-encoding."
     )
   }
 

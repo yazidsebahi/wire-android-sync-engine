@@ -17,16 +17,16 @@
  */
 package com.waz.model
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.ZMessagingDB
 import com.waz.model.CommonConnectionsData.CommonConnectionsDataDao
 import com.waz.model.UserData.UserDataDao
+import com.waz.utils.wrappers.{DB, DBHelper}
 import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 class CommonConnectionDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
-  var dbHelper: ZMessagingDB = _
+  var dbHelper: DBHelper = _
 
   lazy val users = Seq(
     UserData("User 01"),
@@ -47,7 +47,7 @@ class CommonConnectionDataDaoSpec extends FeatureSpec with Matchers with BeforeA
     Robolectric.application.getDatabasePath(dbHelper.getDatabaseName).delete()
   }
 
-  implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
 
   feature("CRUD") {
 

@@ -15,21 +15,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.wire.playground
+package com.waz.utils.wrappers
 
-import com.waz.model.AssetData
-import com.waz.specs.AndroidFreeSpec
-import com.waz.utils.wrappers.URI
-import org.scalatest.FeatureSpec
+import android.database.sqlite.{SQLiteConnectionPool, SQLiteSession}
 
-class PlaygroundSpec extends FeatureSpec with AndroidFreeSpec {
+import scala.language.implicitConversions
 
-  scenario("Hello") {
+trait DBSession {
+  def beginTransaction(): Unit
 
-    val uri = URI.parse("www.hello.com").buildUpon.appendQueryParameter("persist", "true").build
+}
 
-    val test = AssetData(source = Some(uri))
-    println(test.source)
+class SQLiteSessionWrapper(val session: SQLiteSession) extends DBSession {
+  override def beginTransaction(): Unit = session.beginTransaction(SQLiteSession.TRANSACTION_MODE_DEFERRED, null, SQLiteConnectionPool.CONNECTION_FLAG_READ_ONLY, null)
+}
 
-  }
+object DBSession {
+  def apply(session: SQLiteSession): DBSession = new SQLiteSessionWrapper(session)
+
+  implicit def fromAndroid(session: SQLiteSession): DBSession = apply(session)
+
 }

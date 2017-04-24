@@ -29,7 +29,7 @@ import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils._
-import com.waz.utils.wrappers.{AndroidIntentBuilder, ContextBuilder}
+import com.waz.utils.wrappers.{AndroidIntentUtil, ContextBuilder}
 import com.waz.zms.CallService
 import org.scalatest.{FeatureSpec, Matchers, OptionValues}
 
@@ -389,7 +389,7 @@ class VoiceChannelSpec extends FeatureSpec with Matchers with OptionValues with 
         }
 
         val intent = CallService.trackIntent(ContextBuilder.wrap(context.getApplicationContext), conv.id)
-        new CallService().onStartCommand(AndroidIntentBuilder.unwrap(intent), 0, 1) // start service manually, since it's not started by Robolectric
+        new CallService().onStartCommand(AndroidIntentUtil.unwrap(intent), 0, 1) // start service manually, since it's not started by Robolectric
         // call should be dropped after timeout
         withDelay {
           channel.getState shouldEqual ChannelState.Idle

@@ -19,13 +19,14 @@ package com.waz.db
 
 import java.util.concurrent.{CyclicBarrier, TimeUnit}
 
-import android.database.sqlite.{SQLiteGlobal, SQLiteOpenHelper}
+import android.database.sqlite.SQLiteGlobal
 import com.waz.RobolectricUtils
 import com.waz.content.Database
 import com.waz.db.CompositeKeyTestItem.CompositeKeyTestItemDao
 import com.waz.db.TestItem.TestItemDao
 import com.waz.testutils.Implicits._
 import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.wrappers.{DB, DBHelper}
 import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -34,9 +35,9 @@ import scala.util.Random
 
 class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests with RobolectricUtils { outer =>
 
-  lazy val dbHelper = new DaoDB(Robolectric.application, "testdb", null, 1, Seq(TestItemDao, CompositeKeyTestItemDao), Seq.empty[Migration])
+  lazy val dbHelper: DBHelper = new DaoDB(Robolectric.application, "testdb", null, 1, Seq(TestItemDao, CompositeKeyTestItemDao), Seq.empty[Migration])
 
-  implicit def database = dbHelper.getWritableDatabase
+  implicit def database: DB = dbHelper.getWritableDatabase
 
   after {
     dbHelper.close()
@@ -145,7 +146,7 @@ class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with Generat
 
       lazy val dbase = new Database {
         override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue()
-        override val dbHelper: SQLiteOpenHelper = outer.dbHelper
+        override val dbHelper: DBHelper = outer.dbHelper
       }
 
       val n = SQLiteGlobal.getWALConnectionPoolSize

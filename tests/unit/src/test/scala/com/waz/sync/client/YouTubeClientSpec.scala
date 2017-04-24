@@ -27,7 +27,6 @@ import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture
-import com.waz.utils
 import com.waz.znet.Response.HttpStatus
 import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._

@@ -18,8 +18,8 @@
 package com.waz.db
 
 import com.waz.model.Uid
-import android.database.Cursor
-import org.scalacheck.{Gen, Arbitrary}
+import com.waz.utils.wrappers.DBCursor
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Arbitrary._
 
 case class TestItem(id: Uid, str: String, int: Int)
@@ -35,7 +35,7 @@ object TestItem {
     override val idCol = Id
     override val table = new Table("Items", Id, Str, Int)
 
-    override def apply(implicit cursor: Cursor): TestItem = TestItem(Id, Str, Int)
+    override def apply(implicit cursor: DBCursor): TestItem = TestItem(Id, Str, Int)
   }
 
   // limited string generator for our tests, full generator caused errors in db some chars were stripped

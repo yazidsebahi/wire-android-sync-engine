@@ -20,8 +20,6 @@ package com.waz.model
 import java.util.Date
 import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
 import com.waz.db.Col._
@@ -30,6 +28,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.service.SearchKey
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.utils._
+import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
 
 case class UserData(
@@ -220,29 +219,29 @@ object UserData {
     override val idCol = Id
     override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
-    override def apply(implicit cursor: Cursor): UserData =
+    override def apply(implicit cursor: DBCursor): UserData =
       new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_id on Users (${Id.name})")
       db.execSQL(s"CREATE INDEX IF NOT EXISTS UserData_search_key on Users (${SKey.name})")
     }
 
-    def get(id: UserId)(implicit db: SQLiteDatabase): Option[UserData] = single(find(Id, id)(db))
+    def get(id: UserId)(implicit db: DB): Option[UserData] = single(find(Id, id)(db))
 
-    override def getCursor(id: UserId)(implicit db: SQLiteDatabase): Cursor = find(Id, id)(db)
+    override def getCursor(id: UserId)(implicit db: DB): DBCursor = find(Id, id)(db)
 
-    override def delete(id: UserId)(implicit db: SQLiteDatabase): Int = db.delete(table.name, Id.name + "=?", Array(id.toString))
+    override def delete(id: UserId)(implicit db: DB): Int = db.delete(table.name, Id.name + "=?", Array(id.toString))
 
-    def findByConnectionStatus(status: Set[ConnectionStatus])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] = iterating(findInSet(Conn, status))
+    def findByConnectionStatus(status: Set[ConnectionStatus])(implicit db: DB): Managed[Iterator[UserData]] = iterating(findInSet(Conn, status))
 
-    def listContacts(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"(${Conn.name} = ? or ${Conn.name} = ?) and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code, ConnectionStatus.Blocked.code), null, null, null))
+    def listContacts(implicit db: DB) = list(db.query(table.name, null, s"(${Conn.name} = ? or ${Conn.name} = ?) and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code, ConnectionStatus.Blocked.code), null, null, null))
 
-    def topPeople(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
+    def topPeople(implicit db: DB): Managed[Iterator[UserData]] =
       search(s"${Conn.name} = ? and ${Deleted.name} = 0", Array(Conn(ConnectionStatus.Accepted)))
 
-    def recommendedPeople(prefix: String)(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] = {
+    def recommendedPeople(prefix: String)(implicit db: DB): Managed[Iterator[UserData]] = {
       val query = SearchKey(prefix)
       search(s"""(
                 |  (
@@ -257,10 +256,10 @@ object UserData {
         Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", prefix, s"%${query.asciiRepresentation}%"))
     }
 
-    private def search(whereClause: String, args: Array[String])(implicit db: SQLiteDatabase): Managed[Iterator[UserData]] =
+    private def search(whereClause: String, args: Array[String])(implicit db: DB): Managed[Iterator[UserData]] =
       iterating(db.query(table.name, null, whereClause, args, null, null,
         s"case when ${Conn.name} = '${Conn(ConnectionStatus.Accepted)}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
 
-    def findWireBots(implicit db: SQLiteDatabase) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
+    def findWireBots(implicit db: DB) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
   }
 }

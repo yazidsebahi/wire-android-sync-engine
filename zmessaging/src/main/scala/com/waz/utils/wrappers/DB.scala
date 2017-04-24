@@ -17,11 +17,14 @@
  */
 package com.waz.utils.wrappers
 
-import android.database.sqlite.SQLiteDatabase
+import java.io.Closeable
+
+import android.content.ContentValues
+import android.database.sqlite.{SQLiteDatabase, SQLiteSession}
 
 import scala.language.implicitConversions
 
-trait DB {
+trait DB extends Closeable {
 
   // see SQLLiteClosable for comments how these should be used
 
@@ -29,7 +32,7 @@ trait DB {
 
   def releaseReference(): Unit
 
-  def close() = releaseReference()
+  override def close() = releaseReference()
 
   // see SQLLiteDatabase for comments how these should be used
 
@@ -51,16 +54,8 @@ trait DB {
             selectionArgs: Array[String],
             groupBy: String,
             having: String,
-            orderBy: String): DBCursor
-
-  def query(table: String,
-            columns: Array[String],
-            selection: String,
-            selectionArgs: Array[String],
-            groupBy: String,
-            having: String,
             orderBy: String,
-            limit: String): DBCursor
+            limit: String = null): DBCursor
 
   def rawQuery(sql: String, selectionArgs: Array[String]): DBCursor
 
@@ -85,6 +80,12 @@ trait DB {
   def enableWriteAheadLogging(): Boolean
 
   def disableWriteAheadLogging(): Unit
+
+  def getThreadSession: DBSession
+
+  def insertOrIgnore(tableName: String, values: DBContentValues): Unit
+
+  def insertOrReplace(tableName: String, values: DBContentValues): Unit
 }
 
 class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
@@ -110,16 +111,8 @@ class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
                      selectionArgs: Array[String],
                      groupBy: String,
                      having: String,
-                     orderBy: String) = db.query(table, columns, selection, selectionArgs, groupBy, having, orderBy)
-
-  override def query(table: String,
-                     columns: Array[String],
-                     selection: String,
-                     selectionArgs: Array[String],
-                     groupBy: String,
-                     having: String,
                      orderBy: String,
-                     limit: String) = db.query(table, columns, selection, selectionArgs, groupBy, having, orderBy, limit)
+                     limit: String = null) = db.query(table, columns, selection, selectionArgs, groupBy, having, orderBy, limit)
 
   override def rawQuery(sql: String, selectionArgs: Array[String]) = db.rawQuery(sql, selectionArgs)
 
@@ -145,10 +138,39 @@ class SQLiteDBWrapper(val db: SQLiteDatabase) extends DB {
   override def enableWriteAheadLogging() = db.enableWriteAheadLogging()
 
   override def disableWriteAheadLogging() = db.disableWriteAheadLogging()
+
+  override def getThreadSession = {
+    val method = classOf[SQLiteDatabase].getDeclaredMethod("getThreadSession")
+    method.setAccessible(true)
+    method.invoke(db).asInstanceOf[SQLiteSession]
+  }
+
+  override def insertOrIgnore(tableName: String, values: DBContentValues): Unit = db.insertWithOnConflict(tableName, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+
+  override def insertOrReplace(tableName: String, values: DBContentValues): Unit = db.insertWithOnConflict(tableName, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+}
+
+trait DBUtil {
+  def ContentValues(): DBContentValues
+}
+
+object AndroidDBUtil extends DBUtil {
+  override def ContentValues() = new ContentValues()
 }
 
 object DB {
-  def apply(db: SQLiteDatabase) = new SQLiteDBWrapper(db)
+  private var util: DBUtil = AndroidDBUtil
 
-  implicit def fromAndroid(db: SQLiteDatabase) = apply(db)
+  def setUtil(util: DBUtil): Unit = this.util = util
+
+  def ContentValues(): DBContentValues = util.ContentValues()
+
+  def apply(db: SQLiteDatabase): DB = new SQLiteDBWrapper(db)
+
+  implicit def fromAndroid(db: SQLiteDatabase): DB = apply(db)
+
+  implicit def toAndroid(db: DB): SQLiteDatabase = db match {
+    case wrapper: SQLiteDBWrapper => wrapper.db
+    case _ => throw new IllegalArgumentException(s"Expected Android DB, but tried to unwrap: ${db.getClass.getName}")
+  }
 }

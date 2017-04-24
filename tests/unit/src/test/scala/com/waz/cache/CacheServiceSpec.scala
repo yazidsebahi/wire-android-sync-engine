@@ -19,7 +19,6 @@ package com.waz.cache
 
 import java.io.FileInputStream
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.GlobalDatabase
 import com.waz.model.{CacheKey, Mime}
@@ -27,6 +26,7 @@ import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -36,7 +36,7 @@ import scala.concurrent.duration._
 
 class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig { test =>
 
-  implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
+  implicit def db: DB = storage.dbHelper.getWritableDatabase
 
   lazy val cacheDir = Robolectric.application.getCacheDir
 

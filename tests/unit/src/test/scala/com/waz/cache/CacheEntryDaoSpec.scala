@@ -17,7 +17,6 @@
  */
 package com.waz.cache
 
-import android.database.sqlite.SQLiteDatabase
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import com.waz.db.ZGlobalDB
 import org.robolectric.Robolectric
@@ -27,13 +26,14 @@ import scala.concurrent.duration._
 import CacheEntryData.CacheEntryDao
 import com.waz.model.CacheKey
 import com.waz.testutils._
+import com.waz.utils.wrappers.DB
 
 class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
   import CacheEntryDao._
   var dbHelper: ZGlobalDB = _
 
-  implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
 
   val timeout = 1.hour.toMillis
 

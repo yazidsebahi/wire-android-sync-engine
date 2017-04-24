@@ -17,7 +17,6 @@
  */
 package com.waz.model
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.EphemeralExpiration
 import com.waz.db.ZMessagingDB
 import com.waz.model.AddressBook.ContactHashes
@@ -29,6 +28,7 @@ import com.waz.model.sync.{ReceiptType, SyncJob, SyncRequest}
 import com.waz.testutils.Matchers._
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.JsonEncoder._
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -49,7 +49,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     Robolectric.application.getDatabasePath("dbName").delete()
   }
 
-  implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
 
   feature("json serialization") {
     scenario("Simple requests") {

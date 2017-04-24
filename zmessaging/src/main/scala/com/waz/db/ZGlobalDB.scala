@@ -31,10 +31,12 @@ import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
 import com.waz.service.PreferenceService
+import com.waz.utils.wrappers.DB
 import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, Resource}
 import com.waz.znet.AuthenticationManager.Token
 
-class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(context.getApplicationContext, DbName + dbNameSuffix, null, DbVersion, daos, Migrations.migrations(context)) {
+class ZGlobalDB(context: Context, dbNameSuffix: String = "")
+  extends DaoDB(context.getApplicationContext, DbName + dbNameSuffix, null, DbVersion, daos, Migrations.migrations(context)) {
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
     if (from < 5) clearAllData(db)
@@ -102,11 +104,11 @@ object ZGlobalDB {
       override def close(r: ZmsDatabase): Unit = r.close()
     }
 
-    implicit object DbRes extends Resource[SQLiteDatabase] {
-      override def close(r: SQLiteDatabase): Unit = r.close()
+    implicit object DbRes extends Resource[DB] {
+      override def close(r: DB): Unit = r.close()
     }
 
-    def v11(context: Context): SQLiteDatabase => Unit = { implicit db =>
+    def v11(context: Context): DB => Unit = { implicit db =>
       // migrates ZUsers to AccountData, extracts some info from user specific KeyValue storage
 
       val SelfUserId = "self_user_id"

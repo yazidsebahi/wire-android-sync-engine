@@ -17,48 +17,46 @@
  */
 package com.waz
 
-import android.database.sqlite._
-import android.database.{Cursor, MatrixCursor}
 import com.waz.utils._
 import com.waz.ZLog._
+import com.waz.utils.wrappers._
+import com.waz.utils.wrappers.DB
 
 import scala.language.implicitConversions
 import scala.util.Try
 
 package object db {
-  val EmptyCursor = new MatrixCursor(Array())
+  implicit def iterate[A](c: DBCursor)(implicit read: Reader[A]): Iterator[A] = new CursorIterator[A](c)
 
-  implicit def iterate[A](c: Cursor)(implicit read: Reader[A]): Iterator[A] = new CursorIterator[A](c)
+  def iteratingWithReader[A](reader: Reader[A])(c: => DBCursor): Managed[Iterator[A]] = Managed(c).map(new CursorIterator(_)(reader))
 
-  def iteratingWithReader[A](reader: Reader[A])(c: => Cursor): Managed[Iterator[A]] = Managed(c).map(new CursorIterator(_)(reader))
-
-  class CursorIterator[A](c: Cursor)(implicit read: Reader[A]) extends Iterator[A] {
+  class CursorIterator[A](c: DBCursor)(implicit read: Reader[A]) extends Iterator[A] {
     c.moveToFirst()
     override def next(): A = returning(read(c)){ _ => c.moveToNext() }
     override def hasNext: Boolean = !c.isClosed && !c.isAfterLast
   }
 
   object CursorIterator {
-    def list[A](c: Cursor, close: Boolean = true, filter: A => Boolean = { (_: A) => true })(implicit reader: Reader[A]) =
+    def list[A](c: DBCursor, close: Boolean = true, filter: A => Boolean = { (_: A) => true })(implicit reader: Reader[A]) =
       try { new CursorIterator(c)(reader).filter(filter).toVector } finally { if (close) c.close() }
   }
 
-  class ReverseCursorIterator[A](c: Cursor)(implicit read: Reader[A]) extends Iterator[A] {
+  class ReverseCursorIterator[A](c: DBCursor)(implicit read: Reader[A]) extends Iterator[A] {
     c.moveToLast()
     override def next(): A = returning(read(c)){ _ => c.moveToPrevious() }
     override def hasNext: Boolean = !c.isClosed && !c.isBeforeFirst
   }
 
-  def bind[A: DbTranslator](value: A, index: Int, stmt: SQLiteProgram) = implicitly[DbTranslator[A]].bind(value, index, stmt)
+  def bind[A: DbTranslator](value: A, index: Int, stmt: DBProgram) = implicitly[DbTranslator[A]].bind(value, index, stmt)
 
-  def load[A: DbTranslator](c: Cursor, index: Int) = implicitly[DbTranslator[A]].load(c, index)
+  def load[A: DbTranslator](c: DBCursor, index: Int) = implicitly[DbTranslator[A]].load(c, index)
 
-  def forEachRow(cursor: Cursor)(f: Cursor => Unit): Unit = try {
+  def forEachRow(cursor: DBCursor)(f: DBCursor => Unit): Unit = try {
     cursor.moveToFirst()
     while(! cursor.isAfterLast) { f(cursor); cursor.moveToNext() }
   } finally cursor.close()
 
-  class Transaction(db: SQLiteDatabase) {
+  class Transaction(db: DB) {
     def flush() = {
       db.setTransactionSuccessful()
       db.endTransaction()
@@ -66,12 +64,12 @@ package object db {
     }
   }
 
-  def inTransaction[A](body: => A)(implicit db: SQLiteDatabase): A =
+  def inTransaction[A](body: => A)(implicit db: DB): A =
     inTransaction(_ => body)
 
-  def inTransaction[A](body: Transaction => A)(implicit db: SQLiteDatabase): A = {
+  def inTransaction[A](body: Transaction => A)(implicit db: DB): A = {
     val tr = new Transaction(db)
-    if (db.inTransaction()) body(tr)
+    if (db.inTransaction) body(tr)
     else {
       db.beginTransactionNonExclusive()
       try returning(body(tr)) { _ => db.setTransactionSuccessful() }
@@ -81,8 +79,8 @@ package object db {
 
   private lazy val readTransactions = ReadTransactionSupport.chooseImplementation()
 
-  def inReadTransaction[A](body: => A)(implicit db: SQLiteDatabase): A =
-    if (db.inTransaction()) body
+  def inReadTransaction[A](body: => A)(implicit db: DB): A =
+    if (db.inTransaction) body
     else {
       readTransactions.beginReadTransaction(db)
       try returning(body) { _ => db.setTransactionSuccessful() }
@@ -90,7 +88,7 @@ package object db {
     }
 
 
-  def withStatement[A](sql: String)(body: SQLiteStatement => A)(implicit db: SQLiteDatabase): A = {
+  def withStatement[A](sql: String)(body: DBStatement => A)(implicit db: DB): A = {
     val stmt = db.compileStatement(sql)
     try {
       body(stmt)
@@ -104,7 +102,7 @@ package db {
     * TL;DR: the Android SQLite classes fail to support WAL mode correctly, we are forced to hack our way into them
     */
   trait ReadTransactionSupport {
-    def beginReadTransaction(db: SQLiteDatabase): Unit
+    def beginReadTransaction(db: DB): Unit
   }
 
   object ReadTransactionSupport {
@@ -114,18 +112,14 @@ package db {
 
   object DeferredModeReadTransactionSupport {
     def create(implicit logTag: LogTag): ReadTransactionSupport = new ReadTransactionSupport {
-      private val method = classOf[SQLiteDatabase].getDeclaredMethod("getThreadSession")
-      method.setAccessible(true)
-
       verbose("using deferred mode read transactions")
 
-      override def beginReadTransaction(db: SQLiteDatabase): Unit = try reflectiveBegin(db) catch { case _: Exception => db.beginTransactionNonExclusive() }
+      override def beginReadTransaction(db: DB): Unit = try reflectiveBegin(db) catch { case _: Exception => db.beginTransactionNonExclusive() }
 
-      private def reflectiveBegin(db: SQLiteDatabase): Unit = {
+      private def reflectiveBegin(db: DB): Unit = {
         db.acquireReference()
         try {
-          val session = method.invoke(db).asInstanceOf[SQLiteSession]
-          session.beginTransaction(SQLiteSession.TRANSACTION_MODE_DEFERRED, null, SQLiteConnectionPool.CONNECTION_FLAG_READ_ONLY, null)
+          db.getThreadSession.beginTransaction()
         }
         finally db.releaseReference()
       }
@@ -135,7 +129,7 @@ package db {
   object FallbackReadTransactionSupport {
     def create(implicit logTag: LogTag): ReadTransactionSupport = new ReadTransactionSupport {
       verbose("using fallback support for read transactions")
-      override def beginReadTransaction(db: SQLiteDatabase): Unit = db.beginTransactionNonExclusive()
+      override def beginReadTransaction(db: DB): Unit = db.beginTransactionNonExclusive()
     }
   }
 }

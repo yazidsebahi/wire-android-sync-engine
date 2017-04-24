@@ -17,15 +17,13 @@
  */
 package com.waz.db
 
-import android.content.ContentValues
-import android.database.Cursor
-import android.database.sqlite.SQLiteProgram
+import com.waz.utils.wrappers.{DBContentValues, DBCursor, DBProgram}
 
 case class ColBinder[A, B](col: Col[A], extractor: B => A, var index: Int = 0) {
   def apply(value: A): String = col.sqlLiteral(value)
-  def load(cursor: Cursor, index: Int): A = col.load(cursor, index)
-  def save(value: B, values: ContentValues): Unit = col.save(extractor(value), values)
-  def bind(value: B, stmt: SQLiteProgram): Unit = col.bind(extractor(value), index + 1, stmt)
-  def bindCol(value: A, stmt: SQLiteProgram): Unit = col.bind(value, index + 1, stmt)
+  def load(cursor: DBCursor, index: Int): A = col.load(cursor, index)
+  def save(value: B, values: DBContentValues): Unit = col.save(extractor(value), values)
+  def bind(value: B, stmt: DBProgram): Unit = col.bind(extractor(value), index + 1, stmt)
+  def bindCol(value: A, stmt: DBProgram): Unit = col.bind(value, index + 1, stmt)
   def name: String = col.name
 }

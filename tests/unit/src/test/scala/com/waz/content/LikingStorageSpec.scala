@@ -17,13 +17,13 @@
  */
 package com.waz.content
 
-import android.database.sqlite.SQLiteOpenHelper
 import com.waz.db.ZMessagingDB
 import com.waz.model.Liking.Action._
 import com.waz.model.Liking.LikingDao
 import com.waz.model.{Liking, MessageId, UserId}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.wrappers.DBHelper
 import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
@@ -40,7 +40,7 @@ class LikingStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wi
 
   lazy val database = new Database() {
     override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue()
-    override val dbHelper: SQLiteOpenHelper = new ZMessagingDB(Robolectric.application, "dbName")
+    override val dbHelper: DBHelper = new ZMessagingDB(Robolectric.application, "dbName")
   }
 
   lazy val storage = new ReactionsStorage(Robolectric.application, database)

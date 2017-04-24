@@ -21,7 +21,15 @@ import com.waz.api
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.{JSONException, JSONObject}
 
-sealed abstract class AssetStatus(val status: api.AssetStatus)
+sealed abstract class AssetStatus(val status: api.AssetStatus){
+  override def hashCode(): Int = status.hashCode()
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case as: AssetStatus => status == as.status
+    case _ => false
+  }
+}
+
 object AssetStatus {
   import JsonDecoder._
   import api.AssetStatus._

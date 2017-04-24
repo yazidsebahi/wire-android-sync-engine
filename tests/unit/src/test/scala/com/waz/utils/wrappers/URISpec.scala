@@ -15,9 +15,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.utils
+package com.waz.utils.wrappers
 
-package object wrappers {
-  var URI:    URIUtil       = AndroidURIUtil
-  var Intent: IntentBuilder = AndroidIntentBuilder
+import com.waz.model.AssetData
+import com.waz.specs.AndroidFreeSpec
+import org.scalatest.FeatureSpec
+
+class URISpec extends FeatureSpec with AndroidFreeSpec {
+
+  scenario("Hello") {
+
+    val uri = URI.parse("www.hello.com").buildUpon.appendQueryParameter("persist", "true").build
+
+    val test = AssetData(source = Some(uri))
+    println(test.source)
+
+  }
 }

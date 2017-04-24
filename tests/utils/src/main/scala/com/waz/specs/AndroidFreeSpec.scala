@@ -17,20 +17,30 @@
  */
 package com.waz.specs
 
+import com.waz.utils.wrappers._
+
 import com.waz.ZLog
 import com.waz.ZLog.LogLevel
 import com.waz.utils.isTest
-import com.waz.utils.wrappers.{Intent, JVMIntentBuilder, JavaURIUtil, URI}
+import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI}
+
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
 
   //Ensures that Android wrappers are assigned with a non-Android implementation so that tests can run on the JVM
   override protected def beforeAll() = {
+    URI.setUtil(JavaURIUtil)
+
+    DB.setUtil(new DBUtil {
+      override def ContentValues(): DBContentValues = DBContentValuesMap()
+    })
+
     isTest = true
-    ZLog.testLogLevel = LogLevel.Warn
-    URI    = JavaURIUtil
-    Intent = JVMIntentBuilder
+
+    ZLog.testLogLevel = LogLevel.Verbose
+
+    Intent.setUtil(JVMIntentUtil)
   }
 
 }

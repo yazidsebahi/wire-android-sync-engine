@@ -17,11 +17,13 @@
  */
 package com.waz.utils.wrappers
 
+import java.io.Closeable
+
 import android.database.Cursor
 
 import scala.language.implicitConversions
 
-trait DBCursor {
+trait DBCursor extends Closeable {
   def getCount: Int
   def moveToPosition(position: Int): Boolean
   def moveToFirst(): Boolean
@@ -105,4 +107,8 @@ object DBCursor {
   def apply(cursor: Cursor): DBCursor = new DBCursorWrapper(cursor)
 
   implicit def fromAndroid(cursor: Cursor): DBCursor = apply(cursor)
+  implicit def toAndroid(cursor: DBCursor): Cursor = cursor match {
+    case wrapper: DBCursorWrapper => wrapper.cursor
+    case _ => throw new IllegalArgumentException(s"Expected Android Cursor, but tried to unwrap: ${cursor.getClass.getName}")
+  }
 }

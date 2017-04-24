@@ -33,6 +33,13 @@ trait URI {
   def getLastPathSegment: String
   def getQueryParameter(key: String): String
   def normalizeScheme: URI
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case uri: URI => this.toString == uri.toString
+    case _ => false
+  }
+
+  override def hashCode(): Int = this.toString.hashCode
 }
 
 trait URIUtil {
@@ -84,4 +91,18 @@ class AndroidURIBuilder(var uriBuilder: Uri.Builder) extends URIBuilder {
 object AndroidURIUtil extends URIUtil {
   override def parse(uri: String) = new AndroidURI(Uri.parse(uri))
   override def fromFile(file: File) = new AndroidURI(Uri.fromFile(file))
+}
+
+object URI {
+  private var util: URIUtil = AndroidURIUtil
+
+  def setUtil(util: URIUtil) = {
+    this.util = util
+  }
+
+  def parse(uri: String) = util.parse(uri)
+
+  def fromFile(file: File) = util.fromFile(file)
+
+  def unwrap(uri: URI) = util.unwrap(uri)
 }

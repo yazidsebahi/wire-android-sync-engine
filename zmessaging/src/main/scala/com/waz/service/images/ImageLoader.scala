@@ -38,7 +38,7 @@ import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.utils.IoUtils._
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, Serialized, returning}
-import com.waz.{PermissionsService, bitmap, utils}
+import com.waz.{PermissionsService, bitmap}
 
 import scala.concurrent.Future
 

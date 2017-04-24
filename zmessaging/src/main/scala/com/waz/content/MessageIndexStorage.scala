@@ -20,13 +20,13 @@ package com.waz.content
 import java.util.concurrent.TimeUnit
 
 import android.content.Context
-import android.database.Cursor
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
 import com.waz.db.{CursorIterator, Reader}
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
+import com.waz.utils.wrappers.DBCursor
 import com.waz.utils.{CachedStorage, TrimmingLruCache}
 import org.threeten.bp.Instant
 
@@ -81,6 +81,6 @@ object MessageIndexStorage {
   val UpdateOldMessagesThrottle = FiniteDuration(1, TimeUnit.SECONDS)
 
   implicit object MsgIdReader extends Reader[MessageId] {
-    override def apply(implicit c: Cursor): MessageId = MessageId(c.getString(0))
+    override def apply(implicit c: DBCursor): MessageId = MessageId(c.getString(0))
   }
 }

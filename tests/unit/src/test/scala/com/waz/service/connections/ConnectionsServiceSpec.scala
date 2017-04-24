@@ -19,7 +19,6 @@ package com.waz.service.connections
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
 import com.waz.content.ZmsDatabase
@@ -35,6 +34,7 @@ import org.robolectric.Robolectric
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import com.waz.ZLog.ImplicitTag._
+import com.waz.utils.wrappers.DB
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.Await
@@ -45,7 +45,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
   implicit lazy val dispatcher = Threading.Background
 
   def storage: ZmsDatabase = service.db
-  implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
+  implicit def db: DB = storage.dbHelper.getWritableDatabase
 
   val timeout = 5.seconds
 

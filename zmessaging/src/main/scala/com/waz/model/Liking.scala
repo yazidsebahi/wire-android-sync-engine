@@ -17,12 +17,11 @@
  */
 package com.waz.model
 
-import android.database.Cursor
 import android.database.DatabaseUtils.{sqlEscapeString => escape}
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
-import com.waz.db.{Dao2, iteratingWithReader, Reader}
+import com.waz.db.{Dao2, Reader, iteratingWithReader}
 import com.waz.utils.JsonEncoder.encodeInstant
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -66,20 +65,20 @@ object Liking {
 
     override val table = Table("Likings", Message, User, Timestamp, ActionCol)
 
-    override def apply(implicit cursor: Cursor): Liking = Liking(Message, User, Timestamp, ActionCol)
+    override def apply(implicit cursor: DBCursor): Liking = Liking(Message, User, Timestamp, ActionCol)
 
-    def findForMessage(id: MessageId)(implicit db: SQLiteDatabase) = iterating(find(Message, id))
+    def findForMessage(id: MessageId)(implicit db: DB) = iterating(find(Message, id))
 
-    def findForMessages(ids: Set[MessageId])(implicit db: SQLiteDatabase) = iterating {
+    def findForMessages(ids: Set[MessageId])(implicit db: DB) = iterating {
       db.query(table.name, null, s"${Message.name} in (${ids.map(id => escape(id.str)).mkString(", ")})", null, null, null, null)
     }
 
-    def findMaxTime(implicit db: SQLiteDatabase) =
+    def findMaxTime(implicit db: DB) =
       iteratingWithReader(InstantReader)(db.rawQuery(s"SELECT MAX(${Timestamp.name}) FROM ${table.name}", null))
         .acquire(t => if (t.hasNext) t.next else Instant.EPOCH)
 
     object InstantReader extends Reader[Instant] {
-      override def apply(implicit c: Cursor): Instant = Timestamp.load(c, 0)
+      override def apply(implicit c: DBCursor): Instant = Timestamp.load(c, 0)
     }
   }
 

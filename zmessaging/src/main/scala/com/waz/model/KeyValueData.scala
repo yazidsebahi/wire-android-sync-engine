@@ -17,9 +17,9 @@
  */
 package com.waz.model
 
-import android.database.Cursor
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.DBCursor
 
 case class KeyValueData(key: String, value: String)
 
@@ -31,6 +31,6 @@ object KeyValueData {
 
     override val idCol = Key
     override val table = Table("KeyValues", Key, Value)
-    override def apply(implicit cursor: Cursor): KeyValueData = KeyValueData(Key, Value)
+    override def apply(implicit cursor: DBCursor): KeyValueData = KeyValueData(Key, Value)
   }
 }

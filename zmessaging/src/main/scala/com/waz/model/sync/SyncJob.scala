@@ -19,13 +19,13 @@ package com.waz.model.sync
 
 import java.util.concurrent.atomic.AtomicLong
 
-import android.database.Cursor
 import com.waz.api.SyncState
 import com.waz.api.impl.ErrorResponse
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.SyncId
 import com.waz.sync.queue.SyncJobMerger.{MergeResult, Merged, Unchanged, Updated}
+import com.waz.utils.wrappers.DBCursor
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
@@ -131,6 +131,6 @@ object SyncJob {
     override val idCol = Id
     override val table = Table("SyncJobs", Id, Data)
 
-    override def apply(implicit cursor: Cursor) = Data
+    override def apply(implicit cursor: DBCursor) = Data
   }
 }

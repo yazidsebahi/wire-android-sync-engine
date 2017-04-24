@@ -30,7 +30,15 @@ class AndroidIntent(val intent: AIntent) extends Intent {
   override def putExtra(key: String, extra: String) = intent.putExtra(key, extra)
 }
 
-trait IntentBuilder {
+object Intent {
+  private var util: IntentUtil = AndroidIntentUtil
+
+  def setUtil(util: IntentUtil): Unit = this.util = util
+
+  def apply(context: Context, clazz: Class[_]): Intent = util.apply(context, clazz)
+}
+
+trait IntentUtil {
   def apply(context: Context, clazz: Class[_]): Intent
 
   implicit def wrap(aIntent: AIntent): Intent = new AndroidIntent(aIntent)
@@ -40,6 +48,6 @@ trait IntentBuilder {
   }
 }
 
-object AndroidIntentBuilder extends IntentBuilder {
+object AndroidIntentUtil extends IntentUtil {
   override def apply(context: Context, clazz: Class[_]) = new AndroidIntent(new AIntent(ContextBuilder.unwrap(context), clazz))
 }

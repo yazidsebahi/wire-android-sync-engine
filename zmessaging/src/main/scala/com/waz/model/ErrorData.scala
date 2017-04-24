@@ -19,12 +19,11 @@ package com.waz.model
 
 import java.util.Date
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.{DB, DBCursor}
 
 case class ErrorData(id: Uid,
                      errType: ErrorType,
@@ -63,9 +62,9 @@ object ErrorData {
 
     override val table = Table("Errors", Id, Type, Users, Messages, ConvId, ResCode, ResMessage, ResLabel, Time)
 
-    override def apply(implicit cursor: Cursor): ErrorData = ErrorData(Id, Type, Users, Messages, ConvId, ResCode, ResMessage, ResLabel, Time)
+    override def apply(implicit cursor: DBCursor): ErrorData = ErrorData(Id, Type, Users, Messages, ConvId, ResCode, ResMessage, ResLabel, Time)
 
-    def listErrors(implicit db: SQLiteDatabase) = list(db.query(table.name, null, null, null, null, null, Time.name))
+    def listErrors(implicit db: DB) = list(db.query(table.name, null, null, null, null, null, Time.name))
   }
 
   object AssetError {
