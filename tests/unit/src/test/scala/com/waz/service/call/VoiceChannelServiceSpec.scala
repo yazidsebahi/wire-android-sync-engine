@@ -151,7 +151,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
   implicit def user_state_to_participant(p: (UserId, ConnectionState)): VoiceParticipantData =
     p match { case (userId, state) => VoiceParticipantData(conv.id, userId, state) }
 
-/*  feature("event handling") {
+  feature("event handling") {
     scenario("handle initial idle state event") {
       service.dispatchEvent(idleEvent())
 
@@ -883,7 +883,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         spy.channels.value.map(_.id) shouldEqual Vector(conv.id, conv1.id)
       }
     }
-  }*/
+  }
 
   private def withNotification[T](id: ConvId)(op: => T): T = {
     var notified = false
