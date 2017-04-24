@@ -37,7 +37,9 @@ trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
     })
 
     isTest = true
+
     ZLog.testLogLevel = LogLevel.Verbose
+
     Intent = JVMIntentBuilder
   }
 

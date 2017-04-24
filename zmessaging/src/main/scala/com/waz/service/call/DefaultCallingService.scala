@@ -207,7 +207,6 @@ class DefaultCallingService(context:             Context,
       current <- currentCall
       active <- availableCalls
     } yield (current, active)).head.map {
-
       case (Some(cur), _) if cur.convId == convId =>
         cur.state match {
           case OTHER_CALLING =>
@@ -217,23 +216,27 @@ class DefaultCallingService(context:             Context,
           case _ =>
             warn("Tried to join an already joined/connecting call - ignoring")
         }
-
       case (Some(cur), _) =>
         warn("Tried to start a new call while already in a call - ignoring")
-
       case (_, active) if active.contains(convId) =>
         verbose("Joining an ongoing background call")
         avs.answerCall(conv.remoteId, isGroup)
         currentCall ! Some(active(convId).copy(state = SELF_JOINING))
-
       case _ =>
         verbose("No active call, starting new call")
         membersStorage.getByConv(conv.id).map { members =>
           avs.startCall(conv.remoteId, isVideo, isGroup).map {
             case 0 =>
-              val others = members.map(_.userId).find(_ != selfUserId).toSet
               //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              currentCall ! Some(CallInfo(conv.id, selfUserId, SELF_CALLING, others, isVideoCall = isVideo, videoSendState = if (isVideo) PREVIEW else DONT_SEND))
+              val info = CallInfo(
+                conv.id,
+                selfUserId,
+                SELF_CALLING,
+                members.map(_.userId).filter(_ != selfUserId).toSet,
+                isVideoCall = isVideo,
+                videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+              currentCall ! Some(info)
+              availableCalls.mutate(calls => calls + (conv.id -> info))
             case err => warn(s"Unable to start call, reason: errno: $err")
           }
         }

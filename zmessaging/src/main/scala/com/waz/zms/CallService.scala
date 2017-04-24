@@ -76,7 +76,7 @@ object CallService {
   val ActionSilence = "com.waz.zclient.call.ACTION_SILENCE"
 
   def apply(context: Context, conv: ConvId) = {
-    if (context.startService(trackIntent(context, conv)) == null) {
+    if (!context.startService(trackIntent(context, conv))) {
       error(s"could not start CallService, make sure it's added to AndroidManifest")
     }
   }

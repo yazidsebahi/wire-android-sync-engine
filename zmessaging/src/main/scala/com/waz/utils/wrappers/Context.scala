@@ -23,12 +23,12 @@ import AndroidIntentBuilder._
 
 //TODO break up the context into smaller wrappers and also wrap other objects used here.
 trait Context {
-  def startService(intent: Intent): ComponentName
+  def startService(intent: Intent): Boolean
   def getSystemService[A](name: String): A
 }
 
 class AndroidContext(val context: AContext) extends Context {
-  override def startService(intent: Intent) = context.startService(intent)
+  override def startService(intent: Intent) = Option(context.startService(intent)).isDefined
   override def getSystemService[A](name: String) = context.getSystemService(name).asInstanceOf[A]
 }
 
