@@ -22,7 +22,7 @@ import com.waz.utils.wrappers._
 import com.waz.ZLog
 import com.waz.ZLog.LogLevel
 import com.waz.utils.isTest
-import com.waz.utils.wrappers.{Intent, JVMIntentBuilder, JavaURIUtil, URI}
+import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI}
 
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
@@ -40,7 +40,7 @@ trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
 
     ZLog.testLogLevel = LogLevel.Verbose
 
-    Intent = JVMIntentBuilder
+    Intent.setUtil(JVMIntentUtil)
   }
 
 }

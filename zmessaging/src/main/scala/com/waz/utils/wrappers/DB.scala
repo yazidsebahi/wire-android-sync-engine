@@ -161,15 +161,13 @@ object AndroidDBUtil extends DBUtil {
 object DB {
   private var util: DBUtil = AndroidDBUtil
 
-  def setUtil(util: DBUtil) = {
-    this.util = util
-  }
+  def setUtil(util: DBUtil): Unit = this.util = util
 
-  def ContentValues() = util.ContentValues()
+  def ContentValues(): DBContentValues = util.ContentValues()
 
-  def apply(db: SQLiteDatabase) = new SQLiteDBWrapper(db)
+  def apply(db: SQLiteDatabase): DB = new SQLiteDBWrapper(db)
 
-  implicit def fromAndroid(db: SQLiteDatabase) = apply(db)
+  implicit def fromAndroid(db: SQLiteDatabase): DB = apply(db)
 
   implicit def toAndroid(db: DB): SQLiteDatabase = db match {
     case wrapper: SQLiteDBWrapper => wrapper.db

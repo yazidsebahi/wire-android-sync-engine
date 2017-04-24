@@ -28,6 +28,6 @@ class JVMIntent(context: Context, clazz: Class[_]) extends Intent {
   override def toString = s"$context, $clazz, $action, $extras"
 }
 
-object JVMIntentBuilder extends IntentBuilder {
+object JVMIntentUtil extends IntentUtil {
   override def apply(context: Context, clazz: Class[_]) = new JVMIntent(context, clazz)
 }
