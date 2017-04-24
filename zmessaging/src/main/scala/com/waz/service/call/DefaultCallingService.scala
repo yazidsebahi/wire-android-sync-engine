@@ -153,10 +153,7 @@ class DefaultCallingService(context:             Context,
   override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id}, userId: $userId")
     availableCalls.mutate(calls => calls - conv.id)
-    currentCall.mutate {
-      case Some(call) => onCallClosed(call, reason, conv, userId)
-      case None => warn("Received onClosedCall callback without current active call"); None
-    }
+    currentCall.mutate(onCallClosed(_, reason, conv, userId))
   }
 
   override def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
@@ -246,18 +243,11 @@ class DefaultCallingService(context:             Context,
   def endCall(convId: ConvId): Unit = withConv(convId) { conv =>
     verbose(s"endCall: $convId")
     currentCall.mutate {
-      case Some(call) if call.state == OTHER_CALLING =>
-        verbose("Incoming call ended - performing reject instead")
-        avs.rejectCall(conv.remoteId, conv.convType == Group)
-        onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller) //rejectCall doesn't trigger CloseCall handler. Do it ourselves
-      case Some(call) if conv.convType == Group =>
-        verbose(s"Ended group call from: ${call.state}")
-        avs.endCall(conv.remoteId, conv.convType == Group) //wcall_end will always(???) lead to the CloseCall handler - we handle state there
-        onCallClosed(call.copy(hangupRequested = true), ClosedReason.Normal, conv, call.caller) //rejectCall doesn't trigger CloseCall handler. Do it ourselves
       case Some(call) =>
-        verbose(s"Call ended in other state: ${call.state}, ending normally")
-        avs.endCall(conv.remoteId, conv.convType == Group)
-        Some(call.copy(hangupRequested = true))
+        verbose(s"Call ended in other state: ${call.state}")
+        if (call.state == OTHER_CALLING) avs.rejectCall(conv.remoteId, conv.convType == Group) else avs.endCall(conv.remoteId, conv.convType == Group)
+        if (conv.convType != Group || call.state == SELF_CALLING) availableCalls.mutate(calls => calls - conv.id)
+        onCallClosed(Some(call.copy(hangupRequested = true)), ClosedReason.Normal, conv, call.caller)
       case None => warn("Tried to endCall without a current active call"); None
     }
   }
@@ -332,10 +322,10 @@ class DefaultCallingService(context:             Context,
     })
   }
 
-  private def onCallClosed(currentCall: CallInfo, reason: ClosedReason, conv: ConversationData, userId: UserId): Option[CallInfo] = {
+  private def onCallClosed(currentCall: Option[CallInfo], reason: ClosedReason, conv: ConversationData, userId: UserId): Option[CallInfo] = {
     verbose(s"call closed: reason: $reason, convId: ${conv.id}, userId: $userId")
     currentCall match {
-      case call if call.convId == conv.id =>
+      case Some(call) if call.convId == conv.id =>
         if (reason != AnsweredElsewhere) call.state match {
           //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
           case SELF_CALLING =>
@@ -364,11 +354,14 @@ class DefaultCallingService(context:             Context,
 //          hangupRequested = call.hangupRequested,
 //          closedReason    = if (call.closedReason == Interrupted) Interrupted else reason
 //        )
-      case call =>
+      case Some(call) =>
         verbose("A call other than the current one was closed - likely missed another incoming call.")
         messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
         //don't change the current call state, since the close callback was for a different conv/call
         Some(call)
+      case None =>
+        warn("Tried to close call on without an active call")
+        None
     }
   }
 
