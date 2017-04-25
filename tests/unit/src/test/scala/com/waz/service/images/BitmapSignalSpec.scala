@@ -20,7 +20,7 @@ package com.waz.service.images
 import android.graphics.Bitmap
 import android.support.v4.content.ContextCompat
 import com.waz.RobolectricUtils
-import com.waz.utils.wrappers.URI
+import com.waz.utils.wrappers.{Bmp, URI}
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model.AssetMetaData.Image
@@ -35,6 +35,7 @@ import com.waz.ui.MemoryImageCache.BitmapRequest.Regular
 import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -43,31 +44,31 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
-  var cachedBitmapResult: AssetData => Option[Bitmap] = { _ => None }
-  var bitmapResult: AssetData => Option[Bitmap] = { _ => None }
+  var cachedBitmapResult: AssetData => Option[Bmp] = { _ => None }
+  var bitmapResult: AssetData => Option[Bmp] = { _ => None }
   var cachedGifResult: AssetData => Option[Gif] = { _ => None }
   var gifResult: AssetData => Option[Gif] = { _ => None }
   var rawDataResult: AssetData => Option[LocalData] = { _ => None }
   var cachedDataResult: AssetData => Option[LocalData] = { _ => None }
   var loadDelay: AssetData => FiniteDuration = { _ => Duration.Zero }
   
-  def mockBitmap(im: AssetData) = Some(Bitmap.createBitmap(im.dimensions.width, im.dimensions.height, Bitmap.Config.ARGB_8888))
+  def mockBitmap(im: AssetData) = Some(Bmp(Bitmap.createBitmap(im.dimensions.width, im.dimensions.height, Bitmap.Config.ARGB_8888)))
   def mockDelay(preview: FiniteDuration = Duration.Zero, medium: FiniteDuration = Duration.Zero)(im: AssetData) = im.tag match {
     case Medium => medium
     case _ => preview
   }
 
-  lazy val imageCache = new MemoryImageCache(testContext)
+  lazy val imageCache = MemoryImageCache(testContext)
 
   lazy val loader = new ImageLoader(testContext, null, imageCache, null, null, null) {
 
-    override def hasCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Boolean] = CancellableFuture.successful(cachedBitmapResult(asset).isDefined)
+    override def hasCachedBitmap(asset: AssetData, req: BitmapRequest): Future[Boolean] = Future.successful(cachedBitmapResult(asset).isDefined)
 
-    override def hasCachedData(asset: AssetData): CancellableFuture[Boolean] = CancellableFuture.successful(cachedDataResult(asset).isDefined)
+    override def hasCachedData(asset: AssetData): Future[Boolean] = Future.successful(cachedDataResult(asset).isDefined)
 
-    override def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = cachedBitmapResult(asset).fold(CancellableFuture.cancelled[Bitmap]())(CancellableFuture.successful)
+    override def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bmp] = cachedBitmapResult(asset).fold(CancellableFuture.cancelled[Bmp]())(CancellableFuture.successful)
 
-    override def loadBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = CancellableFuture.delayed(loadDelay(asset))(bitmapResult(asset).get)
+    override def loadBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bmp] = CancellableFuture.delayed(loadDelay(asset))(bitmapResult(asset).get)
 
     override def loadCachedGif(asset: AssetData): CancellableFuture[Gif] = cachedGifResult(asset).fold(CancellableFuture.cancelled[Gif]())(CancellableFuture.successful)
 

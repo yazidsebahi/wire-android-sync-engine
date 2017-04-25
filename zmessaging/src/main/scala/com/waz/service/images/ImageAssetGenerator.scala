@@ -33,6 +33,7 @@ import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Single}
 import com.waz.utils._
+import com.waz.utils.wrappers.Bmp
 
 import scala.concurrent.Future
 
@@ -97,7 +98,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       val sampleSize = BitmapUtils.computeInSampleSize(minWidth, meta.width)
       val memoryNeeded = (w * h) + (meta.width / sampleSize * meta.height / sampleSize) * 4
       imageCache.reserve(asset.id, options.req, memoryNeeded)
-      input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation), CancellableFuture.successful) map { image =>
+      input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation).map(Bmp.toAndroid), CancellableFuture.successful) map { image =>
         if (crop) {
           verbose(s"cropping to $w")
           BitmapUtils.cropRect(image, w)
@@ -154,7 +155,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
 
     def load = {
       imageCache.reserve(id, options.req, meta.width, if (meta.isRotated) 2 * meta.height else meta.height)
-      bitmapLoader(() => file.inputStream, 1, meta.orientation)
+      bitmapLoader(() => file.inputStream, 1, meta.orientation).map(Bmp.toAndroid)
     }
 
     imageCache(id, options.req, meta.width, load).future.flatMap(saveImage(file, _, Mime.Jpg, options)).lift

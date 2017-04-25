@@ -58,7 +58,7 @@ private object ZLogMacros {
     import c.universe._
     q"""
         if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Error) ${reify(println(s"E: ${tag.splice}: ${message.splice}"))}
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Error) ${reify(println(s"E: ${tag.splice}: ${message.splice}: ${cause.splice}"))}
         }
         else
           if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message, $cause)

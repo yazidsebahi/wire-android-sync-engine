@@ -17,7 +17,7 @@
  */
 package com.waz.utils.wrappers
 
-class JVMIntent(context: Context, clazz: Class[_]) extends Intent {
+class JVMIntent(context: Option[Context] = None, clazz: Option[Class[_]]) extends Intent {
 
   private var action: Option[String] = None
   private var extras: Map[String, AnyRef] = Map.empty
@@ -29,5 +29,13 @@ class JVMIntent(context: Context, clazz: Class[_]) extends Intent {
 }
 
 object JVMIntentUtil extends IntentUtil {
-  override def apply(context: Context, clazz: Class[_]) = new JVMIntent(context, clazz)
+  val ACTION_MEDIA_SCANNER_SCAN_FILE = "action.MEDIA_SCANNER_SCAN_FILE"
+
+  override def apply(context: Context, clazz: Class[_]) = new JVMIntent(Some(context), Some(clazz))
+
+  override def scanFileIntent(uri: URI): Intent = {
+    val intent = new JVMIntent(None, None)
+    intent.setAction(ACTION_MEDIA_SCANNER_SCAN_FILE)
+    intent
+  }
 }

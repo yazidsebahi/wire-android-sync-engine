@@ -24,7 +24,13 @@ import android.support.v4.util.LruCache
 import com.waz.ZLog._
 import com.waz.utils.TrimmingLruCache.CacheSize
 
-class TrimmingLruCache[K, V](val context: Context, size: CacheSize) extends LruCache[K, V](size.bytes(context)) with AutoTrimming
+trait Cache[K, V] {
+  def put(key: K, value: V): V
+  def get(key: K): V
+  def remove(key: K): V
+}
+
+class TrimmingLruCache[K, V](val context: Context, size: CacheSize) extends LruCache[K, V](size.bytes(context)) with AutoTrimming with Cache[K, V]
 
 object TrimmingLruCache {
   private var _memoryClass = 0
@@ -93,4 +99,4 @@ object AutoTrimming {
   )
 }
 
-class UnlimitedLruCache[K, V] extends LruCache[K, V](Integer.MAX_VALUE)
+class UnlimitedLruCache[K, V] extends LruCache[K, V](Integer.MAX_VALUE) with Cache[K, V]

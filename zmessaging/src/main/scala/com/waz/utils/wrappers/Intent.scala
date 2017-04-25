@@ -36,6 +36,8 @@ object Intent {
   def setUtil(util: IntentUtil): Unit = this.util = util
 
   def apply(context: Context, clazz: Class[_]): Intent = util.apply(context, clazz)
+
+  def scanFileIntent(uri: URI): Intent = util.scanFileIntent(uri: URI)
 }
 
 trait IntentUtil {
@@ -46,8 +48,12 @@ trait IntentUtil {
     case i:AndroidIntent => i.intent
     case _ => null
   }
+
+  def scanFileIntent(uri: URI): Intent
 }
 
 object AndroidIntentUtil extends IntentUtil {
-  override def apply(context: Context, clazz: Class[_]) = new AndroidIntent(new AIntent(ContextBuilder.unwrap(context), clazz))
+  override def apply(context: Context, clazz: Class[_]) = new AndroidIntent(new AIntent(Context.unwrap(context), clazz))
+
+  override def scanFileIntent(uri: URI) = new AndroidIntent(new AIntent(AIntent.ACTION_MEDIA_SCANNER_SCAN_FILE, URI.unwrap(uri)))
 }

@@ -18,17 +18,17 @@
 package com.waz.bitmap
 
 import android.graphics.Bitmap
-import org.robolectric.Robolectric
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import com.waz.utils.wrappers.Bmp
 
 class BitmapDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
 
-  lazy val bitmap = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)
+  lazy val bitmap: Bmp = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)
 
   feature("Retry on error") {
 
     scenario("retry on OOM error") {
-      val decoder = new BitmapDecoder(Robolectric.application)
+      val decoder = new BitmapDecoder
 
       decoder.retryOnError(1, 8) { sample =>
         if (sample == 1) throw new OutOfMemoryError()
@@ -37,7 +37,7 @@ class BitmapDecoderSpec extends FeatureSpec with Matchers with RobolectricTests 
     }
 
     scenario("don't retry if there is no error") {
-      val decoder = new BitmapDecoder(Robolectric.application)
+      val decoder = new BitmapDecoder
 
       decoder.retryOnError(1, 8) { sample =>
         sample shouldEqual 1
@@ -46,7 +46,7 @@ class BitmapDecoderSpec extends FeatureSpec with Matchers with RobolectricTests 
     }
 
     scenario("don't retry forever") {
-      val decoder = new BitmapDecoder(Robolectric.application)
+      val decoder = new BitmapDecoder
 
       var samples = List[Int]()
 

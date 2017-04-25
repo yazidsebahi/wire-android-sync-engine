@@ -35,11 +35,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class CacheService(context: Context, storage: Database) {
+class CacheService(context: Context, storage: Database, val cacheStorage: CacheStorage) {
   import CacheService._
   import Threading.Implicits.Background
-
-  lazy val cacheStorage = new CacheStorage(storage, context)
 
   // create new cache entry for file, return the entry immediately
   def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
@@ -141,9 +139,14 @@ class CacheService(context: Context, storage: Database) {
   def intCacheDir: File = context.getCacheDir
   def cacheDir: File = extCacheDir.getOrElse(intCacheDir)
 
-  def getEntry(key: CacheKey): Future[Option[CacheEntry]] = cacheStorage.get(key) map {
-    case Some(e) => Some(new CacheEntry(e, this))
-    case None => None
+  def getEntry(key: CacheKey): Future[Option[CacheEntry]] = {
+    verbose(s"fileCache getEntry with key $key")
+    cacheStorage.get(key).map {
+      case Some(e) =>  verbose(s"e: $e"); Some(new CacheEntry(e, this))
+      case None => verbose("none"); None
+    }.recover {
+      case e: Throwable => warn("failed", e); None
+    }
   }
 
   def getOrElse(key: CacheKey, default: => Future[CacheEntry]) = getEntry(key) flatMap {
@@ -175,6 +178,8 @@ class CacheService(context: Context, storage: Database) {
 
 object CacheService {
   private implicit val logTag: LogTag = logTagFor[CacheService]
+
+  def apply(context: Context, storage: Database): CacheService = new CacheService(context, storage, CacheStorage(storage, context))
 
   val DataThreshold = 4 * 1024 // amount of data stored in db instead of a file
   val TemDataExpiryTime = 12.hours

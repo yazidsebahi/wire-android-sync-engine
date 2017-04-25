@@ -30,7 +30,7 @@ import scala.concurrent.duration.Duration
  * TODO: maybe image decoder could save pixels directly to current image (line bye line), would not need pixels buffer
  * @param gif
  */
-class AnimGifDecoder(context: Context, gif: Gif) {
+class AnimGifDecoder(gif: Gif) {
 
   private implicit val logTag: LogTag = logTagFor[AnimGifDecoder]
 
@@ -41,7 +41,7 @@ class AnimGifDecoder(context: Context, gif: Gif) {
 
   var currentImage: Bitmap = _
 
-  val decoder = new LzwDecoder(context, gif)
+  val decoder = new LzwDecoder(gif)
 
   /**
    * Returns a delay to wait before displaying next frame.

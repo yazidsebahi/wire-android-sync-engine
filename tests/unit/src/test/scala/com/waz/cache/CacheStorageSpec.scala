@@ -37,7 +37,7 @@ class CacheStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val cacheDir = context.getCacheDir
 
   lazy val storage = new GlobalDatabase(context)
-  lazy val cache = new CacheStorage(storage, context)
+  lazy val cache = CacheStorage(storage, context)
 
   feature("Cache Storage Initialization") {
     scenario("Cache entries where files and data are missing are not loaded.") {

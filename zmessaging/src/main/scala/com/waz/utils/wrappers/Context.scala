@@ -17,7 +17,7 @@
  */
 package com.waz.utils.wrappers
 
-import android.content.{ComponentName, Intent => AIntent, Context => AContext}
+import android.content.{Context => AContext}
 import scala.language.implicitConversions
 import AndroidIntentUtil._
 
@@ -25,14 +25,16 @@ import AndroidIntentUtil._
 trait Context {
   def startService(intent: Intent): Boolean
   def getSystemService[A](name: String): A
+  def sendBroadcast(intent: Intent): Unit
 }
 
 class AndroidContext(val context: AContext) extends Context {
   override def startService(intent: Intent) = Option(context.startService(intent)).isDefined
   override def getSystemService[A](name: String) = context.getSystemService(name).asInstanceOf[A]
+  override def sendBroadcast(intent: Intent) = context.sendBroadcast(intent)
 }
 
-object ContextBuilder {
+object Context {
   implicit def wrap(aContext: AContext): Context = new AndroidContext(aContext)
   implicit def unwrap(context: Context): AContext = context match {
     case a:AndroidContext => a.context

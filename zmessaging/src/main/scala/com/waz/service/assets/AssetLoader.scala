@@ -29,9 +29,15 @@ import com.waz.service.downloads.{Downloader, DownloaderService}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.wrappers.URI
 
-class AssetLoader(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
+trait AssetLoader {
+  def getAssetData(request: AssetRequest): CancellableFuture[Option[LocalData]]
+  def downloadAssetData(req: AssetRequest): CancellableFuture[Option[LocalData]]
+  def openStream(uri: URI): InputStream
+}
+
+class AssetLoaderImpl(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
     streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],
-    unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService) {
+    unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService) extends AssetLoader {
 
   import com.waz.threading.Threading.Implicits.Background
 
@@ -69,4 +75,11 @@ object AssetLoader {
       .orElse(Option(cr.openFileDescriptor(URI.unwrap(uri), "r")).map(file => new FileInputStream(file.getFileDescriptor)))
       .getOrElse(throw new FileNotFoundException(s"Can not load image from: $uri"))
   }
+
+  def apply(context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
+            streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],
+            unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService
+           ) =
+    new AssetLoaderImpl(context, downloader, assetDownloader, streamDownloader, videoDownloader, unencodedAudioDownloader, cache)
+
 }

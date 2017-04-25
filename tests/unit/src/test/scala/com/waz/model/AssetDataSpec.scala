@@ -22,7 +22,7 @@ import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.AssetStatus.{UploadInProgress, UploadNotStarted}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.Matchers._
-import com.waz.utils.sha2
+//import com.waz.utils.sha2
 import com.waz.utils.wrappers._
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
@@ -39,19 +39,32 @@ class AssetDataSpec
 
   import com.waz.model.AssetData._
 
+  lazy val alphaNumStr = Gen.nonEmptyListOf(alphaNumChar).map(_.mkString)
+  lazy val genDimension = Gen.chooseNum(0, 10000)
+  def sideEffect[A](f: => A): Gen[A] = Gen.resultOf[Unit, A](_ => f)
+
   implicit def optGen[T](implicit gen: Gen[T]): Gen[Option[T]] = Gen.frequency((1, Gen.const(None)), (2, gen.map(Some(_))))
 
-  implicit lazy val arbMetaData: Arbitrary[AssetMetaData] = Arbitrary(Gen.oneOf(arbImageMetaData.arbitrary, arbVideoMetaData.arbitrary, arbAudioMetaData.arbitrary))
-  implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- Gen.oneOf(Medium, Preview)) yield AssetMetaData.Image(d, t))
-  implicit lazy val arbVideoMetaData: Arbitrary[AssetMetaData.Video] = Arbitrary(Gen.resultOf(AssetMetaData.Video(_: Dim2, _: Duration)))
-  implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(Gen.resultOf(AssetMetaData.Audio(_: Duration, _: Option[Loudness])))
   implicit lazy val arbDim2: Arbitrary[Dim2] = Arbitrary(for (w <- genDimension; h <- genDimension) yield Dim2(w, h))
-  lazy val genDimension = Gen.chooseNum(0, 10000)
   implicit lazy val arbDuration: Arbitrary[Duration] = Arbitrary(Gen.posNum[Long] map Duration.ofMillis)
+  implicit lazy val arbAssetId: Arbitrary[AssetId]       = Arbitrary(sideEffect(AssetId()))
+  implicit lazy val arbRConvId: Arbitrary[RConvId]       = Arbitrary(sideEffect(RConvId()))
+
   implicit lazy val arbLoudness: Arbitrary[Loudness] = Arbitrary(for {
     len <- Gen.chooseNum(1,10)
     floats <- Gen.listOfN(len, Gen.chooseNum(0.0f, 1.0f))
   } yield Loudness(floats.toVector))
+
+  implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
+    scheme <- Gen.oneOf("file", "content", "http")
+    path <- alphaNumStr
+  } yield URI.parse(s"$scheme://$path"))
+
+  implicit lazy val arbImageMetaData: Arbitrary[AssetMetaData.Image] = Arbitrary(for (d <- arbitrary[Dim2]; t <- Gen.oneOf(Medium, Preview)) yield AssetMetaData.Image(d, t))
+  implicit lazy val arbVideoMetaData: Arbitrary[AssetMetaData.Video] = Arbitrary(Gen.resultOf(AssetMetaData.Video(_: Dim2, _: Duration)))
+  implicit lazy val arbAudioMetaData: Arbitrary[AssetMetaData.Audio] = Arbitrary(Gen.resultOf(AssetMetaData.Audio(_: Duration, _: Option[Loudness])))
+
+  implicit lazy val arbMetaData: Arbitrary[AssetMetaData] = Arbitrary(Gen.oneOf(arbImageMetaData.arbitrary, arbVideoMetaData.arbitrary, arbAudioMetaData.arbitrary))
 
   implicit lazy val arbAssetData: Arbitrary[AssetData] = Arbitrary(for {
     id            <- arbitrary[AssetId]
@@ -62,6 +75,8 @@ class AssetDataSpec
     proxyPath     <- optGen(arbitrary[String])
     convId        <- optGen(arbitrary[RConvId])
   } yield AssetData(id, mime, sizeInBytes, UploadNotStarted, None, None, None, None, None, name, None, None, source, None, convId, None))
+
+  private def arbitraryAssetData: List[AssetData] = (1 to 10).flatMap(_ => arbAssetData.arbitrary.sample).toList
 
   // TODO: Right now the default implicit AssetData JSON decoder is v2 AnyAssetDataDecoder. FInd a way to change it
   // so in tests we could use the following enlarged arbAssetData. Or wait for the end of the transition period.
@@ -83,24 +98,17 @@ class AssetDataSpec
     proxyPath     <- optGen(arbitrary[String])
     convId        <- optGen(arbitrary[RConvId])
     data <- optGen(arbitrary[Array[Byte]])
-  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, encryption, name, previewId, metaData, source, proxyPath, convId, data))*/
+  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, encryption, name, previewId, metaData, source, proxyPath, convId, data))
 
-  lazy val alphaNumStr = Gen.nonEmptyListOf(alphaNumChar).map(_.mkString)
   implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(Gen.oneOf[AssetStatus](AssetStatus.UploadNotStarted,
     AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed, AssetStatus.UploadDone, AssetStatus.DownloadFailed))
   implicit lazy val arbAssetToken: Arbitrary[AssetToken] = Arbitrary(Gen.resultOf(AssetToken))
   implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))
   implicit lazy val arbSha256: Arbitrary[Sha256] = Arbitrary(arbitrary[Array[Byte]].map(b => Sha256(sha2(b))))
-  implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
-    scheme <- Gen.oneOf("file", "content", "http")
-    path <- alphaNumStr
-  } yield URI.parse(s"$scheme://$path"))
-  def sideEffect[A](f: => A): Gen[A] = Gen.resultOf[Unit, A](_ => f)
   implicit lazy val arbConvId: Arbitrary[ConvId]         = Arbitrary(sideEffect(ConvId()))
-  implicit lazy val arbRConvId: Arbitrary[RConvId]       = Arbitrary(sideEffect(RConvId()))
   implicit lazy val arbUserId: Arbitrary[UserId]         = Arbitrary(sideEffect(UserId()))
-  implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))
-  implicit lazy val arbAssetId: Arbitrary[AssetId]       = Arbitrary(sideEffect(AssetId()))
+  implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))*/
+
 
   feature("json serialization") {
     scenario("Random metadata") {
@@ -120,7 +128,7 @@ class AssetDataSpec
 
       implicit val db = mock[DB]
 
-      val assets = (1 to 10).flatMap(_ => arbAssetData.arbitrary.sample).toVector
+      val assets = arbitraryAssetData.toVector
       val values = assets.map(AssetDataDao.values)
 
       val stmt = mock[DBStatement]

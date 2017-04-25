@@ -45,7 +45,7 @@ import scala.concurrent._
 import scala.util.Try
 
 
-sealed trait Downloader[-A <: DownloadRequest] {
+trait Downloader[-A <: DownloadRequest] {
   def load(request: A, callback: ProgressIndicator.Callback): CancellableFuture[Option[CacheEntry]]
 }
 

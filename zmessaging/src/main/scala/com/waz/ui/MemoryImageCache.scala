@@ -17,35 +17,29 @@
  */
 package com.waz.ui
 
-import android.content.Context
 import android.graphics.Bitmap
 import com.waz.ZLog._
 import com.waz.bitmap
 import com.waz.model.AssetId
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
-import com.waz.utils.TrimmingLruCache
+import com.waz.utils.{Cache, TrimmingLruCache}
 import com.waz.utils.TrimmingLruCache.CacheSize
+import com.waz.utils.wrappers.{Bmp, Context}
 
-class MemoryImageCache(val context: Context) {
+class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry]) {
   import MemoryImageCache._
+
   private implicit val logTag: LogTag = logTagFor[MemoryImageCache]
 
-  /**
-   * In memory image cache.
-   */
-  private val lru = new TrimmingLruCache[Key, Entry](context, CacheSize(total => math.max(5 * 1024 * 1024, (total - 30 * 1024 * 1024) / 2))) {
-    override def sizeOf(id: Key, value: Entry): Int = value.size
+  def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bmp] = Option(lru.get(Key(id, tag(req)))) flatMap {
+    case BitmapEntry(bmp) if bmp.getWidth >= req.width || (imgWidth > 0 && bmp.getWidth > imgWidth) => Some(bmp)
+    case _ => None
+
   }
 
-  def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap] =
-    Option(lru.get(Key(id, tag(req)))) flatMap {
-      case BitmapEntry(bmp) if bmp.getWidth >= req.width || (imgWidth > 0 && bmp.getWidth > imgWidth) => Some(bmp)
-      case _ => None
-    }
-
-  def add(id: AssetId, req: BitmapRequest, bitmap: Bitmap): Unit = if (bitmap != null && bitmap != Images.EmptyBitmap) {
-    lru.put(Key(id, tag(req)), BitmapEntry(bitmap))
+  def add(id: AssetId, req: BitmapRequest, bmp: Bmp): Unit = if (bmp != null && !bmp.isEmpty) {
+    lru.put(Key(id, tag(req)), BitmapEntry(bmp))
   }
 
   def remove(id: AssetId, req: BitmapRequest): Unit = lru.remove(Key(id, tag(req)))
@@ -81,14 +75,21 @@ object MemoryImageCache {
     def size: Int
   }
 
-  case class BitmapEntry(bitmap: Bitmap) extends Entry {
-    override def size = bitmap.getByteCount
+  case class BitmapEntry(bmp: Bmp) extends Entry {
+    override def size = bmp.getByteCount
   }
 
   // used to reserve space
   case class EmptyEntry(size: Int) extends Entry {
     require(size > 0)
   }
+
+  def apply(context: Context) = new MemoryImageCache(newTrimmingLru(context))
+
+  def newTrimmingLru(context: Context):Cache[Key, Entry] =
+    new TrimmingLruCache[Key, Entry](context, CacheSize(total => math.max(5 * 1024 * 1024, (total - 30 * 1024 * 1024) / 2))) {
+      override def sizeOf(id: Key, value: Entry): Int = value.size
+    }
 
   sealed trait BitmapRequest {
     val width: Int
@@ -102,7 +103,7 @@ object MemoryImageCache {
   }
 
   //The width makes BitmapRequests themselves bad keys, remove them
-  private def tag(request: BitmapRequest) = request match {
+  def tag(request: BitmapRequest) = request match {
     case Regular(_, mirror) => s"Regular-$mirror"
     case Single(_, mirror) => s"Single-$mirror"
     case Round(_, bw, bc) => s"Round-$bw-$bc"
