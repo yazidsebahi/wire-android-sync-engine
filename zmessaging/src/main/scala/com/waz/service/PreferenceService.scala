@@ -50,7 +50,7 @@ class PreferenceService(context: Context) {
 
   def callingV3  = uiPreferences.getString(callingV3Key,         if (ZmsVersion.DEBUG) "2" else "0") //0 (calling v2) by default for production, v3 (2) for debug
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey,       true) //true by default for production
-  def v31AssetsEnabled = uiPreferences.getBoolean(gcmEnabledKey, false)
+  def v31AssetsEnabled = false
 
   lazy val preferences = preferencesFrom(context)
 
