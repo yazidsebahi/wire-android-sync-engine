@@ -19,8 +19,7 @@ package com.waz.service.push
 
 import android.content.Context
 import com.google.android.gms.common.{ConnectionResult, GooglePlayServicesUtil}
-import com.google.android.gms.gcm.GoogleCloudMessaging
-import com.google.android.gms.iid.InstanceID
+import com.google.firebase.iid.FirebaseInstanceId
 import com.localytics.android.Localytics
 import com.waz.HockeyApp
 import com.waz.HockeyApp.NoReporting
@@ -76,7 +75,7 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
     withGcm {
       LoggedTry {deleteInstanceId()} // if localytics registered first with only their sender id, we have to unregister so that our own additional sender id gets registered, too
       try {
-        val token = getGcmToken(gcmSenderId.str +: metadata.localyticsSenderId.toSeq)
+        val token = getFcmToken
         Localytics.setPushDisabled(false)
         Localytics.setPushRegistrationId(token)
         CancellableFuture.successful(Some(setGcm(token, AccountId(""))))
@@ -110,11 +109,11 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
 
   private def withGcm[A](body: => A): A = if (gcmAvailable) body else throw new GcmGlobalService.GcmNotAvailableException
 
-  private def getGcmToken(senderIds: Seq[String]) =
-     InstanceID.getInstance(context).getToken(senderIds mkString ",", GoogleCloudMessaging.INSTANCE_ID_SCOPE)
+  //TODO do we need the scope here? GoogleCloudMessaging.INSTANCE_ID_SCOPE
+  private def getFcmToken = FirebaseInstanceId.getInstance().getToken()
 
   //Deleting the instance id also removes any tokens the instance id was using
-  private def deleteInstanceId(): Unit = LoggedTry.local { InstanceID.getInstance(context).deleteInstanceID() }
+  private def deleteInstanceId(): Unit = LoggedTry.local { FirebaseInstanceId.getInstance().deleteInstanceId() }
 }
 
 object GcmGlobalService {
