@@ -40,7 +40,8 @@ trait CallingService {
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
   def onOtherSideAnsweredCall(convId: RConvId): Unit
   def onEstablishedCall(convId: RConvId, userId: UserId): Unit
-  def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String): Unit
+  def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId): Unit
+  def onMetricsReady(convId: RConvId, metricsJson: String): Unit
   def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean): Unit
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
@@ -110,7 +111,6 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
       new MissedCallHandler {
         override def onMissedCall(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, arg: Pointer): Unit =
           callingService.onMissedCall(RConvId(convId), instant(msg_time), UserId(userId), video_call)
-
       },
       new AnsweredCallHandler {
         override def onAnsweredCall(convId: String, arg: Pointer) = callingService.onOtherSideAnsweredCall(RConvId(convId))
@@ -120,8 +120,12 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
           callingService.onEstablishedCall(RConvId(convId), UserId(userId))
       },
       new CloseCallHandler {
-        override def onClosedCall(reasonCode: Int, convId: String, userId: String, metrics_json: String, arg: Pointer) =
-          callingService.onClosedCall(ClosedReason(reasonCode), RConvId(convId), UserId(userId), metrics_json)
+        override def onClosedCall(reasonCode: Int, convId: String, userId: String, arg: Pointer) =
+          callingService.onClosedCall(ClosedReason(reasonCode), RConvId(convId), UserId(userId))
+      },
+      new MetricsHandler {
+        override def onMetricsReady(convId: String, metricsJson: String, arg: Pointer) =
+          callingService.onMetricsReady(RConvId(convId), metricsJson)
       },
       null
     )
@@ -204,12 +208,14 @@ object AvsV3 {
     *   WCALL_REASON_LOST_MEDIA          3
     *   WCALL_REASON_CANCELED            4
     *   WCALL_REASON_ANSWERED_ELSEWHERE  5
-    *   ??? TODO what's this reason?
+    *   WCALL_REASON_IO_ERROR            6
     *   WCALL_REASON_STILL_ONGOING       7
+    *
+    *   interrupted - SE only (when interrupted by GSM call)
     */
   type ClosedReason = ClosedReason.Value
   object ClosedReason extends Enumeration {
-    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, WhoKnows, StillOngoing, Interrupted = Value
+    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, IOError, StillOngoing, Interrupted = Value
   }
 
   /**

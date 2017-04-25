@@ -191,7 +191,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       Await.ready(checkpoint1.head, defaultDuration)
 
       (avsMock.endCall _).expects(*, *).once().onCall { (rId, isGroup) =>
-        service.onClosedCall(StillOngoing, groupConv.remoteId, groupMember1, "")
+        service.onClosedCall(StillOngoing, groupConv.remoteId, groupMember1)
       }
       service.endCall(groupConv.id) //avs won't call the ClosedHandler if a group call is still ongoing in the background
       Await.ready(checkpoint2.head, defaultDuration)
@@ -213,12 +213,12 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       Await.ready(checkpoint1.head, defaultDuration)
 
       (avsMock.rejectCall _).expects(*, *).once().onCall { (_, _) =>
-        service.onClosedCall(StillOngoing, _1t1Conv.remoteId, otherUser, "")
+        service.onClosedCall(StillOngoing, _1t1Conv.remoteId, otherUser)
       }
       service.endCall(_1t1Conv.id)
       Await.ready(checkpoint2.head, defaultDuration)
 
-      service.onClosedCall(Normal, _1t1Conv.remoteId, otherUser, "")
+      service.onClosedCall(Normal, _1t1Conv.remoteId, otherUser)
       Await.ready(checkpoint3.head, defaultDuration)
     }
 
@@ -246,7 +246,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       Await.ready(checkpoint1.head, defaultDuration)
 
       (avsMock.endCall _).expects(groupConv.remoteId, true).once().onCall { (_, _) =>
-        service.onClosedCall(Normal, groupConv.remoteId, groupMember1, "")
+        service.onClosedCall(Normal, groupConv.remoteId, groupMember1)
       }
       service.endCall(groupConv.id)
       Await.ready(checkpoint2.head, defaultDuration)
@@ -319,7 +319,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
 
       service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
       (avsMock.rejectCall _).expects(*, *).anyNumberOfTimes().onCall { (_, _) =>
-        service.onClosedCall(StillOngoing, groupConv.remoteId, groupMember1, "")
+        service.onClosedCall(StillOngoing, groupConv.remoteId, groupMember1)
       }
       service.endCall(groupConv.id) //user rejects the group call
 
@@ -341,7 +341,7 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
       val checkpoint3 = callCheckpoint(service, _.contains(groupConv.id), _.exists(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == VoiceChannelState.SELF_CONNECTED))
       
       (avsMock.endCall _).expects(*, *).once().onCall { (rId, _) =>
-        service.onClosedCall(Normal, otoConv.remoteId, otoUser, "")
+        service.onClosedCall(Normal, otoConv.remoteId, otoUser)
       }
       service.endCall(otoConv.id)
 

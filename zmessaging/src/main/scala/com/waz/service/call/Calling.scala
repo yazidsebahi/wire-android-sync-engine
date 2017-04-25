@@ -43,7 +43,7 @@ object Calling {
 
   @native def wcall_network_changed(): Unit
 
-  @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, arg: Pointer): Int
+  @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, metricsh: MetricsHandler, arg: Pointer): Int
 
   @native def wcall_close(): Unit
 
@@ -108,7 +108,7 @@ object Calling {
   }
 
   trait CloseCallHandler extends Callback {
-    def onClosedCall(reason: Int, convid: String, userid: String, metrics_json: String, arg: Pointer): Unit
+    def onClosedCall(reason: Int, convid: String, userid: String, arg: Pointer): Unit
   }
 
   trait BitRateStateHandler extends Callback {
@@ -125,6 +125,10 @@ object Calling {
 
   trait GroupChangedHandler extends Callback {
     def onGroupChanged(convId: String, arg: Pointer): Unit
+  }
+
+  trait MetricsHandler extends Callback {
+    def onMetricsReady(convId: String, metricsJson: String, arg: Pointer): Unit
   }
 
 }

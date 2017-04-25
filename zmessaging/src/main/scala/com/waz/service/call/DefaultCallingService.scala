@@ -146,14 +146,18 @@ class DefaultCallingService(context:             Context,
         setCallMuted(c.muted) //Need to set muted only after call is established
         Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now)))
       case None => warn("Received onEstablishedCall callback without a current active call"); None
-
     }
   }
 
-  override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId, metricsJson: String) = withConv(convId) { conv =>
+  override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id}, userId: $userId")
     if (reason != StillOngoing) availableCalls.mutate(calls => calls - conv.id)
     currentCall.mutate(onCallClosed(_, reason, conv, userId))
+  }
+
+  //TODO pass call metrics to tracking when AVS are ready for it.
+  override def onMetricsReady(convId: RConvId, metricsJson: String) = {
+    verbose(s"Call metrics for $convId, metrics: $metricsJson")
   }
 
   override def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
@@ -260,7 +264,6 @@ class DefaultCallingService(context:             Context,
         case _ => error(s"Tried resending message on invalid info: ${info.convId} in state ${info.state} with msg: ${info.outstandingMsg}")
       }
     case None => warn("Tried to continue degraded call without a current active call")
-
   }
 
   private def sendCallMessage(convId: ConvId, msg: GenericMessage, ctx: Pointer): Unit = withConv(convId) { conv =>
