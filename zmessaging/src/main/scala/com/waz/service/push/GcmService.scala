@@ -177,7 +177,7 @@ class GcmService(accountId:         AccountId,
 
   //Will first unregister the current token before registering a new one
   def resetGcm(post: GcmRegistration => Future[Boolean]): Future[Option[GcmRegistration]] =
-    gcmGlobalService.resetGcm(accountId).future flatMap {
+    gcmGlobalService.resetGcm(accountId) flatMap {
       case Some(reg) => post(reg) flatMap {
         case true =>
           lastRegistrationTime := Instant.now

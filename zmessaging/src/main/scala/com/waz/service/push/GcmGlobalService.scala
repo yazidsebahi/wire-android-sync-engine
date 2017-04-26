@@ -26,14 +26,13 @@ import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.GlobalPreferences.GcmEnabledKey
-import com.waz.content.Preferences.PrefKey
 import com.waz.content.{GlobalPreferences, Preferences}
 import com.waz.model._
-import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
+import com.waz.service.push.GcmGlobalService.{GcmRegistration, PushSenderId}
 import com.waz.service.{BackendConfig, MetaDataService}
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.LoggedTry
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.EventContext
+import com.waz.utils.{LoggedTry, returning}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.{NoStackTrace, NonFatal}
@@ -46,7 +45,7 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
 
   import metadata._
 
-  val gcmSenderId: GcmSenderId = backendConfig.gcmSenderId
+  val gcmSenderId: PushSenderId = backendConfig.gcmSenderId
 
   lazy val gcmCheckResult = try GooglePlayServicesUtil.isGooglePlayServicesAvailable(context) catch {
     case ex: Throwable =>
@@ -71,20 +70,20 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
   }
 
   //removes the current gcm token and generates a new one - ensures that the user shouldn't be left without a GCM token
-  def resetGcm(user: AccountId): CancellableFuture[Option[GcmRegistration]] = CancellableFuture.lift(unregister()) flatMap { _ =>
+  def resetGcm(user: AccountId): Future[Option[GcmRegistration]] = unregister().flatMap { _ =>
     withGcm {
       LoggedTry {deleteInstanceId()} // if localytics registered first with only their sender id, we have to unregister so that our own additional sender id gets registered, too
       try {
         val token = getFcmToken
         Localytics.setPushDisabled(false)
         Localytics.setPushRegistrationId(token)
-        CancellableFuture.successful(Some(setGcm(token, AccountId(""))))
+        Future.successful(Some(setGcm(token, AccountId(""))))
       } catch {
         case NonFatal(ex) =>
           setGcm("", AccountId(""))
           warn(s"registerGcm failed for sender: '$gcmSenderId'", ex)
           HockeyApp.saveException(ex, s"unable to register gcm for sender $gcmSenderId")
-          CancellableFuture.successful(None)
+          Future.successful(None)
       }
     }
   }
@@ -110,7 +109,9 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
   private def withGcm[A](body: => A): A = if (gcmAvailable) body else throw new GcmGlobalService.GcmNotAvailableException
 
   //TODO do we need the scope here? GoogleCloudMessaging.INSTANCE_ID_SCOPE
-  private def getFcmToken = FirebaseInstanceId.getInstance().getToken()
+  private def getFcmToken = returning(FirebaseInstanceId.getInstance().getToken()) { t =>
+    if (t == null) throw new Exception("No FCM token was returned from the FirebaseInstanceId")
+  }
 
   //Deleting the instance id also removes any tokens the instance id was using
   private def deleteInstanceId(): Unit = LoggedTry.local { FirebaseInstanceId.getInstance().deleteInstanceId() }
@@ -118,7 +119,7 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
 
 object GcmGlobalService {
 
-  case class GcmSenderId(str: String) extends AnyVal
+  case class PushSenderId(str: String) extends AnyVal
 
   class GcmNotAvailableException extends Exception("Google Play Services not available") with NoReporting with NoStackTrace
 
