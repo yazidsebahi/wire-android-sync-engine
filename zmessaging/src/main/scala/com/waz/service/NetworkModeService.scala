@@ -41,7 +41,7 @@ class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) ex
   private lazy val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE).asInstanceOf[ConnectivityManager]
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
 
-  override val networkMode = returning(Signal[NetworkMode](NetworkMode.OFFLINE)) { _.disableAutowiring() }
+  override val networkMode = returning(Signal[NetworkMode](NetworkMode.UNKNOWN)) { _.disableAutowiring() }
 
   zmsLifecycle.lifecycleState { state => if (state == LifecycleState.UiActive) updateNetworkMode() }
 
@@ -53,7 +53,7 @@ class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) ex
 
   def updateNetworkMode(): Unit = {
     val mode = Option(connectivityManager.getActiveNetworkInfo) match {
-      case None => NetworkMode.OFFLINE
+      case None => NetworkMode.UNKNOWN
       case Some(info) => if (info.isConnected) computeMode(info, telephonyManager) else NetworkMode.OFFLINE
     }
     verbose(s"updateNetworkMode: $mode")
@@ -61,7 +61,8 @@ class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) ex
   }
 
   def isOfflineMode = networkMode.currentValue contains NetworkMode.OFFLINE
-  def isOnlineMode = !isOfflineMode
+  def isUnknown = networkMode.currentValue contains NetworkMode.UNKNOWN
+  def isOnlineMode = !isOfflineMode && !isUnknown
 }
 
 object NetworkModeService {

@@ -555,7 +555,7 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
     updateMessage(messageId) { _.copy(state = state) }
 
   def markMessageRead(convId: ConvId, id: MessageId) =
-    if (network.isOfflineMode) CancellableFuture.successful(None)
+    if (!network.isOnlineMode) CancellableFuture.successful(None)
     else
       updateMessage(id) { msg =>
         if (msg.state == Status.FAILED) msg.copy(state = Status.FAILED_READ)

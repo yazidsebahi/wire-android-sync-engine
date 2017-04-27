@@ -74,7 +74,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
       info(s"Optional request timeout elapsed, dropping: $job")
       content.removeSyncJob(job.id) map { _ => SyncResult.Success}
     } else {
-      val future = content.updateSyncJob(job.id)(job => job.copy(attempts = job.attempts + 1, state = SyncState.SYNCING, error = None, offline = network.isOfflineMode))
+      val future = content.updateSyncJob(job.id)(job => job.copy(attempts = job.attempts + 1, state = SyncState.SYNCING, error = None, offline = !network.isOnlineMode))
         .flatMap {
           case None => Future.successful(SyncResult(ErrorResponse.internalError(s"Could not update job: $job")))
           case Some(updated) =>
@@ -123,7 +123,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
         } else {
           verbose(s"will schedule retry for: $job, $job")
           val nextTryTime = System.currentTimeMillis() + SyncExecutor.failureDelay(job)
-          content.updateSyncJob(job.id)(job => job.copy(state = SyncState.FAILED, startTime = nextTryTime, error = error, offline = job.offline || network.isOfflineMode)) map { _ =>
+          content.updateSyncJob(job.id)(job => job.copy(state = SyncState.FAILED, startTime = nextTryTime, error = error, offline = job.offline || !network.isOnlineMode)) map { _ =>
             result
           }
         }
