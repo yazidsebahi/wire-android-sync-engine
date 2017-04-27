@@ -100,7 +100,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
 
   def postMessage(convId: ConvId, id: MessageId, editTime: Instant)(implicit convLock: ConvLock): Future[SyncResult] = {
 
-    def shouldGiveUpSending(msg: MessageData) = network.isOfflineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time)
+    def shouldGiveUpSending(msg: MessageData) = !network.isOnlineMode || timeouts.messages.sendingTimeout.elapsedSince(msg.time)
 
     storage.getMessage(id) flatMap { message =>
       message.fold(successful(None: Option[ConversationData]))(msg => convs.convById(msg.convId)) map { conv =>

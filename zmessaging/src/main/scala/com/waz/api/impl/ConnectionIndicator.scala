@@ -25,7 +25,7 @@ class ConnectionIndicator(implicit ui: UiModule) extends com.waz.api.ConnectionI
 
   private var webSocketConnected = false
   private var connectionError = false
-  private var networkMode = NetworkMode.OFFLINE
+  private var networkMode = NetworkMode.UNKNOWN
 
   signalLoader(ui.global.network.networkMode) { mode =>
     if (networkMode != mode) {
