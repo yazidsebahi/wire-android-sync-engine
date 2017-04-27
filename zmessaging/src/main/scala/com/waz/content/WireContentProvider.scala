@@ -29,7 +29,7 @@ import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.returning
-import com.waz.utils.wrappers.URI
+import com.waz.utils.wrappers.{AndroidURI, URI}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -118,7 +118,7 @@ class WireContentProvider extends ContentProvider {
   object CacheUriExtractor {
     val extractor = CacheUri.unapply(getContext) _
 
-    def unapply(uri: URI): Option[CacheKey] = extractor(uri)
+    def unapply(uri: Uri): Option[CacheKey] = extractor(new AndroidURI(uri))
   }
 }
 
