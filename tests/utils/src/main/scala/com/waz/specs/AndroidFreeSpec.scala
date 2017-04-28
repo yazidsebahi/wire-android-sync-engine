@@ -19,7 +19,7 @@ package com.waz.specs
 
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
-import com.waz.ZLog.{LogLevel, LogTag}
+import com.waz.ZLog.LogTag
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
@@ -45,7 +45,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     isTest = true
 
-    ZLog.testLogLevel = LogLevel.Error
+    ZLog.setTestLogging()
 
     Intent.setUtil(JVMIntentUtil)
 
