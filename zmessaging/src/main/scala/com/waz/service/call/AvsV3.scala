@@ -105,7 +105,7 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
         }
       },
       new IncomingCallHandler {
-        override def onIncomingCall(convId: String, userId: String, video_call: Boolean, should_ring: Boolean, arg: Pointer) =
+        override def onIncomingCall(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, should_ring: Boolean, arg: Pointer) =
           callingService.onIncomingCall(RConvId(convId), UserId(userId), video_call, should_ring)
       },
       new MissedCallHandler {

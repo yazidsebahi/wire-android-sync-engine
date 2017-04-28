@@ -22,7 +22,7 @@ import com.waz.api.{NetworkMode, VoiceChannelState}
 import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{UserId, _}
-import com.waz.service.call.AvsV3.ClosedReason.{Normal, StillOngoing}
+import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
@@ -194,6 +194,25 @@ class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with
         service.onClosedCall(StillOngoing, groupConv.remoteId, groupMember1)
       }
       service.endCall(groupConv.id) //avs won't call the ClosedHandler if a group call is still ongoing in the background
+      Await.ready(checkpoint2.head, defaultDuration)
+    }
+
+    scenario("Incoming group call answered on another device") {
+      val groupMember1 = UserId("groupUser1")
+      val groupMember2 = UserId("groupUser2")
+      val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), selfUserId, ConversationType.Group)
+
+      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+
+      val service = initCallingService()
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(_.state == OTHER_CALLING))
+      val checkpoint2 = callCheckpoint(service, _.isEmpty, _.isEmpty)
+
+      service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
+      Await.ready(checkpoint1.head, defaultDuration)
+
+      service.onClosedCall(AnsweredElsewhere, groupConv.remoteId, groupMember1)
       Await.ready(checkpoint2.head, defaultDuration)
     }
 

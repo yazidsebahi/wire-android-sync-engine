@@ -348,15 +348,6 @@ class DefaultCallingService(context:             Context,
             warn(s"Call closed from unexpected state: ${call.state}")
         }
         None
-        //TODO save call state information for tracking
-//        //Leave the current call with any information that makes sense to keep after a call was finished for tracking - will be overwritten on a new call.
-//        IdleCall.copy(
-//          convId          = call.convId,
-//          estabTime       = call.estabTime,
-//          caller          = call.caller,
-//          hangupRequested = call.hangupRequested,
-//          closedReason    = if (call.closedReason == Interrupted) Interrupted else reason
-//        )
       case Some(call) =>
         verbose("A call other than the current one was closed - likely missed another incoming call.")
         messagesService.addMissedCallMessage(conv.id, userId, Instant.now)

@@ -90,7 +90,7 @@ object Calling {
 
   /* Incoming call */
   trait IncomingCallHandler extends Callback {
-    def onIncomingCall(convid: String, userid: String, video_call: Boolean, should_ring: Boolean, arg: Pointer): Unit
+    def onIncomingCall(convid: String, msg_time: Uint32_t, userid: String, video_call: Boolean, should_ring: Boolean, arg: Pointer): Unit
   }
 
   /* Missed call */
