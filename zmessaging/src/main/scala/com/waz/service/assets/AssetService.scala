@@ -17,14 +17,15 @@
  */
 package com.waz.service.assets
 
+
 import java.io._
 import java.util.concurrent.atomic.AtomicReference
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Environment
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.Permission
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.ProgressData
