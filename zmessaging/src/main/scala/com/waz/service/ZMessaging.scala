@@ -113,6 +113,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)
+  def googleApi         = global.googleApi
   def imageCache        = global.imageCache
   def permissions       = global.permissions
   def phoneNumbers      = global.phoneNumbers
@@ -182,9 +183,9 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
-  lazy val pushSignals                            = wire[PushServiceSignals]
   lazy val pushToken                              = wire[PushTokenService]
   lazy val push: PushServiceImpl                  = wire[PushServiceImpl]
+  lazy val pushSignals                            = wire[PushServiceSignals]
   lazy val gcm: GcmService                        = wire[GcmService]
   lazy val errors                                 = wire[ErrorsService]
   lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)
