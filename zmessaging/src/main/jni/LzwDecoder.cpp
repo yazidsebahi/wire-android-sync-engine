@@ -33,6 +33,28 @@ static const int PIXEL_STACK_SIZE = 8192;
 static const int NULL_CODE = -1;
 
 
+LzwDecoder::LzwDecoder(byte* image, int* pixels, int* colors, int width, int height) {
+	this->image = image;
+	this->pixels = pixels;
+	this->colors = colors;
+	this->width = width;
+	this->height = height;
+
+	prefix = new unsigned short[MAX_STACK_SIZE];    
+	suffix = new byte[MAX_STACK_SIZE];
+	pixelStack = new byte[PIXEL_STACK_SIZE];
+	block = new byte[256];
+}
+
+
+LzwDecoder::~LzwDecoder() {
+	delete[] prefix;
+	delete[] suffix;
+	delete[] pixelStack;
+	delete[] block;
+}
+
+
 void LzwDecoder::clear(int x, int y, int w, int h, int color) {
     int* dst = pixels + (x + y * width);
     for (int l = 0; l < h; ++l) {
@@ -49,11 +71,6 @@ void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int trans
     int available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
     int endX, x, end, pass, inc, line;
 
-    unsigned short *prefix = new unsigned short[MAX_STACK_SIZE];    
-    byte *suffix = new byte[MAX_STACK_SIZE];
-    byte *pixelStack = new byte[PIXEL_STACK_SIZE];
-    byte *block = new byte[256];
-
     // Initialize GIF data stream decoder.
     data_size = image[idx++];
     clear = 1 << data_size;
@@ -62,7 +79,7 @@ void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int trans
     old_code = NULL_CODE;
     code_size = data_size + 1;
     code_mask = (1 << code_size) - 1;
-    if (clear >= MAX_STACK_SIZE) goto out;
+    if (clear >= MAX_STACK_SIZE) return;
     for (code = 0; code < clear; ++code) {
         prefix[code] = 0;
         suffix[code] = (byte)code;
@@ -107,7 +124,7 @@ void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int trans
         datum >>= code_size;
         bits -= code_size;
         if (code >= MAX_STACK_SIZE) {
-            goto out;
+            return;
         }
         // Interpret the code
         if (code == end_of_information) {
@@ -134,7 +151,7 @@ void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int trans
         }
         while (code > clear) {
             if (top >= PIXEL_STACK_SIZE) {
-                goto out;
+                return;
             }
             pixelStack[top++] = suffix[code];
             code = prefix[code];
@@ -191,12 +208,6 @@ void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int trans
             }
         }
     }
-
- out:
-    delete[] prefix;
-    delete[] suffix;
-    delete[] pixelStack;
-    delete[] block;
 }
 
 
