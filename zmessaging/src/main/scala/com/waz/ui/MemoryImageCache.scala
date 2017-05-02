@@ -17,7 +17,7 @@
  */
 package com.waz.ui
 
-import android.graphics.Bitmap
+import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog._
 import com.waz.bitmap
 import com.waz.model.AssetId
@@ -25,20 +25,20 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
 import com.waz.utils.{Cache, TrimmingLruCache}
 import com.waz.utils.TrimmingLruCache.CacheSize
-import com.waz.utils.wrappers.{Bmp, Context}
+import com.waz.utils.wrappers.{Bitmap, Context}
 
 class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry]) {
   import MemoryImageCache._
 
   private implicit val logTag: LogTag = logTagFor[MemoryImageCache]
 
-  def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bmp] = Option(lru.get(Key(id, tag(req)))) flatMap {
+  def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap] = Option(lru.get(Key(id, tag(req)))) flatMap {
     case BitmapEntry(bmp) if bmp.getWidth >= req.width || (imgWidth > 0 && bmp.getWidth > imgWidth) => Some(bmp)
     case _ => None
 
   }
 
-  def add(id: AssetId, req: BitmapRequest, bmp: Bmp): Unit = if (bmp != null && !bmp.isEmpty) {
+  def add(id: AssetId, req: BitmapRequest, bmp: Bitmap): Unit = if (bmp != null && !bmp.isEmpty) {
     lru.put(Key(id, tag(req)), BitmapEntry(bmp))
   }
 
@@ -51,7 +51,7 @@ class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry])
     Option(lru.get(key)) getOrElse lru.put(key, EmptyEntry(size))
   }
 
-  def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
+  def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[ABitmap]): CancellableFuture[ABitmap] =
     get(id, req, imgWidth) match {
       case Some(bitmap) =>
         verbose(s"found bitmap for req: $req")
@@ -75,7 +75,7 @@ object MemoryImageCache {
     def size: Int
   }
 
-  case class BitmapEntry(bmp: Bmp) extends Entry {
+  case class BitmapEntry(bmp: Bitmap) extends Entry {
     override def size = bmp.getByteCount
   }
 

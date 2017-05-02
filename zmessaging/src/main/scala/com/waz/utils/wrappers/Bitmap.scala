@@ -17,40 +17,40 @@
  */
 package com.waz.utils.wrappers
 
-import android.graphics.Bitmap
+import android.graphics.{Bitmap => ABitmap}
 import com.waz.ui.Images
 
 import scala.language.implicitConversions
 
-trait Bmp {
+trait Bitmap {
   def getByteCount: Int
   def getWidth: Int
   def getHeight: Int
   def isEmpty: Boolean
 }
 
-case class AndroidBmp(bitmap: Bitmap) extends Bmp {
+case class AndroidBitmap(bitmap: ABitmap) extends Bitmap {
   override def getByteCount = bitmap.getByteCount()
   override def getWidth = bitmap.getWidth()
   override def getHeight = bitmap.getHeight()
   override def isEmpty = (bitmap == Images.EmptyBitmap)
 }
 
-case class FakeBmp(getByteCount: Int = 1, getWidth: Int = 1, getHeight: Int = 1, isEmpty: Boolean = false) extends Bmp
+case class FakeBitmap(getByteCount: Int = 1, getWidth: Int = 1, getHeight: Int = 1, isEmpty: Boolean = false) extends Bitmap
 
-object EmptyBmp extends Bmp {
+object EmptyBitmap extends Bitmap {
   override def getByteCount: Int = 0
   override def getWidth: Int = 1
   override def getHeight: Int = 1
   override def isEmpty: Boolean = true
 }
 
-object Bmp {
-  def apply(bitmap: Bitmap): Bmp = AndroidBmp(bitmap)
+object Bitmap {
+  def apply(bitmap: ABitmap): Bitmap = AndroidBitmap(bitmap)
 
-  implicit def fromAndroid(bitmap: Bitmap): Bmp = apply(bitmap)
-  implicit def toAndroid(bmp: Bmp): Bitmap = bmp match {
-    case AndroidBmp(bitmap) => bitmap
+  implicit def fromAndroid(bitmap: ABitmap): Bitmap = apply(bitmap)
+  implicit def toAndroid(bmp: Bitmap): ABitmap = bmp match {
+    case AndroidBitmap(bitmap) => bitmap
     case _ => throw new IllegalArgumentException(s"Expected Android Bitmap, but tried to unwrap: ${bmp.getClass.getName}")
   }
 }

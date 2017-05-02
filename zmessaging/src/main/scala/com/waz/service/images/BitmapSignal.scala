@@ -17,7 +17,7 @@
  */
 package com.waz.service.images
 
-import android.graphics.Bitmap
+import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
 import com.waz.bitmap
@@ -35,7 +35,7 @@ import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Round, Single}
 import com.waz.utils.events.Signal
 import com.waz.utils.{IoUtils, WeakMemCache}
-import com.waz.utils.wrappers.Bmp
+import com.waz.utils.wrappers.Bitmap
 
 // TODO: restart on network changes if it previously failed
 abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
@@ -116,7 +116,7 @@ object BitmapSignal {
   }
 
   class MimeCheckLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
-    override type Data = Either[Bitmap, Gif]
+    override type Data = Either[ABitmap, Gif]
 
     lazy val gifLoader    = new GifLoader(asset, req, imageLoader, imageCache)
     lazy val bitmapLoader = new AssetBitmapLoader(asset, req, imageLoader, imageCache)
@@ -148,12 +148,12 @@ object BitmapSignal {
   }
 
   abstract class BitmapLoader(req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
-    override type Data = Bitmap
+    override type Data = ABitmap
 
     def id: AssetId
 
-    override def process(result: Bitmap, signal: BitmapSignal) = {
-      def generateResult: CancellableFuture[Bitmap] = {
+    override def process(result: ABitmap, signal: BitmapSignal) = {
+      def generateResult: CancellableFuture[ABitmap] = {
         if (result == bitmap.EmptyBitmap) CancellableFuture.successful(result)
         else req match {
           case Round(width, borderWidth, borderColor) => //result will be the square bitmap loaded earlier
@@ -165,7 +165,7 @@ object BitmapSignal {
         }
       }
 
-      def withCache(width: Int)(loader: => CancellableFuture[Bitmap]) = {
+      def withCache(width: Int)(loader: => CancellableFuture[ABitmap]) = {
         imageCache.reserve(id, req, width * width * 2)
         imageCache(id, req, width, loader)
       }
@@ -186,13 +186,13 @@ object BitmapSignal {
     }
 
     override def loadCached() = CancellableFuture.lift(imageLoader.hasCachedBitmap(asset, initialReq)).flatMap {
-      case true => imageLoader.loadCachedBitmap(asset, initialReq).map(bmp => Some(Bmp.toAndroid(bmp)))
+      case true => imageLoader.loadCachedBitmap(asset, initialReq).map(bmp => Some(Bitmap.toAndroid(bmp)))
       case false => CancellableFuture.successful(None)
     }.recover {
       case e: Throwable => None
     }
 
-    override def load() = imageLoader.loadBitmap(asset, initialReq).map(Bmp.toAndroid)
+    override def load() = imageLoader.loadBitmap(asset, initialReq).map(Bitmap.toAndroid)
   }
 
   class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
@@ -214,7 +214,7 @@ object BitmapSignal {
       } else {
         var etag = 0 // to make sure signal does not cache dispatched result
         def reserveFrameMemory() = imageCache.reserve(asset.id, req, gif.width, gif.height * 2)
-        def frameLoaded(frame: Bitmap) = signal publish BitmapLoaded(frame, {etag += 1; etag})
+        def frameLoaded(frame: ABitmap) = signal publish BitmapLoaded(frame, {etag += 1; etag})
         new GifAnimator(gif, reserveFrameMemory, frameLoaded).run()
       }
     }

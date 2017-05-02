@@ -24,7 +24,8 @@ import android.graphics.BitmapFactory
 import com.waz.ZLog._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
-import com.waz.utils.wrappers.{Bmp, EmptyBmp}
+import com.waz.utils.wrappers.Bitmap
+import com.waz.utils.wrappers
 
 class BitmapDecoder {
 
@@ -38,11 +39,11 @@ class BitmapDecoder {
 
   private def nextPowerOfTwo(i : Int) = 1 << (32 - Integer.numberOfLeadingZeros(i))
 
-  def withFixedOrientation(bitmap: Bmp, orientation: Int): Bmp =
-    if (bitmap == null || bitmap.isEmpty) EmptyBmp
+  def withFixedOrientation(bitmap: Bitmap, orientation: Int): Bitmap =
+    if (bitmap == null || bitmap.isEmpty) wrappers.EmptyBitmap
     else BitmapUtils.fixOrientation(bitmap, orientation)
 
-  def retryOnError(sampleSize: Int, maxSampleSize: Int = 8)(loader: Int => Bmp): Bmp = {
+  def retryOnError(sampleSize: Int, maxSampleSize: Int = 8)(loader: Int => Bitmap): Bitmap = {
     try {
       loader(sampleSize)
     } catch {
@@ -52,29 +53,24 @@ class BitmapDecoder {
     }
   }
 
-  def apply(file: File, inSampleSize: Int, orientation: Int): CancellableFuture[Bmp] = dispatcher {
+  def apply(file: File, inSampleSize: Int, orientation: Int): CancellableFuture[Bitmap] = dispatcher {
     retryOnError(inSampleSize, inSampleSize * 3) { sampleSize =>
       withFixedOrientation(BitmapFactory.decodeFile(file.getAbsolutePath, factoryOptions(sampleSize)), orientation)
     }
   }
 
-  def apply(data: Array[Byte], inSampleSize: Int, orientation: Int): CancellableFuture[Bmp] = dispatcher {
+  def apply(data: Array[Byte], inSampleSize: Int, orientation: Int): CancellableFuture[Bitmap] = dispatcher {
     retryOnError(inSampleSize, inSampleSize * 3) { sampleSize =>
       withFixedOrientation(BitmapFactory.decodeByteArray(data, 0, data.length, factoryOptions(sampleSize)), orientation)
     }
   }
 
-  def apply(stream: () => InputStream, inSampleSize: Int, orientation: Int): CancellableFuture[Bmp] = dispatcher {
+  def apply(stream: () => InputStream, inSampleSize: Int, orientation: Int): CancellableFuture[Bitmap] = dispatcher {
     retryOnError(inSampleSize, inSampleSize * 3) { sampleSize =>
       IoUtils.withResource(stream()) { in =>
         withFixedOrientation(BitmapFactory.decodeStream(in, null, factoryOptions(sampleSize)), orientation)
       }
     }
   }
-/*
-  def apply(resourceId: Int, inSampleSize: Int, orientation: Int): CancellableFuture[Bmp] = dispatcher {
-    retryOnError(inSampleSize, inSampleSize * 3) { sampleSize =>
-      withFixedOrientation(BitmapFactory.decodeResource(context.getResources, resourceId, factoryOptions(sampleSize)), orientation)
-    }
-  }*/
+
 }

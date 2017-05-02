@@ -17,13 +17,13 @@
  */
 package com.waz.bitmap
 
-import android.graphics.Bitmap
+import android.graphics.{Bitmap => ABitmap}
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
-import com.waz.utils.wrappers.Bmp
+import com.waz.utils.wrappers.Bitmap
 
 class BitmapDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
 
-  lazy val bitmap: Bmp = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)
+  lazy val bitmap: Bitmap = ABitmap.createBitmap(10, 10, ABitmap.Config.ARGB_8888)
 
   feature("Retry on error") {
 

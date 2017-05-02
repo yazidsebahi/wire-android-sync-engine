@@ -37,11 +37,10 @@ import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.utils.IoUtils._
 import com.waz.utils.wrappers._
-import com.waz.utils.{ExponentialBackoff, IoUtils, Serialized, returning}
+import com.waz.utils.{IoUtils, Serialized, returning}
 import com.waz.PermissionsService
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
 class ImageLoader(context: Context, fileCache: CacheService, val memoryCache: MemoryImageCache,
                   bitmapLoader: BitmapDecoder, permissions: PermissionsService, assetLoader: AssetLoader) {
@@ -69,7 +68,7 @@ class ImageLoader(context: Context, fileCache: CacheService, val memoryCache: Me
     case _ => Future.successful(false)
   }
 
-  def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bmp] = ifIsImage(asset) { dims =>
+  def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
     verbose(s"load cached bitmap for: ${asset.id} and req: $req")
     withMemoryCache(asset.id, req, dims.width) {
       loadLocalAndDecode(asset, decodeBitmap(asset.id, req, _)) map {
@@ -79,7 +78,7 @@ class ImageLoader(context: Context, fileCache: CacheService, val memoryCache: Me
     }
   }
 
-  def loadBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bmp] = ifIsImage(asset) { dims =>
+  def loadBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
     verbose(s"loadBitmap for ${asset.id} and req: $req")
     Serialized(("loadBitmap", asset.id)) {
       // serialized to avoid cache conflicts, we don't want two same requests running at the same time
@@ -124,17 +123,17 @@ class ImageLoader(context: Context, fileCache: CacheService, val memoryCache: Me
 
   private def saveImageToGallery(data: LocalData, mime: Mime) =
     permissions.requiring(Set(Permission.WRITE_EXTERNAL_STORAGE), delayUntilProviderIsSet = false)(
-      {
-        warn("permission to save image to gallery denied")
-        Future successful None
-      },
-      Future {
-        val newFile = AssetService.saveImageFile(mime)
-        IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
-        val uri = URI.fromFile(newFile)
-        context.sendBroadcast(Intent.scanFileIntent(uri))
-        Some(uri)
-      }(Threading.IO)
+    {
+      warn("permission to save image to gallery denied")
+      Future successful None
+    },
+    Future {
+      val newFile = AssetService.saveImageFile(mime)
+      IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
+      val uri = URI.fromFile(newFile)
+      context.sendBroadcast(Intent.scanFileIntent(uri))
+      Some(uri)
+    }(Threading.IO)
     )
 
   private def downloadAndDecode[A](asset: AssetData, decode: LocalData => CancellableFuture[A]): CancellableFuture[A] =
@@ -205,7 +204,7 @@ class ImageLoader(context: Context, fileCache: CacheService, val memoryCache: Me
     data.byteArray.fold(GifReader(data.inputStream))(GifReader(_)).get
   }
 
-  private def decodeBitmap(assetId: AssetId, req: BitmapRequest, data: LocalData): CancellableFuture[Bmp] = {
+  private def decodeBitmap(assetId: AssetId, req: BitmapRequest, data: LocalData): CancellableFuture[Bitmap] = {
 
     def computeInSampleSize(srcWidth: Int, srcHeight: Int): Int = {
       val pixelCount = srcWidth * srcHeight
@@ -231,7 +230,7 @@ class ImageLoader(context: Context, fileCache: CacheService, val memoryCache: Me
       Metadata(data).withOrientation(if (mirror) Metadata.mirrored(o) else o)
     }
 
-  private def withMemoryCache(assetId: AssetId, req: BitmapRequest, imgWidth: Int)(loader: => CancellableFuture[Bmp]): CancellableFuture[Bmp] =
+  private def withMemoryCache(assetId: AssetId, req: BitmapRequest, imgWidth: Int)(loader: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
     memoryCache.get(assetId, req, imgWidth) match {
       case Some(image) =>
         verbose(s"getBitmap($assetId, $req, $imgWidth) - got from cache: $image (${image.getWidth}, ${image.getHeight})")

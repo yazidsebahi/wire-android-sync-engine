@@ -18,7 +18,7 @@
 package com.waz.service.images
 
 import android.content.Context
-import android.graphics.Bitmap
+import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
@@ -33,7 +33,7 @@ import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Single}
 import com.waz.utils._
-import com.waz.utils.wrappers.Bmp
+import com.waz.utils.wrappers.Bitmap
 
 import scala.concurrent.Future
 
@@ -71,7 +71,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
-  def generateAssetData(asset: AssetData, input: Either[LocalData, Bitmap], meta: Metadata, co: CompressionOptions): CancellableFuture[AssetData] = {
+  def generateAssetData(asset: AssetData, input: Either[LocalData, ABitmap], meta: Metadata, co: CompressionOptions): CancellableFuture[AssetData] = {
     generateImageData(asset, co, input, meta) flatMap {
       case (file, m) =>
         verbose(s"generated image, size: ${input.fold(_.length, _.getByteCount)}, meta: $m")
@@ -91,14 +91,14 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
     }
   }
 
-  private def generateImageData(asset: AssetData, options: CompressionOptions, input: Either[LocalData, Bitmap], meta: Metadata) = {
+  private def generateImageData(asset: AssetData, options: CompressionOptions, input: Either[LocalData, ABitmap], meta: Metadata) = {
 
     def loadScaled(w: Int, h: Int, crop: Boolean) = {
       val minWidth = if (crop) math.max(w, w * meta.width / meta.height) else w
       val sampleSize = BitmapUtils.computeInSampleSize(minWidth, meta.width)
       val memoryNeeded = (w * h) + (meta.width / sampleSize * meta.height / sampleSize) * 4
       imageCache.reserve(asset.id, options.req, memoryNeeded)
-      input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation).map(Bmp.toAndroid), CancellableFuture.successful) map { image =>
+      input.fold(ld => bitmapLoader(() => ld.inputStream, sampleSize, meta.orientation).map(Bitmap.toAndroid), CancellableFuture.successful) map { image =>
         if (crop) {
           verbose(s"cropping to $w")
           BitmapUtils.cropRect(image, w)
@@ -118,7 +118,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
       }
     }
 
-    def save(image: Bitmap): CancellableFuture[(CacheEntry, Metadata)] = {
+    def save(image: ABitmap): CancellableFuture[(CacheEntry, Metadata)] = {
       imageCache.add(asset.id, options.req, image)
       saveImage(asset.cacheKey, image, meta.mimeType, options)
     }
@@ -130,16 +130,16 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
   }
 
   private def saveFormat(mime: String, forceLossy: Boolean) =
-    if (!forceLossy && mime == Mime.Png) Bitmap.CompressFormat.PNG
-    else Bitmap.CompressFormat.JPEG
+    if (!forceLossy && mime == Mime.Png) ABitmap.CompressFormat.PNG
+    else ABitmap.CompressFormat.JPEG
 
-  private def saveImage(key: CacheKey, image: Bitmap, mime: String, options: CompressionOptions): CancellableFuture[(CacheEntry, Metadata)] =
+  private def saveImage(key: CacheKey, image: ABitmap, mime: String, options: CompressionOptions): CancellableFuture[(CacheEntry, Metadata)] =
     cache.createForFile(key, cacheLocation = Some(saveDir)).flatMap(saveImage(_, image, mime, options)).lift
 
-  private def saveImage(file: CacheEntry, image: Bitmap, mime: String, options: CompressionOptions): Future[(CacheEntry, Metadata)] = {
+  private def saveImage(file: CacheEntry, image: ABitmap, mime: String, options: CompressionOptions): Future[(CacheEntry, Metadata)] = {
     val format = saveFormat(mime, options.forceLossy)
     val (len, compressed) = IoUtils.counting(file.outputStream) { os => image.compress(format, options.quality, os) }
-    file.updatedWithLength(len).map(ce => (ce, Metadata(image.getWidth, image.getHeight, if (format == Bitmap.CompressFormat.PNG) Mime.Png else Mime.Jpg)))
+    file.updatedWithLength(len).map(ce => (ce, Metadata(image.getWidth, image.getHeight, if (format == ABitmap.CompressFormat.PNG) Mime.Png else Mime.Jpg)))
   }
 
   private[images] def shouldRecode(file: LocalData, meta: Metadata, opts: CompressionOptions) = {
@@ -155,7 +155,7 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
 
     def load = {
       imageCache.reserve(id, options.req, meta.width, if (meta.isRotated) 2 * meta.height else meta.height)
-      bitmapLoader(() => file.inputStream, 1, meta.orientation).map(Bmp.toAndroid)
+      bitmapLoader(() => file.inputStream, 1, meta.orientation).map(Bitmap.toAndroid)
     }
 
     imageCache(id, options.req, meta.width, load).future.flatMap(saveImage(file, _, Mime.Jpg, options)).lift
@@ -207,8 +207,8 @@ case class CompressionOptions(byteCount: Int, dimension: Int, quality: Int, forc
   }
 
   def getOutputFormat(mime: String) =
-    if (!forceLossy && mime == Mime.Png) Bitmap.CompressFormat.PNG
-    else Bitmap.CompressFormat.JPEG
+    if (!forceLossy && mime == Mime.Png) ABitmap.CompressFormat.PNG
+    else ABitmap.CompressFormat.JPEG
 }
 
 object CompressionOptions {

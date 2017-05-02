@@ -22,7 +22,6 @@ import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.AssetStatus.{UploadInProgress, UploadNotStarted}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.Matchers._
-//import com.waz.utils.sha2
 import com.waz.utils.wrappers._
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
@@ -79,36 +78,6 @@ class AssetDataSpec
   private def arbitraryAssetData: List[AssetData] = (1 to 10).flatMap(_ => arbAssetData.arbitrary.sample).toList
 
   // TODO: Right now the default implicit AssetData JSON decoder is v2 AnyAssetDataDecoder. FInd a way to change it
-  // so in tests we could use the following enlarged arbAssetData. Or wait for the end of the transition period.
-  /*
-  implicit lazy val arbAssetData: Arbitrary[AssetData] = Arbitrary(for {
-    id            <- arbitrary[AssetId]
-    mime          <- Gen.oneOf(knownMimeTypes)
-    sizeInBytes   <- Gen.posNum[Long]
-    status        <- arbitrary[AssetStatus]
-    remoteId      <- optGen(arbitrary[RAssetId])
-    token         <- optGen(arbitrary[AssetToken])
-    otrKey        <- optGen(arbitrary[AESKey])
-    sha           <- optGen(arbitrary[Sha256])
-    encryption    <- optGen(Gen.oneOf(EncryptionAlgorithm.AES_GCM, EncryptionAlgorithm.AES_CBC))
-    name          <- optGen(alphaNumStr)
-    previewId     <- optGen(arbitrary[AssetId])
-    metaData      <- optGen(arbitrary[AssetMetaData])
-    source        <- optGen(arbitrary[URI])
-    proxyPath     <- optGen(arbitrary[String])
-    convId        <- optGen(arbitrary[RConvId])
-    data <- optGen(arbitrary[Array[Byte]])
-  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, encryption, name, previewId, metaData, source, proxyPath, convId, data))
-
-  implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(Gen.oneOf[AssetStatus](AssetStatus.UploadNotStarted,
-    AssetStatus.UploadInProgress, AssetStatus.UploadCancelled, AssetStatus.UploadFailed, AssetStatus.UploadDone, AssetStatus.DownloadFailed))
-  implicit lazy val arbAssetToken: Arbitrary[AssetToken] = Arbitrary(Gen.resultOf(AssetToken))
-  implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))
-  implicit lazy val arbSha256: Arbitrary[Sha256] = Arbitrary(arbitrary[Array[Byte]].map(b => Sha256(sha2(b))))
-  implicit lazy val arbConvId: Arbitrary[ConvId]         = Arbitrary(sideEffect(ConvId()))
-  implicit lazy val arbUserId: Arbitrary[UserId]         = Arbitrary(sideEffect(UserId()))
-  implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))*/
-
 
   feature("json serialization") {
     scenario("Random metadata") {

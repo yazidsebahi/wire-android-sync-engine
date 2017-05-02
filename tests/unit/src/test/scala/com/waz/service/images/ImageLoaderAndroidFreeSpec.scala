@@ -26,8 +26,6 @@ import com.waz.content.Database
 import com.waz.model.AssetStatus.UploadNotStarted
 import com.waz.model._
 import com.waz.service.assets.AssetLoader
-import com.waz.service.downloads.DownloadRequest.AssetRequest
-import com.waz.service.downloads.Downloader
 import com.waz.service.images.ImageLoader.Metadata
 import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.CancellableFuture
@@ -109,7 +107,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
     scenario("confirms it has a cached bitmap of the given size") {
       arbImgAssetData.foreach( asset => {
         val cache = mock[Cache[Key, Entry]]
-        val bmp = FakeBmp(1, asset.width, asset.height, false)
+        val bmp = FakeBitmap(1, asset.width, asset.height, false)
         val req = Regular(asset.width)
         (cache.get _).expects(Key(asset.id, MemoryImageCache.tag(req))).returning(BitmapEntry(bmp))
 
@@ -122,7 +120,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
     scenario("confirms it has a cached bitmap bigger than needed") {
       arbImgAssetData.foreach( asset => {
         val cache = mock[Cache[Key, Entry]]
-        val bmp = FakeBmp(1, asset.width + 1, asset.height, false)
+        val bmp = FakeBitmap(1, asset.width + 1, asset.height, false)
         val req = Regular(asset.width)
         (cache.get _).expects(Key(asset.id, MemoryImageCache.tag(req))).returning(BitmapEntry(bmp))
 
@@ -170,7 +168,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
     scenario("loads memory-cached bitmap") {
       arbImgAssetData.foreach(asset => {
         val cache = mock[Cache[Key, Entry]]
-        val bmp = FakeBmp(getWidth = 128, getHeight = 128)
+        val bmp = FakeBitmap(getWidth = 128, getHeight = 128)
         val req = Regular(128)
         (cache.get _).expects(Key(asset.id, MemoryImageCache.tag(req))).returning(BitmapEntry(bmp))
 
@@ -182,7 +180,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
 
     scenario("loads file-cached bitmap") {
       arbImgNonLocalAssetData.foreach( asset => {
-        val bmp = FakeBmp(getWidth = 128, getHeight = 128)
+        val bmp = FakeBitmap(getWidth = 128, getHeight = 128)
         val req = Regular(128)
         val key = Key(asset.id, MemoryImageCache.tag(req))
         val cacheEntryData = CacheEntryData(asset.cacheKey)
@@ -211,7 +209,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
 
     scenario("download a bitmap") {
       arbImgNonLocalAssetData.foreach( asset => {
-        val bmp = FakeBmp(getWidth = 128, getHeight = 128)
+        val bmp = FakeBitmap(getWidth = 128, getHeight = 128)
         val req = Regular(128)
         val key = Key(asset.id, MemoryImageCache.tag(req))
         val cacheEntryData = CacheEntryData(asset.cacheKey)
