@@ -32,16 +32,22 @@ import com.waz.service.images.ImageLoader
 import com.waz.service.push.GcmGlobalService
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
+import com.waz.ui.MemoryImageCache.{Entry, Key}
+import com.waz.utils.Cache
 import com.waz.znet._
+
 
 class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val storage: Database = new GlobalDatabase(context)
   lazy val prefs: PreferenceService = wire[PreferenceService]
   lazy val metadata: MetaDataService = wire[MetaDataService]
-  lazy val cache: CacheService = new CacheService(context, storage)
+  lazy val cache: CacheService = CacheService(context, storage)
   lazy val gcmGlobal = wire[GcmGlobalService]
   lazy val bitmapDecoder: BitmapDecoder = wire[BitmapDecoder]
+
+  lazy val trimmingLruCache: Cache[Key, Entry] = MemoryImageCache.newTrimmingLru(context)
   lazy val imageCache: MemoryImageCache = wire[MemoryImageCache]
+
   lazy val network = wire[DefaultNetworkModeService]
   lazy val phoneNumbers: PhoneNumberService = wire[PhoneNumberService]
   lazy val timeouts = wire[Timeouts]
@@ -70,7 +76,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val globalClient = new ZNetClient(global, "", "")
   lazy val imageLoader = {
     val client = new AssetClient(new ZNetClient(this, "", ""))
-    val loader: AssetLoader = new AssetLoader(context, downloader, new AssetDownloader(client, cache), streamLoader, videoLoader, pcmAudioLoader, cache)
+    val loader: AssetLoader = AssetLoader(context, downloader, new AssetDownloader(client, cache), streamLoader, videoLoader, pcmAudioLoader, cache)
     new ImageLoader(context, cache, imageCache, bitmapDecoder, permissions, loader) { override def tag = "Global" }
   }
 
@@ -81,3 +87,4 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
 
   val lifecycle = new ZmsLifecycle()
 }
+

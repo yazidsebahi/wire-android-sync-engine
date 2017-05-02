@@ -26,7 +26,7 @@ import com.waz.ui.Images
 import scala.concurrent.Promise
 import scala.concurrent.duration.{FiniteDuration, _}
 
-class GifAnimator(context: Context, gif: Gif, reserveFrameMemory: () => Unit, frameCallback: Bitmap => Unit) {
+class GifAnimator(gif: Gif, reserveFrameMemory: () => Unit, frameCallback: Bitmap => Unit) {
   import GifAnimator._
   private implicit val dispatcher = GifAnimator.dispatcher
 
@@ -35,7 +35,7 @@ class GifAnimator(context: Context, gif: Gif, reserveFrameMemory: () => Unit, fr
     var frameFuture = CancellableFuture.successful({})
 
     dispatcher {
-      nextFrame(new AnimGifDecoder(context, gif))
+      nextFrame(new AnimGifDecoder(gif))
     }
 
     def done(decoder: AnimGifDecoder) = {

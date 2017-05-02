@@ -157,7 +157,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
 
   val imageData = Future {
     ui.imageCache.reserve(id, req, bitmap.getWidth, bitmap.getHeight)
-    val img = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
+    val img: Bitmap = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
     ui.imageCache.add(id, req, img)
     verbose(s"compressing $id")
     val before = System.nanoTime

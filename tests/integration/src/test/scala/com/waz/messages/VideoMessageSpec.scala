@@ -196,7 +196,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   override val provisionFile: String = "/two_users_connected.json"
 
   override lazy val globalModule = new ApiSpecGlobal {
-    override lazy val cache = new CacheService(context, storage) {
+    override lazy val cache = new CacheService(context, storage, new CacheStorageImpl(storage, context)) {
       override def addStream[A](key: CacheKey, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
         super.addStream(key, in, mime, name, cacheLocation, length, execution)(timeout).andThen {
           case Success(entry) if isDownloadingFromProvider(key) =>

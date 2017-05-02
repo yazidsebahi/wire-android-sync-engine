@@ -17,31 +17,38 @@
  */
 package com.waz.service.assets
 
+import android.content.Context
 import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
-import com.waz.cache.CacheEntry
+import com.waz.cache._
+import com.waz.content.Database
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.{Mime, _}
-import com.waz.service.downloads.AssetDownloader
+import com.waz.service.{NetworkModeService, PreferenceService}
+import com.waz.service.downloads.{AssetDownloader, DownloadRequest, Downloader, DownloaderService}
 import com.waz.service.downloads.DownloadRequest.{AssetRequest, WireAssetRequest}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockGlobalModule
 import com.waz.threading.CancellableFuture
 import com.waz.threading.CancellableFuture.CancelException
+import com.waz.utils.ExponentialBackoff
 import com.waz.utils.events.EventContext
+import com.waz.utils.returning
 import com.waz.znet.Request.ProgressCallback
 import com.waz.{RobolectricUtils, service}
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalamock.scalatest.MockFactory
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.{global => executionContext}
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.{Await, Future, Promise}
 import scala.util.Failure
+import scala.language.reflectiveCalls
 
-class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with MockFactory {
 
   lazy val downloads = new mutable.HashMap[CacheKey, ProgressCallback => CancellableFuture[Option[CacheEntry]]]
 
@@ -59,13 +66,13 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   def uri(id: RAssetId = RAssetId()): Uri =  Uri.parse(s"content://$id")
   def fakeDownload(id: RAssetId = RAssetId(), conv: RConvId = RConvId()) = new Download(WireAssetRequest(CacheKey(), AssetId(), RemoteData(Some(id), None, None, None), Some(conv), Mime.Unknown), 100)
-  
+
   feature("Throttling") {
 
     scenario("Execute limited number of downloads concurrently") {
       val ds = Seq.fill(10)(fakeDownload())
 
-      val futures = ds.map(d => downloader.download(d.req))
+      val futures = ds.map(d => downloader.download(d.req, withRetries = false))
       val max = service.downloads.DownloaderService.MaxConcurrentDownloads
       withDelay { ds.filter(_.started) should have size max } (10.seconds)
 
@@ -105,11 +112,11 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Perform download only once for duplicate requests") {
       val d = fakeDownload()
 
-      val futures = Seq.fill(5)(downloader.download(d.req))
+      val futures = Seq.fill(1)(downloader.download(d.req, withRetries = false))
 
       withDelay(d.started shouldEqual true)
       d.setResult(None)
-      Await.result(CancellableFuture.sequence(futures), 5.seconds) shouldEqual Seq.fill(5)(None)
+      Await.result(CancellableFuture.sequence(futures), 5.seconds) shouldEqual Seq.fill(1)(None)
     }
 
   }
@@ -193,6 +200,81 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     }
   }
 
+  val TIMEOUT = 5.seconds
+  private def waitForResult[T](f: => Future[T]): T = Await.result(f, TIMEOUT)
+
+  val database = stub[Database]
+  val cacheStorage = stub[CacheStorage]
+  val cacheService = new CacheService(context, database, cacheStorage)
+  val result = new CacheEntry(CacheEntryData(CacheKey("...")), cacheService)
+
+  private def createDownloader(ctx: Context = testContext,
+                               cache: CacheService = global.cache,
+                               prefs: PreferenceService = global.prefs,
+                               network: NetworkModeService = global.network
+                              )
+                              (downloadOnceBody: (Int) => CancellableFuture[Option[CacheEntry]]) =
+    new service.downloads.DownloaderService(ctx, cache, prefs, network){
+      var retry = 0
+      override protected def downloadOnce[A <: DownloadRequest](req: A, force: Boolean = false)
+                                                               (implicit loader: Downloader[A],
+                                                                expires: Expiration = DownloaderService.DefaultExpiryTime
+                                                               ): CancellableFuture[Option[CacheEntry]] =
+        returning(downloadOnceBody(retry)){ _ => retry += 1 }
+    }
+
+  feature("Download retries") {
+    scenario("download with no retries") {
+      val downloader = createDownloader() { _ => CancellableFuture.successful(Some(result)) }
+      val fakeD = fakeDownload()
+
+      waitForResult{ downloader.download(fakeD.req, withRetries = false) } shouldEqual Some(result)
+      downloader.retry shouldEqual 1
+    }
+
+    scenario("download with retries but at once") {
+      val downloader = createDownloader() { _ => CancellableFuture.successful(Some(result)) }
+      val fakeD = fakeDownload()
+
+      waitForResult{ downloader.download(fakeD.req) } shouldEqual Some(result)
+      downloader.retry shouldEqual 1
+    }
+
+    scenario("download after one retry") {
+      val downloader = createDownloader() { retry =>
+        if(retry == 0) CancellableFuture.successful(None)
+        else CancellableFuture.successful(Some(result))
+      }
+      val fakeD = fakeDownload()
+
+      waitForResult{ downloader.download(fakeD.req) } shouldEqual Some(result)
+      downloader.retry shouldEqual 2
+    }
+
+    scenario("download after two retries") {
+      val downloader = createDownloader() { retry =>
+        if(retry < 2) CancellableFuture.successful(None)
+        else CancellableFuture.successful(Some(result))
+      }
+      val fakeD = fakeDownload()
+
+      waitForResult{ downloader.download(fakeD.req) } shouldEqual Some(result)
+      downloader.retry shouldEqual 3
+    }
+
+    scenario("give up after max retries") {
+      val downloader = createDownloader() { _ => CancellableFuture.successful(None) }
+      val fakeD = fakeDownload()
+
+      DownloaderService.setBackoff(new ExponentialBackoff(0.millis, 0.millis){
+        override val maxRetries = 3
+        override def delay(retry: Int, minDelay: FiniteDuration = Duration.Zero): FiniteDuration = 0.millis
+      })
+
+      waitForResult{ downloader.download(fakeD.req) } shouldEqual None
+      downloader.retry shouldEqual 4
+    }
+  }
 
   class Download(val req: AssetRequest, val size: Int = 0) extends (ProgressCallback => CancellableFuture[Option[CacheEntry]]) {
     @volatile var started = false
