@@ -20,7 +20,6 @@ package com.waz.service.assets
 import java.io._
 
 import android.content.Context
-import android.net.Uri
 import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.{CacheService, LocalData}
@@ -28,10 +27,17 @@ import com.waz.model.Mime
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads.{Downloader, DownloaderService}
 import com.waz.threading.CancellableFuture
+import com.waz.utils.wrappers.URI
 
-class AssetLoader(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
+trait AssetLoader {
+  def getAssetData(request: AssetRequest): CancellableFuture[Option[LocalData]]
+  def downloadAssetData(req: AssetRequest): CancellableFuture[Option[LocalData]]
+  def openStream(uri: URI): InputStream
+}
+
+class AssetLoaderImpl(val context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
     streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],
-    unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService) {
+    unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService) extends AssetLoader {
 
   import com.waz.threading.Threading.Implicits.Background
 
@@ -59,14 +65,21 @@ class AssetLoader(val context: Context, downloader: DownloaderService, assetDown
     }
   }
 
-  def openStream(uri: Uri) = AssetLoader.openStream(context, uri)
+  def openStream(uri: URI) = AssetLoader.openStream(context, uri)
 }
 
 object AssetLoader {
-  def openStream(context: Context, uri: Uri) = {
+  def openStream(context: Context, uri: URI) = {
     val cr = context.getContentResolver
-    Option(cr.openInputStream(uri))
-      .orElse(Option(cr.openFileDescriptor(uri, "r")).map(file => new FileInputStream(file.getFileDescriptor)))
+    Option(cr.openInputStream(URI.unwrap(uri)))
+      .orElse(Option(cr.openFileDescriptor(URI.unwrap(uri), "r")).map(file => new FileInputStream(file.getFileDescriptor)))
       .getOrElse(throw new FileNotFoundException(s"Can not load image from: $uri"))
   }
+
+  def apply(context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
+            streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],
+            unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService
+           ) =
+    new AssetLoaderImpl(context, downloader, assetDownloader, streamDownloader, videoDownloader, unencodedAudioDownloader, cache)
+
 }

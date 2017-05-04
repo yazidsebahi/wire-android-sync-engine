@@ -20,9 +20,9 @@ package com.waz.model
 import java.nio.ByteBuffer
 import java.util.UUID
 
-import android.net.Uri
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
@@ -117,7 +117,7 @@ object CacheKey extends (String => CacheKey) {
   //any appended strings should be url friendly
   def decrypted(key: CacheKey) = CacheKey(s"${key.str}_decr_")
   def fromAssetId(id: AssetId) = CacheKey(s"${id.str}")
-  def fromUri(uri: Uri) = CacheKey(uri.toString)
+  def fromUri(uri: URI) = CacheKey(uri.toString)
 
   implicit object Id extends Id[CacheKey] {
     override def random() = CacheKey(Uid().toString)

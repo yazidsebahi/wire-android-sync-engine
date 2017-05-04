@@ -20,7 +20,6 @@ package com.waz.ui
 import android.content.{ContentResolver, Context}
 import android.graphics.Bitmap
 import android.media.ExifInterface
-import android.net.Uri
 import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
@@ -30,6 +29,7 @@ import com.waz.bitmap.BitmapDecoder
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, returning}
 import com.waz.{HockeyApp, api, bitmap}
 
@@ -50,7 +50,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getLocalImageAssetWithPreview(preview: Option[AssetData], data: AssetData) = cacheImageAsset(data.id, new LocalImageAssetWithPreview(preview, data))
 
-  def getOrCreateUriImageAsset(uri: Uri): api.ImageAsset = {
+  def getOrCreateUriImageAsset(uri: URI): api.ImageAsset = {
     if (uri == null || uri.toString == "null") {
       HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
@@ -86,7 +86,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
     returning(createImageAssetFrom(bytes))(_.setMirrored(true))
 
   def getOrCreateImageAssetFromResourceId(resourceId: Int): api.ImageAsset =
-    getOrCreateUriImageAsset(Uri.parse(s"${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.getPackageName}/$resourceId"))
+    getOrCreateUriImageAsset(URI.parse(s"${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.getPackageName}/$resourceId"))
 
   def getOrCreateImageAssetFrom(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL): api.ImageAsset = {
     if (bitmap == null || bitmap == com.waz.bitmap.EmptyBitmap) ImageAsset.Empty

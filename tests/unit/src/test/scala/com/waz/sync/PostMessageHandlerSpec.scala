@@ -73,11 +73,11 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
 
-    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
+    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
       override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean) = postMessageResponse
     }
 
-    override lazy val network: NetworkModeService = new NetworkModeService(context, lifecycle) {
+    override lazy val network: DefaultNetworkModeService = new DefaultNetworkModeService(context, lifecycle) {
       override def updateNetworkMode(): Unit = ()
     }
 

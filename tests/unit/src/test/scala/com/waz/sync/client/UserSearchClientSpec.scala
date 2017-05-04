@@ -18,7 +18,6 @@
 package com.waz.sync.client
 
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
-import com.waz.model.UserId
 import com.waz.service.ZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ZNetClient.EmptyClient

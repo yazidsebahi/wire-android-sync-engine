@@ -20,7 +20,6 @@ package com.waz.conv
 import java.lang.Iterable
 
 import akka.pattern.ask
-import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog._
 import com.waz.api.ConversationsList.ConversationCallback
 import com.waz.api.ErrorsList.{ErrorDescription, ErrorListener}
@@ -34,6 +33,7 @@ import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.testutils.Implicits._
 import com.waz.utils._
+import com.waz.utils.wrappers.DB
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, OptionValues}
 
@@ -68,7 +68,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
   lazy val auto2 = registerDevice("ConversationsSpec_auto2")
   lazy val otherClient = registerDevice("ConversationsSpec_otherClient")
 
-  implicit def db: SQLiteDatabase = zmessaging.db.dbHelper.getWritableDatabase
+  implicit def db: DB = zmessaging.db.dbHelper.getWritableDatabase
 
   def getConv(convType: IConversation.Type): IConversation = getConv(_.getType == convType, s"looking for conv type: $convType")
 

@@ -31,6 +31,7 @@
     <string name="zms_auto_answer_key">PREF_KEY_AUTO_ANSWER_ENABLED</string>
     <string name="zms_calling_v3">PREF_KEY_CALLING_V3</string>
     <string name="zms_gcm_enabled">PREF_KEY_GCM_ENABLED</string>
+    <string name="zms_v31_assets_enabled">PREF_V31_ASSETS_ENABLED</string>
     <string name="zms_ws_foreground_service_enabled">PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED</string>
 
     <!-- contact sharing -->

@@ -19,13 +19,13 @@ package com.waz.znet
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.EmailAddress
 import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.RequestContent
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response._
@@ -73,7 +73,7 @@ class ZNetClient(credentials: CredentialsHandler,
    */
   def MaxConcurrentRequests = 4
   def LongRunning = 45.seconds
-  val baseUri = Uri.parse(backend.baseUrl)
+  val baseUri = URI.parse(backend.baseUrl)
   val auth = new AuthenticationManager(loginClient, credentials)
 
   def apply[A](r: Request[A]): CancellableFuture[Response] = {
@@ -122,7 +122,7 @@ class ZNetClient(credentials: CredentialsHandler,
 
         val request: Request[_] = handle.request
 
-        val uri = request.resourcePath.map(path => baseUri.buildUpon().encodedPath(path).build()).orElse(request.absoluteUri).get
+        val uri = request.resourcePath.map(path => baseUri.buildUpon.encodedPath(path).build).orElse(request.absoluteUri).get
 
         val future =
           if (request.requiresAuthentication) {
@@ -226,7 +226,7 @@ object ZNetClient {
   def nextId = handleId.incrementAndGet()
 
   class EmptyAsyncClient(wrapper: ClientWrapper = ClientWrapper) extends AsyncClient(wrapper = wrapper) {
-    override def apply(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
+    override def apply(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 

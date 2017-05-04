@@ -17,13 +17,13 @@
  */
 package com.waz.utils
 
-import android.database.sqlite.SQLiteDatabase
 import android.support.v4.util.LruCache
 import com.waz.ZLog._
 import com.waz.content.Database
 import com.waz.db.DaoIdOps
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
+import com.waz.utils.wrappers.DB
 
 import scala.collection.JavaConverters._
 import scala.collection.{GenTraversableOnce, breakOut}
@@ -32,22 +32,22 @@ import scala.concurrent.Future
 
 trait StorageDao[K, V] {
   val idExtractor: (V => K)
-  def getById(key: K)(implicit db: SQLiteDatabase): Option[V]
-  def getAll(keys: Set[K])(implicit db: SQLiteDatabase): Seq[V]
-  def list(implicit db: SQLiteDatabase): Seq[V]
-  def insertOrReplace(items: GenTraversableOnce[V])(implicit db: SQLiteDatabase): Unit
-  def deleteEvery(ids: GenTraversableOnce[K])(implicit db: SQLiteDatabase): Unit
+  def getById(key: K)(implicit db: DB): Option[V]
+  def getAll(keys: Set[K])(implicit db: DB): Seq[V]
+  def list(implicit db: DB): Seq[V]
+  def insertOrReplace(items: GenTraversableOnce[V])(implicit db: DB): Unit
+  def deleteEvery(ids: GenTraversableOnce[K])(implicit db: DB): Unit
 }
 
 object StorageDao {
 
   implicit class DbDao[K, V](dao: DaoIdOps[V] { type IdVals = K }) extends StorageDao[K, V] {
     override val idExtractor: (V) => K = dao.idExtractor
-    override def getById(key: K)(implicit db: SQLiteDatabase): Option[V] = dao.getById(key)
-    override def getAll(keys: Set[K])(implicit db: SQLiteDatabase): Seq[V] = dao.getAll(keys)
-    override def list(implicit db: SQLiteDatabase) = dao.list
-    override def deleteEvery(ids: GenTraversableOnce[K])(implicit db: SQLiteDatabase): Unit = dao.deleteEvery(ids)
-    override def insertOrReplace(items: GenTraversableOnce[V])(implicit db: SQLiteDatabase): Unit = dao.insertOrReplace(items)
+    override def getById(key: K)(implicit db: DB): Option[V] = dao.getById(key)
+    override def getAll(keys: Set[K])(implicit db: DB): Seq[V] = dao.getAll(keys)
+    override def list(implicit db: DB) = dao.list
+    override def deleteEvery(ids: GenTraversableOnce[K])(implicit db: DB): Unit = dao.deleteEvery(ids)
+    override def insertOrReplace(items: GenTraversableOnce[V])(implicit db: DB): Unit = dao.insertOrReplace(items)
   }
 }
 
@@ -60,13 +60,13 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
 
   val onChanged = onAdded.union(onUpdated.map(_.map(_._2)))
 
-  protected def load(key: K)(implicit db: SQLiteDatabase): Option[V] = dao.getById(key)
+  protected def load(key: K)(implicit db: DB): Option[V] = dao.getById(key)
 
-  protected def load(keys: Set[K])(implicit db: SQLiteDatabase): Seq[V] = dao.getAll(keys)
+  protected def load(keys: Set[K])(implicit db: DB): Seq[V] = dao.getAll(keys)
 
-  protected def save(values: Seq[V])(implicit db: SQLiteDatabase): Unit = dao.insertOrReplace(values)
+  protected def save(values: Seq[V])(implicit db: DB): Unit = dao.insertOrReplace(values)
 
-  protected def delete(keys: Iterable[K])(implicit db: SQLiteDatabase): Unit = dao.deleteEvery(keys)
+  protected def delete(keys: Iterable[K])(implicit db: DB): Unit = dao.deleteEvery(keys)
 
   private def cachedOrElse(key: K, default: => Future[Option[V]]): Future[Option[V]] =
     Option(cache.get(key)).fold(default)(Future.successful)
@@ -78,7 +78,7 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
     }
   }
 
-  def find[A, B](predicate: V => Boolean, search: SQLiteDatabase => Managed[TraversableOnce[V]], mapping: V => A)(implicit cb: CanBuild[A, B]): Future[B] = Future {
+  def find[A, B](predicate: V => Boolean, search: DB => Managed[TraversableOnce[V]], mapping: V => A)(implicit cb: CanBuild[A, B]): Future[B] = Future {
     val matches = cb.apply()
     val snapshot = cache.snapshot.asScala
 

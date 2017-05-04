@@ -22,26 +22,18 @@ import java.io.{ByteArrayInputStream, File, InputStream}
 import akka.pattern.ask
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever.{METADATA_KEY_DURATION, METADATA_KEY_VIDEO_HEIGHT, METADATA_KEY_VIDEO_ROTATION, METADATA_KEY_VIDEO_WIDTH}
-import android.net.Uri
 import com.waz.api._
 import com.waz.api.impl.DoNothingAndProceed
 import com.waz.cache._
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.otr.ClientId
 import com.waz.model.{Mime, AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
-import com.waz.service
-import com.waz.service.{UserModule, ZMessagingFactory}
-import com.waz.sync.client.AssetClient
-import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, ReusableCountDownLatch}
-import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils.toByteArray
-import com.waz.utils._
-import com.waz.znet.ZNetClient._
+import com.waz.utils.{wrappers, _}
 import org.robolectric.Robolectric.{getShadowApplication, shadowOf}
 import org.robolectric.shadows.ShadowMediaMetadataRetriever
 import org.scalatest._
@@ -182,8 +174,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   def contentCacheKey(asset: com.waz.api.Asset) = {
     val p = Promise[CacheKey]
-    asset.getContentUri(new com.waz.api.Asset.LoadCallback[Uri]() {
-      override def onLoaded(uri: Uri): Unit = CacheUri.unapply(context)(uri) match {
+    asset.getContentUri(new com.waz.api.Asset.LoadCallback[wrappers.URI]() {
+      override def onLoaded(uri: wrappers.URI): Unit = CacheUri.unapply(context)(uri) match {
         case Some(key) => p.success(key)
         case None => p.failure(new Exception(s"Returned uri is not CacheUri: $uri"))
       }
@@ -204,7 +196,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   override val provisionFile: String = "/two_users_connected.json"
 
   override lazy val globalModule = new ApiSpecGlobal {
-    override lazy val cache = new CacheService(context, storage) {
+    override lazy val cache = new CacheService(context, storage, new CacheStorageImpl(storage, context)) {
       override def addStream[A](key: CacheKey, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
         super.addStream(key, in, mime, name, cacheLocation, length, execution)(timeout).andThen {
           case Success(entry) if isDownloadingFromProvider(key) =>

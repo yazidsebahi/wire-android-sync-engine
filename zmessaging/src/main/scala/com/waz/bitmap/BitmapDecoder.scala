@@ -19,20 +19,18 @@ package com.waz.bitmap
 
 import java.io.{File, InputStream}
 
-import android.content.Context
 import android.graphics.BitmapFactory.Options
-import android.graphics.{Bitmap, BitmapFactory}
+import android.graphics.BitmapFactory
 import com.waz.ZLog._
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.ui.Images
 import com.waz.utils._
+import com.waz.utils.wrappers.Bitmap
+import com.waz.utils.wrappers
 
-class BitmapDecoder(context: Context) {
+class BitmapDecoder {
 
-  private implicit val dispatcher = Threading.ImageDispatcher
+  private implicit lazy val dispatcher = Threading.ImageDispatcher
   private implicit val logTag: LogTag = logTagFor[BitmapDecoder]
-
-  val contentResolver = context.getContentResolver
 
   def factoryOptions(sampleSize: Int) = returning(new Options) { opts =>
     opts.inSampleSize = sampleSize
@@ -41,8 +39,8 @@ class BitmapDecoder(context: Context) {
 
   private def nextPowerOfTwo(i : Int) = 1 << (32 - Integer.numberOfLeadingZeros(i))
 
-  def withFixedOrientation(bitmap: Bitmap, orientation: Int) =
-    if (bitmap == null || bitmap == Images.EmptyBitmap) Images.EmptyBitmap
+  def withFixedOrientation(bitmap: Bitmap, orientation: Int): Bitmap =
+    if (bitmap == null || bitmap.isEmpty) wrappers.EmptyBitmap
     else BitmapUtils.fixOrientation(bitmap, orientation)
 
   def retryOnError(sampleSize: Int, maxSampleSize: Int = 8)(loader: Int => Bitmap): Bitmap = {
@@ -75,9 +73,4 @@ class BitmapDecoder(context: Context) {
     }
   }
 
-  def apply(resourceId: Int, inSampleSize: Int, orientation: Int): CancellableFuture[Bitmap] = dispatcher {
-    retryOnError(inSampleSize, inSampleSize * 3) { sampleSize =>
-      withFixedOrientation(BitmapFactory.decodeResource(context.getResources, resourceId, factoryOptions(sampleSize)), orientation)
-    }
-  }
 }

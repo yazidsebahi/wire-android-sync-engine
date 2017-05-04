@@ -17,7 +17,6 @@
  */
 package com.waz.content
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.User.ConnectionStatus
 import com.waz.model.UserData.UserDataDao
@@ -26,6 +25,7 @@ import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.utils.events.EventStream
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
@@ -48,7 +48,7 @@ class UsersStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   before {
     storage = new ZmsDatabase(AccountId(), Robolectric.application)
-    implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
+    implicit def db: DB = storage.dbHelper.getWritableDatabase
 
     UserDataDao.deleteAll
     UserDataDao.insertOrReplace(testUsers)

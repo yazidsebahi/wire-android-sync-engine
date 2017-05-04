@@ -21,7 +21,6 @@ import java.io.ByteArrayOutputStream
 
 import android.graphics.Bitmap
 import android.media.ExifInterface
-import android.net.Uri
 import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -43,6 +42,7 @@ import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -157,7 +157,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
 
   val imageData = Future {
     ui.imageCache.reserve(id, req, bitmap.getWidth, bitmap.getHeight)
-    val img = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
+    val img: Bitmap = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
     ui.imageCache.add(id, req, img)
     verbose(s"compressing $id")
     val before = System.nanoTime
@@ -223,7 +223,7 @@ object ImageAsset {
   }
 
   object EmptySaveCallback extends SaveCallback {
-    override def imageSaved(uri: Uri): Unit = ()
+    override def imageSaved(uri: URI): Unit = ()
     override def imageSavingFailed(ex: Exception): Unit = ()
   }
 
@@ -292,10 +292,10 @@ trait SavingToGallery {
 
   override def saveImageToGallery(): Unit = saveImageToGallery(new SaveCallback {
     override def imageSavingFailed(ex: Exception): Unit = ()
-    override def imageSaved(uri: Uri): Unit = ()
+    override def imageSaved(uri: URI): Unit = ()
   })
 
-  protected def imageSaveHandler(callback: SaveCallback): (Try[Option[Uri]] => Unit) = {
+  protected def imageSaveHandler(callback: SaveCallback): (Try[Option[URI]] => Unit) = {
     case Success(Some(uri)) => callback.imageSaved(uri)
     case Success(None) =>
       info(s"saveImageToGallery($this) failed")

@@ -22,7 +22,8 @@ import android.media.MediaPlayer
 import android.media.MediaPlayer.OnSeekCompleteListener
 import com.waz.service.assets.GlobalRecordAndPlayService.{MediaPointer, UnauthenticatedContent}
 import com.waz.threading.Threading
-import com.waz.utils._
+import com.waz.utils.wrappers.URI
+import com.waz.utils.returning
 import org.threeten.bp
 
 import scala.concurrent.{Future, Promise}
@@ -56,7 +57,7 @@ class DefaultPlayer private (delegate: MediaPlayer, initialContent: Unauthentica
 
 object DefaultPlayer {
   def apply(content: UnauthenticatedContent, observer: Player.Observer)(implicit context: Context): DefaultPlayer = {
-    val delegate = MediaPlayer.create(context, content.uri)
+    val delegate = MediaPlayer.create(context, URI.unwrap(content.uri))
 
     delegate.setOnCompletionListener(new MediaPlayer.OnCompletionListener {
       override def onCompletion(mp: MediaPlayer): Unit = {

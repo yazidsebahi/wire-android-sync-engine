@@ -17,9 +17,8 @@
  */
 package com.waz.db.migrate
 
-import android.database.Cursor
-import android.database.sqlite.{SQLiteDatabase, SQLiteProgram}
 import com.waz.db._
+import com.waz.utils.wrappers.{DB, DBCursor, DBProgram}
 
 import scala.collection._
 
@@ -27,32 +26,32 @@ abstract class TableMigration(from: TableDesc, to: TableDesc) { migration =>
   import language.implicitConversions
 
   trait Binder {
-    def copy(c: Cursor, stmt: SQLiteProgram): Unit
+    def copy(c: DBCursor, stmt: DBProgram): Unit
   }
 
   case class ColBinder[A](from: Col[A], to: Col[A]) extends Binder {
     val fromIndex = migration.from.colIndex(from.name)
     val toIndex = migration.to.colIndex(to.name)
-    def copy(c: Cursor, stmt: SQLiteProgram) = to.bind(from.load(c, fromIndex), toIndex + 1, stmt)
+    def copy(c: DBCursor, stmt: DBProgram) = to.bind(from.load(c, fromIndex), toIndex + 1, stmt)
   }
 
-  case class FunBinder[A](to: Col[A], f: Cursor => A) extends Binder {
+  case class FunBinder[A](to: Col[A], f: DBCursor => A) extends Binder {
     val toIndex = migration.to.colIndex(to.name)
-    override def copy(c: Cursor, stmt: SQLiteProgram): Unit = to.bind(f(c), toIndex + 1, stmt)
+    override def copy(c: DBCursor, stmt: DBProgram): Unit = to.bind(f(c), toIndex + 1, stmt)
   }
 
   class BindingBuilder[A](toColumn: Col[A]) {
     def :=(fromCol: Col[A]): Binder = new ColBinder(fromCol, toColumn)
-    def :=(f: Cursor => A): Binder = new FunBinder(toColumn, f)
+    def :=(f: DBCursor => A): Binder = new FunBinder(toColumn, f)
   }
 
   protected implicit def colToBinder[A](col: Col[A]): BindingBuilder[A] = new BindingBuilder[A](col)
 
-  protected implicit def colToLoader[A](col: Col[A]): Function[Cursor, A] = col.load(_, from.colIndex(col.name))
+  protected implicit def colToLoader[A](col: Col[A]): Function[DBCursor, A] = col.load(_, from.colIndex(col.name))
 
   val bindings: Seq[Binder]
 
-  def migrate(implicit db: SQLiteDatabase) = inTransaction { tr: Transaction =>
+  def migrate(implicit db: DB) = inTransaction { tr: Transaction =>
     var count = 0
     db.execSQL(to.createSql)
     withStatement(to.insertSql) { stmt =>

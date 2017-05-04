@@ -142,7 +142,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       }
 
       message.data.protos should beMatching {
-        case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, Some(Audio(d, _)), _, _, _, _, _, _), _))) if d.getSeconds == 4 => true
+        case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, _, Some(Audio(d, _)), _, _, _, _, _, _), _))) if d.getSeconds == 4 => true
       }
 
       errors shouldBe empty
@@ -179,7 +179,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       }
 
       message.data.protos should beMatching {
-        case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, Some(Video(Dim2(1080, 1920), d)), _, _, _, _, _, _), _))) if d.getSeconds == 3 => true
+        case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, _, Some(Video(Dim2(1080, 1920), d)), _, _, _, _, _, _), _))) if d.getSeconds == 3 => true
       }
 
       errors shouldBe empty
@@ -666,7 +666,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
     override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
       new ApiZMessaging(clientId, user) {
 
-        override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
+        override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
           override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] =
             super.postOtrMessage(convId, remoteId, message).andThen { case Success(r) if r.isRight => otrMessageSyncs :+=(remoteId, message, r) }(Threading.Background)
         }

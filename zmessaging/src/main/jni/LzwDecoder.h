@@ -26,16 +26,10 @@ typedef unsigned char byte;
 class LzwDecoder {
 
     public:
-        LzwDecoder(byte* image, int* pixels, int* colors, int width, int height) {
-            this->image = image;
-            this->pixels = pixels;
-            this->colors = colors;
-            this->width = width;
-            this->height = height;
-        };
+        LzwDecoder(byte* image, int* pixels, int* colors, int width, int height);
+	~LzwDecoder();
 
         void clear(int x, int y, int w, int h, int color);
-
         void decode(int x, int y, int w, int h, int inputSize, int transIndex, int bgColor, bool interlace, bool transparency);
 
     private:
@@ -46,6 +40,10 @@ class LzwDecoder {
         int width;
         int height;
 
+	unsigned short *prefix;
+	byte *suffix;
+	byte *pixelStack;
+	byte *block;
 };
 
 #ifdef __cplusplus

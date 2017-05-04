@@ -26,7 +26,7 @@ import com.waz.threading.Threading
 
 import scala.concurrent.Future
 
-class TypingSyncHandler(client: TypingClient, convs: ConversationsContentUpdater, typingService: TypingService) {
+class TypingSyncHandler(client: TypingClient, convs: DefaultConversationsContentUpdater, typingService: TypingService) {
 
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[TypingSyncHandler]

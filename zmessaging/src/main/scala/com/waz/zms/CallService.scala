@@ -17,16 +17,17 @@
  */
 package com.waz.zms
 
-import android.content.{Context, Intent}
+import android.content.{Context => AContext, Intent => AIntent}
 import com.waz.ZLog._
 import com.waz.api.VoiceChannelState._
 import com.waz.model.ConvId
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
-import com.waz.service.call.CallInfo.IsActive
 import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
+import com.waz.utils.returning
+import com.waz.utils.wrappers.{Context, Intent}
 
 import scala.concurrent.{Future, Promise}
 
@@ -40,7 +41,7 @@ class CallService extends FutureService {
 
   lazy val executor = new CallExecutor(getApplicationContext, ZMessaging.currentAccounts)
 
-  override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
+  override protected def onIntent(intent: AIntent, id: Int): Future[Any] = wakeLock.async {
     debug(s"onIntent $intent")
     if (intent != null && intent.hasExtra(ConvIdExtra)) {
       val convId = ConvId(intent.getStringExtra(ConvIdExtra))
@@ -48,7 +49,9 @@ class CallService extends FutureService {
 
       intent.getAction match {
         case ActionJoin => executor.join(convId, id, withVideo = false)
+        case ActionJoinGroup => executor.join(convId, id, withVideo = false)
         case ActionJoinWithVideo => executor.join(convId, id, withVideo = true)
+        case ActionJoinGroupWithVideo => executor.join(convId, id, withVideo = true)
         case ActionLeave => executor.leave(convId, id)
         case ActionSilence => executor.silence(convId, id)
         case _ => executor.track(convId, id)
@@ -66,40 +69,45 @@ object CallService {
 
   val ActionTrack = "com.waz.zclient.call.ACTION_TRACK"
   val ActionJoin = "com.waz.zclient.call.ACTION_JOIN"
+  val ActionJoinGroup = "com.waz.zclient.call.ACTION_JOIN_GROUP"
   val ActionJoinWithVideo = "com.waz.zclient.call.ACTION_JOIN_WITH_VIDEO"
+  val ActionJoinGroupWithVideo = "com.waz.zclient.call.ACTION_JOIN_GROUP_WITH_VIDEO"
   val ActionLeave = "com.waz.zclient.call.ACTION_LEAVE"
   val ActionSilence = "com.waz.zclient.call.ACTION_SILENCE"
 
   def apply(context: Context, conv: ConvId) = {
-    if (context.startService(trackIntent(context, conv)) == null) {
+    if (!context.startService(trackIntent(context, conv))) {
       error(s"could not start CallService, make sure it's added to AndroidManifest")
     }
   }
 
   def intent(context: Context, conv: ConvId, action: String = ActionTrack) = {
-    val intent = new Intent(context, classOf[CallService])
-    intent.setAction(action)
-    intent.putExtra(ConvIdExtra, conv.str)
+    returning(Intent(context, classOf[CallService])) { i =>
+      i.setAction(action)
+      i.putExtra(ConvIdExtra, conv.str)
+    }
   }
 
   def trackIntent(context: Context, conv: ConvId) = intent(context, conv, ActionTrack)
 
   def joinIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoin)
+  def joinGroupIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroup)
   def joinWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
+  def joinGroupWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
 
   def leaveIntent(context: Context, conv: ConvId) = intent(context, conv, ActionLeave)
 
   def silenceIntent(context: Context, conv: ConvId) = intent(context, conv, ActionSilence)
 }
 
-class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
+class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
 
   private implicit val logTag: LogTag = logTagFor[CallExecutor]
   import Threading.Implicits.Background
 
   def join(conv: ConvId, id: Int, withVideo: Boolean) = execute { zms =>
     isV3Call(zms).flatMap {
-      case true => Future.successful(zms.calling.acceptCall(conv))
+      case true => Future.successful(zms.calling.startCall(conv))
       case _ => zms.voice.joinVoiceChannel(conv, withVideo) flatMap (_ => track(conv, zms))
     }
   }(s"CallExecutor.join($id, withVideo = $withVideo)")
@@ -120,7 +128,7 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
 
   def track(conv: ConvId, id: Int): Future[Unit] = execute(track(conv, _)) (s"CallExecutor.track $id")
 
-  private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case IsActive() => true; case _ => false }.head
+  private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case Some(_) => true; case _ => false }.head
 
   /**
     * Sets up a cancellable future which will end the call after the `callConnectingTimeout`, unless
@@ -133,7 +141,7 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
       CancellableFuture.lift(isV3Call(zms)).flatMap {
         case true =>
-          CancellableFuture.lift(zms.calling.currentCall.head.map(_.state).map(ChannelState.isConnecting).map {
+          CancellableFuture.lift(zms.calling.currentCall.head.collect{case Some(i) => i.state}.map(ChannelState.isConnecting).map {
             case true => zms.calling.endCall(conv)
             case _ =>
           })
@@ -148,7 +156,7 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
     def check() = isV3Call(zms).flatMap {
       case true =>
         zms.calling.currentCall.head map {
-          case info if info.state == SELF_CALLING =>
+          case Some(info) if info.state == SELF_CALLING =>
             verbose(s"call in progress: $info")
           case _ => promise.trySuccess({})
         }
@@ -162,7 +170,7 @@ class CallExecutor(val context: Context, val accounts: Accounts)(implicit ec: Ev
       }
 
     val subscriberV2 = zms.voiceContent.activeChannel { _ => check() }
-    val subscriberV3 = zms.calling.currentCall.map(_.state) { _ => check()}
+    val subscriberV3 = zms.calling.currentCall.map(_.map(_.state)) { _ => check()}
 
     check()
 

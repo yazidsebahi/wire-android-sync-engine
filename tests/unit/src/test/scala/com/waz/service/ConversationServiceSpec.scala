@@ -19,7 +19,6 @@ package com.waz.service
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.Message
 import com.waz.content.GlobalDatabase
@@ -29,6 +28,7 @@ import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest._
 
@@ -46,7 +46,7 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
   lazy val user2 = UserData("user 1")
   lazy val user3 = UserData("user 3")
 
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+  implicit def db: DB = service.db.dbHelper.getWritableDatabase
 
   var convSync = None: Option[ConvId]
   var convNameSync = None: Option[ConvId]

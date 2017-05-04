@@ -38,6 +38,7 @@ import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Future
 
+
 class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 
   lazy val selfUser = UserData("test")
@@ -56,7 +57,7 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
 
-    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage) {
+    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage, prefs) {
       override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent, recipients: Option[Set[UserId]]): Future[EncryptedContent] = {
         encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
         Future successful encryptedContent
@@ -73,6 +74,7 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     override lazy val otrClientsSync: OtrClientsSyncHandler = new OtrClientsSyncHandler(context, accountId, selfUserId, Signal.const(Some(clientId)), otrClient, otrClientsService, otrClientsStorage, cryptoBox, kvStorage) {
       override private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] = Future.successful(None)
     }
+
 
     usersStorage.addOrOverwrite(selfUser).futureValue
     otrClientsStorage.insert(UserClients(selfUser.id, Map(clientId -> Client(clientId, ""))))
@@ -100,4 +102,5 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       postMsgRequests shouldEqual Seq((conv.remoteId, otrMsg, false), (conv.remoteId, otrMsg, false), (conv.remoteId, otrMsg, true))
     }
   }
+
 }

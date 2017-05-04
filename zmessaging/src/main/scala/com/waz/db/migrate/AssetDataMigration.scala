@@ -17,12 +17,12 @@
  */
 package com.waz.db.migrate
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db._
+import com.waz.utils.wrappers.DB
 import org.json.JSONObject
 
 object AssetDataMigration {
-  lazy val v70: SQLiteDatabase => Unit = { implicit db =>
+  lazy val v70: DB => Unit = { implicit db =>
     // migrate AnyAssetData preview field
     withStatement("UPDATE Assets SET data = ? WHERE _id = ?") { stmt =>
       forEachRow(db.query("Assets", Array("_id", "data"), "asset_type = 'Any'", null, null, null, null)) { c =>

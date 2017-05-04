@@ -17,9 +17,9 @@
  */
 package com.waz.model
 
-import android.database.Cursor
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.DBCursor
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -51,6 +51,6 @@ object CommonConnectionsData {
     override val idCol = Id
     override val table = Table("CommonConnections", Id, Data, Timestamp)
 
-    override def apply(implicit cursor: Cursor): CommonConnectionsData = Data
+    override def apply(implicit cursor: DBCursor): CommonConnectionsData = Data
   }
 }

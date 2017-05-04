@@ -20,6 +20,7 @@ package com.waz.model
 import android.database.Cursor
 import com.waz.db.ZMessagingDB
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
@@ -57,7 +58,7 @@ class ConversationDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAf
     dbHelper.close()
   }
 
-  implicit def db = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
   import ConversationDataDao._
 
   feature("conversations ordering") {

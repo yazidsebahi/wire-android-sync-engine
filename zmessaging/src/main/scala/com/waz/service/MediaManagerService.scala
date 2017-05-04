@@ -20,6 +20,7 @@ package com.waz.service
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
@@ -33,14 +34,18 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.util.Try
 
-class MediaManagerService(context: Context, prefs: PreferenceService) {
+trait MediaManagerService {
+  def mediaManager: Option[MediaManager]
+}
+
+class DefaultMediaManagerService(context: Context, prefs: PreferenceService) extends MediaManagerService {
   import com.waz.service.MediaManagerService._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
 
   lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
-  
+
   lazy val mediaManager = LoggedTry {
     val manager = MediaManager.getInstance(context.getApplicationContext)
     manager.addListener(listener)
@@ -90,7 +95,5 @@ class MediaManagerService(context: Context, prefs: PreferenceService) {
 }
 
 object MediaManagerService {
-  private implicit val logTag: LogTag = logTagFor[MediaManagerService]
-
-  private val AudioConfigAsset = "android.json"
+  val AudioConfigAsset = "android.json"
 }

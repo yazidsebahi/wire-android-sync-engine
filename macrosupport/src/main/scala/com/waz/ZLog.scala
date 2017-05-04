@@ -26,6 +26,12 @@ import scala.annotation.tailrec
 object ZLog {
   type LogTag = String
 
+  type LogLevel = LogLevel.Value
+  object LogLevel extends Enumeration {
+    val Verbose, Debug, Warn, Info, Error = Value
+  }
+
+  var testLogLevel: LogLevel = LogLevel.Error
   @volatile var minimumLogLevel: Int = Log.VERBOSE
 
   def logTagFor[A <: Singleton](a: A): String = macro ZLogMacros.logTagForSingleton[A]
@@ -50,37 +56,79 @@ private object ZLogMacros {
 
   def errorWithCause(c: Context)(message: c.Expr[String], cause: c.Expr[Throwable])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message, $cause)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Error) ${reify(println(s"E: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message, $cause)
+      """
   }
 
   def error(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Error) ${reify(println(s"E: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message)
+      """
   }
 
   def warnWithCause(c: Context)(message: c.Expr[String], cause: c.Expr[Throwable])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message, $cause)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Warn) ${reify(println(s"W: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message, $cause)
+      """
   }
 
   def warn(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if(com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Warn) ${reify(println(s"W: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message)
+      """
   }
 
   def info(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.INFO) android.util.Log.i($tag, $message)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Info) ${reify(println(s"I: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.INFO) android.util.Log.i($tag, $message)
+      """
   }
 
   def debug(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.DEBUG) android.util.Log.d($tag, $message)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Info) ${reify(println(s"D: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.DEBUG) android.util.Log.d($tag, $message)
+      """
   }
 
   def verbose(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"if (com.waz.ZLog.minimumLogLevel <= android.util.Log.VERBOSE) android.util.Log.v($tag, $message)"
+    q"""
+        if (com.waz.utils.isTest) {
+          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Verbose) ${reify(println(s"V: ${tag.splice}: ${message.splice}"))}
+        }
+        else
+          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.VERBOSE) android.util.Log.v($tag, $message)
+      """
   }
 
   def logTime[A](c: Context)(message: c.Expr[String])(body: c.Expr[A])(tag: c.Expr[LogTag]) = {

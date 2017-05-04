@@ -37,7 +37,7 @@ import scala.util.Try
 /**
  * Updates conversation names when any dependency changes (members list, user names).
  */
-class NameUpdater(context: Context, users: UserService, usersStorage: UsersStorage, convs: ConversationStorage, membersStorage: MembersStorage) {
+class NameUpdater(context: Context, users: UserService, usersStorage: UsersStorage, convs: ConversationStorage, membersStorage: DefaultMembersStorage) {
 
   private implicit val tag: LogTag = logTagFor[NameUpdater]
   private implicit val ev = EventContext.Global

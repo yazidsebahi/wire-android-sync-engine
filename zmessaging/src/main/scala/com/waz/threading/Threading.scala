@@ -24,16 +24,17 @@ import java.util.concurrent.{Executor, ExecutorService, Executors}
 
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
+import com.waz.utils.returning
 
 import scala.concurrent.{ExecutionContext, Future, Promise, blocking}
 
 object Threading {
 
   object Implicits {
-    implicit val Background: DispatchQueue = Threading.ThreadPool
-    implicit val Ui: DispatchQueue = Threading.Ui
-    implicit val Image: DispatchQueue = Threading.ImageDispatcher
-    implicit val BlockingIO: ExecutionContext = Threading.BlockingIO
+    implicit lazy val Background: DispatchQueue = Threading.ThreadPool
+    implicit lazy val Ui: DispatchQueue = Threading.Ui
+    implicit lazy val Image: DispatchQueue = Threading.ImageDispatcher
+    implicit lazy val BlockingIO: ExecutionContext = Threading.BlockingIO
   }
 
   var AssertsEnabled = ZmsVersion.DEBUG
@@ -67,7 +68,14 @@ object Threading {
     override def reportFailure(cause: Throwable): Unit = delegate.reportFailure(cause)
   }
 
-  lazy val Ui = new UiDispatchQueue
+  // var for tests
+  private var _ui: Option[DispatchQueue] = None
+  def Ui: DispatchQueue = _ui match {
+    case Some(ui) => ui
+    case None => returning(new UiDispatchQueue){ t => _ui = Some(t) }
+  }
+
+  def setUi(ui: DispatchQueue) = this._ui = Some(ui)
 
   val Timer = new Timer(true)
 

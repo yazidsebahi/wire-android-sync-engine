@@ -17,7 +17,6 @@
  */
 package com.waz.db.migrate
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api
 import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.db.Col._
@@ -25,13 +24,14 @@ import com.waz.db._
 import com.waz.model.GenericContent.Knock
 import com.waz.model.MessageData.MessageState
 import com.waz.model.{GenericMessage, _}
+import com.waz.utils.wrappers.DB
 
 import scala.collection.breakOut
 
 object MessageDataMigration {
   import GenericMessage._
 
-  lazy val v69 = { implicit db: SQLiteDatabase =>
+  lazy val v69 = { implicit db: DB =>
     // removes Edit, Otr and HotKnock columns
     // adds protos column
     // generates protos for KNOCK msgs, to preserve hot knock info
@@ -71,7 +71,7 @@ object MessageDataMigration {
     }
   }
 
-  lazy val v72 = { implicit db: SQLiteDatabase =>
+  lazy val v72 = { implicit db: DB =>
     val table = TableDesc("Messages_tmp", Columns.v72.all)
 
     inTransaction { tr: Transaction =>
@@ -97,20 +97,20 @@ object MessageDataMigration {
     }
   }
 
-  lazy val v76 = { implicit db: SQLiteDatabase =>
+  lazy val v76 = { implicit db: DB =>
     db.execSQL("ALTER TABLE Messages ADD COLUMN ephemeral INTEGER DEFAULT 0")
     db.execSQL("ALTER TABLE Messages ADD COLUMN expiry_time INTEGER")
   }
 
-  lazy val v77 = { implicit db: SQLiteDatabase =>
+  lazy val v77 = { implicit db: DB =>
     db.execSQL("ALTER TABLE Messages ADD COLUMN expired INTEGER DEFAULT 0")
   }
 
-  lazy val v80 = { implicit db: SQLiteDatabase =>
+  lazy val v80 = { implicit db: DB =>
     db.execSQL("ALTER TABLE Messages ADD COLUMN duration INTEGER DEFAULT 0")
   }
 
-  lazy val v83 = { implicit db: SQLiteDatabase =>
+  lazy val v83 = { implicit db: DB =>
     // ensures MessageContentIndex is fully populated
 
     val Type = text[Message.Type]('msg_type, MessageData.MessageTypeCodec.encode, MessageData.MessageTypeCodec.decode)

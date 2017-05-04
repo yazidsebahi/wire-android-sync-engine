@@ -20,7 +20,6 @@ package com.waz.api.impl
 import java.io.{File, InputStream}
 
 import android.content.Context
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
@@ -32,6 +31,7 @@ import com.waz.service.assets.GlobalRecordAndPlayService.{AssetMediaKey, PCMCont
 import com.waz.threading.Threading
 import com.waz.utils.ContentURIs.queryContentUriMetaData
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import org.threeten.bp
 
 import scala.concurrent.Future
@@ -66,7 +66,7 @@ case class TranscodedVideoAsset(fileName: Option[String], data: CacheEntry) exte
   override def openDataStream(context: Context) = data.inputStream
 }
 
-case class ContentUriAssetForUpload(override val id: AssetId, uri: Uri) extends AssetForUpload(id) {
+case class ContentUriAssetForUpload(override val id: AssetId, uri: URI) extends AssetForUpload(id) {
   import Threading.Implicits.Background
   private lazy val info = queryContentUriMetaData(ZMessaging.context, uri)
 
@@ -74,7 +74,7 @@ case class ContentUriAssetForUpload(override val id: AssetId, uri: Uri) extends 
   override lazy val mimeType = info.map(_.mime)
   override lazy val sizeInBytes = info.map(_.size)
 
-  override def openDataStream(context: Context): InputStream = context.getContentResolver.openInputStream(uri)
+  override def openDataStream(context: Context): InputStream = context.getContentResolver.openInputStream(URI.unwrap(uri))
 }
 
 case class AudioAssetForUpload(override val id: AssetId, data: CacheEntry, duration: bp.Duration, fx: (AudioEffect, File) => Future[AudioAssetForUpload]) extends AssetForUpload(id) with api.AudioAssetForUpload {

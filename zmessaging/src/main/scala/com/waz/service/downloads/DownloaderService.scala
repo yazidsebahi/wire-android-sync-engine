@@ -76,14 +76,30 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
   }
 
   def cancel(key: CacheKey): Future[Unit] = Future {
-    verbose(s"cancel($key)")
     downloads.remove(key) foreach { _.cancel() }
     active.remove(key)
     checkQueue()
   }
 
-  def download[A <: DownloadRequest](req: A, force: Boolean = false)(implicit loader: Downloader[A], expires: Expiration = DownloaderService.DefaultExpiryTime): CancellableFuture[Option[CacheEntry]] = {
-    verbose(s"download($req, $force)")
+  def download[A <: DownloadRequest](req: A, force: Boolean = false, withRetries: Boolean = true)
+                                    (implicit loader: Downloader[A]): CancellableFuture[Option[CacheEntry]] =
+    if (withRetries) downloadWithRetries(req, force) else downloadOnce(req, force)
+
+  private def downloadWithRetries[A <: DownloadRequest](req: A, force: Boolean = false, retry: Int = 0)
+                                    (implicit loader: Downloader[A]): CancellableFuture[Option[CacheEntry]] = {
+    val cf = downloadOnce(req, force)
+    cf.flatMap {
+      case None if retry >= DownloaderService.backoff.maxRetries => CancellableFuture.successful(None)
+      case None => CancellableFuture.delay(DownloaderService.backoff.delay(retry)).flatMap { _ => downloadWithRetries(req, force, retry + 1)(loader) }
+      case _ => cf // if everything is ok we want to return the original cancellable future, not a new one
+    }
+  }
+
+  // 'protected' for the sake of unit tests, to enable mocking
+  protected def downloadOnce[A <: DownloadRequest](req: A, force: Boolean = false)
+                                        (implicit loader: Downloader[A],
+                                         expires: Expiration = DownloaderService.DefaultExpiryTime
+                                        ): CancellableFuture[Option[CacheEntry]] = {
     val p = Promise[Option[CacheEntry]]()
     p.tryCompleteWith(downloadEntry(req, loader, force).flatMap(_.promise.future))
 
@@ -93,6 +109,7 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
         super.cancel()(tag)
       }
     }
+
   }
 
   private def downloadEntry[A <: DownloadRequest](req: A, loader: Downloader[A], force: Boolean = false)(implicit expires: Expiration): Future[DownloadEntry] = Future {
@@ -106,6 +123,7 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
         entry.force = entry.force || force
         entry.time = System.currentTimeMillis()
         entry.expiration = Expiration(entry.expiration.timeout max expires.timeout)
+        verbose("adding entry to the queue")
         queue.put(req, uiWaiting = true, entry.time)
         checkQueue()
       }
@@ -194,6 +212,9 @@ object DownloaderService {
   // number of concurrent downloads for request not immediately required by UI
   val MaxBackgroundDownloads = 1
   val DefaultExpiryTime = 7.days
+
+  private var backoff = new ExponentialBackoff(250.millis, 5.minutes)
+  def setBackoff(backoff: ExponentialBackoff) = this.backoff = backoff
 
   private[downloads] class DownloadEntry(val req: DownloadRequest, load: ProgressIndicator.Callback => CancellableFuture[Option[CacheEntry]]) {
     val promise = Promise[Option[CacheEntry]]()

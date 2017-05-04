@@ -17,22 +17,20 @@
  */
 package com.waz.db
 
-import android.content.ContentValues
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog
 import com.waz.ZLog._
+import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor}
 import com.waz.utils.{Managed, returning}
 
-import scala.collection.{breakOut, GenTraversableOnce}
+import scala.collection.{GenTraversableOnce, breakOut}
 import scala.language.implicitConversions
 
 trait Reader[A] {
-  def apply(implicit c: Cursor): A
+  def apply(implicit c: DBCursor): A
 }
 
 object Reader {
-  def apply[A](f: Cursor => A): Reader[A] = new Reader[A] { def apply(implicit c: Cursor): A = f(c) }
+  def apply[A](f: DBCursor => A): Reader[A] = new Reader[A] { def apply(implicit c: DBCursor): A = f(c) }
 }
 
 abstract class Dao[T, A] extends DaoIdOps[T] {
@@ -43,7 +41,7 @@ abstract class Dao[T, A] extends DaoIdOps[T] {
   protected def idValueSplitter(v: IdVals): Array[String] = Array(idCol(v))
   def idExtractor(item: T): IdVals = idCol.extractor(item)
 
-  override def getAll(ids: Set[A])(implicit db: SQLiteDatabase): Vector[T] =
+  override def getAll(ids: Set[A])(implicit db: DB): Vector[T] =
     if (ids.isEmpty) Vector.empty
     else list(db.query(table.name, null, s"${idCol.name} IN (${ids.map(idCol.col.sqlLiteral).mkString("'", "','", "'")})", null, null, null, null))
 }
@@ -79,21 +77,21 @@ abstract class DaoIdOps[T] extends BaseDao[T] {
   private lazy val builtIdCols = idColumnsQueryBuilder(idCol)
   protected def idColumnsQueryBuilder(id: IdCols): String = idColumns(id).map(c => s"${c.name} = ?").mkString(" AND ")
 
-  def getAll(ids: Set[IdVals])(implicit db: SQLiteDatabase): Vector[T] = {
+  def getAll(ids: Set[IdVals])(implicit db: DB): Vector[T] = {
     val builder = Vector.newBuilder[T]
     ids foreach { getById(_) foreach { builder += _ } }
     builder.result()
   }
 
-  def getById(id: IdVals)(implicit db: SQLiteDatabase) = single(findById(id))
+  def getById(id: IdVals)(implicit db: DB) = single(findById(id))
 
-  def getCursor(id: IdVals)(implicit db: SQLiteDatabase) = findById(id)
+  def getCursor(id: IdVals)(implicit db: DB) = findById(id)
 
-  private def findById(id: IdVals)(implicit db: SQLiteDatabase): Cursor = db.query(table.name, null, builtIdCols, idValueSplitter(id), null, null, null, "1")
+  private def findById(id: IdVals)(implicit db: DB): DBCursor = db.query(table.name, null, builtIdCols, idValueSplitter(id), null, null, null, "1")
 
-  def delete(id: IdVals)(implicit db: SQLiteDatabase): Int = db.delete(table.name, builtIdCols, idValueSplitter(id))
+  def delete(id: IdVals)(implicit db: DB): Int = db.delete(table.name, builtIdCols, idValueSplitter(id))
 
-  def deleteEvery(ids: GenTraversableOnce[IdVals])(implicit db: SQLiteDatabase): Unit = inTransaction {
+  def deleteEvery(ids: GenTraversableOnce[IdVals])(implicit db: DB): Unit = inTransaction {
     withStatement(s"DELETE FROM ${table.name} WHERE $builtIdCols") { stmt =>
       ids.foreach { id =>
         idValueSplitter(id).zipWithIndex foreach { case (v, idx) => stmt.bindString(idx + 1, v) }
@@ -102,9 +100,9 @@ abstract class DaoIdOps[T] extends BaseDao[T] {
     }
   }
 
-  def update(item: T)(f: T => T)(implicit db: SQLiteDatabase): Option[T] = updateById(idExtractor(item))(f)
+  def update(item: T)(f: T => T)(implicit db: DB): Option[T] = updateById(idExtractor(item))(f)
 
-  def updateById(id: IdVals)(f: T => T)(implicit db: SQLiteDatabase): Option[T] = getById(id).map(it => insertOrReplace(f(it)))
+  def updateById(id: IdVals)(f: T => T)(implicit db: DB): Option[T] = getById(id).map(it => insertOrReplace(f(it)))
 
   override def Table(name: String, columns: Column[_]*) = new TableWithId(name, columns:_*)(idColumns(idCol))
 }
@@ -114,40 +112,40 @@ abstract class BaseDao[T] extends Reader[T] {
 
   val table: Table[T]
 
-  def onCreate(db: SQLiteDatabase) = db.execSQL(table.createSql)
+  def onCreate(db: DB) = db.execSQL(table.createSql)
 
-  def values(item: T): ContentValues = table.save(item)
+  def values(item: T): DBContentValues = table.save(item)
 
-  def listCursor(implicit db: SQLiteDatabase): Cursor = db.query(table.name, null, null, null, null, null, null, null)
+  def listCursor(implicit db: DB): DBCursor = db.query(table.name, null, null, null, null, null, null, null)
 
-  def list(implicit db: SQLiteDatabase): Vector[T] = list(listCursor)
+  def list(implicit db: DB): Vector[T] = list(listCursor)
 
-  def iterating(c: => Cursor): Managed[Iterator[T]] = iteratingWithReader(this)(c)
+  def iterating(c: => DBCursor): Managed[Iterator[T]] = iteratingWithReader(this)(c)
 
-  def single(c: Cursor, close: Boolean = true): Option[T] = try { if (c.moveToFirst()) Option(apply(c)) else None } finally { if (close) c.close() }
+  def single(c: DBCursor, close: Boolean = true): Option[T] = try { if (c.moveToFirst()) Option(apply(c)) else None } finally { if (close) c.close() }
 
-  def list(c: Cursor, close: Boolean = true, filter: T => Boolean = { _ => true }): Vector[T] =
+  def list(c: DBCursor, close: Boolean = true, filter: T => Boolean = { _ => true }): Vector[T] =
     CursorIterator.list[T](c, close, filter)(this)
 
-  def foreach(c: Cursor, f: T => Unit): Unit =
+  def foreach(c: DBCursor, f: T => Unit): Unit =
     try { new CursorIterator(c)(this).foreach(f) } finally { c.close() }
 
-  def foreach(f: T => Unit)(implicit db: SQLiteDatabase): Unit = {
+  def foreach(f: T => Unit)(implicit db: DB): Unit = {
     val c = listCursor
     try { new CursorIterator(c)(this).foreach(f) } finally { c.close() }
   }
 
-  def find[A](col: Column[A], value: A)(implicit db: SQLiteDatabase): Cursor = db.query(table.name, null, s"${col.name} = ?", Array(col(value)), null, null, null)
+  def find[A](col: Column[A], value: A)(implicit db: DB): DBCursor = db.query(table.name, null, s"${col.name} = ?", Array(col(value)), null, null, null)
 
-  def findInSet[A](col: Column[A], values: Set[A])(implicit db: SQLiteDatabase): Cursor = db.query(table.name, null, s"${col.name} IN (${values.iterator.map(_ => "?").mkString(", ")})", values.map(col(_))(breakOut): Array[String], null, null, null)
+  def findInSet[A](col: Column[A], values: Set[A])(implicit db: DB): DBCursor = db.query(table.name, null, s"${col.name} IN (${values.iterator.map(_ => "?").mkString(", ")})", values.map(col(_))(breakOut): Array[String], null, null, null)
 
-  def delete[A](col: Column[A], value: A)(implicit db: SQLiteDatabase): Int = db.delete(table.name, s"${col.name} = ?", Array(col(value)))
+  def delete[A](col: Column[A], value: A)(implicit db: DB): Int = db.delete(table.name, s"${col.name} = ?", Array(col(value)))
 
-  def insertOrIgnore(items: GenTraversableOnce[T])(implicit db: SQLiteDatabase): Unit = insertWith(table.insertOrIgnoreSql)(items)
+  def insertOrIgnore(items: GenTraversableOnce[T])(implicit db: DB): Unit = insertWith(table.insertOrIgnoreSql)(items)
 
-  def insertOrReplace(items: GenTraversableOnce[T])(implicit db: SQLiteDatabase): Unit = insertWith(table.insertSql)(items)
+  def insertOrReplace(items: GenTraversableOnce[T])(implicit db: DB): Unit = insertWith(table.insertSql)(items)
 
-  private def insertWith(sql: String)(items: GenTraversableOnce[T])(implicit db: SQLiteDatabase): Unit = inTransaction {
+  private def insertWith(sql: String)(items: GenTraversableOnce[T])(implicit db: DB): Unit = inTransaction {
     withStatement(sql) { stmt =>
       items foreach { item =>
         table.bind(item, stmt)
@@ -156,17 +154,17 @@ abstract class BaseDao[T] extends Reader[T] {
     }
   }
 
-  def insertOrIgnore(item: T)(implicit db: SQLiteDatabase): T = returning(item)(i => db.insertWithOnConflict(table.name, null, values(i), SQLiteDatabase.CONFLICT_IGNORE))
+  def insertOrIgnore(item: T)(implicit db: DB): T = returning(item)(i => db.insertOrIgnore(table.name, values(i)))
 
-  def insertOrReplace(item: T)(implicit db: SQLiteDatabase): T = returning(item)(i => db.insertWithOnConflict(table.name, null, values(i), SQLiteDatabase.CONFLICT_REPLACE))
+  def insertOrReplace(item: T)(implicit db: DB): T = returning(item)(i => db.insertOrReplace(table.name, values(i)))
 
-  def deleteAll(implicit db: SQLiteDatabase): Int = db.delete(table.name, null, null)
+  def deleteAll(implicit db: DB): Int = db.delete(table.name, null, null)
 
   def Table(name: String, columns: Column[_]*) = new Table(name, columns:_*)
 
   type Column[A] = ColBinder[A, T]
 
-  final implicit def columnToValue[A](col: Column[A])(implicit cursor: Cursor): A = {
+  final implicit def columnToValue[A](col: Column[A])(implicit cursor: DBCursor): A = {
     val index = cursor.getColumnIndex(col.name)
     if (index < 0) {
       ZLog.error(s"getColumnIndex returned $index for column: ${col.name}, cursor columns: ${cursor.getColumnNames.mkString(",")}")
@@ -175,7 +173,7 @@ abstract class BaseDao[T] extends Reader[T] {
   }
 
   def readerFor[A](col: Column[A]): Reader[A] = new Reader[A] {
-    def apply(implicit c: Cursor): A = col
+    def apply(implicit c: DBCursor): A = col
   }
 
   final implicit class colToColumn[A](col: Col[A]) {

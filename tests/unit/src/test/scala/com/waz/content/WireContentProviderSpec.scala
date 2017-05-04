@@ -20,7 +20,8 @@ package com.waz.content
 import java.io.{ByteArrayInputStream, FileInputStream}
 
 import android.provider.OpenableColumns
-import com.waz.RobolectricUtils
+import com.waz.{RobolectricUtils}
+import com.waz.utils.wrappers.URI
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.{CacheKey, Mime}
 import com.waz.service.ZMessaging
@@ -57,7 +58,7 @@ class WireContentProviderSpec extends FeatureSpec with Matchers with BeforeAndAf
 
     scenario("Query cache entry metadata") {
       entry.data.encKey shouldBe empty
-      val c = provider.query(uri, Array(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null, null)
+      val c = provider.query(URI.unwrap(uri), Array(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null, null)
       c.getCount shouldEqual 1
       c.moveToFirst()
       c.getString(0) shouldEqual "file.txt"
@@ -65,7 +66,7 @@ class WireContentProviderSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     scenario("Query without specified project") {
-      val c = provider.query(uri, null, null, null, null, null)
+      val c = provider.query(URI.unwrap(uri), null, null, null, null, null)
       c.getCount shouldEqual 1
       c.moveToFirst()
       c.getString(c.getColumnIndex(OpenableColumns.DISPLAY_NAME)) shouldEqual "file.txt"
@@ -73,20 +74,20 @@ class WireContentProviderSpec extends FeatureSpec with Matchers with BeforeAndAf
     }
 
     scenario("Load file data") {
-      IoUtils.toByteArray(new FileInputStream(provider.openFile(uri, "r").getFileDescriptor)).toSeq shouldEqual assetData.toSeq
+      IoUtils.toByteArray(new FileInputStream(provider.openFile(URI.unwrap(uri), "r").getFileDescriptor)).toSeq shouldEqual assetData.toSeq
     }
 
     scenario("Load from encrypted cache entry") {
       val entry = cache.addStream(CacheKey("key1"), new ByteArrayInputStream(assetData), Mime("text/txt"), Some("file.txt")).futureValue
       entry.data.encKey should be('defined)
       val uri = CacheUri(entry.data, context)
-      val c = provider.query(uri, Array(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null, null)
+      val c = provider.query(URI.unwrap(uri), Array(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null, null)
       c.getCount shouldEqual 1
       c.moveToFirst()
       c.getString(0) shouldEqual "file.txt"
       c.getInt(1) shouldEqual 10000
 
-      IoUtils.toByteArray(new FileInputStream(provider.openFile(uri, "r").getFileDescriptor)).toSeq shouldEqual assetData.toSeq
+      IoUtils.toByteArray(new FileInputStream(provider.openFile(URI.unwrap(uri), "r").getFileDescriptor)).toSeq shouldEqual assetData.toSeq
     }
   }
 }

@@ -45,6 +45,7 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import com.waz.ZLog.ImplicitTag._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.LoginClient.LoginResult
 
 import scala.concurrent.duration._
@@ -62,14 +63,14 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
   var loginResponse: LoginResult = _
   var registerResponse: Either[ErrorResponse, (UserInfo, Option[Cookie])] = _
-  var response: ((Uri, RequestContent)) => Response = _
-  var request: Option[(Uri, RequestContent)] = _
+  var response: ((URI, RequestContent)) => Response = _
+  var request: Option[(URI, RequestContent)] = _
   var selfUserSyncRequested = false
 
   class MockGlobal extends MockGlobalModule {
 
     override lazy val client: AsyncClient = new AsyncClient(wrapper = TestClientWrapper) {
-      override def apply(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
+      override def apply(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
         println(s"uri: $uri, body: $body")
         request = Some((uri, body))
         CancellableFuture.successful(response(request.value))
@@ -152,13 +153,13 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
   feature("New user registration") {
 
     object LoginUri {
-      def unapply(uri: Uri): Boolean = uri.getPath.startsWith("/login")
+      def unapply(uri: URI): Boolean = uri.getPath.startsWith("/login")
     }
     object SelfUri {
-      def unapply(uri: Uri): Boolean = uri.getPath.startsWith("/self")
+      def unapply(uri: URI): Boolean = uri.getPath.startsWith("/self")
     }
     object ClientsUri {
-      def unapply(uri: Uri): Boolean = uri.getPath.startsWith("/clients")
+      def unapply(uri: URI): Boolean = uri.getPath.startsWith("/clients")
     }
 
     scenario("Register new user, verify email right away, and set picture") {

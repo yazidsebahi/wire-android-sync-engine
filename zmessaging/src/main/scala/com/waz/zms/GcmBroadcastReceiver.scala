@@ -29,7 +29,8 @@ class GcmBroadcastReceiver extends BroadcastReceiver {
     import scala.collection.JavaConverters._
 
     val extras = Option(intent.getExtras)
-    verbose(s"Received gcm: $intent, extras: ${extras.map { ex => ex.keySet().asScala.map(k => (k, ex.get(k)))}}")
+    val extrasToPrint = extras.map { ex => ex.keySet().asScala.map(k => (k, ex.get(k)))}
+    verbose(s"Received gcm: $intent, extras: $extrasToPrint")
 
     val serviceIntent = new Intent(context, classOf[GcmHandlerService])
     extras.foreach(serviceIntent.putExtras)

@@ -18,7 +18,6 @@
 package com.waz.model
 
 
-import android.net.Uri
 import android.util.Base64
 import com.google.protobuf.nano.MessageNano
 import com.waz.api.EphemeralExpiration
@@ -28,6 +27,7 @@ import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, U
 import com.waz.model.nano.Messages
 import com.waz.model.nano.Messages.MessageEdit
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
@@ -155,6 +155,7 @@ object GenericContent {
           ak.token.foreach(v => rData.assetToken = v.str)
           ak.otrKey.foreach(v => rData.otrKey = v.bytes)
           ak.sha256.foreach(v => rData.sha256 = v.bytes)
+          ak.encryption.foreach(v => rData.encryption = v.value)
         }
 
       def unapply(remoteData: RemoteData): Option[AssetData.RemoteData] = Option(remoteData) map { rData =>
@@ -162,7 +163,8 @@ object GenericContent {
           Option(rData.assetId).filter(_.nonEmpty).map(RAssetId),
           Option(rData.assetToken).filter(_.nonEmpty).map(AssetToken),
           Some(AESKey(rData.otrKey)).filter(_ != AESKey.Empty),
-          Some(Sha256(rData.sha256)).filter(_ != Sha256.Empty))
+          Some(Sha256(rData.sha256)).filter(_ != Sha256.Empty),
+          Some(EncryptionAlgorithm(rData.encryption)))
       }
     }
 
@@ -274,12 +276,12 @@ object GenericContent {
       override def apply(preview: LinkPreview, meta: Tweet): LinkPreview = returning(preview) {_.setTweet(meta)}
     }
 
-    def apply(uri: Uri, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
+    def apply(uri: URI, offset: Int): LinkPreview = returning(new Messages.LinkPreview) { p =>
       p.url = uri.toString
       p.urlOffset = offset
     }
 
-    def apply(uri: Uri, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[Uri]): LinkPreview =
+    def apply(uri: URI, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[URI]): LinkPreview =
       returning(new Messages.LinkPreview) { p =>
         p.url = uri.toString
         p.urlOffset = offset
@@ -292,7 +294,7 @@ object GenericContent {
         p.setArticle(article(title, summary, image, permanentUrl))
       }
 
-    def apply[Meta: PreviewMeta](uri: Uri, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[Uri], meta: Meta): LinkPreview =
+    def apply[Meta: PreviewMeta](uri: URI, offset: Int, title: String, summary: String, image: Option[Asset], permanentUrl: Option[URI], meta: Meta): LinkPreview =
       returning(apply(uri, offset, title, summary, image, permanentUrl)) { p =>
         implicitly[PreviewMeta[Meta]].apply(p, meta)
       }
@@ -303,7 +305,7 @@ object GenericContent {
 
     }
 
-    private def article(title: String, summary: String, image: Option[Asset], uri: Option[Uri]) = returning(new Messages.Article) { p =>
+    private def article(title: String, summary: String, image: Option[Asset], uri: Option[URI]) = returning(new Messages.Article) { p =>
       p.title = title
       p.summary = summary
       uri foreach { u => p.permanentUrl = u.toString }
@@ -492,11 +494,11 @@ object GenericContent {
     override def set(msg: GenericMessage) = msg.setConfirmation
 
     def apply(msg: MessageId) = returning(new Messages.Confirmation) { c =>
-      c.messageId = msg.str
+      c.firstMessageId = msg.str
       c.`type` = Messages.Confirmation.DELIVERED
     }
 
-    def unapply(proto: Receipt): Option[MessageId] = if (proto.`type` == Messages.Confirmation.DELIVERED) Some(MessageId(proto.messageId)) else None
+    def unapply(proto: Receipt): Option[MessageId] = if (proto.`type` == Messages.Confirmation.DELIVERED) Some(MessageId(proto.firstMessageId)) else None
   }
 
   type External = Messages.External
@@ -576,6 +578,31 @@ object GenericContent {
     }
 
     def unapply(calling: Calling): Option[String] = Option(calling.content)
+  }
+
+  sealed trait EncryptionAlgorithm {
+    val value: Int
+  }
+
+  implicit object EncryptionAlgorithm {
+
+    case object AES_CBC extends EncryptionAlgorithm {
+      override val value: Int = Messages.AES_CBC
+    }
+
+    case object AES_GCM extends EncryptionAlgorithm {
+      override val value: Int = Messages.AES_GCM
+    }
+
+    def apply(v: Int) = v match {
+      case Messages.AES_GCM => AES_GCM
+      case other => AES_CBC
+    }
+
+    def unapply(encryption: EncryptionAlgorithm): Option[Int] = encryption match {
+      case AES_GCM => Some(Messages.AES_GCM)
+      case _ => Some(Messages.AES_CBC)
+    }
   }
 
 }

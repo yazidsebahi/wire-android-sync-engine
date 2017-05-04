@@ -17,12 +17,11 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db._
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.service.SearchKey
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{NameParts, RichOption}
 
 import scala.collection.{GenSet, breakOut, mutable}
@@ -59,12 +58,12 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
     override val idCol = Id
     override val table = Table("Contacts", Id, Name, Source, Sorting, Searching)
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS Contacts_sorting on Contacts ( ${Sorting.name} )")
     }
 
-    def save(contacts: Iterable[Contact])(implicit db: SQLiteDatabase): Unit = inTransaction {
+    def save(contacts: Iterable[Contact])(implicit db: DB): Unit = inTransaction {
       PhoneNumbersDao.deleteAll
       EmailAddressesDao.deleteAll
       ContactsDao.deleteAll
@@ -79,9 +78,9 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
 
     import com.waz.model.Contact.{EmailAddressesDao => E, PhoneNumbersDao => P}
 
-    override def listCursor(implicit db: SQLiteDatabase): Cursor = listCursorWithLimit(None)
+    override def listCursor(implicit db: DB): DBCursor = listCursorWithLimit(None)
 
-    def listCursorWithLimit(limit: Option[Int])(implicit db: SQLiteDatabase): Cursor =
+    def listCursorWithLimit(limit: Option[Int])(implicit db: DB): DBCursor =
       db.rawQuery(
       s"""   SELECT ${table.columns.map(_.name).mkString("c.", ", c.", ",")}
          |          (SELECT group_concat(${P.Phone.name}) FROM ${P.table.name} WHERE ${P.Contact.name} = c.${Id.name}) AS phones,
@@ -90,9 +89,9 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
          | ${limit.fold2("", l => s"ORDER BY c.${Sorting.name} COLLATE LOCALIZED ASC LIMIT $l")}
        """.stripMargin, null)
 
-    override def apply(implicit c: Cursor): Contact = Contact(Id, Name, Source, Sorting, Searching, split[PhoneNumber, mutable.HashSet]('phones, PhoneNumber), split[EmailAddress, mutable.HashSet]('emails, EmailAddress))
+    override def apply(implicit c: DBCursor): Contact = Contact(Id, Name, Source, Sorting, Searching, split[PhoneNumber, mutable.HashSet]('phones, PhoneNumber), split[EmailAddress, mutable.HashSet]('emails, EmailAddress))
 
-    private def split[A, B[_]](n: Symbol, f: String => A)(implicit c: Cursor, cb: CanBuild[A, B[A]]): B[A] = {
+    private def split[A, B[_]](n: Symbol, f: String => A)(implicit c: DBCursor, cb: CanBuild[A, B[A]]): B[A] = {
       val value = c.getString(c.getColumnIndex(n.name))
       if (value ne null) value.split(",").map(f)(breakOut) else cb.apply().result
     }
@@ -103,15 +102,15 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
     val Phone = text[PhoneNumber]('phone_number, _.str, PhoneNumber).apply(_._2)
 
     override val table = Table("PhoneNumbers", Contact, Phone)
-    override def apply(implicit cursor: Cursor): (ContactId, PhoneNumber) = (Contact, Phone)
+    override def apply(implicit cursor: DBCursor): (ContactId, PhoneNumber) = (Contact, Phone)
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS PhoneNumbers_contact on PhoneNumbers ( ${Contact.name} )")
       db.execSQL(s"CREATE INDEX IF NOT EXISTS PhoneNumbers_phone on PhoneNumbers ( ${Phone.name} )")
     }
 
-    def findBy(p: PhoneNumber)(implicit db: SQLiteDatabase): Set[ContactId] = iteratingWithReader(contactIdReader)(find(Phone, p)).acquire(_.toSet)
+    def findBy(p: PhoneNumber)(implicit db: DB): Set[ContactId] = iteratingWithReader(contactIdReader)(find(Phone, p)).acquire(_.toSet)
     private val contactIdReader = readerFor(Contact)
   }
 
@@ -120,15 +119,15 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
     val Email = text[EmailAddress]('email_address, _.str, EmailAddress).apply(_._2)
 
     override val table = Table("EmailAddresses", Contact, Email)
-    override def apply(implicit cursor: Cursor): (ContactId, EmailAddress) = (Contact, Email)
+    override def apply(implicit cursor: DBCursor): (ContactId, EmailAddress) = (Contact, Email)
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS EmailAddresses_contact on EmailAddresses ( ${Contact.name} )")
       db.execSQL(s"CREATE INDEX IF NOT EXISTS EmailAddresses_email on EmailAddresses ( ${Email.name} )")
     }
 
-    def findBy(e: EmailAddress)(implicit db: SQLiteDatabase): Set[ContactId] = iteratingWithReader(contactIdReader)(find(Email, e)).acquire(_.toSet)
+    def findBy(e: EmailAddress)(implicit db: DB): Set[ContactId] = iteratingWithReader(contactIdReader)(find(Email, e)).acquire(_.toSet)
     private val contactIdReader = readerFor(Contact)
   }
 
@@ -139,7 +138,7 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
     override val idCol = (User, Contact)
     override val table = Table("ContactsOnWire", User, Contact)
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ContactsOnWire_contact on ContactsOnWire ( ${Contact.name} )")
     }
@@ -147,10 +146,10 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
     import UserData.{UserDataDao => U}
     import com.waz.model.Contact.{ContactsDao => C, EmailAddressesDao => E, PhoneNumbersDao => P}
 
-    def deleteNonExisting(implicit db: SQLiteDatabase): Unit =
+    def deleteNonExisting(implicit db: DB): Unit =
       db.execSQL(s"DELETE FROM ${table.name} WHERE NOT EXISTS ( SELECT c.${C.Id.name} FROM ${C.table.name} c WHERE c.${C.Id.name} = ${Contact.name} )")
 
-    def fillFromUsers(implicit db: SQLiteDatabase): Unit = db.execSQL(
+    def fillFromUsers(implicit db: DB): Unit = db.execSQL(
       s"""INSERT OR IGNORE INTO ${table.name} (${User.name}, ${Contact.name})
          |  SELECT u.${U.Id.name} as user, e.${E.Contact.name} as contact
          |    FROM ${U.table.name} u, ${E.table.name} e
@@ -161,6 +160,6 @@ object Contact extends ((ContactId, String, NameSource, String, SearchKey, GenSe
          |   WHERE u.${U.Phone.name} = ${P.Phone.name}""".stripMargin)
 
     lazy val Connected = s"IN (${Vector(ConnectionStatus.Self, ConnectionStatus.Accepted, ConnectionStatus.Blocked).map(UserDataDao.Conn.col.sqlLiteral).mkString(", ")})"
-    override def apply(implicit cursor: Cursor): (UserId, ContactId) = (User, Contact)
+    override def apply(implicit cursor: DBCursor): (UserId, ContactId) = (User, Contact)
   }
 }

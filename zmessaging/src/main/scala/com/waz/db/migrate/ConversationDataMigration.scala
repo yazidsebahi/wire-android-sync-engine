@@ -17,8 +17,6 @@
  */
 package com.waz.db.migrate
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.{EphemeralExpiration, Verification}
 import com.waz.db.Col._
 import com.waz.db._
@@ -26,11 +24,12 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.SearchKey
 import com.waz.utils._
+import com.waz.utils.wrappers.{DB, DBCursor}
 import org.threeten.bp.Instant
 
 object ConversationDataMigration {
 
-  lazy val v64 = { db: SQLiteDatabase =>
+  lazy val v64 = { db: DB =>
 
     val moveConvs = new TableMigration(TableDesc("Conversations", Columns.v63.all), TableDesc("Conversations_tmp", Columns.v64.all)) {
       import Columns.{v63 => src, v64 => dst}
@@ -45,7 +44,7 @@ object ConversationDataMigration {
         dst.LastEvent := src.LastEvent,
         dst.Status := src.Status,
         dst.StatusTime := src.StatusTime.andThen(_.instant),
-        dst.LastRead := { c: Cursor =>
+        dst.LastRead := { c: DBCursor =>
           src.LastReadTime(c).getOrElse(src.LastEventTime(c).instant)
         },
         dst.Muted := src.Muted,
@@ -75,7 +74,7 @@ object ConversationDataMigration {
     db.execSQL("DROP TABLE Conversations_old")
   }
 
-  lazy val v72 = { implicit db: SQLiteDatabase =>
+  lazy val v72 = { implicit db: DB =>
     val table = TableDesc("Conversations_tmp", Columns.v72.all)
 
     inTransaction { tr: Transaction =>
@@ -92,15 +91,15 @@ object ConversationDataMigration {
     }
   }
 
-  lazy val v76 = { implicit db: SQLiteDatabase =>
+  lazy val v76 = { implicit db: DB =>
     db.execSQL("ALTER TABLE Conversations ADD COLUMN ephemeral INTEGER DEFAULT 0")
   }
 
-  lazy val v79 = { implicit db: SQLiteDatabase =>
+  lazy val v79 = { implicit db: DB =>
     db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_search_key on Conversations (search_key)")
   }
 
-  lazy val v82 = { implicit db: SQLiteDatabase =>
+  lazy val v82 = { implicit db: DB =>
     val table = TableDesc("Conversations_tmp", Columns.v82.all)
 
     inTransaction { tr: Transaction =>

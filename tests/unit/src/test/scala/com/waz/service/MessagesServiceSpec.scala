@@ -19,7 +19,6 @@ package com.waz.service
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog.LogTag
 import com.waz.api.Message
 import com.waz.api.Message.Status
@@ -40,6 +39,7 @@ import com.waz.testutils._
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.crypto.AESUtils
+import com.waz.utils.wrappers.DB
 import com.waz.{api, _}
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
@@ -57,7 +57,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
   import com.waz.utils.events.EventContext.Implicits.global
   implicit val tag: LogTag = "MessagesServiceSpec"
 
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+  implicit def db: DB = service.db.dbHelper.getWritableDatabase
 
   var online = true
 
@@ -65,7 +65,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
   lazy val service = new MockZMessaging(selfUserId = selfUserId) {
 
-    override def network: NetworkModeService = new NetworkModeService(context, lifecycle) {
+    override def network: DefaultNetworkModeService = new DefaultNetworkModeService(context, lifecycle) {
       override def isOnlineMode: Boolean = online
       override def isOfflineMode: Boolean = !online
     }

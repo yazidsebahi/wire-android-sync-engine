@@ -24,13 +24,13 @@ import javax.crypto.Mac
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.{MembersStorage, OtrClientsStorage}
+import com.waz.content.{DefaultMembersStorage, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
 import com.waz.model.GenericContent._
 import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.DefaultConversationsContentUpdater
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
@@ -48,9 +48,9 @@ import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
 
 class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
-                 cryptoBox: CryptoBoxService, members: MembersStorage, convs: ConversationsContentUpdater,
-                 sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage) {
-
+                 cryptoBox: CryptoBoxService, members: DefaultMembersStorage, convs: DefaultConversationsContentUpdater,
+                 sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
+                 prefs: PreferenceService) {
   import EventContext.Implicits.global
   import OtrService._
   import Threading.Implicits.Background
@@ -228,23 +228,6 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
       else cs
     }
 
-  def encryptAssetData(key: AESKey, data: LocalData): Future[(Sha256, LocalData)] = {
-    import Threading.Implicits.Background
-
-    def encryptFile() = cache.createForFile(length = Some(sizeWithPaddingAndIV(data.length))) map { entry =>
-      val mac = AESUtils.encrypt(key, data.inputStream, entry.outputStream)
-      (mac, entry)
-    }
-
-    def encryptBytes() = {
-      val bos = new ByteArrayOutputStream()
-      val mac = AESUtils.encrypt(key, data.inputStream, bos)
-      cache.addData(CacheKey(), bos.toByteArray) map { (mac, _) }
-    }
-
-    data.byteArray.fold(encryptFile()){ _ => encryptBytes() }
-  }
-
   def deleteClients(userMap: Map[UserId, Seq[ClientId]]) =
     Future.traverse(userMap) {
       case (user, cs) =>
@@ -256,6 +239,51 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
   def fingerprintSignal(userId: UserId, cId: ClientId): Signal[Option[Array[Byte]]] =
     if (userId == selfUserId && cId == clientId) Signal.future(cryptoBox { cb => Future successful cb.getLocalFingerprint })
     else sessions.remoteFingerprint(sessionId(userId, clientId))
+
+  def encryptAssetDataCBC(key: AESKey, data: LocalData): Future[(Sha256, LocalData, EncryptionAlgorithm)] = {
+    import Threading.Implicits.Background
+
+    def encryptFile() = cache.createForFile(length = Some(sizeWithPaddingAndIV(data.length))) map { entry =>
+      val mac = AESUtils.encrypt(key, data.inputStream, entry.outputStream)
+      (mac, entry, EncryptionAlgorithm.AES_CBC)
+    }
+
+    def encryptBytes() = {
+      val bos = new ByteArrayOutputStream()
+      val mac = AESUtils.encrypt(key, data.inputStream, bos)
+      cache.addData(CacheKey(), bos.toByteArray) map { (mac, _, EncryptionAlgorithm.AES_CBC) }
+    }
+
+    data.byteArray.fold(encryptFile()){ _ => encryptBytes() }
+  }
+
+  // TODO: AN-5168. Right now throws a NotImplementedError when called; to be implemented later
+  def encryptAssetDataGCM(key: AESKey, data: LocalData): Future[(Sha256, LocalData, EncryptionAlgorithm)] = ???
+
+  def encryptAssetData(key: AESKey, data: LocalData):Future[(Sha256, LocalData, EncryptionAlgorithm)] =
+    if(prefs.v31AssetsEnabled) encryptAssetDataGCM(key, data)
+    else encryptAssetDataCBC(key, data)
+
+  def decryptAssetDataCBC(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = {
+    data.flatMap { arr =>
+      otrKey.map { key =>
+        if (sha.forall(_.str == com.waz.utils.sha2(arr))) LoggedTry(AESUtils.decrypt(key, arr)).toOption else None
+      }.getOrElse {
+        warn(s"got otr asset event without otr key: $assetId")
+        Some(arr)
+      }
+    }.filter(_.nonEmpty)
+  }
+
+  // TODO: AN-5167. Right now throws a NotImplementedError when called; to be implemented later
+  def decryptAssetDataGCM(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = ???
+
+  def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]): Option[Array[Byte]] =
+    (prefs.v31AssetsEnabled, encryption) match {
+      case (true, Some(EncryptionAlgorithm.AES_GCM)) => decryptAssetDataGCM(assetId, otrKey, sha, data)
+      case _ => decryptAssetDataCBC(assetId, otrKey, sha, data)
+    }
+
 }
 
 object OtrService {

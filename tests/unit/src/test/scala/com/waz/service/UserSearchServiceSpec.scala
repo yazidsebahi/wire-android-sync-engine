@@ -17,13 +17,11 @@
  */
 package com.waz.service
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.User.ConnectionStatus
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
-import com.waz.service.UserSearchService.MinCommonConnections
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.testutils.Implicits.SignalToSink
@@ -31,9 +29,10 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.DB
 import org.scalatest._
 import org.threeten.bp.Instant
-import org.threeten.bp.Instant.{EPOCH, now}
+import org.threeten.bp.Instant.{EPOCH}
 
 import scala.collection.breakOut
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -43,7 +42,7 @@ import scala.concurrent.{Await, Future}
 
 class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with OptionValues with RobolectricTests with RobolectricUtils {
 
-  implicit def db: SQLiteDatabase = zms.storage.db.dbHelper.getWritableDatabase
+  implicit def db: DB = zms.storage.db.dbHelper.getWritableDatabase
 
   lazy val users = Seq(
     UserData(id('a), "other user 1"),

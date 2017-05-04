@@ -23,7 +23,7 @@ import android.content.Context
 import android.graphics.{Bitmap, Color}
 import com.waz.bitmap.gif.Gif.{Disposal, Frame}
 
-class LzwDecoder(context: Context, gif: Gif) {
+class LzwDecoder(gif: Gif) {
   import LzwDecoder._
 
   ensureLibraryLoaded()

@@ -17,10 +17,10 @@
  */
 package com.waz.db.migrate
 
-import android.database.sqlite.SQLiteDatabase
+import com.waz.utils.wrappers.DB
 
 object CallLogMigration {
-  lazy val v66: SQLiteDatabase => Unit = { db =>
+  lazy val v66: DB => Unit = { db =>
     db.execSQL("CREATE TABLE CallLog (event INTEGER, session TEXT, conv TEXT, timestamp INTEGER, is_video INTEGER)")
   }
 }

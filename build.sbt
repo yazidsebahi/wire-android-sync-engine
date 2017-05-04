@@ -2,13 +2,13 @@ import java.lang.Runtime._
 
 import android.Keys._
 import com.android.tools.lint.checks.ApiDetector
-import sbt.Keys._
+import sbt.Keys.{libraryDependencies, _}
 import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "97"
-val MinorVersion = "1" // hotfix release
+val MajorVersion = "98"
+val MinorVersion = "0" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -184,8 +184,12 @@ lazy val testutils = project.in(file("tests") / "utils")
     crossPaths := false,
     exportJars := false,
     libraryDependencies ++= Seq(
+      //Replacements for Android Dependencies
+      "org.apache.httpcomponents" % "httpclient" % "4.5.3",
+      Deps.scalaCheck,
       "org.scalatest" %% "scalatest" % "2.2.6",
       "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",
+      "org.scalamock" %% "scalamock-core" % "3.2.2",
       "com.wire" %% "robotest" % "0.7" exclude("org.scalatest", "scalatest"),
       "com.drewnoakes" % "metadata-extractor" % "2.8.1",
       "org.robolectric" % "android-all" % RobolectricVersion,

@@ -24,7 +24,7 @@ import android.media.ExifInterface
 import android.util.Base64
 import com.waz.RobolectricUtils
 import com.waz.bitmap.ExifOrientation
-import com.waz.cache.{CacheEntry, Expiration}
+import com.waz.cache.CacheEntry
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Medium
@@ -58,10 +58,10 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
   lazy val zms = new MockZMessaging() {
     override lazy val downloader = new DownloaderService(context, cache, prefs, network) {
-      override def download[A <: DownloadRequest](req: A, force: Boolean)(implicit loader: downloads.Downloader[A], expires: Expiration): CancellableFuture[Option[CacheEntry]] = {
+      override def download[A <: DownloadRequest](req: A, force: Boolean, withRetries: Boolean)(implicit loader: downloads.Downloader[A]): CancellableFuture[Option[CacheEntry]] = {
         downloadRequest = downloadRequest :+ req
         req match {
-          case WireAssetRequest(_, _, RemoteData(Some(id), _, _, _), _, _, _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
+          case WireAssetRequest(_, _, RemoteData(Some(id), _, _, _, _), _, _, _) => CancellableFuture.delayed(500.millis)(downloadResult.get(id))(Threading.Background)
           case _ => CancellableFuture.successful(None)
         }
       }
@@ -95,7 +95,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   def clearImageCache(assetData: AssetData =assetData) = Await.result(zms.cache.remove(assetData.cacheKey), 5.seconds)
 
   def prepareDownload(assetData: AssetData =assetData) = {
-    service.imageCache.remove(assetData.id, req)
+    service.memoryCache.remove(assetData.id, req)
     clearImageCache(assetData)
 
     val entry = Await.result(zms.cache.addFile(CacheKey("test_full"), fullFile), 5.second)
@@ -105,7 +105,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
 
   class SignalListener(req: BitmapRequest, assetData: AssetData =assetData) {
     var results = Seq.empty[BitmapResult]
-    val signal = new AssetBitmapSignal(assetData, req, service, service.imageCache)
+    val signal = new AssetBitmapSignal(assetData, req, service, service.memoryCache)
     val obs = signal { result => results = results :+ result }
   }
 
@@ -128,7 +128,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       image.getWidth shouldEqual 240
 
       downloadRequest should beMatching({
-        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _)) => true
+        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _)) => true
       })
     }
 
@@ -136,7 +136,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       val REPEATS = 9 // the mocked download takes 0.5s, so 10 repeats + overhead would result in a timeout if WAIT_TIME = 5s
       val WAIT_TIME = 5.second
 
-      service.imageCache.remove(assetData.id, req)
+      service.memoryCache.remove(assetData.id, req)
       clearImageCache()
 
       val entry = Await.result(zms.cache.addFile(CacheKey("test_medium"), mediumFile), WAIT_TIME)
@@ -155,7 +155,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       downloadRequest.size shouldEqual (REPEATS)
 
       downloadRequest.foreach{ _ should beMatching({
-        case WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _) => true
+        case WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _) => true
       })}
     }
   }
@@ -168,7 +168,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       assertResults(BitmapRequest.Regular(300)) { results =>
         results should have size 1
         downloadRequest should beMatching({
-          case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _)) => true
+          case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _)) => true
         })
       }
     }
@@ -194,7 +194,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       }
 
       downloadRequest should beMatching({
-        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _), Some(`convId`), _, _)) => true
+        case Seq(WireAssetRequest(_, _, RemoteData(Some(`mediumId`), _, _, _, _), Some(`convId`), _, _)) => true
       })
     }
 
@@ -216,7 +216,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       prepareDownload()
 
       var results = Seq.empty[BitmapResult]
-      val signal = new AssetBitmapSignal(assetData, BitmapRequest.Regular(300), service, service.imageCache)
+      val signal = new AssetBitmapSignal(assetData, BitmapRequest.Regular(300), service, service.memoryCache)
       val obs = signal { result => results = results :+ result }
       withDelay(results.count(_ != BitmapResult.Empty) shouldEqual 1)
       obs.destroy()
@@ -237,7 +237,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     lazy val assetData = new AssetData(convId = Some(convId), mime = Mime.Image.Gif, remoteId = Some(mediumId), metaData = Some(Image(Dim2(320, 320), Medium)), sizeInBytes = mediumFile.length())
 
     def preparePreview() = {
-      service.imageCache.remove(assetData.id, req)
+      service.memoryCache.remove(assetData.id, req)
       clearImageCache(assetData)
 
       val entry = Await.result(zms.cache.addFile(CacheKey("test_preview"), previewFile), 5.second)

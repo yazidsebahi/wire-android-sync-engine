@@ -17,7 +17,6 @@
  */
 package com.waz.sync
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.UserData.UserDataDao
@@ -28,6 +27,7 @@ import com.waz.sync.handler.UsersSyncHandler
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.wrappers.DB
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.scalatest._
@@ -59,7 +59,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   def searchSync = zms.usersearchSync
   def sync = zms.sync
 
-  implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
+  implicit def db: DB = storage.dbHelper.getWritableDatabase
 
   def query = SearchQuery.Recommended("query")
 

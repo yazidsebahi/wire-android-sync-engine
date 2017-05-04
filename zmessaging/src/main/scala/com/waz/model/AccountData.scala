@@ -17,8 +17,6 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
@@ -29,6 +27,7 @@ import com.waz.db.Dao
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
@@ -126,15 +125,15 @@ object AccountData {
     override val idCol = Id
     override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode)
 
-    override def apply(implicit cursor: Cursor): AccountData = AccountData(Id, Email, Hash, Phone, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Email, Hash, Phone, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode)
 
-    def findByEmail(email: EmailAddress)(implicit db: SQLiteDatabase) =
+    def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
 
-    def findByPhone(phone: PhoneNumber)(implicit db: SQLiteDatabase) =
+    def findByPhone(phone: PhoneNumber)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Phone.name} = ?", Array(phone.str), null, null, null))
 
-    def deleteForEmail(email: EmailAddress)(implicit db: SQLiteDatabase) = delete(Email, Some(email))
+    def deleteForEmail(email: EmailAddress)(implicit db: DB) = delete(Email, Some(email))
   }
 
 }

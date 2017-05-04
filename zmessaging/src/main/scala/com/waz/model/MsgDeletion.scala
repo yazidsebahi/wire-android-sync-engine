@@ -17,10 +17,9 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
+import com.waz.utils.wrappers.{DB, DBCursor}
 import org.threeten.bp.Instant
 
 case class MsgDeletion(msg: MessageId, time: Instant)
@@ -34,9 +33,9 @@ object MsgDeletion {
     override val idCol = Message
     override val table = Table("MsgDeletion", Message, Timestamp)
 
-    override def apply(implicit cursor: Cursor) = MsgDeletion(Message, Timestamp)
+    override def apply(implicit cursor: DBCursor) = MsgDeletion(Message, Timestamp)
 
-    def deleteOlder(time: Instant)(implicit db: SQLiteDatabase) =
+    def deleteOlder(time: Instant)(implicit db: DB) =
       db.delete(table.name, s"${Timestamp.name} < ${time.toEpochMilli}", null)
   }
 }

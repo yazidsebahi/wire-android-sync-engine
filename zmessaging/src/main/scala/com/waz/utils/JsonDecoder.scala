@@ -21,10 +21,11 @@ import java.text.SimpleDateFormat
 import java.util.concurrent.TimeUnit
 import java.util.{Date, Locale, TimeZone}
 
-import android.net.Uri
+import com.waz.model.AssetMetaData.Loudness
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.push.GcmGlobalService.GcmSenderId
+import com.waz.utils.wrappers.URI
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.{Duration, Instant}
 
@@ -119,6 +120,7 @@ object JsonDecoder {
   implicit def decodeFiniteDuration(s: Symbol)(implicit js: JSONObject): FiniteDuration = FiniteDuration(withDefault(s, 0L, _.getLong(s.name)), TimeUnit.MILLISECONDS)
   implicit def decodeLocale(s: Symbol)(implicit js: JSONObject): Option[Locale] = withDefault(s, None, o => Locales.bcp47.localeFor(o.getString(s.name)))
   implicit def decodeUid(s: Symbol)(implicit js: JSONObject): Uid = Uid(js.getString(s.name))
+  implicit def decodeLoudness(s: Symbol)(implicit js: JSONObject): Loudness = Loudness(decodeFloatSeq(s).toVector)
 
   implicit def decodeOptObject(s: Symbol)(implicit js: JSONObject): Option[JSONObject] = Try(js.getJSONObject(s.name)).toOption
   implicit def decodeOptString(s: Symbol)(implicit js: JSONObject): Option[String] = if (js.has(s.name)) { if(js.isNull(s.name)) Some("") else Some(js.getString(s.name)) } else None
@@ -134,7 +136,8 @@ object JsonDecoder {
   implicit def decodeOptUtcDate(s: Symbol)(implicit js: JSONObject): Option[Date] = opt(s, decodeUtcDate(s)(_))
   implicit def decodeOptInstant(s: Symbol)(implicit js: JSONObject): Option[Instant] = opt(s, decodeInstant(s)(_))
   implicit def decodeOptDuration(s: Symbol)(implicit js: JSONObject): Option[Duration] = opt(s, decodeDuration(s)(_))
-  implicit def decodeUri(s: Symbol)(implicit js: JSONObject): Uri = Uri.parse(js.getString(s.name))
+  implicit def decodeOptLoudness(s: Symbol)(implicit js: JSONObject): Option[Loudness] = opt(s, decodeLoudness(s)(_))
+  implicit def decodeUri(s: Symbol)(implicit js: JSONObject): URI = URI.parse(js.getString(s.name))
 
   implicit def decodeSeq[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A]): Vector[A] = decodeColl[A, Vector](s)
   implicit def decodeArray[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A], ct: ClassTag[A]): Array[A] = decodeColl[A, Array](s)

@@ -41,7 +41,7 @@ import scala.concurrent.duration._
   * @see com.waz.service.WebSocketClientService.ConnectionStats ConnectionStats
   */
 class PingIntervalService(lifecycle: ZmsLifecycle,
-                          network: NetworkModeService,
+                          network:   NetworkModeService,
                           wsService: WebSocketClientService,
                           kvStorage: KeyValueStorage) {
   import PingIntervalService._

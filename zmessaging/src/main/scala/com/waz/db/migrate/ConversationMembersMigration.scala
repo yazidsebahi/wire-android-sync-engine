@@ -17,15 +17,15 @@
  */
 package com.waz.db.migrate
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db._
 import com.waz.model.{ConvId, UserId}
+import com.waz.utils.wrappers.DB
 
 
 object ConversationMembersMigration {
 
-  lazy val v72 = { implicit db: SQLiteDatabase =>
+  lazy val v72 = { implicit db: DB =>
     val table = TableDesc("ConversationMembers_tmp", Columns.v72.all)
 
     inTransaction { tr: Transaction =>
@@ -41,11 +41,11 @@ object ConversationMembersMigration {
     }
   }
 
-  lazy val v79 = { implicit db: SQLiteDatabase =>
+  lazy val v79 = { implicit db: DB =>
     db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (user_id)")
   }
 
-  lazy val v82 = { implicit db: SQLiteDatabase =>
+  lazy val v82 = { implicit db: DB =>
     val table = TableDesc("ConversationMembers_tmp", Columns.v82.all)
 
     inTransaction { tr: Transaction =>

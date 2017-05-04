@@ -17,8 +17,8 @@
  */
 package com.waz.api
 
-import android.net.Uri
 import com.waz.api.Asset.LoadCallback
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Duration
 
 object Asset {
@@ -45,8 +45,8 @@ trait Asset extends UiObservable {
   def getHeight: Int
   def getAudioOverview: AudioOverview
 
-  def getContentUri(callback: LoadCallback[Uri]): Unit
-  def saveToDownloads(callback: LoadCallback[Uri]): Unit
+  def getContentUri(callback: LoadCallback[URI]): Unit
+  def saveToDownloads(callback: LoadCallback[URI]): Unit
   def getPlaybackControls(callback: LoadCallback[PlaybackControls]): Unit
 
   def getDownloadProgress: ProgressIndicator

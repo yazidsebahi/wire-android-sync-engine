@@ -28,7 +28,7 @@ import com.waz.model.Event.CallProperties
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
 import com.waz.model._
 import com.waz.service.ZMessaging
-import com.waz.service.call.FlowManagerService.EstablishedFlows
+import com.waz.service.call.DefaultFlowManagerService.EstablishedFlows
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
@@ -97,7 +97,7 @@ class VoiceChannelServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         }
       }
 
-      override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, websocket, prefs, network) {
+      override lazy val flowmanager: DefaultFlowManagerService = new DefaultFlowManagerService(context, zNetClient, websocket, prefs, network) {
         override lazy val flowManager = None
       }
 

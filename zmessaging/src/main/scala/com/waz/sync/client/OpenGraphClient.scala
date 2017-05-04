@@ -17,11 +17,11 @@
  */
 package com.waz.sync.client
 
-import android.net.Uri
 import com.koushikdutta.async.ByteBufferList
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.threading.CancellableFuture
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response._
 import com.waz.znet.ResponseConsumer.{ConsumerState, EmptyResponseConsumer, StringConsumer}
@@ -33,9 +33,9 @@ class OpenGraphClient(netClient: ZNetClient) {
   import OpenGraphClient._
   import com.waz.threading.Threading.Implicits.Background
 
-  def loadMetadata(uri: Uri): ErrorOrResponse[Option[OpenGraphData]] = {
+  def loadMetadata(uri: URI): ErrorOrResponse[Option[OpenGraphData]] = {
 
-    def load(uri: Uri, cookie: Map[String, String]): ErrorOrResponse[Option[OpenGraphData]] = {
+    def load(uri: URI, cookie: Map[String, String]): ErrorOrResponse[Option[OpenGraphData]] = {
 
       val headers = Map(
         AsyncClient.UserAgentHeader -> DesktopUserAgent,  // using empty User-Agent to avoid getting mobile website version
@@ -55,7 +55,7 @@ class OpenGraphClient(netClient: ZNetClient) {
               val cs = hs("Set-Cookie").fold(Map.empty[String, String]) { str =>
                 CookiePattern.findAllMatchIn(str).map { m => m.group(1) -> m.group(2) } .toMap
               }
-              load(Uri.parse(location), cookie ++ cs)
+              load(URI.parse(location), cookie ++ cs)
             case None =>
               CancellableFuture successful Left(ErrorResponse.internalError("unexpected response, redirect without location header"))
           }
@@ -86,7 +86,7 @@ object OpenGraphClient {
   val DesktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
   val CookiePattern = """([^=]+)=([^\;]+)""".r
 
-  case class OpenGraphData(title: String, description: String, image: Option[Uri], tpe: String, permanentUrl: Option[Uri])
+  case class OpenGraphData(title: String, description: String, image: Option[URI], tpe: String, permanentUrl: Option[URI])
 
   case class HtmlHeaderConsumer(len: Long) extends StringConsumer(math.min(len, MaxHeaderLength)) {
     def isDone = data.size() >= MaxHeaderLength || data.toString("utf8").toLowerCase.contains("""</head>""")
@@ -100,20 +100,20 @@ object OpenGraphClient {
 
   object ResponseDecoder extends ResponseBodyDecoder {
     override def apply(contentType: String, contentLength: Long) =
-      if (contentType.toLowerCase().contains("text/html")) new HtmlHeaderConsumer(contentLength)
+      if (contentType.toLowerCase().contains("text/html")) HtmlHeaderConsumer(contentLength)
       else {
         verbose(s"dropping response with content type: $contentType, len: $contentLength")
         EmptyResponseConsumer
       }
   }
 
-  object OpenGraphData extends ((String, String, Option[Uri], String, Option[Uri]) => OpenGraphData) {
+  object OpenGraphData extends ((String, String, Option[URI], String, Option[URI]) => OpenGraphData) {
     val Empty = OpenGraphData("", "", None, "", None)
 
     implicit object Decoder extends JsonDecoder[OpenGraphData] {
       import JsonDecoder._
 
-      override def apply(implicit js: JSONObject): OpenGraphData = OpenGraphData('title, 'description, decodeOptString('image).map(Uri.parse), 'tpe, decodeOptString('url).map(Uri.parse))
+      override def apply(implicit js: JSONObject): OpenGraphData = OpenGraphData('title, 'description, decodeOptString('image).map(URI.parse), 'tpe, decodeOptString('url).map(URI.parse))
     }
 
     implicit object Encoder extends JsonEncoder[OpenGraphData] {
@@ -159,7 +159,7 @@ object OpenGraphClient {
       } .toMap
 
       if ((ogMeta.contains(Title) || ogMeta.contains(Image)) && ogMeta.get(Type).forall { tpe => AcceptedTypes.contains(tpe.toLowerCase) }) {
-        Some(OpenGraphData(ogMeta.get(Title).orElse(htmlTitle).getOrElse(""), ogMeta.getOrElse(Description, ""), ogMeta.get(Image).map(Uri.parse), ogMeta.getOrElse(Type, ""), ogMeta.get(Url).map(Uri.parse)))
+        Some(OpenGraphData(ogMeta.get(Title).orElse(htmlTitle).getOrElse(""), ogMeta.getOrElse(Description, ""), ogMeta.get(Image).map(URI.parse), ogMeta.getOrElse(Type, ""), ogMeta.get(Url).map(URI.parse)))
       } else None
     }
   }

@@ -22,7 +22,8 @@ import android.database.sqlite.SQLiteDatabase.CursorFactory
 import android.database.sqlite.{SQLiteDatabase, SQLiteOpenHelper}
 import com.waz.utils.returning
 
-class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int, daos: Seq[BaseDao[_]], migrations: Seq[Migration]) extends SQLiteOpenHelper(context, name, factory, version) {
+class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int, daos: Seq[BaseDao[_]], migrations: Seq[Migration])
+  extends SQLiteOpenHelper(context, name, factory, version) {
 
   override def getWritableDatabase: SQLiteDatabase = synchronized(returning(super.getWritableDatabase)(db => if (! db.isWriteAheadLoggingEnabled) db.enableWriteAheadLogging()))
 

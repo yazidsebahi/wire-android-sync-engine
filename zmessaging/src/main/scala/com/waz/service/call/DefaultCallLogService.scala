@@ -30,14 +30,18 @@ import org.threeten.bp.Instant.now
 import scala.concurrent.Future
 import scala.util.Success
 
-class CallLogService(storage: ZmsDatabase) {
+trait CallLogService {
+  def addEstablishedCall(session: Option[CallSessionId], conv: ConvId, isVideo: Boolean): Future[Unit]
+}
+
+class DefaultCallLogService(storage: ZmsDatabase) extends CallLogService {
   import Threading.Implicits.Background
 
   val callLogEntryAdded = EventStream[CallLogEntry]
 
-  def addEstablishedCall(session: Option[CallSessionId], conv: ConvId, isVideo: Boolean): Future[Unit] = {
+  override def addEstablishedCall(session: Option[CallSessionId], conv: ConvId, isVideo: Boolean): Future[Unit] = {
     val entry = CallLogEntry(KindOfCallingEvent.CALL_ESTABLISHED, session, conv, now, isVideo)
-    storage(CallLogEntryDao.insertOrReplace(entry)(_)).future.andThen { case Success(e) => callLogEntryAdded ! e }.recoverWithLog()(logTagFor[CallLogService])
+    storage(CallLogEntryDao.insertOrReplace(entry)(_)).future.andThen { case Success(e) => callLogEntryAdded ! e }.recoverWithLog()(logTagFor[DefaultCallLogService])
   }
 
   def numberOfEstablishedVoiceCalls: Future[Int] = storage.read(CallLogEntryDao.countEstablished(false)(_))
