@@ -27,17 +27,71 @@ import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.Database
 import com.waz.model._
 import com.waz.threading.CancellableFuture.CancelException
+import com.waz.threading.Threading.Implicits.Background
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.crypto.AESUtils
+import com.waz.utils.events.Signal
 import com.waz.utils.{IoUtils, returning}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class CacheService(context: Context, storage: Database, val cacheStorage: CacheStorage) {
+trait CacheService {
+  def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry
+  def createForFile(key: CacheKey = CacheKey(),
+                    mime: Mime = Mime.Unknown,
+                    name: Option[String] = None,
+                    cacheLocation: Option[File] = None,
+                    length: Option[Long] = None)
+                   (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+  def addData(key: CacheKey, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+  def addStream(key: CacheKey,
+                in: => InputStream,
+                mime: Mime = Mime.Unknown,
+                name: Option[String] = None,
+                cacheLocation: Option[File] = None,
+                length: Int = -1,
+                execution: ExecutionContext = Background)
+               (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
+  // TODO: This one is used only in tests. Get rid of it.
+  def addFile(key: CacheKey,
+              src: File,
+              moveFile: Boolean = false,
+              mime: Mime = Mime.Unknown,
+              name: Option[String] = None,
+              cacheLocation: Option[File] = None)
+             (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
+  def entryFile(path: File, fileId: Uid): File
+  def intCacheDir: File
+  def cacheDir: File
+  def remove(key: CacheKey): Future[Unit]
+  def remove(entry: CacheEntry): Future[Unit]
+  def insert(entry: CacheEntry): Future[CacheEntry]
+  def move(key: CacheKey,
+           entry: LocalData,
+           mime: Mime = Mime.Unknown,
+           name: Option[String] = None,
+           cacheLocation: Option[File] = None)
+          (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+  def getEntry(key: CacheKey): Future[Option[CacheEntry]]
+
+  def getOrElse(key: CacheKey, default: => Future[CacheEntry]) = getEntry(key) flatMap {
+    case Some(entry) => Future successful entry
+    case _ => default
+  }
+
+  def deleteExpired(): CancellableFuture[Unit]
+  def optSignal(cacheKey: CacheKey): Signal[Option[CacheEntry]]
+}
+
+class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheStorage) extends CacheService {
   import CacheService._
   import Threading.Implicits.Background
+
+  private implicit val logTag: LogTag = logTagFor[CacheService]
 
   // create new cache entry for file, return the entry immediately
   def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {
@@ -54,7 +108,7 @@ class CacheService(context: Context, storage: Database, val cacheStorage: CacheS
   def addData(key: CacheKey, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
     add(CacheEntryData(key, Some(data), timeout = timeout.timeout))
 
-  def addStream[A](key: CacheKey, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
+  def addStream(key: CacheKey, in: => InputStream, mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Int = -1, execution: ExecutionContext = Background)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry] =
     if (length > 0 && length <= CacheService.DataThreshold) {
       Future(IoUtils.toByteArray(in))(execution).flatMap(addData(key, _))
     } else {
@@ -149,11 +203,6 @@ class CacheService(context: Context, storage: Database, val cacheStorage: CacheS
     }
   }
 
-  def getOrElse(key: CacheKey, default: => Future[CacheEntry]) = getEntry(key) flatMap {
-    case Some(entry) => Future successful entry
-    case _ => default
-  }
-
   def remove(key: CacheKey): Future[Unit] = cacheStorage.remove(key)
 
   def remove(entry: CacheEntry): Future[Unit] = {
@@ -173,13 +222,20 @@ class CacheService(context: Context, storage: Database, val cacheStorage: CacheS
     }.map { _ foreach (entry => entry.path foreach { path => entryFile(path, entry.fileId).delete() }) }
   }
 
-  private[cache] def entryFile(path: File, fileId: Uid) = CacheStorage.entryFile(path, fileId)
+  def entryFile(path: File, fileId: Uid) = CacheStorage.entryFile(path, fileId)
+
+  def insert(entry: CacheEntry) = cacheStorage.insert(entry.data).map(d => new CacheEntry(d, this))
+
+  def optSignal(cacheKey: CacheKey): Signal[Option[CacheEntry]] = cacheStorage.optSignal(cacheKey).map {
+    case Some(data) => Some(new CacheEntry(data, this))
+    case None => None
+  }
 }
 
 object CacheService {
-  private implicit val logTag: LogTag = logTagFor[CacheService]
 
-  def apply(context: Context, storage: Database): CacheService = new CacheService(context, storage, CacheStorage(storage, context))
+  def apply(context: Context, storage: Database, cacheStorage: CacheStorage) = new CacheServiceImpl(context, storage, cacheStorage)
+  def apply(context: Context, storage: Database): CacheService = CacheService(context, storage, CacheStorage(storage, context))
 
   val DataThreshold = 4 * 1024 // amount of data stored in db instead of a file
   val TemDataExpiryTime = 12.hours

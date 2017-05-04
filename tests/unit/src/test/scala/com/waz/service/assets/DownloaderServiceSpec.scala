@@ -205,7 +205,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   val database = stub[Database]
   val cacheStorage = stub[CacheStorage]
-  val cacheService = new CacheService(context, database, cacheStorage)
+  val cacheService = CacheService(context, database, cacheStorage)
   val result = new CacheEntry(CacheEntryData(CacheKey("...")), cacheService)
 
   private def createDownloader(ctx: Context = testContext,

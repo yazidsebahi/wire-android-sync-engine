@@ -57,9 +57,9 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
   def postSelfPicture(): Future[SyncResult] = userService.getSelfUser flatMap {
     case Some(UserData(id, _, _, _, _, Some(assetId), _, _, _, _, _, _, _, _, _, _, _, _)) =>
       for {
-        Some(asset) <- assets.storage.get(assetId)
+        Some(asset) <- assets.getAssetData(assetId)
         preview <- imageGenerator.generateSmallProfile(asset).future
-        _ <- assets.storage.mergeOrCreateAsset(preview) //needs to be in storage for other steps to find it
+        _ <- assets.mergeOrCreateAsset(preview) //needs to be in storage for other steps to find it
         _ <- assetSync.postSelfImageAsset(RConvId(id.str), preview.id).recover {case _ => warn("Failed to upload v2 small picture")} //TODO Dean: stop posting to v2 after transition period
         _ <- assetSync.postSelfImageAsset(RConvId(id.str), assetId).recover {case _ => warn("Failed to upload v2 medium picture")} //TODO Dean: stop posting to v2 after transition period
         res <- assetSync.uploadAssetData(preview.id, public = true).future flatMap {
@@ -67,7 +67,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserService, us
             assetSync.uploadAssetData(assetId, public = true).future flatMap {
               case Right(uploaded) =>
                 for {
-                  asset <- assets.storage.get(assetId)
+                  asset <- assets.getAssetData(assetId)
                   res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Some(Seq(uploadedPreview, uploaded).flatten))))
                 } yield res
 

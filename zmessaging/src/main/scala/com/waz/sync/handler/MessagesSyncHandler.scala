@@ -238,7 +238,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
         case Right(origTime) =>
           convLock.release()
           //send preview
-          CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
+          CancellableFuture.lift(asset.previewId.map(assets.getAssetData).getOrElse(Future successful None)).flatMap {
             case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
               case Right(Some(updated)) =>
                 postAssetMessage(asset, Some(updated)).map {
@@ -265,7 +265,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
 
     //want to wait until asset meta and preview data is loaded before we send any messages
     AssetProcessing.get(ProcessingTaskKey(msg.assetId)).flatMap { _ =>
-      CancellableFuture lift assets.storage.get(msg.assetId).flatMap {
+      CancellableFuture lift assets.getAssetData(msg.assetId).flatMap {
         case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
         case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
         case Some(asset) =>
@@ -321,7 +321,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
       conv   <- convs.storage.get(cid) or internalError(s"conversation $cid not found")
       msg    <- storage.get(mid) or internalError(s"message $mid not found")
       aid     = msg.right.map(_.assetId)
-      asset <- aid.flatMapFuture(id => assets.storage.get(id).or(internalError(s"asset $id not found")))
+      asset <- aid.flatMapFuture(id => assets.getAssetData(id).or(internalError(s"asset $id not found")))
       result <- conv.flatMapFuture(c => asset.flatMapFuture(a => post(c, a)))
     } yield result.fold(SyncResult(_), _ => SyncResult.Success)
   }
