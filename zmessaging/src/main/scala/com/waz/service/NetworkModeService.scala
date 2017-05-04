@@ -53,10 +53,11 @@ class DefaultNetworkModeService(context: Context, zmsLifecycle: ZmsLifecycle) ex
 
   def updateNetworkMode(): Unit = {
     val mode = Option(connectivityManager.getActiveNetworkInfo) match {
-      case None => NetworkMode.UNKNOWN
+      case None => NetworkMode.OFFLINE
       case Some(info) => if (info.isConnected) computeMode(info, telephonyManager) else NetworkMode.OFFLINE
     }
     verbose(s"updateNetworkMode: $mode")
+
     networkMode.publish(mode, Threading.Background)
   }
 
