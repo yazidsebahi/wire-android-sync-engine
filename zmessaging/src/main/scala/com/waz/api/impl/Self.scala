@@ -152,4 +152,22 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
     case Success(Left(ErrorResponse(code, message, label))) => listener.onUpdateFailed(code, message, label)
     case Failure(ex) => listener.onUpdateFailed(499, ex.getMessage, "")
   } (Threading.Ui)
+
+  override def clearEmail(listener: CredentialsUpdateListener): Unit = handlingErrors(users.clearSelfEmail(), new CredentialsUpdateListener {
+    override def onUpdateFailed(code: Int, message: LogTag, label: LogTag): Unit = listener.onUpdateFailed(code, message, label)
+    override def onUpdated(): Unit = {
+      user.foreach(_.update(email = None))
+      ui.zms(_.users.syncSelfNow)
+      listener.onUpdated()
+    }
+  })
+
+  override def clearPhone(listener: CredentialsUpdateListener): Unit = handlingErrors(users.clearSelfPhone(), new CredentialsUpdateListener {
+    override def onUpdateFailed(code: Int, message: LogTag, label: LogTag): Unit = listener.onUpdateFailed(code, message, label)
+    override def onUpdated(): Unit = {
+      user.foreach(_.update(phone = None))
+      ui.zms(_.users.syncSelfNow)
+      listener.onUpdated()
+    }
+  })
 }

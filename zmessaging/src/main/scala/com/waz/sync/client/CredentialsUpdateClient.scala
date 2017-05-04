@@ -31,8 +31,14 @@ class CredentialsUpdateClient(netClient: ZNetClient) {
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] =
     netClient.updateWithErrorHandling("updateEmail", Request.Put(CredentialsUpdateClient.emailPath, JsonEncoder { _.put("email", email.str) }))
 
+  def clearEmail(): ErrorOrResponse[Unit] =
+    netClient.updateWithErrorHandling("clearEmail", Request.Delete[Unit](CredentialsUpdateClient.emailPath))
+
   def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] =
     netClient.updateWithErrorHandling("updatePhone", Request.Put(CredentialsUpdateClient.phonePath, JsonEncoder { _.put("phone", phone.str) }))
+
+  def clearPhone(): ErrorOrResponse[Unit] =
+    netClient.updateWithErrorHandling("clearPhone", Request.Delete[Unit](CredentialsUpdateClient.phonePath))
 
   def updatePassword(newPassword: String, currentPassword: Option[String]): ErrorOrResponse[Unit] =
     netClient.updateWithErrorHandling("updatePassword", Request.Put(CredentialsUpdateClient.passwordPath, JsonEncoder { o =>

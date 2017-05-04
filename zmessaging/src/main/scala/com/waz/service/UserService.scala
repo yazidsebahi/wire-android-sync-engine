@@ -55,8 +55,11 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, userPrefs:
   }
 
   val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
-
-  val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => updateSyncedUsers(e.map(_.user)(breakOut)))
+  val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
+      _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
+      _ <- removeIdentityFromSyncedUsers(e.filter(_.removeIdentity).map(_.user)(breakOut))
+    } yield {}
+  )
   val userDeleteEventsStage = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
 
   push.onSlowSyncNeeded { case SlowSyncRequest(time, _) =>
@@ -213,6 +216,18 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, userPrefs:
       }
       usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
     }
+  }
+
+  def removeIdentityFromSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Unit] = {
+    def update(current: UserData): UserData = {
+      val userInfo = users.find(_.id == current.id)
+      userInfo.fold(current){ info =>
+        current.copy(
+          email = if (info.email.nonEmpty) None else current.email,
+          phone = if (info.phone.nonEmpty) None else current.phone)
+      }
+    }
+    usersStorage.updateAll2(users.map {user => user.id}, update).map(_ => ())
   }
 
   def updateUserDeleted(userIds: Vector[UserId]): Future[Any] =
