@@ -149,8 +149,8 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  override def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId) = withConv(convId) { conv =>
-    verbose(s"call closed for conv: ${conv.id}, userId: $userId")
+  override def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { conv =>
+    verbose(s"call closed for conv: ${conv.id} at $time, userId: $userId")
     if (reason != StillOngoing) availableCalls.mutate(calls => calls - conv.id)
     currentCall.mutate(onCallClosed(_, reason, conv, userId))
   }
