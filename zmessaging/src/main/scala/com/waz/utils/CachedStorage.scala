@@ -251,7 +251,7 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
 
   protected def updateInternal(key: K, updater: V => V)(current: V): Future[Option[(V, V)]] = {
     val updated = updater(current)
-    if (updated == current) Future.successful(None)
+    if (updated == current) Future.successful(Some((current, updated)))
     else {
       cache.put(key, Some(updated))
       returning(db { save(Seq(updated))(_) } .future.map { _ => Some((current, updated)) }) { _ =>
