@@ -108,7 +108,7 @@ object Calling {
   }
 
   trait CloseCallHandler extends Callback {
-    def onClosedCall(reason: Int, convid: String, userid: String, arg: Pointer): Unit
+    def onClosedCall(reason: Int, convid: String, msg_time: Uint32_t, userid: String, arg: Pointer): Unit
   }
 
   trait BitRateStateHandler extends Callback {

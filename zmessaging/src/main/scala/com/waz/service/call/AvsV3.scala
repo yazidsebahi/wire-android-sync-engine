@@ -40,7 +40,7 @@ trait CallingService {
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
   def onOtherSideAnsweredCall(convId: RConvId): Unit
   def onEstablishedCall(convId: RConvId, userId: UserId): Unit
-  def onClosedCall(reason: ClosedReason, convId: RConvId, userId: UserId): Unit
+  def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId): Unit
   def onMetricsReady(convId: RConvId, metricsJson: String): Unit
   def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean): Unit
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
@@ -120,8 +120,8 @@ class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
           callingService.onEstablishedCall(RConvId(convId), UserId(userId))
       },
       new CloseCallHandler {
-        override def onClosedCall(reasonCode: Int, convId: String, userId: String, arg: Pointer) =
-          callingService.onClosedCall(ClosedReason(reasonCode), RConvId(convId), UserId(userId))
+        override def onClosedCall(reasonCode: Int, convId: String, msg_time: Uint32_t, userId: String, arg: Pointer) =
+          callingService.onClosedCall(ClosedReason(reasonCode), RConvId(convId), instant(msg_time), UserId(userId))
       },
       new MetricsHandler {
         override def onMetricsReady(convId: String, metricsJson: String, arg: Pointer) =
