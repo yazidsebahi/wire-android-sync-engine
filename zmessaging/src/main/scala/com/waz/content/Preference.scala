@@ -18,6 +18,7 @@
 package com.waz.content
 
 import com.waz.model.Id
+import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.znet.AuthenticationManager.Token
@@ -78,18 +79,20 @@ object Preference {
       override def default = defaultValue
     }
 
-    implicit val StrCodec     = apply[String] (identity,       identity,                       "")
-    implicit val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt,     0)
-    implicit val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,       0L)
-    implicit val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean, false)
+    implicit lazy val StrCodec     = apply[String] (identity,       identity,                       "")
+    implicit lazy val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt,     0)
+    implicit lazy val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,       0L)
+    implicit lazy val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean, false)
 
     implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode, implicitly[Id[A]].empty)
     implicit def optCodec[A: PrefCodec]: PrefCodec[Option[A]] = apply[Option[A]](_.fold("")(implicitly[PrefCodec[A]].encode), { str => if (str == "") None else Some(implicitly[PrefCodec[A]].decode(str)) }, None)
-    implicit val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
+    implicit lazy val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
 
-    implicit val AuthTokenCodec = apply[Option[Token]] (
+    implicit lazy val AuthTokenCodec = apply[Option[Token]] (
       { t => optCodec[String].encode(t map Token.Encoder.apply map (_.toString)) },
       { s => optCodec[String].decode(s) map (new JSONObject(_)) map (Token.Decoder.apply(_)) },
       None)
+
+    implicit lazy val SpotifyRefreshTokenCodec = apply[RefreshToken](_.str, RefreshToken, RefreshToken(""))
   }
 }

@@ -22,6 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.{NetworkMode, ZmsVersion}
 import com.waz.content.KeyValueStorage
 import com.waz.content.Preference.PrefCodec
+import com.waz.service.push.PingIntervalService.NetworkStats.NetworkStatsCodec
 import com.waz.service.{NetworkModeService, ZmsLifecycle}
 import com.waz.utils.events.Subscription
 import com.waz.utils.{JsonDecoder, JsonEncoder}
@@ -51,7 +52,7 @@ class PingIntervalService(lifecycle: ZmsLifecycle,
 
   import scala.concurrent.duration._
 
-  val stats = kvStorage.keyValuePref[Map[NetworkMode, NetworkStats]]("ping_interval_network_stats", Map.empty)(StatsCodec)
+  val stats = kvStorage.keyValuePref[Map[NetworkMode, NetworkStats]]("ping_interval_network_stats", Map.empty)(NetworkStatsCodec)
   val statsSignal = stats.signal
 
   val currentStats = for {
@@ -180,14 +181,12 @@ object PingIntervalService {
       override def apply(implicit js: JSONObject): NetworkStats =
         NetworkStats(NetworkMode.valueOf('net), 'interval, 'maxInactive, 'ping, 'alive, 'time)
     }
-  }
 
-  implicit object StatsCodec extends PrefCodec[Map[NetworkMode, NetworkStats]] {
-    override def encode(v: Map[NetworkMode, NetworkStats]): String = JsonEncoder.arr(v.values).toString
-    override def decode(str: String): Map[NetworkMode, NetworkStats] = {
-      Try(new JSONArray(str)).toOption.fold(Map.empty[NetworkMode, NetworkStats]) { arr =>
+    implicit lazy val NetworkStatsCodec = PrefCodec.apply[Map[NetworkMode, NetworkStats]](
+      v => JsonEncoder.arr(v.values).toString,
+      str => Try(new JSONArray(str)).toOption.fold(Map.empty[NetworkMode, NetworkStats]) { arr =>
         JsonDecoder.array[NetworkStats](arr).map(s => s.net -> s)(scala.collection.breakOut)
-      }
-    }
+      },
+      Map.empty)
   }
 }

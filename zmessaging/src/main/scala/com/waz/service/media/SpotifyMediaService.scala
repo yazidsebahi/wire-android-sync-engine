@@ -110,9 +110,4 @@ object SpotifyMediaService {
   case class TrackId(id: String) extends SpotifyId
   case class AlbumId(id: String) extends SpotifyId
   case class PlaylistId(user: String, id: String) extends SpotifyId
-
-  implicit lazy val refreshTokenPrefCodec: PrefCodec[RefreshToken] = new PrefCodec[RefreshToken] {
-    override def encode(v: RefreshToken): String = v.str
-    override def decode(str: String): RefreshToken = RefreshToken(str)
-  }
 }

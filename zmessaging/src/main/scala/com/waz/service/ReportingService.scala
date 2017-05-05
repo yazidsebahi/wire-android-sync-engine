@@ -27,7 +27,7 @@ import com.waz.cache.{CacheService, Expiration}
 import com.waz.content.AccountsStorageImpl
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.{AccountId, Mime}
-import com.waz.service.push.GcmGlobalService
+import com.waz.service.push.GcmGlobalService.GcmRegistration
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, RichFuture}
@@ -110,8 +110,8 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     }
   })
 
-  val PushTokenRegistrationReporter = Reporter("Push", { writer =>
-    prefs.preference[Option[PushToken]](PushTokenService.pushTokenPrefKey, None).apply() map { writer.println }
+  val GcmRegistrationReporter = Reporter("Push", { writer =>
+    GcmRegistration()(Threading.Background, prefs).map(writer.println )
   })
 
   val LogCatReporter = Reporter("LogCat", { writer =>

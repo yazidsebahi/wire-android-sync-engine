@@ -143,7 +143,7 @@ class GcmService(accountId:         AccountId,
   def gcmSenderId = gcmGlobalService.gcmSenderId
 
   def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.gcmEnabled) {
-    gcmGlobalService.getGcmRegistration.future map {
+    gcmGlobalService.getGcmRegistration map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.resetGcm()
     }
@@ -166,7 +166,7 @@ class GcmService(accountId:         AccountId,
   }
 
   val eventProcessingStage = EventScheduler.Stage[GcmTokenRemoveEvent] { (convId, events) =>
-    gcmGlobalService.getGcmRegistration.future map { reg =>
+    gcmGlobalService.getGcmRegistration map { reg =>
       events find (reg.token == _.token) foreach { _ =>
         gcmGlobalService.unregister() flatMap (_ => ensureGcmRegistered())
       }
@@ -179,7 +179,7 @@ class GcmService(accountId:         AccountId,
       case Some(reg) => post(reg) flatMap {
         case true =>
           lastRegistrationTime := Instant.now
-          gcmGlobalService.updateRegisteredUser(reg.token, accountId).future map {
+          gcmGlobalService.updateRegisteredUser(reg.token, accountId) map {
             Some(_)
           }
         case false => Future.successful(Some(reg))

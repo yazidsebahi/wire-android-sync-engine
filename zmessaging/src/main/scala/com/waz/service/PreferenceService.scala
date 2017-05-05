@@ -19,7 +19,6 @@ package com.waz.service
 
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
-import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ZmsVersion
 import com.waz.content.Preference
@@ -80,12 +79,16 @@ class PreferenceServiceImpl(context: Context) extends PreferenceService {
   def gcmEnabled = uiPreferences.getBoolean(gcmEnabledKey,       true) //true by default for production
   def v31AssetsEnabled = false
 
-  override lazy val preferences   = preferencesFrom("zmessaging", context)
-  override lazy val uiPreferences = preferencesFrom("com.waz.zclient.user.preferences", context)
+  override lazy val preferences   = preferencesFrom(zmsPrefsFileName, context)
+  override lazy val uiPreferences = preferencesFrom(uiPrefsFileName, context)
 
 }
 
 object PreferenceService {
+
+  val zmsPrefsFileName = "zmessaging"
+  val uiPrefsFileName = "com.waz.zclient.user.preferences"
+
   def preferencesFrom(name: String, context: Context) = context.getSharedPreferences(name, Context.MODE_PRIVATE)
 
   lazy val preferenceDispatcher = new SerialDispatchQueue()

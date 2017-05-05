@@ -44,12 +44,12 @@ class RemoteActorService(context: Context) {
   import android.os.Build._
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val tag: LogTag = logTagFor[RemoteActorService]
-  val preferences = new PreferenceServiceImpl(context)
+  val prefs = new PreferenceServiceImpl(context)
 
-  val otrOnly = preferences.uiPreferenceBooleanSignal("otrOnly", false)
-  val background = preferences.uiPreferenceBooleanSignal("background", false)
-  val name = preferences.uiPreferenceStringSignal("name", s"$MANUFACTURER $MODEL")
-  val backendPref = preferences.uiPreferenceStringSignal("env", BackendConfig.StagingBackend.environment)
+  val otrOnly     = prefs.preference[Boolean]("otrOnly", false, prefs.uiPreferences)
+  val background  = prefs.preference[Boolean]("background", false, prefs.uiPreferences)
+  val name        = prefs.preference[String]("name", s"$MANUFACTURER $MODEL", prefs.uiPreferences)
+  val backendPref = prefs.preference[String]("env", BackendConfig.StagingBackend.environment, prefs.uiPreferences)
 
   val backend = backendPref.signal map BackendConfig.byName
 

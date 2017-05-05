@@ -28,8 +28,7 @@ import com.waz.model.Contact
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
 import com.waz.service.ContactsService.PrefKey
-import com.waz.service.PreferenceServiceImpl.uiPreferencesFrom
-import com.waz.service.{SearchKey, Timeouts, ZMessaging}
+import com.waz.service.{PreferenceService, SearchKey, Timeouts, ZMessaging}
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.testutils.HasId._
@@ -580,7 +579,7 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
   def eql[A](a: A): Matcher[A] = equal(a)
 
   def whileSharingIsDisabled[A](f: => A): A = {
-    val uiPrefs = uiPreferencesFrom(context)
+    val uiPrefs = PreferenceService.preferencesFrom(PreferenceService.uiPrefsFileName, context)
     val previousValue = uiPrefs.getBoolean(PrefKey, true)
     uiPrefs.edit().putBoolean(PrefKey, false).commit()
     try f finally uiPrefs.edit().putBoolean(PrefKey, previousValue).commit()
