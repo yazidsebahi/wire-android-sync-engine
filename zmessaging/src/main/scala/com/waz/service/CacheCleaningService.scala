@@ -21,13 +21,14 @@ import java.lang.System._
 
 import com.waz.ZLog._
 import com.waz.cache.CacheService
+import com.waz.content.GlobalPreferences
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class CacheCleaningService(cache: CacheService, prefs: PreferenceServiceImpl) {
+class CacheCleaningService(cache: CacheService, prefs: GlobalPreferences) {
   import CacheCleaningService._
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[CacheCleaningService]
@@ -36,7 +37,7 @@ class CacheCleaningService(cache: CacheService, prefs: PreferenceServiceImpl) {
   CancellableFuture.delayed(1.minute) { requestDeletionOfExpiredCacheEntries() }
 
   def requestDeletionOfExpiredCacheEntries(): Future[Unit] = {
-    prefs.preference[Long](LastCacheCleanupPref, 0L).mutate { lastSync =>
+    prefs.preference[Long](LastCacheCleanupPref).mutate { lastSync =>
       if ((currentTimeMillis() - lastSync).millis > CleanupInterval) {
         debug("at least one week expired since last cache cleaning, cleaning now...")
         cache.deleteExpired()

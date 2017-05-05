@@ -21,17 +21,18 @@ import java.io.File
 
 import akka.actor.ActorDSL._
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
-import akka.actor.{Terminated, ActorDSL, ActorRef, ActorSystem}
+import akka.actor.{ActorDSL, ActorRef, ActorSystem, Terminated}
 import akka.pattern.gracefulStop
 import android.app.{Notification, PendingIntent}
 import android.content.{Context, Intent}
 import android.net.wifi.WifiManager
 import com.typesafe.config.ConfigFactory
 import com.waz.ZLog._
+import com.waz.content.GlobalPreferences
 import com.waz.provision.RemoteProcessActor
-import com.waz.service.{BackendConfig, PreferenceServiceImpl}
+import com.waz.service.BackendConfig
 import com.waz.threading.Threading
-import com.waz.utils.{Serialized, LoggedTry}
+import com.waz.utils.{LoggedTry, Serialized}
 import com.waz.utils.events.{ServiceEventContext, Signal}
 import com.waz.zms.FutureService
 import com.waz.znet.TestClientWrapper
@@ -44,12 +45,12 @@ class RemoteActorService(context: Context) {
   import android.os.Build._
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val tag: LogTag = logTagFor[RemoteActorService]
-  val prefs = new PreferenceServiceImpl(context)
+  val prefs = new GlobalPreferences(context)
 
-  val otrOnly     = prefs.preference[Boolean]("otrOnly", false, prefs.uiPreferences)
-  val background  = prefs.preference[Boolean]("background", false, prefs.uiPreferences)
-  val name        = prefs.preference[String]("name", s"$MANUFACTURER $MODEL", prefs.uiPreferences)
-  val backendPref = prefs.preference[String]("env", BackendConfig.StagingBackend.environment, prefs.uiPreferences)
+  val otrOnly     = prefs.preference[Boolean]("otrOnly")
+  val background  = prefs.preference[Boolean]("background")
+  val name        = prefs.preference[String]("name", Some(s"$MANUFACTURER $MODEL"))
+  val backendPref = prefs.preference[String]("env", Some(BackendConfig.StagingBackend.environment))
 
   val backend = backendPref.signal map BackendConfig.byName
 

@@ -40,8 +40,8 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 
 class NotificationService(context: Context, selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
-    storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
-    kv: KeyValueStorage, timeouts: Timeouts, pushService: PushService) {
+                          storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
+                          kv: UserPreferences, timeouts: Timeouts, pushService: PushService) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -50,7 +50,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
   @volatile private var uiActive = false
 
-  private val lastUiVisibleTime = kv.keyValuePref("last_ui_visible_time", Instant.EPOCH)
+  private val lastUiVisibleTime = kv.preference[Instant]("last_ui_visible_time")
 
   val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
 

@@ -42,7 +42,7 @@ import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads._
 import com.waz.service.images.ImageAssetGenerator
-import com.waz.service.{ErrorsService, PreferenceService}
+import com.waz.service.ErrorsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
@@ -80,7 +80,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
     loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
     permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
     metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-    prefs: PreferenceService) extends AssetService {
+    prefs: GlobalPreferences) extends AssetService {
 
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
@@ -338,7 +338,7 @@ object AssetService {
     loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
     permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
     metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-    prefs: PreferenceService): AssetService =
+    prefs: GlobalPreferences): AssetService =
     new AssetServiceImpl(storage, generator, cache, context, loader, messages, downloader, errors, permissions, streamLoader, assetDownloader, metaService, sync, media, prefs)
 
   val SaveImageDirName = "Wire"

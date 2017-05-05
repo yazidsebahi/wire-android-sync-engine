@@ -20,6 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.{CacheService, LocalData}
+import com.waz.content.GlobalPreferences
 import com.waz.model.AssetStatus.UploadInProgress
 import com.waz.model._
 import com.waz.service.assets.AssetService
@@ -32,7 +33,12 @@ import com.waz.znet.ZNetClient._
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
+<<<<<<< HEAD
 class AssetSyncHandler(cache: CacheService, client: AssetClient, assets: AssetService, otrSync: OtrSyncHandler) {
+=======
+class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,
+                       assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler, prefs: GlobalPreferences) {
+>>>>>>> WIP: Unify global and user preferences under one trait
 
   import Threading.Implicits.Background
 

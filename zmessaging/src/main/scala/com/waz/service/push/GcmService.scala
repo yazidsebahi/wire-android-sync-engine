@@ -19,7 +19,8 @@ package com.waz.service.push
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.content.KeyValueStorage
+import com.waz.content.GlobalPreferences.GcmEnabledKey
+import com.waz.content.UserPreferences
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.conversation.DefaultConversationsContentUpdater
@@ -39,7 +40,7 @@ trait IGcmService {
 
 class GcmService(accountId:         AccountId,
                  val gcmGlobalService:  GcmGlobalService,
-                 keyVal:            KeyValueStorage,
+                 userPrefs:            UserPreferences,
                  convsContent:      DefaultConversationsContentUpdater,
                  eventsClient:      EventsClient,
                  eventPipeline:     EventPipeline,
@@ -55,11 +56,11 @@ class GcmService(accountId:         AccountId,
   val notificationsToProcess = Signal(Set[Uid]())
 
 
-  val lastReceivedConvEventTime = keyVal.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
-  val lastFetchedConvEventTime = keyVal.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
-  val lastFetchedLocalTime = keyVal.keyValuePref[Instant]("last_fetched_local_time", Instant.EPOCH)
-  val lastRegistrationTime = keyVal.keyValuePref[Instant]("gcm_registration_time", Instant.EPOCH)
-  val registrationRetryCount = keyVal.keyValuePref[Int]("gcm_registration_retry_count", 0)
+  val lastReceivedConvEventTime = userPrefs.preference[Instant]("last_received_conv_event_time")
+  val lastFetchedConvEventTime  = userPrefs.preference[Instant]("last_fetched_conv_event_time", Some(Instant.ofEpochMilli(1)))
+  val lastFetchedLocalTime      = userPrefs.preference[Instant]("last_fetched_local_time")
+  val lastRegistrationTime      = userPrefs.preference[Instant]("gcm_registration_time")
+  val registrationRetryCount    = userPrefs.preference[Int]("gcm_registration_retry_count")
 
   /**
     * Current GCM state, true if we are receiving notifications on it.
@@ -142,7 +143,7 @@ class GcmService(accountId:         AccountId,
 
   def gcmSenderId = gcmGlobalService.gcmSenderId
 
-  def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.gcmEnabled) {
+  def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.getFromPref[Boolean](GcmEnabledKey)) {
     gcmGlobalService.getGcmRegistration map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.resetGcm()

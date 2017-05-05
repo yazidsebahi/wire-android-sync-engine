@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
-import com.waz.content.{KeyValueStorage, OtrClientsStorage}
+import com.waz.content.{UserPreferences, OtrClientsStorage}
 import com.waz.model.otr.{Client, ClientId, Location, UserClients}
 import com.waz.model.{AccountId, UserId}
 import com.waz.service.otr._
@@ -37,7 +37,7 @@ import com.waz.znet.Response.Status
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, otrClients: OtrClientsService, storage: OtrClientsStorage, cryptoBox: CryptoBoxService, kvStorage: KeyValueStorage) {
+class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, otrClients: OtrClientsService, storage: OtrClientsStorage, cryptoBox: CryptoBoxService, userPrefs: UserPreferences) {
   import OtrClientsSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
@@ -77,7 +77,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
 
   // keeps ZMS_MAJOR_VERSION number of client registration
   // this can be used to detect problematic version updates
-  lazy val clientRegVersion = kvStorage.keyValuePref(ClientRegVersionPref, 0)
+  lazy val clientRegVersion = userPrefs.preference[Int](ClientRegVersionPref)
 
   def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]] = Serialized.future("sync-self-clients", this) {
     cryptoBox.createClient() flatMap {

@@ -19,7 +19,8 @@ package com.waz.service.conversation
 
 import com.waz.ZLog._
 import com.waz.api.impl.ConversationsListState
-import com.waz.content.{ConversationStorage, KeyValueStorage}
+import com.waz.content.UserPreferences.SelectedConvId
+import com.waz.content.{ConversationStorage, UserPreferences}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, ConversationData}
 import com.waz.threading.SerialDispatchQueue
@@ -32,7 +33,7 @@ import scala.concurrent.Future
 /**
  * Keeps track of general conversation list stats needed for display of conversations lists.
  */
-class ConversationsListStateService(convs: ConversationStorage, keyValue: KeyValueStorage) {
+class ConversationsListStateService(convs: ConversationStorage, userPrefs: UserPreferences) {
 
   import ConversationsListState.Data
   import com.waz.utils.events.EventContext.Implicits.global
@@ -41,7 +42,7 @@ class ConversationsListStateService(convs: ConversationStorage, keyValue: KeyVal
 
   private[conversation] case class ConversationListStats(unreadCount: Int = 0, unsentCount: Int = 0, voiceCount: Int = 0, pendingCount: Int = 0, selectedConversationId: Option[ConvId] = None)
 
-  val selectedConvIdPref = keyValue.keyValuePref(KeyValueStorage.SelectedConvId, Option.empty[ConvId])
+  val selectedConvIdPref = userPrefs.preference[Option[ConvId]](SelectedConvId)
   private[conversation] val listStats = Signal[ConversationListStats](ConversationListStats())
 
   val state = listStats map { stats =>

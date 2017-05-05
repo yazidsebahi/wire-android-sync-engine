@@ -207,7 +207,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
     }
 
     scenario("retrieve contact search results") {
-      api.zmessaging.futureValue.foreach (_.prefs.editUiPreferences { _.putBoolean(ContactsService.PrefKey, true) })
+      api.zmessaging.futureValue.foreach (_.prefs.preference[Boolean](ContactsService.PrefKey) := true)
       awaitUi(1.second)
       val users = search.getRecommendedPeople("", 20, Array.empty)
       withDelay { users.getAll should not be empty }(timeout = 20.seconds)

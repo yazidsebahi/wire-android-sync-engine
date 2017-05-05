@@ -17,121 +17,42 @@
  */
 package com.waz.testutils
 
-import java.util
-
-import android.content.SharedPreferences
-import android.content.SharedPreferences.{Editor, OnSharedPreferenceChangeListener}
-import com.waz.service.PreferenceService
+import com.waz.content.Preferences.Preference
+import com.waz.content.Preferences.Preference.PrefCodec
+import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.threading.SerialDispatchQueue
 
-import scala.language.existentials
-
-class TestPreferences extends PreferenceService {
-
-  override val dispatcher = new SerialDispatchQueue(name = "TestPreferenceQueue")
-
-  private var _preferences   = new TestSharedPreferences
-  private var _uiPreferences = new TestSharedPreferences
-
-  override def preferences   = _preferences
-  override def uiPreferences = _uiPreferences
-
-  def reset() = {
-    _preferences   = new TestSharedPreferences
-    _uiPreferences = new TestSharedPreferences
-  }
-}
-
-class TestSharedPreferences extends SharedPreferences {
-
-  /**
-    * Values in this class need to be set on a different thread. If we allow the main thread to be used, then
-    * preferences won't update while we are waiting on them
-    */
-  private implicit val dispatcher = new SerialDispatchQueue(name = "TestSharedPreferencesQueue")
-
-  private var listeners = Set.empty[OnSharedPreferenceChangeListener]
+class TestGlobalPreferences extends GlobalPreferences(null) {
+  override implicit val dispatcher = new SerialDispatchQueue(name = "TestGlobalPreferenceQueue")
 
   private var values = Map.empty[String, String]
 
-  override def unregisterOnSharedPreferenceChangeListener(listener: OnSharedPreferenceChangeListener) =
-    listeners -= listener
+  override protected val prefs = null
 
-  override def registerOnSharedPreferenceChangeListener(listener: OnSharedPreferenceChangeListener) =
-    listeners += listener
 
-  override def edit() = new Editor {
+  override def preference[A: PrefCodec](key: String, default: Option[A]) = new Preference[A](this, key, default)
 
-    private var changes = Set.empty[String]
-
-    override def clear() = {
-      dispatcher {
-        values = Map.empty[String, String]
-      }
-      this
-    }
-
-    override def remove(key: String) = {
-      dispatcher {
-        changes += key
-        values -= key
-      }
-      this
-    }
-
-    override def putString(key: String, value: String) = {
-      dispatcher {
-        changes += key
-        values += (key -> value)
-      }
-      this
-    }
-
-    /**
-      * We use `PrefCodec`s in our PreferenceService and save everything as a String. This allows us to simplify the type
-      * mess down here.
-      */
-    override def putFloat(key: String, value: Float)                 = ???
-    override def putBoolean(key: String, value: Boolean)             = ???
-    override def putInt(key: String, value: Int)                     = ???
-    override def putLong(key: String, value: Long)                   = ???
-    override def putStringSet(key: String, values: util.Set[String]) = ???
-
-    override def apply() = commit()
-
-    override def commit() = {
-      dispatcher {
-        for {
-          listener <- listeners
-          change  <- changes
-        } {
-          try {
-            listener.onSharedPreferenceChanged(TestSharedPreferences.this, change)
-          } catch {
-            case e: Throwable =>
-              //TODO fix this
-              // not too sure exactly what's causing this, but the mocks seem to be out of scope even after some preferences
-              // are still processing values - this gives us NPEs in the tests. They don't fail, but they just don't look nice.
-              println(s"Tried to update shared preference listener after test completed")
-          }
-        }
-      }
-      true
-    }
+  override def getFromPref[A: PrefCodec](key: String, default: Option[A]) = {
+    val codec = implicitly[PrefCodec[A]]
+    values.get(key).map(codec.decode).getOrElse(codec.default)
   }
 
-  override def getString(key: String, defValue: String) =
-    values.get(key) match {
-      case Some(value) => value
-      case _           => defValue
-    }
+  override protected def setValue[A: PrefCodec](key: String, value: A) =
+    dispatcher(values += (key -> implicitly[PrefCodec[A]].encode(value)))
+}
 
-  override def getFloat(key: String, defValue: Float)                 = ???
-  override def getLong(key: String, defValue: Long)                   = ???
-  override def getStringSet(key: String, defValues: util.Set[String]) = ???
-  override def getBoolean(key: String, defValue: Boolean)             = ???
-  override def getInt(key: String, defValue: Int)                     = ???
-  override def getAll                                                 = ???
+class TestUserPreferences extends UserPreferences(null, null) {
 
-  override def contains(key: String) = values.contains(key)
+  override val dispatcher = new SerialDispatchQueue(name = "TestUserPreferenceQueue")
+
+  private var values = Map.empty[String, String]
+
+  override protected def getValue[A: PrefCodec](key: String, defaultValue: Option[A]) = dispatcher {
+    val codec = implicitly[PrefCodec[A]]
+    values.get(key).map(codec.decode).getOrElse(codec.default)
+  }
+
+  override protected def setValue[A: PrefCodec](key: String, value: A) =
+    dispatcher(values += (key -> implicitly[PrefCodec[A]].encode(value)))
+
 }

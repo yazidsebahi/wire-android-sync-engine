@@ -19,7 +19,7 @@ package com.waz.utils
 
 import com.waz.Generators._
 import com.waz.model.Uid
-import com.waz.content.Preference.PrefCodec._
+import com.waz.content.Preferences.Preference.PrefCodec._
 import com.waz.znet.AuthenticationManager.Token
 
 import org.scalatest.{Matchers, FeatureSpec}

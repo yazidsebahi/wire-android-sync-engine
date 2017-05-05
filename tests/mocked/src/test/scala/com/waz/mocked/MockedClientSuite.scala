@@ -25,7 +25,7 @@ import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
 import com.waz.client.RegistrationClient
 import com.waz.client.RegistrationClient.ActivateResult
-import com.waz.content.KeyValueStorage
+import com.waz.content.UserPreferences
 import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
@@ -42,6 +42,7 @@ import com.waz.sync.client.OtrClient.{ClientKey, MessageResponse}
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.sync.client._
+import com.waz.testutils.TestUserPreferences
 import com.waz.threading.CancellableFuture.successful
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.AuthenticationManager._
@@ -61,9 +62,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
   class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "") extends StorageModule(context, accountId, prefix) {
-    override lazy val kvStorage: KeyValueStorage = new KeyValueStorage(context, db) {
-      override def getPref(key: String) = keyValueStoreOverrides.get(key).fold(super.getPref(key))(Future.successful)
-    }
+    override lazy val userPrefs: UserPreferences = new TestUserPreferences
   }
 
   class MockedUserModule(userId: UserId, account: AccountService) extends UserModule(userId, account) {

@@ -17,18 +17,20 @@
  */
 package com.waz.service.push
 
-import android.content.{Context, SharedPreferences}
+import android.content.Context
 import com.google.android.gms.common.{ConnectionResult, GooglePlayServicesUtil}
 import com.google.android.gms.gcm.GoogleCloudMessaging
 import com.google.android.gms.iid.InstanceID
 import com.localytics.android.Localytics
 import com.waz.HockeyApp
 import com.waz.HockeyApp.NoReporting
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
+import com.waz.content.GlobalPreferences.GcmEnabledKey
+import com.waz.content.{GlobalPreferences, Preferences}
 import com.waz.model._
 import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
-import com.waz.service.{BackendConfig, MetaDataService, PreferenceService, PreferenceServiceImpl}
+import com.waz.service.{BackendConfig, MetaDataService}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.LoggedTry
 import com.waz.utils.events.EventContext
@@ -36,7 +38,7 @@ import com.waz.utils.events.EventContext
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.{NoStackTrace, NonFatal}
 
-class GcmGlobalService(context: Context, implicit val prefs: PreferenceServiceImpl, metadata: MetaDataService, backendConfig: BackendConfig) {
+class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, metadata: MetaDataService, backendConfig: BackendConfig) {
 
   implicit val dispatcher = new SerialDispatchQueue(name = "GcmGlobalDispatchQueue")
 
@@ -52,9 +54,9 @@ class GcmGlobalService(context: Context, implicit val prefs: PreferenceServiceIm
       ConnectionResult.DEVELOPER_ERROR
   }
 
-  val gcmEnabled = prefs.preference[Boolean](prefs.gcmEnabledKey, false, prefs.uiPreferences).signal
+  val gcmEnabled = prefs.preference[Boolean](GcmEnabledKey).signal
 
-  def gcmAvailable = prefs.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
+  def gcmAvailable = prefs.getFromPref[Boolean](GcmEnabledKey) && gcmCheckResult == ConnectionResult.SUCCESS
 
   def getGcmRegistration: Future[GcmRegistration] = GcmRegistration() map { reg =>
     if (reg.version == appVersion) reg
@@ -130,13 +132,13 @@ object GcmGlobalService {
 
     lazy val empty = GcmRegistration("", AccountId(""), 0)
 
-    def apply()(implicit ec: ExecutionContext, prefs: PreferenceService): Future[GcmRegistration] = for {
+    def apply()(implicit ec: ExecutionContext, prefs: Preferences): Future[GcmRegistration] = for {
       token   <- prefs.preference[String](RegistrationIdPref).apply()
       userId  <- prefs.preference[String](RegistrationUserPref).apply()
       version <- prefs.preference[Int](RegistrationVersionPref).apply()
     } yield GcmRegistration(token, AccountId(userId), version)
 
-    def update(reg: GcmRegistration)(implicit ec: ExecutionContext, prefs: PreferenceService) = for {
+    def update(reg: GcmRegistration)(implicit ec: ExecutionContext, prefs: Preferences) = for {
       _ <- prefs.preference[String](RegistrationUserPref) := reg.token
       _ <- prefs.preference[String](RegistrationUserPref) := reg.user.str
       _ <- prefs.preference[Int](RegistrationVersionPref) := reg.version

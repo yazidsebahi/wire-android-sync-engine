@@ -24,6 +24,7 @@ import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
+import com.waz.content.GlobalPreferences.WsForegroundKey
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
@@ -63,7 +64,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
   val notificationsState = for {
     Some(zms) <- zmessaging
     true <- zms.websocket.useWebSocketFallback
-    true <- zms.prefs.wsForegroundEnabledPref.signal // only when foreground service is enabled
+    true <- zms.prefs.preference[Boolean](WsForegroundKey).signal // only when foreground service is enabled
     offline <- zms.network.networkMode.map(_ == NetworkMode.OFFLINE)
     connected <- zms.websocket.connected
     error <- zms.websocket.connectionError

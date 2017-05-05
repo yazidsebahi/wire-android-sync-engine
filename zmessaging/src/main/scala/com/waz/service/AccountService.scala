@@ -21,7 +21,7 @@ import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
-import com.waz.content.Preference
+import com.waz.content.Preferences.Preference
 import com.waz.model.{UserData, _}
 import com.waz.model.otr.Client
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
@@ -50,7 +50,7 @@ class UserModule(val userId: UserId, val account: AccountService) {
   def accountId = account.id
   def timeouts = account.global.timeouts
   def network = account.global.network
-  def kvStorage = account.storage.kvStorage
+  def userPrefs = account.storage.userPrefs
   def usersStorage = account.storage.usersStorage
   def convsStorage = account.storage.convsStorage
   def membersStorage = account.storage.membersStorage

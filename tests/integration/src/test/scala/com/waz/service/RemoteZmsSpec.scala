@@ -20,7 +20,7 @@ package com.waz.service
 import android.content.{Context, SharedPreferences}
 import com.waz.api._
 import com.waz.api.impl.{EmailCredentials, ZMessagingApi}
-import com.waz.content.{Database, GlobalDatabase}
+import com.waz.content.{Database, GlobalDatabase, GlobalPreferences}
 import com.waz.model.{MessageContent => _, _}
 import com.waz.testutils.Implicits._
 import com.waz.threading.Threading
@@ -82,11 +82,6 @@ trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Sui
     override lazy val storage: Database = new GlobalDatabase(context, dataTag)
     override lazy val metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + dataTag
-    }
-
-    override lazy val prefs: PreferenceServiceImpl = new PreferenceServiceImpl(context) {
-      override lazy val preferences: SharedPreferences = context.getSharedPreferences("zmessaging_" + dataTag, Context.MODE_PRIVATE)
-      override lazy val uiPreferences: SharedPreferences = context.getSharedPreferences("zmessaging_ui_" + dataTag, Context.MODE_PRIVATE)
     }
     override lazy val factory: ZMessagingFactory = new ZMessagingFactory(global) {
       override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, dataTag)

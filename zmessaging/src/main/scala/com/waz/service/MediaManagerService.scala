@@ -21,6 +21,7 @@ import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.content.GlobalPreferences
 import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
@@ -38,7 +39,7 @@ trait MediaManagerService {
   def mediaManager: Option[MediaManager]
 }
 
-class DefaultMediaManagerService(context: Context, prefs: PreferenceServiceImpl) extends MediaManagerService {
+class DefaultMediaManagerService(context: Context, prefs: GlobalPreferences) extends MediaManagerService {
   import com.waz.service.MediaManagerService._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
@@ -70,7 +71,7 @@ class DefaultMediaManagerService(context: Context, prefs: PreferenceServiceImpl)
 
   private lazy val intensityMap = Map(prefAll -> IntensityLevel.FULL, prefSome -> IntensityLevel.SOME, prefNone -> IntensityLevel.NONE)
 
-  private lazy val soundsPref = prefs.preference[String](soundsPrefKey, "", prefs.uiPreferences)
+  private lazy val soundsPref = prefs.preference[String](soundsPrefKey)
 
   soundsPref.signal { value =>
     val intensity = intensityMap.getOrElse(value, IntensityLevel.FULL)

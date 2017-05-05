@@ -53,14 +53,14 @@ import scala.util.control.NoStackTrace
 import scala.util.{Success, Try}
 
 class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
-                      keyValue: KeyValueStorage, prefs: PreferenceServiceImpl, users: UserService, usersStorage: UsersStorage,
+                      userPrefs: UserPreferences, prefs: GlobalPreferences, users: UserService, usersStorage: UsersStorage,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
                       convs: ConversationStorage, permissions: PermissionsService) {
 
   import ContactsService._
   import EventContext.Implicits.global
   import Threading.Implicits.Background
-  import keyValue._
+  import userPrefs._
   import lifecycle._
   import timeouts.contacts._
 
@@ -134,10 +134,10 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
     }
   }
 
-  private[waz] lazy val lastUploadTime = keyValuePref[Option[Instant]]("address_book_last_upload_time", None)
-  private[service] lazy val addressBookVersionOfLastUpload = keyValuePref[Option[Int]]("address_book_version_of_last_upload", None)
+  private[waz] lazy val lastUploadTime = preference[Option[Instant]]("address_book_last_upload_time")
+  private[service] lazy val addressBookVersionOfLastUpload = preference[Option[Int]]("address_book_version_of_last_upload")
   private lazy val shareContactsPrefKey = Try(context.getString(R.string.pref_share_contacts_key)).getOrElse(PrefKey) // fallback for testing
-  private[service] lazy val shareContactsPref = prefs.preference[Boolean](shareContactsPrefKey, defaultValue = true, prefs.uiPreferences)
+  private[service] lazy val shareContactsPref = prefs.preference[Boolean](shareContactsPrefKey, default = Some(true))
   private lazy val contactsObserver = new ContentObserverSignal(Contacts)(context)
   private lazy val contactsNeedReloading = new AtomicBoolean(true)
 

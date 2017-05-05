@@ -251,7 +251,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
         zmessagingCreated() shouldEqual false
       }
 
-      withDelay(global.prefs.preferences.getString(Accounts.CurrentAccountPref, "") should not be "")
+      withDelay(global.prefs.getFromPref[String](Accounts.CurrentAccountPref) should not be "")
 
       val accountId = AccountId(api.ui.accounts.currentAccountPref().futureValue)
 

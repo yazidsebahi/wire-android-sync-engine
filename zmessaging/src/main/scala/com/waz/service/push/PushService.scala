@@ -21,7 +21,7 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
-import com.waz.content.KeyValueStorage
+import com.waz.content.UserPreferences
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventPipeline
@@ -35,7 +35,7 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.{Future, Promise}
 
-class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
+class PushService(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
   self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val tag: LogTag = logTagFor[PushService]
@@ -186,7 +186,7 @@ class PushServiceSignals {
   * Keeps track of last received notifications and updates lastNotificationId preference accordingly.
   * Last id is fetched from backend whenever slow sync is requested.
   */
-class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
+class LastNotificationIdService(userPrefs: UserPreferences, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
 
   import LastNotificationIdService._
 
@@ -194,11 +194,11 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
   private implicit val dispatcher = new SerialDispatchQueue(name = "LastNotificationIdService")
   private implicit val ec = EventContext.Global
 
-  import keyValueService._
+  import userPrefs._
 
   private var fetchLast = CancellableFuture.successful(())
 
-  private[push] val idPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
+  private[push] val idPref = preference[Option[Uid]](LastNotificationIdKey)
 
   def lastNotificationId() = Future(idPref()).flatten // future and flatten ensure that there is no race with onNotification
 

@@ -21,14 +21,14 @@ import com.waz.api.User.ConnectionStatus
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{Contacts, _}
 import com.waz.api._
-import com.waz.content.{GlobalDatabase, ZmsDatabase}
+import com.waz.content.{GlobalDatabase, GlobalPreferences, Preferences, ZmsDatabase}
 import com.waz.mocked.PushBehaviour.NoPush
 import com.waz.mocked.{MockBackend, PushBehaviour, SystemTimeline}
 import com.waz.model.Contact
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
 import com.waz.service.ContactsService.PrefKey
-import com.waz.service.{PreferenceService, SearchKey, Timeouts, ZMessaging}
+import com.waz.service.{SearchKey, Timeouts, ZMessaging}
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.testutils.HasId._
@@ -91,10 +91,16 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
     scenario("Phone has contacts. Sharing is disabled.") {
       givenSomeContacts(Seq(cII, cIV, cV, cVI, cVII, cCr))
 
-      whileSharingIsDisabled(withInitializedApi {
-        val contacts = api.getContacts
-        idsOf(contacts) shouldEqual ids(uII, uI) soon
-      })
+      val prefs = new GlobalPreferences(context)
+      val pref = prefs.preference[Boolean](PrefKey)
+      val previousValue = prefs.getFromPref[Boolean](PrefKey)
+
+      (pref := false).await()
+
+      val contacts = api.getContacts
+      idsOf(contacts) shouldEqual ids(uII, uI) soon
+
+      (pref := previousValue).await()
     }
 
     scenario("Phone has contacts. No matches from backend (but locally).") {
@@ -577,11 +583,4 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
       (be(null) compose ((_: API.Contact).getUser)))
 
   def eql[A](a: A): Matcher[A] = equal(a)
-
-  def whileSharingIsDisabled[A](f: => A): A = {
-    val uiPrefs = PreferenceService.preferencesFrom(PreferenceService.uiPrefsFileName, context)
-    val previousValue = uiPrefs.getBoolean(PrefKey, true)
-    uiPrefs.edit().putBoolean(PrefKey, false).commit()
-    try f finally uiPrefs.edit().putBoolean(PrefKey, previousValue).commit()
-  }
 }
