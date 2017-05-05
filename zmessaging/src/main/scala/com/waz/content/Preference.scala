@@ -68,23 +68,28 @@ object Preference {
   trait PrefCodec[A] {
     def encode(v: A): String
     def decode(str: String): A
+    def default: A
   }
 
   object PrefCodec {
-    def apply[A](enc: A => String, dec: String => A): PrefCodec[A] = new PrefCodec[A] {
+    def apply[A](enc: A => String, dec: String => A, defaultValue: A): PrefCodec[A] = new PrefCodec[A] {
       override def encode(v: A): String = enc(v)
       override def decode(str: String): A = dec(str)
+      override def default = defaultValue
     }
 
-    implicit val StrCodec = apply[String](identity, identity)
-    implicit val IntCodec = apply[Int](String.valueOf, java.lang.Integer.parseInt)
-    implicit val LongCodec = apply[Long](String.valueOf, java.lang.Long.parseLong)
-    implicit val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean)
-    implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode)
-    implicit def optCodec[A: PrefCodec]: PrefCodec[Option[A]] = apply[Option[A]](_.fold("")(implicitly[PrefCodec[A]].encode), { str => if (str == "") None else Some(implicitly[PrefCodec[A]].decode(str)) })
-    implicit val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)))
-    implicit val TokenCodec = apply[Option[Token]] (
+    implicit val StrCodec     = apply[String] (identity,       identity,                       "")
+    implicit val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt,     0)
+    implicit val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,       0L)
+    implicit val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean, false)
+
+    implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode, implicitly[Id[A]].empty)
+    implicit def optCodec[A: PrefCodec]: PrefCodec[Option[A]] = apply[Option[A]](_.fold("")(implicitly[PrefCodec[A]].encode), { str => if (str == "") None else Some(implicitly[PrefCodec[A]].decode(str)) }, None)
+    implicit val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
+
+    implicit val AuthTokenCodec = apply[Option[Token]] (
       { t => optCodec[String].encode(t map Token.Encoder.apply map (_.toString)) },
-      { s => optCodec[String].decode(s) map (new JSONObject(_)) map (Token.Decoder.apply(_)) })
+      { s => optCodec[String].decode(s) map (new JSONObject(_)) map (Token.Decoder.apply(_)) },
+      None)
   }
 }

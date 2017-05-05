@@ -32,6 +32,7 @@ trait Id[A] extends Ordering[A] {
   def random(): A
   def decode(str: String): A
   def encode(id: A): String = id.toString
+  def empty: A = decode("")
 
   override def compare(x: A, y: A): Int = Ordering.String.compare(encode(x), encode(y))
 }

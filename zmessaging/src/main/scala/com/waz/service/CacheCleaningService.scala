@@ -24,6 +24,7 @@ import com.waz.cache.CacheService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class CacheCleaningService(cache: CacheService, prefs: PreferenceServiceImpl) {
@@ -34,12 +35,14 @@ class CacheCleaningService(cache: CacheService, prefs: PreferenceServiceImpl) {
 
   CancellableFuture.delayed(1.minute) { requestDeletionOfExpiredCacheEntries() }
 
-  def requestDeletionOfExpiredCacheEntries(): CancellableFuture[Unit] = {
-    prefs.withPreferences { _.getLong(LastCacheCleanupPref, 0L) } map { lastSync =>
+  def requestDeletionOfExpiredCacheEntries(): Future[Unit] = {
+    prefs.preference[Long](LastCacheCleanupPref, 0L).mutate { lastSync =>
       if ((currentTimeMillis() - lastSync).millis > CleanupInterval) {
         debug("at least one week expired since last cache cleaning, cleaning now...")
         cache.deleteExpired()
-        prefs.editPreferences { _.putLong(LastCacheCleanupPref, currentTimeMillis()) }
+        currentTimeMillis()
+      } else {
+        lastSync
       }
     }
   }

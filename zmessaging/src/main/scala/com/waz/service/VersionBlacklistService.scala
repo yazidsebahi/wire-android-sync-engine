@@ -34,9 +34,9 @@ class VersionBlacklistService(metadata: MetaDataService, prefs: PreferenceServic
   private implicit val ec = EventContext.Global
   import metadata._
 
-  val lastUpToDateSync = prefs.preference[Long](LastUpToDateSyncPref, 0)
+  val lastUpToDateSync   = prefs.preference[Long](LastUpToDateSyncPref, 0)
   val lastCheckedVersion = prefs.preference[Int](LastCheckedVersionPref, 0)
-  val upToDatePref = prefs.preference[Boolean](UpToDatePref, defaultValue = true)
+  val upToDatePref       = prefs.preference[Boolean](UpToDatePref, defaultValue = true)
 
   val upToDate = Signal(lastCheckedVersion.signal, upToDatePref.signal) map {
     case (lastVersion, isUpToDate) => lastVersion != metadata.appVersion || isUpToDate

@@ -41,16 +41,14 @@ trait PreferenceService {
   //TODO - try to merge UI preferences with zms preferences - there's not much point in having two.
   def uiPreferences: SharedPreferences
 
-  def withPreferences[A](body: SharedPreferences => A, prefs: => SharedPreferences = preferences): CancellableFuture[A] = dispatcher(body(prefs))
-
   def editPreferences(body: SharedPreferences.Editor => Unit, prefs: => SharedPreferences = preferences): CancellableFuture[Boolean] = dispatcher {
     val editor = prefs.edit()
     body(editor)
     editor.commit()
   }
 
-  def preference[A](key: String, defaultValue: A, prefs: => SharedPreferences = preferences)(implicit codec: PrefCodec[A]): Preference[A] =
-    new Pref[A](prefs, key, Option(prefs.getString(key, null)).fold(defaultValue)(codec.decode), { (prefs, value) => prefs.putString(key, codec.encode(value)) })
+  def preference[A](key: String, defaultValue: A = null.asInstanceOf[A], prefs: => SharedPreferences = preferences)(implicit codec: PrefCodec[A]): Preference[A] =
+    new Pref[A](prefs, key, Option(prefs.getString(key, null)).fold(Option(defaultValue).getOrElse(codec.default))(codec.decode), { (prefs, value) => prefs.putString(key, codec.encode(value)) })
 
   def editUiPreferences(body: SharedPreferences.Editor => Unit) =
     editPreferences(body, uiPreferences)

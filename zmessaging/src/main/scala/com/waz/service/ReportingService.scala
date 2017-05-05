@@ -110,8 +110,8 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     }
   })
 
-  val GcmRegistrationReporter = Reporter("Gcm", { writer =>
-    prefs.withPreferences(GcmGlobalService.GcmRegistration.apply) map { writer.println }
+  val PushTokenRegistrationReporter = Reporter("Push", { writer =>
+    prefs.preference[Option[PushToken]](PushTokenService.pushTokenPrefKey, None).apply() map { writer.println }
   })
 
   val LogCatReporter = Reporter("LogCat", { writer =>
