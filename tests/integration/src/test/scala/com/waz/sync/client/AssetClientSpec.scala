@@ -141,7 +141,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
     scenario("Load asset using BitmapSignal") {
       val data = AssetData(mime = Mime.Image.Png, sizeInBytes = image.length, metaData = Some(AssetMetaData.Image(Dim2(480, 492), Medium))).copyWithRemoteData(RemoteData(Some(asset.rId), asset.token))
 
-      val signal = BitmapSignal(data, BitmapRequest.Regular(600), zmessaging.imageLoader, zmessaging.imageCache)
+      val signal = BitmapSignal(data, BitmapRequest.Regular(600), zmessaging.imageLoader)
       var results = Seq.empty[BitmapResult]
       signal { res =>
         results = results :+ res
