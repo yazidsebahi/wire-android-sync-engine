@@ -20,6 +20,7 @@ package com.waz.content
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.{debug, warn}
 import com.waz.content.Preferences.Preference
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.model.KeyValueData.KeyValueDataDao
@@ -33,6 +34,7 @@ import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 trait Preferences {
@@ -83,6 +85,7 @@ object Preferences {
       val default: A
     }
 
+    //TODO maybe we can use JSON codecs at some point...
     object PrefCodec {
       def apply[A](enc: A => String, dec: String => A, defaultValue: A): PrefCodec[A] = new PrefCodec[A] {
         override def encode(v: A): String = enc(v)
@@ -92,6 +95,7 @@ object Preferences {
 
       implicit lazy val StrCodec     = apply[String] (identity,       identity,                       "")
       implicit lazy val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt,     0)
+      implicit lazy val DoubleCodec  = apply[Double] (String.valueOf, java.lang.Double.parseDouble,   0.0)
       implicit lazy val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,       0L)
       implicit lazy val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean, false)
 
@@ -120,6 +124,43 @@ class GlobalPreferences(context: Context) extends Preferences {
   protected val prefs = context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)
 
   def v31AssetsEnabled = false
+
+  //TODO eventually remove
+  private def migrate() = dispatcher {
+
+    val oldPrefFiles = Seq("zmessaging", "com.waz.zclient.user.preferences")
+      .map(name => Option(context.getSharedPreferences(name, Context.MODE_PRIVATE)))
+      .collect { case Some(pref) => pref }
+
+    val oldPrefs = oldPrefFiles
+      .map(_.getAll.asScala)
+      .foldLeft(Map.empty[String, Any]){ case (cur, i) => cur ++ i }
+      .map {
+        case (key, value) =>
+          debug(s"Migrating $key: $value")
+          import PrefCodec._
+          val encodedValue = value match {
+            case v: String  => Some(v)
+            case v: Boolean => Some(BooleanCodec.encode(v))
+            case v: Int     => Some(IntCodec.encode(v))
+            case v: Float   => Some(DoubleCodec.encode(v))
+            case v => warn(s"Preference $key: $v has unexpected type. Leaving out of migration"); None
+          }
+          encodedValue.map(v => key -> v)
+      }.collect { case Some((key, v)) => key -> v }
+
+      val editor = prefs.edit()
+      oldPrefs.foreach { case (key, value) =>
+        editor.putString(key, value)
+      }
+      if (editor.commit()) {
+        debug("Clearing old preference files")
+        oldPrefFiles.foreach { pref =>
+          pref.edit().clear().commit()
+        }
+      }
+  }
+  migrate()
 
   //TODO would be nice to hide this, but for now it's fine
   def getFromPref[A: PrefCodec](key: String, default: Option[A] = None) = {
@@ -167,17 +208,12 @@ class GlobalPreferences(context: Context) extends Preferences {
 }
 
 object GlobalPreferences {
-
   val AutoAnswerCallPrefKey = "PREF_KEY_AUTO_ANSWER_ENABLED"
   val CallingV3Key          = "PREF_KEY_CALLING_V3"
   val GcmEnabledKey         = "PREF_KEY_GCM_ENABLED"
   val V31AssetsEnabledKey   = "PREF_V31_ASSETS_ENABLED"
   val WsForegroundKey       = "PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED"
   val AnalyticsPrefKey      = "PREF_KEY_AVS_METRICS"
-
-  //TODO - try to merge UI preferences with zms preferences - there's not much point in having two.
-  val zmsPrefsFileName = "zmessaging"
-  val uiPrefsFileName = "com.waz.zclient.user.preferences"
 }
 
 /**
@@ -197,9 +233,9 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
 }
 
 object UserPreferences {
-  val LastSlowSyncTimeKey = "last_slow_sync_time"
-  val Verified = "verified"
-  val SelectedConvId = "selected_conv_id"
-  val SpotifyRefreshToken = "spotify_refresh_token"
+  val LastSlowSyncTimeKey     = "last_slow_sync_time"
+  val Verified                = "verified"
+  val SelectedConvId          = "selected_conv_id"
+  val SpotifyRefreshToken     = "spotify_refresh_token"
   val ShouldSyncConversations = "should_sync_conversations"
 }
