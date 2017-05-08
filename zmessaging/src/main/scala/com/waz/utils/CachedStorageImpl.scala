@@ -53,9 +53,9 @@ object StorageDao {
 
 trait CachedStorage[K, V] {
 
-  def onAdded: EventStream[Seq[V]]
-  def onUpdated: EventStream[Seq[(V, V)]]
-  def onDeleted: EventStream[Seq[K]]
+  val onAdded: EventStream[Seq[V]]
+  val onUpdated: EventStream[Seq[(V, V)]]
+  val onDeleted: EventStream[Seq[K]]
 
   protected def load(key: K)(implicit db: DB): Option[V]
   protected def load(keys: Set[K])(implicit db: DB): Seq[V]
