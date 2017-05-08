@@ -54,15 +54,13 @@ object DeviceActor {
   def props(deviceName: String,
             application: Context,
             backend: BackendConfig = BackendConfig.StagingBackend,
-            otrOnly: Boolean = false,
             wrapper: ClientWrapper) =
-  Props(new DeviceActor(deviceName, application, backend, otrOnly, wrapper)).withDispatcher("ui-dispatcher")
+  Props(new DeviceActor(deviceName, application, backend, wrapper)).withDispatcher("ui-dispatcher")
 }
 
 class DeviceActor(val deviceName: String,
                   val application: Context,
                   backend: BackendConfig = BackendConfig.StagingBackend,
-                  otrOnly: Boolean = false,
                   wrapper: ClientWrapper) extends Actor with ActorLogging {
 
   import ActorMessage._
@@ -79,7 +77,6 @@ class DeviceActor(val deviceName: String,
     ZMessaging.currentGlobal = this
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
     override lazy val clientWrapper: ClientWrapper = wrapper
-    if (otrOnly) prefs.preference[Boolean]("zms_send_only_otr") := true
 
     override lazy val metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + Random.nextInt().toHexString

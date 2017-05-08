@@ -47,7 +47,6 @@ class RemoteActorService(context: Context) {
   private implicit val tag: LogTag = logTagFor[RemoteActorService]
   val prefs = new GlobalPreferences(context)
 
-  val otrOnly     = prefs.preference[Boolean]("otrOnly")
   val background  = prefs.preference[Boolean]("background")
   val name        = prefs.preference[String]("name", Some(s"$MANUFACTURER $MODEL"))
   val backendPref = prefs.preference[String]("env", Some(BackendConfig.StagingBackend.environment))
@@ -73,7 +72,7 @@ class RemoteActorService(context: Context) {
   } .get
 
   private val currentActor = Signal[ActorRef]()
-  private val actorConfig = Signal(name.signal, backend, otrOnly.signal)
+  private val actorConfig = Signal(name.signal, backend)
 
   ActorDSL.actor(new Act {
     currentActor { context.watch(_) }
@@ -82,24 +81,24 @@ class RemoteActorService(context: Context) {
       case Terminated(ref) =>
         if (currentActor.currentValue.contains(ref))
           actorConfig.currentValue foreach {
-            case (name, backend, otrOnly) => updateActor(name, backend, otrOnly)
+            case (name, backend) => updateActor(name, backend)
           }
     }
   })
 
   actorConfig.throttle(1.second) {
-    case (name, backend, otrOnly) => updateActor(name, backend, otrOnly)
+    case (name, backend) => updateActor(name, backend)
   }
 
-  private def updateActor(name: String, backend: BackendConfig, otrOnly: Boolean) = Serialized.future(this, "updateRemoteActor") {
-    println(s"updateActor($name, $backend, $otrOnly)")
+  private def updateActor(name: String, backend: BackendConfig) = Serialized.future(this, "updateRemoteActor") {
+    println(s"updateActor($name, $backend)")
     currentActor.currentValue.fold(Future successful true) { act => gracefulStop(act, 5.seconds) } map { stopped =>
-      println(s"prev actor stopped: $stopped, creating: ($name, $backend, $otrOnly)")
+      println(s"prev actor stopped: $stopped, creating: ($name, $backend)")
       val dbs = new File(context.getFilesDir.getParentFile, "databases")
       dbs.listFiles() foreach { db =>
         println(s"deleting db: $db, res:" + db.delete())
       }
-      currentActor ! actorSystem.actorOf(RemoteProcessActor.props(context, name, None, backend, otrOnly, TestClientWrapper), name.replaceAll("\\s+", "_"))
+      currentActor ! actorSystem.actorOf(RemoteProcessActor.props(context, name, None, backend, TestClientWrapper), name.replaceAll("\\s+", "_"))
     }
   }
 
