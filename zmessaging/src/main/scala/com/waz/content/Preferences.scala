@@ -36,6 +36,7 @@ import org.threeten.bp.Instant
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 trait Preferences {
 
@@ -95,7 +96,6 @@ object Preferences {
 
       implicit lazy val StrCodec     = apply[String] (identity,       identity,                       "")
       implicit lazy val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt,     0)
-      implicit lazy val DoubleCodec  = apply[Double] (String.valueOf, java.lang.Double.parseDouble,   0.0)
       implicit lazy val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,       0L)
       implicit lazy val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean, false)
 
@@ -115,7 +115,9 @@ object Preferences {
 }
 
 /**
-  * Global preference based on Android SharedPreferences
+  * Global preference based on Android SharedPreferences. Note, here we need to save preferences to the correct primitive
+  * type in SharedPreferences, as the Android system uses these types by default (e.g., a CheckBoxPreference defined in XML
+  * will store a boolean preference in the shared prefs document
   */
 class GlobalPreferences(context: Context) extends Preferences {
 
@@ -127,45 +129,44 @@ class GlobalPreferences(context: Context) extends Preferences {
 
   //TODO eventually remove
   private def migrate() = dispatcher {
-
     val oldPrefFiles = Seq("zmessaging", "com.waz.zclient.user.preferences")
       .map(name => Option(context.getSharedPreferences(name, Context.MODE_PRIVATE)))
       .collect { case Some(pref) => pref }
 
-    val oldPrefs = oldPrefFiles
+    val editor = prefs.edit()
+
+    oldPrefFiles
       .map(_.getAll.asScala)
       .foldLeft(Map.empty[String, Any]){ case (cur, i) => cur ++ i }
-      .map {
+      .foreach {
         case (key, value) =>
-          debug(s"Migrating $key: $value")
-          import PrefCodec._
-          val encodedValue = value match {
-            case v: String  => Some(v)
-            case v: Boolean => Some(BooleanCodec.encode(v))
-            case v: Int     => Some(IntCodec.encode(v))
-            case v: Float   => Some(DoubleCodec.encode(v))
-            case v => warn(s"Preference $key: $v has unexpected type. Leaving out of migration"); None
+          value match {
+            case v: String  => debug(s"Migrating String:  $key: $value"); editor.putString(key, v)
+            case v: Boolean => debug(s"Migrating Boolean: $key: $value"); editor.putBoolean(key, v)
+            case v: Int     => debug(s"Migrating Int:     $key: $value"); editor.putInt(key, v)
+            case v: Long    => debug(s"Migrating Long:    $key: $value"); editor.putLong(key, v)
+            case v => warn(s"Preference $key: $v has unexpected type. Leaving out of migration")
           }
-          encodedValue.map(v => key -> v)
-      }.collect { case Some((key, v)) => key -> v }
+      }
 
-      val editor = prefs.edit()
-      oldPrefs.foreach { case (key, value) =>
-        editor.putString(key, value)
+    if (editor.commit()) {
+      oldPrefFiles.foreach { pref =>
+        pref.edit().clear().commit()
       }
-      if (editor.commit()) {
-        debug("Clearing old preference files")
-        oldPrefFiles.foreach { pref =>
-          pref.edit().clear().commit()
-        }
-      }
+    }
   }
   migrate()
 
   //TODO would be nice to hide this, but for now it's fine
   def getFromPref[A: PrefCodec](key: String, default: Option[A] = None) = {
     val codec = implicitly[PrefCodec[A]]
-    Option(prefs.getString(key, null)).map(codec.decode).orElse(default).getOrElse(codec.default)
+    import PrefCodec._
+    (codec match {
+      case IntCodec     => prefs.getInt    (key, default.asInstanceOf[Option[Int]].getOrElse(IntCodec.default))
+      case BooleanCodec => prefs.getBoolean(key, default.asInstanceOf[Option[Boolean]].getOrElse(BooleanCodec.default))
+      case LongCodec    => prefs.getLong   (key, default.asInstanceOf[Option[Long]].getOrElse(LongCodec.default))
+      case _            => Option(prefs.getString (key, null)).map(codec.decode).orElse(default).getOrElse(codec.default)
+    }).asInstanceOf[A]
   }
 
   override def preference[A: PrefCodec](key: String, default: Option[A]) = {
@@ -204,7 +205,19 @@ class GlobalPreferences(context: Context) extends Preferences {
     dispatcher(getFromPref[A](key, defaultValue))
 
   protected def setValue[A: PrefCodec](key: String, value: A): Future[Unit] =
-    dispatcher(prefs.edit().putString(key, implicitly[PrefCodec[A]].encode(value)).apply())
+    dispatcher {
+      import PrefCodec._
+      val codec = implicitly[PrefCodec[A]]
+      val editor = prefs.edit()
+      codec match {
+        case IntCodec     => editor.putInt    (key, value.asInstanceOf[Int])
+        case BooleanCodec => editor.putBoolean(key, value.asInstanceOf[Boolean])
+        case LongCodec    => editor.putLong   (key, value.asInstanceOf[Long])
+        case _            => editor.putString (key, codec.encode(value))
+      }
+      editor.apply()
+    }
+
 }
 
 object GlobalPreferences {
@@ -238,4 +251,6 @@ object UserPreferences {
   val SelectedConvId          = "selected_conv_id"
   val SpotifyRefreshToken     = "spotify_refresh_token"
   val ShouldSyncConversations = "should_sync_conversations"
+
+
 }
