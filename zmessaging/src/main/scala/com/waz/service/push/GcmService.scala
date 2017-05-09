@@ -131,11 +131,11 @@ class GcmService(accountId:         AccountId,
 
   shouldReRegister {
     case true =>
-      for {
+      (for {
         retries <- registrationRetryCount()
+        if retries > retryFailLimit
         _ <- sync.resetGcm()
-        _ <- registrationRetryCount := retries + 1
-      } yield {}
+      } yield retries).flatMap(retries => registrationRetryCount := retries + 1)
 
     case false =>
       verbose(s"shouldReRegister == false")
