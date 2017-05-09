@@ -35,7 +35,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
+
 class CacheService(context: Context, storage: Database, val cacheStorage: CacheStorage) {
+
   import CacheService._
   import Threading.Implicits.Background
 

@@ -92,16 +92,19 @@ class ZNetClient(credentials: CredentialsHandler,
     withErrorHandling(name, r) { case Response(SuccessHttpStatus(), _, _) => () } (ec)
 
   def withErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
-    apply(r) .map (pf .andThen (Right(_)) .orElse(errorHandling(name))) (ec)
+    apply(r).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+
 
   def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
-    apply(r) .flatMap (pf .orElse (errorHandling(name) andThen CancellableFuture.successful)) (ec)
+    apply(r).flatMap(pf.orElse(errorHandling(name) andThen CancellableFuture.successful))(ec)
+
 
   def withFutureErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOr[T] =
-    apply(r).future .map (pf .andThen (Right(_)) .orElse (errorHandling(name))) .recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
+    apply(r).future.map(pf.andThen(Right(_)).orElse(errorHandling(name))).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
+
 
   def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T] =
-    apply(r).future .flatMap (pf .orElse (errorHandling(name) andThen Future.successful)) (ec) .recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
+    apply(r).future.flatMap(pf.orElse(errorHandling(name) andThen Future.successful))(ec).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
 
   def close(): Future[Unit] = Future {
     closed = true
@@ -141,7 +144,7 @@ class ZNetClient(credentials: CredentialsHandler,
             retry(handle, status.status == Status.RateLimiting)
           case Success(response)  => done(handle, response)
           case Failure(exc: CancelException) => done(handle, Response(Cancelled))
-          case Failure(exc)        => done(handle, Response(Response.InternalError(exc.getMessage, Some(exc))))
+          case Failure(exc) => done(handle, Response(Response.InternalError(exc.getMessage, Some(exc))))
         }
       }
     } else {
@@ -245,10 +248,10 @@ object ZNetClient {
     case Response(ConnectionError(msg), _, _) =>
       Left(ErrorResponse(ErrorResponse.ConnectionErrorCode, s"request '$name' connection failed: $msg", "connection-error"))
     case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
-      warn(s"Error response to $name query: ${ErrorResponse(code, msg, label)}")
+      warn(s"$name response to $name query: ${ErrorResponse(code, msg, label)}")
       Left(ErrorResponse(code, msg, label))
     case resp @ Response(ErrorStatus(), body, headers) =>
-      warn(s"$name query failed: $resp, body: $body, headers: $headers")
+      warn(s"Error $name query failed: $resp, body: $body, headers: $headers")
       Left(ErrorResponse(resp.status.status, resp.toString, "internal-error"))
     case resp @ Response(_, _, _) =>
       error(s"Unexpected response to $name query: $resp")
