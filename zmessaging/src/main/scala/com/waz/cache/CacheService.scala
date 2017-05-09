@@ -37,50 +37,62 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
+import com.waz.ZLog.ImplicitTag._
+
 trait CacheService {
   def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry
-  def createForFile(key: CacheKey = CacheKey(),
-                    mime: Mime = Mime.Unknown,
-                    name: Option[String] = None,
-                    cacheLocation: Option[File] = None,
-                    length: Option[Long] = None)
-                   (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
+  def createForFile(key:              CacheKey        = CacheKey(),
+                    mime:             Mime            = Mime.Unknown,
+                    name:             Option[String]  = None,
+                    cacheLocation:    Option[File]    = None,
+                    length:           Option[Long]    = None)
+                   (implicit timeout: Expiration      = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
   def addData(key: CacheKey, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
-  def addStream(key: CacheKey,
-                in: => InputStream,
-                mime: Mime = Mime.Unknown,
-                name: Option[String] = None,
-                cacheLocation: Option[File] = None,
-                length: Int = -1,
-                execution: ExecutionContext = Background)
-               (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
+  def addStream(key:              CacheKey,
+                in:               => InputStream,
+                mime:             Mime              = Mime.Unknown,
+                name:             Option[String]    = None,
+                cacheLocation:    Option[File]      = None,
+                length:           Int               = -1,
+                execution:        ExecutionContext  = Background)
+               (implicit timeout: Expiration        = CacheService.DefaultExpiryTime): Future[CacheEntry]
 
   // TODO: This one is used only in tests. Get rid of it.
-  def addFile(key: CacheKey,
-              src: File,
-              moveFile: Boolean = false,
-              mime: Mime = Mime.Unknown,
-              name: Option[String] = None,
-              cacheLocation: Option[File] = None)
-             (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+  def addFile(key:              CacheKey,
+              src:              File,
+              moveFile:         Boolean         = false,
+              mime:             Mime            = Mime.Unknown,
+              name:             Option[String]  = None,
+              cacheLocation:    Option[File]    = None)
+             (implicit timeout: Expiration      = CacheService.DefaultExpiryTime): Future[CacheEntry]
 
   def entryFile(path: File, fileId: Uid): File
+
   def intCacheDir: File
+
   def cacheDir: File
+
   def remove(key: CacheKey): Future[Unit]
+
   def remove(entry: CacheEntry): Future[Unit]
+
   def insert(entry: CacheEntry): Future[CacheEntry]
-  def move(key: CacheKey,
-           entry: LocalData,
-           mime: Mime = Mime.Unknown,
-           name: Option[String] = None,
-           cacheLocation: Option[File] = None)
-          (implicit timeout: Expiration = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
+  def move(key:              CacheKey,
+           entry:            LocalData,
+           mime:             Mime           = Mime.Unknown,
+           name:             Option[String] = None,
+           cacheLocation:    Option[File]   = None)
+          (implicit timeout: Expiration     = CacheService.DefaultExpiryTime): Future[CacheEntry]
+
   def getEntry(key: CacheKey): Future[Option[CacheEntry]]
 
   def getOrElse(key: CacheKey, default: => Future[CacheEntry]) = getEntry(key) flatMap {
     case Some(entry) => Future successful entry
-    case _ => default
+    case _           => default
   }
 
   def deleteExpired(): CancellableFuture[Unit]
@@ -90,8 +102,6 @@ trait CacheService {
 class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheStorage) extends CacheService {
   import CacheService._
   import Threading.Implicits.Background
-
-  private implicit val logTag: LogTag = logTagFor[CacheService]
 
   // create new cache entry for file, return the entry immediately
   def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) = {

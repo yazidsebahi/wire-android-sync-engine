@@ -33,7 +33,7 @@ import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
-import com.waz.service.messages.{MessagesContentUpdater, DefaultMessagesService}
+import com.waz.service.messages.{DefaultMessagesService, MessagesContentUpdater}
 import com.waz.service.otr.OtrService
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
@@ -68,6 +68,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
       case None =>
         successful(SyncResult(internalError("conversation not found")))
     }
+
 
   def postRecalled(convId: ConvId, msgId: MessageId, recalled: MessageId): Future[SyncResult] =
     convs.convById(convId) flatMap {
@@ -311,17 +312,16 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
     def post(conv: ConversationData, asset: AssetData): ErrorOr[Unit] =
       if (asset.status != status) successful(Left(internalError(s"asset $asset should have status $status")))
       else status match {
-        case UploadCancelled =>
-          postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(asset))).flatMapRight(_ => storage.remove(mid))
-        case UploadFailed =>
-          postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(asset))).mapRight(_ => ())
+        case UploadCancelled => postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(asset))).flatMapRight(_ => storage.remove(mid))
+        case UploadFailed if asset.isImage => successful(Left(internalError(s"upload failed for image $asset")))
+        case UploadFailed => postMessage(conv, expiration, GenericMessage(mid.uid, expiration, Proto.Asset(asset))).mapRight(_ => ())
       }
 
     for {
       conv   <- convs.storage.get(cid) or internalError(s"conversation $cid not found")
       msg    <- storage.get(mid) or internalError(s"message $mid not found")
-      aid     = msg.right.map(_.assetId)
-      asset <- aid.flatMapFuture(id => assets.getAssetData(id).or(internalError(s"asset $id not found")))
+      aid    = msg.right.map(_.assetId)
+      asset  <- aid.flatMapFuture(id => assets.getAssetData(id).or(internalError(s"asset $id not found")))
       result <- conv.flatMapFuture(c => asset.flatMapFuture(a => post(c, a)))
     } yield result.fold(SyncResult(_), _ => SyncResult.Success)
   }

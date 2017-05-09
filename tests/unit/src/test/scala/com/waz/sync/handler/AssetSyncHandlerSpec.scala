@@ -40,9 +40,6 @@ import scala.annotation.tailrec
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
-/**
-  * Created by admin on 03/05/17.
-  */
 class AssetSyncHandlerSpec extends FeatureSpec with AndroidFreeSpec with BeforeAndAfter with Matchers with MockFactory {
 
   import scala.concurrent.ExecutionContext.Implicits.global

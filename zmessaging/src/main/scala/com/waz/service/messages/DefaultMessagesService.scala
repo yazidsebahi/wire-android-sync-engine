@@ -22,7 +22,7 @@ import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.AssetStatus.UploadCancelled
+import com.waz.model.AssetStatus.{UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
@@ -138,6 +138,9 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptAssetData(a, data))
           verbose(s"Received asset v2 image: $asset")
           assets.mergeOrCreateAsset(asset)
+        case (Asset(a, _), _) if a.status == UploadFailed && a.isImage =>
+          verbose(s"Received a message about a failed image upload: $id. Dropping")
+          Future successful None
         case (Asset(a, preview), _ ) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset without remote data - we will expect another update: $asset")
