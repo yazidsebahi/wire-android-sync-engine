@@ -24,10 +24,10 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.cache.{CacheService, Expiration}
+import com.waz.content.GlobalPreferences.PushToken
 import com.waz.content.{AccountsStorageImpl, GlobalPreferences}
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.{AccountId, Mime}
-import com.waz.service.push.GcmGlobalService.GcmRegistration
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, RichFuture}
@@ -81,7 +81,7 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
       lazy val writer = new PrintWriter(new OutputStreamWriter(entry.outputStream))
 
       val rs = if (metadata.internalBuild)
-        VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter
+        VersionReporter +: PushRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter
       else Seq(VersionReporter, LogCatReporter)
 
       RichFuture.processSequential(rs) { reporter =>
@@ -110,8 +110,8 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     }
   })
 
-  val GcmRegistrationReporter = Reporter("Push", { writer =>
-    GcmRegistration()(Threading.Background, prefs).map(writer.println )
+  val PushRegistrationReporter = Reporter("Push", { writer =>
+    prefs.preference(PushToken).apply().map(writer.println )
   })
 
   val LogCatReporter = Reporter("LogCat", { writer =>

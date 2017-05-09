@@ -29,20 +29,20 @@ import com.waz.service.assets.{AssetLoader, GlobalRecordAndPlayService}
 import com.waz.service.downloads.DownloadRequest.{AssetFromInputStream, UnencodedAudioAsset, VideoAsset}
 import com.waz.service.downloads._
 import com.waz.service.images.ImageLoader
-import com.waz.service.push.GcmGlobalService
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
 import com.waz.utils.Cache
+import com.waz.utils.wrappers.{GoogleApi, GoogleApiImpl}
 import com.waz.znet._
 
 
 class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val storage: Database = new GlobalDatabase(context)
+  lazy val googleApi: GoogleApi = new GoogleApiImpl
   lazy val prefs: GlobalPreferences = wire[GlobalPreferences]
   lazy val metadata: MetaDataService = wire[MetaDataService]
   lazy val cache: CacheService = CacheService(context, storage)
-  lazy val gcmGlobal = wire[GcmGlobalService]
   lazy val bitmapDecoder: BitmapDecoder = wire[BitmapDecoder]
 
   lazy val trimmingLruCache: Cache[Key, Entry] = MemoryImageCache.newTrimmingLru(context)

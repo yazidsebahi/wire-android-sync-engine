@@ -27,7 +27,6 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service._
-import com.waz.service.push.GcmService.GcmState
 import com.waz.service.push.WebSocketClientService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
@@ -94,9 +93,7 @@ class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec:
 
 class MockUserModule(val mockAccount: MockAccountService = new MockAccountService(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
 
-class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), clientId: ClientId = ClientId()) extends {
-  val mockGcmState = Signal(GcmState(true, true))
-} with ZMessaging(clientId, mockUser) { zms =>
+class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), clientId: ClientId = ClientId()) extends ZMessaging(clientId, mockUser) { zms =>
   def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), ClientId())
   def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), clientId)
   def this(account: MockAccountService, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), ClientId())
@@ -122,7 +119,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
     }
   }
 
-  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, gcm) {
+  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
     override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("http://"), zNetClient.auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }

@@ -18,42 +18,26 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
-import com.waz.api.impl.ErrorResponse
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, GcmId}
 import com.waz.service.BackendConfig
-import com.waz.service.push.GcmGlobalService.{GcmNotAvailableException, GcmRegistration}
-import com.waz.service.push.{GcmService, PushTokenService}
+import com.waz.service.push.PushTokenService
 import com.waz.sync.SyncResult
-import com.waz.sync.client.GcmClient
-import com.waz.sync.client.GcmClient.GcmToken
+import com.waz.sync.client.PushTokenClient
+import com.waz.sync.client.PushTokenClient.GcmToken
 import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future
 
-class GcmSyncHandler(user: AccountId, gcmService: GcmService, pushTokenService: PushTokenService, backend: BackendConfig, clientId: ClientId, client: GcmClient) {
+class GcmSyncHandler(user: AccountId, pushTokenService: PushTokenService, backend: BackendConfig, clientId: ClientId, client: PushTokenClient) {
 
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[GcmSyncHandler]
 
-  def resetGcm(): Future[SyncResult] = {
-    def post(token: String) =
-      client.postPushToken(GcmToken(token, gcmService.gcmSenderId, clientId))
-
-    gcmService.resetGcm(r => post(r.token).map(_.isRight))
-      .map {
-        case Some(GcmRegistration(_, `user`, _)) => SyncResult.Success
-        case _ => SyncResult.Failure(None)
-      }
-      .recover {
-        case e: GcmNotAvailableException => SyncResult.Failure(None, shouldRetry = false)
-      }
-  }
-
   def registerPushToken(): Future[SyncResult] = {
     pushTokenService.currentTokenPref().flatMap {
       case Some(token) =>
-        client.postPushToken(GcmToken(token, backend.gcmSenderId, clientId)).future.flatMap {
+        client.postPushToken(GcmToken(token, backend.pushSenderId, clientId)).future.flatMap {
           case Right(GcmToken(`token`, _, `clientId`, _)) => pushTokenService.onTokenRegistered().map(_ => SyncResult.Success)
           case Right(_)  => Future.successful(SyncResult.Failure(None, shouldRetry = false))
           case Left(err) => Future.successful(SyncResult.Failure(Some(err)))

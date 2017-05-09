@@ -246,9 +246,11 @@ object GlobalPreferences {
   //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct
   lazy val AutoAnswerCallPrefKey      = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")
   lazy val CallingV3Key               = PrefKey[String] ("PREF_KEY_CALLING_V3", "1") //1 == use backend switch
-  lazy val GcmEnabledKey              = PrefKey[Boolean]("PREF_KEY_GCM_ENABLED")
   lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
   lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
+
+  lazy val GcmEnabledKey              = PrefKey[Boolean]       ("PREF_KEY_GCM_ENABLED")
+  lazy val PushToken                  = PrefKey[Option[String]]("PUSH_TOKEN")
 
   lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
   lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")

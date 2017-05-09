@@ -24,6 +24,7 @@ import com.waz.model._
 import com.waz.service.{PreferenceService, ZmsLifecycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
+import com.waz.testutils.TestGlobalPreferences
 import com.waz.threading.Threading
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.returning
@@ -42,20 +43,11 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
   val gcmEnabledKey = "PUSH_ENABLED_KEY"
 
   val google    = mock[GoogleApi]
-  val prefs     = mock[PreferenceService]
   val lifecycle = mock[ZmsLifecycle]
   val accounts  = mock[AccountsStorage]
   val sync      = mock[SyncServiceHandle]
+  val prefs     = new TestGlobalPreferences()
   val accountId = AccountId()
-
-  var pushEnabledPref:      Preference[Boolean] = _
-  var pushTokenPref:        Preference[Option[String]] = _
-  var lastReceivedPref:     Preference[Option[Instant]] = _
-  var lastFetchedPref:      Preference[Option[Instant]] = _
-  var lastFetchedLocalPref: Preference[Option[Instant]] = _
-  var lastRegisteredPref:   Preference[Option[Instant]] = _
-  var failedCountPref:      Preference[Int] = _
-  var failedTimePref:       Preference[Option[Instant]] = _
 
   var googlePlayAvailable: SourceSignal[Boolean] = _
   var lifecycleActive: SourceSignal[Boolean] = _
@@ -64,15 +56,8 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
   val defaultDuration = 5.seconds
 
   before {
-    pushEnabledPref = Preference.inMemory[Boolean](false, if (ZLog.testLogging) Some(gcmEnabledKey) else None)
-    pushTokenPref = Preference.inMemory[Option[String]](None, if (ZLog.testLogging) Some(pushTokenPrefKey) else None)
 
-    lastReceivedPref      = Preference.inMemory[Option[Instant]](None, if (ZLog.testLogging) Some(lastReceivedKey) else None)
-    lastFetchedPref       = Preference.inMemory[Option[Instant]](None, if (ZLog.testLogging) Some(lastFetchedKey) else None)
-    lastFetchedLocalPref  = Preference.inMemory[Option[Instant]](None, if (ZLog.testLogging) Some(lastFetchedLocalKey) else None)
-    lastRegisteredPref    = Preference.inMemory[Option[Instant]](None, if (ZLog.testLogging) Some(lastRegisteredKey) else None)
-    failedCountPref       = Preference.inMemory[Int]            (0,    if (ZLog.testLogging) Some(failCountKey) else None)
-    failedTimePref        = Preference.inMemory[Option[Instant]](None, if (ZLog.testLogging) Some(failedTimeKey) else None)
+    prefs.reset()
 
     googlePlayAvailable = Signal(false)
     lifecycleActive = Signal(false)

@@ -24,7 +24,7 @@ import java.util.{Date, Locale, TimeZone}
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.push.GcmGlobalService.PushSenderId
+import com.waz.service.push.PushTokenService.PushSenderId
 import com.waz.utils.wrappers.URI
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.{Duration, Instant}

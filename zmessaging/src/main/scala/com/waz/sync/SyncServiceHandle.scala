@@ -71,9 +71,8 @@ trait SyncServiceHandle {
   def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: Instant): Future[SyncId]
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId]
 
-  def resetGcm(): Future[SyncId]
   def registerPush(): Future[SyncId]
-  def deleteGcmToken(token: GcmId): Future[SyncId]
+  def deletePushToken(token: GcmId): Future[SyncId]
 
   def syncSelfClients(): Future[SyncId]
   def postClientLabel(id: ClientId, label: String): Future[SyncId]
@@ -131,9 +130,8 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = addRequest(PostOpenGraphMeta(conv, msg, time), priority = Priority.Low)
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId] = addRequest(PostReceipt(conv, message, user, tpe), priority = Priority.Optional)
 
-  def resetGcm() = addRequest(ResetGcmToken, priority = Priority.Low, forceRetry = true)
   def registerPush() = addRequest(RegisterPushToken, priority = Priority.High, forceRetry = true)
-  def deleteGcmToken(token: GcmId) = addRequest(DeleteGcmToken(token), priority = Priority.Low)
+  def deletePushToken(token: GcmId) = addRequest(DeletePushToken(token), priority = Priority.Low)
 
   def syncSelfClients() = addRequest(SyncSelfClients, priority = Priority.Critical)
   def postClientLabel(id: ClientId, label: String) = addRequest(PostClientLabel(id, label))
@@ -175,7 +173,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case SyncUser(u)                           => zms.usersSync.syncUsers(u.toSeq: _*)
     case SyncSearchQuery(query)                => zms.usersearchSync.syncSearchQuery(query)
     case SyncRichMedia(messageId)              => zms.richmediaSync.syncRichMedia(messageId)
-    case DeleteGcmToken(token)                 => zms.gcmSync.deleteGcmToken(token)
+    case DeletePushToken(token)                 => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
     case SyncCallState(convId, fresh)          => zms.voicechannelSync.syncCallState(convId, fresh)
@@ -188,7 +186,6 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostSelfPicture(_)                    => zms.usersSync.postSelfPicture()
     case PostAddressBook(ab)                   => zms.addressbookSync.postAddressBook(ab)
     case PostInvitation(i)                     => zms.invitationSync.postInvitation(i)
-    case ResetGcmToken                         => zms.gcmSync.resetGcm()
     case RegisterPushToken                     => zms.gcmSync.registerPushToken()
     case PostLiking(convId, liking)            => zms.reactionsSync.postReaction(convId, liking)
     case PostDeleted(convId, msgId)            => zms.messagesSync.postDeleted(convId, msgId)

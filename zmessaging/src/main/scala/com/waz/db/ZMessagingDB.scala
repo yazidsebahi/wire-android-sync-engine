@@ -54,7 +54,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 84
+  val DbVersion = 85
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -130,6 +130,11 @@ object ZMessagingDB {
     },
     Migration(83, 84){ db =>
       db.execSQL("INSERT INTO KeyValues (key, value) VALUES ('should_sync_conversations', 'true')")
+    },
+    Migration(84, 85){ db =>
+      //TODO TEST!!
+      db.execSQL("UPDATE SyncJobs SET data = replace(data, 'delete-gcm-token', 'delete-push-token') WHERE data LIKE '%delete-gcm-token%'")
+      db.execSQL("UPDATE SyncJobs SET data = replace(data, 'register-gcm-token', 'register-push-token') WHERE data LIKE '%register-gcm-token%'")
     }
   )
 }

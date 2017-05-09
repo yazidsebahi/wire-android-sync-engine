@@ -17,11 +17,11 @@
  */
 package com.waz.service
 
-import com.waz.service.push.GcmGlobalService.PushSenderId
+import com.waz.service.push.PushTokenService.PushSenderId
 
-case class BackendConfig(baseUrl: String, pushUrl: String, gcmSenderId: PushSenderId, environment: String) {
+case class BackendConfig(baseUrl: String, pushUrl: String, pushSenderId: PushSenderId, environment: String) {
   import BackendConfig._
-  if (gcmSenderId != stagingSenderId && gcmSenderId != prodSenderId) throw new IllegalArgumentException(s"Unknown sender id: $gcmSenderId")
+  if (pushSenderId != stagingSenderId && pushSenderId != prodSenderId) throw new IllegalArgumentException(s"Unknown sender id: $pushSenderId")
 }
 
 object BackendConfig {

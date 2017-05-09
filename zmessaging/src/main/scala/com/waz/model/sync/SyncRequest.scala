@@ -66,8 +66,6 @@ object SyncRequest {
   case object SyncConversations extends BaseRequest(Cmd.SyncConversations)
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
-  case object ResetGcmToken extends BaseRequest(Cmd.RegisterGcmToken)
-  case object RegisterPushToken extends BaseRequest(Cmd.RegisterGcmToken)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
   case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
 
@@ -86,7 +84,8 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(Merged(_))
   }
 
-  case class DeleteGcmToken(token: GcmId) extends BaseRequest(Cmd.DeleteGcmToken) {
+  case object RegisterPushToken extends BaseRequest(Cmd.RegisterPushToken)
+  case class DeletePushToken(token: GcmId) extends BaseRequest(Cmd.DeletePushToken) {
     override val mergeKey: Any = (cmd, token)
   }
 
@@ -311,14 +310,13 @@ object SyncRequest {
         case Cmd.PostConvJoin          => PostConvJoin(convId, users)
         case Cmd.PostConvLeave         => PostConvLeave(convId, userId)
         case Cmd.PostConnection        => PostConnection(userId, 'name, 'message)
-        case Cmd.DeleteGcmToken        => DeleteGcmToken(decodeId[GcmId]('token))
+        case Cmd.DeletePushToken        => DeletePushToken(decodeId[GcmId]('token))
         case Cmd.SyncRichMedia         => SyncRichMedia(messageId)
         case Cmd.SyncSelf              => SyncSelf
         case Cmd.DeleteAccount         => DeleteAccount
         case Cmd.SyncConversations     => SyncConversations
         case Cmd.SyncConnectedUsers    => SyncConnectedUsers
         case Cmd.SyncConnections       => SyncConnections
-        case Cmd.RegisterGcmToken      => ResetGcmToken
         case Cmd.RegisterPushToken     => RegisterPushToken
         case Cmd.PostSelf              => PostSelf(JsonDecoder[UserInfo]('user))
         case Cmd.PostAddressBook       => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
@@ -356,7 +354,7 @@ object SyncRequest {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
-        case DeleteGcmToken(token)            => putId("token", token)
+        case DeletePushToken(token)            => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
         case PostMessage(_, messageId, time)  =>
@@ -417,7 +415,7 @@ object SyncRequest {
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncCallState(_, _) => () // nothing to do
-        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | ResetGcmToken | RegisterPushToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | RegisterPushToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }

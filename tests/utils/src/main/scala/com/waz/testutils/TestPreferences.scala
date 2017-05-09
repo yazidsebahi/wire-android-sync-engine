@@ -38,6 +38,8 @@ class TestGlobalPreferences extends GlobalPreferences(null) {
 
   override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
     dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
+
+  def reset() = this.values = Map.empty
 }
 
 class TestUserPreferences extends UserPreferences(null, null) {
@@ -54,4 +56,5 @@ class TestUserPreferences extends UserPreferences(null, null) {
   override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
     dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
 
+  def reset() = this.values = Map.empty
 }

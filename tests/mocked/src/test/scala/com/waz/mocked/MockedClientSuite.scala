@@ -52,7 +52,6 @@ import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import org.scalatest.{Alerting, Informing, Suite}
 
-import scala.concurrent.Future
 import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
@@ -102,7 +101,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val abClient           = new AddressBookClient(zNetClient) {
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
     }
-    override lazy val gcmClient          = new GcmClient(zNetClient) {}
+    override lazy val gcmClient          = new PushTokenClient(zNetClient) {}
     override lazy val typingClient       = new TypingClient(zNetClient) {
       override def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = suite.updateTypingState(id, isTyping)
     }
@@ -119,7 +118,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
 
       override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
         override def close() = dispatcher {
@@ -182,7 +181,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   override def pushGcm(notification: PushNotification, userId: UserId) =
     Option(ZMessaging.currentAccounts) foreach { accounts =>
       accounts.getCurrentZms.foreach {
-        case Some(zms) if zms.selfUserId == userId => zms.gcm.addNotificationToProcess(Uid(), Some(notification))
+        case Some(zms) if zms.selfUserId == userId => zms.push.cloudPushNotificationsToProcess.mutate(_ + notification.id)
         case _ =>
       }(Threading.Background)
     }

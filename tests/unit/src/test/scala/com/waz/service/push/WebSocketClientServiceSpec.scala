@@ -48,7 +48,6 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
   lazy val prefs = new GlobalPreferences(context)
   lazy val meta = new MetaDataService(context)
 
-  lazy val gcm = mock[IGcmService]
   lazy val service = new WebSocketClientService(context, lifecycle, new EmptyClient, network, BackendConfig.StagingBackend, ClientId(), timeouts, gcm)
 
 

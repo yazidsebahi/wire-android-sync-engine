@@ -14,7 +14,7 @@
         <service android:name="com.waz.zms.NotificationsAndroidService" />
         <service android:name="com.waz.zms.WebSocketService" />
         <service android:name="com.waz.zms.CallService" android:exported="true" />
-        <service android:name="com.waz.zms.GcmHandlerService" />
+        <service android:name="com.waz.zms.CloudMessageHandlerService" />
 
         <service
                 android:name="com.waz.zms.InstanceIdListenerService">

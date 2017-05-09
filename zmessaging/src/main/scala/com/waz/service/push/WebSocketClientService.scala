@@ -34,14 +34,14 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WebSocketClientService(context: Context,
-                             lifecycle: ZmsLifecycle,
-                             netClient: ZNetClient,
+class WebSocketClientService(context:     Context,
+                             lifecycle:   ZmsLifecycle,
+                             netClient:   ZNetClient,
                              val network: DefaultNetworkModeService,
-                             backend: BackendConfig,
-                             clientId: ClientId,
-                             timeouts: Timeouts,
-                             gcmService: IGcmService) {
+                             backend:     BackendConfig,
+                             clientId:    ClientId,
+                             timeouts:    Timeouts,
+                             pushToken:   PushTokenService) {
   import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -49,7 +49,7 @@ class WebSocketClientService(context: Context,
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  val useWebSocketFallback = gcmService.gcmActive.map(!_)
+  val useWebSocketFallback = pushToken.pushActive.map(!_)
 
   // true if web socket should be active,
   val wsActive = network.networkMode.flatMap {

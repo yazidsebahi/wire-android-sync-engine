@@ -17,9 +17,8 @@
  */
 package com.waz.sync.client
 
-import com.waz.ZLog._
 import com.waz.model.otr.ClientId
-import com.waz.service.push.GcmGlobalService.PushSenderId
+import com.waz.service.push.PushTokenService.PushSenderId
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.SuccessHttpStatus
@@ -29,10 +28,9 @@ import org.json.JSONObject
 
 import scala.util.Try
 
-class GcmClient(netClient: ZNetClient) {
+class PushTokenClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
-  import com.waz.sync.client.GcmClient._
-  private implicit val tag: LogTag = logTagFor[GcmClient]
+  import com.waz.sync.client.PushTokenClient._
 
   def postPushToken(token: GcmToken): ErrorOrResponse[GcmToken] =
     netClient.withErrorHandling("postPushToken", Request.Post(PushesPath, token)) {
@@ -43,7 +41,7 @@ class GcmClient(netClient: ZNetClient) {
     netClient.updateWithErrorHandling("deletePushToken", Request.Delete[Unit](s"$PushesPath/$token"))
 }
 
-object GcmClient {
+object PushTokenClient {
   val PushesPath = "/push/tokens"
 
   case class GcmToken(token: String, app: PushSenderId, clientId: ClientId, transport: String = "GCM")

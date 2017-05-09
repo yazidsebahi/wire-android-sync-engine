@@ -32,7 +32,7 @@ class GcmBroadcastReceiver extends BroadcastReceiver {
     val extrasToPrint = extras.map { ex => ex.keySet().asScala.map(k => (k, ex.get(k)))}
     verbose(s"Received gcm: $intent, extras: $extrasToPrint")
 
-    val serviceIntent = new Intent(context, classOf[GcmHandlerService])
+    val serviceIntent = new Intent(context, classOf[CloudMessageHandlerService])
     extras.foreach(serviceIntent.putExtras)
     WakefulBroadcastReceiver.startWakefulService(context, serviceIntent)
     setResultCode(Activity.RESULT_OK)

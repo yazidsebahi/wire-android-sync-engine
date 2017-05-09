@@ -120,7 +120,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def prefs             = global.prefs
   def downloader        = global.downloader
   def bitmapDecoder     = global.bitmapDecoder
-  def gcmGlobal         = global.gcmGlobal
   def timeouts          = global.timeouts
   def cache             = global.cache
   def mediamanager      = global.mediaManager
@@ -165,7 +164,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val eventsClient       = wire[EventsClient]
   lazy val voiceClient        = wire[VoiceChannelClient]
   lazy val abClient           = wire[AddressBookClient]
-  lazy val gcmClient          = wire[GcmClient]
+  lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
   lazy val invitationClient   = wire[InvitationClient]
   lazy val giphyClient        = wire[GiphyClient]
@@ -183,10 +182,9 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
-  lazy val pushToken                              = wire[PushTokenService]
   lazy val push: PushServiceImpl                  = wire[PushServiceImpl]
+  lazy val pushToken: PushTokenService            = wire[PushTokenService]
   lazy val pushSignals                            = wire[PushServiceSignals]
-  lazy val gcm: GcmService                        = wire[GcmService]
   lazy val errors                                 = wire[ErrorsService]
   lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService      = wire[PingIntervalService]
@@ -264,7 +262,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           conversations.convStateEventProcessingStage,
           typing.typingEventStage,
           otrClientsService.otrClientsProcessingStage,
-          gcm.eventProcessingStage,
+          pushToken.eventProcessingStage,
           Stage(Parallel)(
             UnarchivingEventProcessingStage(users, convsStorage),
             convEvents.conversationEventsStage,

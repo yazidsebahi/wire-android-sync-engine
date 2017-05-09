@@ -61,7 +61,7 @@ class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with
 
       // make sure current user data is saved in db (just to check that Robolectric is behaving correctly)
       Await.result(globalModule.accountsStorage.find(EmailCredentials(EmailAddress(email), Some(password))), timeout) match {
-        case Some(AccountData(id, e, hash, _, _, _, _, _, _, _, _, _, _)) =>
+        case Some(AccountData(id, e, hash, _, _, _, _, _, _, _, _, _, _, _)) =>
           e shouldEqual Some(EmailAddress(email))
           hash shouldEqual AccountData.computeHash(id, password)
         case res => fail(s"did not find current user $res")
