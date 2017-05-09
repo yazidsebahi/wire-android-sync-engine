@@ -75,7 +75,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
 
-    override lazy val assetClient        = new AssetClient(zNetClient) {
+    override lazy val assetClient        = new AssetClientImpl(zNetClient) {
       override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = suite.postImageAssetData(asset, convId, data, nativePush)
     }
 

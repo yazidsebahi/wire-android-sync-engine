@@ -22,6 +22,7 @@ import java.io.InputStream
 import android.util.Base64
 import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
 import com.waz.model.otr.ClientId
@@ -41,11 +42,19 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-class AssetClient(netClient: ZNetClient) {
+trait AssetClient {
+  import com.waz.sync.client.AssetClient._
+
+  def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry]
+  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId]
+  def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse]
+}
+
+class AssetClientImpl(netClient: ZNetClient) extends AssetClient {
   import Threading.Implicits.Background
   import com.waz.sync.client.AssetClient._
 
-  def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] =
+  override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] =
     netClient.withErrorHandling("loadAsset", req) {
       case Response(SuccessHttpStatus(), resp: BinaryResponse, _) => resp
       case Response(SuccessHttpStatus(), resp: FileResponse, _) => resp
@@ -55,7 +64,7 @@ class AssetClient(netClient: ZNetClient) {
       case Left(err) => CancellableFuture successful Left(err)
     }
 
-  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
+  override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
     asset match {
       case AssetData.IsImage() =>
         val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
@@ -69,7 +78,7 @@ class AssetClient(netClient: ZNetClient) {
 
   }
 
-  def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
+  override def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
     val meta = JsonEncoder { o =>
       o.put("public", public)
       o.put("retention", retention.value)
@@ -85,8 +94,11 @@ class AssetClient(netClient: ZNetClient) {
 }
 
 object AssetClient {
-  private implicit val logTag: LogTag = logTagFor[AssetClient]
+
   implicit val DefaultExpiryTime: Expiration = 1.hour
+
+  def apply(netClient: ZNetClient): AssetClient = new AssetClientImpl(netClient)
+
 
   val AssetsV3Path = "/assets/v3"
 

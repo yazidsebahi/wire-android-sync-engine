@@ -22,10 +22,7 @@ import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.model.AssetStatus.UploadInProgress
 import com.waz.model._
-import com.waz.service.PreferenceService
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
-import com.waz.service.images.ImageLoader
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -35,17 +32,17 @@ import com.waz.znet.ZNetClient._
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
-class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUpdater, convEvents: ConversationEventsService, client: AssetClient,
-                       assets: AssetService, imageLoader: ImageLoader, otrSync: OtrSyncHandler, prefs: PreferenceService) {
+class AssetSyncHandler(cache: CacheService, client: AssetClient, assets: AssetService, otrSync: OtrSyncHandler) {
 
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[AssetSyncHandler]
 
   //for v3
-  def uploadAssetData(assetId: AssetId, public: Boolean = false): ErrorOrResponse[Option[AssetData]] = {
-    CancellableFuture.lift(assets.storage.updateAsset(assetId, _.copy(status = UploadInProgress)).zip(assets.getAssetData(assetId))) flatMap {
+ def uploadAssetData(assetId: AssetId, public: Boolean = false): ErrorOrResponse[Option[AssetData]] = {
+    CancellableFuture.lift(assets.updateAsset(assetId, _.copy(status = UploadInProgress)).zip(assets.getLocalData(assetId))) flatMap {
       case (Some(asset), Some(data)) if data.length > AssetData.MaxAllowedAssetSizeInBytes =>
+        debug(s"Local data too big. Data length: ${data.length}, max size: ${AssetData.MaxAllowedAssetSizeInBytes}, local data: $data, asset: $asset")
         CancellableFuture successful Left(internalError(AssetSyncHandler.AssetTooLarge))
       case (Some(asset), _) if asset.remoteId.isDefined =>
         warn(s"asset has already been uploaded, skipping: $asset")
@@ -54,13 +51,19 @@ class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUp
         otrSync.uploadAssetDataV3(data, if (public) None else Some(AESKey()), asset.mime).flatMap {
           case Right(remoteData) =>
             for {
-              Some(updated) <- CancellableFuture.lift(assets.storage.updateAsset(asset.id, _.copyWithRemoteData(remoteData)))
+              Some(updated) <- CancellableFuture.lift(assets.updateAsset(asset.id, _.copyWithRemoteData(remoteData)))
               _ <- CancellableFuture.lift(cache.addStream(updated.cacheKey, data.inputStream, updated.mime, updated.name, length = data.length))
             } yield Right(Some(updated))
           case Left(err) => CancellableFuture successful Left(err)
         }
-      case asset =>
-        debug(s"No asset data found in postAssetData, got: $asset")
+      case (Some(asset), None) =>
+        debug(s"An asset found, but its remote id is not defined, and local data is missing. Asset: $asset")
+        CancellableFuture successful Right(None)
+      case (None, Some(data)) =>
+        debug(s"No asset data found, got local data: $data")
+        CancellableFuture successful Right(None)
+      case (None, None) =>
+        debug(s"No asset data found, no local data found")
         CancellableFuture successful Right(None)
     }
   }
@@ -68,7 +71,7 @@ class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUp
   //for v2
   def postSelfImageAsset(convId: RConvId, id: AssetId): Future[SyncResult] =
     (for {
-      Some(asset) <- assets.storage.get(id)
+      Some(asset) <- assets.getAssetData(id)
       data        <- cache.getEntry(asset.cacheKey)
     } yield (asset, data)) flatMap {
       case (a, Some(d)) => postImageData(convId, a, d, nativePush = false)
@@ -89,7 +92,7 @@ class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUp
         verbose(s"postImageAssetData returned for ${asset.id} with local data: $data")
         for {
           _ <- updateImageCache(asset)
-          _ <- assets.storage.updateAsset(asset.id, _.copy(v2ProfileId = Some(rId)))
+          _ <- assets.updateAsset(asset.id, _.copy(v2ProfileId = Some(rId)))
         } yield SyncResult.Success
       case Left(error) =>
         Future.successful(SyncResult(error))

@@ -22,7 +22,7 @@ import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, ReactionsStorage}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.AssetStatus.UploadCancelled
+import com.waz.model.AssetStatus.{UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
@@ -100,8 +100,8 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
 
     //ensure we always save the preview to the same id (GenericContent.Asset.unapply always creates new assets and previews))
     def saveAssetAndPreview(asset: AssetData, preview: Option[AssetData]) = {
-      assets.storage.mergeOrCreateAsset(asset).flatMap {
-        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.storage.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
+      assets.mergeOrCreateAsset(asset).flatMap {
+        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
         case _ => Future.successful(Option.empty[AssetData])
       }
     }
@@ -137,7 +137,10 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
         case (ImageAsset(a@AssetData.IsImageWithTag(Medium)), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptAssetData(a, data))
           verbose(s"Received asset v2 image: $asset")
-          assets.storage.mergeOrCreateAsset(asset)
+          assets.mergeOrCreateAsset(asset)
+        case (Asset(a, _), _) if a.status == UploadFailed && a.isImage =>
+          verbose(s"Received a message about a failed image upload: $id. Dropping")
+          Future successful None
         case (Asset(a, preview), _ ) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset without remote data - we will expect another update: $asset")
@@ -169,7 +172,7 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
     if (toRemove.isEmpty) Future.successful(())
     else for {
       _ <- Future.traverse(toRemove)(id => content.messagesStorage.remove(MessageId(id.str)))
-      _ <- assets.storage.remove(toRemove)
+      _ <- assets.removeAssets(toRemove)
     } yield ()
   }
 

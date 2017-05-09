@@ -85,7 +85,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
   val context = stub[Context]
   val database = stub[Database]
   val cacheStorage = stub[CacheStorage]
-  val cacheService = new CacheService(context, database, cacheStorage)
+  val cacheService = CacheService(context, database, cacheStorage)
   val memoryImageCache = new MemoryImageCache(stub[Cache[Key, Entry]])
   val bitmapDecoder = new BitmapDecoder
   val permissionsService = new PermissionsService(context)
@@ -156,7 +156,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
         val cacheStorage = mock[CacheStorage]
         (cacheStorage.get _).expects(*).returning(Future(Option(CacheEntryData(asset.cacheKey))))
 
-        val loader = new ImageLoader(context, new CacheService(context, database, cacheStorage), memoryImageCache, bitmapDecoder, permissionsService, assetLoader)
+        val loader = new ImageLoader(context, CacheService(context, database, cacheStorage), memoryImageCache, bitmapDecoder, permissionsService, assetLoader)
 
         val req = Regular(asset.width)
         waitForResult { loader.hasCachedData(asset) } should be(true)
@@ -197,7 +197,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
           (memoryCache.put _).expects(key, *).twice().onCall { (key: Key, value: Entry) => value }
         }
 
-        val loader = new ImageLoader(context, new CacheService(context, database, fileCache), new MemoryImageCache(memoryCache), bitmapDecoder, permissionsService, assetLoader) {
+        val loader = new ImageLoader(context, CacheService(context, database, fileCache), new MemoryImageCache(memoryCache), bitmapDecoder, permissionsService, assetLoader) {
           override def getImageMetadata(data: LocalData, mirror: Boolean) = CancellableFuture {
             Metadata(bmp.getWidth, bmp.getHeight, Mime.Image.Bmp.str)
           }
@@ -227,7 +227,7 @@ class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with B
           (assetLoader.downloadAssetData _).expects(asset.loadRequest).returning( CancellableFuture { Some(new CacheEntry(cacheEntryData, cacheService)) } )
         }
 
-        val loader = new ImageLoader(context, new CacheService(context, database, fileCache), new MemoryImageCache(memoryCache), bitmapDecoder, permissionsService, assetLoader) {
+        val loader = new ImageLoader(context, CacheService(context, database, fileCache), new MemoryImageCache(memoryCache), bitmapDecoder, permissionsService, assetLoader) {
           override def getImageMetadata(data: LocalData, mirror: Boolean): CancellableFuture[Metadata] = CancellableFuture {
             Metadata(bmp.getWidth, bmp.getHeight, Mime.Image.Bmp.str)
           }

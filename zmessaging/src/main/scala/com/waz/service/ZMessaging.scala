@@ -26,7 +26,7 @@ import com.waz.content.{DefaultMembersStorage, UsersStorage, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
-import com.waz.service.assets.{AssetLoaderImpl, AssetService, RecordAndPlayService}
+import com.waz.service.assets.{AssetLoader, AssetService, RecordAndPlayService}
 import com.waz.service.call._
 import com.waz.service.conversation._
 import com.waz.service.downloads.AssetDownloader
@@ -179,7 +179,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
 
   lazy val assetDownloader = wire[AssetDownloader]
-  lazy val assetLoader     = wire[AssetLoaderImpl]
+  lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
   lazy val pushSignals                            = wire[PushServiceSignals]

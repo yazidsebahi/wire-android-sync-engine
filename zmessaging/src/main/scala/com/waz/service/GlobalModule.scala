@@ -75,7 +75,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
 
   lazy val globalClient = new ZNetClient(global, "", "")
   lazy val imageLoader = {
-    val client = new AssetClient(new ZNetClient(this, "", ""))
+    val client = AssetClient(new ZNetClient(this, "", ""))
     val loader: AssetLoader = AssetLoader(context, downloader, new AssetDownloader(client, cache), streamLoader, videoLoader, pcmAudioLoader, cache)
     new ImageLoader(context, cache, imageCache, bitmapDecoder, permissions, loader) { override def tag = "Global" }
   }
