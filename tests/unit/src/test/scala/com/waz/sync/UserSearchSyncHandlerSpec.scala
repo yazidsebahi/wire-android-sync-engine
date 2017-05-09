@@ -84,7 +84,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
         override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delay(delay) map { _ => response.get }
       }
 
-      userPrefs.preference[Long](LastSlowSyncTimeKey) := System.currentTimeMillis()
+      userPrefs.preference(LastSlowSyncTimeKey) := Some(System.currentTimeMillis())
       override lazy val usersSync: UsersSyncHandler = new UsersSyncHandler(assetSync, users, usersStorage, assets, usersClient, assetGenerator) {
         override def syncUsers(ids: UserId*) = {
           sync.syncUsers(ids: _*)

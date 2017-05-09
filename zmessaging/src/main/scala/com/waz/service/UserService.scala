@@ -21,6 +21,7 @@ import java.util.Date
 
 import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
+import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -53,7 +54,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, userPrefs:
       Signal.empty
   }
 
-  val lastSlowSyncTimestamp = preference[Option[Long]](UserPreferences.LastSlowSyncTimeKey)
+  val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
 
   val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => updateSyncedUsers(e.map(_.user)(breakOut)))
   val userDeleteEventsStage = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))

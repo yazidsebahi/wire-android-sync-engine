@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz._
+import com.waz.content.GlobalPreferences.{LastUpToDateSyncTime, VersionUpToDate}
 import com.waz.model._
 import com.waz.sync.client.VersionBlacklistClient
 import com.waz.testutils.Matchers._
@@ -87,7 +88,7 @@ class VersionBlacklistSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
     scenario("If recently synced, return the up-to-date state from the preferences") {
       resetLastSyncTime(System.currentTimeMillis)
-      Await.ready(global.prefs.preference[Boolean](VersionBlacklistService.UpToDatePref) := false, 1.second)
+      Await.ready(global.prefs.preference(VersionUpToDate) := false, 1.second)
       blacklist = VersionBlacklist(global.metadata.appVersion, Seq())
       val service = createService
       service.upToDate.head should eventually(be(false))
@@ -96,5 +97,5 @@ class VersionBlacklistSpec extends FeatureSpec with Matchers with BeforeAndAfter
     }
   }
 
-  def resetLastSyncTime(to: Long = 0L): Unit = Await.ready(global.prefs.preference[Long](VersionBlacklistService.LastUpToDateSyncPref) := to, 1.second)
+  def resetLastSyncTime(to: Long = 0L): Unit = Await.ready(global.prefs.preference(LastUpToDateSyncTime) := to, 1.second)
 }

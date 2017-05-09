@@ -42,7 +42,7 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, userPrefs
 
   private implicit val logTag: LogTag = logTagFor[SpotifyMediaService]
 
-  private val spotifyRefreshTokenPref = userPrefs.preference[Option[RefreshToken]](SpotifyRefreshToken)
+  private val spotifyRefreshTokenPref = userPrefs.preference(SpotifyRefreshToken)
   private val accessToken = new SourceSignal[Option[AccessToken]](Some(None))
 
   val authentication: Signal[Authentication] = spotifyRefreshTokenPref.signal zip accessToken map { case (refresh, access) =>

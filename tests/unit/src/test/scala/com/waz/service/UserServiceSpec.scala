@@ -57,7 +57,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         }
       }
 
-      userPrefs.preference[Long](LastSlowSyncTimeKey) := System.currentTimeMillis()
+      userPrefs.preference(LastSlowSyncTimeKey) := Some(System.currentTimeMillis())
     }
   }
 

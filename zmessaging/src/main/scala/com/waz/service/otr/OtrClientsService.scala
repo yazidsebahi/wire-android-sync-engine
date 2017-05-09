@@ -20,6 +20,7 @@ package com.waz.service.otr
 import com.waz.ZLog._
 import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
+import com.waz.content.UserPreferences.LastSelfClientsSyncRequestedTime
 import com.waz.content._
 import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.model.{OtrClientAddEvent, OtrClientEvent, OtrClientRemoveEvent, UserId}
@@ -40,7 +41,7 @@ class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netC
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private lazy val lastSelfClientsSyncPref = userPrefs.preference[Long]("last_self_clients_sync_requested")
+  private lazy val lastSelfClientsSyncPref = userPrefs.preference(LastSelfClientsSyncRequestedTime)
 
   lifecycle.lifecycleState.map(_ != LifecycleState.Stopped) {
     case true => requestSyncIfNeeded()

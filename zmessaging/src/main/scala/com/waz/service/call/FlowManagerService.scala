@@ -20,12 +20,12 @@ package com.waz.service.call
 import android.content.Context
 import android.view.View
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api._
 import com.waz.call._
 import com.waz.content.GlobalPreferences
-import com.waz.content.GlobalPreferences.{AnalyticsPrefKey, AutoAnswerCallPrefKey}
+import com.waz.content.GlobalPreferences._
 import com.waz.log.LogHandler
 import com.waz.model._
 import com.waz.service._
@@ -33,7 +33,6 @@ import com.waz.service.push.WebSocketClientService
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events._
-import com.waz.zms.R
 import com.waz.znet.ContentEncoder.BinaryRequestContent
 import com.waz.znet.Response.ResponseBodyDecoder
 import com.waz.znet.ResponseConsumer.ByteArrayConsumer
@@ -59,12 +58,9 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "FlowManagerService")
 
-  private lazy val loggingEnabledPrefKey = Try(context.getResources.getString(R.string.pref_avs_logging_key)).getOrElse("PREF_KEY_AVS_LOGGING") // hardcoded value used in tests
-  private lazy val logLevelPrefKey       = Try(context.getResources.getString(R.string.pref_avs_loglevel_key)).getOrElse("PREF_KEY_AVS_LOGLEVEL")
-
-  private lazy val metricsEnabledPref = prefs.preference[Boolean](AnalyticsPrefKey)
-  private lazy val loggingEnabledPref = prefs.preference[Boolean](loggingEnabledPrefKey)
-  private lazy val logLevelPref       = prefs.preference[Int](logLevelPrefKey)
+  private lazy val metricsEnabledPref = prefs.preference(AnalyticsEnabled)
+  private lazy val loggingEnabledPref = prefs.preference(LoggingEnabled)
+  private lazy val logLevelPref       = prefs.preference(GlobalPreferences.LogLevel)
 
   val onMediaEstablished = new Publisher[RConvId]
   val onFlowManagerError = new Publisher[(RConvId, Int)] // (conv, errorCode)
@@ -138,7 +134,7 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
 
 
   lazy val flowManager: Option[FlowManager] = LoggedTry {
-    val fm = new FlowManager(context, requestHandler, if (prefs.getFromPref[Boolean](AutoAnswerCallPrefKey)) avsAudioTestFlag else 0)
+    val fm = new FlowManager(context, requestHandler, if (prefs.getFromPref(AutoAnswerCallPrefKey)) avsAudioTestFlag else 0)
     fm.addListener(flowListener)
     fm.setLogHandler(logHandler)
     metricsEnabledPref.signal { fm.setEnableMetrics }

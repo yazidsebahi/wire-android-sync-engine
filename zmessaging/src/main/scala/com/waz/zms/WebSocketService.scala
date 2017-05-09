@@ -64,7 +64,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
   val notificationsState = for {
     Some(zms) <- zmessaging
     true <- zms.websocket.useWebSocketFallback
-    true <- zms.prefs.preference[Boolean](WsForegroundKey).signal // only when foreground service is enabled
+    true <- zms.prefs.preference(WsForegroundKey).signal // only when foreground service is enabled
     offline <- zms.network.networkMode.map(_ == NetworkMode.OFFLINE)
     connected <- zms.websocket.connected
     error <- zms.websocket.connectionError

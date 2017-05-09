@@ -23,6 +23,7 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.Verification
 import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.OtrLastPrekey
 import com.waz.model.AccountId
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service.MetaDataService
@@ -39,7 +40,7 @@ class CryptoBoxService(context: Context, userId: AccountId, metadata: MetaDataSe
 
   private[service] lazy val cryptoBoxDir = returning(new File(new File(context.getFilesDir, metadata.cryptoBoxDirName), userId.str))(_.mkdirs())
 
-  private[waz] val lastPreKeyId = userPrefs.preference[Int]("otr_last_prekey_id")
+  private[waz] val lastPreKeyId = userPrefs.preference(OtrLastPrekey)
 
   private lazy val clientLabel = if (metadata.localBluetoothName.isEmpty) metadata.deviceModel else metadata.localBluetoothName
 

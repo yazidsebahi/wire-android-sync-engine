@@ -20,6 +20,7 @@ package com.waz.service.push
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.{NetworkMode, ZmsVersion}
+import com.waz.content.Preferences.PrefKey
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.UserPreferences
 import com.waz.service.push.PingIntervalService.NetworkStats.NetworkStatsCodec
@@ -52,7 +53,7 @@ class PingIntervalService(lifecycle: ZmsLifecycle,
 
   import scala.concurrent.duration._
 
-  val stats = userPrefs.preference[Map[NetworkMode, NetworkStats]]("ping_interval_network_stats")(NetworkStatsCodec)
+  val stats = userPrefs.preference(PrefKey[Map[NetworkMode, NetworkStats]]("ping_interval_network_stats")(NetworkStatsCodec))
   val statsSignal = stats.signal
 
   val currentStats = for {

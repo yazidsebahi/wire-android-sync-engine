@@ -22,6 +22,7 @@ import android.net.Uri
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.GlobalPreferences
+import com.waz.content.GlobalPreferences.SoundsPrefKey
 import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
@@ -67,11 +68,11 @@ class DefaultMediaManagerService(context: Context, prefs: GlobalPreferences) ext
   private lazy val prefAll = Try(context.getResources.getString(R.string.pref_sound_value_all)).getOrElse("all")
   private lazy val prefSome = Try(context.getResources.getString(R.string.pref_sound_value_some)).getOrElse("some")
   private lazy val prefNone = Try(context.getResources.getString(R.string.pref_sound_value_none)).getOrElse("none")
-  private lazy val soundsPrefKey = Try(context.getResources.getString(R.string.pref_sound_option_key)).getOrElse("PREF_KEY_SOUND") // hardcoded value used in tests
+
 
   private lazy val intensityMap = Map(prefAll -> IntensityLevel.FULL, prefSome -> IntensityLevel.SOME, prefNone -> IntensityLevel.NONE)
 
-  private lazy val soundsPref = prefs.preference[String](soundsPrefKey)
+  private lazy val soundsPref = prefs.preference(SoundsPrefKey)
 
   soundsPref.signal { value =>
     val intensity = intensityMap.getOrElse(value, IntensityLevel.FULL)

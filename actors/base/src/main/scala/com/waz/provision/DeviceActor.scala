@@ -29,6 +29,8 @@ import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
+import com.waz.content.GlobalPreferences.CallingV3Key
+import com.waz.content.Preferences.PrefKey
 import com.waz.content.{Database, GlobalDatabase, GlobalPreferences}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
@@ -93,7 +95,7 @@ class DeviceActor(val deviceName: String,
   }
 
   lazy val instance = new Accounts(globalModule) {
-    override val currentAccountPref = global.prefs.preference[String]("current_user_" + Random.nextInt().toHexString)
+    override val currentAccountPref = global.prefs.preference(PrefKey[String]("current_user_" + Random.nextInt().toHexString, ""))
   }
   lazy val ui = new UiModule(instance)
   lazy val api = {
@@ -484,7 +486,7 @@ class DeviceActor(val deviceName: String,
       }
 
     case SetCallingVersion(version) =>
-      (prefs.preference[String](GlobalPreferences.CallingV3Key) := (if (version == 3) "2" else "0")).map(_ => Successful)
+      (prefs.preference(CallingV3Key) := (if (version == 3) "2" else "0")).map(_ => Successful)
 
     case AcceptCall =>
       whenCallIncoming { channel =>
@@ -494,7 +496,7 @@ class DeviceActor(val deviceName: String,
 
     case StartCall(remoteId) =>
       whenConversationExists(remoteId) { conv =>
-        prefs.preference[String](GlobalPreferences.CallingV3Key).apply().map {
+        prefs.preference(CallingV3Key).apply().map {
           case "2" => zmessaging.calling.startCall(conv.id)
           case __ => conv.getVoiceChannel.join(spy.joinCallback)
         }

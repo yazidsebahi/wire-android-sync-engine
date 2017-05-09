@@ -21,13 +21,13 @@ import com.waz.api.User.ConnectionStatus
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{Contacts, _}
 import com.waz.api._
+import com.waz.content.GlobalPreferences.ShareContacts
 import com.waz.content.{GlobalDatabase, GlobalPreferences, Preferences, ZmsDatabase}
 import com.waz.mocked.PushBehaviour.NoPush
 import com.waz.mocked.{MockBackend, PushBehaviour, SystemTimeline}
 import com.waz.model.Contact
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
-import com.waz.service.ContactsService.PrefKey
 import com.waz.service.{SearchKey, Timeouts, ZMessaging}
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
@@ -92,8 +92,8 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
       givenSomeContacts(Seq(cII, cIV, cV, cVI, cVII, cCr))
 
       val prefs = new GlobalPreferences(context)
-      val pref = prefs.preference[Boolean](PrefKey)
-      val previousValue = prefs.getFromPref[Boolean](PrefKey)
+      val pref = prefs.preference(ShareContacts)
+      val previousValue = prefs.getFromPref(ShareContacts)
 
       (pref := false).await()
 

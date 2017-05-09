@@ -24,6 +24,7 @@ import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
+import com.waz.content.GlobalPreferences._
 import com.waz.content.Preferences
 import com.waz.model.CacheKey
 import com.waz.service.NetworkModeService
@@ -31,12 +32,11 @@ import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream, Signal}
-import com.waz.zms.R
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
  * Keeps track of all download requests in priority queue, executes more important downloads first.
@@ -60,11 +60,8 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 
   private val onAdded = EventStream[DownloadEntry]()
 
-  private lazy val downloadPrefAlways = Try(context.getResources.getString(R.string.zms_image_download_default_value)).getOrElse("always")
-  private lazy val downloadPrefKey = Try(context.getResources.getString(R.string.zms_image_download_preference_key)).getOrElse("zms_pref_image_download") // hardcoded value used in tests
-
-  private lazy val downloadPref = prefs.preference[String](downloadPrefKey, Some(downloadPrefAlways)).signal
-  private lazy val downloadEnabled = Signal.or(downloadPref.map(_ == downloadPrefAlways), network.networkMode.map(_ == NetworkMode.WIFI))
+  private lazy val downloadPref = prefs.preference(DownloadImages).signal
+  private lazy val downloadEnabled = Signal.or(downloadPref.map(_ == DownloadImagesAlways), network.networkMode.map(_ == NetworkMode.WIFI))
 
   downloadEnabled.disableAutowiring()
 

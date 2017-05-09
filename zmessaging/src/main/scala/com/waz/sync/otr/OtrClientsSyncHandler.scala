@@ -23,7 +23,8 @@ import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
-import com.waz.content.{UserPreferences, OtrClientsStorage}
+import com.waz.content.UserPreferences.ClientRegVersion
+import com.waz.content.{OtrClientsStorage, UserPreferences}
 import com.waz.model.otr.{Client, ClientId, Location, UserClients}
 import com.waz.model.{AccountId, UserId}
 import com.waz.service.otr._
@@ -77,7 +78,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
 
   // keeps ZMS_MAJOR_VERSION number of client registration
   // this can be used to detect problematic version updates
-  lazy val clientRegVersion = userPrefs.preference[Int](ClientRegVersionPref)
+  lazy val clientRegVersion = userPrefs.preference(ClientRegVersion)
 
   def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]] = Serialized.future("sync-self-clients", this) {
     cryptoBox.createClient() flatMap {
@@ -202,5 +203,4 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
 
 object OtrClientsSyncHandler {
   private implicit val tag: LogTag = logTagFor[OtrClientsSyncHandler]
-  val ClientRegVersionPref = "otr_client_reg_version"
 }

@@ -42,7 +42,7 @@ class ConversationsListStateService(convs: ConversationStorage, userPrefs: UserP
 
   private[conversation] case class ConversationListStats(unreadCount: Int = 0, unsentCount: Int = 0, voiceCount: Int = 0, pendingCount: Int = 0, selectedConversationId: Option[ConvId] = None)
 
-  val selectedConvIdPref = userPrefs.preference[Option[ConvId]](SelectedConvId)
+  val selectedConvIdPref = userPrefs.preference(SelectedConvId)
   private[conversation] val listStats = Signal[ConversationListStats](ConversationListStats())
 
   val state = listStats map { stats =>

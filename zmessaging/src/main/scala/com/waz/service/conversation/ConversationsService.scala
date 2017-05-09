@@ -23,6 +23,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
+import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
@@ -74,7 +75,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     } yield ()
   }
 
-  val shouldSyncConversations = userPrefs.preference[Option[Boolean]](UserPreferences.ShouldSyncConversations)
+  val shouldSyncConversations = userPrefs.preference(ShouldSyncConversations)
 
   shouldSyncConversations.mutate {
     case Some(true) =>

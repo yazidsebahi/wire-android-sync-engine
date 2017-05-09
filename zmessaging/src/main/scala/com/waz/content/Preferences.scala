@@ -21,10 +21,10 @@ import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{debug, warn}
-import com.waz.content.Preferences.Preference
 import com.waz.content.Preferences.Preference.PrefCodec
+import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.model.KeyValueData.KeyValueDataDao
-import com.waz.model.{Id, KeyValueData}
+import com.waz.model.{ConvId, Id, KeyValueData, Uid}
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -36,23 +36,22 @@ import org.threeten.bp.Instant
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
 
 trait Preferences {
 
   implicit protected def dispatcher: ExecutionContext
 
-  def preference[A: PrefCodec](key: String, defaultValue: Option[A] = None): Preference[A] = new Preference[A](this, key, defaultValue)
+  def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] = new Preference[A](this, key)
 
-  protected def getValue[A: PrefCodec](key: String, defaultValue: Option[A] = None): Future[A]
-  protected def setValue[A: PrefCodec](key: String, value: A): Future[Unit]
+  protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A]
+  protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit]
 }
 
 object Preferences {
 
-  class Preference[A: PrefCodec](prefs: Preferences, key: String, default: Option[A])(implicit val dispatcher: ExecutionContext) {
+  class Preference[A: PrefCodec](prefs: Preferences, key: PrefKey[A])(implicit val dispatcher: ExecutionContext) {
 
-    def apply():          Future[A]    = prefs.getValue(key, default)
+    def apply():          Future[A]    = prefs.getValue(key)
     def update(value: A): Future[Unit] = prefs.setValue(key, value).map { _ => signal ! value }
 
     def :=(value: A):      Future[Unit] = update(value)
@@ -68,12 +67,12 @@ object Preferences {
   object Preference {
 
     //TODO should be able to eventually get rid of apply and inMemory...
-    def apply[A: PrefCodec](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A](null, null, null)(implicitly[PrefCodec[A]], Threading.Background) {
+    def apply[A: PrefCodec](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]], Threading.Background) {
       override def apply()      = load
       override def update(v: A) = save(v) map { _ => signal ! v }
     }
 
-    def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null, null)(implicitly[PrefCodec[A]], Threading.Background) {
+    def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]], Threading.Background) {
       private var value = defaultValue
 
       override def apply()      = Future { value }
@@ -88,15 +87,15 @@ object Preferences {
 
     //TODO maybe we can use JSON codecs at some point...
     object PrefCodec {
-      def apply[A](enc: A => String, dec: String => A, defaultValue: A): PrefCodec[A] = new PrefCodec[A] {
+      def apply[A](enc: A => String, dec: String => A, defaultVal: A): PrefCodec[A] = new PrefCodec[A] {
         override def encode(v: A): String = enc(v)
         override def decode(str: String): A = dec(str)
-        override val default = defaultValue
+        override val default = defaultVal
       }
 
-      implicit lazy val StrCodec     = apply[String] (identity,       identity,                       "")
-      implicit lazy val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt,     0)
-      implicit lazy val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,       0L)
+      implicit lazy val StrCodec     = apply[String] (identity,       identity,                   "")
+      implicit lazy val IntCodec     = apply[Int]    (String.valueOf, java.lang.Integer.parseInt, 0)
+      implicit lazy val LongCodec    = apply[Long]   (String.valueOf, java.lang.Long.parseLong,   0)
       implicit lazy val BooleanCodec = apply[Boolean](String.valueOf, java.lang.Boolean.parseBoolean, false)
 
       implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode, implicitly[Id[A]].empty)
@@ -111,6 +110,10 @@ object Preferences {
 
       implicit lazy val SpotifyRefreshTokenCodec = apply[RefreshToken](_.str, RefreshToken, RefreshToken(""))
     }
+  }
+
+  case class PrefKey[A: PrefCodec](str: String, customDefault: A = null.asInstanceOf[A]) {
+    val default = Option(customDefault).getOrElse(implicitly[PrefCodec[A]].default)
   }
 }
 
@@ -158,30 +161,30 @@ class GlobalPreferences(context: Context) extends Preferences {
   migrate()
 
   //TODO would be nice to hide this, but for now it's fine
-  def getFromPref[A: PrefCodec](key: String, default: Option[A] = None) = {
+  def getFromPref[A: PrefCodec](key: PrefKey[A]) = {
     val codec = implicitly[PrefCodec[A]]
     import PrefCodec._
     (codec match {
-      case IntCodec     => prefs.getInt    (key, default.asInstanceOf[Option[Int]].getOrElse(IntCodec.default))
-      case BooleanCodec => prefs.getBoolean(key, default.asInstanceOf[Option[Boolean]].getOrElse(BooleanCodec.default))
-      case LongCodec    => prefs.getLong   (key, default.asInstanceOf[Option[Long]].getOrElse(LongCodec.default))
-      case _            => Option(prefs.getString (key, null)).map(codec.decode).orElse(default).getOrElse(codec.default)
+      case IntCodec     => prefs.getInt    (key.str, key.default.asInstanceOf[Int])
+      case BooleanCodec => prefs.getBoolean(key.str, key.default.asInstanceOf[Boolean])
+      case LongCodec    => prefs.getLong   (key.str, key.default.asInstanceOf[Long])
+      case _            => Option(prefs.getString (key.str, null)).map(codec.decode).getOrElse(key.default)
     }).asInstanceOf[A]
   }
 
-  override def preference[A: PrefCodec](key: String, default: Option[A]) = {
-    new Preference[A](this, key, default) {
+  override def preference[A: PrefCodec](key: PrefKey[A]) = {
+    new Preference[A](this, key) {
 
       //No need to update the signal. The SharedPreferences Listener will do this for us.
       override def update(value: A) = setValue[A](key, value)
 
-      private def load = getFromPref(key, default)
+      private def load = getFromPref(key)
 
       override lazy val signal = new SourceSignal[A](Some(load)) {
 
         private val listener = new OnSharedPreferenceChangeListener {
           override def onSharedPreferenceChanged(sharedPreferences: SharedPreferences, k: String): Unit = {
-            if (key == k) {
+            if (key.str == k) {
               if (Threading.isUiThread) publish(load, Threading.Ui)
               else publish(load)
             }
@@ -201,32 +204,23 @@ class GlobalPreferences(context: Context) extends Preferences {
     }
   }
 
-  protected def getValue[A: PrefCodec](key: String, defaultValue: Option[A] = None): Future[A] =
-    dispatcher(getFromPref[A](key, defaultValue))
+  override protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A] =
+    dispatcher(getFromPref[A](key))
 
-  protected def setValue[A: PrefCodec](key: String, value: A): Future[Unit] =
+  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] =
     dispatcher {
       import PrefCodec._
       val codec = implicitly[PrefCodec[A]]
       val editor = prefs.edit()
       codec match {
-        case IntCodec     => editor.putInt    (key, value.asInstanceOf[Int])
-        case BooleanCodec => editor.putBoolean(key, value.asInstanceOf[Boolean])
-        case LongCodec    => editor.putLong   (key, value.asInstanceOf[Long])
-        case _            => editor.putString (key, codec.encode(value))
+        case IntCodec     => editor.putInt    (key.str, value.asInstanceOf[Int])
+        case BooleanCodec => editor.putBoolean(key.str, value.asInstanceOf[Boolean])
+        case LongCodec    => editor.putLong   (key.str, value.asInstanceOf[Long])
+        case _            => editor.putString (key.str, codec.encode(value))
       }
       editor.apply()
     }
 
-}
-
-object GlobalPreferences {
-  val AutoAnswerCallPrefKey = "PREF_KEY_AUTO_ANSWER_ENABLED"
-  val CallingV3Key          = "PREF_KEY_CALLING_V3"
-  val GcmEnabledKey         = "PREF_KEY_GCM_ENABLED"
-  val V31AssetsEnabledKey   = "PREF_V31_ASSETS_ENABLED"
-  val WsForegroundKey       = "PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED"
-  val AnalyticsPrefKey      = "PREF_KEY_AVS_METRICS"
 }
 
 /**
@@ -235,22 +229,71 @@ object GlobalPreferences {
 class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[String, KeyValueData](new TrimmingLruCache(context, Fixed(128)), storage)(KeyValueDataDao, "KeyValueStorage_Cached") with Preferences {
   override protected implicit val dispatcher = Threading.Background
 
-  protected def getValue[A: PrefCodec](key: String, defaultValue: Option[A]) = {
-    val codec = implicitly[PrefCodec[A]]
-    get(key).map(_.map(_.value)).map(_.map(codec.decode).orElse(defaultValue).getOrElse(codec.default))
+  override protected def getValue[A: PrefCodec](key: PrefKey[A]) = {
+    get(key.str).map(_.map(_.value)).map(_.map(implicitly[PrefCodec[A]].decode).getOrElse(key.default))
   }
 
-  protected def setValue[A: PrefCodec](key: String, value: A) =
-    put(key, KeyValueData(key, implicitly[PrefCodec[A]].encode(value))).map(_ => {})
+  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+    put(key.str, KeyValueData(key.str, implicitly[PrefCodec[A]].encode(value))).map(_ => {})
+
+}
+
+object GlobalPreferences {
+
+  lazy val CurrentAccountPref = PrefKey[String]("CurrentUserPref", "")
+
+  //TODO move some of these to UserPreferences
+  //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct
+  lazy val AutoAnswerCallPrefKey      = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")
+  lazy val CallingV3Key               = PrefKey[String] ("PREF_KEY_CALLING_V3", "1") //1 == use backend switch
+  lazy val GcmEnabledKey              = PrefKey[Boolean]("PREF_KEY_GCM_ENABLED")
+  lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
+  lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
+
+  lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
+  lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")
+  lazy val AddressBookLastUpload      = PrefKey[Option[Instant]]("address_book_last_upload_time")
+
+  lazy val GcmRegistrationIdPref      = PrefKey[String]("registration_id")
+  lazy val GcmRegistrationUserPref    = PrefKey[String]("registration_user")
+  lazy val GcmRegistrationVersionPref = PrefKey[Int]   ("registration_version")
+
+  lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED")
+  lazy val LoggingEnabled             = PrefKey[Boolean]("PREF_KEY_AVS_LOGGING")
+  lazy val LogLevel                   = PrefKey[Int]    ("PREF_KEY_AVS_LOGLEVEL")
+
+  lazy val LastUpToDateSyncTime       = PrefKey[Long]   ("LastUpToDateSync")
+  lazy val LastCheckedVersion         = PrefKey[Int]    ("UpToDateVersion")
+  lazy val VersionUpToDate            = PrefKey[Boolean]("UpToDate", customDefault = true)
+
+  lazy val LastCacheCleanup           = PrefKey[Long]("LastCacheCleanup")
+
+  lazy val SoundsPrefKey              = PrefKey[String]("PREF_KEY_SOUND")
+
+  lazy val DownloadImagesAlways       = "always"
+  lazy val DownloadImagesWifi         = "wifi"
+  lazy val DownloadImages             = PrefKey[String]("zms_pref_image_download", customDefault = DownloadImagesAlways) // hardcoded value used in tests
+
 
 }
 
 object UserPreferences {
-  val LastSlowSyncTimeKey     = "last_slow_sync_time"
-  val Verified                = "verified"
-  val SelectedConvId          = "selected_conv_id"
-  val SpotifyRefreshToken     = "spotify_refresh_token"
-  val ShouldSyncConversations = "should_sync_conversations"
+  lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")
+  lazy val SelectedConvId          = PrefKey[Option[ConvId]]      ("selected_conv_id")
+  lazy val SpotifyRefreshToken     = PrefKey[Option[RefreshToken]]("spotify_refresh_token")
+  lazy val ShouldSyncConversations = PrefKey[Option[Boolean]]     ("should_sync_conversations")
 
+  lazy val LastUiVisibleTime      = PrefKey[Instant]    ("last_ui_visible_time")
+  lazy val OtrLastPrekey          = PrefKey[Int]        ("otr_last_prekey_id")
+  lazy val ClientRegVersion       = PrefKey[Int]        ("otr_client_reg_version")
+  lazy val LastStableNotification = PrefKey[Option[Uid]]("last_notification_id")
+
+  lazy val LastSelfClientsSyncRequestedTime = PrefKey[Long]("last_self_clients_sync_requested")
+
+  lazy val LastReceivedConvEvent     = PrefKey[Instant]("last_received_conv_event_time")
+  lazy val LastFetchedConvEvent      = PrefKey[Instant]("last_fetched_conv_event_time", customDefault = Instant.ofEpochMilli(1))
+  lazy val LastFetchedConvEventLocal = PrefKey[Instant]("last_fetched_local_time")
+  lazy val GcmRegistrationTime       = PrefKey[Instant]("gcm_registration_time")
+  lazy val GcmRegistrationRetry      = PrefKey[Int]    ("gcm_registration_retry_count")
 
 }

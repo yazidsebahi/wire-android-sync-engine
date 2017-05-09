@@ -22,6 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventPipeline
@@ -198,7 +199,7 @@ class LastNotificationIdService(userPrefs: UserPreferences, signals: PushService
 
   private var fetchLast = CancellableFuture.successful(())
 
-  private[push] val idPref = preference[Option[Uid]](LastNotificationIdKey)
+  private[push] val idPref = preference(LastStableNotification)
 
   def lastNotificationId() = Future(idPref()).flatten // future and flatten ensure that there is no race with onNotification
 
@@ -230,6 +231,5 @@ class LastNotificationIdService(userPrefs: UserPreferences, signals: PushService
 }
 
 object LastNotificationIdService {
-  val LastNotificationIdKey = "last_notification_id"
   val NoNotificationsId = Uid(0, 0)
 }

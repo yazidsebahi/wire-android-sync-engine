@@ -24,6 +24,7 @@ import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
+import com.waz.content.UserPreferences.LastUiVisibleTime
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.LastRead
@@ -41,7 +42,7 @@ import scala.concurrent.Future
 
 class NotificationService(context: Context, selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
                           storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
-                          kv: UserPreferences, timeouts: Timeouts, pushService: PushService) {
+                          userPrefs: UserPreferences, timeouts: Timeouts, pushService: PushService) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -50,7 +51,7 @@ class NotificationService(context: Context, selfUserId: UserId, messages: Messag
 
   @volatile private var uiActive = false
 
-  private val lastUiVisibleTime = kv.preference[Instant]("last_ui_visible_time")
+  private val lastUiVisibleTime = userPrefs.preference(LastUiVisibleTime)
 
   val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
 

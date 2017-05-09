@@ -27,6 +27,7 @@ import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.GlobalPreferences.GcmEnabledKey
+import com.waz.content.Preferences.PrefKey
 import com.waz.content.{GlobalPreferences, Preferences}
 import com.waz.model._
 import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
@@ -54,9 +55,9 @@ class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, 
       ConnectionResult.DEVELOPER_ERROR
   }
 
-  val gcmEnabled = prefs.preference[Boolean](GcmEnabledKey).signal
+  val gcmEnabled = prefs.preference(GcmEnabledKey).signal
 
-  def gcmAvailable = prefs.getFromPref[Boolean](GcmEnabledKey) && gcmCheckResult == ConnectionResult.SUCCESS
+  def gcmAvailable = prefs.getFromPref(GcmEnabledKey) && gcmCheckResult == ConnectionResult.SUCCESS
 
   def getGcmRegistration: Future[GcmRegistration] = GcmRegistration() map { reg =>
     if (reg.version == appVersion) reg
@@ -120,10 +121,6 @@ object GcmGlobalService {
 
   case class GcmSenderId(str: String) extends AnyVal
 
-  val RegistrationIdPref = "registration_id"
-  val RegistrationUserPref = "registration_user"
-  val RegistrationVersionPref = "registration_version"
-
   class GcmNotAvailableException extends Exception("Google Play Services not available") with NoReporting with NoStackTrace
 
   case class GcmRegistration(token: String, user: AccountId, version: Int)
@@ -132,16 +129,17 @@ object GcmGlobalService {
 
     lazy val empty = GcmRegistration("", AccountId(""), 0)
 
+    import GlobalPreferences._
     def apply()(implicit ec: ExecutionContext, prefs: Preferences): Future[GcmRegistration] = for {
-      token   <- prefs.preference[String](RegistrationIdPref).apply()
-      userId  <- prefs.preference[String](RegistrationUserPref).apply()
-      version <- prefs.preference[Int](RegistrationVersionPref).apply()
+      token   <- prefs.preference(GcmRegistrationIdPref).apply()
+      userId  <- prefs.preference(GcmRegistrationUserPref).apply()
+      version <- prefs.preference(GcmRegistrationVersionPref).apply()
     } yield GcmRegistration(token, AccountId(userId), version)
 
     def update(reg: GcmRegistration)(implicit ec: ExecutionContext, prefs: Preferences) = for {
-      _ <- prefs.preference[String](RegistrationUserPref) := reg.token
-      _ <- prefs.preference[String](RegistrationUserPref) := reg.user.str
-      _ <- prefs.preference[Int](RegistrationVersionPref) := reg.version
+      _ <- prefs.preference(GcmRegistrationUserPref) := reg.token
+      _ <- prefs.preference(GcmRegistrationUserPref) := reg.user.str
+      _ <- prefs.preference(GcmRegistrationVersionPref) := reg.version
     } yield {}
   }
 }

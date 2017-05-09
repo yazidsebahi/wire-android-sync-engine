@@ -93,7 +93,7 @@ object ZGlobalDB {
       },
       Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
         val prefs = new GlobalPreferences(context)
-        prefs.preference[String](CallingV3Key) := "2" //force update debug builds to calling v3
+        prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
       }},
       Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
           //setting prefs.sendWithAssetsV3Key no longer needed, if you haven't updated by now, it doesn't matter

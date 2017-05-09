@@ -17,7 +17,7 @@
  */
 package com.waz.testutils
 
-import com.waz.content.Preferences.Preference
+import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.threading.SerialDispatchQueue
@@ -29,16 +29,15 @@ class TestGlobalPreferences extends GlobalPreferences(null) {
 
   override protected val prefs = null
 
+  override def preference[A: PrefCodec](key: PrefKey[A]) = new Preference[A](this, key)
 
-  override def preference[A: PrefCodec](key: String, default: Option[A]) = new Preference[A](this, key, default)
-
-  override def getFromPref[A: PrefCodec](key: String, default: Option[A]) = {
+  override def getFromPref[A: PrefCodec](key: PrefKey[A]) = {
     val codec = implicitly[PrefCodec[A]]
-    values.get(key).map(codec.decode).getOrElse(codec.default)
+    values.get(key.str).map(codec.decode).getOrElse(key.default)
   }
 
-  override protected def setValue[A: PrefCodec](key: String, value: A) =
-    dispatcher(values += (key -> implicitly[PrefCodec[A]].encode(value)))
+  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+    dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
 }
 
 class TestUserPreferences extends UserPreferences(null, null) {
@@ -47,12 +46,12 @@ class TestUserPreferences extends UserPreferences(null, null) {
 
   private var values = Map.empty[String, String]
 
-  override protected def getValue[A: PrefCodec](key: String, defaultValue: Option[A]) = dispatcher {
+  override protected def getValue[A: PrefCodec](key: PrefKey[A]) = dispatcher {
     val codec = implicitly[PrefCodec[A]]
-    values.get(key).map(codec.decode).getOrElse(codec.default)
+    values.get(key.str).map(codec.decode).getOrElse(key.default)
   }
 
-  override protected def setValue[A: PrefCodec](key: String, value: A) =
-    dispatcher(values += (key -> implicitly[PrefCodec[A]].encode(value)))
+  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+    dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
 
 }

@@ -21,7 +21,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.{AvsLogLevel, NetworkMode}
 import com.waz.call.FlowManager
-import com.waz.content.GlobalPreferences.AnalyticsPrefKey
+import com.waz.content.GlobalPreferences._
 import com.waz.model.UserId
 import com.waz.service.call.DefaultFlowManagerService
 import com.waz.service.call.DefaultFlowManagerService.AvsLogData
@@ -77,9 +77,9 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
 
     scenario("Enable/disable metrics") {
       withDelay { logData.value.metricsEnabled shouldEqual false }
-      zms.prefs.preference[Boolean](AnalyticsPrefKey) := true
+      zms.prefs.preference(AnalyticsEnabled) := true
       withDelay { logData.value.metricsEnabled shouldEqual true }
-      zms.prefs.preference[Boolean](AnalyticsPrefKey) := false
+      zms.prefs.preference(AnalyticsEnabled) := false
       withDelay { logData.value.metricsEnabled shouldEqual false }
     }
 

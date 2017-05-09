@@ -29,6 +29,7 @@ import android.net.wifi.WifiManager
 import com.typesafe.config.ConfigFactory
 import com.waz.ZLog._
 import com.waz.content.GlobalPreferences
+import com.waz.content.Preferences.PrefKey
 import com.waz.provision.RemoteProcessActor
 import com.waz.service.BackendConfig
 import com.waz.threading.Threading
@@ -47,9 +48,9 @@ class RemoteActorService(context: Context) {
   private implicit val tag: LogTag = logTagFor[RemoteActorService]
   val prefs = new GlobalPreferences(context)
 
-  val background  = prefs.preference[Boolean]("background")
-  val name        = prefs.preference[String]("name", Some(s"$MANUFACTURER $MODEL"))
-  val backendPref = prefs.preference[String]("env", Some(BackendConfig.StagingBackend.environment))
+  val background  = prefs.preference(PrefKey[Boolean]("background", false))
+  val name        = prefs.preference(PrefKey[String]("name", s"$MANUFACTURER $MODEL"))
+  val backendPref = prefs.preference(PrefKey[String]("env", BackendConfig.StagingBackend.environment))
 
   val backend = backendPref.signal map BackendConfig.byName
 
