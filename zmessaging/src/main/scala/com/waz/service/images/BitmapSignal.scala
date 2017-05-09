@@ -30,12 +30,13 @@ import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFa
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Round, Single}
 import com.waz.utils.events.Signal
 import com.waz.utils.{IoUtils, WeakMemCache}
 import com.waz.utils.wrappers.Bitmap
+
+import scala.concurrent.Future
 
 // TODO: restart on network changes if it previously failed
 abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
@@ -48,34 +49,22 @@ abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
   override protected def onWire(): Unit = {
     if (req.width > 0) {
       // ignore requests with invalid size
-      future = load(previewLoader(req), fullLoader(req))
+      future = load(loader(req))
     } else {
       warn(s"invalid bitmap request, width <= 0: $req")
     }
   }
 
-  protected def previewLoader(req: BitmapRequest): Loader
-  protected def fullLoader(req: BitmapRequest): Loader
+  protected def loader(req: BitmapRequest): Loader
 
   override protected def onUnwire(): Unit = future.cancel()
 
-  /*
-   * Tries loading and processing of full cached image first
-   * If loading (or processing) from cache fails does following:
-   * - starts preview loading / processing
-   * - start full image loading
-   * - cancels preview when full image is loaded
-   * - starts full image processing
-   */
-  private def load(preview: Loader, full: Loader) = {
-    val future = full.loadCached() flatMap {
+  private def load(loader: Loader) = {
+    val future = loader.loadCached() flatMap {
       case Some(data) =>
-        full.process(data, signal)
+        loader.process(data, signal)
       case None => // will try with download
-        val pf = preview.load() flatMap {preview.process(_, signal)}
-        val ff = full.load()
-        ff.onSuccess { case _ => pf.cancel() }
-        ff flatMap {full.process(_, signal)}
+        loader.load() flatMap { loader.process(_, signal) }
     }
     future onFailure {
       case _: CancelException => // ignore
@@ -88,16 +77,19 @@ abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
 }
 
 object BitmapSignal {
+  type AssetStore = (AssetId) => Future[Option[AssetData]]
+  val EmptyAssetStore = (_: AssetId) => Future.successful(Option.empty[AssetData])
+
   private[images] val signalCache = new WeakMemCache[Any, Signal[BitmapResult]]
 
-  def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, imageCache: MemoryImageCache): Signal[BitmapResult] = {
+  def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, assets: AssetStore = EmptyAssetStore): Signal[BitmapResult] = {
     if (!asset.isImage) {
       warn(s"asset is not an image: $asset ")
       Signal(BitmapResult.Empty)
     }
     else {
       warn(s"image asset taken through the cache")
-      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, imageCache))
+      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, assets))
     }
   }
 
@@ -109,17 +101,17 @@ object BitmapSignal {
   }
 
   object EmptyLoader extends Loader {
-    override type Data = Unit
+    override type Data = ABitmap
     override def loadCached() = CancellableFuture.successful(None)
-    override def load() = CancellableFuture.successful(())
-    override def process(result: Unit, signal: BitmapSignal) = CancellableFuture.successful(())
+    override def load() = CancellableFuture.successful(bitmap.EmptyBitmap)
+    override def process(result: ABitmap, signal: BitmapSignal) = CancellableFuture.successful(())
   }
 
-  class MimeCheckLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
+  class MimeCheckLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore) extends Loader {
     override type Data = Either[ABitmap, Gif]
 
-    lazy val gifLoader    = new GifLoader(asset, req, imageLoader, imageCache)
-    lazy val bitmapLoader = new AssetBitmapLoader(asset, req, imageLoader, imageCache)
+    lazy val gifLoader    = new GifLoader(asset, req, imageLoader, assets)
+    lazy val bitmapLoader = new AssetBitmapLoader(asset, req, imageLoader, assets)
 
     def detectMime(data: LocalData) = Threading.IO {IoUtils.withResource(data.inputStream)(in => Mime(BitmapUtils.detectImageType(in)))}
 
@@ -147,8 +139,10 @@ object BitmapSignal {
     }
   }
 
-  abstract class BitmapLoader(req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
+  abstract class BitmapLoader(req: BitmapRequest, imageLoader: ImageLoader) extends Loader {
     override type Data = ABitmap
+
+    val imageCache = imageLoader.memoryCache
 
     def id: AssetId
 
@@ -177,25 +171,38 @@ object BitmapSignal {
     }
   }
 
-  class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends BitmapLoader(req, imageLoader, imageCache) {
+  class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore) extends BitmapLoader(req, imageLoader) {
     override def id = asset.id
+
+    def data = asset.previewId match {
+      case Some(pId) if asset.width > req.width * 3 =>
+        // asset is significantly bigger than requested image, let's check if preview is big enough
+        // in case of chatheads we often need small images and it would be enough to only load smallProfile version
+        CancellableFuture.lift(assets(pId)) map {
+          case Some(d) if d.width > req.width * .85 => d
+          case _ => asset
+        }
+      case _ => CancellableFuture successful asset
+    }
 
     val initialReq = req match {
       case Round(w, _, _) => Single(w) //need to pre-load a separate bitmap (with a separate memCache entry) to be used later in generating the round one
       case req => req
     }
 
-    override def loadCached() = CancellableFuture.lift(imageLoader.hasCachedBitmap(asset, initialReq)).flatMap {
-      case true => imageLoader.loadCachedBitmap(asset, initialReq).map(bmp => Some(Bitmap.toAndroid(bmp)))
-      case false => CancellableFuture.successful(None)
-    }.recover {
-      case e: Throwable => None
+    override def loadCached() = data flatMap { a =>
+      CancellableFuture.lift(imageLoader.hasCachedBitmap(a, initialReq)) flatMap {
+        case true => imageLoader.loadCachedBitmap(a, initialReq).map(bmp => Some(Bitmap.toAndroid(bmp)))
+        case false => CancellableFuture.successful(None)
+      } recover {
+        case e: Throwable => None
+      }
     }
 
-    override def load() = imageLoader.loadBitmap(asset, initialReq).map(Bitmap.toAndroid)
+    override def load() = data flatMap { imageLoader.loadBitmap(_, initialReq) } map Bitmap.toAndroid
   }
 
-  class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, imageCache: MemoryImageCache) extends Loader {
+  class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore) extends Loader {
     override type Data = Gif
 
     override def loadCached() = CancellableFuture.lift(imageLoader.hasCachedData(asset)).flatMap {
@@ -209,47 +216,37 @@ object BitmapSignal {
 
     override def process(gif: Gif, signal: BitmapSignal) = {
       if (gif.frames.length <= 1) {
-        val loader = new AssetBitmapLoader(asset, req, imageLoader, imageCache)
+        val loader = new AssetBitmapLoader(asset, req, imageLoader, assets)
         loader.load() flatMap {loader.process(_, signal)}
       } else {
         var etag = 0 // to make sure signal does not cache dispatched result
-        def reserveFrameMemory() = imageCache.reserve(asset.id, req, gif.width, gif.height * 2)
+        def reserveFrameMemory() = imageLoader.memoryCache.reserve(asset.id, req, gif.width, gif.height * 2)
         def frameLoaded(frame: ABitmap) = signal publish BitmapLoaded(frame, {etag += 1; etag})
         new GifAnimator(gif, reserveFrameMemory, frameLoaded).run()
       }
     }
   }
-
 }
 
 
 // TODO: we could listen for AssetData changes and restart this signal,
 // this isn't really needed currently since ImageAsset will be updated and UI will restart this loading
 // but this could be useful in future, if UI forgets to reload or we could stop requiring them to do so
-class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, cache: MemoryImageCache) extends BitmapSignal(req) {
+class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: BitmapSignal.AssetStore) extends BitmapSignal(req) {
   signal =>
 
   import BitmapSignal._
 
   require(asset.isImage, s"Passed non-image data to bitmap signal: $asset")
 
-  override protected def previewLoader(req: BitmapRequest): Loader =
+  override protected def loader(req: BitmapRequest): Loader =
     req match {
-      case Single(_, _) => EmptyLoader
-      case _ => asset.mime match {
-        case Mime.Image.Gif | Mime.Image.Unknown => new AssetBitmapLoader(asset, req, imageLoader, cache)
-        case _ => EmptyLoader
-      }
-    }
-
-  override protected def fullLoader(req: BitmapRequest): Loader =
-    req match {
-      case Single(_, _) | Round(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, cache)
+      case Single(_, _) | Round(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, assets)
       case _ =>
         asset.mime match {
-          case Mime.Image.Unknown => new MimeCheckLoader(asset, req, imageLoader, cache)
-          case Mime.Image.Gif => new GifLoader(asset, req, imageLoader, cache)
-          case _ => new AssetBitmapLoader(asset, req, imageLoader, cache)
+          case Mime.Image.Unknown => new MimeCheckLoader(asset, req, imageLoader, assets)
+          case Mime.Image.Gif => new GifLoader(asset, req, imageLoader, assets)
+          case _ => new AssetBitmapLoader(asset, req, imageLoader, assets)
         }
     }
 }
