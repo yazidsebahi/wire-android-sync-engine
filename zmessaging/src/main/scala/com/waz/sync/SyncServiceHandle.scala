@@ -71,8 +71,8 @@ trait SyncServiceHandle {
   def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: Instant): Future[SyncId]
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId]
 
-  def registerPush(): Future[SyncId]
-  def deletePushToken(token: GcmId): Future[SyncId]
+  def registerPush(token: PushToken): Future[SyncId]
+  def deletePushToken(token: PushToken): Future[SyncId]
 
   def syncSelfClients(): Future[SyncId]
   def postClientLabel(id: ClientId, label: String): Future[SyncId]
@@ -130,8 +130,8 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = addRequest(PostOpenGraphMeta(conv, msg, time), priority = Priority.Low)
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId] = addRequest(PostReceipt(conv, message, user, tpe), priority = Priority.Optional)
 
-  def registerPush() = addRequest(RegisterPushToken, priority = Priority.High, forceRetry = true)
-  def deletePushToken(token: GcmId) = addRequest(DeletePushToken(token), priority = Priority.Low)
+  def registerPush(token: PushToken) = addRequest(RegisterPushToken(token), priority = Priority.High, forceRetry = true)
+  def deletePushToken(token: PushToken) = addRequest(DeletePushToken(token), priority = Priority.Low)
 
   def syncSelfClients() = addRequest(SyncSelfClients, priority = Priority.Critical)
   def postClientLabel(id: ClientId, label: String) = addRequest(PostClientLabel(id, label))
@@ -186,7 +186,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostSelfPicture(_)                    => zms.usersSync.postSelfPicture()
     case PostAddressBook(ab)                   => zms.addressbookSync.postAddressBook(ab)
     case PostInvitation(i)                     => zms.invitationSync.postInvitation(i)
-    case RegisterPushToken                     => zms.gcmSync.registerPushToken()
+    case RegisterPushToken(token)              => zms.gcmSync.registerPushToken(token)
     case PostLiking(convId, liking)            => zms.reactionsSync.postReaction(convId, liking)
     case PostDeleted(convId, msgId)            => zms.messagesSync.postDeleted(convId, msgId)
     case PostLastRead(convId, time)            => zms.lastReadSync.postLastRead(convId, time)

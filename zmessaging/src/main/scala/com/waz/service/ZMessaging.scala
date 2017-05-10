@@ -232,7 +232,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val connectionsSync  = wire[ConnectionsSyncHandler]
   lazy val voicechannelSync = wire[VoiceChannelSyncHandler]
   lazy val addressbookSync  = wire[AddressBookSyncHandler]
-  lazy val gcmSync          = wire[GcmSyncHandler]
+  lazy val gcmSync          = wire[PushTokenSyncHandler]
   lazy val typingSync       = wire[TypingSyncHandler]
   lazy val richmediaSync    = wire[RichMediaSyncHandler]
   lazy val invitationSync   = wire[InvitationSyncHandler]

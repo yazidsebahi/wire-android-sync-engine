@@ -20,14 +20,13 @@ package com.waz.service.push
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{verbose, warn}
-import com.waz.content.GlobalPreferences.{PushEnabledKey, PushToken}
+import com.waz.content.GlobalPreferences.PushEnabledKey
 import com.waz.content.{AccountsStorage, GlobalPreferences}
-import com.waz.model.{AccountId, GcmTokenRemoveEvent}
+import com.waz.model.{AccountId, PushTokenRemoveEvent, PushToken}
 import com.waz.service.{EventScheduler, ZmsLifecycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, EventStream, Signal}
-import com.waz.utils.returning
 import com.waz.utils.wrappers.{GoogleApi, Localytics}
 
 import scala.concurrent.Future
@@ -47,16 +46,16 @@ class PushTokenService(googleApi: GoogleApi,
   private implicit val ev = EventContext.Global
 
 
-  val pushEnabled       = prefs.preference(PushEnabledKey)
-  val currentTokenPref  = prefs.preference(PushToken)
+  val pushEnabled   = prefs.preference(PushEnabledKey)
+  val currentToken  = prefs.preference(GlobalPreferences.PushToken)
 
-  val onTokenRefresh    = EventStream[Option[String]]()
+  val onTokenRefresh    = EventStream[Option[PushToken]]()
 
   onTokenRefresh(setNewToken(_))
 
   private val shouldGenerateNewToken = for {
     play    <- googleApi.isGooglePlayServicesAvailable
-    current <- currentTokenPref.signal
+    current <- currentToken.signal
   } yield play && current.isEmpty
 
   shouldGenerateNewToken.on(dispatcher) {
@@ -68,7 +67,7 @@ class PushTokenService(googleApi: GoogleApi,
     push     <- pushEnabled.signal                      if push
     play     <- googleApi.isGooglePlayServicesAvailable if play
     lcActive <- lifeCycle.active                        if !lcActive
-    current  <- currentTokenPref.signal
+    current  <- currentToken.signal
     userRegistered <- accounts.signal(accountId)
       .map(_.registeredPush)
       .map(t => current.isDefined && t == current)
@@ -76,54 +75,48 @@ class PushTokenService(googleApi: GoogleApi,
   } yield current.isDefined && userRegistered)
     .orElse(Signal.const(false))
 
-  val eventProcessingStage = EventScheduler.Stage[GcmTokenRemoveEvent] { (_, events) =>
-    currentTokenPref().flatMap {
+  val eventProcessingStage = EventScheduler.Stage[PushTokenRemoveEvent] { (_, events) =>
+    currentToken().flatMap {
       case Some(t) if events.exists(_.token == t) =>
         verbose("Clearing all push tokens in response to backend event")
         googleApi.deleteAllPushTokens()
-        currentTokenPref := None
+        currentToken := None
       case _ => Future.successful({})
     }
   }
 
-  private def setNewToken(token: Option[String] = None): Future[Unit] = try {
+  private def setNewToken(token: Option[PushToken] = None): Future[Unit] = try {
     val t = token.orElse(Some(googleApi.getPushToken))
     t.foreach { t =>
       Localytics.setPushDisabled(false)
-      Localytics.setPushRegistrationId(t)
+      Localytics.setPushRegistrationId(t.str)
     }
     verbose(s"Setting new push token: $t")
-    currentTokenPref := t
+    currentToken := t
   } catch {
     case NonFatal(ex) => Future.successful {
       HockeyApp.saveException(ex, s"unable to set push token")
     }
   }
 
-  private val shouldRegister = for {
-    userToken   <- accounts.signal(accountId).map(_.registeredPush)
-    globalToken <- currentTokenPref.signal
-  } yield
-    returning(globalToken.isDefined && userToken != globalToken) { reg =>
-      verbose(s"Should register: user: $userToken, global: $globalToken => $reg")
-    }
-
-  //TODO figure out why exactly...
   //on dispatcher prevents infinite register loop
-  shouldRegister.on(dispatcher) {
-    case true => sync.registerPush()
-    case false =>
+  (for {
+    userToken <- accounts.signal(accountId).map(_.registeredPush)
+    globalToken <- currentToken.signal
+  } yield (globalToken, userToken)).on(dispatcher) {
+    case (Some(glob), Some(user)) if glob != user =>
+      sync.deletePushToken(user)
+      sync.registerPush(glob)
+    case (Some(glob), None) =>
+      sync.registerPush(glob)
+    case (None, Some(user)) =>
+      sync.deletePushToken(user)
+    case _ => //do nothing
   }
 
-  def onTokenRegistered(): Future[Unit] = {
+  def onTokenRegistered(token: PushToken): Future[Unit] = {
     verbose("onTokenRegistered")
-    currentTokenPref().flatMap {
-      case Some(token) =>
-        accounts.update(accountId, _.copy(registeredPush = Some(token))).map(_ => ())
-      case value =>
-        warn(s"Couldn't find current token after registration - this shouldn't happen, had value: $value")
-        Future.successful({})
-    }
+    accounts.update(accountId, _.copy(registeredPush = Some(token))).map(_ => ())
   }
 }
 

@@ -84,8 +84,9 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(Merged(_))
   }
 
-  case object RegisterPushToken extends BaseRequest(Cmd.RegisterPushToken)
-  case class DeletePushToken(token: GcmId) extends BaseRequest(Cmd.DeletePushToken) {
+  case class RegisterPushToken(token: PushToken) extends BaseRequest(Cmd.RegisterPushToken)
+
+  case class DeletePushToken(token: PushToken) extends BaseRequest(Cmd.DeletePushToken) {
     override val mergeKey: Any = (cmd, token)
   }
 
@@ -310,14 +311,14 @@ object SyncRequest {
         case Cmd.PostConvJoin          => PostConvJoin(convId, users)
         case Cmd.PostConvLeave         => PostConvLeave(convId, userId)
         case Cmd.PostConnection        => PostConnection(userId, 'name, 'message)
-        case Cmd.DeletePushToken        => DeletePushToken(decodeId[GcmId]('token))
+        case Cmd.DeletePushToken       => DeletePushToken(decodeId[PushToken]('token))
         case Cmd.SyncRichMedia         => SyncRichMedia(messageId)
         case Cmd.SyncSelf              => SyncSelf
         case Cmd.DeleteAccount         => DeleteAccount
         case Cmd.SyncConversations     => SyncConversations
         case Cmd.SyncConnectedUsers    => SyncConnectedUsers
         case Cmd.SyncConnections       => SyncConnections
-        case Cmd.RegisterPushToken     => RegisterPushToken
+        case Cmd.RegisterPushToken     => RegisterPushToken(decodeId[PushToken]('token))
         case Cmd.PostSelf              => PostSelf(JsonDecoder[UserInfo]('user))
         case Cmd.PostAddressBook       => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
         case Cmd.PostInvitation        => PostInvitation(JsonDecoder[Invitation]('invitation))
@@ -354,7 +355,8 @@ object SyncRequest {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
-        case DeletePushToken(token)            => putId("token", token)
+        case DeletePushToken(token)           => putId("token", token)
+        case RegisterPushToken(token)         => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
         case PostMessage(_, messageId, time)  =>
@@ -415,7 +417,7 @@ object SyncRequest {
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncCallState(_, _) => () // nothing to do
-        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | RegisterPushToken | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }

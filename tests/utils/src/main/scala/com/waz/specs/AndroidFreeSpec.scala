@@ -31,6 +31,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
+//TODO somehow check other threads for failures that might normally be swallowed up and fail tests accordingly
 abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfter with Matchers with MockFactory { this: Suite =>
 
   val defaultTimeout = 5.seconds

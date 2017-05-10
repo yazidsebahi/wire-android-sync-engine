@@ -43,7 +43,7 @@ case class AccountData(id:             AccountId,
                        hash:           String,
                        phone:          Option[PhoneNumber],
                        handle:         Option[Handle],
-                       registeredPush: Option[String]          = None,
+                       registeredPush: Option[PushToken]       = None,
                        verified:       Boolean                 = false,
                        cookie:         Option[Cookie]          = None,
                        password:       Option[String]          = None,
@@ -124,7 +124,7 @@ object AccountData {
     val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
     val Handle = opt(handle('handle))(_.handle)
-    val PushRegistered = opt(text('push_registered))(_.registeredPush)
+    val PushRegistered = opt(id[PushToken]('push_registered))(_.registeredPush)
     val EmailVerified = bool('verified)(_.verified)
     val Cookie = opt(text[Cookie]('cookie, _.str, AuthenticationManager.Cookie))(_.cookie)
     val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))(_.accessToken)

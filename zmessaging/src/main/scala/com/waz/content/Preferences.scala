@@ -19,13 +19,12 @@ package com.waz.content
 
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
-import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{debug, verbose, warn}
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.model.KeyValueData.KeyValueDataDao
-import com.waz.model.{ConvId, Id, KeyValueData, Uid}
+import com.waz.model._
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -254,8 +253,8 @@ object GlobalPreferences {
   lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
   lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
 
-  lazy val PushEnabledKey             = PrefKey[Boolean]       ("PUSH_ENABLED")
-  lazy val PushToken                  = PrefKey[Option[String]]("PUSH_TOKEN")
+  lazy val PushEnabledKey             = PrefKey[Boolean]          ("PUSH_ENABLED")
+  lazy val PushToken                  = PrefKey[Option[PushToken]]("PUSH_TOKEN")
 
   lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
   lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")

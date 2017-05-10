@@ -17,7 +17,7 @@
  */
 package com.waz.service.push
 
-import com.waz.content.AccountsStorage
+import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.content.GlobalPreferences.PushEnabledKey
 import com.waz.model._
 import com.waz.service.ZmsLifecycle
@@ -42,6 +42,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   val accountId = AccountId()
 
   var pushEnabled         = prefs.preference(PushEnabledKey)
+  var currentToken        = prefs.preference(GlobalPreferences.PushToken)
 
   var googlePlayAvailable = Signal(false)
   var lifecycleActive     = Signal(false)
@@ -54,6 +55,8 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     prefs.reset()
 
     pushEnabled         = prefs.preference(PushEnabledKey)
+    currentToken        = prefs.preference(GlobalPreferences.PushToken)
+
     googlePlayAvailable = Signal(false)
     lifecycleActive     = Signal(false)
     accountSignal       = Signal[AccountData]()
@@ -61,106 +64,103 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
-      val token = "token"
+      val token = PushToken("token")
       (google.getPushToken _).expects().returning(token)
       val service = initTokenService()
 
       pushEnabled := true
       googlePlayAvailable ! true
-      result(service.currentTokenPref.signal.filter(_.contains(token)).head)
+      result(service.currentToken.signal.filter(_.contains(token)).head)
     }
 
     scenario("Remove Push Token event should create new token and delete all previous tokens") {
 
-      val oldToken = "oldToken"
-      val newToken = "newToken"
-      var calls = 0
-      (google.getPushToken _).expects().anyNumberOfTimes().onCall { () =>
-        calls += 1
-        calls match {
-          case 1 => oldToken
-          case 2 => newToken
-          case _ => fail("Too many calls to getPushToken!")
-        }
-      }
+      val oldToken = PushToken("oldToken")
+      val newToken = PushToken("newToken")
+      pushEnabled := true
+      currentToken := Some(oldToken)
+      googlePlayAvailable ! true
+
+      (google.getPushToken _).expects().once().returning(newToken)
 
       //This needs to be called
       (google.deleteAllPushTokens _).expects().once()
 
       val service = initTokenService()
 
-      pushEnabled := true
-      googlePlayAvailable ! true
       //wait for first token to be set
-      result(service.currentTokenPref.signal.filter(_.contains(oldToken)).head)
+      result(service.currentToken.signal.filter(_.contains(oldToken)).head)
       //delete first token in response to BE event
-      service.eventProcessingStage(RConvId(), Vector(GcmTokenRemoveEvent(oldToken, "sender", Some("client"))))
+      service.eventProcessingStage(RConvId(), Vector(PushTokenRemoveEvent(oldToken, "sender", Some("client"))))
       //new token should be set
-      result(service.currentTokenPref.signal.filter(_.contains(newToken)).head)
+      result(service.currentToken.signal.filter(_.contains(newToken)).head)
     }
   }
 
   feature("Token registration") {
-    scenario("If current user does not have matching registeredPush token, register the user with our BE") {
+    scenario("If current user does not have matching registeredPush token, remove the old token and register the new one with our BE") {
 
-      accountSignal ! AccountData(accountId, None, "", None, None, Some("oldToken"))
+      val oldToken = PushToken("oldToken")
+      val newToken = PushToken("token")
+      accountSignal ! AccountData(accountId, None, "", None, None, Some(oldToken))
+
+      currentToken := Some(newToken)
       pushEnabled := true
       googlePlayAvailable ! true
 
-      val token = "token"
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
-
       lazy val service = initTokenService()
 
-      (sync.registerPush _).expects().anyNumberOfTimes().onCall { () =>
+      (sync.deletePushToken _).expects(oldToken).once().returning(Future.successful(SyncId()))
+
+      (sync.registerPush _).expects(newToken).once().onCall { _: PushToken =>
         Future {
-          service.onTokenRegistered()
+          service.onTokenRegistered(newToken)
           SyncId()
         } (Threading.Background)
       }
 
-      result(service.currentTokenPref.signal.filter(_.contains(token)).head)
-      result(accountSignal.filter(_.registeredPush.contains(token)).head)
+      result(service.currentToken.signal.filter(_.contains(newToken)).head)
+      result(accountSignal.filter(_.registeredPush.contains(newToken)).head)
     }
 
     scenario("Instance Id token refresh should trigger re-registration for current user") {
-      accountSignal ! AccountData(accountId, None, "", None, None, Some("token"))
+      val oldToken = PushToken("oldToken")
+      val newToken = PushToken("newToken")
+
+      accountSignal ! AccountData(accountId, None, "", None, None, Some(oldToken))
       pushEnabled := true
       googlePlayAvailable ! true
-
-      val token = "token"
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
+      currentToken := Some(oldToken)
 
       lazy val service = initTokenService()
 
-      (sync.registerPush _).expects().anyNumberOfTimes().onCall { () =>
+      (sync.deletePushToken _).expects(oldToken).once().returning(Future.successful(SyncId()))
+      (sync.registerPush _).expects(newToken).once().onCall { _: PushToken =>
         Future {
-          service.onTokenRegistered()
+          service.onTokenRegistered(newToken)
           SyncId()
         } (Threading.Background)
       }
 
-      result(service.currentTokenPref.signal.filter(_.contains(token)).head)
-      result(accountSignal.filter(_.registeredPush.contains(token)).head)
+      result(service.currentToken.signal.filter(_.contains(oldToken)).head)
+      result(accountSignal.filter(_.registeredPush.contains(oldToken)).head)
 
-      val newToken = "newToken"
       service.onTokenRefresh ! Some(newToken) //InstanceIDService triggers new token
 
-      result(service.currentTokenPref.signal.filter(_.contains(newToken)).head)
+      result(service.currentToken.signal.filter(_.contains(newToken)).head)
       result(accountSignal.filter(_.registeredPush.contains(newToken)).head)
-
     }
   }
 
   feature("Push active") {
 
     scenario("Push should be active if push is enabled and inactive if not") {
-      val token = "token"
+      val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
       pushEnabled := true //set active
       googlePlayAvailable ! true
+      currentToken := Some(token)
 
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
       val service = initTokenService()
 
       result(service.pushActive.filter(_ == true).head)
@@ -169,14 +169,14 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       result(service.pushActive.filter(_ == false).head)
     }
 
-    scenario("Push should be active if app is in background and inactive if not") {
-      val token = "token"
+    scenario("Current: Push should be active if app is in background and inactive if not") {
+      val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
       pushEnabled := true
       googlePlayAvailable ! true
       lifecycleActive ! true //websocket should be open
+      currentToken := Some(token)
 
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
       val service = initTokenService()
 
       result(service.pushActive.filter(_ == false).head)
@@ -186,14 +186,13 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     }
 
     scenario("Push should be inactive if play services are unavailable") {
-      val token = "token"
+      val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
       pushEnabled := true
       googlePlayAvailable ! true
+      currentToken := Some(token)
 
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
       val service = initTokenService()
-
 
       result(service.pushActive.filter(_ == true).head)
 
@@ -203,16 +202,14 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
     scenario("Push should be inactive if user is not currently registered") {
 
-      val token = "token"
+      val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, None)
       pushEnabled := true
       googlePlayAvailable ! true
+      currentToken := Some(token)
 
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
-      (sync.registerPush _).expects().anyNumberOfTimes().returning(Future.successful(SyncId()))
+      (sync.registerPush _).expects(*).anyNumberOfTimes().returning(Future.successful(SyncId()))
       val service = initTokenService()
-
-
       result(service.pushActive.filter(_ == false).head)
     }
   }

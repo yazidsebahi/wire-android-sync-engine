@@ -66,7 +66,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostConvState requests") { PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))) should beUnchangedByEncodingAndDecoding }
     scenario("PostTypingState requests") { PostTypingState(ConvId(), isTyping = true) should beUnchangedByEncodingAndDecoding }
     scenario("SyncCallState requests") { SyncCallState(ConvId(), fromFreshNotification = false) should beUnchangedByEncodingAndDecoding }
-    scenario("DeletePushToken requests") { DeletePushToken(GcmId()) should beUnchangedByEncodingAndDecoding }
+    scenario("DeletePushToken requests") { DeletePushToken(PushToken()) should beUnchangedByEncodingAndDecoding }
     scenario("SyncSearchQuery requests") { SyncSearchQuery(SearchQuery.Recommended("meep moop")) should beUnchangedByEncodingAndDecoding }
     scenario("PostMessage requests") { PostMessage(ConvId(), MessageId(), Instant.now()) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvJoin requests") { PostConvJoin(ConvId(), Set(UserId(), UserId())) should beUnchangedByEncodingAndDecoding }
@@ -95,7 +95,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         SyncUser(Set(UserId(), UserId(), UserId())),
         SyncConversation(Set(ConvId(), ConvId(), ConvId())),
         PostConv(ConvId(), Seq(UserId()), None),
-        DeletePushToken(GcmId()),
+        DeletePushToken(PushToken()),
         PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, None)),
         PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))),
         SyncSearchQuery(SearchQuery.Recommended("meep moop")),

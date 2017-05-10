@@ -46,7 +46,7 @@ class RemoteActorService(context: Context) {
   import android.os.Build._
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val tag: LogTag = logTagFor[RemoteActorService]
-  val prefs = new GlobalPreferences(context)
+  val prefs = GlobalPreferences(context)
 
   val background  = prefs.preference(PrefKey[Boolean]("background", false))
   val name        = prefs.preference(PrefKey[String]("name", s"$MANUFACTURER $MODEL"))
