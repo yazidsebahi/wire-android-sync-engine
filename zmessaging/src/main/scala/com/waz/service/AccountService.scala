@@ -256,7 +256,18 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   }
 
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] = credentialsClient.updateEmail(email)
+  def clearEmail(): ErrorOr[Unit] =
+    credentialsClient.clearEmail().future.flatMap {
+      case Left(err) => Future successful Left(err)
+      case Right(_) => accountsStorage.update(id, _.copy(email = None)) .map(_ => Right(()))
+    }
+
   def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] = credentialsClient.updatePhone(phone)
+  def clearPhone(): ErrorOr[Unit] =
+    credentialsClient.clearPhone().future.flatMap {
+      case Left(err) => Future successful Left(err)
+      case Right(_) => accountsStorage.update(id, _.copy(phone = None)) .map(_ => Right(()))
+    }
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
     credentialsClient.updatePassword(newPassword, currentPassword).future flatMap {
       case Left(err) => Future successful Left(err)
