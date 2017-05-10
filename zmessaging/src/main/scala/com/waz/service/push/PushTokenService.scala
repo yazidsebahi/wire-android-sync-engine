@@ -20,7 +20,7 @@ package com.waz.service.push
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{verbose, warn}
-import com.waz.content.GlobalPreferences.{GcmEnabledKey, PushToken}
+import com.waz.content.GlobalPreferences.{PushEnabledKey, PushToken}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, GcmTokenRemoveEvent}
 import com.waz.service.{EventScheduler, ZmsLifecycle}
@@ -47,7 +47,7 @@ class PushTokenService(googleApi: GoogleApi,
   private implicit val ev = EventContext.Global
 
 
-  val pushEnabled       = prefs.preference(GcmEnabledKey)
+  val pushEnabled       = prefs.preference(PushEnabledKey)
   val currentTokenPref  = prefs.preference(PushToken)
   val onTokenRefresh    = EventStream[Option[String]]()
 

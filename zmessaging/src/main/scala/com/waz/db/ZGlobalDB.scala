@@ -92,7 +92,7 @@ object ZGlobalDB {
         implicit db => AccountDataMigration.v78(db)
       },
       Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
-        val prefs = new GlobalPreferences(context)
+        val prefs = GlobalPreferences(context)
         prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
       }},
       Migration(15, 16) { db => if (ZmsVersion.DEBUG) {

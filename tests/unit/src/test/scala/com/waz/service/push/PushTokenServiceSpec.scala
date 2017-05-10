@@ -17,11 +17,11 @@
  */
 package com.waz.service.push
 
-import com.waz.ZLog
-import com.waz.content.Preference.PrefCodec
-import com.waz.content.{AccountsStorage, Preference}
+import com.waz.content.AccountsStorage
+import com.waz.content.GlobalPreferences.PushEnabledKey
+import com.waz.content.Preferences.Preference
 import com.waz.model._
-import com.waz.service.{PreferenceService, ZmsLifecycle}
+import com.waz.service.ZmsLifecycle
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.testutils.TestGlobalPreferences
@@ -29,25 +29,20 @@ import com.waz.threading.Threading
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.returning
 import com.waz.utils.wrappers.GoogleApi
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
-import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFactory with Matchers with BeforeAndAfter {
-
-  import PushTokenService._
-
-  val gcmEnabledKey = "PUSH_ENABLED_KEY"
-
+class PushTokenServiceSpec extends AndroidFreeSpec {
+  
   val google    = mock[GoogleApi]
   val lifecycle = mock[ZmsLifecycle]
   val accounts  = mock[AccountsStorage]
   val sync      = mock[SyncServiceHandle]
   val prefs     = new TestGlobalPreferences()
   val accountId = AccountId()
+
+  var pushEnabled: Preference[Boolean] = _
 
   var googlePlayAvailable: SourceSignal[Boolean] = _
   var lifecycleActive: SourceSignal[Boolean] = _
@@ -58,6 +53,8 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
   before {
 
     prefs.reset()
+
+    pushEnabled = prefs.preference(PushEnabledKey)
 
     googlePlayAvailable = Signal(false)
     lifecycleActive = Signal(false)
@@ -70,7 +67,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
       (google.getPushToken _).expects().returning(token)
       val service = initTokenService()
 
-      pushEnabledPref := true
+      pushEnabled := true
       googlePlayAvailable ! true
       Await.ready(service.currentTokenPref.signal.filter(_.contains(token)).head, defaultDuration)
     }
@@ -94,7 +91,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
 
       val service = initTokenService()
 
-      pushEnabledPref := true
+      pushEnabled := true
       googlePlayAvailable ! true
       //wait for first token to be set
       Await.ready(service.currentTokenPref.signal.filter(_.contains(oldToken)).head, defaultDuration)
@@ -109,7 +106,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
     scenario("If current user does not have matching registeredPush token, register the user with our BE") {
 
       accountSignal ! AccountData(accountId, None, "", None, None, Some("oldToken"))
-      pushEnabledPref := true
+      pushEnabled := true
       googlePlayAvailable ! true
 
       val token = "token"
@@ -130,7 +127,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
 
     scenario("Instance Id token refresh should trigger re-registration for current user") {
       accountSignal ! AccountData(accountId, None, "", None, None, Some("token"))
-      pushEnabledPref := true
+      pushEnabled := true
       googlePlayAvailable ! true
 
       val token = "token"
@@ -149,7 +146,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
       Await.ready(accountSignal.filter(_.registeredPush.contains(token)).head, defaultDuration)
 
       val newToken = "newToken"
-      service.onTokenRefresh ! newToken //InstanceIDService triggers new token
+      service.onTokenRefresh ! Some(newToken) //InstanceIDService triggers new token
 
       Await.ready(service.currentTokenPref.signal.filter(_.contains(newToken)).head, defaultDuration)
       Await.ready(accountSignal.filter(_.registeredPush.contains(newToken)).head, defaultDuration)
@@ -168,12 +165,12 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
       (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
       val service = initTokenService()
 
-      pushEnabledPref := true //set active
+      pushEnabled := true //set active
       googlePlayAvailable ! true
 
       Await.ready(service.pushActive.filter(_ == true).head, defaultDuration)
 
-      pushEnabledPref := false //set inactive
+      pushEnabled := false //set inactive
       Await.ready(service.pushActive.filter(_ == false).head, defaultDuration)
     }
 
@@ -182,7 +179,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
       (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
       val service = initTokenService()
 
-      pushEnabledPref := true
+      pushEnabled := true
       googlePlayAvailable ! true
       lifecycleActive ! true //websocket should be open
 
@@ -197,7 +194,7 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
       (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
       val service = initTokenService()
 
-      pushEnabledPref := true
+      pushEnabled := true
       googlePlayAvailable ! true
 
       Await.ready(service.pushActive.filter(_ == true).head, defaultDuration)
@@ -205,48 +202,14 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
       googlePlayAvailable ! false //Set true and then false again to cause the signal to change. Maybe the user disables play services?
       Await.ready(service.pushActive.filter(_ == false).head, defaultDuration)
     }
-
-    scenario("Current: Failed count should increment if we miss notifications while push is active") {
-      val token = "token"
-      (google.getPushToken _).expects().anyNumberOfTimes().returning(token)
-
-      val service = initTokenService()
-
-      pushEnabledPref := true
-      googlePlayAvailable ! true
-
-      Await.ready(service.pushActive.filter(_ == true).head, defaultDuration)
-
-      service.lastFetchedConvEventTime := Some(Instant.now)
-      service.lastFetchedLocalTime := Some(Instant.now)
-
-      Thread.sleep(2000)
-    }
-
   }
 
   def initTokenService(google:    GoogleApi         = google,
-                       prefs:     PreferenceService = prefs,
                        lifecycle: ZmsLifecycle      = lifecycle,
                        accountId: AccountId         = accountId,
                        accounts:  AccountsStorage   = accounts,
                        sync:      SyncServiceHandle = sync) = {
-    import PushTokenService._
 
-    (prefs.gcmEnabledKey _).expects().returning(gcmEnabledKey)
-    (prefs.uiPreferenceBooleanSignal _).expects(gcmEnabledKey, false).returning(pushEnabledPref)
-
-    //Pretty hacky - but the only thing that works with Scalamock
-    (prefs.preference (_: String, _: Any)(_: PrefCodec[Any])).expects(*, *, *).anyNumberOfTimes().onCall((key, _, _) => key match {
-        case `pushTokenPrefKey`     => pushTokenPref.asInstanceOf[Preference[Any]]
-        case `lastReceivedKey`      => lastReceivedPref.asInstanceOf[Preference[Any]]
-        case `lastFetchedKey`       => lastFetchedPref.asInstanceOf[Preference[Any]]
-        case `lastFetchedLocalKey`  => lastFetchedLocalPref.asInstanceOf[Preference[Any]]
-        case `lastRegisteredKey`    => lastReceivedPref.asInstanceOf[Preference[Any]]
-        case `failedTimeKey`        => failedTimePref.asInstanceOf[Preference[Any]]
-        case `failCountKey`         => failedCountPref.asInstanceOf[Preference[Any]]
-        case key => fail(s"Unexpected call to prefs.preference with key: $key")
-      })
     (google.isGooglePlayServicesAvailable _).expects().anyNumberOfTimes().returning(googlePlayAvailable)
     (accounts.signal _).expects(*).anyNumberOfTimes().returning(accountSignal)
     (lifecycle.active _).expects().anyNumberOfTimes().returning(lifecycleActive)
@@ -260,10 +223,5 @@ class PushTokenServiceSpec extends FeatureSpec with AndroidFreeSpec with MockFac
     }
 
     new PushTokenService(google, prefs, lifecycle, accountId, accounts, sync)
-  }
-
-  //Allows type parameters in mocking
-  def mockPreference[A](prefs: PreferenceService)(onCall: String => Preference[A]) = {
-    (prefs.preference[A] (_: String, _: A)(_: PrefCodec[A])).expects(*, *, *).anyNumberOfTimes().onCall((key, _, _) => onCall(key))
   }
 }

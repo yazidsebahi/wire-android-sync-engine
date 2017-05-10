@@ -246,9 +246,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
     scenario("encrypt an asset using CBC") {
 
       lazy val zms = new MockZMessaging() {
-        override lazy val prefs = new GlobalPreferences(context) {
-          override def v31AssetsEnabled = false
-        }
+        override lazy val prefs = GlobalPreferences(context)
       }
 
       val key = AESKey()

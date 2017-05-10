@@ -29,7 +29,7 @@ import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{Signal, SourceSignal}
-import com.waz.utils.{CachedStorageImpl, TrimmingLruCache}
+import com.waz.utils.{CachedStorageImpl, TrimmingLruCache, returning}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -122,11 +122,9 @@ object Preferences {
   * type in SharedPreferences, as the Android system uses these types by default (e.g., a CheckBoxPreference defined in XML
   * will store a boolean preference in the shared prefs document
   */
-class GlobalPreferences(context: Context) extends Preferences {
+class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Preferences {
 
   override protected implicit val dispatcher = new SerialDispatchQueue(name = "GlobalPreferencesDispatcher")
-
-  protected val prefs = context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)
 
   def v31AssetsEnabled = false
 
@@ -158,7 +156,6 @@ class GlobalPreferences(context: Context) extends Preferences {
       }
     }
   }
-  migrate()
 
   //TODO would be nice to hide this, but for now it's fine
   def getFromPref[A: PrefCodec](key: PrefKey[A]) = {
@@ -240,6 +237,10 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
 
 object GlobalPreferences {
 
+  def apply(context: Context): GlobalPreferences = {
+    returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
+  }
+
   lazy val CurrentAccountPref = PrefKey[String]("CurrentUserPref", "")
 
   //TODO move some of these to UserPreferences
@@ -249,16 +250,12 @@ object GlobalPreferences {
   lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
   lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
 
-  lazy val GcmEnabledKey              = PrefKey[Boolean]       ("PREF_KEY_GCM_ENABLED")
+  lazy val PushEnabledKey             = PrefKey[Boolean]       ("PREF_KEY_GCM_ENABLED")
   lazy val PushToken                  = PrefKey[Option[String]]("PUSH_TOKEN")
 
   lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
   lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")
   lazy val AddressBookLastUpload      = PrefKey[Option[Instant]]("address_book_last_upload_time")
-
-  lazy val GcmRegistrationIdPref      = PrefKey[String]("registration_id")
-  lazy val GcmRegistrationUserPref    = PrefKey[String]("registration_user")
-  lazy val GcmRegistrationVersionPref = PrefKey[Int]   ("registration_version")
 
   lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED")
   lazy val LoggingEnabled             = PrefKey[Boolean]("PREF_KEY_AVS_LOGGING")

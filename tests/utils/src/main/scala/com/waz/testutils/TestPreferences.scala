@@ -17,17 +17,15 @@
  */
 package com.waz.testutils
 
-import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.content.Preferences.Preference.PrefCodec
+import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.threading.SerialDispatchQueue
 
-class TestGlobalPreferences extends GlobalPreferences(null) {
+class TestGlobalPreferences extends GlobalPreferences(null, null) {
   override implicit val dispatcher = new SerialDispatchQueue(name = "TestGlobalPreferenceQueue")
 
   private var values = Map.empty[String, String]
-
-  override protected val prefs = null
 
   override def preference[A: PrefCodec](key: PrefKey[A]) = new Preference[A](this, key)
 
