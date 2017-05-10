@@ -17,32 +17,35 @@
  */
 package com.waz.service.push
 
-import android.content.{Context, SharedPreferences}
+import android.content.Context
 import com.google.android.gms.common.{ConnectionResult, GooglePlayServicesUtil}
 import com.google.android.gms.gcm.GoogleCloudMessaging
 import com.google.android.gms.iid.InstanceID
 import com.localytics.android.Localytics
 import com.waz.HockeyApp
 import com.waz.HockeyApp.NoReporting
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
+import com.waz.content.GlobalPreferences.GcmEnabledKey
+import com.waz.content.Preferences.PrefKey
+import com.waz.content.{GlobalPreferences, Preferences}
 import com.waz.model._
 import com.waz.service.push.GcmGlobalService.{GcmRegistration, GcmSenderId}
-import com.waz.service.{BackendConfig, MetaDataService, PreferenceService}
+import com.waz.service.{BackendConfig, MetaDataService}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.LoggedTry
 import com.waz.utils.events.EventContext
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.{NoStackTrace, NonFatal}
 
-class GcmGlobalService(context: Context, val prefs: PreferenceService, metadata: MetaDataService, backendConfig: BackendConfig) {
+class GcmGlobalService(context: Context, implicit val prefs: GlobalPreferences, metadata: MetaDataService, backendConfig: BackendConfig) {
 
   implicit val dispatcher = new SerialDispatchQueue(name = "GcmGlobalDispatchQueue")
 
   private implicit val ev = EventContext.Global
 
   import metadata._
-  import prefs._
 
   val gcmSenderId: GcmSenderId = backendConfig.gcmSenderId
 
@@ -52,22 +55,19 @@ class GcmGlobalService(context: Context, val prefs: PreferenceService, metadata:
       ConnectionResult.DEVELOPER_ERROR
   }
 
-  val gcmEnabled = prefs.uiPreferenceBooleanSignal(prefs.gcmEnabledKey).signal
+  val gcmEnabled = prefs.preference(GcmEnabledKey).signal
 
-  def gcmAvailable = prefs.gcmEnabled && gcmCheckResult == ConnectionResult.SUCCESS
+  def gcmAvailable = prefs.getFromPref(GcmEnabledKey) && gcmCheckResult == ConnectionResult.SUCCESS
 
-  def getGcmRegistration: CancellableFuture[GcmRegistration] = withPreferences(GcmRegistration(_)) map { reg =>
+  def getGcmRegistration: Future[GcmRegistration] = GcmRegistration() map { reg =>
     if (reg.version == appVersion) reg
     else GcmRegistration("", AccountId(""), appVersion)
   }
 
-  def clearGcm(user: AccountId) = withPreferences { prefs =>
-    val reg = GcmRegistration(prefs)
+  def clearGcm(user: AccountId) = GcmRegistration() map { reg =>
     verbose(s"clearGcmRegistrationUser($user): $reg")
     if (reg.user == user) {
-      val edit = prefs.edit()
-      reg.copy(user = AccountId("")).save(edit)
-      edit.commit()
+      GcmRegistration.update(reg.copy(user = AccountId("")))
     }
   }
 
@@ -93,23 +93,20 @@ class GcmGlobalService(context: Context, val prefs: PreferenceService, metadata:
   private def setGcm(token: String, user: AccountId): GcmRegistration = {
     val reg = GcmRegistration(token, user, appVersion)
     verbose(s"setGcmRegistration: $reg")
-    editPreferences(reg.save(_))
+    GcmRegistration.update(reg)
     reg
   }
 
   //used to indicate that the token was registered properly with the BE - no user indicates it's not registered
-  def updateRegisteredUser(token: String, user: AccountId) = withPreferences { prefs =>
-    val reg = GcmRegistration(prefs)
+  def updateRegisteredUser(token: String, user: AccountId) = GcmRegistration() map { reg =>
     if (reg.token == token && reg.user != user) {
       val updated = reg.copy(user = user, version = appVersion)
-      val editor = prefs.edit()
-      updated.save(editor)
-      editor.commit()
+      GcmRegistration.update(updated)
       updated
     } else reg
   }
 
-  def unregister() = editPreferences(GcmRegistration().save(_)).future map { _ => deleteInstanceId() } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
+  def unregister() = GcmRegistration.update(GcmRegistration.empty) map { _ => deleteInstanceId() } recover { case NonFatal(e) => warn("unable to unregister from GCM", e) }
 
   private def withGcm[A](body: => A): A = if (gcmAvailable) body else throw new GcmGlobalService.GcmNotAvailableException
 
@@ -124,22 +121,25 @@ object GcmGlobalService {
 
   case class GcmSenderId(str: String) extends AnyVal
 
-  val RegistrationIdPref = "registration_id"
-  val RegistrationUserPref = "registration_user"
-  val RegistrationVersionPref = "registration_version"
-
   class GcmNotAvailableException extends Exception("Google Play Services not available") with NoReporting with NoStackTrace
 
-  case class GcmRegistration(token: String = "", user: AccountId = AccountId(""), version: Int = 0) {
-    def save(editor: SharedPreferences.Editor) = {
-      editor.putString(RegistrationIdPref, token)
-      editor.putString(RegistrationUserPref, user.str)
-      editor.putInt(RegistrationVersionPref, version)
-    }
-  }
+  case class GcmRegistration(token: String, user: AccountId, version: Int)
 
   object GcmRegistration {
-    def apply(prefs: SharedPreferences): GcmRegistration =
-      GcmRegistration(prefs.getString(RegistrationIdPref, ""), AccountId(prefs.getString(RegistrationUserPref, "")), prefs.getInt(RegistrationVersionPref, 0))
+
+    lazy val empty = GcmRegistration("", AccountId(""), 0)
+
+    import GlobalPreferences._
+    def apply()(implicit ec: ExecutionContext, prefs: Preferences): Future[GcmRegistration] = for {
+      token   <- prefs.preference(GcmRegistrationIdPref).apply()
+      userId  <- prefs.preference(GcmRegistrationUserPref).apply()
+      version <- prefs.preference(GcmRegistrationVersionPref).apply()
+    } yield GcmRegistration(token, AccountId(userId), version)
+
+    def update(reg: GcmRegistration)(implicit ec: ExecutionContext, prefs: Preferences) = for {
+      _ <- prefs.preference(GcmRegistrationUserPref) := reg.token
+      _ <- prefs.preference(GcmRegistrationUserPref) := reg.user.str
+      _ <- prefs.preference(GcmRegistrationVersionPref) := reg.version
+    } yield {}
   }
 }

@@ -23,14 +23,14 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.ZmsDatabase
+import com.waz.content.GlobalPreferences.CallingV3Key
+import com.waz.content.{GlobalPreferences, ZmsDatabase}
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
 import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
-import com.waz.service.PreferenceService
 import com.waz.utils.wrappers.DB
 import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, Resource}
 import com.waz.znet.AuthenticationManager.Token
@@ -92,8 +92,8 @@ object ZGlobalDB {
         implicit db => AccountDataMigration.v78(db)
       },
       Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
-        val prefs = new PreferenceService(context)
-        prefs.editUiPreferences(_.putString(prefs.callingV3Key, "2")) //force update debug builds to calling v3
+        val prefs = new GlobalPreferences(context)
+        prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
       }},
       Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
           //setting prefs.sendWithAssetsV3Key no longer needed, if you haven't updated by now, it doesn't matter

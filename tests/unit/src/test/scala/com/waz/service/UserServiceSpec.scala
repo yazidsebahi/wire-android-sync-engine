@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz.RobolectricUtils
+import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -56,7 +57,7 @@ class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         }
       }
 
-      kvStorage.lastSlowSyncTimestamp = System.currentTimeMillis()
+      userPrefs.preference(LastSlowSyncTimeKey) := Some(System.currentTimeMillis())
     }
   }
 

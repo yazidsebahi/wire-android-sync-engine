@@ -21,6 +21,7 @@ import java.util.Date
 
 import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
+import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -38,13 +39,13 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
 import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
-class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushServiceSignals,
+class UserService(val selfUserId: UserId, usersStorage: UsersStorage, userPrefs: UserPreferences, push: PushServiceSignals,
                   assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) {
 
   private implicit val logTag: LogTag = logTagFor[UserService]
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
-  import keyValueService._
+  import userPrefs._
 
   val selfUser: Signal[UserData] = usersStorage.optSignal(selfUserId) flatMap {
     case Some(data) => Signal.const(data)
@@ -53,12 +54,14 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
       Signal.empty
   }
 
+  val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
+
   val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => updateSyncedUsers(e.map(_.user)(breakOut)))
   val userDeleteEventsStage = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
 
   push.onSlowSyncNeeded { case SlowSyncRequest(time, _) =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")
-    lastSlowSyncTimestamp = time
+    lastSlowSyncTimestamp := Some(time)
 
     sync.syncSelfUser().map(dependency => sync.syncConnections(Some(dependency)))
   }
@@ -193,7 +196,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     * Schedules user data sync if stored user timestamp is older than last slow sync timestamp.
    */
   def syncIfNeeded(users: UserData*): Future[Unit] =
-    lastSlowSyncTimestamp flatMap {
+    lastSlowSyncTimestamp() flatMap {
       //TODO: Remove empty picture check when not needed anymore
       case Some(time) => sync.syncUsersIfNotEmpty(users.filter(user => user.syncTimestamp < time || user.picture.isEmpty).map(_.id))
       case _ => sync.syncUsersIfNotEmpty(users.filter(_.picture.isEmpty).map(_.id))

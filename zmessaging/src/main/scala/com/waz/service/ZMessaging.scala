@@ -61,7 +61,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
 
-  def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.kvStorage)
+  def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.userPrefs)
 
   def userModule(userId: UserId, account: AccountService) = wire[UserModule]
 
@@ -71,7 +71,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val db                = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val kvStorage         = wire[KeyValueStorage]
+  lazy val userPrefs         = wire[UserPreferences]
   lazy val usersStorage      = wire[UsersStorage]
   lazy val otrClientsStorage = wire[OtrClientsStorage]
   lazy val membersStorage    = wire[DefaultMembersStorage]
@@ -135,7 +135,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def pcmAudioLoader    = global.pcmAudioLoader
 
   def db                = storage.db
-  def kvStorage         = storage.kvStorage
+  def userPrefs         = storage.userPrefs
   def usersStorage      = storage.usersStorage
   def otrClientsStorage = storage.otrClientsStorage
   def membersStorage    = storage.membersStorage
@@ -199,7 +199,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val convEvents: ConversationEventsService  = wire[ConversationEventsService]
   lazy val convsUi                                = wire[ConversationsUiService]
   lazy val convsStats                             = wire[ConversationsListStateService]
-  lazy val messages: DefaultMessagesService              = wire[DefaultMessagesService]
+  lazy val messages: DefaultMessagesService       = wire[DefaultMessagesService]
   lazy val connection: ConnectionService          = wire[ConnectionService]
   lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
   lazy val voiceContent                           = wire[VoiceChannelContent]
@@ -302,7 +302,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
     reporting.addStateReporter { pw =>
       Future {
-        kvStorage foreachCached {
+        userPrefs foreachCached {
           case KeyValueData(k, v) if k.contains("time") |
                                      (Try(v.toLong).toOption.isDefined && v.length == 13) => pw.println(s"$k: ${Instant.ofEpochMilli(Try(v.toLong).getOrElse(0L))}")
           case KeyValueData(k, v) => pw.println(s"$k: $v")

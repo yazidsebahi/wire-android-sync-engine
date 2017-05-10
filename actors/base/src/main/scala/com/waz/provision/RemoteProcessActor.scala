@@ -30,7 +30,6 @@ class RemoteProcessActor(application: Context,
                          processName: String,
                          coordinator: Option[ActorRef],
                          backend: BackendConfig = BackendConfig.StagingBackend,
-                         otrOnly: Boolean = false,
                          wrapper: ClientWrapper) extends FSM[RemoteProcessActor.State, Option[ActorRef]] with ActorLogging {
 
   import ActorMessage._
@@ -78,7 +77,7 @@ class RemoteProcessActor(application: Context,
   }
 
   def spawnDevice(deviceName: String): ActorRef =
-    context.actorOf(DeviceActor.props(deviceName, application, backend, otrOnly, wrapper), deviceName)
+    context.actorOf(DeviceActor.props(deviceName, application, backend, wrapper), deviceName)
 }
 
 object RemoteProcessActor {
@@ -86,9 +85,8 @@ object RemoteProcessActor {
             processName: String,
             mainCoordinatorRef: Option[ActorRef],
             backend: BackendConfig = BackendConfig.StagingBackend,
-            otrOnly: Boolean = false,
             wrapper: ClientWrapper) =
-    Props(new RemoteProcessActor(context, processName, mainCoordinatorRef, backend, otrOnly, wrapper))
+    Props(new RemoteProcessActor(context, processName, mainCoordinatorRef, backend, wrapper))
 
   trait State
   case object Waiting extends State

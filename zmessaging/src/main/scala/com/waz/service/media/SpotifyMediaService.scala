@@ -21,9 +21,8 @@ import java.util.Locale
 
 import com.waz.ZLog._
 import com.waz.api.Message
-import com.waz.content.KeyValueStorage
-import com.waz.content.KeyValueStorage.KeyValuePref
-import com.waz.content.Preference.PrefCodec
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.SpotifyRefreshToken
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.model.{MessageContent, MessageData}
 import com.waz.service.assets.AssetService
@@ -37,13 +36,13 @@ import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
 
-class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue: KeyValueStorage) {
+class SpotifyMediaService(client: SpotifyClient, assets: AssetService, userPrefs: UserPreferences) {
   import SpotifyMediaService._
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[SpotifyMediaService]
 
-  private val spotifyRefreshTokenPref: KeyValuePref[Option[RefreshToken]] = keyValue.keyValuePref(KeyValueStorage.SpotifyRefreshToken, None)
+  private val spotifyRefreshTokenPref = userPrefs.preference(SpotifyRefreshToken)
   private val accessToken = new SourceSignal[Option[AccessToken]](Some(None))
 
   val authentication: Signal[Authentication] = spotifyRefreshTokenPref.signal zip accessToken map { case (refresh, access) =>
@@ -110,9 +109,4 @@ object SpotifyMediaService {
   case class TrackId(id: String) extends SpotifyId
   case class AlbumId(id: String) extends SpotifyId
   case class PlaylistId(user: String, id: String) extends SpotifyId
-
-  implicit lazy val refreshTokenPrefCodec: PrefCodec[RefreshToken] = new PrefCodec[RefreshToken] {
-    override def encode(v: RefreshToken): String = v.str
-    override def decode(str: String): RefreshToken = RefreshToken(str)
-  }
 }

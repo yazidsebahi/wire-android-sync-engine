@@ -24,10 +24,10 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.cache.{CacheService, Expiration}
-import com.waz.content.AccountsStorage
+import com.waz.content.{AccountsStorageImpl, GlobalPreferences}
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.{AccountId, Mime}
-import com.waz.service.push.GcmGlobalService
+import com.waz.service.push.GcmGlobalService.GcmRegistration
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, RichFuture}
@@ -70,7 +70,7 @@ class ZmsReportingService(user: AccountId, global: ReportingService) extends Rep
   global.addStateReporter(generateStateReport)(s"ZMessaging[$user]")
 }
 
-class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountsStorage, prefs: PreferenceService) extends ReportingService {
+class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountsStorageImpl, prefs: GlobalPreferences) extends ReportingService {
   import ReportingService._
   import Threading.Implicits.Background
   implicit val tag: LogTag = logTagFor[GlobalReportingService]
@@ -110,8 +110,8 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     }
   })
 
-  val GcmRegistrationReporter = Reporter("Gcm", { writer =>
-    prefs.withPreferences(GcmGlobalService.GcmRegistration.apply) map { writer.println }
+  val GcmRegistrationReporter = Reporter("Push", { writer =>
+    GcmRegistration()(Threading.Background, prefs).map(writer.println )
   })
 
   val LogCatReporter = Reporter("LogCat", { writer =>

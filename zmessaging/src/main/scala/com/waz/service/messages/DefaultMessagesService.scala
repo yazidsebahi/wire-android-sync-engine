@@ -20,7 +20,7 @@ package com.waz.service.messages
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
-import com.waz.content.{EditHistoryStorage, ReactionsStorage}
+import com.waz.content.{EditHistoryStorage, GlobalPreferences, ReactionsStorage}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.AssetStatus.{UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -50,7 +50,7 @@ trait MessagesService {
 }
 
 class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
-                             prefs: PreferenceService, users: UserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
+                             prefs: GlobalPreferences, users: UserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
                              network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
                              otr: OtrService) extends MessagesService {
   import Threading.Implicits.Background

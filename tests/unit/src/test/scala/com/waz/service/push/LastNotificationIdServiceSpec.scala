@@ -18,7 +18,7 @@
 package com.waz.service.push
 
 import com.waz.RobolectricUtils
-import com.waz.content.{KeyValueStorage, ZmsDatabase}
+import com.waz.content.{UserPreferences, ZmsDatabase}
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, Uid}
 import com.waz.service.push.PushService.SlowSyncRequest
@@ -45,8 +45,8 @@ class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with Robol
   lazy val eventsClient = new EventsClient(new EmptyClient) {
     override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(100.millis)(Right(lastNotificationResponse))
   }
-  lazy val keyValue = new KeyValueStorage(context, new ZmsDatabase(AccountId(), context))
-  lazy val service = new LastNotificationIdService(keyValue, pushSignals, eventsClient, ClientId())
+  lazy val userPrefs = new UserPreferences(context, new ZmsDatabase(AccountId(), context))
+  lazy val service = new LastNotificationIdService(userPrefs, pushSignals, eventsClient, ClientId())
 
   var lastNotificationResponse = Option(PushNotification(Uid(), Nil))
 

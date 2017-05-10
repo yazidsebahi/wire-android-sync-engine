@@ -19,7 +19,9 @@ package com.waz.service.push
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.content.KeyValueStorage
+import com.waz.content.GlobalPreferences.GcmEnabledKey
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences._
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.conversation.DefaultConversationsContentUpdater
@@ -39,7 +41,7 @@ trait IGcmService {
 
 class GcmService(accountId:         AccountId,
                  val gcmGlobalService:  GcmGlobalService,
-                 keyVal:            KeyValueStorage,
+                 userPrefs:            UserPreferences,
                  convsContent:      DefaultConversationsContentUpdater,
                  eventsClient:      EventsClient,
                  eventPipeline:     EventPipeline,
@@ -55,11 +57,11 @@ class GcmService(accountId:         AccountId,
   val notificationsToProcess = Signal(Set[Uid]())
 
 
-  val lastReceivedConvEventTime = keyVal.keyValuePref[Instant]("last_received_conv_event_time", Instant.EPOCH)
-  val lastFetchedConvEventTime = keyVal.keyValuePref[Instant]("last_fetched_conv_event_time", Instant.ofEpochMilli(1))
-  val lastFetchedLocalTime = keyVal.keyValuePref[Instant]("last_fetched_local_time", Instant.EPOCH)
-  val lastRegistrationTime = keyVal.keyValuePref[Instant]("gcm_registration_time", Instant.EPOCH)
-  val registrationRetryCount = keyVal.keyValuePref[Int]("gcm_registration_retry_count", 0)
+  val lastReceivedConvEventTime = userPrefs.preference(LastReceivedConvEvent)
+  val lastFetchedConvEventTime  = userPrefs.preference(LastFetchedConvEvent)
+  val lastFetchedLocalTime      = userPrefs.preference(LastFetchedConvEventLocal)
+  val lastRegistrationTime      = userPrefs.preference(GcmRegistrationTime)
+  val registrationRetryCount    = userPrefs.preference(GcmRegistrationRetry)
 
   /**
     * Current GCM state, true if we are receiving notifications on it.
@@ -142,8 +144,8 @@ class GcmService(accountId:         AccountId,
 
   def gcmSenderId = gcmGlobalService.gcmSenderId
 
-  def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.gcmEnabled) {
-    gcmGlobalService.getGcmRegistration.future map {
+  def ensureGcmRegistered(): Future[Any] = if (gcmGlobalService.prefs.getFromPref(GcmEnabledKey)) {
+    gcmGlobalService.getGcmRegistration map {
       case r@GcmRegistration(_, userId, _) if userId == accountId => verbose(s"ensureGcmRegistered() - already registered: $r")
       case _ => sync.resetGcm()
     }
@@ -166,7 +168,7 @@ class GcmService(accountId:         AccountId,
   }
 
   val eventProcessingStage = EventScheduler.Stage[GcmTokenRemoveEvent] { (convId, events) =>
-    gcmGlobalService.getGcmRegistration.future map { reg =>
+    gcmGlobalService.getGcmRegistration map { reg =>
       events find (reg.token == _.token) foreach { _ =>
         gcmGlobalService.unregister() flatMap (_ => ensureGcmRegistered())
       }
@@ -179,7 +181,7 @@ class GcmService(accountId:         AccountId,
       case Some(reg) => post(reg) flatMap {
         case true =>
           lastRegistrationTime := Instant.now
-          gcmGlobalService.updateRegisteredUser(reg.token, accountId).future map {
+          gcmGlobalService.updateRegisteredUser(reg.token, accountId) map {
             Some(_)
           }
         case false => Future.successful(Some(reg))

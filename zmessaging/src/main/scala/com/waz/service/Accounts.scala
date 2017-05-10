@@ -21,6 +21,7 @@ import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
@@ -46,7 +47,7 @@ class Accounts(val global: GlobalModule) {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  val currentAccountPref = prefs.preferenceStringSignal(CurrentAccountPref)
+  val currentAccountPref = prefs.preference(CurrentAccountPref)
 
   lazy val currentAccountData = currentAccountPref.signal.flatMap[Option[AccountData]] {
     case "" => Signal.const(Option.empty[AccountData])
@@ -222,7 +223,5 @@ class Accounts(val global: GlobalModule) {
 
 object Accounts {
   private implicit val logTag: LogTag = logTagFor[Accounts]
-
-  val CurrentAccountPref = "CurrentUserPref"
 }
 

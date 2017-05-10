@@ -22,7 +22,8 @@ import java.io.File
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.Verification
-import com.waz.content.KeyValueStorage
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.OtrLastPrekey
 import com.waz.model.AccountId
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service.MetaDataService
@@ -33,13 +34,13 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class CryptoBoxService(context: Context, userId: AccountId, metadata: MetaDataService, keyValue: KeyValueStorage) {
+class CryptoBoxService(context: Context, userId: AccountId, metadata: MetaDataService, userPrefs: UserPreferences) {
   import CryptoBoxService._
   private implicit val dispatcher = new SerialDispatchQueue(Threading.IO)
 
   private[service] lazy val cryptoBoxDir = returning(new File(new File(context.getFilesDir, metadata.cryptoBoxDirName), userId.str))(_.mkdirs())
 
-  private[waz] val lastPreKeyId = keyValue.keyValuePref("otr_last_prekey_id", 0)
+  private[waz] val lastPreKeyId = userPrefs.preference(OtrLastPrekey)
 
   private lazy val clientLabel = if (metadata.localBluetoothName.isEmpty) metadata.deviceModel else metadata.localBluetoothName
 
