@@ -49,6 +49,7 @@ class PushTokenService(googleApi: GoogleApi,
 
   val pushEnabled       = prefs.preference(PushEnabledKey)
   val currentTokenPref  = prefs.preference(PushToken)
+
   val onTokenRefresh    = EventStream[Option[String]]()
 
   onTokenRefresh(setNewToken(_))
@@ -67,14 +68,13 @@ class PushTokenService(googleApi: GoogleApi,
     push     <- pushEnabled.signal                      if push
     play     <- googleApi.isGooglePlayServicesAvailable if play
     lcActive <- lifeCycle.active                        if !lcActive
-    //token state will be undefined at the start, in which case we SHOULD use the token (hence state.forall)
     current  <- currentTokenPref.signal
     userRegistered <- accounts.signal(accountId)
       .map(_.registeredPush)
       .map(t => current.isDefined && t == current)
       .orElse(Signal.const(false))
-  } yield current.isDefined && userRegistered).
-    orElse(Signal.const(false))
+  } yield current.isDefined && userRegistered)
+    .orElse(Signal.const(false))
 
   val eventProcessingStage = EventScheduler.Stage[GcmTokenRemoveEvent] { (_, events) =>
     currentTokenPref().flatMap {

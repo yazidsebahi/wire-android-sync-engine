@@ -19,8 +19,9 @@ package com.waz.content
 
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
+import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{debug, warn}
+import com.waz.ZLog.{debug, verbose, warn}
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.model.KeyValueData.KeyValueDataDao
@@ -39,7 +40,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 trait Preferences {
 
-  implicit protected def dispatcher: ExecutionContext
+  implicit protected val dispatcher: ExecutionContext
 
   def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] = new Preference[A](this, key)
 
@@ -51,8 +52,11 @@ object Preferences {
 
   class Preference[A: PrefCodec](prefs: Preferences, key: PrefKey[A])(implicit val dispatcher: ExecutionContext) {
 
-    def apply():          Future[A]    = prefs.getValue(key)
-    def update(value: A): Future[Unit] = prefs.setValue(key, value).map { _ => signal ! value }
+    def apply():          Future[A]    = prefs.getValue(key).map { v => verbose(s"Getting $key: $v"); v }
+    def update(value: A): Future[Unit] = {
+      verbose(s"Setting $key: $value")
+      prefs.setValue(key, value).map { _ => verbose(s"Updating signal with value: $value"); signal ! value }
+    }
 
     def :=(value: A):      Future[Unit] = update(value)
     def mutate(f: A => A): Future[Unit] = apply().flatMap(cur => update(f(cur)))
@@ -250,7 +254,7 @@ object GlobalPreferences {
   lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
   lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
 
-  lazy val PushEnabledKey             = PrefKey[Boolean]       ("PREF_KEY_GCM_ENABLED")
+  lazy val PushEnabledKey             = PrefKey[Boolean]       ("PUSH_ENABLED")
   lazy val PushToken                  = PrefKey[Option[String]]("PUSH_TOKEN")
 
   lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
