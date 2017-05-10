@@ -17,9 +17,9 @@
  */
 package com.waz.bitmap.gif
 
-import android.content.Context
 import android.graphics.Bitmap
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration.Duration
 
@@ -31,9 +31,6 @@ import scala.concurrent.duration.Duration
  * @param gif
  */
 class AnimGifDecoder(gif: Gif) {
-
-  private implicit val logTag: LogTag = logTagFor[AnimGifDecoder]
-
   val framesCount = gif.frames.length
   var frameIndex = -1
   var loopCounter = 0
