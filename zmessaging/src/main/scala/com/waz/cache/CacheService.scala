@@ -100,6 +100,7 @@ trait CacheService {
 }
 
 class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheStorage) extends CacheService {
+
   import CacheService._
   import Threading.Implicits.Background
 
