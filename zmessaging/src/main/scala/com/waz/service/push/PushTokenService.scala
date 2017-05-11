@@ -63,16 +63,15 @@ class PushTokenService(googleApi: GoogleApi,
     case _ =>
   }
 
+  private val userToken = accounts.signal(accountId).map(_.registeredPush)
+
   val pushActive = (for {
-    push     <- pushEnabled.signal                      if push
-    play     <- googleApi.isGooglePlayServicesAvailable if play
-    lcActive <- lifeCycle.active                        if !lcActive
-    current  <- currentToken.signal
-    userRegistered <- accounts.signal(accountId)
-      .map(_.registeredPush)
-      .map(t => current.isDefined && t == current)
-      .orElse(Signal.const(false))
-  } yield current.isDefined && userRegistered)
+    push           <- pushEnabled.signal                      if push
+    play           <- googleApi.isGooglePlayServicesAvailable if play
+    lcActive       <- lifeCycle.active                        if !lcActive
+    current        <- currentToken.signal                     if current.isDefined
+    userRegistered <- userToken.map(_ == current)
+  } yield userRegistered)
     .orElse(Signal.const(false))
 
   val eventProcessingStage = EventScheduler.Stage[PushTokenRemoveEvent] { (_, events) =>
@@ -101,7 +100,7 @@ class PushTokenService(googleApi: GoogleApi,
 
   //on dispatcher prevents infinite register loop
   (for {
-    userToken <- accounts.signal(accountId).map(_.registeredPush)
+    userToken   <- userToken
     globalToken <- currentToken.signal
   } yield (globalToken, userToken)).on(dispatcher) {
     case (Some(glob), Some(user)) if glob != user =>
