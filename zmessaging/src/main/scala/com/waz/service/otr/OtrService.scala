@@ -89,6 +89,8 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
               case None =>
                 error(s"External message could not be decoded External($key, $sha), data: $extData")
                 Some(OtrErrorEvent(conv, time, from, DecryptionError("symmetric decryption failed", from, sender)))
+              case Some(GenericMessage(_, Calling(content))) =>
+                Some(CallMessageEvent(conv, time, from, sender, content)) //call messages need sender client id
               case Some(extMsg) =>
                 Some(GenericMessageEvent(conv, time, from, extMsg).withLocalTime(ev.localTime))
             }
