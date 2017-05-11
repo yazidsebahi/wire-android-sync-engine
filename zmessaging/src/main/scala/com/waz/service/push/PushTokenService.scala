@@ -49,7 +49,7 @@ class PushTokenService(googleApi: GoogleApi,
   val pushEnabled   = prefs.preference(PushEnabledKey)
   val currentToken  = prefs.preference(GlobalPreferences.PushToken)
 
-  val onTokenRefresh    = EventStream[Option[PushToken]]()
+  val onTokenRefresh = EventStream[Option[PushToken]]()
 
   onTokenRefresh(setNewToken(_))
 

@@ -56,8 +56,7 @@ class WebSocketClientService(context:     Context,
     case NetworkMode.OFFLINE => Signal const false
     case _ => lifecycle.lifecycleState.flatMap {
       case Stopped => Signal const false
-      case Idle => useWebSocketFallback
-      case Active | UiActive => Signal const true
+      case _ => useWebSocketFallback
     }.flatMap {
       case true => Signal.const(true)
       case false =>

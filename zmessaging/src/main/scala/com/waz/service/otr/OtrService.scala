@@ -23,6 +23,7 @@ import javax.crypto.Mac
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.{MembersStorageImpl, GlobalPreferences, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
@@ -289,7 +290,6 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
 }
 
 object OtrService {
-  private implicit val logTag: LogTag = logTagFor[OtrService]
 
   val random = new SecureRandom
 
