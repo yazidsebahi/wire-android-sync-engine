@@ -52,11 +52,7 @@ class AssetSyncHandler(cache: CacheService, convs: DefaultConversationsContentUp
         CancellableFuture.successful(Right(None))
       case (Some(asset), Some(data)) =>
         otrSync.uploadAssetDataV3(data, if (public) None else Some(AESKey()), asset.mime).flatMap {
-          case Right(remoteData) =>
-            for {
-              Some(updated) <- CancellableFuture.lift(assets.storage.updateAsset(asset.id, _.copyWithRemoteData(remoteData)))
-              _ <- CancellableFuture.lift(cache.addStream(updated.cacheKey, data.inputStream, updated.mime, updated.name, length = data.length))
-            } yield Right(Some(updated))
+          case Right(remoteData) => CancellableFuture.lift(assets.storage.updateAsset(asset.id, _.copyWithRemoteData(remoteData)).map { Right(_) })
           case Left(err) => CancellableFuture successful Left(err)
         }
       case asset =>

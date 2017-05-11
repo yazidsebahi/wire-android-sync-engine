@@ -59,7 +59,8 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
     service.clients.getSelfClient flatMap {
       case Some(otrClient) =>
         postEncryptedMessage(convId, message, recipients = recipients) {
-          case (content, retry) if content.estimatedSize < MaxContentSize => msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content, nativePush = nativePush), ignoreMissing(retry), recipients)
+          case (content, retry) if content.estimatedSize < MaxContentSize =>
+            msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content, nativePush = nativePush), ignoreMissing(retry), recipients)
           case (content, retry) =>
             verbose(s"Message content too big, will post as External. Estimated size: ${content.estimatedSize}")
             postExternalMessage(otrClient.id, convId, remoteId, message, recipients, nativePush)
