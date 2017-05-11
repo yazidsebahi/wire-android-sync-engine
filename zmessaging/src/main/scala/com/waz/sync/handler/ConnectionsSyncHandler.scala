@@ -49,7 +49,7 @@ class ConnectionsSyncHandler(usersStorage: UsersStorage, connectionService: Conn
     connectionsClient.createConnection(userId, name, message).future flatMap {
       case Right(event) =>
         verbose(s"postConnection($userId) success: $event")
-        connectionService.syncConversationInitiallyAfterCreation(event.convId, event.from, event.to) map (_ => SyncResult.Success)
+        pipeline(Seq(event)) map { _ => SyncResult.Success }
 
       case Left(error) =>
         warn("postConnection failed")
