@@ -53,6 +53,24 @@ case class AccountData(id:             AccountId,
                        clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
                        privateMode:    Boolean                 = false) {
 
+  override def toString: String =
+    s"""AccountData:
+       | id:              $id
+       | email:           $email
+       | hash:            $hash
+       | phone:           $phone
+       | handle:          $handle
+       | registeredPush:  $registeredPush
+       | verified:        $verified
+       | cookie:          ${cookie.take(6)}
+       | password         ... left out ...
+       | accessToken:     ${accessToken.take(6)}
+       | userId:          $userId
+       | clientId:        $clientId
+       | clientRegState:  $clientRegState
+       | privateMode:     $privateMode
+    """.stripMargin
+
   def authorized(credentials: Credentials) = credentials match {
     case EmailCredentials(e, Some(passwd), _) if email.contains(e) && AccountData.computeHash(id, passwd) == hash =>
       Some(copy(password = Some(passwd)))
@@ -81,8 +99,6 @@ case class AccountData(id:             AccountId,
 
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState) =
     copy(userId = userId orElse this.userId, verified = this.verified | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
-
-  override def toString: String = s"AccountData($id, $handle, $email, $phone, $verified, user: $userId, client: $clientId, cookie: ${cookie.toString}, password: ${password.isDefined})"
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
