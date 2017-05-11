@@ -132,7 +132,7 @@ class DefaultConversationsContentUpdater(val storage: ConversationStorage, users
   def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false) =
     for {
       user <- users.getUsers(members)
-      conv <- storage.insert(ConversationData(convId, remoteId, None, selfUserId, convType, generatedName = NameUpdater.generatedName(convType)(user), hidden = hidden))
+      conv <- storage.insert(ConversationData(convId, remoteId, None, selfUserId, convType, generatedName = NameUpdater.generatedName(convType)(user), hidden = hidden, status = Some(ConversationStatus.Active)))
       _    <- addConversationMembers(convId, selfUserId, members)
     } yield conv
 
