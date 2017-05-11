@@ -65,7 +65,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
       val token = PushToken("token")
-      (google.getPushToken _).expects().returning(token)
+      (google.getPushToken _).expects().returning(Some(token))
       val service = initTokenService()
 
       pushEnabled := true
@@ -81,7 +81,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       currentToken := Some(oldToken)
       googlePlayAvailable ! true
 
-      (google.getPushToken _).expects().once().returning(newToken)
+      (google.getPushToken _).expects().once().returning(Some(newToken))
 
       //This needs to be called
       (google.deleteAllPushTokens _).expects().once()

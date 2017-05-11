@@ -86,7 +86,7 @@ class PushTokenService(googleApi: GoogleApi,
   }
 
   private def setNewToken(token: Option[PushToken] = None): Future[Unit] = try {
-    val t = token.orElse(Some(googleApi.getPushToken))
+    val t = token.orElse(googleApi.getPushToken)
     t.foreach { t =>
       Localytics.setPushDisabled(false)
       Localytics.setPushRegistrationId(t.str)

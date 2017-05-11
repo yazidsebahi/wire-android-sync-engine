@@ -23,46 +23,48 @@ import com.google.firebase.iid.FirebaseInstanceId
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
 import com.waz.model.PushToken
+import com.waz.utils.LoggedTry
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.GoogleApi.RequestGooglePlayServices
-import com.waz.utils.{LoggedTry, returning}
 
 trait GoogleApi {
   def isGooglePlayServicesAvailable: Signal[Boolean]
   def checkGooglePlayServicesAvailable(activity: Activity): Unit
   def onActivityResult(requestCode: Int, resultCode: Int)
-  def getPushToken: PushToken
+  def getPushToken: Option[PushToken]
   def deleteAllPushTokens(): Unit
 }
 
-class GoogleApiImpl extends GoogleApi {
+class GoogleApiImpl(context: Context) extends GoogleApi {
 
-  private lazy val api = GoogleApiAvailability.getInstance()
+  private val api = GoogleApiAvailability.getInstance()
 
-  override val isGooglePlayServicesAvailable = Signal[Boolean](false)
+  override val isGooglePlayServicesAvailable = Signal[Boolean](api.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS)
 
   override def checkGooglePlayServicesAvailable(activity: Activity) = api.isGooglePlayServicesAvailable(activity) match {
     case ConnectionResult.SUCCESS => isGooglePlayServicesAvailable ! true
     case code if api.isUserResolvableError(code) => api.getErrorDialog(activity, code, RequestGooglePlayServices)
-    case code => warn(s"Google Play Services not available: error code: $code")
+    case code =>
+      isGooglePlayServicesAvailable ! false
+      warn(s"Google Play Services not available: error code: $code")
   }
 
   override def onActivityResult(requestCode: Int, resultCode: Int) = requestCode match {
     case RequestGooglePlayServices =>
       resultCode match {
         case Activity.RESULT_OK => isGooglePlayServicesAvailable ! true
-        case _ => warn("Failed to update/install Google Play Services")
+        case _ =>
+          isGooglePlayServicesAvailable ! false
+          warn("Failed to update/install Google Play Services")
       }
     case _ => //
   }
 
   override def getPushToken =
-    returning(PushToken(FirebaseInstanceId.getInstance().getToken)) { t =>
-      if (t == null) throw new Exception("No FCM token was returned from the FirebaseInstanceId")
-    }
+    LoggedTry(FirebaseInstanceId.getInstance().getToken).toOption.map(PushToken(_))
 
   override def deleteAllPushTokens(): Unit =
-    LoggedTry.local { FirebaseInstanceId.getInstance().deleteInstanceId() }
+    LoggedTry(FirebaseInstanceId.getInstance().deleteInstanceId())
 }
 
 object GoogleApi {
