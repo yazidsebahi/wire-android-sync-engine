@@ -124,7 +124,7 @@ object AccountData {
     val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
     val Handle = opt(handle('handle))(_.handle)
-    val PushRegistered = opt(id[PushToken]('push_registered))(_.registeredPush)
+    val RegisteredPush = opt(id[PushToken]('registered_push))(_.registeredPush)
     val EmailVerified = bool('verified)(_.verified)
     val Cookie = opt(text[Cookie]('cookie, _.str, AuthenticationManager.Cookie))(_.cookie)
     val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))(_.accessToken)
@@ -134,9 +134,9 @@ object AccountData {
     val PrivateMode = bool('private_mode)(_.privateMode)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode)
+    override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Email, Hash, Phone, Handle, PushRegistered, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
