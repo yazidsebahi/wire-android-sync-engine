@@ -19,7 +19,6 @@ package com.waz.bitmap.gif
 
 import java.nio.{ByteBuffer, ByteOrder, IntBuffer}
 
-import android.content.Context
 import android.graphics.{Bitmap, Color}
 import com.waz.bitmap.gif.Gif.{Disposal, Frame}
 

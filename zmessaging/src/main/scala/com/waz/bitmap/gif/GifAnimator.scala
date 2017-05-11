@@ -17,9 +17,9 @@
  */
 package com.waz.bitmap.gif
 
-import android.content.Context
 import android.graphics.Bitmap
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.Images
 
@@ -27,7 +27,6 @@ import scala.concurrent.Promise
 import scala.concurrent.duration.{FiniteDuration, _}
 
 class GifAnimator(gif: Gif, reserveFrameMemory: () => Unit, frameCallback: Bitmap => Unit) {
-  import GifAnimator._
   private implicit val dispatcher = GifAnimator.dispatcher
 
   def run(): CancellableFuture[Unit] = {
@@ -76,7 +75,5 @@ class GifAnimator(gif: Gif, reserveFrameMemory: () => Unit, frameCallback: Bitma
 
 
 object GifAnimator {
-  implicit val logTag: LogTag = logTagFor[GifAnimator]
-  
   val dispatcher = Threading.ImageDispatcher
 }
