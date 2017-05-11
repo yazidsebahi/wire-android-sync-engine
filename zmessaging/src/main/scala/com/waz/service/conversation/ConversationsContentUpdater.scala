@@ -41,6 +41,7 @@ trait ConversationsContentUpdater {
   def hideIncomingConversation(user: UserId): Future[Option[(ConversationData, ConversationData)]]
   def hideConversation(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
+  def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A]
 }
 
 class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {

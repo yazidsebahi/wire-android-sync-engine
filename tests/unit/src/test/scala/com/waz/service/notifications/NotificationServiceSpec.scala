@@ -34,7 +34,7 @@ import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.utils.events.EventContext
-import com.waz.zms.CloudMessageHandlerService.EncryptedNot
+import com.waz.zms.FCMHandlerService.DecryptedNotification
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
@@ -252,7 +252,7 @@ class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChe
 
       val json = """{"data":{"payload":[{"conversation":"0a032ce9-2b6b-4f6c-9825-1ac958eeb94b","time":"2016-01-27T17:29:45.714Z","data":{"text":"owABAaEAWCCYir0PHK4qO8706uRy2aID1MZPjsZd3BCgrVBLZWm6uwJYxQKkAAQBoQBYIKk+iFvwuNS4u8C9kEr5euVnNecXconfHNcUv8BMSuM+AqEAoQBYIDcRmzxai6NPcUeVmcBAeKYl1ikB1zP5IdDBLKootTDdA6UAUGEAzoTIyssU5udKqxR2mDQBAAIAA6EAWCCT1VMZ3KIXptRnH9O2oeW4Z7Ck\/6iwshmRig\/+mpKA8gRYNREviDPKaPYzaUQpqlKWNm3EKyEF+B1eSoEdaOg52+0NIiHthTi22dfZc8MwAKeg5a4xZ\/lA","sender":"30f327954b3a772a","recipient":"ecd0802b04b01fe8"},"from":"b3fe68df-db7f-4a1d-b49c-370e77334af0","type":"conversation.otr-message-add"}],"transient":false,"id":"8eeb8574-c51b-11e5-a396-22000b0a2794"}}"""
       new JSONObject(json) match {
-        case EncryptedNot(notification) => info(s"notification: $notification")
+        case DecryptedNotification(notification) => info(s"notification: $notification")
         case resp => fail(resp.toString())
       }
     }

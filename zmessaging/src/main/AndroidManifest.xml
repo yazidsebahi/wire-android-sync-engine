@@ -16,12 +16,18 @@
         <service android:name="com.waz.zms.NotificationsAndroidService" />
         <service android:name="com.waz.zms.WebSocketService" />
         <service android:name="com.waz.zms.CallService" android:exported="true" />
-        <service android:name="com.waz.zms.CloudMessageHandlerService" />
 
         <service
                 android:name="com.waz.zms.InstanceIdListenerService">
             <intent-filter>
                 <action android:name="com.google.firebase.INSTANCE_ID_EVENT" />
+            </intent-filter>
+        </service>
+
+        <service
+                android:name="com.waz.zms.FCMHandlerService">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
             </intent-filter>
         </service>
 

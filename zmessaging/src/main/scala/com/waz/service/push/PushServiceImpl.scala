@@ -38,6 +38,8 @@ import scala.concurrent.{Future, Promise}
 
 trait PushService {
 
+  def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
+
 }
 
 class PushServiceImpl(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushService {
@@ -52,7 +54,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
 
   var connectedPushPromise = Promise[PushServiceImpl]()
 
-  val cloudPushNotificationsToProcess = Signal(Set[Uid]())
+  override val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
   /**
     * Drift to the BE time at the moment we fetch notifications

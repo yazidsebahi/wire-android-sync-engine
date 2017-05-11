@@ -98,7 +98,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       val bytes = Base64.decode(data, 0)
       info(s"bytes len: ${bytes.length}")
 
-      OtrService.hmacSha256(client.signalingKey.get, bytes).toSeq shouldEqual Base64.decode(mac, 0)
+      OtrServiceImpl.hmacSha256(client.signalingKey.get, bytes).toSeq shouldEqual Base64.decode(mac, 0)
 
       val plain = AESUtils.decrypt(client.signalingKey.get.encKey, bytes)
       info(new String(plain, "utf8"))
@@ -194,12 +194,12 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
         client2.otrClientsService.updateSelfClients(Seq(c2)),
         client1.otrClientsService.updateUserClients(user2.id, Seq(c2)),
         client2.otrClientsService.updateUserClients(user1.id, Seq(c1)),
-        client1.otrService.sessions.getOrCreateSession(OtrService.sessionId(user2.id, c2.id), pre2.head),
-        client2.otrService.sessions.getOrCreateSession(OtrService.sessionId(user1.id, c1.id), pre1.head)
+        client1.otrService.sessions.getOrCreateSession(OtrServiceImpl.sessionId(user2.id, c2.id), pre2.head),
+        client2.otrService.sessions.getOrCreateSession(OtrServiceImpl.sessionId(user1.id, c1.id), pre1.head)
       )), 5.seconds)
 
       client1.otrClientsService.getSelfClient.futureValue shouldBe 'defined
-      client1.otrService.sessions.getSession(OtrService.sessionId(user2.id, c2.id)).futureValue shouldBe 'defined
+      client1.otrService.sessions.getSession(OtrServiceImpl.sessionId(user2.id, c2.id)).futureValue shouldBe 'defined
 
       info(s"user1: ${user1.id}, c1: $c1")
       info(s"user1: ${user2.id}, c1: $c2")

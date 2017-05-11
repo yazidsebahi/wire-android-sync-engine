@@ -214,7 +214,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val youtubeMedia                           = wire[YouTubeMediaService]
   lazy val soundCloudMedia                        = wire[SoundCloudMediaService]
   lazy val spotifyMedia                           = wire[SpotifyMediaService]
-  lazy val otrService: OtrService                 = wire[OtrService]
+  lazy val otrService: OtrServiceImpl             = wire[OtrServiceImpl]
   lazy val genericMsgs: GenericMessageService     = wire[GenericMessageService]
   lazy val reactions: ReactionsService            = wire[ReactionsService]
   lazy val notifications: NotificationService     = wire[NotificationService]

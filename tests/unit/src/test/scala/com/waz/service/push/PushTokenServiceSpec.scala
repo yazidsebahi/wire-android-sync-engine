@@ -33,7 +33,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class PushTokenServiceSpec extends AndroidFreeSpec {
-  
+
   val google    = mock[GoogleApi]
   val lifecycle = mock[ZmsLifecycle]
   val accounts  = mock[AccountsStorage]

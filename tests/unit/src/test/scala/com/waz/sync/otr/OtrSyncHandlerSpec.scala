@@ -25,7 +25,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, UserClients}
-import com.waz.service.otr.OtrService
+import com.waz.service.otr.OtrServiceImpl
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
@@ -57,7 +57,7 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
 
-    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage, prefs) {
+    override lazy val otrService: OtrServiceImpl = new OtrServiceImpl(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage, prefs) {
       override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent, recipients: Option[Set[UserId]]): Future[EncryptedContent] = {
         encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
         Future successful encryptedContent

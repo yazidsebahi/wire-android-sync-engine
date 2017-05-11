@@ -28,7 +28,7 @@ import com.waz.api.{Location, OtrClientType, Verification, OtrClient => ApiClien
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{AccountData, ConvId, UserId, otr}
 import com.waz.service.AccountService
-import com.waz.service.otr.OtrService
+import com.waz.service.otr.OtrServiceImpl
 import com.waz.sync.SyncResult
 import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
@@ -147,7 +147,7 @@ class OtrClient(val userId: UserId, val clientId: ClientId, var data: Client)(im
   override def getFingerprint: api.UiSignal[Fingerprint] = {
     def signal(acc: AccountService) = acc.accountData flatMap { account =>
       if (account.userId.contains(userId) && account.clientId.contains(clientId)) Signal.future(acc.cryptoBox { cb => Future successful cb.getLocalFingerprint })
-      else acc.cryptoBox.sessions.remoteFingerprint(OtrService.sessionId(userId, clientId))
+      else acc.cryptoBox.sessions.remoteFingerprint(OtrServiceImpl.sessionId(userId, clientId))
     }
 
     UiSignal.accountMapped(signal(_: AccountService).collect { case Some(bytes) => bytes }, new Fingerprint(_: Array[Byte]))
