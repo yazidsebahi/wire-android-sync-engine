@@ -30,14 +30,11 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 import org.threeten.bp.Instant
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Future, Promise}
 
-class CallingServiceSpec extends FeatureSpec with Matchers with MockFactory with BeforeAndAfterAll with AndroidFreeSpec {
+class CallingServiceSpec extends AndroidFreeSpec {
 
   implicit val eventContext = EventContext.Implicits.global
   implicit val executionContext = new SerialDispatchQueue(name = "CallingServiceSpec")

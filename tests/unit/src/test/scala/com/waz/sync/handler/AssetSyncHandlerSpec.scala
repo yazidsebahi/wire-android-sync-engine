@@ -33,14 +33,12 @@ import com.waz.utils.sha2
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen.resultOf
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
 
 import scala.annotation.tailrec
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
-class AssetSyncHandlerSpec extends FeatureSpec with AndroidFreeSpec with BeforeAndAfter with Matchers with MockFactory {
+class AssetSyncHandlerSpec extends AndroidFreeSpec {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 

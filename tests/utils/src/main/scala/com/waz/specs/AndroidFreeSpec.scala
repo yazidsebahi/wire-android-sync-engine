@@ -24,12 +24,13 @@ import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.isTest
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
 import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalamock.scalatest.MockFactory
+import org.scalatest._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
+abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfter with Matchers with MockFactory { this: Suite =>
 
   //Ensures that Android wrappers are assigned with a non-Android implementation so that tests can run on the JVM
   override protected def beforeAll() = {

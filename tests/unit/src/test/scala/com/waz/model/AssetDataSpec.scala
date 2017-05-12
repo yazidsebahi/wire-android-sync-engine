@@ -23,18 +23,13 @@ import com.waz.model.AssetStatus.{UploadInProgress, UploadNotStarted}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.Matchers._
 import com.waz.utils.wrappers._
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
 import org.scalacheck.Arbitrary.arbitrary
-import org.scalacheck.Gen
 import org.scalacheck.Gen.alphaNumChar
-import org.scalacheck._
-import org.scalamock.scalatest.MockFactory
+import org.scalacheck.{Gen, _}
+import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.threeten.bp.Duration
 
-class AssetDataSpec
-  extends FeatureSpec with Matchers with TableDrivenPropertyChecks with BeforeAndAfter
-    with GeneratorDrivenPropertyChecks with AndroidFreeSpec with MockFactory {
+class AssetDataSpec extends AndroidFreeSpec with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks {
 
   import com.waz.model.AssetData._
 

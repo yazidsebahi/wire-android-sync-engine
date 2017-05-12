@@ -35,18 +35,17 @@ import com.waz.ui.MemoryImageCache.BitmapRequest.Regular
 import com.waz.utils.Cache
 import com.waz.utils.wrappers._
 import org.scalacheck.Arbitrary.arbitrary
-import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Gen.alphaNumChar
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
+import org.scalacheck.{Arbitrary, Gen}
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
-class ImageLoaderAndroidFreeSpec extends FeatureSpec with AndroidFreeSpec with BeforeAndAfter with Matchers with MockFactory {
+class ImageLoaderAndroidFreeSpec extends AndroidFreeSpec {
+
+  import com.waz.ui.MemoryImageCache.{Entry, Key}
 
   import scala.concurrent.ExecutionContext.Implicits.global
-  import com.waz.ui.MemoryImageCache.{Key, Entry}
 
   val TIMEOUT = 5.seconds
   val ARB_DATA_SIZE = 10
