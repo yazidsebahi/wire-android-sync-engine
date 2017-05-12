@@ -144,7 +144,7 @@ class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val last
 
     windowFuture.value match {
       case Some(Success(result)) => result
-      case _ => logTime(s"loading window for index: $index")(Await.result(windowFuture, 5.seconds))
+      case _ => logTime(s"loading window for index: $index")(LoggedTry(Await.result(windowFuture, 5.seconds)).getOrElse(new IndexWindow(index, IndexedSeq.empty)))
     }
   }
 
@@ -166,7 +166,7 @@ class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val last
 
       val msg = messages.get(id)
       if (msg ne null) msg else {
-        logTime("waiting for window to prefetch")(Await.result(fetching, 5.seconds))
+        logTime("waiting for window to prefetch")(LoggedTry(Await.result(fetching, 5.seconds)))
         Option(messages.get(id)).getOrElse {
           logTime(s"loading message for id: $id, position: $index") {
             val m = LoggedTry(Await.result(loader(Seq(id)), 500.millis).headOption).toOption.flatten
