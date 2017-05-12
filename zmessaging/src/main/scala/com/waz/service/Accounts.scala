@@ -98,7 +98,11 @@ class Accounts(val global: GlobalModule) {
   }
 
   def logout(account: AccountId) = currentAccountPref() flatMap {
-    case id if id == account.str => setAccount(None) map (_ => ())
+    case id if id == account.str =>
+      for {
+        _ <- storage.update(account, _.copy(registeredPush = None))
+        _ <- setAccount(None) map (_ => ())
+      } yield {}
     case id =>
       verbose(s"logout($account) ignored, current id: $id")
       Future.successful(())
