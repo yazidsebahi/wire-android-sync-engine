@@ -40,6 +40,9 @@ trait DispatchQueue extends ExecutionContext {
   //TODO: this implements ExecutionContext.reportFailure, should we use different log here? or maybe do something else
   override def reportFailure(t: Throwable): Unit = error("reportFailure called", t)(logTagFor[DispatchQueue])
 
+  //used for waiting in tests
+  def hasRemainingTasks: Boolean = false
+
 }
 
 object DispatchQueue {
@@ -78,6 +81,7 @@ class LimitedDispatchQueue(concurrencyLimit: Int = 1, parent: ExecutionContext =
     val runningCount = new AtomicInteger(0)
 
     def dispatch(runnable: Runnable): Unit = {
+      verbose(s"dispatching runnable: $runnable")("blah")
       queue.add(DispatchQueueStats(name, runnable))
       dispatchExecutor()
     }
@@ -96,6 +100,7 @@ class LimitedDispatchQueue(concurrencyLimit: Int = 1, parent: ExecutionContext =
         case null => // done
         case runnable =>
           try {
+            verbose(s"running task: remaining? ${queue.size()}")("blah")
             runnable.run()
           } catch {
             case cause: Throwable => reportFailure(cause)
@@ -109,6 +114,8 @@ class LimitedDispatchQueue(concurrencyLimit: Int = 1, parent: ExecutionContext =
         dispatchExecutor()
     }
   }
+
+  override def hasRemainingTasks = !Executor.queue.isEmpty || Executor.runningCount.get() > 0
 }
 
 object LimitedDispatchQueue {

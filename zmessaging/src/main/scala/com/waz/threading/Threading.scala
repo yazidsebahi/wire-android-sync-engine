@@ -61,6 +61,11 @@ object Threading {
 
   val IO = IOThreadPool
 
+  /**
+    * Image decoding/encoding dispatch queue. This operations are quite cpu intensive, we don't want them to use all cores (leaving one spare core for other tasks).
+    */
+  val ImageDispatcher = new LimitedDispatchQueue(Cpus - 1, ThreadPool, "ImageDispatcher")
+
   val BlockingIO: ExecutionContext = new ExecutionContext {
     val delegate = ExecutionContext.fromExecutor(null: Executor) // default impl that handles block contexts correctly
     override def execute(runnable: Runnable): Unit = delegate.execute(new Runnable {
@@ -88,11 +93,6 @@ object Threading {
   val Timer = new Timer(true)
 
   Timer.purge()
-
-  /**
-   * Image decoding/encoding dispatch queue. This operations are quite cpu intensive, we don't want them to use all cores (leaving one spare core for other tasks).
-   */
-  val ImageDispatcher = new LimitedDispatchQueue(Cpus - 1, ThreadPool, "ImageDispatcher")
 
   lazy val BackgroundHandler: Future[Handler] = {
     val looper = Promise[Looper]
