@@ -23,7 +23,7 @@ import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.{ConvId, UserData, UserId}
-import com.waz.service.UserService
+import com.waz.service.DefaultUserService
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.EventContext
 import com.waz.utils.{BiRelation, ThrottledProcessingQueue}
@@ -37,7 +37,7 @@ import scala.util.Try
 /**
  * Updates conversation names when any dependency changes (members list, user names).
  */
-class NameUpdater(context: Context, users: UserService, usersStorage: UsersStorage, convs: ConversationStorage, membersStorage: DefaultMembersStorage) {
+class NameUpdater(context: Context, users: DefaultUserService, usersStorage: DefaultUsersStorage, convs: DefaultConversationStorage, membersStorage: DefaultMembersStorage) {
 
   private implicit val tag: LogTag = logTagFor[NameUpdater]
   private implicit val ev = EventContext.Global

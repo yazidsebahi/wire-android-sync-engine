@@ -40,9 +40,9 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class NotificationService(context: Context, selfUserId: UserId, messages: MessagesStorage, lifecycle: ZmsLifecycle,
-                          storage: NotificationStorage, usersStorage: UsersStorage, convs: ConversationStorage, reactionStorage: ReactionsStorage,
-                          userPrefs: UserPreferences, timeouts: Timeouts, pushService: PushService) {
+class NotificationService(context: Context, selfUserId: UserId, messages: DefaultMessagesStorage, lifecycle: ZmsLifecycle,
+                          storage: NotificationStorage, usersStorage: DefaultUsersStorage, convs: DefaultConversationStorage, reactionStorage: ReactionsStorage,
+                          userPrefs: UserPreferences, timeouts: Timeouts, pushService: DefaultPushService) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global

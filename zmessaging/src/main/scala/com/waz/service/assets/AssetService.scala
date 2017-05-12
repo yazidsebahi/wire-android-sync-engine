@@ -77,10 +77,10 @@ trait AssetService {
 }
 
 class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-    loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
-    permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-    metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-    prefs: GlobalPreferences) extends AssetService {
+                       loader: AssetLoader, messages: DefaultMessagesStorage, downloader: DownloaderService, errors: ErrorsService,
+                       permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
+                       metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
+                       prefs: GlobalPreferences) extends AssetService {
 
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
@@ -335,10 +335,10 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
 object AssetService {
 
   def apply(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-    loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
-    permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-    metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-    prefs: GlobalPreferences): AssetService =
+            loader: AssetLoader, messages: DefaultMessagesStorage, downloader: DownloaderService, errors: ErrorsService,
+            permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
+            metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
+            prefs: GlobalPreferences): AssetService =
     new AssetServiceImpl(storage, generator, cache, context, loader, messages, downloader, errors, permissions, streamLoader, assetDownloader, metaService, sync, media, prefs)
 
   val SaveImageDirName = "Wire"

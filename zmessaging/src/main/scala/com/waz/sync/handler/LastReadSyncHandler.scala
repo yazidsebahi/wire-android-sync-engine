@@ -19,7 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.ConversationStorage
+import com.waz.content.DefaultConversationStorage
 import com.waz.model.GenericContent.LastRead
 import com.waz.model._
 import com.waz.service.MetaDataService
@@ -29,7 +29,7 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class LastReadSyncHandler(selfUserId: UserId, convs: ConversationStorage, metadata: MetaDataService, convSync: ConversationsSyncHandler, msgsSync: MessagesSyncHandler, otrSync: OtrSyncHandler) {
+class LastReadSyncHandler(selfUserId: UserId, convs: DefaultConversationStorage, metadata: MetaDataService, convSync: ConversationsSyncHandler, msgsSync: MessagesSyncHandler, otrSync: OtrSyncHandler) {
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[LastReadSyncHandler]
 

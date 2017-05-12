@@ -25,7 +25,7 @@ import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.ConversationStorage
+import com.waz.content.DefaultConversationStorage
 import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -33,7 +33,7 @@ import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.DefaultMessagesService
 import com.waz.service.otr.OtrService
-import com.waz.service.{ErrorsService, UserService}
+import com.waz.service.{ErrorsService, DefaultUserService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient.UploadResponse
 import com.waz.sync.client.MessagesClient.OtrMessage
@@ -54,8 +54,8 @@ trait OtrSyncHandler {
 }
 
 class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-                     convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: DefaultMessagesService,
-                     errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) extends OtrSyncHandler {
+                         convs: ConversationsService, convStorage: DefaultConversationStorage, users: DefaultUserService, messages: DefaultMessagesService,
+                         errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) extends OtrSyncHandler {
 
   import OtrSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
@@ -194,7 +194,7 @@ object OtrSyncHandler {
   val MaxContentSize = 256 * 1024 // backend accepts 256KB for otr messages, but we would prefer to send less
 
   def apply(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-            convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: DefaultMessagesService,
+            convs: ConversationsService, convStorage: DefaultConversationStorage, users: DefaultUserService, messages: DefaultMessagesService,
             errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService): OtrSyncHandler =
     new OtrSyncHandlerImpl(client, msgClient, assetClient, service, assets, convs, convStorage, users, messages, errors, clientsSyncHandler, cache)
 }

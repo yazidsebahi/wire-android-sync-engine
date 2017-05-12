@@ -31,6 +31,7 @@ import scala.concurrent.Future
 
 trait MembersStorage {
   def getByConv(conv: ConvId): Future[IndexedSeq[ConversationMemberData]]
+  def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]]
 }
 
 class DefaultMembersStorage(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {

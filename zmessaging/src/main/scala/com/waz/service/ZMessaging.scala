@@ -22,7 +22,7 @@ import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
 import com.waz.api.impl.LogLevel
-import com.waz.content.{DefaultMembersStorage, UsersStorage, ZmsDatabase, _}
+import com.waz.content.{DefaultMembersStorage, DefaultUsersStorage, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
@@ -72,14 +72,14 @@ class ZMessagingFactory(global: GlobalModule) {
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val db                = new ZmsDatabase(accountId, context, dbPrefix)
   lazy val userPrefs         = wire[UserPreferences]
-  lazy val usersStorage      = wire[UsersStorage]
+  lazy val usersStorage      = wire[DefaultUsersStorage]
   lazy val otrClientsStorage = wire[OtrClientsStorage]
   lazy val membersStorage    = wire[DefaultMembersStorage]
   lazy val assetsStorage     = wire[AssetsStorage]
   lazy val voiceStorage      = wire[VoiceChannelStorage]
   lazy val reactionsStorage  = wire[ReactionsStorage]
   lazy val notifStorage      = wire[NotificationStorage]
-  lazy val convsStorage      = wire[ConversationStorage]
+  lazy val convsStorage      = wire[DefaultConversationStorage]
   lazy val msgDeletions      = wire[MsgDeletionStorage]
   lazy val searchQueryCache  = wire[SearchQueryCacheStorage]
   lazy val commonConnections = wire[CommonConnectionsStorage]
@@ -149,7 +149,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def searchQueryCache  = storage.searchQueryCache
   def commonConnections = storage.commonConnections
 
-  lazy val messagesStorage: MessagesStorage = wire[MessagesStorage]
+  lazy val messagesStorage: DefaultMessagesStorage = wire[DefaultMessagesStorage]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
 
@@ -183,7 +183,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val imageLoader     = wire[ImageLoader]
 
   lazy val pushSignals                            = wire[PushServiceSignals]
-  lazy val push: PushService                      = wire[PushService]
+  lazy val push: DefaultPushService                      = wire[DefaultPushService]
   lazy val gcm: GcmService                        = wire[GcmService]
   lazy val errors                                 = wire[ErrorsService]
   lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)
@@ -193,7 +193,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetGenerator                         = wire[ImageAssetGenerator]
   lazy val assetMetaData                          = wire[com.waz.service.assets.MetaDataService]
   lazy val assets: AssetService                   = wire[AssetService]
-  lazy val users: UserService                     = wire[UserService]
+  lazy val users: DefaultUserService                     = wire[DefaultUserService]
   lazy val conversations: ConversationsService    = wire[ConversationsService]
   lazy val convsNotifier                          = wire[ConversationsNotifier]
   lazy val convEvents: ConversationEventsService  = wire[ConversationEventsService]

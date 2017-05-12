@@ -20,7 +20,7 @@ package com.waz.service.messages
 import com.waz.ZLog._
 import com.waz.content.{Likes, ReactionsStorage}
 import com.waz.model._
-import com.waz.service.UserService
+import com.waz.service.DefaultUserService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -29,7 +29,7 @@ import org.threeten.bp.Instant.EPOCH
 
 import scala.concurrent.Future
 
-class ReactionsService(storage: ReactionsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserService, selfUserId: UserId) {
+class ReactionsService(storage: ReactionsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: DefaultUserService, selfUserId: UserId) {
   import ReactionsService._
   import Threading.Implicits.Background
 

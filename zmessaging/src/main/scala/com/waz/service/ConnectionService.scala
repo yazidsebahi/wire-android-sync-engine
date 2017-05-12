@@ -20,13 +20,12 @@ package com.waz.service
 import java.util.Date
 
 import com.waz.ZLog._
-import com.waz.api.Message
-import com.waz.content.{DefaultMembersStorage, MessagesStorage, UsersStorage}
+import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.conversation.DefaultConversationsContentUpdater
-import com.waz.service.messages.DefaultMessagesService
+import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -37,8 +36,8 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class ConnectionService(push: PushService, convs: DefaultConversationsContentUpdater, members: DefaultMembersStorage,
-                        messages: DefaultMessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
+class ConnectionService(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
+                        messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
                         sync: SyncServiceHandle, scheduler: => EventScheduler) {
 
   private implicit val logTag: LogTag = logTagFor[ConnectionService]
@@ -70,7 +69,7 @@ class ConnectionService(push: PushService, convs: DefaultConversationsContentUpd
     verbose(s"handleUserConnectionEvents: $events")
     def updateOrCreate(event: UserConnectionEvent)(user: Option[UserData]): UserData =
       user.fold {
-        UserData(event.to, UserService.defaultUserName, None, None, connection = event.status, conversation = Some(event.convId), connectionMessage = event.message, searchKey = SearchKey(UserService.defaultUserName), connectionLastUpdated = event.lastUpdated,
+        UserData(event.to, DefaultUserService.defaultUserName, None, None, connection = event.status, conversation = Some(event.convId), connectionMessage = event.message, searchKey = SearchKey(DefaultUserService.defaultUserName), connectionLastUpdated = event.lastUpdated,
           handle = None)
       } {
         _.copy(conversation = Some(event.convId)).updateConnectionStatus(event.status, Some(event.lastUpdated), event.message)

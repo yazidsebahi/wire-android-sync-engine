@@ -47,10 +47,13 @@ trait MessagesService {
   def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]]
   def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]]
   def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration): Future[Option[MessageData]]
+  def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false): Future[MessageData]
+  def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
+  def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
 }
 
 class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
-                             prefs: GlobalPreferences, users: UserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
+                             prefs: GlobalPreferences, users: DefaultUserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
                              network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
                              otr: OtrService) extends MessagesService {
   import Threading.Implicits.Background
@@ -464,7 +467,7 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
         if (toRemove.isEmpty) deleteMessage(msg) // FIXME: race condition
         else updateMessage(msg.id)(_.copy(members = toRemove)) // FIXME: race condition
 
-        if (toAdd.isEmpty) successful(()) else updateOrCreate(toAdd)
+        if (toAdd.isEmpty) successful(None) else updateOrCreate(toAdd)
       case _ =>
         updateOrCreate(users)
     }

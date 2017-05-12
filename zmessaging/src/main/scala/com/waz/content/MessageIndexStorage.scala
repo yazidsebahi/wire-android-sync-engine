@@ -33,7 +33,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorage: MessagesStorage, loader: MessageAndLikesStorage)
+class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorage: DefaultMessagesStorage, loader: MessageAndLikesStorage)
     extends CachedStorageImpl[MessageId, MessageContentIndexEntry](new TrimmingLruCache(context, Fixed(MessageContentIndex.MaxSearchResults)), storage)(MessageContentIndexDao, "MessageIndexStorage_Cached") {
 
   import MessageIndexStorage._
