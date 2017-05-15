@@ -276,17 +276,7 @@ object ConversationMemberData {
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (${UserId.name})")
     }
 
-    def listForConv(convId: ConvId)(implicit db: DB) = list(find(ConvId, convId))
-    def listForUser(userId: UserId)(implicit db: DB) = list(find(UserId, userId))
     def findForConv(convId: ConvId)(implicit db: DB) = iterating(find(ConvId, convId))
     def findForUser(userId: UserId)(implicit db: DB) = iterating(find(UserId, userId))
-
-    def get(convId: ConvId, userId: UserId)(implicit db: DB) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, userId.toString), null, null, null))
-
-    def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: DB) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.mkString("'", "','", "'")})", Array(convId.toString), null, null, null))
-
-    def isActiveMember(convId: ConvId, user: UserId)(implicit db: DB) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, user.toString), null, null, null)).isDefined
-
-    def deleteForConv(id: ConvId)(implicit db: DB) = delete(ConvId, id)
   }
 }

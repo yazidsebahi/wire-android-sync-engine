@@ -71,7 +71,6 @@ object RConvEvent extends (Event => RConvId) {
     case _              => RConvId.Empty
   }
 }
-
 case class UserUpdateEvent(user: UserInfo, removeIdentity: Boolean = false) extends UserEvent
 case class UserPropertiesSetEvent(key: String, value: String) extends UserEvent // value is always json string, so maybe we should parse it already (or maybe not)
 case class UserConnectionEvent(convId: RConvId, from: UserId, to: UserId, message: Option[String], status: ConnectionStatus, lastUpdated: Date, fromUserName: Option[String] = None) extends UserEvent with RConvEvent
@@ -268,9 +267,9 @@ object Event {
 
       lazy val data = if (js.has("data") && !js.isNull("data")) Try(js.getJSONObject("data")).toOption else None
 
-      val evType = decodeString('type)
-      if (evType.startsWith("conversation")) ConversationEventDecoder(js)
-      else evType match {
+      decodeString('type) match {
+        case tpe if tpe.startsWith("conversation") => ConversationEventDecoder(js)
+        case tpe if tpe.startsWith("team")         => TeamEvent.TeamEventDecoder(js)
         case "user.update" => UserUpdateEvent(JsonDecoder[UserInfo]('user))
         case "user.identity-remove" => UserUpdateEvent(JsonDecoder[UserInfo]('user), true)
         case "user.connection" => connectionEvent(js.getJSONObject("connection"), JsonDecoder.opt('user, _.getJSONObject("user")) flatMap (JsonDecoder.decodeOptString('name)(_)))
@@ -343,4 +342,63 @@ object ConversationEvent {
       UnknownConvEvent(js)
     }
   }
+}
+
+
+sealed trait TeamEvent extends Event {
+  val teamId: TeamId
+}
+
+object TeamEvent {
+
+  /**
+    * See: https://github.com/wireapp/architecture/blob/master/teams/backend.md
+    */
+
+  case class Create(teamId: TeamId) extends TeamEvent
+  case class Delete(teamId: TeamId) extends TeamEvent
+  case class Update(teamId: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) extends TeamEvent
+
+  sealed trait MemberEvent extends TeamEvent {
+    val userId: UserId
+  }
+  case class MemberJoin(teamId: TeamId, userId: UserId) extends MemberEvent
+  case class MemberLeave(teamId: TeamId, userId: UserId) extends MemberEvent
+
+  sealed trait ConversationEvent extends TeamEvent {
+    val convId: RConvId
+  }
+
+  case class ConversationCreate(teamId: TeamId, convId: RConvId) extends ConversationEvent
+  case class ConversationDelete(teamId: TeamId, convId: RConvId) extends ConversationEvent
+
+  case class UnknownTeamEvent(js: JSONObject) extends TeamEvent { override val teamId = TeamId.Empty }
+
+  implicit lazy val TeamEventDecoder: JsonDecoder[TeamEvent] = new JsonDecoder[TeamEvent] {
+
+    override def apply(implicit js: JSONObject) = {
+
+      decodeString('type) match {
+        case "team.create"              => Create('team)
+        case "team.delete"              => Delete('team)
+        case "team.update"              => Update('team, decodeOptString('name)('data), decodeOptString('icon)('data).map(RAssetId), decodeOptString('icon_key)('data).map(AESKey))
+        case "team.member-join"         => MemberJoin ('team, UserId(decodeString('user)('data)))
+        case "team.member-leave"        => MemberLeave('team, UserId(decodeString('user)('data)))
+        case "team.conversation-create" => ConversationCreate('team, RConvId(decodeString('conv)('data)))
+        case "team.conversation-delete" => ConversationDelete('team, RConvId(decodeString('conv)('data)))
+        case _ =>
+          error(s"Unhandled event: $js")
+          UnknownTeamEvent(js)
+      }
+
+    }
+  }
+
+
+
+
+
+
+
+
 }
