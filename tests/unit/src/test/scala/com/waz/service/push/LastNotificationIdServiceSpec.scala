@@ -21,7 +21,7 @@ import com.waz.RobolectricUtils
 import com.waz.content.{UserPreferences, ZmsDatabase}
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, Uid}
-import com.waz.service.push.PushService.SlowSyncRequest
+import com.waz.service.push.DefaultPushService.SlowSyncRequest
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._

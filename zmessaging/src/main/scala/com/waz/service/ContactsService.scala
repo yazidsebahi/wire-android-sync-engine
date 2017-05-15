@@ -53,9 +53,9 @@ import scala.util.Success
 import scala.util.control.NoStackTrace
 
 class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
-                      userPrefs: UserPreferences, prefs: GlobalPreferences, users: UserService, usersStorage: UsersStorage,
+                      userPrefs: UserPreferences, prefs: GlobalPreferences, users: DefaultUserService, usersStorage: DefaultUsersStorage,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
-                      convs: ConversationStorage, permissions: PermissionsService) {
+                      convs: DefaultConversationStorage, permissions: PermissionsService) {
 
   import ContactsService._
   import EventContext.Implicits.global

@@ -19,16 +19,16 @@ package com.waz.service.conversation
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.content.ConversationStorage
+import com.waz.content.DefaultConversationStorage
 import com.waz.model.GenericContent._
 import com.waz.model._
-import com.waz.service.{EventScheduler, UserService}
+import com.waz.service.{EventScheduler, DefaultUserService}
 import com.waz.threading.Threading
 import com.waz.utils._
 
 object UnarchivingEventProcessingStage {
 
-  def apply(users: UserService, storage: ConversationStorage) = EventScheduler.Stage[UnarchivingEvent] { case (convId, events) =>
+  def apply(users: DefaultUserService, storage: DefaultConversationStorage) = EventScheduler.Stage[UnarchivingEvent] { case (convId, events) =>
     import Threading.Implicits.Background
 
     users.withSelfUserFuture { selfUserId =>

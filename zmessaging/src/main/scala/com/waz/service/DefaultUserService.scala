@@ -25,9 +25,9 @@ import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.UserService._
+import com.waz.service.DefaultUserService._
 import com.waz.service.assets.AssetService
-import com.waz.service.push.PushService.SlowSyncRequest
+import com.waz.service.push.DefaultPushService.SlowSyncRequest
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -39,10 +39,18 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
 import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
-class UserService(val selfUserId: UserId, usersStorage: UsersStorage, userPrefs: UserPreferences, push: PushServiceSignals,
-                  assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) {
+trait UserService {
+  def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
+  def getOrCreateUser(id: UserId): Future[UserData]
+  def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
+  def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
+  def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
+}
 
-  private implicit val logTag: LogTag = logTagFor[UserService]
+class DefaultUserService(val selfUserId: UserId, usersStorage: DefaultUsersStorage, userPrefs: UserPreferences, push: PushServiceSignals,
+                         assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) extends UserService {
+
+  private implicit val logTag: LogTag = logTagFor[DefaultUserService]
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
   import userPrefs._
@@ -234,6 +242,6 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, userPrefs:
     usersStorage.updateAll2(userIds, _.copy(deleted = true))
 }
 
-object UserService {
+object DefaultUserService {
   val defaultUserName: String = ""
 }

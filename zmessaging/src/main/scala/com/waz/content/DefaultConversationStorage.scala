@@ -32,8 +32,12 @@ import scala.collection._
 import scala.collection.immutable.SortedSet
 import scala.concurrent.Future
 
-class ConversationStorage(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") {
-  import ConversationStorage._
+trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
+  def setUnknownVerification(convId: ConvId): Future[Option[(ConversationData, ConversationData)]]
+}
+
+class DefaultConversationStorage(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
+  import DefaultConversationStorage._
   import EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationStorage")
 
@@ -134,8 +138,8 @@ class ConversationStorage(storage: ZmsDatabase) extends CachedStorageImpl[ConvId
   def search(prefix: SearchKey, self: UserId, handleOnly: Boolean): Future[Vector[ConversationData]] = storage(ConversationDataDao.search(prefix, self, handleOnly)(_))
 }
 
-object ConversationStorage {
-  private implicit val logTag: LogTag = logTagFor[ConversationStorage]
+object DefaultConversationStorage {
+  private implicit val logTag: LogTag = logTagFor[DefaultConversationStorage]
 }
 
 // this wrapper provides a check for content equality instead of the equality based on total ordering provided by the sorted set

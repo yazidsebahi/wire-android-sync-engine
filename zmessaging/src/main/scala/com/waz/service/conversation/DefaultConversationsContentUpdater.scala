@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.content._
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
-import com.waz.service.UserService
+import com.waz.service.DefaultUserService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -35,9 +35,14 @@ trait ConversationsContentUpdater {
   def convById(id: ConvId): Future[Option[ConversationData]]
   def convByRemoteId(id: RConvId): Future[Option[ConversationData]]
   def storage: ConversationStorage
+  def getOneToOneConversation(toUser: UserId, selfUserId: UserId, remoteId: Option[RConvId] = None, convType: ConversationType = ConversationType.OneToOne): Future[ConversationData]
+  def updateConversation(id: ConvId, convType: Option[ConversationType] = None, hidden: Option[Boolean] = None): Future[Option[(ConversationData, ConversationData)]]
+  def hideIncomingConversation(user: UserId): Future[Option[(ConversationData, ConversationData)]]
+  def hideConversation(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
+  def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class DefaultConversationsContentUpdater(val storage: ConversationStorage, users: UserService, membersStorage: DefaultMembersStorage, messagesStorage: => MessagesStorage) extends ConversationsContentUpdater {
+class DefaultConversationsContentUpdater(val storage: DefaultConversationStorage, users: DefaultUserService, membersStorage: DefaultMembersStorage, messagesStorage: => DefaultMessagesStorage) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val tag: LogTag = logTagFor[DefaultConversationsContentUpdater]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")

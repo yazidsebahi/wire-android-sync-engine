@@ -30,8 +30,12 @@ import com.waz.utils.events._
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
-class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") {
-  import com.waz.content.UsersStorage._
+trait UsersStorage extends CachedStorage[UserId, UserData] {
+
+}
+
+class DefaultUsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
+  import com.waz.content.DefaultUsersStorage._
   import EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "UsersStorage")
 
@@ -130,7 +134,7 @@ class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage
       cs.get(user).fold(setFullName(user))(name => setDisplayName(user, name.first))
     } else {
       def firstWithInitial(user: UserId) = cs.get(user).fold("")(_.firstWithInitial)
-      
+
       users.groupBy(firstWithInitial) map {
         case ("", us) => Future.sequence(us map setFullName)
         case (name, Seq(u)) => setDisplayName(u, name)
@@ -140,8 +144,8 @@ class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage
   }
 }
 
-object UsersStorage {
-  private implicit val tag: LogTag = logTagFor[UsersStorage]
+object DefaultUsersStorage {
+  private implicit val tag: LogTag = logTagFor[DefaultUsersStorage]
 
   sealed trait DbCmd
   case class Insert(user: UserData) extends DbCmd

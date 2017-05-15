@@ -26,7 +26,7 @@ import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventPipeline
-import com.waz.service.push.PushService.SlowSyncRequest
+import com.waz.service.push.DefaultPushService.SlowSyncRequest
 import com.waz.sync.client.EventsClient.NotificationsResponse
 import com.waz.sync.client.{EventsClient, PushNotification}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -36,17 +36,21 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.{Future, Promise}
 
-class PushService(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
+trait PushService {
+
+}
+
+class DefaultPushService(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) extends PushService {
   self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
-  private implicit val tag: LogTag = logTagFor[PushService]
+  private implicit val tag: LogTag = logTagFor[DefaultPushService]
   private implicit val ec = EventContext.Global
 
   private val wakeLock = new WakeLock(context)
 
   val lastNotification = new LastNotificationIdService(keyValue, signals, client, clientId)
 
-  var connectedPushPromise = Promise[PushService]()
+  var connectedPushPromise = Promise[DefaultPushService]()
 
   /**
     * Drift to the BE time at the moment we fetch notifications
@@ -173,7 +177,7 @@ class PushService(context: Context, keyValue: UserPreferences, client: EventsCli
     }
 }
 
-object PushService {
+object DefaultPushService {
   // lostHistory is set if there were lost notifications, meaning that some messages might be lost
   case class SlowSyncRequest(time: Long, lostHistory: Boolean = false)
 }

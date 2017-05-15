@@ -36,12 +36,16 @@ import scala.collection._
 import scala.concurrent.Future
 import scala.util.Failure
 
-class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorage, users: UsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
-    CachedStorageImpl[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(MessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") {
+trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
+  def getLastMessage(conv: ConvId): Future[Option[MessageData]]
+}
+
+class DefaultMessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: DefaultConversationStorage, users: DefaultUsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
+    CachedStorageImpl[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(DefaultMessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") with MessagesStorage {
 
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private implicit val tag: LogTag = logTagFor[MessagesStorage]
+  private implicit val tag: LogTag = logTagFor[DefaultMessagesStorage]
   private implicit val dispatcher = new SerialDispatchQueue(name = "MessagesStorage")
 
   val messageAdded = onAdded
@@ -53,7 +57,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
   val onMessageFailed = EventStream[(MessageData, ErrorResponse)]()
 
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
-  private val filteredIndexes = new MultiKeyLruCache[ConvId, MessageFilter, ConvMessagesIndex](MessagesStorage.filteredMessagesCacheSize)
+  private val filteredIndexes = new MultiKeyLruCache[ConvId, MessageFilter, ConvMessagesIndex](DefaultMessagesStorage.filteredMessagesCacheSize)
 
   lazy val incomingMessages = storage {
     MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis)(_)
@@ -233,7 +237,7 @@ class MessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, co
     }
 }
 
-object MessagesStorage {
+object DefaultMessagesStorage {
   val cacheSize = 12048
   val filteredMessagesCacheSize = 32
   val FirstMessageTypes = {
@@ -278,7 +282,7 @@ class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: 
   }
 }
 
-class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorage, likings: ReactionsStorage) {
+class MessageAndLikesStorage(selfUserId: UserId, messages: DefaultMessagesStorage, likings: ReactionsStorage) {
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 

@@ -34,7 +34,7 @@ import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted, 
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
-import com.waz.service.push.PushService
+import com.waz.service.push.DefaultPushService
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
@@ -54,7 +54,7 @@ class DefaultCallingService(context:             Context,
                             flowManagerService:  FlowManagerService,
                             messagesService:     MessagesService,
                             mediaManagerService: MediaManagerService,
-                            pushService:         PushService,
+                            pushService:         DefaultPushService,
                             callLogService:      CallLogService,
                             network:             NetworkModeService,
                             errors:              ErrorsService) extends CallingService {
