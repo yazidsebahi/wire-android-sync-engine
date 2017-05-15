@@ -81,7 +81,6 @@ class LimitedDispatchQueue(concurrencyLimit: Int = 1, parent: ExecutionContext =
     val runningCount = new AtomicInteger(0)
 
     def dispatch(runnable: Runnable): Unit = {
-      verbose(s"dispatching runnable: $runnable")("blah")
       queue.add(DispatchQueueStats(name, runnable))
       dispatchExecutor()
     }
@@ -100,7 +99,6 @@ class LimitedDispatchQueue(concurrencyLimit: Int = 1, parent: ExecutionContext =
         case null => // done
         case runnable =>
           try {
-            verbose(s"running task: remaining? ${queue.size()}")("blah")
             runnable.run()
           } catch {
             case cause: Throwable => reportFailure(cause)
