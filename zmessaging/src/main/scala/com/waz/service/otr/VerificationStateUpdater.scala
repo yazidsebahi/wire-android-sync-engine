@@ -19,7 +19,7 @@ package com.waz.service.otr
 
 import com.waz.ZLog._
 import com.waz.api.Verification
-import com.waz.content.{DefaultConversationStorage, DefaultMembersStorage, OtrClientsStorage, DefaultUsersStorage}
+import com.waz.content.{DefaultConversationStorage, MembersStorageImpl, OtrClientsStorage, DefaultUsersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.model.otr.UserClients
@@ -35,7 +35,7 @@ import scala.concurrent.Future
   * If conv gets unverified because new client was added, then it's state is changed to UNVERIFIED,
   * if device was manually unverified, then conv state goes to UNKNOWN
   */
-class VerificationStateUpdater(selfUserId: UserId, usersStorage: DefaultUsersStorage, clientsStorage: OtrClientsStorage, convs: DefaultConversationStorage, membersStorage: DefaultMembersStorage) {
+class VerificationStateUpdater(selfUserId: UserId, usersStorage: DefaultUsersStorage, clientsStorage: OtrClientsStorage, convs: DefaultConversationStorage, membersStorage: MembersStorageImpl) {
   import Verification._
   import VerificationStateUpdater._
   import com.waz.threading.Threading.Implicits.Background

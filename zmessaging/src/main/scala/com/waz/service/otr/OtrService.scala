@@ -24,7 +24,7 @@ import javax.crypto.Mac
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.{DefaultMembersStorage, GlobalPreferences, OtrClientsStorage}
+import com.waz.content.{MembersStorageImpl, GlobalPreferences, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
 import com.waz.model.GenericContent._
 import com.waz.model._
@@ -48,7 +48,7 @@ import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
 
 class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
-                 cryptoBox: CryptoBoxService, members: DefaultMembersStorage, convs: DefaultConversationsContentUpdater,
+                 cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: DefaultConversationsContentUpdater,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
                  prefs: GlobalPreferences) {
   import EventContext.Implicits.global
