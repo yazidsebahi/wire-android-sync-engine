@@ -22,7 +22,7 @@ import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
 import com.waz.api.impl.LogLevel
-import com.waz.content.{MembersStorageImpl, DefaultUsersStorage, ZmsDatabase, _}
+import com.waz.content.{MembersStorageImpl, UsersStorageImpl, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
@@ -72,7 +72,7 @@ class ZMessagingFactory(global: GlobalModule) {
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val db                = new ZmsDatabase(accountId, context, dbPrefix)
   lazy val userPrefs         = wire[UserPreferences]
-  lazy val usersStorage      = wire[DefaultUsersStorage]
+  lazy val usersStorage      = wire[UsersStorageImpl]
   lazy val otrClientsStorage = wire[OtrClientsStorage]
   lazy val membersStorage    = wire[MembersStorageImpl]
   lazy val assetsStorage     = wire[AssetsStorage]

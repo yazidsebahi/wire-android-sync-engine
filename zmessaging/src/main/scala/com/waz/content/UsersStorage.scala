@@ -18,7 +18,7 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{UserData, UserId}
 import com.waz.service.SearchKey
@@ -30,12 +30,9 @@ import com.waz.utils.events._
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
-trait UsersStorage extends CachedStorage[UserId, UserData] {
+trait UsersStorage extends CachedStorage[UserId, UserData]
 
-}
-
-class DefaultUsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
-  import com.waz.content.DefaultUsersStorage._
+class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
   import EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "UsersStorage")
 
@@ -142,12 +139,4 @@ class DefaultUsersStorage(context: Context, storage: ZmsDatabase) extends Cached
       }
     }
   }
-}
-
-object DefaultUsersStorage {
-  private implicit val tag: LogTag = logTagFor[DefaultUsersStorage]
-
-  sealed trait DbCmd
-  case class Insert(user: UserData) extends DbCmd
-  case class Delete(user: UserId) extends DbCmd
 }

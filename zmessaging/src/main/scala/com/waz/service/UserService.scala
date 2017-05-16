@@ -48,7 +48,7 @@ trait UserService {
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
 }
 
-class UserServiceImpl(val selfUserId: UserId, usersStorage: DefaultUsersStorage, userPrefs: UserPreferences, push: PushServiceSignals,
+class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, userPrefs: UserPreferences, push: PushServiceSignals,
                       assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) extends UserService {
 
   import Threading.Implicits.Background

@@ -20,7 +20,7 @@ package com.waz.service.call
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.api._
-import com.waz.content.{ConversationStorageImpl, DefaultUsersStorage, VoiceChannelStorage}
+import com.waz.content.{ConversationStorageImpl, UsersStorageImpl, VoiceChannelStorage}
 import com.waz.model.VoiceChannelData.ChannelState._
 import com.waz.model.{ConvId, VoiceChannelData}
 import com.waz.threading.{CancellableFuture, Threading}
@@ -34,7 +34,7 @@ import scala.concurrent.duration._
 case class ActiveChannels(ongoing: Option[VoiceChannelData], incoming: Vector[VoiceChannelData])
 case class ChannelUpdate(before: VoiceChannelData, updated: VoiceChannelData, timestamp: Option[Instant])
 
-class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, convs: ConversationStorageImpl, users: DefaultUsersStorage, callLog: DefaultCallLogService) { self =>
+class VoiceChannelContent(context: Context, val storage: VoiceChannelStorage, convs: ConversationStorageImpl, users: UsersStorageImpl, callLog: DefaultCallLogService) { self =>
 
   import VoiceChannelContent._
 

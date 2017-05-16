@@ -19,7 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.DefaultUsersStorage
+import com.waz.content.UsersStorageImpl
 import com.waz.model._
 import com.waz.service.UserServiceImpl
 import com.waz.service.assets.AssetService
@@ -31,7 +31,7 @@ import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 
-class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserServiceImpl, usersStorage: DefaultUsersStorage, assets: AssetService, usersClient: UsersClient, imageGenerator: ImageAssetGenerator) {
+class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserServiceImpl, usersStorage: UsersStorageImpl, assets: AssetService, usersClient: UsersClient, imageGenerator: ImageAssetGenerator) {
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[UsersSyncHandler]
   private implicit val ec = EventContext.Global
