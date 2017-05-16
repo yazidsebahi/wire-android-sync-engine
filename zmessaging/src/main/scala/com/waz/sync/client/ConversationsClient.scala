@@ -131,12 +131,14 @@ object ConversationsClient {
       val id = decodeRConvId('id)(js)
       val convType = ConversationType(decodeInt('type)(js))
       val lastEventTime = decodeISOInstant('last_event_time)(js)
+      val team = decodeOptId('team)(js, TeamId.Id)
       val renameEvt = if (convType == ConversationType.Group) lastEventTime else Instant.EPOCH
 
       val state = ConversationState.Decoder(self)
 
+      //TODO Teams: how do we tell if a conversation is managed, currently defaulting to false
       ConversationData(
-        ConvId(id.str), id, decodeOptString('name)(js) filterNot (_.isEmpty), decodeUserId('creator)(js), convType,
+        ConvId(id.str), id, decodeOptString('name)(js) filterNot (_.isEmpty), decodeUserId('creator)(js), convType, team, team.map(_ => false),
         lastEventTime, decodeOptInt('status).fold2(Some(ConversationStatus.Active), i => Some(ConversationStatus(i))),
         Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime), renameEvent = renameEvt
       )

@@ -80,6 +80,8 @@ object Generators {
     creator <- arbitrary[UserId]
     convType <- arbitrary[ConversationType]
     lastEventTime <- arbitrary[Instant]
+    team  <- arbitrary[Option[TeamId]]
+    isManaged <- arbitrary[Option[Boolean]]
     status <- arbitrary[Int]
     muted <- arbitrary[Boolean]
     muteTime <- arbitrary[Instant]
@@ -97,7 +99,7 @@ object Generators {
     renameEvent <- arbitrary[Instant]
     voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]
@@ -246,6 +248,7 @@ object Generators {
   implicit lazy val arbConvId: Arbitrary[ConvId]         = Arbitrary(sideEffect(ConvId()))
   implicit lazy val arbRConvId: Arbitrary[RConvId]       = Arbitrary(sideEffect(RConvId()))
   implicit lazy val arbUserId: Arbitrary[UserId]         = Arbitrary(sideEffect(UserId()))
+  implicit lazy val arbTeamId: Arbitrary[TeamId]         = Arbitrary(sideEffect(TeamId()))
   implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))
   implicit lazy val arbAssetId: Arbitrary[AssetId]       = Arbitrary(sideEffect(AssetId()))
   implicit lazy val arbSyncId: Arbitrary[SyncId]         = Arbitrary(sideEffect(SyncId()))

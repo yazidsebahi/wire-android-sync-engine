@@ -54,7 +54,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 86
+  val DbVersion = 87
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -138,6 +138,10 @@ object ZMessagingDB {
       // new users won't have any push ti- fix for broken internal users due to last migration
       db.execSQL("DELETE FROM SyncJobs WHERE data LIKE '%push-token%'")
       db.execSQL("DELETE FROM SyncJobs WHERE data LIKE '%gcm-token%'")
+    },
+    Migration(86, 87) { db =>
+      db.execSQL("ALTER TABLE Conversations ADD COLUMN team TEXT")
+      db.execSQL("ALTER TABLE Conversations ADD COLUMN is_managed INTEGER")
     }
   )
 }
