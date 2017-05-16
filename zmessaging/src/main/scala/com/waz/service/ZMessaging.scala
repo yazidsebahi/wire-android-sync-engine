@@ -183,7 +183,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val imageLoader     = wire[ImageLoader]
 
   lazy val pushSignals                            = wire[PushServiceSignals]
-  lazy val push: DefaultPushService                      = wire[DefaultPushService]
+  lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
   lazy val gcm: GcmService                        = wire[GcmService]
   lazy val errors                                 = wire[ErrorsService]
   lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)

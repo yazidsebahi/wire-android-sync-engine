@@ -26,7 +26,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.call.DefaultFlowManagerService.EstablishedFlows
 import com.waz.service.conversation.DefaultConversationsContentUpdater
-import com.waz.service.push.DefaultPushService
+import com.waz.service.push.PushServiceImpl
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
@@ -39,7 +39,7 @@ import org.threeten.bp.{Instant, Duration => Duration310}
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: DefaultPushService,
+class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushServiceImpl,
                           val lifecycle: ZmsLifecycle, val sync: SyncServiceHandle,
                           val convs: DefaultConversationsContentUpdater, users: DefaultUserService,
                           private[call] val flows: DefaultFlowManagerService, val network: DefaultNetworkModeService,

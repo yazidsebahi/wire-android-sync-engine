@@ -27,7 +27,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.DefaultUserService._
 import com.waz.service.assets.AssetService
-import com.waz.service.push.DefaultPushService.SlowSyncRequest
+import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry

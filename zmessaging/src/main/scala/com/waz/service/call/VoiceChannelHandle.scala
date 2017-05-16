@@ -27,7 +27,7 @@ import com.waz.model._
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.service.{ErrorsService, ZmsLifecycle}
 import com.waz.service.call.VoiceChannelService.{CallJoinResult, CallJoined, Unchanged}
-import com.waz.service.push.DefaultPushService
+import com.waz.service.push.PushServiceImpl
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.RichTraversableOnce
 import com.waz.utils.events.EventContext
@@ -40,7 +40,7 @@ import org.threeten.bp.Instant.now
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChannelStorage, push: DefaultPushService, errors: ErrorsService, lifecycle: ZmsLifecycle, service: VoiceChannelService)(implicit val dispatcher: SerialDispatchQueue) {
+class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChannelStorage, push: PushServiceImpl, errors: ErrorsService, lifecycle: ZmsLifecycle, service: VoiceChannelService)(implicit val dispatcher: SerialDispatchQueue) {
   import com.waz.model.VoiceChannelData.ChannelState._
   import VoiceChannelHandle._
 

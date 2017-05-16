@@ -32,7 +32,7 @@ import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service
 import com.waz.service._
 import com.waz.service.call.DefaultFlowManagerService
-import com.waz.service.push.DefaultPushService
+import com.waz.service.push.PushServiceImpl
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -58,7 +58,7 @@ import scala.util.Random
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
   private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
 
-  @volatile private var pushService = Option.empty[DefaultPushService]
+  @volatile private var pushService = Option.empty[PushServiceImpl]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
   class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "") extends StorageModule(context, accountId, prefix) {
