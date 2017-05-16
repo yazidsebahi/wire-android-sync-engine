@@ -50,7 +50,7 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
   lazy val auto2Session = {
     withDelay { auto2Clients should not be empty }
     val client = auto2Clients.head.asInstanceOf[com.waz.api.impl.otr.OtrClient]
-    new File(new File(zmessaging.cryptoBox.cryptoBoxDir, "sessions"), OtrServiceImpl.sessionId(client.userId, client.clientId))
+    new File(new File(zmessaging.cryptoBox.cryptoBoxDir, "sessions"), OtrService.sessionId(client.userId, client.clientId))
   }
 
   scenario("init both clients and exchange messages") {

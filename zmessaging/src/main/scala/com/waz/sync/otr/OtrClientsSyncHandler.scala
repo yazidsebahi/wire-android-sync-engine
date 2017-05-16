@@ -105,7 +105,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
   def syncClients(user: UserId): Future[SyncResult] = clientId.head flatMap { current =>
     verbose(s"syncClients")
 
-    def hasSession(user: UserId, client: ClientId) = sessions.getSession(OtrServiceImpl.sessionId(user, client)).map(_.isDefined)
+    def hasSession(user: UserId, client: ClientId) = sessions.getSession(OtrService.sessionId(user, client)).map(_.isDefined)
 
     def loadClients = (if (user == userId) netClient.loadClients() else netClient.loadClients(user)).future
 
@@ -149,7 +149,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
         case Right(us) =>
           for {
             _ <- otrClients.updateClients(us.mapValues(_.map { case (id, key) => Client(id, "") }))
-            prekeys = us.flatMap { case (u, cs) => cs map { case (c, p) => (OtrServiceImpl.sessionId(u, c), p)} }
+            prekeys = us.flatMap { case (u, cs) => cs map { case (c, p) => (OtrService.sessionId(u, c), p)} }
             _ <- Future.traverse(prekeys) { case (id, p) => sessions.getOrCreateSession(id, p) }
             _ <- VerificationStateUpdater.awaitUpdated(userId)
           } yield None
