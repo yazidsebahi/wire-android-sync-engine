@@ -34,7 +34,7 @@ import org.threeten.bp.Instant
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
-class InvitationService(storage: ZmsDatabase, users: DefaultUserService, connections: ConnectionService, contacts: ContactsService,
+class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connections: ConnectionService, contacts: ContactsService,
                         conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts) {
 
   import EventContext.Implicits.global

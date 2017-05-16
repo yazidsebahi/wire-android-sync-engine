@@ -41,7 +41,7 @@ import scala.concurrent.Future
 
 class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushServiceImpl,
                           val lifecycle: ZmsLifecycle, val sync: SyncServiceHandle,
-                          val convs: ConversationsContentUpdaterImpl, users: DefaultUserService,
+                          val convs: ConversationsContentUpdaterImpl, users: UserServiceImpl,
                           private[call] val flows: DefaultFlowManagerService, val network: DefaultNetworkModeService,
                           errors: ErrorsService, client: VoiceChannelClient)
 

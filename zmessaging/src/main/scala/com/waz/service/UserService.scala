@@ -20,12 +20,13 @@ package com.waz.service
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.AccentColor
 import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.DefaultUserService._
+import com.waz.service.UserService._
 import com.waz.service.assets.AssetService
 import com.waz.service.push.PushService.SlowSyncRequest
 import com.waz.service.push.PushServiceSignals
@@ -47,10 +48,9 @@ trait UserService {
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
 }
 
-class DefaultUserService(val selfUserId: UserId, usersStorage: DefaultUsersStorage, userPrefs: UserPreferences, push: PushServiceSignals,
-                         assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) extends UserService {
+class UserServiceImpl(val selfUserId: UserId, usersStorage: DefaultUsersStorage, userPrefs: UserPreferences, push: PushServiceSignals,
+                      assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) extends UserService {
 
-  private implicit val logTag: LogTag = logTagFor[DefaultUserService]
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
   import userPrefs._
@@ -242,6 +242,6 @@ class DefaultUserService(val selfUserId: UserId, usersStorage: DefaultUsersStora
     usersStorage.updateAll2(userIds, _.copy(deleted = true))
 }
 
-object DefaultUserService {
+object UserService {
   val defaultUserName: String = ""
 }

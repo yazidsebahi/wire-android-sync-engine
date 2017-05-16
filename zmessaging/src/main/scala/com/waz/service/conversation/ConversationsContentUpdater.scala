@@ -23,7 +23,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.content._
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
-import com.waz.service.DefaultUserService
+import com.waz.service.UserServiceImpl
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -43,7 +43,7 @@ trait ConversationsContentUpdater {
   def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: DefaultUserService, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
+class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
 

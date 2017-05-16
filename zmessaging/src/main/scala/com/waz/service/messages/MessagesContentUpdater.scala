@@ -23,7 +23,7 @@ import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.Message.Status
 import com.waz.content._
 import com.waz.model._
-import com.waz.service.DefaultUserService
+import com.waz.service.UserServiceImpl
 import com.waz.service.media.RichMediaContentParser
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -33,7 +33,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorageImpl, convs: ConversationStorageImpl, users: DefaultUserService, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
+class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorageImpl, convs: ConversationStorageImpl, users: UserServiceImpl, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
 
   private implicit val tag: LogTag = logTagFor[MessagesContentUpdater]
   import Threading.Implicits.Background

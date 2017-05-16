@@ -36,7 +36,7 @@ import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
 
 class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage: CommonConnectionsStorage,
-                        userService: DefaultUserService, usersStorage: DefaultUsersStorage, timeouts: Timeouts, sync: SyncServiceHandle, messages: MessagesStorageImpl) {
+                        userService: UserServiceImpl, usersStorage: DefaultUsersStorage, timeouts: Timeouts, sync: SyncServiceHandle, messages: MessagesStorageImpl) {
 
   import Threading.Implicits.Background
   import com.waz.service.UserSearchService._

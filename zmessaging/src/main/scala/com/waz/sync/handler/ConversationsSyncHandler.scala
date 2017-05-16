@@ -42,7 +42,7 @@ object ConversationsSyncHandler {
 }
 
 class ConversationsSyncHandler(assetSync: AssetSyncHandler,
-                               userService: DefaultUserService, messagesStorage: MessagesStorageImpl, messagesService: MessagesServiceImpl,
+                               userService: UserServiceImpl, messagesStorage: MessagesStorageImpl, messagesService: MessagesServiceImpl,
                                convService: ConversationsService, convs: ConversationsContentUpdaterImpl, convEvents: ConversationEventsService,
                                errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
 

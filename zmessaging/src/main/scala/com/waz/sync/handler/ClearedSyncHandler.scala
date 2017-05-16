@@ -23,7 +23,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.{ConversationStorageImpl, MessagesStorageImpl}
 import com.waz.model.GenericContent.Cleared
 import com.waz.model._
-import com.waz.service.DefaultUserService
+import com.waz.service.UserServiceImpl
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.sync.SyncResult
 import com.waz.sync.otr.OtrSyncHandler
@@ -31,7 +31,7 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class ClearedSyncHandler(convs: ConversationStorageImpl, convsContent: ConversationsContentUpdaterImpl, users: DefaultUserService, msgs: MessagesStorageImpl, convSync: ConversationsSyncHandler, otrSync: OtrSyncHandler) {
+class ClearedSyncHandler(convs: ConversationStorageImpl, convsContent: ConversationsContentUpdaterImpl, users: UserServiceImpl, msgs: MessagesStorageImpl, convSync: ConversationsSyncHandler, otrSync: OtrSyncHandler) {
   import com.waz.threading.Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[ClearedSyncHandler]
 

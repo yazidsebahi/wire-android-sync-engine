@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.Invitation
-import com.waz.service.DefaultUserService
+import com.waz.service.UserServiceImpl
 import com.waz.service.invitations.InvitationService
 import com.waz.sync.SyncResult
 import com.waz.sync.SyncResult.Failure
@@ -30,7 +30,7 @@ import com.waz.znet.Response.Status
 
 import scala.concurrent.Future
 
-class InvitationSyncHandler(invitationService: InvitationService, userService: DefaultUserService, userSync: UsersSyncHandler, client: InvitationClient, connections: ConnectionsClient) {
+class InvitationSyncHandler(invitationService: InvitationService, userService: UserServiceImpl, userSync: UsersSyncHandler, client: InvitationClient, connections: ConnectionsClient) {
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[InvitationSyncHandler]
 

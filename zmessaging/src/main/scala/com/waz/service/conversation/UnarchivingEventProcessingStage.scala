@@ -22,13 +22,13 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ConversationStorageImpl
 import com.waz.model.GenericContent._
 import com.waz.model._
-import com.waz.service.{EventScheduler, DefaultUserService}
+import com.waz.service.{EventScheduler, UserServiceImpl}
 import com.waz.threading.Threading
 import com.waz.utils._
 
 object UnarchivingEventProcessingStage {
 
-  def apply(users: DefaultUserService, storage: ConversationStorageImpl) = EventScheduler.Stage[UnarchivingEvent] { case (convId, events) =>
+  def apply(users: UserServiceImpl, storage: ConversationStorageImpl) = EventScheduler.Stage[UnarchivingEvent] { case (convId, events) =>
     import Threading.Implicits.Background
 
     users.withSelfUserFuture { selfUserId =>

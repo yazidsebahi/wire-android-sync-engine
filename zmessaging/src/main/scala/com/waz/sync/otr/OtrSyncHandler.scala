@@ -33,7 +33,7 @@ import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.MessagesServiceImpl
 import com.waz.service.otr.OtrService
-import com.waz.service.{ErrorsService, DefaultUserService}
+import com.waz.service.{ErrorsService, UserServiceImpl}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient.UploadResponse
 import com.waz.sync.client.MessagesClient.OtrMessage
@@ -54,7 +54,7 @@ trait OtrSyncHandler {
 }
 
 class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-                         convs: ConversationsService, convStorage: ConversationStorageImpl, users: DefaultUserService, messages: MessagesServiceImpl,
+                         convs: ConversationsService, convStorage: ConversationStorageImpl, users: UserServiceImpl, messages: MessagesServiceImpl,
                          errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) extends OtrSyncHandler {
 
   import OtrSyncHandler._
@@ -194,7 +194,7 @@ object OtrSyncHandler {
   val MaxContentSize = 256 * 1024 // backend accepts 256KB for otr messages, but we would prefer to send less
 
   def apply(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-            convs: ConversationsService, convStorage: ConversationStorageImpl, users: DefaultUserService, messages: MessagesServiceImpl,
+            convs: ConversationsService, convStorage: ConversationStorageImpl, users: UserServiceImpl, messages: MessagesServiceImpl,
             errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService): OtrSyncHandler =
     new OtrSyncHandlerImpl(client, msgClient, assetClient, service, assets, convs, convStorage, users, messages, errors, clientsSyncHandler, cache)
 }

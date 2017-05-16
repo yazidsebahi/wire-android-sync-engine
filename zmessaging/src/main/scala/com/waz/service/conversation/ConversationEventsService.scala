@@ -21,14 +21,14 @@ import com.waz.ZLog._
 import com.waz.model.GenericContent.{MsgDeleted, MsgEdit, MsgRecall, Reaction, Receipt}
 import com.waz.model._
 import com.waz.service.messages.MessagesServiceImpl
-import com.waz.service.{EventPipeline, EventScheduler, DefaultUserService}
+import com.waz.service.{EventPipeline, EventScheduler, UserServiceImpl}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 
 import scala.concurrent.Future
 
-class ConversationEventsService(convs: ConversationsContentUpdaterImpl, messages: MessagesServiceImpl, users: DefaultUserService, sync: SyncServiceHandle, pipeline: EventPipeline) {
+class ConversationEventsService(convs: ConversationsContentUpdaterImpl, messages: MessagesServiceImpl, users: UserServiceImpl, sync: SyncServiceHandle, pipeline: EventPipeline) {
 
   private implicit val tag: LogTag = logTagFor[ConversationEventsService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
