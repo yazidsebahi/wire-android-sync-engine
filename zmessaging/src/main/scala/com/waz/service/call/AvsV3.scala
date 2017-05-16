@@ -23,10 +23,8 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.call.Calling._
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.Signal
 import com.waz.utils.jna.{Size_t, Uint32_t}
 import com.waz.utils.returning
 import org.threeten.bp.Instant
@@ -57,7 +55,7 @@ trait AvsV3 {
   * Facilitates synchronous communication with AVS and also provides a wrapper around the native code which can be easily
   * mocked for testing the CallingService
   */
-class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
+class AvsV3Impl(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "AvsWrapper")
 

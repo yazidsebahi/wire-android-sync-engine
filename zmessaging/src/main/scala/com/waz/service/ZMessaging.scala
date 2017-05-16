@@ -204,7 +204,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
   lazy val voiceContent                           = wire[VoiceChannelContent]
   lazy val voice: VoiceChannelService             = wire[VoiceChannelService]
-  lazy val avs: AvsV3                             = wire[DefaultAvsV3]
+  lazy val avs: AvsV3                             = wire[AvsV3Impl]
   lazy val calling: CallingService                = wire[CallingService]
   lazy val contacts: ContactsService              = wire[ContactsService]
   lazy val typing: TypingService                  = wire[TypingService]
