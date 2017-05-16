@@ -30,7 +30,7 @@ import com.waz.model.GenericContent._
 import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
-import com.waz.service.conversation.DefaultConversationsContentUpdater
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
@@ -48,7 +48,7 @@ import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
 
 class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
-                 cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: DefaultConversationsContentUpdater,
+                 cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: ConversationsContentUpdaterImpl,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
                  prefs: GlobalPreferences) {
   import EventContext.Implicits.global

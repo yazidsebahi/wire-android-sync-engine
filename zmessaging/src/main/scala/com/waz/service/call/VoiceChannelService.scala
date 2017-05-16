@@ -25,7 +25,7 @@ import com.waz.model.VoiceChannelData.ConnectionState
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.call.DefaultFlowManagerService.EstablishedFlows
-import com.waz.service.conversation.DefaultConversationsContentUpdater
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.service.push.PushServiceImpl
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient
@@ -41,7 +41,7 @@ import scala.concurrent.Future
 
 class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushServiceImpl,
                           val lifecycle: ZmsLifecycle, val sync: SyncServiceHandle,
-                          val convs: DefaultConversationsContentUpdater, users: DefaultUserService,
+                          val convs: ConversationsContentUpdaterImpl, users: DefaultUserService,
                           private[call] val flows: DefaultFlowManagerService, val network: DefaultNetworkModeService,
                           errors: ErrorsService, client: VoiceChannelClient)
 

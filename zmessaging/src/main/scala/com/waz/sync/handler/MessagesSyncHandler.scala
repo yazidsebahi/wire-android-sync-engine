@@ -32,8 +32,8 @@ import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
-import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
-import com.waz.service.messages.{DefaultMessagesService, MessagesContentUpdater}
+import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdaterImpl}
+import com.waz.service.messages.{MessagesServiceImpl, MessagesContentUpdater}
 import com.waz.service.otr.OtrService
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
@@ -50,8 +50,8 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: DefaultConversationsContentUpdater, storage: DefaultMessagesStorage,
+class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
+                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdaterImpl, storage: DefaultMessagesStorage,
                           assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: GlobalPreferences,
                           sync: SyncServiceHandle, assets: AssetService, users: DefaultUserService, cache: CacheService,
                           members: MembersStorageImpl, errors: ErrorsService, timeouts: Timeouts) {

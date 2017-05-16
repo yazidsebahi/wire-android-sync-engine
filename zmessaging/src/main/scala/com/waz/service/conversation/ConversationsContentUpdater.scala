@@ -19,6 +19,7 @@ package com.waz.service.conversation
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content._
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
@@ -42,9 +43,8 @@ trait ConversationsContentUpdater {
   def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class DefaultConversationsContentUpdater(val storage: ConversationStorageImpl, users: DefaultUserService, membersStorage: MembersStorageImpl, messagesStorage: => DefaultMessagesStorage) extends ConversationsContentUpdater {
+class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: DefaultUserService, membersStorage: MembersStorageImpl, messagesStorage: => DefaultMessagesStorage) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
-  private implicit val tag: LogTag = logTagFor[DefaultConversationsContentUpdater]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
 
   val conversationsSignal: Signal[ConversationsSet] = storage.convsSignal
@@ -190,17 +190,17 @@ class DefaultConversationsContentUpdater(val storage: ConversationStorageImpl, u
   def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A] = {
 
     def retry() = CancellableFuture.delay(ConversationsService.RetryBackoff.delay(retryCount)).future .flatMap { _ =>
-      processConvWithRemoteId(remoteId, retryAsync = false, retryCount + 1)(processor)
+      processConvWithRemoteId(remoteId, retryAsync = false, retryCount + 1)(processor)(tag, ec)
     } (ec)
 
     convByRemoteId(remoteId) .flatMap {
       case Some(conv) => processor(conv)
       case None if retryCount > 3 =>
         val ex = new NoSuchElementException("No conversation data found") with NoStackTrace
-        HockeyApp.saveException(ex, s"remoteId: $remoteId")
+        HockeyApp.saveException(ex, s"remoteId: $remoteId")(tag)
         Future.failed(ex)
       case None =>
-        warn(s"No conversation data found for remote id: $remoteId on try: $retryCount")
+        warn(s"No conversation data found for remote id: $remoteId on try: $retryCount")(tag)
         if (retryAsync) {
           retry()
           Future.failed(BoxedError(new NoSuchElementException(s"No conversation data found for: $remoteId") with NoStackTrace)) // use BoxedError to avoid sending unnecessary hockey report

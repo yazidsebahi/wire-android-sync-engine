@@ -18,6 +18,7 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
 import com.waz.content.{EditHistoryStorage, GlobalPreferences, ReactionsStorage}
@@ -28,7 +29,7 @@ import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.DefaultConversationsContentUpdater
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.service.otr.{OtrService, VerificationStateUpdater}
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
@@ -52,12 +53,11 @@ trait MessagesService {
   def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
 }
 
-class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
-                             prefs: GlobalPreferences, users: DefaultUserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
-                             network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
-                             otr: OtrService) extends MessagesService {
+class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
+                          prefs: GlobalPreferences, users: DefaultUserService, convs: ConversationsContentUpdaterImpl, reactions: ReactionsStorage,
+                          network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
+                          otr: OtrService) extends MessagesService {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[DefaultMessagesService]
   private implicit val ec = EventContext.Global
 
   import content._
