@@ -408,7 +408,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       initPromise.success({})
       initPromise.future
     }
-    val service = new DefaultCallingService(context, self, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
+    val service = new CallingService(context, self, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
     result(initPromise.future)
     service
   }

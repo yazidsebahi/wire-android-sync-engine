@@ -45,19 +45,19 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
 
-class DefaultCallingService(context:             Context,
-                            selfUserId:          UserId,
-                            avs:                 AvsV3,
-                            convs:               ConversationsContentUpdater,
-                            membersStorage:      MembersStorage,
-                            otrSyncHandler:      OtrSyncHandler,
-                            flowManagerService:  FlowManagerService,
-                            messagesService:     MessagesService,
-                            mediaManagerService: MediaManagerService,
-                            pushService:         PushServiceImpl,
-                            callLogService:      CallLogService,
-                            network:             NetworkModeService,
-                            errors:              ErrorsService) extends CallingService {
+class CallingService(context:             Context,
+                     selfUserId:          UserId,
+                     avs:                 AvsV3,
+                     convs:               ConversationsContentUpdater,
+                     membersStorage:      MembersStorage,
+                     otrSyncHandler:      OtrSyncHandler,
+                     flowManagerService:  FlowManagerService,
+                     messagesService:     MessagesService,
+                     mediaManagerService: MediaManagerService,
+                     pushService:         PushServiceImpl,
+                     callLogService:      CallLogService,
+                     network:             NetworkModeService,
+                     errors:              ErrorsService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -86,12 +86,12 @@ class DefaultCallingService(context:             Context,
     info.foreach(i => CallService(context, i.convId)) // start tracking
   }
 
-  override def onReady(version: Int) = {
+  def onReady(version: Int) = {
     verbose(s"Calling ready: avs version: $version")
     requestedCallVersion ! version
   }
 
-  override def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
+  def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
     otherSideCBR.mutate(_ => false)
     withConv(convId) { conv =>
       sendCallMessage(conv.id, GenericMessage(Uid(), GenericContent.Calling(msg)), ctx)
@@ -103,7 +103,7 @@ class DefaultCallingService(context:             Context,
     *                   true if someone called recently for group but false if the call was started more than 30 seconds ago"
     *                                                                                                               - Chris the All-Knowing.
     */
-  override def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
+  def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
     verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
     otherSideCBR.mutate(_ => false)
 
@@ -124,7 +124,7 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  override def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
+  def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     currentCall.mutate {
       case Some(call) if call.convId == conv.id => Some(call.copy(state = SELF_JOINING))
@@ -133,12 +133,12 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  override def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean) = {
+  def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean) = {
     verbose(s"Missed call for conversation: $convId at $time from user $userId. Video: $videoCall")
     messagesService.addMissedCallMessage(convId, userId, time)
   }
 
-  override def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { conv =>
+  def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { conv =>
     verbose(s"call established for conv: ${conv.id}, userId: $userId")
     currentCall.mutate {
       case Some(c) =>
@@ -149,18 +149,18 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  override def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { conv =>
+  def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id} at $time, userId: $userId")
     if (reason != StillOngoing) availableCalls.mutate(calls => calls - conv.id)
     currentCall.mutate(onCallClosed(_, reason, conv, userId))
   }
 
   //TODO pass call metrics to tracking when AVS are ready for it.
-  override def onMetricsReady(convId: RConvId, metricsJson: String) = {
+  def onMetricsReady(convId: RConvId, metricsJson: String) = {
     verbose(s"Call metrics for $convId, metrics: $metricsJson")
   }
 
-  override def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
+  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
     verbose(s"video state changed: $videoReceiveState")
     currentCall.mutate {
       case Some(c) => Some(c.copy(videoReceiveState = videoReceiveState))
@@ -169,9 +169,9 @@ class DefaultCallingService(context:             Context,
   }
 
   //TODO should this be synchronised too?
-  override def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
+  def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
 
-  override def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { conv =>
+  def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { conv =>
     verbose(s"group members changed, convId: $convId, other members: $members")
     currentCall.mutate {
       case Some(call) if call.convId == conv.id =>

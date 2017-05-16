@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 
-class VoiceChannelGsmService(voice: VoiceChannelService, callingService: DefaultCallingService) {
+class VoiceChannelGsmService(voice: VoiceChannelService, callingService: CallingService) {
   import voice._
 
   private implicit val eventContext = EventContext.Global

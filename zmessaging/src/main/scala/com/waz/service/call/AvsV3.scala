@@ -33,25 +33,6 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.{Future, Promise}
 
-trait CallingService {
-  def currentCall: Signal[Option[CallInfo]]
-  def availableCalls: Signal[Map[ConvId, CallInfo]]
-  def onReady(version: Int): Unit
-  def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
-  def onOtherSideAnsweredCall(convId: RConvId): Unit
-  def onEstablishedCall(convId: RConvId, userId: UserId): Unit
-  def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId): Unit
-  def onMetricsReady(convId: RConvId, metricsJson: String): Unit
-  def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean): Unit
-  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
-  def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
-  def onBitRateStateChanged(): Unit
-  def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
-  def startCall(convId: ConvId, isVideo: Boolean = false): Unit
-  def endCall(convId: ConvId): Unit
-  def setVideoSendActive(convId: ConvId, send: Boolean): Unit
-}
-
 trait AvsV3 {
   def available: Future[Unit] //Fails if not available
   def onNetworkChanged(): Future[Unit]
