@@ -40,7 +40,7 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def getLastMessage(conv: ConvId): Future[Option[MessageData]]
 }
 
-class DefaultMessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: DefaultConversationStorage, users: DefaultUsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
+class DefaultMessagesStorage(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorageImpl, users: DefaultUsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
     CachedStorageImpl[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(DefaultMessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") with MessagesStorage {
 
   import com.waz.utils.events.EventContext.Implicits.global

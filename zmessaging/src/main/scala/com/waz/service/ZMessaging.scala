@@ -79,7 +79,7 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val voiceStorage      = wire[VoiceChannelStorage]
   lazy val reactionsStorage  = wire[ReactionsStorage]
   lazy val notifStorage      = wire[NotificationStorage]
-  lazy val convsStorage      = wire[DefaultConversationStorage]
+  lazy val convsStorage      = wire[ConversationStorageImpl]
   lazy val msgDeletions      = wire[MsgDeletionStorage]
   lazy val searchQueryCache  = wire[SearchQueryCacheStorage]
   lazy val commonConnections = wire[CommonConnectionsStorage]

@@ -33,7 +33,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class MessagesContentUpdater(context: Context, val messagesStorage: DefaultMessagesStorage, convs: DefaultConversationStorage, users: DefaultUserService, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
+class MessagesContentUpdater(context: Context, val messagesStorage: DefaultMessagesStorage, convs: ConversationStorageImpl, users: DefaultUserService, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
 
   private implicit val tag: LogTag = logTagFor[MessagesContentUpdater]
   import Threading.Implicits.Background

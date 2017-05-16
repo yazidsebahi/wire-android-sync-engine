@@ -20,7 +20,7 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.api.impl.ConversationsListState
 import com.waz.content.UserPreferences.SelectedConvId
-import com.waz.content.{DefaultConversationStorage, UserPreferences}
+import com.waz.content.{ConversationStorageImpl, UserPreferences}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, ConversationData}
 import com.waz.threading.SerialDispatchQueue
@@ -33,7 +33,7 @@ import scala.concurrent.Future
 /**
  * Keeps track of general conversation list stats needed for display of conversations lists.
  */
-class ConversationsListStateService(convs: DefaultConversationStorage, userPrefs: UserPreferences) {
+class ConversationsListStateService(convs: ConversationStorageImpl, userPrefs: UserPreferences) {
 
   import ConversationsListState.Data
   import com.waz.utils.events.EventContext.Implicits.global

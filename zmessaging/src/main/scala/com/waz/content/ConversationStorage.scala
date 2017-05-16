@@ -18,6 +18,7 @@
 package com.waz.content
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Verification
 import com.waz.api.Verification.UNKNOWN
 import com.waz.model.ConversationData.ConversationDataDao
@@ -36,8 +37,7 @@ trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
   def setUnknownVerification(convId: ConvId): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class DefaultConversationStorage(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
-  import DefaultConversationStorage._
+class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
   import EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationStorage")
 
@@ -136,10 +136,6 @@ class DefaultConversationStorage(storage: ZmsDatabase) extends CachedStorageImpl
     } yield res
 
   def search(prefix: SearchKey, self: UserId, handleOnly: Boolean): Future[Vector[ConversationData]] = storage(ConversationDataDao.search(prefix, self, handleOnly)(_))
-}
-
-object DefaultConversationStorage {
-  private implicit val logTag: LogTag = logTagFor[DefaultConversationStorage]
 }
 
 // this wrapper provides a check for content equality instead of the equality based on total ordering provided by the sorted set

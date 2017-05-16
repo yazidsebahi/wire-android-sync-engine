@@ -20,7 +20,7 @@ package com.waz.service.conversation
 import java.util.Date
 
 import com.waz.ZLog._
-import com.waz.content.DefaultConversationStorage
+import com.waz.content.ConversationStorageImpl
 import com.waz.model._
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
@@ -31,7 +31,7 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class TypingService(conversations: DefaultConversationStorage, timeouts: Timeouts, lifecycle: ZmsLifecycle, sync: SyncServiceHandle) {
+class TypingService(conversations: ConversationStorageImpl, timeouts: Timeouts, lifecycle: ZmsLifecycle, sync: SyncServiceHandle) {
   import timeouts.typing._
 
   private implicit val ev = EventContext.Global

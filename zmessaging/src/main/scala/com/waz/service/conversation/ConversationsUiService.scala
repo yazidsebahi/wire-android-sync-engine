@@ -46,7 +46,7 @@ import scala.language.higherKinds
 
 class ConversationsUiService(assets: AssetService, users: DefaultUserService, usersStorage: DefaultUsersStorage,
                              storage: ZmsDatabase, messages: DefaultMessagesService, members: MembersStorageImpl, assetStorage: AssetsStorage,
-                             convsContent: DefaultConversationsContentUpdater, convStorage: DefaultConversationStorage, network: DefaultNetworkModeService,
+                             convsContent: DefaultConversationsContentUpdater, convStorage: ConversationStorageImpl, network: DefaultNetworkModeService,
                              convs: ConversationsService, voice: VoiceChannelService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle,
                              errors: ErrorsService) {
 
