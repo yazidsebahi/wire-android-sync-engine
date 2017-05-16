@@ -44,7 +44,7 @@ import scala.concurrent.Future.successful
 import scala.util.control.NoStackTrace
 
 class ConversationsService(context: Context, push: PushServiceSignals, users: DefaultUserService, usersStorage: DefaultUsersStorage,
-                           messagesStorage: DefaultMessagesStorage, membersStorage: MembersStorageImpl,
+                           messagesStorage: MessagesStorageImpl, membersStorage: MembersStorageImpl,
                            convsStorage: ConversationStorageImpl, val content: ConversationsContentUpdaterImpl, listState: ConversationsListStateService,
                            sync: SyncServiceHandle, errors: ErrorsService,
                            messages: MessagesServiceImpl, assets: AssetService, storage: ZmsDatabase,

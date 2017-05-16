@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
-import com.waz.content.{MembersStorageImpl, GlobalPreferences, DefaultMessagesStorage}
+import com.waz.content.{MembersStorageImpl, GlobalPreferences, MessagesStorageImpl}
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -51,7 +51,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdaterImpl, storage: DefaultMessagesStorage,
+                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdaterImpl, storage: MessagesStorageImpl,
                           assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: GlobalPreferences,
                           sync: SyncServiceHandle, assets: AssetService, users: DefaultUserService, cache: CacheService,
                           members: MembersStorageImpl, errors: ErrorsService, timeouts: Timeouts) {

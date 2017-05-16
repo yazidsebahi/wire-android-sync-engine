@@ -77,7 +77,7 @@ trait AssetService {
 }
 
 class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-                       loader: AssetLoader, messages: DefaultMessagesStorage, downloader: DownloaderService, errors: ErrorsService,
+                       loader: AssetLoader, messages: MessagesStorageImpl, downloader: DownloaderService, errors: ErrorsService,
                        permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
                        metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
                        prefs: GlobalPreferences) extends AssetService {
@@ -335,7 +335,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
 object AssetService {
 
   def apply(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-            loader: AssetLoader, messages: DefaultMessagesStorage, downloader: DownloaderService, errors: ErrorsService,
+            loader: AssetLoader, messages: MessagesStorageImpl, downloader: DownloaderService, errors: ErrorsService,
             permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
             metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
             prefs: GlobalPreferences): AssetService =

@@ -149,7 +149,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def searchQueryCache  = storage.searchQueryCache
   def commonConnections = storage.commonConnections
 
-  lazy val messagesStorage: DefaultMessagesStorage = wire[DefaultMessagesStorage]
+  lazy val messagesStorage: MessagesStorageImpl = wire[MessagesStorageImpl]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
 

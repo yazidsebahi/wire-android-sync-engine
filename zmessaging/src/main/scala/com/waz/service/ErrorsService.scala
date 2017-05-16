@@ -20,7 +20,7 @@ package com.waz.service
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.ErrorType
-import com.waz.content.DefaultMessagesStorage
+import com.waz.content.MessagesStorageImpl
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model._
 import com.waz.content.ZmsDatabase
@@ -33,7 +33,7 @@ import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 import com.waz.utils._
 
-class ErrorsService(context: Context, storage: ZmsDatabase, lifecycle: ZmsLifecycle, messages: DefaultMessagesStorage) {
+class ErrorsService(context: Context, storage: ZmsDatabase, lifecycle: ZmsLifecycle, messages: MessagesStorageImpl) {
   import com.waz.utils.events.EventContext.Implicits.global
   import lifecycle._
 

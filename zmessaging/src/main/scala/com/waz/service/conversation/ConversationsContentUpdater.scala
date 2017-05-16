@@ -43,7 +43,7 @@ trait ConversationsContentUpdater {
   def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: DefaultUserService, membersStorage: MembersStorageImpl, messagesStorage: => DefaultMessagesStorage) extends ConversationsContentUpdater {
+class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: DefaultUserService, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
 

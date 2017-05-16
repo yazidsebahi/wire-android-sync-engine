@@ -22,7 +22,7 @@ import java.util.Date
 import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.DefaultMessagesStorage
+import com.waz.content.MessagesStorageImpl
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
@@ -42,7 +42,7 @@ object ConversationsSyncHandler {
 }
 
 class ConversationsSyncHandler(assetSync: AssetSyncHandler,
-                               userService: DefaultUserService, messagesStorage: DefaultMessagesStorage, messagesService: MessagesServiceImpl,
+                               userService: DefaultUserService, messagesStorage: MessagesStorageImpl, messagesService: MessagesServiceImpl,
                                convService: ConversationsService, convs: ConversationsContentUpdaterImpl, convEvents: ConversationEventsService,
                                errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
 
