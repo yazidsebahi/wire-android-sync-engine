@@ -86,7 +86,7 @@ case class AccountId(str: String) {
   override def toString: String = str
 }
 
-object AccountId {
+object AccountId extends (String => AccountId) {
   def apply(): AccountId = Id.random()
 
   implicit object Id extends Id[AccountId] {

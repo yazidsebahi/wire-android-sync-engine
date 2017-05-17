@@ -54,7 +54,7 @@ object Preferences {
     def apply():          Future[A]    = prefs.getValue(key).map { v => verbose(s"Getting $key: $v"); v }
     def update(value: A): Future[Unit] = {
       verbose(s"Setting $key: $value")
-      prefs.setValue(key, value).map { _ => verbose(s"Updating signal with value: $value"); signal ! value }
+      prefs.setValue(key, value).map { _ => signal ! value }
     }
 
     def :=(value: A):      Future[Unit] = update(value)

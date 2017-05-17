@@ -19,10 +19,10 @@ package com.waz.service.push
 
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{verbose, warn}
-import com.waz.content.GlobalPreferences.PushEnabledKey
+import com.waz.ZLog.verbose
+import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
-import com.waz.model.{AccountId, PushTokenRemoveEvent, PushToken}
+import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
 import com.waz.service.{EventScheduler, ZmsLifecycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
@@ -46,8 +46,9 @@ class PushTokenService(googleApi: GoogleApi,
   private implicit val ev = EventContext.Global
 
 
-  val pushEnabled   = prefs.preference(PushEnabledKey)
-  val currentToken  = prefs.preference(GlobalPreferences.PushToken)
+  val pushEnabled    = prefs.preference(PushEnabledKey)
+  val currentAccount = prefs.preference(CurrentAccountPref)
+  val currentToken   = prefs.preference(GlobalPreferences.PushToken)
 
   val onTokenRefresh = EventStream[Option[PushToken]]()
 
@@ -62,6 +63,9 @@ class PushTokenService(googleApi: GoogleApi,
     case true => setNewToken()
     case _ =>
   }
+
+  //None if user is not logged in.
+  private val loggedInAccount = currentAccount.signal.map(v => if (v.isEmpty) None else Some(AccountId(v)))
 
   private val userToken = accounts.signal(accountId).map(_.registeredPush)
 
@@ -100,6 +104,7 @@ class PushTokenService(googleApi: GoogleApi,
 
   //on dispatcher prevents infinite register loop
   (for {
+    Some(id)    <- loggedInAccount if id == accountId
     userToken   <- userToken
     globalToken <- currentToken.signal
   } yield (globalToken, userToken)).on(dispatcher) {
@@ -114,8 +119,11 @@ class PushTokenService(googleApi: GoogleApi,
   }
 
   def onTokenRegistered(token: PushToken): Future[Unit] = {
-    verbose("onTokenRegistered")
-    accounts.update(accountId, _.copy(registeredPush = Some(token))).map(_ => ())
+    verbose(s"onTokenRegistered: $accountId, $token")
+    for {
+      Some(id) <- loggedInAccount.head if id == accountId
+      _        <- accounts.update(id, _.copy(registeredPush = Some(token)))
+    } yield {}
   }
 }
 

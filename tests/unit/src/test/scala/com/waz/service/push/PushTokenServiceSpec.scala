@@ -18,7 +18,7 @@
 package com.waz.service.push
 
 import com.waz.content.{AccountsStorage, GlobalPreferences}
-import com.waz.content.GlobalPreferences.PushEnabledKey
+import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.model._
 import com.waz.service.ZmsLifecycle
 import com.waz.specs.AndroidFreeSpec
@@ -42,6 +42,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   val accountId = AccountId()
 
   var pushEnabled         = prefs.preference(PushEnabledKey)
+  var currentAccount      = prefs.preference(CurrentAccountPref)
   var currentToken        = prefs.preference(GlobalPreferences.PushToken)
 
   var googlePlayAvailable = Signal(false)
@@ -55,6 +56,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     prefs.reset()
 
     pushEnabled         = prefs.preference(PushEnabledKey)
+    currentAccount      = prefs.preference(CurrentAccountPref)
     currentToken        = prefs.preference(GlobalPreferences.PushToken)
 
     googlePlayAvailable = Signal(false)
@@ -102,7 +104,9 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val oldToken = PushToken("oldToken")
       val newToken = PushToken("token")
+
       accountSignal ! AccountData(accountId, None, "", None, None, Some(oldToken))
+      currentAccount := accountId.str
 
       currentToken := Some(newToken)
       pushEnabled := true
@@ -128,6 +132,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val newToken = PushToken("newToken")
 
       accountSignal ! AccountData(accountId, None, "", None, None, Some(oldToken))
+      currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(oldToken)
@@ -150,6 +155,38 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       result(service.currentToken.signal.filter(_.contains(newToken)).head)
       result(accountSignal.filter(_.registeredPush.contains(newToken)).head)
     }
+
+    scenario("After user is logged out, clearing their current push token should NOT trigger new registration") {
+      val token = PushToken("token")
+
+      accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      currentAccount := accountId.str
+      pushEnabled := true
+      googlePlayAvailable ! true
+      currentToken := Some(token)
+
+      (google.getPushToken _).expects().never()
+      (sync.registerPush _).expects(*).never()
+
+      lazy val service = initTokenService()
+
+      result(service.pushActive.filter(_ == true).head)
+
+      currentAccount := "" //user is logged out
+      accountSignal ! AccountData(accountId, None, "", None, None, None)
+
+      result(service.pushActive.filter(_ == false).head)
+
+      /**
+        * It seems as though there can be a couple of instances of zms (and therefore the push token service) available.
+        * So lets make sure we only register the account assigned to our instance. Logging in then with another account
+        * shouldn't change the state of this instance.
+        */
+      currentAccount := AccountId().str
+
+      awaitAllTasks
+      result(service.pushActive.filter(_ == false).head)
+    }
   }
 
   feature("Push active") {
@@ -157,6 +194,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if push is enabled and inactive if not") {
       val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      currentAccount := accountId.str
       pushEnabled := true //set active
       googlePlayAvailable ! true
       currentToken := Some(token)
@@ -169,9 +207,10 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       result(service.pushActive.filter(_ == false).head)
     }
 
-    scenario("Current: Push should be active if app is in background and inactive if not") {
+    scenario("Push should be active if app is in background and inactive if not") {
       val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
       lifecycleActive ! true //websocket should be open
@@ -188,6 +227,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be inactive if play services are unavailable") {
       val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
@@ -204,6 +244,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val token = PushToken("token")
       accountSignal ! AccountData(accountId, None, "", None, None, None)
+      currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)

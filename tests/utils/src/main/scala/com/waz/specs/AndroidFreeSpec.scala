@@ -46,7 +46,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     isTest = true
 
-    ZLog.setTestLogging()
+//    ZLog.setTestLogging()
 
     Intent.setUtil(JVMIntentUtil)
 
