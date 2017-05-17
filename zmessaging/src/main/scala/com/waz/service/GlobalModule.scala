@@ -39,7 +39,7 @@ import com.waz.znet._
 
 class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val storage:             Database                         = new GlobalDatabase(context)
-  lazy val googleApi:           GoogleApi                        = new GoogleApiImpl(context)
+  lazy val googleApi:           GoogleApi                        = new GoogleApiImpl(context, backend)
   lazy val prefs:               GlobalPreferences                = GlobalPreferences(context)
   lazy val metadata:            MetaDataService                  = wire[MetaDataService]
   lazy val cache:               CacheService                     = CacheService(context, storage)

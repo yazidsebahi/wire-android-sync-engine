@@ -45,7 +45,7 @@ class PushTokenClient(netClient: ZNetClient) {
 object PushTokenClient {
   val PushesPath = "/push/tokens"
 
-  case class PushTokenRegistration(token: PushToken, app: PushSenderId, clientId: ClientId, transport: String = "GCM")
+  case class PushTokenRegistration(token: PushToken, senderId: String, clientId: ClientId, transport: String = "GCM")
   object PushTokenRegistration {
 
     implicit lazy val Decoder: JsonDecoder[PushTokenRegistration] = new JsonDecoder[PushTokenRegistration] {
@@ -56,7 +56,7 @@ object PushTokenClient {
     implicit lazy val Encoder: JsonEncoder[PushTokenRegistration] = new JsonEncoder[PushTokenRegistration] {
       override def apply(v: PushTokenRegistration): JSONObject = JsonEncoder { o =>
         o.put("token", v.token)
-        o.put("app", v.app.str)
+        o.put("app", v.senderId)
         o.put("transport", v.transport)
         o.put("client", v.clientId.str)
       }

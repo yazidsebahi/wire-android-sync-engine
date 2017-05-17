@@ -133,7 +133,7 @@ class WebSocketClientService(context:     Context,
   })
 
   private def webSocketUri(clientId: ClientId) =
-    Uri.parse(backend.pushUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
+    Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
   private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, webSocketUri(clientId))
 }

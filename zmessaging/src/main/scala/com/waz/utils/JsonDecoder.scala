@@ -150,7 +150,6 @@ object JsonDecoder {
   implicit def decodeOptHandle(s: Symbol)(implicit js: JSONObject): Option[Handle] = opt(s, js => Handle(js.getString(s.name)))
   implicit def decodeHandleSeq(s: Symbol)(implicit js: JSONObject): Seq[Handle] = array[Handle](s)({ (arr, i) => Handle(arr.getString(i)) })
 
-  implicit def decodePushSenderId(s: Symbol)(implicit js: JSONObject): PushSenderId = PushSenderId(js.getString(s.name))
   implicit def decodePushToken(s: Symbol)(implicit js: JSONObject): PushToken = PushToken(js.getString(s.name))
 
   implicit def decodeOptCallSequenceNumber(s: Symbol)(implicit js:JSONObject): Option[CallSequenceNumber] = decodeOptInt(s) filter (_ > 1) map CallSequenceNumber // 0 means uninitialized, and 1 can happen by resetting Redis, so it basically just means "unknown", too
