@@ -68,7 +68,9 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       @volatile var timeoutForPhase = requestTimeout
       val interval = 5.seconds min timeout
 
-      val httpFuture = client.execute(buildHttpRequest(uri, method, body, headers, followRedirect, timeoutForPhase), new HttpConnectCallback {
+      val request = buildHttpRequest(uri, method, body, headers, followRedirect, timeoutForPhase)
+
+      val callback = new HttpConnectCallback {
         override def onConnectCompleted(ex: Exception, response: AsyncHttpResponse): Unit = {
           debug(s"Connect completed for uri: '$uri', ex: '$ex', cancelled: $cancelled")
           timeoutForPhase = timeout
@@ -88,7 +90,9 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
             }
           }
         }
-      })
+      }
+
+      val httpFuture = client.execute(request, callback)
 
       returning(new CancellableFuture(p) {
         override def cancel()(implicit tag: LogTag): Boolean = {
@@ -105,7 +109,6 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
           if (timeSinceLastNetworkActivity > t.toMillis) CancellableFuture.successful {
             debug(s"cancelling due to inactivity: $timeSinceLastNetworkActivity")
             cancellable.fail(new TimeoutException("[AsyncClient] timedOut") with NoReporting)
-            cancellable.cancel()("[AsyncClient] timedOut cancel")
           } else CancellableFuture.delay(interval min (t - timeSinceLastNetworkActivity.millis)) flatMap { _ => cancelOnInactivity }
         }
 
@@ -229,4 +232,5 @@ object AsyncClient {
     case e: CancelException => Response(Response.Cancelled)
     case NonFatal(e) => Response(Response.InternalError(e.getMessage, Some(e)))
   }
+
 }

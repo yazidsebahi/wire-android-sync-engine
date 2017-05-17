@@ -406,4 +406,62 @@ class AsyncClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter 
       a[TimeoutException] should be thrownBy doPost("/post/json_json200", new JSONObject("""{ "key": "value"}"""), false, 2.seconds, 10.seconds)
     }
   }
+
+  /*
+  TODO: Maciek Gorywoda: We need a way to mock the AsyncClient in a more complex way - for example, simulating low
+  bandwidth connection, but only for downloading assets and for a given time, so after the time passes the connection
+  gets well again and the user is able to download the asset). For that, we need to wrap koushikdutta's AsyncHttpClient.
+  I leave here the code I used in AsyncClientto simulate that situation.
+
+  import com.koushikdutta.async.future.SimpleFuture
+
+  class AsyncClient ... {
+    ...
+    private def mockExecute(callback: () => Boolean): SimpleFuture[AsyncHttpResponse] = {
+    debug(s"CE mocked execute started")
+    new SimpleFuture[AsyncHttpResponse] {
+      val c = CancellableFuture {
+        debug(s"the mocked future started")
+        Thread.sleep(DefaultTimeout.toMillis)
+        callback()
+      }
+
+      override def cancel(): Boolean = {
+        debug(s"mocked future cancel")
+        c.cancel()
+      }
+    }
+  }
+
+  def execute(client: AsyncHttpClient, request: AsyncHttpRequest, callback: HttpConnectCallback, mockCallback: Option[() => Boolean] = None): KFuture[AsyncHttpResponse] = {
+    val uri = request.getUri().toString
+    if (request.getMethod() == "GET" && uri.contains("https://staging-nginz-https.zinfra.io/assets/v3") && mockCallback.isDefined) {
+      AsyncClient.addIfMissing(uri)
+      if(AsyncClient.mockDuration(uri) > 4*DefaultTimeout.toMillis + 1L) {
+        debug(s"the mock execute finished for $uri, calling the standard execute")
+        client.execute(request, callback)
+      } else {
+        mockExecute(mockCallback.get)
+      }
+    }
+    else {
+      debug(s"the standard execute for method ${request.getMethod()} and uri ${request.getUri()}")
+      client.execute(request, callback)
+    }
+  }
+  ...
+    val mockedCallback = () => p.tryFailure(new TimeoutException("mocked timeout"))
+    val httpFuture = execute(client, request, callback, Some(mockedCallback))  // instead of: val httpFuture = client.execute(request, callback)
+  ...
+  }
+
+  object AsyncClient {
+    ...
+    import scala.collection.mutable
+    val mockTime = mutable.HashMap[String, Long]()
+    def addIfMissing(uri: String) = mockTime.getOrElseUpdate(uri, System.currentTimeMillis())
+    def mockDuration(uri: String) = mockTime.get(uri).map(System.currentTimeMillis() - _).getOrElse(0L)
+    ...
+  }
+   */
 }

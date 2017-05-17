@@ -85,12 +85,20 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 
   private def downloadWithRetries[A <: DownloadRequest](req: A, force: Boolean = false, retry: Int = 0)
                                     (implicit loader: Downloader[A]): CancellableFuture[Option[CacheEntry]] = {
+    debug(s"downloadWithRetries($req, $force, $retry)")
     val cf = downloadOnce(req, force)
     cf.flatMap {
-      case None if retry >= DownloaderService.backoff.maxRetries => CancellableFuture.successful(None)
+      case None if retry >= DownloaderService.backoff.maxRetries => // in practice it should never happen due to a very long backoff
+        downloadFailed(req)
+        CancellableFuture.successful(None)
       case None => CancellableFuture.delay(DownloaderService.backoff.delay(retry)).flatMap { _ => downloadWithRetries(req, force, retry + 1)(loader) }
       case _ => cf // if everything is ok we want to return the original cancellable future, not a new one
     }
+  }
+
+  private def downloadFailed(req: DownloadRequest) = downloads.get(req.cacheKey).fold(error(s"no download entry found for: $req")) { entry =>
+    error(s"download really failed for $req")
+    entry.state ! ProgressData(0, 0, State.FAILED)
   }
 
   // 'protected' for the sake of unit tests, to enable mocking
@@ -164,35 +172,16 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
   private def doDownload(download: DownloadEntry): CancellableFuture[Option[CacheEntry]] = {
     verbose(s"doDownload($download)")
 
-    def actualDownload = {
-      verbose(s"actualDownload $download")
-      download.doDownload(download.state ! _)
-    }
-
-    def done(state: State) = {
-      verbose(s"done($state), $download")
-      download.state ! ProgressData(0, 0, state)
-      downloads.remove(download.req.cacheKey)
-      active -= download.req.cacheKey
-      checkQueue()
-    }
-
     if (download.force || downloadEnabled.currentValue.exists(identity)) {
       download.state ! ProgressData(0, 0, State.RUNNING)
 
-      val result = actualDownload
+      val result = download.doDownload(download.state ! _)
 
       result.onComplete {
-        case Success(Some(entry)) => done(State.COMPLETED)
-        case Success(None) => done(State.FAILED)
-        case Failure(ex: CancelException) =>
-          download.state ! ProgressData(0, 0, State.CANCELLED)
-          active -= download.req.cacheKey
-          queue.put(download.req, uiWaiting = false, download.time)
-          checkQueue()
-        case Failure(ex) =>
-          error(s"download failed for: $download", ex)
-          done(State.FAILED)
+        case Success(Some(entry)) => download.state ! ProgressData(0, 0, State.COMPLETED)
+        case Success(None) => warn(s"download failed - we will retry")
+        case Failure(ex: CancelException) => download.state ! ProgressData(0, 0, State.CANCELLED)
+        case Failure(ex) => error(s"download failed with an exception for: $download - we will retry", ex)
       }
 
       result
@@ -211,7 +200,7 @@ object DownloaderService {
   val MaxBackgroundDownloads = 1
   val DefaultExpiryTime = 7.days
 
-  private var backoff = new ExponentialBackoff(250.millis, 5.minutes)
+  private var backoff = new ExponentialBackoff(250.millis, 7.days)
   def setBackoff(backoff: ExponentialBackoff) = this.backoff = backoff
 
   private[downloads] class DownloadEntry(val req: DownloadRequest, load: ProgressIndicator.Callback => CancellableFuture[Option[CacheEntry]]) {
