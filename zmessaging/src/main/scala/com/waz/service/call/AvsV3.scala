@@ -189,12 +189,14 @@ object AvsV3 {
     *   WCALL_REASON_ANSWERED_ELSEWHERE  5
     *   WCALL_REASON_IO_ERROR            6
     *   WCALL_REASON_STILL_ONGOING       7
+    *   WCALL_REASON_TIMEOUT_ECONN       8
+    *   WCALL_REASON_DATACHANNEL         9
     *
     *   interrupted - SE only (when interrupted by GSM call)
     */
   type ClosedReason = ClosedReason.Value
   object ClosedReason extends Enumeration {
-    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, IOError, StillOngoing, Interrupted = Value
+    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, IOError, StillOngoing, TimeoutEconn, DataChannel, Interrupted = Value
   }
 
   /**
