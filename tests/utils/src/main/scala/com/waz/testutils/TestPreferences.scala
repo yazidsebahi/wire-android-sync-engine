@@ -17,34 +17,19 @@
  */
 package com.waz.testutils
 
-import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.content.Preferences.Preference.PrefCodec
+import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.returning
 
-class TestGlobalPreferences extends GlobalPreferences(null) {
+class TestGlobalPreferences extends GlobalPreferences(null, null) {
   override implicit val dispatcher = new SerialDispatchQueue(name = "TestGlobalPreferenceQueue")
 
   private var values = Map.empty[String, String]
+  private var prefs = Map.empty[String, Preference[_]]
 
-  override protected val prefs = null
-
-  override def preference[A: PrefCodec](key: PrefKey[A]) = new Preference[A](this, key)
-
-  override def getFromPref[A: PrefCodec](key: PrefKey[A]) = {
-    val codec = implicitly[PrefCodec[A]]
-    values.get(key.str).map(codec.decode).getOrElse(key.default)
-  }
-
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
-    dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
-}
-
-class TestUserPreferences extends UserPreferences(null, null) {
-
-  override val dispatcher = new SerialDispatchQueue(name = "TestUserPreferenceQueue")
-
-  private var values = Map.empty[String, String]
+  override def preference[A: PrefCodec](key: PrefKey[A]) = returning(new Preference[A](this, key))(p => prefs += (key.str -> p))
 
   override protected def getValue[A: PrefCodec](key: PrefKey[A]) = dispatcher {
     val codec = implicitly[PrefCodec[A]]
@@ -52,6 +37,39 @@ class TestUserPreferences extends UserPreferences(null, null) {
   }
 
   override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
-    dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
+    dispatcher {
+      values += (key.str -> implicitly[PrefCodec[A]].encode(value))
+      //need to update any other preferences of the change
+      prefs.collect { case (k, p) if k == key.str => p.asInstanceOf[Preference[A]] }.foreach(_.signal ! value)
+    }
 
+  def reset() = this.values = Map.empty
+
+  def print() = dispatcher(println(values))
+}
+
+class TestUserPreferences extends UserPreferences(null, null) {
+
+  override implicit val dispatcher = new SerialDispatchQueue(name = "TestGlobalPreferenceQueue")
+
+  private var values = Map.empty[String, String]
+  private var prefs = Map.empty[String, Preference[_]]
+
+  override def preference[A: PrefCodec](key: PrefKey[A]) = returning(new Preference[A](this, key))(p => prefs += (key.str -> p))
+
+  override protected def getValue[A: PrefCodec](key: PrefKey[A]) = dispatcher {
+    val codec = implicitly[PrefCodec[A]]
+    values.get(key.str).map(codec.decode).getOrElse(key.default)
+  }
+
+  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+    dispatcher {
+      values += (key.str -> implicitly[PrefCodec[A]].encode(value))
+      //need to update any other preferences of the change
+      prefs.collect { case (k, p) if k == key.str => p.asInstanceOf[Preference[A]] }.foreach(_.signal ! value)
+    }
+
+  def reset() = this.values = Map.empty
+
+  def print() = dispatcher(println(values))
 }

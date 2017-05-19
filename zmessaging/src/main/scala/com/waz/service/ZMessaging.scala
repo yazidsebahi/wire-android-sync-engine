@@ -113,13 +113,13 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
 
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)
+  def googleApi         = global.googleApi
   def imageCache        = global.imageCache
   def permissions       = global.permissions
   def phoneNumbers      = global.phoneNumbers
   def prefs             = global.prefs
   def downloader        = global.downloader
   def bitmapDecoder     = global.bitmapDecoder
-  def gcmGlobal         = global.gcmGlobal
   def timeouts          = global.timeouts
   def cache             = global.cache
   def mediamanager      = global.mediaManager
@@ -164,7 +164,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val eventsClient       = wire[EventsClient]
   lazy val voiceClient        = wire[VoiceChannelClient]
   lazy val abClient           = wire[AddressBookClient]
-  lazy val gcmClient          = wire[GcmClient]
+  lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
   lazy val invitationClient   = wire[InvitationClient]
   lazy val giphyClient        = wire[GiphyClient]
@@ -182,9 +182,9 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
-  lazy val pushSignals                            = wire[PushServiceSignals]
   lazy val push: PushServiceImpl                  = wire[PushServiceImpl]
-  lazy val gcm: GcmService                        = wire[GcmService]
+  lazy val pushToken: PushTokenService            = wire[PushTokenService]
+  lazy val pushSignals                            = wire[PushServiceSignals]
   lazy val errors                                 = wire[ErrorsService]
   lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService      = wire[PingIntervalService]
@@ -214,7 +214,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val youtubeMedia                           = wire[YouTubeMediaService]
   lazy val soundCloudMedia                        = wire[SoundCloudMediaService]
   lazy val spotifyMedia                           = wire[SpotifyMediaService]
-  lazy val otrService: OtrService                 = wire[OtrService]
+  lazy val otrService: OtrServiceImpl             = wire[OtrServiceImpl]
   lazy val genericMsgs: GenericMessageService     = wire[GenericMessageService]
   lazy val reactions: ReactionsService            = wire[ReactionsService]
   lazy val notifications: NotificationService     = wire[NotificationService]
@@ -232,7 +232,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val connectionsSync  = wire[ConnectionsSyncHandler]
   lazy val voicechannelSync = wire[VoiceChannelSyncHandler]
   lazy val addressbookSync  = wire[AddressBookSyncHandler]
-  lazy val gcmSync          = wire[GcmSyncHandler]
+  lazy val gcmSync          = wire[PushTokenSyncHandler]
   lazy val typingSync       = wire[TypingSyncHandler]
   lazy val richmediaSync    = wire[RichMediaSyncHandler]
   lazy val invitationSync   = wire[InvitationSyncHandler]
@@ -262,7 +262,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           conversations.convStateEventProcessingStage,
           typing.typingEventStage,
           otrClientsService.otrClientsProcessingStage,
-          gcm.eventProcessingStage,
+          pushToken.eventProcessingStage,
           Stage(Parallel)(
             UnarchivingEventProcessingStage(users, convsStorage),
             convEvents.conversationEventsStage,

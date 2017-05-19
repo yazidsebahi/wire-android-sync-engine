@@ -17,9 +17,9 @@
  */
 package com.waz.sync.client
 
-import com.waz.ZLog._
+import com.waz.model.PushToken
 import com.waz.model.otr.ClientId
-import com.waz.service.push.GcmGlobalService.GcmSenderId
+import com.waz.service.push.PushTokenService.PushSenderId
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.SuccessHttpStatus
@@ -29,12 +29,11 @@ import org.json.JSONObject
 
 import scala.util.Try
 
-class GcmClient(netClient: ZNetClient) {
+class PushTokenClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
-  import com.waz.sync.client.GcmClient._
-  private implicit val tag: LogTag = logTagFor[GcmClient]
+  import com.waz.sync.client.PushTokenClient._
 
-  def postPushToken(token: GcmToken): ErrorOrResponse[GcmToken] =
+  def postPushToken(token: PushTokenRegistration): ErrorOrResponse[PushTokenRegistration] =
     netClient.withErrorHandling("postPushToken", Request.Post(PushesPath, token)) {
       case Response(SuccessHttpStatus(), GcmResponseExtractor(res), _) => res
     }
@@ -43,33 +42,33 @@ class GcmClient(netClient: ZNetClient) {
     netClient.updateWithErrorHandling("deletePushToken", Request.Delete[Unit](s"$PushesPath/$token"))
 }
 
-object GcmClient {
+object PushTokenClient {
   val PushesPath = "/push/tokens"
 
-  case class GcmToken(token: String, app: GcmSenderId, clientId: ClientId, transport: String = "GCM")
-  object GcmToken {
+  case class PushTokenRegistration(token: PushToken, senderId: String, clientId: ClientId, transport: String = "GCM")
+  object PushTokenRegistration {
 
-    implicit lazy val Decoder: JsonDecoder[GcmToken] = new JsonDecoder[GcmToken] {
+    implicit lazy val Decoder: JsonDecoder[PushTokenRegistration] = new JsonDecoder[PushTokenRegistration] {
       import com.waz.utils.JsonDecoder._
-      override def apply(implicit js: JSONObject): GcmToken = GcmToken('token, 'app, decodeId[ClientId]('client), 'transport)
+      override def apply(implicit js: JSONObject): PushTokenRegistration = PushTokenRegistration('token, 'app, decodeId[ClientId]('client), 'transport)
     }
 
-    implicit lazy val Encoder: JsonEncoder[GcmToken] = new JsonEncoder[GcmToken] {
-      override def apply(v: GcmToken): JSONObject = JsonEncoder { o =>
+    implicit lazy val Encoder: JsonEncoder[PushTokenRegistration] = new JsonEncoder[PushTokenRegistration] {
+      override def apply(v: PushTokenRegistration): JSONObject = JsonEncoder { o =>
         o.put("token", v.token)
-        o.put("app", v.app.str)
+        o.put("app", v.senderId)
         o.put("transport", v.transport)
         o.put("client", v.clientId.str)
       }
     }
 
-    implicit val TokenContentEncoder: ContentEncoder[GcmToken] = ContentEncoder.json[GcmToken]
+    implicit val TokenContentEncoder: ContentEncoder[PushTokenRegistration] = ContentEncoder.json[PushTokenRegistration]
   }
 
   object GcmResponseExtractor {
-    def unapplySeq(resp: ResponseContent): Option[Seq[GcmToken]] = resp match {
-      case JsonArrayResponse(js) => Try(JsonDecoder.array[GcmToken](js)).toOption
-      case JsonObjectResponse(js) => Try(Seq(GcmToken.Decoder(js))).toOption
+    def unapplySeq(resp: ResponseContent): Option[Seq[PushTokenRegistration]] = resp match {
+      case JsonArrayResponse(js) => Try(JsonDecoder.array[PushTokenRegistration](js)).toOption
+      case JsonObjectResponse(js) => Try(Seq(PushTokenRegistration.Decoder(js))).toOption
       case _ => None
     }
   }

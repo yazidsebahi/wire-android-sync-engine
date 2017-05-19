@@ -19,6 +19,7 @@ package com.waz.service.push
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.content.UserPreferences
@@ -38,12 +39,13 @@ import scala.concurrent.{Future, Promise}
 
 trait PushService {
 
+  def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
+
 }
 
-class PushServiceImpl(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) extends PushService {
+class PushServiceImpl(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushService {
   self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
-  private implicit val tag: LogTag = logTagFor[PushServiceImpl]
   private implicit val ec = EventContext.Global
 
   private val wakeLock = new WakeLock(context)
@@ -51,6 +53,8 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
   val lastNotification = new LastNotificationIdService(keyValue, signals, client, clientId)
 
   var connectedPushPromise = Promise[PushServiceImpl]()
+
+  override val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
   /**
     * Drift to the BE time at the moment we fetch notifications
@@ -114,14 +118,14 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
       connectedPushPromise = Promise()
   }
 
-  //no need to sync history on GCM if websocket is connected
+  //no need to sync history on cloud messaging if websocket is connected
   webSocket.connected.flatMap {
-    case false => gcmService.notificationsToProcess
+    case false => cloudPushNotificationsToProcess
     case _ => Signal.empty[Set[Uid]]
   }.on(dispatcher) {
     notifications =>
       if (notifications.nonEmpty){
-        verbose("Sync history in response to gcm notification")
+        verbose("Sync history in response to cloud message notification")
         syncHistory()
       }
   }
@@ -148,7 +152,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
         }
       }
     }.map {
-      _ => gcmService.notificationsToProcess mutate (_.filter(notificationId => !notifications.exists(_.id.equals(notificationId))))
+      _ => cloudPushNotificationsToProcess mutate (_ -- notifications.map(_.id).toSet)
     }
   }
 
@@ -195,7 +199,6 @@ class LastNotificationIdService(userPrefs: UserPreferences, signals: PushService
 
   import LastNotificationIdService._
 
-  private implicit val logTag = logTagFor[LastNotificationIdService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "LastNotificationIdService")
   private implicit val ec = EventContext.Global
 

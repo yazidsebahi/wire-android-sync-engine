@@ -91,7 +91,7 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
     scenario("Phone has contacts. Sharing is disabled.") {
       givenSomeContacts(Seq(cII, cIV, cV, cVI, cVII, cCr))
 
-      val prefs = new GlobalPreferences(context)
+      val prefs = GlobalPreferences(context)
       val pref = prefs.preference(ShareContacts)
       val previousValue = prefs.getFromPref(ShareContacts)
 
@@ -534,7 +534,7 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
   }
 
   def givenAPreviousInvitationAt(i: Instant): Unit = {
-    val zuser = AccountData(EmailAddress(email), password).copy(activated = true)
+    val zuser = AccountData(EmailAddress(email), password).copy(verified = true)
     val globalDB = new GlobalDatabase(context)
     try Await.result(globalDB(AccountDataDao.insertOrReplace(zuser)(_)), 10.seconds) finally globalDB.close
     val userDB = new ZmsDatabase(zuser.id, context)

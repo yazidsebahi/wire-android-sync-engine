@@ -19,7 +19,7 @@ package com.waz.specs
 
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
-import com.waz.ZLog.{LogLevel, LogTag}
+import com.waz.ZLog.LogTag
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
@@ -31,6 +31,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
+//TODO somehow check other threads for failures that might normally be swallowed up and fail tests accordingly
 abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfter with Matchers with MockFactory { this: Suite =>
 
   val defaultTimeout = 5.seconds
@@ -45,7 +46,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     isTest = true
 
-    ZLog.testLogLevel = LogLevel.Error
+//    ZLog.setTestLogging()
 
     Intent.setUtil(JVMIntentUtil)
 

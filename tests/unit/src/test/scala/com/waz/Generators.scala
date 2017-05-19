@@ -190,7 +190,7 @@ object Generators {
       arbitrary[PostSelfPicture],
       arbitrary[PostConvJoin],
       arbitrary[PostConvLeave],
-      arbitrary[DeleteGcmToken],
+      arbitrary[DeletePushToken],
       arbitrary[PostAddressBook],
       arbitrary[PostInvitation],
       arbitrary[SyncPreKeys]))
@@ -211,14 +211,14 @@ object Generators {
       arbitrary[PostLiking],
       arbitrary[PostAssetStatus]))
 
-    lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncConnections, SyncConnectedUsers, ResetGcmToken))
+    lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncConnections, SyncConnectedUsers))
 
     implicit lazy val arbUsersSyncRequest: Arbitrary[SyncUser] = Arbitrary(listOf(arbitrary[UserId]) map { u => SyncUser(u.toSet) })
     implicit lazy val arbConvsSyncRequest: Arbitrary[SyncConversation] = Arbitrary(listOf(arbitrary[ConvId]) map { c => SyncConversation(c.toSet) })
     implicit lazy val arbSearchSyncRequest: Arbitrary[SyncSearchQuery] = Arbitrary(resultOf(SyncSearchQuery))
     implicit lazy val arbSelfPictureSyncRequest: Arbitrary[PostSelfPicture] = Arbitrary(resultOf(PostSelfPicture))
     implicit lazy val arbRichMediaSyncRequest: Arbitrary[SyncRichMedia] = Arbitrary(resultOf(SyncRichMedia))
-    implicit lazy val arbGcmSyncRequest: Arbitrary[DeleteGcmToken] = Arbitrary(resultOf(DeleteGcmToken))
+    implicit lazy val arbGcmSyncRequest: Arbitrary[DeletePushToken] = Arbitrary(resultOf(DeletePushToken))
     implicit lazy val arbCallStateSyncRequest: Arbitrary[SyncCallState] = Arbitrary(resultOf(SyncCallState))
     implicit lazy val arbPostConvSyncRequest: Arbitrary[PostConv] = Arbitrary(resultOf(PostConv))
     implicit lazy val arbPostLastReadRequest: Arbitrary[PostLastRead] = Arbitrary(resultOf(PostLastRead))
@@ -249,7 +249,7 @@ object Generators {
   implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))
   implicit lazy val arbAssetId: Arbitrary[AssetId]       = Arbitrary(sideEffect(AssetId()))
   implicit lazy val arbSyncId: Arbitrary[SyncId]         = Arbitrary(sideEffect(SyncId()))
-  implicit lazy val arbGcmId: Arbitrary[GcmId]           = Arbitrary(sideEffect(GcmId()))
+  implicit lazy val arbGcmId: Arbitrary[PushToken]           = Arbitrary(sideEffect(PushToken()))
   implicit lazy val arbMessageId: Arbitrary[MessageId]   = Arbitrary(sideEffect(MessageId()))
   implicit lazy val arbTrackingId: Arbitrary[TrackingId] = Arbitrary(sideEffect(TrackingId()))
   implicit lazy val arbContactId: Arbitrary[ContactId]   = Arbitrary(sideEffect(ContactId()))

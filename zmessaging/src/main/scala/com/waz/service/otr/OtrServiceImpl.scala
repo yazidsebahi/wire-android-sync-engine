@@ -23,6 +23,7 @@ import javax.crypto.Mac
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.{CacheService, LocalData}
 import com.waz.content.{MembersStorageImpl, GlobalPreferences, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
@@ -47,10 +48,15 @@ import scala.concurrent.Future
 import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
 
-class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
+
+trait OtrService {
+  def decryptGcm(data: Array[Byte], mac: Array[Byte]): Future[Option[JSONObject]]
+}
+
+class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
                  cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: ConversationsContentUpdaterImpl,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
-                 prefs: GlobalPreferences) {
+                 prefs: GlobalPreferences) extends OtrService {
   import EventContext.Implicits.global
   import OtrService._
   import Threading.Implicits.Background
@@ -289,7 +295,6 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
 }
 
 object OtrService {
-  private implicit val logTag: LogTag = logTagFor[OtrService]
 
   val random = new SecureRandom
 

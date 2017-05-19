@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
-import com.waz.content.{MembersStorageImpl, GlobalPreferences, MessagesStorageImpl}
+import com.waz.content.{GlobalPreferences, MembersStorageImpl, MessagesStorageImpl}
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -33,8 +33,8 @@ import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdaterImpl}
-import com.waz.service.messages.{MessagesServiceImpl, MessagesContentUpdater}
-import com.waz.service.otr.OtrService
+import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
+import com.waz.service.otr.OtrServiceImpl
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -51,7 +51,7 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
 class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: ConversationsContentUpdaterImpl, storage: MessagesStorageImpl,
+                          client: MessagesClient, otr: OtrServiceImpl, otrSync: OtrSyncHandler, convs: ConversationsContentUpdaterImpl, storage: MessagesStorageImpl,
                           assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: GlobalPreferences,
                           sync: SyncServiceHandle, assets: AssetService, users: UserServiceImpl, cache: CacheService,
                           members: MembersStorageImpl, errors: ErrorsService, timeouts: Timeouts) {

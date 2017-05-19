@@ -81,7 +81,7 @@ case class OtrClientRemoveEvent(client: ClientId) extends OtrClientEvent
 
 case class ContactJoinEvent(user: UserId, name: String) extends Event
 
-case class GcmTokenRemoveEvent(token: String, senderId: String, client: Option[String]) extends Event
+case class PushTokenRemoveEvent(token: PushToken, senderId: String, client: Option[String]) extends Event
 
 sealed trait ConversationEvent extends RConvEvent {
   val time: Date
@@ -230,7 +230,7 @@ object Event {
 
     def contactJoinEvent(implicit js: JSONObject) = ContactJoinEvent('id, 'name)
 
-    def gcmTokenRemoveEvent(implicit js: JSONObject) = GcmTokenRemoveEvent(token = 'token, senderId = 'app, client = 'client)
+    def gcmTokenRemoveEvent(implicit js: JSONObject) = PushTokenRemoveEvent(token = 'token, senderId = 'app, client = 'client)
 
     def joined(d: JSONObject): Boolean = d.getString("state") == Joined
 

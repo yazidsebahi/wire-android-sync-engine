@@ -86,7 +86,7 @@ case class AccountId(str: String) {
   override def toString: String = str
 }
 
-object AccountId {
+object AccountId extends (String => AccountId) {
   def apply(): AccountId = Id.random()
 
   implicit object Id extends Id[AccountId] {
@@ -197,16 +197,16 @@ object SyncId {
   }
 }
 
-case class GcmId(str: String) {
+case class PushToken(str: String) {
   override def toString: String = str
 }
 
-object GcmId {
-  def apply(): GcmId = Id.random()
+object PushToken {
+  def apply(): PushToken = Id.random()
 
-  implicit object Id extends Id[GcmId] {
-    override def random(): GcmId = GcmId(Uid().toString)
-    override def decode(str: String): GcmId = GcmId(str)
+  implicit object Id extends Id[PushToken] {
+    override def random(): PushToken = PushToken(Uid().toString)
+    override def decode(str: String): PushToken = PushToken(str)
   }
 }
 

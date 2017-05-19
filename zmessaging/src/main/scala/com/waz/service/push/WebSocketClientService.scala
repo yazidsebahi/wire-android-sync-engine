@@ -34,14 +34,14 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WebSocketClientService(context: Context,
-                             lifecycle: ZmsLifecycle,
-                             netClient: ZNetClient,
+class WebSocketClientService(context:     Context,
+                             lifecycle:   ZmsLifecycle,
+                             netClient:   ZNetClient,
                              val network: DefaultNetworkModeService,
-                             backend: BackendConfig,
-                             clientId: ClientId,
-                             timeouts: Timeouts,
-                             gcmService: IGcmService) {
+                             backend:     BackendConfig,
+                             clientId:    ClientId,
+                             timeouts:    Timeouts,
+                             pushToken:   PushTokenService) {
   import WebSocketClientService._
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
@@ -49,15 +49,14 @@ class WebSocketClientService(context: Context,
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  val useWebSocketFallback = gcmService.gcmActive.map(!_)
+  val useWebSocketFallback = pushToken.pushActive.map(!_)
 
   // true if web socket should be active,
   val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
     case _ => lifecycle.lifecycleState.flatMap {
       case Stopped => Signal const false
-      case Idle => useWebSocketFallback
-      case Active | UiActive => Signal const true
+      case _ => useWebSocketFallback
     }.flatMap {
       case true => Signal.const(true)
       case false =>
@@ -134,7 +133,7 @@ class WebSocketClientService(context: Context,
   })
 
   private def webSocketUri(clientId: ClientId) =
-    Uri.parse(backend.pushUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
+    Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
   private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, webSocketUri(clientId))
 }

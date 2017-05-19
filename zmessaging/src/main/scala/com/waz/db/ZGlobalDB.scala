@@ -52,7 +52,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 16
+  val DbVersion = 17
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao)
 
@@ -92,12 +92,15 @@ object ZGlobalDB {
         implicit db => AccountDataMigration.v78(db)
       },
       Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
-        val prefs = new GlobalPreferences(context)
+        val prefs = GlobalPreferences(context)
         prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
       }},
       Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
           //setting prefs.sendWithAssetsV3Key no longer needed, if you haven't updated by now, it doesn't matter
-      }}
+      }},
+      Migration(16, 17) { db =>
+        db.execSQL(s"ALTER TABLE Accounts ADD COLUMN registered_push TEXT")
+      }
     )
 
     implicit object ZmsDatabaseRes extends Resource[ZmsDatabase] {
