@@ -19,7 +19,6 @@ package com.waz.sync
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
@@ -34,6 +33,7 @@ import com.waz.testutils._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging, _}
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.wrappers.DB
 import com.waz.znet.ZNetClient._
 import org.scalatest._
 import org.scalatest.concurrent.{ScalaFutures, ScaledTimeSpans}
@@ -49,7 +49,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
   
   private lazy implicit val dispatcher = Threading.Background
 
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+  implicit def db: DB = service.db.dbHelper.getWritableDatabase
 
   var convsRequest = List[Option[RConvId]]()
   var postConvRequests = Seq.empty[Seq[UserId]]
@@ -69,7 +69,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
 
     override lazy val conversations: ConversationsService =
       new ConversationsService(context, pushSignals, users, usersStorage, messagesStorage, membersStorage,
-        convsStorage, convsContent, convsStats, sync, errors, messages, assets, db, messagesContent, kvStorage, eventScheduler) {
+        convsStorage, convsContent, convsStats, sync, errors, messages, assets, db, messagesContent, userPrefs, eventScheduler) {
 
         override def updateConversations(conversations: Seq[ConversationResponse]) = Future.successful(Nil)
       }

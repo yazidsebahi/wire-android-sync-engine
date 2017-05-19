@@ -230,7 +230,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       awaitUi(1.second)
       val asset = msgs.getLastMessage.getImage
       val asset1 = asset.data.copy(id = AssetId()) // create asset copy to make sure it is not cached
-      zmessaging.assets.storage.updateAsset(asset1.id, _ => asset1)
+      zmessaging.assets.updateAsset(asset1.id, _ => asset1)
 
       val a = api.ui.images.getImageAsset(asset1.id)
 

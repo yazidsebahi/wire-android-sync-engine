@@ -26,6 +26,7 @@ import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.service.assets.MetaDataRetriever
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp
@@ -63,8 +64,7 @@ object AssetMetaData {
       case 'video =>
         Video(opt[Dim2]('dimensions).getOrElse(Dim2(0, 0)), Duration.ofMillis('duration))
       case 'audio =>
-        Audio(Duration.ofMillis('duration),
-          Try(JsonDecoder.array[Float]('levels)((arr, i) => arr.getDouble(i).toFloat)).toOption.map(Loudness))
+        Audio(Duration.ofMillis('duration), decodeOptLoudness('levels))
       case 'image =>
         Image(JsonDecoder[Dim2]('dimensions), Image.Tag(decodeString('tag)))
       case other =>
@@ -159,8 +159,8 @@ object AssetMetaData {
     def apply(file: File): Option[Image] = apply(file, Tag.Empty)
     def apply(file: File, tag: Tag): Option[Image] = apply(new FileInputStream(file), tag)
 
-    def apply(context: Context, uri: Uri): Option[Image] = apply(context, uri, Tag.Empty)
-    def apply(context: Context, uri: Uri, tag: Tag): Option[Image] = apply(context.getContentResolver.openInputStream(uri), tag)
+    def apply(context: Context, uri: URI): Option[Image] = apply(context, uri, Tag.Empty)
+    def apply(context: Context, uri: URI, tag: Tag): Option[Image] = apply(context.getContentResolver.openInputStream(URI.unwrap(uri)), tag)
 
     def apply(stream: => InputStream, tag: Tag): Option[Image] = Try(Managed(stream).acquire { is =>
       val opts = new BitmapFactory.Options

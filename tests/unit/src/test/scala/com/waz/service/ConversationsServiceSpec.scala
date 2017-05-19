@@ -19,7 +19,6 @@ package com.waz.service
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.{RobolectricUtils, testutils}
 import com.waz.api.{ErrorType, Message}
 import com.waz.model.ConversationData.ConversationType
@@ -32,6 +31,7 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.DB
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.threeten.bp.Instant
@@ -47,7 +47,7 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
   lazy val user = UserData("user 1")
   lazy val selfUserId = UserId()
 
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+  implicit def db: DB = service.db.dbHelper.getWritableDatabase
 
   var convNameSync = None: Option[ConvId]
   var convArchivedSync = None: Option[ConvId]

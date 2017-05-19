@@ -20,8 +20,6 @@ package com.waz.service.call
 import android.content.Context
 import android.telephony.{PhoneStateListener, TelephonyManager}
 import com.waz.ZLog._
-import com.waz.api.VoiceChannelState
-import com.waz.service.LifecycleState
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 
@@ -32,7 +30,7 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
   private implicit val dispatcher = Threading.Ui
   private implicit val logTag: LogTag = logTagFor[VoiceChannelGsmService]
 
-  private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
+  private lazy val telephonyManager = context.getSystemService[TelephonyManager](Context.TELEPHONY_SERVICE)
 
   private var listening = false
 
@@ -53,7 +51,7 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
 
   (for {
     hasContent <- content.activeChannel.map(_.isDefined)
-    v3call <- callingService.currentCall.map(_.state != VoiceChannelState.NO_ACTIVE_USERS)
+    v3call <- callingService.currentCall.map(_.isDefined)
   } yield hasContent || v3call).on(dispatcher) {
     case false => stopListening()
     case true =>

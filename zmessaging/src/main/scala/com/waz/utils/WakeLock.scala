@@ -22,8 +22,6 @@ import android.os.PowerManager
 import com.waz.ZLog.{LogTag, verbose}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
-import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.utils.events.Signal
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -34,49 +32,47 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
   protected lazy val powerManager = appContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
   protected lazy val wakeLock = powerManager.newWakeLock(level, tag)
 
-  protected val count = Signal[Int]()
-
-  count {
-    case 0 if wakeLock.isHeld =>
-      verbose("releasing wakelock")
-      wakeLock.release()
-    case 1 if !wakeLock.isHeld =>
-      verbose("acquiring wakelock")
-      wakeLock.acquire()
-    case _ =>
+  protected def acquire()(implicit srcTag: LogTag): Unit = {
+    verbose(s"acquiring wakelock, src: $srcTag")(tag)
+    wakeLock.acquire()
   }
 
-  def apply[A](body: => A): A = {
-    count.mutateOrDefault(_ + 1, 1)
+  protected def release()(implicit srcTag: LogTag): Unit = {
+    verbose(s"releasing wakelock, src: $srcTag")(tag)
+    wakeLock.release()
+  }
+
+  def apply[A](body: => A)(implicit srcTag: LogTag): A = {
+    acquire()(srcTag)
     try {
       body
     } finally {
-      count.mutate(_ - 1)
+      release()(srcTag)
     }
   }
 
-  def async[A](body: Future[A]): Future[A] = {
-    count.mutateOrDefault(_ + 1, 1)
-    returning(body) { _.onComplete(_ => count.mutate(_ - 1)) }
+  def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A] = {
+    acquire()(s"async[$srcTag]")
+    returning(body) { _.onComplete(_ => release()(s"async[$srcTag]")) }
   }
 }
 
 //To keep wakelock for a given period of time after executing it's code
 class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: LogTag) extends WakeLock(context) {
 
-  override def apply[A](body: => A): A = {
-    count.mutateOrDefault(_ + 1, 1)
+  override def apply[A](body: => A)(implicit srcTag: LogTag): A = {
+    acquire()(srcTag)
     try {
       body
     } finally {
-      releaseAfterDuration()
+      releaseAfterDuration()(srcTag)
     }
   }
 
-  override def async[A](body: Future[A]): Future[A] = {
-    count.mutateOrDefault(_ + 1, 1)
-    returning(body) { _.onComplete(_ => releaseAfterDuration()) }
+  override def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A] = {
+    acquire()(s"async[$srcTag]")
+    returning(body) { _.onComplete(_ => releaseAfterDuration()(srcTag)) }
   }
 
-  private def releaseAfterDuration(): Unit = CancellableFuture.delay(duration).onComplete(_ => count.mutate(_ - 1))
+  private def releaseAfterDuration()(implicit srcTag: LogTag): Unit = CancellableFuture.delay(duration).onComplete(_ => release()(s"delayed[$srcTag]"))
 }

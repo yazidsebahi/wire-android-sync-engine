@@ -17,9 +17,9 @@
  */
 package com.waz.sync
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
+import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -28,6 +28,7 @@ import com.waz.sync.handler.UsersSyncHandler
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.wrappers.DB
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.robolectric.Robolectric
 import org.scalatest._
@@ -59,7 +60,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
   def searchSync = zms.usersearchSync
   def sync = zms.sync
 
-  implicit def db: SQLiteDatabase = storage.dbHelper.getWritableDatabase
+  implicit def db: DB = storage.dbHelper.getWritableDatabase
 
   def query = SearchQuery.Recommended("query")
 
@@ -83,7 +84,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
         override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delay(delay) map { _ => response.get }
       }
 
-      kvStorage.lastSlowSyncTimestamp = System.currentTimeMillis()
+      userPrefs.preference(LastSlowSyncTimeKey) := Some(System.currentTimeMillis())
       override lazy val usersSync: UsersSyncHandler = new UsersSyncHandler(assetSync, users, usersStorage, assets, usersClient, assetGenerator) {
         override def syncUsers(ids: UserId*) = {
           sync.syncUsers(ids: _*)

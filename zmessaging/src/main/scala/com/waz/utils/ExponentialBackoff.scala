@@ -26,7 +26,7 @@ import scala.util.Random
   */
 class ExponentialBackoff(initialDelay: FiniteDuration, maxDelay: FiniteDuration) {
 
-  val maxRetries = ExponentialBackoff.bitsCount(maxDelay.toMillis / initialDelay.toMillis)
+  val maxRetries = ExponentialBackoff.bitsCount(maxDelay.toMillis / math.max(initialDelay.toMillis, 1L))
 
   def delay(retry: Int, minDelay: FiniteDuration = Duration.Zero): FiniteDuration = {
     if (retry <= 0) initialDelay
@@ -45,4 +45,14 @@ class ExponentialBackoff(initialDelay: FiniteDuration, maxDelay: FiniteDuration)
 
 object ExponentialBackoff {
   def bitsCount(v: Long): Int = if (v >= 2) 1 + bitsCount(v >> 1) else if (v >= 0) 1 else 0
+
+  def zeroBackoff(max: Int) = new ExponentialBackoff(0.millis, 0.millis){
+    override val maxRetries = max
+    override def delay(retry: Int, minDelay: FiniteDuration = Duration.Zero): FiniteDuration = 0.millis
+  }
+
+  lazy val minimalBackoff = new ExponentialBackoff(1.millis, 1.millis)
+  
+  lazy val standardBackoff = new ExponentialBackoff(250.millis, 5.minutes)
+
 }

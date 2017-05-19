@@ -18,7 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
-import com.waz.content.UsersStorage
+import com.waz.content.UsersStorageImpl
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserId
 import com.waz.service.{ConnectionService, EventPipeline}
@@ -29,7 +29,7 @@ import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 
-class ConnectionsSyncHandler(usersStorage: UsersStorage, connectionService: ConnectionService, connectionsClient: ConnectionsClient, pipeline: EventPipeline) {
+class ConnectionsSyncHandler(usersStorage: UsersStorageImpl, connectionService: ConnectionService, connectionsClient: ConnectionsClient, pipeline: EventPipeline) {
 
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[ConnectionsSyncHandler]
@@ -49,7 +49,7 @@ class ConnectionsSyncHandler(usersStorage: UsersStorage, connectionService: Conn
     connectionsClient.createConnection(userId, name, message).future flatMap {
       case Right(event) =>
         verbose(s"postConnection($userId) success: $event")
-        connectionService.syncConversationInitiallyAfterCreation(event.convId, event.from, event.to) map (_ => SyncResult.Success)
+        pipeline(Seq(event)) map { _ => SyncResult.Success }
 
       case Left(error) =>
         warn("postConnection failed")

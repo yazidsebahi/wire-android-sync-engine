@@ -45,7 +45,7 @@ import scala.concurrent._
 import scala.util.Try
 
 
-sealed trait Downloader[-A <: DownloadRequest] {
+trait Downloader[-A <: DownloadRequest] {
   def load(request: A, callback: ProgressIndicator.Callback): CancellableFuture[Option[CacheEntry]]
 }
 
@@ -90,7 +90,6 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
             }
           case Left(err) =>
             error(s"loadAsset failed: $err")
-            onDownloadFailed ! (asset, err)
             CancellableFuture successful None
         }
     }

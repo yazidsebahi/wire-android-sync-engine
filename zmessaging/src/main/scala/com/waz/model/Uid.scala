@@ -20,9 +20,9 @@ package com.waz.model
 import java.nio.ByteBuffer
 import java.util.UUID
 
-import android.net.Uri
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
@@ -32,6 +32,7 @@ trait Id[A] extends Ordering[A] {
   def random(): A
   def decode(str: String): A
   def encode(id: A): String = id.toString
+  def empty: A = decode("")
 
   override def compare(x: A, y: A): Int = Ordering.String.compare(encode(x), encode(y))
 }
@@ -85,7 +86,7 @@ case class AccountId(str: String) {
   override def toString: String = str
 }
 
-object AccountId {
+object AccountId extends (String => AccountId) {
   def apply(): AccountId = Id.random()
 
   implicit object Id extends Id[AccountId] {
@@ -117,7 +118,7 @@ object CacheKey extends (String => CacheKey) {
   //any appended strings should be url friendly
   def decrypted(key: CacheKey) = CacheKey(s"${key.str}_decr_")
   def fromAssetId(id: AssetId) = CacheKey(s"${id.str}")
-  def fromUri(uri: Uri) = CacheKey(uri.toString)
+  def fromUri(uri: URI) = CacheKey(uri.toString)
 
   implicit object Id extends Id[CacheKey] {
     override def random() = CacheKey(Uid().toString)
@@ -196,16 +197,16 @@ object SyncId {
   }
 }
 
-case class GcmId(str: String) {
+case class PushToken(str: String) {
   override def toString: String = str
 }
 
-object GcmId {
-  def apply(): GcmId = Id.random()
+object PushToken {
+  def apply(): PushToken = Id.random()
 
-  implicit object Id extends Id[GcmId] {
-    override def random(): GcmId = GcmId(Uid().toString)
-    override def decode(str: String): GcmId = GcmId(str)
+  implicit object Id extends Id[PushToken] {
+    override def random(): PushToken = PushToken(Uid().toString)
+    override def decode(str: String): PushToken = PushToken(str)
   }
 }
 

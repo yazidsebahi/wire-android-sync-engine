@@ -18,20 +18,20 @@
 package com.waz.utils
 
 import android.content.Context
-import android.net.Uri
 import android.provider.OpenableColumns._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model.Mime
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.URI
 
 import scala.concurrent.Future
 import scala.util.Try
 
 object ContentURIs {
-  private implicit def logTag: LogTag = logTagFor(ContentURIs)
 
-  def queryContentUriMetaData(context: Context, uri: Uri): Future[MetaData] = Future {
-    def mimeFromResolver = LoggedTry(Option(context.getContentResolver.getType(uri))).toOption.flatten.map(Mime(_)).filterNot(_.isEmpty)
+  def queryContentUriMetaData(context: Context, uri: URI): Future[MetaData] = Future {
+    def mimeFromResolver = LoggedTry(Option(context.getContentResolver.getType(URI.unwrap(uri)))).toOption.flatten.map(Mime(_)).filterNot(_.isEmpty)
     def mimeFromExtension = Option(uri.getLastPathSegment).map(Mime.fromFileName).filterNot(_.isEmpty)
     def mime = mimeFromResolver orElse mimeFromExtension getOrElse Mime.Default
 
@@ -39,7 +39,7 @@ object ContentURIs {
 
     def nameFromUri = Option(uri.getLastPathSegment).filterNot(_.isEmpty)
 
-    Option(context.getContentResolver.query(uri, Array(DISPLAY_NAME, SIZE), null, null, null)).filter(_.moveToFirst()) map { cursor =>
+    Option(context.getContentResolver.query(URI.unwrap(uri), Array(DISPLAY_NAME, SIZE), null, null, null)).filter(_.moveToFirst()) map { cursor =>
       def nameFromProvider = Try(Option(cursor.getString(0))).toOption.flatten.filterNot(_.isEmpty)
       def sizeFromProvider = Try(Option(cursor.getLong(1))).toOption.flatten.filter(_ >= 0L)
 

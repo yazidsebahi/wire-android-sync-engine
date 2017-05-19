@@ -19,7 +19,7 @@ package com.waz.utils
 
 import com.waz.Generators._
 import com.waz.model.Uid
-import com.waz.content.Preference.PrefCodec._
+import com.waz.content.Preferences.Preference.PrefCodec._
 import com.waz.znet.AuthenticationManager.Token
 
 import org.scalatest.{Matchers, FeatureSpec}
@@ -43,7 +43,7 @@ class KeyValuePrefSpec extends FeatureSpec with Matchers with GeneratorDrivenPro
     }
 
     scenario("token serialization") {
-      forAll { t: Option[Token] => TokenCodec.decode(TokenCodec.encode(t)) shouldEqual t }
+      forAll { t: Option[Token] => AuthTokenCodec.decode(AuthTokenCodec.encode(t)) shouldEqual t }
     }
 
     scenario("instant serialization") {

@@ -17,13 +17,14 @@
  */
 package com.waz.service.assets
 
+
 import java.io._
 import java.util.concurrent.atomic.AtomicReference
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Environment
+import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Permission
 import com.waz.api.ProgressIndicator.State
@@ -41,11 +42,12 @@ import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
 import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads._
 import com.waz.service.images.ImageAssetGenerator
-import com.waz.service.{ErrorsService, PreferenceService}
+import com.waz.service.ErrorsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.URI
 import com.waz.{PermissionsService, api}
 
 import scala.collection.breakOut
@@ -54,13 +56,32 @@ import scala.concurrent.Future.successful
 import scala.concurrent.duration._
 import scala.util.Random
 
-class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-    loader: AssetLoader, messages: MessagesStorage, downloader: DownloaderService, errors: ErrorsService,
-    permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-    metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-    prefs: PreferenceService) {
+trait AssetService {
+  def assetSignal(id: AssetId): Signal[(AssetData, api.AssetStatus)]
+  def downloadProgress(id: AssetId): Signal[ProgressIndicator.ProgressData]
+  def cancelDownload(id: AssetId): Future[Unit]
+  def uploadProgress(id: AssetId): Signal[ProgressIndicator.ProgressData]
+  def cancelUpload(id: AssetId, msg: MessageId): Future[Unit]
+  def markUploadFailed(id: AssetId, status: AssetStatus.Syncable): Future[Any] // should be: Future[SyncId]
+  def addImageAsset(image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData]
+  def updateAssets(data: Seq[AssetData]): Future[Set[AssetData]]
+  def getLocalData(id: AssetId): CancellableFuture[Option[LocalData]]
+  def getAssetData(id: AssetId): Future[Option[AssetData]]
+  def addAsset(a: AssetForUpload, conv: RConvId): Future[AssetData]
+  def saveAssetToDownloads(id: AssetId): Future[Option[File]]
+  def saveAssetToDownloads(asset: AssetData): Future[Option[File]]
+  def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]]
+  def getContentUri(id: AssetId): CancellableFuture[Option[URI]]
+  def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]]
+  def removeAssets(ids: Iterable[AssetId]): Future[Unit]
+}
 
-  import AssetService._
+class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
+                       loader: AssetLoader, messages: MessagesStorageImpl, downloader: DownloaderService, errors: ErrorsService,
+                       permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
+                       metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
+                       prefs: GlobalPreferences) extends AssetService {
+
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -91,9 +112,9 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     case _ => Signal.empty[(AssetData, api.AssetStatus)]
   }
 
-  def assetStatusSignal(status: AssetStatus, cacheKey: CacheKey) = status match {
+  private def assetStatusSignal(status: AssetStatus, cacheKey: CacheKey) = status match {
     case UploadDone => //only if the asset is uploaded, check for a cache entry. Upload state takes precedence over download state
-      cache.cacheStorage.optSignal(cacheKey).map(_.isDefined) flatMap {
+      cache.optSignal(cacheKey).map(_.isDefined) flatMap {
         case true =>
           verbose(s"uploaded asset also has cache entry, must be downloaded. For key: $cacheKey")
           Signal const api.AssetStatus.DOWNLOAD_DONE
@@ -140,10 +161,9 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     }
 
   def addImageAsset(image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData] = {
-    val convIdOpt = if (prefs.sendWithV3) None else Some(convId) //TODO Dean remove sending with v2 after testing
     image match {
         case img: ImageAsset =>
-          val asset = img.data.copy(convId = convIdOpt)
+          val asset = img.data.copy(convId = None)
           verbose(s"addImageAsset: $asset")
           val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
           generator.generateWireAsset(asset, isSelf).future.flatMap { data =>
@@ -156,7 +176,9 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
   def updateAssets(data: Seq[AssetData]) =
     storage.updateOrCreateAll(data.map(d => d.id -> { (_: Option[AssetData]) => d })(collection.breakOut))
 
-  def getAssetData(id: AssetId): CancellableFuture[Option[LocalData]] =
+  def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]] = storage.updateAsset(id, updater)
+
+  def getLocalData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {
       case None => CancellableFuture successful None
       case Some(asset) => loader.getAssetData(asset.loadRequest) map { res =>
@@ -164,6 +186,12 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         res
       }
     }
+
+  def getAssetData(id: AssetId): Future[Option[AssetData]] = storage.get(id)
+
+  def mergeOrCreateAsset(assetData: AssetData): Future[Option[AssetData]] = storage.mergeOrCreateAsset(assetData)
+
+  def removeAssets(ids: Iterable[AssetId]): Future[Unit] = storage.remove(ids)
 
   def addAsset(a: AssetForUpload, conv: RConvId): Future[AssetData] = {
     val uri = a match {
@@ -191,7 +219,7 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
         sizeInBytes = size.getOrElse(0),
         name = n,
         source = uri,
-        convId = if (prefs.sendWithV3) None else Some(conv) //TODO turn off v2 toggling after transition period
+        convId = None
       ))
     } yield {
 
@@ -227,11 +255,11 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
     } yield returning(updated)(a => verbose(s"Generated preview and meta data for ${asset.id}"))
   }
 
-  def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))
+  private def markDownloadFailed(id: AssetId) = storage.updateAsset(id, _.copy(status = DownloadFailed))
 
-  def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.copy(status = UploadDone))
+  private def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.copy(status = UploadDone))
 
-  def getContentUri(id: AssetId): CancellableFuture[Option[Uri]] =
+  def getContentUri(id: AssetId): CancellableFuture[Option[URI]] =
     CancellableFuture.lift(storage.get(id)) .flatMap {
       case Some(a: AssetData) =>
         verbose(s"getContentUri for: $a")
@@ -305,7 +333,13 @@ class AssetService(val storage: AssetsStorage, generator: ImageAssetGenerator, c
 }
 
 object AssetService {
-  private implicit val logTag: LogTag = logTagFor[AssetService]
+
+  def apply(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
+            loader: AssetLoader, messages: MessagesStorageImpl, downloader: DownloaderService, errors: ErrorsService,
+            permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
+            metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
+            prefs: GlobalPreferences): AssetService =
+    new AssetServiceImpl(storage, generator, cache, context, loader, messages, downloader, errors, permissions, streamLoader, assetDownloader, metaService, sync, media, prefs)
 
   val SaveImageDirName = "Wire"
 

@@ -22,12 +22,12 @@ import java.util.Date
 import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.MessagesStorage
+import com.waz.content.MessagesStorageImpl
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdater, ConversationsService}
-import com.waz.service.messages.MessagesService
+import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdaterImpl, ConversationsService}
+import com.waz.service.messages.MessagesServiceImpl
 import com.waz.sync.SyncResult
 import com.waz.sync.client.ConversationsClient
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -42,8 +42,8 @@ object ConversationsSyncHandler {
 }
 
 class ConversationsSyncHandler(assetSync: AssetSyncHandler,
-                               userService: UserService, messagesStorage: MessagesStorage, messagesService: MessagesService,
-                               convService: ConversationsService, convs: ConversationsContentUpdater, convEvents: ConversationEventsService,
+                               userService: UserServiceImpl, messagesStorage: MessagesStorageImpl, messagesService: MessagesServiceImpl,
+                               convService: ConversationsService, convs: ConversationsContentUpdaterImpl, convEvents: ConversationEventsService,
                                errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
 
   import Threading.Implicits.Background

@@ -39,6 +39,9 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import com.waz.ZLog.ImplicitTag._
+import com.waz.cache.LocalData
+import com.waz.content.GlobalPreferences
+import com.waz.model.GenericContent.EncryptionAlgorithm
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -111,7 +114,7 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
     var syncCheckRequests = Seq.empty[FiniteDuration]
 
     lazy val zms = new MockZMessaging() {
-      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(selfUserId, Signal.const(Some(clientId)), otrClient, kvStorage, otrClientsStorage, sync, lifecycle, verificationUpdater) {
+      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(selfUserId, Signal.const(Some(clientId)), otrClient, userPrefs, otrClientsStorage, sync, lifecycle, verificationUpdater) {
         override def requestSyncIfNeeded(retryInterval: Timeout): Future[Unit] =
           Future successful { syncCheckRequests = syncCheckRequests :+ retryInterval }
       }
@@ -235,6 +238,29 @@ class OtrServiceSpec extends FeatureSpec with Matchers with OptionValues with Be
       val event = OtrMessageEvent(client2.conv.remoteId, new Date, client1.self.id, client1.selfClient.id, client2.selfClient.id, session.encrypt(GenericMessage.toByteArray(msg)))
 
       Await.result(client2.otrService.decryptOtrEvent(event), 5.seconds) shouldEqual Left(IdentityChangedError(client1.self.id, client1.selfClient.id))
+    }
+  }
+
+  feature("assets encryption") {
+
+    scenario("encrypt an asset using CBC") {
+
+      lazy val zms = new MockZMessaging() {
+        override lazy val prefs = GlobalPreferences(context)
+      }
+
+      val key = AESKey()
+      val data = Array.fill(100)(Random.nextInt.toByte)
+
+      val encryptedF = zms.otrService.encryptAssetData(key, LocalData(data))
+
+      ScalaFutures.whenReady(encryptedF){
+        case (sha, encrypted, encryptionAlg) =>
+          encryptionAlg shouldEqual(EncryptionAlgorithm.AES_CBC)
+          val decrypted = zms.otrService.decryptAssetData(AssetId(), Some(key), Some(sha), encrypted.byteArray, None)
+          decrypted.getOrElse(fail(s"Decrypted ($key, $data) as None")) shouldEqual(data)
+      }
+
     }
   }
 }

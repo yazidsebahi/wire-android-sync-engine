@@ -17,8 +17,10 @@
  */
 package com.waz.service
 
+import java.util.Date
+
 import com.waz.ZLog._
-import com.waz.content.{MembersStorage, MessagesStorage, UsersStorage}
+import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -29,6 +31,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.RichFuture
 import com.waz.utils.events.EventContext
+import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.concurrent.Future
@@ -75,19 +78,21 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     val lastEvents = events.groupBy(_.to).map { case (_, es) => es.maxBy(_.lastUpdated) }
 
     val fromSync: Set[UserId] = lastEvents.filter(_.localTime == Event.UnknownDateTime).map(_.to)(breakOut)
-    usersStorage.updateOrCreateAll(lastEvents.map { ev => ev.to -> updateOrCreate(ev) _ } (breakOut)) map ((_, fromSync))
+    Future.sequence(lastEvents.map{ ev =>
+      usersStorage.updateOrCreate(ev.to, prev => updateOrCreate(ev)(Some(prev)), updateOrCreate(ev)(None)).map((_, ev.lastUpdated))
+    }).map(users => (users.toSet, fromSync))
   } flatMap { case (users, fromSync) =>
-    val toSync = users filter { u => u.connection == ConnectionStatus.Accepted || u.connection == ConnectionStatus.PendingFromOther || u.connection == ConnectionStatus.PendingFromUser }
-    sync.syncUsersIfNotEmpty(toSync.map(_.id)(breakOut)) flatMap { _ =>
+    val toSync = users filter { case (user, _) => user.connection == ConnectionStatus.Accepted || user.connection == ConnectionStatus.PendingFromOther || user.connection == ConnectionStatus.PendingFromUser }
+    sync.syncUsersIfNotEmpty(toSync.map(_._1.id)(breakOut)) flatMap { _ =>
       withSelfUserFuture { selfUser =>
         RichFuture.processSequential(users.grouped(16).toSeq) { us =>
-          Future.traverse(us)(u => updateConversationForConnection(u, selfUser, fromSync = fromSync(u.id)))
+          Future.traverse(us){ case (user, time) => updateConversationForConnection(user, selfUser, fromSync = fromSync(user.id), time) }
         }
       }
     }
   }
 
-  def updateConversationForConnection(user: UserData, selfUserId: UserId, fromSync: Boolean) = {
+  def updateConversationForConnection(user: UserData, selfUserId: UserId, fromSync: Boolean, lastEventTime: Date) = {
     verbose(s"updateConversationForConnection: $user")
     val convType = user.connection match {
       case ConnectionStatus.PendingFromUser | ConnectionStatus.Cancelled => ConversationType.WaitForConnection
@@ -97,7 +102,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     val hidden = user.connection == ConnectionStatus.Ignored || user.connection == ConnectionStatus.Blocked || user.connection == ConnectionStatus.Cancelled
     getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
       members.add(conv.id, Seq(selfUserId, user.id): _*) flatMap { members =>
-        convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden)) flatMap { updated =>
+        convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden, lastEventTime = Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
             case None if convType == ConversationType.Incoming =>
               addConnectRequestMessage(conv.id, user.id, selfUserId, user.connectionMessage.getOrElse(""), user.getDisplayName, fromSync = fromSync)
@@ -158,13 +163,8 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     } flatMap { _ =>
       getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
         updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) flatMap { updated =>
-          messagesStorage.getLastMessage(conv.id) flatMap  {
-            case Some(_) =>
-              Future successful updated.fold(conv)(_._2)
-            case _ =>
-              addMemberJoinMessage(conv.id, selfUserId, Set(selfUserId), firstMessage = true) map { _ =>
-                updated.fold(conv)(_._2)
-              }
+          addMemberJoinMessage(conv.id, selfUserId, Set(selfUserId), firstMessage = true) map { _ =>
+            updated.fold(conv)(_._2)
           }
         }
       }

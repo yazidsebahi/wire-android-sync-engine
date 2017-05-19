@@ -23,11 +23,12 @@ import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.AssetData
 import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
-import com.waz.model.messages.media.{PlaylistData, ArtistData, TrackData, MediaAssetData}
-import com.waz.service.media.SpotifyMediaService.{AlbumId, PlaylistId, TrackId, SpotifyId}
+import com.waz.model.messages.media.{ArtistData, MediaAssetData, PlaylistData, TrackData}
+import com.waz.service.media.SpotifyMediaService.{AlbumId, PlaylistId, SpotifyId, TrackId}
 import com.waz.sync.client.OAuth2Client._
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.JsonObjectResponse
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
@@ -72,6 +73,8 @@ class SpotifyClient(netClient: ZNetClient, val clientId: SpotifyClientId) {
 object SpotifyClient {
   import JsonDecoder._
 
+  val domainNames = Set("open.spotify.com", "play.spotify.com")
+
   implicit val logTag = logTagFor[SpotifyClient]
 
   private val Base = "https://api.spotify.com/v1"
@@ -80,7 +83,7 @@ object SpotifyClient {
   val TokenPath = "/proxy/spotify/api/token"
   val RedirectUri = Uri.parse("wire://spotify")
 
-  private def mediaUri(id: SpotifyId, authenticated: Boolean): Uri = withMarket(id match {
+  private def mediaUri(id: SpotifyId, authenticated: Boolean): URI = withMarket(id match {
     case TrackId(track)       => uri(Base)(_ / "tracks" / track)
     case PlaylistId(user, pl) => uri(Base)(_ / "users" / user / "playlists" / pl)
     case AlbumId(album)       => uri(Base)(_ / "albums" / album)
@@ -92,9 +95,9 @@ object SpotifyClient {
     case AlbumId(_)       => { case Response(SuccessHttpStatus(), AlbumResponse(album), _) => album }
   }
 
-  private def withMarket(u: Uri, authenticated: Boolean): Uri = if (authenticated) uri(u)(_ :? ("market", "from_token")) else u
+  private def withMarket(u: URI, authenticated: Boolean): URI = if (authenticated) uri(u)(_ :? ("market", "from_token")) else u
 
-  private def get(url: Uri, headers: Map[String, String]) = Request[Unit](httpMethod = Request.GetMethod, absoluteUri = Option(url), requiresAuthentication = false, headers = headers)
+  private def get(url: URI, headers: Map[String, String]) = Request[Unit](httpMethod = Request.GetMethod, absoluteUri = Option(url), requiresAuthentication = false, headers = headers)
 
   object IsPremiumResponse extends SpotifyJsonObjectResponse[Boolean] {
     override def fromJson(implicit js: JSONObject): Option[Boolean] = Some(js.has("product") && js.getString("product") == "premium")

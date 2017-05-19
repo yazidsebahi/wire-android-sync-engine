@@ -17,15 +17,15 @@
  */
 package com.waz.service.media
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
+import com.waz.model._
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
-import com.waz.model._
 import com.waz.service.assets.AssetService
 import com.waz.sync.client.YouTubeClient
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
@@ -59,5 +59,5 @@ class YouTubeMediaService(client: YouTubeClient, assets: AssetService) {
     }
   }
 
-  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[Uri]] = Future.successful(Right(media.tracks flatMap (_.streamUrl) map Uri.parse))
+  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[URI]] = Future.successful(Right(media.tracks flatMap (_.streamUrl) map URI.parse))
 }

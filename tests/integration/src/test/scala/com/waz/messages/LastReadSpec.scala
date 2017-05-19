@@ -28,7 +28,7 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, GenericMessage, RConvId, UserId}
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
 import com.waz.service._
-import com.waz.sync.otr.OtrSyncHandler
+import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FeatureSpec, Matchers}
@@ -63,7 +63,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
     override def zmessaging(clientId: ClientId, userModule: UserModule): ZMessaging = new ApiZMessaging(clientId, userModule) {
 
 
-      override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
+      override lazy val otrSync: OtrSyncHandler = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
         override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] = {
           if (convId.str == self.str)
             message match {

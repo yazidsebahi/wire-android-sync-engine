@@ -19,7 +19,6 @@ package com.waz.sync.client
 
 import java.net.URLEncoder
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
@@ -28,6 +27,7 @@ import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
 import com.waz.model.messages.media.{ArtistData, MediaAssetData, PlaylistData, TrackData}
 import com.waz.threading.Threading
 import com.waz.utils._
+import com.waz.utils.wrappers.URI
 import com.waz.znet.Response.{ResponseBodyDecoder, SuccessHttpStatus}
 import com.waz.znet.ResponseConsumer.JsonConsumer
 import com.waz.znet.ZNetClient.ErrorOr
@@ -49,15 +49,17 @@ class SoundCloudClient(netClient: ZNetClient) {
     def apply(contentType: String, contentLength: Long): ResponseConsumer[_ <: ResponseContent] = new JsonConsumer(contentLength)
   }), followRedirect = false)
 
-  def streamingLocation(url: String): ErrorOr[Uri] =
+  def streamingLocation(url: String): ErrorOr[URI] =
     netClient(Request[Unit](Request.GetMethod, Some(proxyPath("stream", url)), followRedirect = false)).future map {
-      case Response(Response.HttpStatus(Response.Status.MovedTemporarily, _), _, headers) => headers("Location").fold2(Left(ErrorResponse.internalError("no location header available")), { loc => Right(Uri.parse(loc)) })
+      case Response(Response.HttpStatus(Response.Status.MovedTemporarily, _), _, headers) => headers("Location").fold2(Left(ErrorResponse.internalError("no location header available")), { loc => Right(URI.parse(loc)) })
       case other => Left(ErrorResponse(other.status.status, s"Unexpected response when retrieving streaming uri for $url: $other", "unexpected-soundcloud-response"))
     }
 }
 
 object SoundCloudClient {
   import com.waz.utils.JsonDecoder._
+
+  val domainNames = Set("soundcloud.com")
 
   implicit val logTag = logTagFor[SoundCloudClient]
 

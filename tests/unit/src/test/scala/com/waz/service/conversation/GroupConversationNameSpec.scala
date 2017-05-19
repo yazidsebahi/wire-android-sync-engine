@@ -19,7 +19,6 @@ package com.waz.service.conversation
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.content.GlobalDatabase
 import com.waz.model.ConversationData.ConversationType
@@ -28,6 +27,7 @@ import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.testutils.MockZMessaging
 import com.waz.threading.Threading
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -44,7 +44,7 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
   lazy val time = System.currentTimeMillis() - 100
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group, renameEvent = Instant.ofEpochMilli(time)).withFreshSearchKey
 
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+  implicit def db: DB = service.db.dbHelper.getWritableDatabase
 
   lazy val service = new MockZMessaging(selfUserId = selfUser.id)
 

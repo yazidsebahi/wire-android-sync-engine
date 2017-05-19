@@ -195,70 +195,70 @@ public class ShadowContentResolver2 {
         }
     }
 
-    @Implementation
-    public final ContentProviderClient acquireContentProviderClient(String name) {
-        ContentProvider provider = getProvider(name);
-        if (provider == null) return null;
-        return getContentProviderClient(provider, true);
-    }
+//    @Implementation
+//    public final ContentProviderClient acquireContentProviderClient(String name) {
+//        ContentProvider provider = getProvider(name);
+//        if (provider == null) return null;
+//        return getContentProviderClient(provider, true);
+//    }
+//
+//    @Implementation
+//    public final ContentProviderClient acquireContentProviderClient(Uri uri) {
+//        ContentProvider provider = getProvider(uri);
+//        if (provider == null) return null;
+//        return getContentProviderClient(provider, true);
+//    }
+//
+//    @Implementation
+//    public final ContentProviderClient acquireUnstableContentProviderClient(String name) {
+//        ContentProvider provider = getProvider(name);
+//        if (provider == null) return null;
+//        return getContentProviderClient(provider, false);
+//    }
+//
+//    @Implementation
+//    public final ContentProviderClient acquireUnstableContentProviderClient(Uri uri) {
+//        ContentProvider provider = getProvider(uri);
+//        if (provider == null) return null;
+//        return getContentProviderClient(provider, false);
+//    }
+//
+//    private ContentProviderClient getContentProviderClient(ContentProvider provider, boolean stable) {
+//        ContentProviderClient client =
+//                Robolectric.newInstance(ContentProviderClient.class,
+//                        new Class[] {ContentResolver.class, IContentProvider.class, boolean.class},
+//                        new Object[] {realContentResolver, provider.getIContentProvider(), stable});
+//        Robolectric.shadowOf(client).setContentProvider(provider);
+//        return client;
+//    }
 
-    @Implementation
-    public final ContentProviderClient acquireContentProviderClient(Uri uri) {
-        ContentProvider provider = getProvider(uri);
-        if (provider == null) return null;
-        return getContentProviderClient(provider, true);
-    }
+//    @Implementation
+//    public final IContentProvider acquireProvider(String name) {
+//        return acquireUnstableProvider(name);
+//    }
+//
+//    @Implementation
+//    public final IContentProvider acquireProvider(Uri uri) {
+//        return acquireUnstableProvider(uri);
+//    }
 
-    @Implementation
-    public final ContentProviderClient acquireUnstableContentProviderClient(String name) {
-        ContentProvider provider = getProvider(name);
-        if (provider == null) return null;
-        return getContentProviderClient(provider, false);
-    }
-
-    @Implementation
-    public final ContentProviderClient acquireUnstableContentProviderClient(Uri uri) {
-        ContentProvider provider = getProvider(uri);
-        if (provider == null) return null;
-        return getContentProviderClient(provider, false);
-    }
-
-    private ContentProviderClient getContentProviderClient(ContentProvider provider, boolean stable) {
-        ContentProviderClient client =
-                Robolectric.newInstance(ContentProviderClient.class,
-                        new Class[] {ContentResolver.class, IContentProvider.class, boolean.class},
-                        new Object[] {realContentResolver, provider.getIContentProvider(), stable});
-        Robolectric.shadowOf(client).setContentProvider(provider);
-        return client;
-    }
-
-    @Implementation
-    public final IContentProvider acquireProvider(String name) {
-        return acquireUnstableProvider(name);
-    }
-
-    @Implementation
-    public final IContentProvider acquireProvider(Uri uri) {
-        return acquireUnstableProvider(uri);
-    }
-
-    @Implementation
-    public final IContentProvider acquireUnstableProvider(String name) {
-        ContentProvider cp = getProvider(name);
-        if (cp != null) {
-            return cp.getIContentProvider();
-        }
-        return null;
-    }
-
-    @Implementation
-    public final IContentProvider acquireUnstableProvider(Uri uri) {
-        ContentProvider cp = getProvider(uri);
-        if (cp != null) {
-            return cp.getIContentProvider();
-        }
-        return null;
-    }
+//    @Implementation
+//    public final IContentProvider acquireUnstableProvider(String name) {
+//        ContentProvider cp = getProvider(name);
+//        if (cp != null) {
+//            return cp.getIContentProvider();
+//        }
+//        return null;
+//    }
+//
+//    @Implementation
+//    public final IContentProvider acquireUnstableProvider(Uri uri) {
+//        ContentProvider cp = getProvider(uri);
+//        if (cp != null) {
+//            return cp.getIContentProvider();
+//        }
+//        return null;
+//    }
 
     @Implementation
     public final int delete(Uri url, String where, String[] selectionArgs) {

@@ -106,7 +106,7 @@ class CacheEntry(val data: CacheEntryData, service: CacheService) extends LocalD
 
   override def toString: LogTag = s"CacheEntry($data)"
 
-  def updatedWithLength(len: Long)(implicit ec: ExecutionContext): Future[CacheEntry] = service.cacheStorage.insert(data.copy(length = Some(len))).map(d => new CacheEntry(d, service))
+  def updatedWithLength(len: Long)(implicit ec: ExecutionContext): Future[CacheEntry] = service.insert(new CacheEntry(data.copy(length = Some(len)), service))
 }
 
 object CacheEntry {

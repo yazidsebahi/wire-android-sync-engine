@@ -17,10 +17,9 @@
  */
 package com.waz.znet
 
-import android.net.Uri
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.client.RegistrationClient
 import com.waz.model.{AccountId, EmailAddress}
@@ -31,6 +30,8 @@ import com.waz.utils.{ExponentialBackoff, JsonEncoder}
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
+import com.waz.utils.wrappers.URI
+
 import org.json.JSONObject
 
 import scala.concurrent.duration._
@@ -114,9 +115,9 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     case r @ Response(status, _, headers) => Left((headers(RequestId), ErrorResponse(status.status, s"unexpected login response: $r", "")))
   }
 
-  private val loginUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(LoginPath).encodedQuery("persist=true").build()
-  private val accessUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(AccessPath).build()
-  private val activateSendUri = Uri.parse(backend.baseUrl).buildUpon().encodedPath(ActivateSendPath).build()
+  private val loginUri = URI.parse(backend.baseUrl).buildUpon.encodedPath(LoginPath).appendQueryParameter("persist", "true").build
+  private val accessUri = URI.parse(backend.baseUrl).buildUpon.encodedPath(AccessPath).build
+  private val activateSendUri = URI.parse(backend.baseUrl).buildUpon.encodedPath(ActivateSendPath).build
 }
 
 object LoginClient {

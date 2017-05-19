@@ -22,11 +22,11 @@ import java.util.Date
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 
-import android.net.Uri
 import android.util.Base64
 import com.waz.ZLog.LogTag
 import com.waz.api.UpdateListener
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.wrappers.{URI, URIBuilder}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
@@ -34,8 +34,8 @@ import org.threeten.bp.temporal.ChronoUnit
 
 import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
-import scala.collection.{GenIterable, SeqView}
 import scala.collection.generic.CanBuild
+import scala.collection.{GenIterable, SeqView}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
@@ -44,6 +44,8 @@ import scala.util.{Failure, Success, Try}
 import scala.{PartialFunction => =/>}
 
 package object utils {
+
+  var isTest = false
 
   //collection string representation formatted one item per line
   //TODO make into a macro or compiler plugin etc.
@@ -281,14 +283,14 @@ package object utils {
     }
   }
 
-  def uri(from: String)(f: Uri.Builder => Uri.Builder): Uri = f(Uri.parse(from).buildUpon()).build()
-  def uri(from: Uri, firstPartsOfPath: String = "")(f: Uri.Builder => Uri.Builder): Uri = f(from.buildUpon.appendEncodedPath(firstPartsOfPath)).build()
+  def uri(from: String)(f: URIBuilder => URIBuilder): URI = f(URI.parse(from).buildUpon).build
+  def uri(from: URI, firstPartsOfPath: String = "")(f: URIBuilder => URIBuilder): URI = f(from.buildUpon.appendEncodedPath(firstPartsOfPath)).build
 
-  implicit class RichUriBuilder(val b: Uri.Builder) extends AnyVal {
-    def /(p: String): Uri.Builder = b.appendPath(p)
-    def :?(k: String, v: String): Uri.Builder = b.appendQueryParameter(k, v)
-    def :?(k: String, v: Option[String]): Uri.Builder = returning(b)(_ => v foreach (b.appendQueryParameter(k, _)))
-    def :&(k: String, v: String): Uri.Builder = :?(k, v)
-    def :&(k: String, v: Option[String]): Uri.Builder = :?(k, v)
+  implicit class RichUriBuilder(val b: URIBuilder) extends AnyVal {
+    def /(p: String): URIBuilder = b.appendPath(p)
+    def :?(k: String, v: String): URIBuilder = b.appendQueryParameter(k, v)
+    def :?(k: String, v: Option[String]): URIBuilder = returning(b)(_ => v foreach (b.appendQueryParameter(k, _)))
+    def :&(k: String, v: String): URIBuilder = :?(k, v)
+    def :&(k: String, v: Option[String]): URIBuilder = :?(k, v)
   }
 }

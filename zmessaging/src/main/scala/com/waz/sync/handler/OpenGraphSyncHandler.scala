@@ -17,29 +17,29 @@
  */
 package com.waz.sync.handler
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
-import com.waz.content.{AssetsStorage, ConversationStorage, MessagesStorage}
+import com.waz.content.{AssetsStorage, ConversationStorageImpl, MessagesStorageImpl}
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
-import com.waz.service.otr.OtrService
+import com.waz.service.otr.OtrServiceImpl
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.utils.RichFuture
+import com.waz.utils.wrappers.URI
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage, otrService: OtrService, assetSync: AssetSyncHandler, assetsStorage: AssetsStorage, otrSync: OtrSyncHandler, client: OpenGraphClient, imageGenerator: ImageAssetGenerator, imageLoader: ImageLoader, assetClient: AssetClient) {
+class OpenGraphSyncHandler(convs: ConversationStorageImpl, messages: MessagesStorageImpl, otrService: OtrServiceImpl, assetSync: AssetSyncHandler, assetsStorage: AssetsStorage, otrSync: OtrSyncHandler, client: OpenGraphClient, imageGenerator: ImageAssetGenerator, imageLoader: ImageLoader, assetClient: AssetClient) {
   import OpenGraphSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
@@ -117,7 +117,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       links map { l =>
         offset = content.indexOf(l.content, offset + 1)
         assert(offset >= 0) // XXX: link has to be present in original content, parts are taken directly from it
-        LinkPreview(Uri.parse(l.content), offset)
+        LinkPreview(URI.parse(l.content), offset)
       }
     }
 
@@ -165,7 +165,7 @@ class OpenGraphSyncHandler(convs: ConversationStorage, messages: MessagesStorage
       uploadImage map {
         case Left(error) => Left(error)
         case Right(imageAsset) =>
-          Right(LinkPreview(Uri.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
+          Right(LinkPreview(URI.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
       }
   }
 }

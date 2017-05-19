@@ -23,15 +23,11 @@ import com.waz.api.ProvisionedApiSpec
 import com.waz.cache.LocalData
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model.AssetStatus.UploadDone
-import com.waz.model.GenericContent.Asset.Original
-import com.waz.model.otr.ClientId
 import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.downloads.DownloadRequest.WireAssetRequest
 import com.waz.service.images.BitmapSignal
-import com.waz.sync.client.AssetClient.{OtrAssetMetadata, Retention, UploadResponse}
-import com.waz.sync.client.OtrClient.EncryptedContent
+import com.waz.sync.client.AssetClient.{Retention, UploadResponse}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
@@ -119,22 +115,6 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
       }
     }
 
-    scenario("post otr asset") {
-      val file = File.createTempFile("penguin", "png")
-      IoUtils.copy(new ByteArrayInputStream(randomArray(14700)), file)
-
-      val conversations = api.getConversations
-      withDelay(conversations should not be empty)
-      val c = conversations.get(0).asInstanceOf[com.waz.api.impl.Conversation].data.remoteId
-      val clId = Await.result(zmessaging.otrClientsService.getSelfClient, 5.seconds).fold(ClientId())(_.id)
-
-      for (i <- 0 to 10) {
-        withClue(i) {
-          Await.result(client.postOtrAsset(c, OtrAssetMetadata(clId, EncryptedContent(Map.empty), nativePush = false), LocalData(file), ignoreMissing = false, recipients = None), 5.seconds) shouldBe 'right
-        }
-      }
-    }
-
     def randomArray(size: Int) = returning(new Array[Byte](size))(Random.nextBytes)
   }
 
@@ -161,7 +141,7 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
     scenario("Load asset using BitmapSignal") {
       val data = AssetData(mime = Mime.Image.Png, sizeInBytes = image.length, metaData = Some(AssetMetaData.Image(Dim2(480, 492), Medium))).copyWithRemoteData(RemoteData(Some(asset.rId), asset.token))
 
-      val signal = BitmapSignal(data, BitmapRequest.Regular(600), zmessaging.imageLoader, zmessaging.imageCache)
+      val signal = BitmapSignal(data, BitmapRequest.Regular(600), zmessaging.imageLoader)
       var results = Seq.empty[BitmapResult]
       signal { res =>
         results = results :+ res

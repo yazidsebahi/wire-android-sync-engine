@@ -17,9 +17,10 @@
  */
 package com.waz.db
 
-import android.database.sqlite.{SQLiteDatabase, SQLiteTransactionListener}
-import com.waz.{HockeyApp, ZLog}
-import ZLog._
+import android.database.sqlite.SQLiteDatabase
+import com.waz.HockeyApp
+import com.waz.ZLog._
+import com.waz.utils.wrappers.DB
 
 import scala.util.control.NonFatal
 
@@ -27,22 +28,22 @@ trait Migration { self =>
   val fromVersion: Int
   val toVersion: Int
   
-  def apply(db: SQLiteDatabase): Unit
+  def apply(db: DB): Unit
 }
 
 object Migration {
   val AnyVersion = -1
 
-  def apply(from: Int, to: Int)(migrations: (SQLiteDatabase => Unit)*): Migration = new Migration {
+  def apply(from: Int, to: Int)(migrations: (DB => Unit)*): Migration = new Migration {
     override val toVersion = to
     override val fromVersion = from
 
-    override def apply(db: SQLiteDatabase): Unit = migrations.foreach(_(db))
+    override def apply(db: DB): Unit = migrations.foreach(_(db))
 
     override def toString: LogTag = s"Migration from: $from to $to"
   }
 
-  def to(to: Int)(migrations: (SQLiteDatabase => Unit)*): Migration = apply(AnyVersion, to)(migrations:_*)
+  def to(to: Int)(migrations: (DB => Unit)*): Migration = apply(AnyVersion, to)(migrations:_*)
 }
 
 /**

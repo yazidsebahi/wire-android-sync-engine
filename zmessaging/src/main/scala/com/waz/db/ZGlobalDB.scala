@@ -23,18 +23,20 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.ZmsDatabase
+import com.waz.content.GlobalPreferences.CallingV3Key
+import com.waz.content.{GlobalPreferences, ZmsDatabase}
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
 import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
-import com.waz.service.PreferenceService
+import com.waz.utils.wrappers.DB
 import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, Resource}
 import com.waz.znet.AuthenticationManager.Token
 
-class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(context.getApplicationContext, DbName + dbNameSuffix, null, DbVersion, daos, Migrations.migrations(context)) {
+class ZGlobalDB(context: Context, dbNameSuffix: String = "")
+  extends DaoDB(context.getApplicationContext, DbName + dbNameSuffix, null, DbVersion, daos, Migrations.migrations(context)) {
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit = {
     if (from < 5) clearAllData(db)
@@ -50,7 +52,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "") extends DaoDB(conte
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 15
+  val DbVersion = 17
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao)
 
@@ -90,20 +92,26 @@ object ZGlobalDB {
         implicit db => AccountDataMigration.v78(db)
       },
       Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
-        val prefs = new PreferenceService(context)
-        prefs.editUiPreferences(_.putString(prefs.callingV3Key, "2")) //force update debug builds to calling v3
-      }}
+        val prefs = GlobalPreferences(context)
+        prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
+      }},
+      Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
+          //setting prefs.sendWithAssetsV3Key no longer needed, if you haven't updated by now, it doesn't matter
+      }},
+      Migration(16, 17) { db =>
+        db.execSQL(s"ALTER TABLE Accounts ADD COLUMN registered_push TEXT")
+      }
     )
 
     implicit object ZmsDatabaseRes extends Resource[ZmsDatabase] {
       override def close(r: ZmsDatabase): Unit = r.close()
     }
 
-    implicit object DbRes extends Resource[SQLiteDatabase] {
-      override def close(r: SQLiteDatabase): Unit = r.close()
+    implicit object DbRes extends Resource[DB] {
+      override def close(r: DB): Unit = r.close()
     }
 
-    def v11(context: Context): SQLiteDatabase => Unit = { implicit db =>
+    def v11(context: Context): DB => Unit = { implicit db =>
       // migrates ZUsers to AccountData, extracts some info from user specific KeyValue storage
 
       val SelfUserId = "self_user_id"

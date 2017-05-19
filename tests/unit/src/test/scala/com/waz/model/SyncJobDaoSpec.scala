@@ -17,7 +17,6 @@
  */
 package com.waz.model
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.EphemeralExpiration
 import com.waz.db.ZMessagingDB
 import com.waz.model.AddressBook.ContactHashes
@@ -29,6 +28,7 @@ import com.waz.model.sync.{ReceiptType, SyncJob, SyncRequest}
 import com.waz.testutils.Matchers._
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.JsonEncoder._
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -49,7 +49,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     Robolectric.application.getDatabasePath("dbName").delete()
   }
 
-  implicit def db: SQLiteDatabase = dbHelper.getWritableDatabase
+  implicit def db: DB = dbHelper.getWritableDatabase
 
   feature("json serialization") {
     scenario("Simple requests") {
@@ -66,7 +66,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("PostConvState requests") { PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))) should beUnchangedByEncodingAndDecoding }
     scenario("PostTypingState requests") { PostTypingState(ConvId(), isTyping = true) should beUnchangedByEncodingAndDecoding }
     scenario("SyncCallState requests") { SyncCallState(ConvId(), fromFreshNotification = false) should beUnchangedByEncodingAndDecoding }
-    scenario("DeleteGcmToken requests") { DeleteGcmToken(GcmId()) should beUnchangedByEncodingAndDecoding }
+    scenario("DeletePushToken requests") { DeletePushToken(PushToken()) should beUnchangedByEncodingAndDecoding }
     scenario("SyncSearchQuery requests") { SyncSearchQuery(SearchQuery.Recommended("meep moop")) should beUnchangedByEncodingAndDecoding }
     scenario("PostMessage requests") { PostMessage(ConvId(), MessageId(), Instant.now()) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvJoin requests") { PostConvJoin(ConvId(), Set(UserId(), UserId())) should beUnchangedByEncodingAndDecoding }
@@ -95,7 +95,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         SyncUser(Set(UserId(), UserId(), UserId())),
         SyncConversation(Set(ConvId(), ConvId(), ConvId())),
         PostConv(ConvId(), Seq(UserId()), None),
-        DeleteGcmToken(GcmId()),
+        DeletePushToken(PushToken()),
         PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, None)),
         PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))),
         SyncSearchQuery(SearchQuery.Recommended("meep moop")),

@@ -18,18 +18,23 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{AggregatingSignal, Signal}
-import com.waz.utils.{CachedStorage, TrimmingLruCache}
+import com.waz.utils.{CachedStorageImpl, TrimmingLruCache}
 
 import scala.collection._
 import scala.concurrent.Future
 
-class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") {
+trait MembersStorage {
+  def getByConv(conv: ConvId): Future[IndexedSeq[ConversationMemberData]]
+  def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]]
+}
+
+class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {
   private implicit val dispatcher = new SerialDispatchQueue(name = "MembersStorage")
 
   def getByConv(conv: ConvId) = find(_.convId == conv, ConversationMemberDataDao.findForConv(conv)(_), identity)
@@ -71,8 +76,4 @@ class MembersStorage(context: Context, storage: ZmsDatabase) extends CachedStora
   def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
 
   def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
-}
-
-object MembersStorage {
-  private implicit val tag: LogTag = logTagFor[MembersStorage]
 }

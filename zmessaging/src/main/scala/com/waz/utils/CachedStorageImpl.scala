@@ -17,13 +17,13 @@
  */
 package com.waz.utils
 
-import android.database.sqlite.SQLiteDatabase
 import android.support.v4.util.LruCache
 import com.waz.ZLog._
 import com.waz.content.Database
 import com.waz.db.DaoIdOps
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
+import com.waz.utils.wrappers.DB
 
 import scala.collection.JavaConverters._
 import scala.collection.{GenTraversableOnce, breakOut}
@@ -32,26 +32,76 @@ import scala.concurrent.Future
 
 trait StorageDao[K, V] {
   val idExtractor: (V => K)
-  def getById(key: K)(implicit db: SQLiteDatabase): Option[V]
-  def getAll(keys: Set[K])(implicit db: SQLiteDatabase): Seq[V]
-  def list(implicit db: SQLiteDatabase): Seq[V]
-  def insertOrReplace(items: GenTraversableOnce[V])(implicit db: SQLiteDatabase): Unit
-  def deleteEvery(ids: GenTraversableOnce[K])(implicit db: SQLiteDatabase): Unit
+  def getById(key: K)(implicit db: DB): Option[V]
+  def getAll(keys: Set[K])(implicit db: DB): Seq[V]
+  def list(implicit db: DB): Seq[V]
+  def insertOrReplace(items: GenTraversableOnce[V])(implicit db: DB): Unit
+  def deleteEvery(ids: GenTraversableOnce[K])(implicit db: DB): Unit
 }
 
 object StorageDao {
 
   implicit class DbDao[K, V](dao: DaoIdOps[V] { type IdVals = K }) extends StorageDao[K, V] {
     override val idExtractor: (V) => K = dao.idExtractor
-    override def getById(key: K)(implicit db: SQLiteDatabase): Option[V] = dao.getById(key)
-    override def getAll(keys: Set[K])(implicit db: SQLiteDatabase): Seq[V] = dao.getAll(keys)
-    override def list(implicit db: SQLiteDatabase) = dao.list
-    override def deleteEvery(ids: GenTraversableOnce[K])(implicit db: SQLiteDatabase): Unit = dao.deleteEvery(ids)
-    override def insertOrReplace(items: GenTraversableOnce[V])(implicit db: SQLiteDatabase): Unit = dao.insertOrReplace(items)
+    override def getById(key: K)(implicit db: DB): Option[V] = dao.getById(key)
+    override def getAll(keys: Set[K])(implicit db: DB): Seq[V] = dao.getAll(keys)
+    override def list(implicit db: DB) = dao.list
+    override def deleteEvery(ids: GenTraversableOnce[K])(implicit db: DB): Unit = dao.deleteEvery(ids)
+    override def insertOrReplace(items: GenTraversableOnce[V])(implicit db: DB): Unit = dao.insertOrReplace(items)
   }
 }
 
-class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit val dao: StorageDao[K, V], tag: LogTag = "CachedStorage") {
+trait CachedStorage[K, V] {
+
+  val onAdded: EventStream[Seq[V]]
+  val onUpdated: EventStream[Seq[(V, V)]]
+  val onDeleted: EventStream[Seq[K]]
+
+  protected def load(key: K)(implicit db: DB): Option[V]
+  protected def load(keys: Set[K])(implicit db: DB): Seq[V]
+  protected def save(values: Seq[V])(implicit db: DB): Unit
+  protected def delete(keys: Iterable[K])(implicit db: DB): Unit
+  protected def updateInternal(key: K, updater: V => V)(current: V): Future[Option[(V, V)]]
+
+  def find[A, B](predicate: V => Boolean, search: DB => Managed[TraversableOnce[V]], mapping: V => A)(implicit cb: CanBuild[A, B]): Future[B]
+  def filterCached(f: V => Boolean): Future[Vector[V]]
+  def foreachCached(f: V => Unit): Future[Unit]
+  def deleteCached(predicate: V => Boolean): Future[Unit]
+
+  def onChanged(key: K): EventStream[V]
+  def onRemoved(key: K): EventStream[K]
+
+  def optSignal(key: K): Signal[Option[V]]
+  def signal(key: K): Signal[V]
+
+  def insert(v: V): Future[V]
+  def insert(vs: Traversable[V]): Future[Set[V]]
+
+  def get(key: K): Future[Option[V]]
+  def getOrCreate(key: K, creator: => V): Future[V]
+  def list(): Future[Seq[V]]
+  def getAll(keys: Traversable[K]): Future[Seq[Option[V]]]
+
+  def update(key: K, updater: V => V): Future[Option[(V, V)]]
+  def updateAll(updaters: scala.collection.Map[K, V => V]): Future[Seq[(V, V)]]
+  def updateAll2(keys: Iterable[K], updater: V => V): Future[Seq[(V, V)]]
+
+  def updateOrCreate(key: K, updater: V => V, creator: => V): Future[V]
+
+  def updateOrCreateAll(updaters: K Map (Option[V] => V)): Future[Set[V]]
+  def updateOrCreateAll2(keys: Iterable[K], updater: ((K, Option[V]) => V)): Future[Set[V]]
+
+
+  def put(key: K, value: V): Future[V]
+  def getRawCached(key: K): Option[V]
+
+  def remove(key: K): Future[Unit]
+  def remove(keys: Iterable[K]): Future[Unit]
+
+  def cacheIfNotPresent(key: K, value: V): Unit
+}
+
+class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit val dao: StorageDao[K, V], tag: LogTag = "CachedStorage") extends CachedStorage[K, V] {
   private implicit val dispatcher = new SerialDispatchQueue(name = tag + "_Dispatcher")
 
   val onAdded = EventStream[Seq[V]]()
@@ -60,13 +110,13 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
 
   val onChanged = onAdded.union(onUpdated.map(_.map(_._2)))
 
-  protected def load(key: K)(implicit db: SQLiteDatabase): Option[V] = dao.getById(key)
+  protected def load(key: K)(implicit db: DB): Option[V] = dao.getById(key)
 
-  protected def load(keys: Set[K])(implicit db: SQLiteDatabase): Seq[V] = dao.getAll(keys)
+  protected def load(keys: Set[K])(implicit db: DB): Seq[V] = dao.getAll(keys)
 
-  protected def save(values: Seq[V])(implicit db: SQLiteDatabase): Unit = dao.insertOrReplace(values)
+  protected def save(values: Seq[V])(implicit db: DB): Unit = dao.insertOrReplace(values)
 
-  protected def delete(keys: Iterable[K])(implicit db: SQLiteDatabase): Unit = dao.deleteEvery(keys)
+  protected def delete(keys: Iterable[K])(implicit db: DB): Unit = dao.deleteEvery(keys)
 
   private def cachedOrElse(key: K, default: => Future[Option[V]]): Future[Option[V]] =
     Option(cache.get(key)).fold(default)(Future.successful)
@@ -78,7 +128,7 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
     }
   }
 
-  def find[A, B](predicate: V => Boolean, search: SQLiteDatabase => Managed[TraversableOnce[V]], mapping: V => A)(implicit cb: CanBuild[A, B]): Future[B] = Future {
+  def find[A, B](predicate: V => Boolean, search: DB => Managed[TraversableOnce[V]], mapping: V => A)(implicit cb: CanBuild[A, B]): Future[B] = Future {
     val matches = cb.apply()
     val snapshot = cache.snapshot.asScala
 
@@ -251,7 +301,7 @@ class CachedStorage[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit 
 
   protected def updateInternal(key: K, updater: V => V)(current: V): Future[Option[(V, V)]] = {
     val updated = updater(current)
-    if (updated == current) Future.successful(None)
+    if (updated == current) Future.successful(Some((current, updated)))
     else {
       cache.put(key, Some(updated))
       returning(db { save(Seq(updated))(_) } .future.map { _ => Some((current, updated)) }) { _ =>

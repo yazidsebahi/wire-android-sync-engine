@@ -32,7 +32,7 @@ import com.waz.service._
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.ClientMismatch
 import com.waz.sync.handler.AssetSyncHandler
-import com.waz.sync.otr.OtrSyncHandler
+import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
 import com.waz.sync.queue.ConvLock
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockZMessaging
@@ -73,15 +73,15 @@ class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAft
 
     usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
 
-    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, prefs) {
+    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
       override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean) = postMessageResponse
     }
 
-    override lazy val network: NetworkModeService = new NetworkModeService(context, lifecycle) {
+    override lazy val network: DefaultNetworkModeService = new DefaultNetworkModeService(context, lifecycle) {
       override def updateNetworkMode(): Unit = ()
     }
 
-    override lazy val assetSync = new AssetSyncHandler(cache, convsContent, convEvents, assetClient, assets, imageLoader, otrSync, prefs) {
+    override lazy val assetSync = new AssetSyncHandler(cache, assetClient, assets, otrSync) {
       override def uploadAssetData(assetId: AssetId, public: Boolean): ErrorOrResponse[Option[AssetData]] = CancellableFuture successful postImageResult
     }
 

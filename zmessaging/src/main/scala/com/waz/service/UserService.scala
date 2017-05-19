@@ -20,7 +20,9 @@ package com.waz.service
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.AccentColor
+import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -38,13 +40,20 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
 import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
-class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueService: KeyValueStorage, push: PushServiceSignals,
-                  assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) {
+trait UserService {
+  def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
+  def getOrCreateUser(id: UserId): Future[UserData]
+  def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
+  def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
+  def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
+}
 
-  private implicit val logTag: LogTag = logTagFor[UserService]
+class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, userPrefs: UserPreferences, push: PushServiceSignals,
+                      assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) extends UserService {
+
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
-  import keyValueService._
+  import userPrefs._
 
   val selfUser: Signal[UserData] = usersStorage.optSignal(selfUserId) flatMap {
     case Some(data) => Signal.const(data)
@@ -53,12 +62,17 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
       Signal.empty
   }
 
-  val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => updateSyncedUsers(e.map(_.user)(breakOut)))
+  val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
+  val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
+      _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
+      _ <- removeIdentityFromSyncedUsers(e.filter(_.removeIdentity).map(_.user)(breakOut))
+    } yield {}
+  )
   val userDeleteEventsStage = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
 
   push.onSlowSyncNeeded { case SlowSyncRequest(time, _) =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")
-    lastSlowSyncTimestamp = time
+    lastSlowSyncTimestamp := Some(time)
 
     sync.syncSelfUser().map(dependency => sync.syncConnections(Some(dependency)))
   }
@@ -193,7 +207,7 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
     * Schedules user data sync if stored user timestamp is older than last slow sync timestamp.
    */
   def syncIfNeeded(users: UserData*): Future[Unit] =
-    lastSlowSyncTimestamp flatMap {
+    lastSlowSyncTimestamp() flatMap {
       //TODO: Remove empty picture check when not needed anymore
       case Some(time) => sync.syncUsersIfNotEmpty(users.filter(user => user.syncTimestamp < time || user.picture.isEmpty).map(_.id))
       case _ => sync.syncUsersIfNotEmpty(users.filter(_.picture.isEmpty).map(_.id))
@@ -210,6 +224,18 @@ class UserService(val selfUserId: UserId, usersStorage: UsersStorage, keyValueSe
       }
       usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
     }
+  }
+
+  def removeIdentityFromSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Unit] = {
+    def update(current: UserData): UserData = {
+      val userInfo = users.find(_.id == current.id)
+      userInfo.fold(current){ info =>
+        current.copy(
+          email = if (info.email.nonEmpty) None else current.email,
+          phone = if (info.phone.nonEmpty) None else current.phone)
+      }
+    }
+    usersStorage.updateAll2(users.map {user => user.id}, update).map(_ => ())
   }
 
   def updateUserDeleted(userIds: Vector[UserId]): Future[Any] =

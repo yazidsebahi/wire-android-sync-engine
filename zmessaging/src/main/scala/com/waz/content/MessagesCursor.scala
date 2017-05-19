@@ -17,7 +17,6 @@
  */
 package com.waz.content
 
-import android.database.Cursor
 import android.support.v4.util.LruCache
 import com.waz.HockeyApp
 import com.waz.ZLog._
@@ -28,6 +27,7 @@ import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.events.EventStream
+import com.waz.utils.wrappers.DBCursor
 import org.threeten.bp.Instant
 
 import scala.collection.Searching.{Found, InsertionPoint}
@@ -43,7 +43,7 @@ trait MsgCursor {
   def close(): Unit
 }
 
-class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage)(implicit ordering: Ordering[Instant]) extends MsgCursor { self =>
+class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage)(implicit ordering: Ordering[Instant]) extends MsgCursor { self =>
   import MessagesCursor._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -144,7 +144,7 @@ class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastRe
 
     windowFuture.value match {
       case Some(Success(result)) => result
-      case _ => logTime(s"loading window for index: $index")(Await.result(windowFuture, 5.seconds))
+      case _ => logTime(s"loading window for index: $index")(LoggedTry(Await.result(windowFuture, 5.seconds)).getOrElse(new IndexWindow(index, IndexedSeq.empty)))
     }
   }
 
@@ -166,7 +166,7 @@ class MessagesCursor(cursor: Cursor, override val lastReadIndex: Int, val lastRe
 
       val msg = messages.get(id)
       if (msg ne null) msg else {
-        logTime("waiting for window to prefetch")(Await.result(fetching, 5.seconds))
+        logTime("waiting for window to prefetch")(LoggedTry(Await.result(fetching, 5.seconds)))
         Option(messages.get(id)).getOrElse {
           logTime(s"loading message for id: $id, position: $index") {
             val m = LoggedTry(Await.result(loader(Seq(id)), 500.millis).headOption).toOption.flatten
@@ -241,16 +241,16 @@ object MessagesCursor {
     }
 
     implicit object EntryReader extends Reader[Entry] {
-      override def apply(implicit c: Cursor): Entry =
+      override def apply(implicit c: DBCursor): Entry =
         Entry(MessageId(c.getString(0)), Instant.ofEpochMilli(c.getLong(1)))
     }
 
-    def apply(c: Cursor): Entry = EntryReader(c)
+    def apply(c: DBCursor): Entry = EntryReader(c)
     def apply(m: MessageData): Entry = Entry(m.id, m.time)
   }
 }
 
-class WindowLoader(cursor: Cursor)(implicit dispatcher: SerialDispatchQueue) {
+class WindowLoader(cursor: DBCursor)(implicit dispatcher: SerialDispatchQueue) {
   import MessagesCursor._
   private implicit val tag = logTagFor[WindowLoader]
 

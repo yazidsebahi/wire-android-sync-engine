@@ -23,7 +23,7 @@ import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.Message.Status
 import com.waz.content._
 import com.waz.model._
-import com.waz.service.UserService
+import com.waz.service.UserServiceImpl
 import com.waz.service.media.RichMediaContentParser
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -33,7 +33,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorage, convs: ConversationStorage, users: UserService, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
+class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorageImpl, convs: ConversationStorageImpl, users: UserServiceImpl, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
 
   private implicit val tag: LogTag = logTagFor[MessagesContentUpdater]
   import Threading.Implicits.Background
@@ -174,7 +174,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
         msg.copy(id = m.id, localTime = m.localTime)
 
       def mergeMatching(prev: MessageData, msg: MessageData) = {
-        val u = prev.copy(msgType = msg.msgType, time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
+        val u = prev.copy(msgType = if (msg.msgType != Message.Type.UNKNOWN) msg.msgType else prev.msgType , time = if (msg.time.isBefore(prev.time) || prev.isLocal) msg.time else prev.time, protos = prev.protos ++ msg.protos, content = msg.content)
         prev.msgType match {
           case Message.Type.RECALLED => prev // ignore updates to already recalled message
           case _ => u

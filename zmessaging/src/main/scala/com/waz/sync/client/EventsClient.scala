@@ -21,7 +21,7 @@ import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.model.otr.ClientId
-import com.waz.model.{ConversationEvent, Event, OtrEvent, Uid}
+import com.waz.model._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.events.SourceStream

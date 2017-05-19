@@ -19,12 +19,10 @@ package com.waz.service.media
 
 import java.util.Locale
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.Message
-import com.waz.content.KeyValueStorage
-import com.waz.content.KeyValueStorage.KeyValuePref
-import com.waz.content.Preference.PrefCodec
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.SpotifyRefreshToken
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.model.{MessageContent, MessageData}
 import com.waz.service.assets.AssetService
@@ -33,18 +31,18 @@ import com.waz.sync.client.SpotifyClient
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.{Signal, SourceSignal}
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
-class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue: KeyValueStorage) {
+class SpotifyMediaService(client: SpotifyClient, assets: AssetService, userPrefs: UserPreferences) {
   import SpotifyMediaService._
   import Threading.Implicits.Background
 
   private implicit val logTag: LogTag = logTagFor[SpotifyMediaService]
 
-  private val spotifyRefreshTokenPref: KeyValuePref[Option[RefreshToken]] = keyValue.keyValuePref(KeyValueStorage.SpotifyRefreshToken, None)
+  private val spotifyRefreshTokenPref = userPrefs.preference(SpotifyRefreshToken)
   private val accessToken = new SourceSignal[Option[AccessToken]](Some(None))
 
   val authentication: Signal[Authentication] = spotifyRefreshTokenPref.signal zip accessToken map { case (refresh, access) =>
@@ -77,9 +75,9 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue:
   })
 
   private def resolveId(content: String): Option[SpotifyId] = {
-    val uri = Uri.parse(content)
-    if (uri.getHost.toLowerCase(Locale.ENGLISH) != "open.spotify.com") None else {
-      uri.getPathSegments.asScala match {
+    val uri = URI.parse(content)
+    if (!SpotifyClient.domainNames.contains(uri.getHost.toLowerCase(Locale.ENGLISH))) None else {
+      uri.getPathSegments match {
         case Seq("track", id) =>
           verbose(s"resolved track id (from $content): $id")
           Some(TrackId(id))
@@ -96,11 +94,11 @@ class SpotifyMediaService(client: SpotifyClient, assets: AssetService, keyValue:
     }
   }
 
-  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[Uri]] = for {
+  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[URI]] = for {
     refresh <- spotifyRefreshTokenPref()
     access <- client.refreshAccessToken(refresh)
     _ = accessToken ! access
-  } yield Right(media.tracks flatMap { t => if (refresh.isDefined) t.streamUrl else t.previewUrl } map Uri.parse)
+  } yield Right(media.tracks flatMap { t => if (refresh.isDefined) t.streamUrl else t.previewUrl } map URI.parse)
 }
 
 object SpotifyMediaService {
@@ -111,9 +109,4 @@ object SpotifyMediaService {
   case class TrackId(id: String) extends SpotifyId
   case class AlbumId(id: String) extends SpotifyId
   case class PlaylistId(user: String, id: String) extends SpotifyId
-
-  implicit lazy val refreshTokenPrefCodec: PrefCodec[RefreshToken] = new PrefCodec[RefreshToken] {
-    override def encode(v: RefreshToken): String = v.str
-    override def decode(str: String): RefreshToken = RefreshToken(str)
-  }
 }

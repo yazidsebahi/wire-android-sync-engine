@@ -59,7 +59,7 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
       val token = Await.result(auth.currentToken(), 5.seconds)
       var webSocket = None : Option[WebSocket]
 
-      val req = token.right.get.prepare(new AsyncHttpGet(backend.pushUrl))
+      val req = token.right.get.prepare(new AsyncHttpGet(backend.websocketUrl))
       req.setHeader("Accept-Encoding", "identity")
 
       Await.result(asyncClient.client, 1.second).websocket(req, null, new WebSocketConnectCallback {
@@ -78,7 +78,7 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
     scenario("Receive name change update") {
       val latch = new CountDownLatch(1)
 
-      val manager = new WebSocketClient(context, asyncClient, Uri.parse(backend.pushUrl), auth)
+      val manager = new WebSocketClient(context, asyncClient, Uri.parse(backend.websocketUrl), auth)
 
       manager.onMessage {
         case resp @ JsonObjectResponse(js) if js.toString.contains("auto1_updated") =>

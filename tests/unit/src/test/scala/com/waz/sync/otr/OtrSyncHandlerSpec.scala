@@ -25,7 +25,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, UserClients}
-import com.waz.service.otr.OtrService
+import com.waz.service.otr.OtrServiceImpl
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
@@ -37,6 +37,7 @@ import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Future
+
 
 class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 
@@ -56,7 +57,7 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
 
-    override lazy val otrService: OtrService = new OtrService(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage) {
+    override lazy val otrService: OtrServiceImpl = new OtrServiceImpl(selfUserId, clientId, otrClientsService, pushSignals, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage, prefs) {
       override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent, recipients: Option[Set[UserId]]): Future[EncryptedContent] = {
         encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
         Future successful encryptedContent
@@ -70,9 +71,10 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       }
     }
 
-    override lazy val otrClientsSync: OtrClientsSyncHandler = new OtrClientsSyncHandler(context, accountId, selfUserId, Signal.const(Some(clientId)), otrClient, otrClientsService, otrClientsStorage, cryptoBox, kvStorage) {
+    override lazy val otrClientsSync: OtrClientsSyncHandler = new OtrClientsSyncHandler(context, accountId, selfUserId, Signal.const(Some(clientId)), otrClient, otrClientsService, otrClientsStorage, cryptoBox, userPrefs) {
       override private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] = Future.successful(None)
     }
+
 
     usersStorage.addOrOverwrite(selfUser).futureValue
     otrClientsStorage.insert(UserClients(selfUser.id, Map(clientId -> Client(clientId, ""))))
@@ -100,4 +102,5 @@ class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       postMsgRequests shouldEqual Seq((conv.remoteId, otrMsg, false), (conv.remoteId, otrMsg, false), (conv.remoteId, otrMsg, true))
     }
   }
+
 }

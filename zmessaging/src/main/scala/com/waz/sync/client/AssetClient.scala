@@ -22,6 +22,7 @@ import java.io.InputStream
 import android.util.Base64
 import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
 import com.waz.model.otr.ClientId
@@ -41,11 +42,19 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-class AssetClient(netClient: ZNetClient) {
+trait AssetClient {
+  import com.waz.sync.client.AssetClient._
+
+  def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry]
+  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId]
+  def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse]
+}
+
+class AssetClientImpl(netClient: ZNetClient) extends AssetClient {
   import Threading.Implicits.Background
   import com.waz.sync.client.AssetClient._
 
-  def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] =
+  override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] =
     netClient.withErrorHandling("loadAsset", req) {
       case Response(SuccessHttpStatus(), resp: BinaryResponse, _) => resp
       case Response(SuccessHttpStatus(), resp: FileResponse, _) => resp
@@ -55,7 +64,7 @@ class AssetClient(netClient: ZNetClient) {
       case Left(err) => CancellableFuture successful Left(err)
     }
 
-  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
+  override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
     asset match {
       case AssetData.IsImage() =>
         val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
@@ -69,23 +78,7 @@ class AssetClient(netClient: ZNetClient) {
 
   }
 
-  def postOtrAsset(convId: RConvId, metadata: OtrAssetMetadata, data: LocalData, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] = {
-    val meta = OtrAssetMetadata.OtrMetaEncoder(metadata).asInstanceOf[ByteArrayRequestContent]
-    val content = new MultipartRequestContent(Seq(new LocalDataPart(LocalData(meta.data), meta.contentType), new AssetDataPart(data, "application/octet-stream")), "multipart/mixed")
-
-    verbose(s"postOtrAsset($metadata, data: $data)")
-    netClient.withErrorHandling("postOtrAsset", Request.Post(postOtrAssetPath(convId, ignoreMissing, recipients), content))(otrAssetResponseHandler(h => RAssetId(h("Location").getOrElse(""))))
-  }
-
-  def postOtrAssetMetadata(dataId: RAssetId, convId: RConvId, metadata: OtrAssetMetadata, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[OtrAssetResponse] =
-    netClient.withErrorHandling("postOtrAssetMetadata", Request.Post(postOtrAssetPath(convId, dataId, ignoreMissing, recipients), metadata))(otrAssetResponseHandler(_ => dataId))
-
-  private def otrAssetResponseHandler(assetId: Headers => RAssetId): PartialFunction[Response, OtrAssetResponse] = {
-    case Response(SuccessHttpStatus(), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Success(mismatch))
-    case Response(HttpStatus(Status.PreconditionFailed, _), ClientMismatchResponse(mismatch), headers) => OtrAssetResponse(assetId(headers), MessageResponse.Failure(mismatch))
-  }
-
-  def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
+  override def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
     val meta = JsonEncoder { o =>
       o.put("public", public)
       o.put("retention", retention.value)
@@ -101,8 +94,11 @@ class AssetClient(netClient: ZNetClient) {
 }
 
 object AssetClient {
-  private implicit val logTag: LogTag = logTagFor[AssetClient]
+
   implicit val DefaultExpiryTime: Expiration = 1.hour
+
+  def apply(netClient: ZNetClient): AssetClient = new AssetClientImpl(netClient)
+
 
   val AssetsV3Path = "/assets/v3"
 
@@ -128,18 +124,6 @@ object AssetClient {
   }
 
   def postAssetPath(conv: RConvId) = s"/conversations/$conv/assets"
-
-  def postOtrAssetPath(conv: RConvId, ignoreMissing: Boolean, recipients: Option[Set[UserId]]) = {
-    val base = s"/conversations/$conv/otr/assets"
-    if (ignoreMissing) s"$base?ignore_missing=true"
-    else recipients.fold(base)(uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
-  }
-
-  def postOtrAssetPath(conv: RConvId, asset: RAssetId, ignoreMissing: Boolean, recipients: Option[Set[UserId]]) = {
-    val base = s"/conversations/$conv/otr/assets/$asset"
-    if (ignoreMissing) s"$base?ignore_missing=true"
-    else recipients.fold(base)(uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
-  }
 
   //TODO remove asset v2 when transition period is over
   def getAssetPath(remoteId: Option[RAssetId], otrKey: Option[AESKey], conv: Option[RConvId]): Option[String] = remoteId.map { rId =>

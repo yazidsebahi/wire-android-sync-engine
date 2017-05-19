@@ -17,12 +17,12 @@
  */
 package com.waz.testutils
 
-import android.net.Uri
 import com.waz.threading.CancellableFuture
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, RequestContent}
 import com.waz.znet.Request._
 import com.waz.znet.Response.ResponseBodyDecoder
-import com.waz.znet.{TestClientWrapper, AsyncClient, Response}
+import com.waz.znet.{AsyncClient, Response, TestClientWrapper}
 
 import scala.concurrent.duration._
 import scala.util.matching.Regex
@@ -31,7 +31,7 @@ class UnreliableAsyncClient extends AsyncClient(wrapper = TestClientWrapper) {
   @volatile var delayInMillis: Long = 200L
   @volatile var failFor: Option[(Regex, String)] = None
 
-  override def apply(uri: Uri, method: String = "GET", body: RequestContent = EmptyRequestContent, headers: Map[String, String] = AsyncClient.EmptyHeaders, followRedirect: Boolean = false, timeout: FiniteDuration = 30.seconds, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
+  override def apply(uri: URI, method: String = "GET", body: RequestContent = EmptyRequestContent, headers: Map[String, String] = AsyncClient.EmptyHeaders, followRedirect: Boolean = false, timeout: FiniteDuration = 30.seconds, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
     CancellableFuture.delay(delayInMillis.millis) flatMap { _ =>
       val fail = failFor exists { failFor =>
         val (uriRegex, failingMethod) = failFor

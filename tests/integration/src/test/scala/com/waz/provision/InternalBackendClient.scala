@@ -17,7 +17,6 @@
  */
 package com.waz.provision
 
-import android.net.Uri
 import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
@@ -25,6 +24,7 @@ import com.waz.build.InternalCredentials
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture
+import com.waz.utils.wrappers.URI
 import com.waz.utils.JsonEncoder
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.SuccessHttpStatus
@@ -41,7 +41,7 @@ class InternalBackendClient(client: AsyncClient, backend: BackendConfig) {
   val (user, password) = InternalCredentials.backend(backend)
 
   def activateEmail(email: EmailAddress): ErrorOrResponse[Unit] = {
-    client(Uri.parse(Request.query(backend.baseUrl + "/i/users/activation-code", "email" -> email.str)), headers = basicAuthHeader, timeout = AsyncClient.DefaultTimeout) flatMap {
+    client(URI.parse(Request.query(backend.baseUrl + "/i/users/activation-code", "email" -> email.str)), headers = basicAuthHeader, timeout = AsyncClient.DefaultTimeout) flatMap {
       case Response(SuccessHttpStatus(), CodeExtractor(code), headers) => verifyEmail(email, ConfirmationCode(code))
       case Response(_, ErrorResponse(status, message, label), _) => CancellableFuture.successful(Left(ErrorResponse(status, message, label)))
       case other => CancellableFuture.successful(Left(ErrorResponse(other.status.status, other.toString, "unknown")))
@@ -52,21 +52,21 @@ class InternalBackendClient(client: AsyncClient, backend: BackendConfig) {
   def getPhoneLoginCode(phone: PhoneNumber): ErrorOrResponse[ConfirmationCode] = getPhoneConfirmationCode(phone, "login")
 
   private def verifyEmail(email: EmailAddress, code: ConfirmationCode): ErrorOrResponse[Unit] =
-    client(Uri.parse(backend.baseUrl + "/activate"), Request.PostMethod, verifyRequestBody(email, code), timeout = AsyncClient.DefaultTimeout) map {
+    client(URI.parse(backend.baseUrl + "/activate"), Request.PostMethod, verifyRequestBody(email, code), timeout = AsyncClient.DefaultTimeout) map {
       case Response(SuccessHttpStatus(), _, _) => Right(())
       case Response(_, ErrorResponse(status, msg, label), _) => Left(ErrorResponse(status, msg, label))
       case other => Left(ErrorResponse(other.status.status, other.toString, "unknown"))
     }
 
   private def getPhoneConfirmationCode(phone: PhoneNumber, kindOfCode: String): ErrorOrResponse[ConfirmationCode] =
-    client(Uri.parse(Request.query(backend.baseUrl + s"/i/users/$kindOfCode-code", "phone" -> phone.str)), headers = basicAuthHeader, timeout = AsyncClient.DefaultTimeout) map {
+    client(URI.parse(Request.query(backend.baseUrl + s"/i/users/$kindOfCode-code", "phone" -> phone.str)), headers = basicAuthHeader, timeout = AsyncClient.DefaultTimeout) map {
       case Response(SuccessHttpStatus(), CodeExtractor(code), headers) => Right(ConfirmationCode(code))
       case Response(_, ErrorResponse(status, message, label), _) => Left(ErrorResponse(status, message, label))
       case other => Left(ErrorResponse(other.status.status, other.toString, "unknown"))
     }
 
   def getInvitationToken(inviter: UserId, invitation: InvitationId): ErrorOrResponse[PersonalInvitationToken] =
-    client(Uri.parse(Request.query(s"${backend.baseUrl}/i/users/invitation-code", "inviter" -> inviter.str, "invitation_id" -> invitation.str)), headers = basicAuthHeader, timeout = AsyncClient.DefaultTimeout) map {
+    client(URI.parse(Request.query(s"${backend.baseUrl}/i/users/invitation-code", "inviter" -> inviter.str, "invitation_id" -> invitation.str)), headers = basicAuthHeader, timeout = AsyncClient.DefaultTimeout) map {
       case Response(SuccessHttpStatus(), CodeExtractor(code), headers) => Right(PersonalInvitationToken(code))
       case Response(_, ErrorResponse(status, message, label), _) => Left(ErrorResponse(status, message, label))
       case other => Left(ErrorResponse(other.status.status, other.toString, "unknown"))

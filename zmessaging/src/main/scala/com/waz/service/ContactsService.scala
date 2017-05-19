@@ -31,6 +31,7 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.api.Permission.READ_CONTACTS
+import com.waz.content.GlobalPreferences.{AddressBookLastUpload, AddressBookVersion, ShareContacts}
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
@@ -41,7 +42,6 @@ import com.waz.threading.Threading
 import com.waz.utils.Locales.{currentLocaleOrdering, sortWithCurrentLocale}
 import com.waz.utils._
 import com.waz.utils.events._
-import com.waz.zms.R
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
 
@@ -49,20 +49,20 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{GenMap, GenSet, breakOut, mutable => mut}
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.Success
 import scala.util.control.NoStackTrace
-import scala.util.{Success, Try}
 
-class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorage, lifecycle: ZmsLifecycle,
-    keyValue: KeyValueStorage, prefs: PreferenceService, users: UserService, usersStorage: UsersStorage,
-    timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
-    convs: ConversationStorage, permissions: PermissionsService) {
+class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
+                      userPrefs: UserPreferences, prefs: GlobalPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
+                      timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
+                      convs: ConversationStorageImpl, permissions: PermissionsService) {
 
   import ContactsService._
   import EventContext.Implicits.global
   import Threading.Implicits.Background
-  import keyValue._
   import lifecycle._
   import timeouts.contacts._
+  import userPrefs._
 
   private[service] val initFuture = init()
   private def init() = permissions.request(Set(READ_CONTACTS), delayUntilProviderIsSet = true).flatMap(_ =>
@@ -134,10 +134,10 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
     }
   }
 
-  private[waz] lazy val lastUploadTime = keyValuePref[Option[Instant]]("address_book_last_upload_time", None)
-  private[service] lazy val addressBookVersionOfLastUpload = keyValuePref[Option[Int]]("address_book_version_of_last_upload", None)
-  private lazy val shareContactsPrefKey = Try(context.getString(R.string.pref_share_contacts_key)).getOrElse(PrefKey) // fallback for testing
-  private[service] lazy val shareContactsPref = prefs.uiPreferenceBooleanSignal(shareContactsPrefKey, defaultValue = true)
+  private[waz] lazy val lastUploadTime                     = preference(AddressBookLastUpload)
+  private[service] lazy val addressBookVersionOfLastUpload = preference(AddressBookVersion)
+  private[service] lazy val shareContactsPref              = preference(ShareContacts)
+
   private lazy val contactsObserver = new ContentObserverSignal(Contacts)(context)
   private lazy val contactsNeedReloading = new AtomicBoolean(true)
 
@@ -461,8 +461,6 @@ object ContactsService {
 
   lazy val Visible = if (SDK_INT >= LOLLIPOP) Some(s"${Col.Visible} = 1 OR ${Col.InDefaultDirectory} = 1") else None
   lazy val OrderBySortKey = s"${Col.SortKey} COLLATE LOCALIZED ASC"
-
-  val PrefKey = "PREF_KEY_PRIVACY_CONTACTS"
 
   private[service] val zUserAndTimeOfLastCheck = new AtomicReference((AccountId(), Instant.EPOCH))
 

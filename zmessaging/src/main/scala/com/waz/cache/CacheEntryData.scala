@@ -20,14 +20,12 @@ package com.waz.cache
 import java.io.File
 import java.lang.System.currentTimeMillis
 
-import android.content.ContentValues
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.db.DbTranslator.FileTranslator
 import com.waz.model._
 import com.waz.utils.returning
+import com.waz.utils.wrappers.{DB, DBCursor}
 
 case class CacheEntryData(key: CacheKey,
                           data: Option[Array[Byte]] = None,
@@ -57,35 +55,35 @@ object CacheEntryData {
     override val idCol = Key
     override val table = Table("CacheEntry", Key, Uid, Data, LastUsed, Timeout, EncKey, Path, MimeType, Name, Length)
 
-    override def apply(implicit cursor: Cursor): CacheEntryData =
+    override def apply(implicit cursor: DBCursor): CacheEntryData =
       new CacheEntryData(Key, Data, LastUsed, Timeout, Path, EncKey, Name, MimeType, Uid, Length)
 
-    def getByKey(key: CacheKey)(implicit db: SQLiteDatabase): Option[CacheEntryData] = getById(key)
+    def getByKey(key: CacheKey)(implicit db: DB): Option[CacheEntryData] = getById(key)
 
-    def deleteByKey(key: CacheKey)(implicit db: SQLiteDatabase): Int = delete(key)
+    def deleteByKey(key: CacheKey)(implicit db: DB): Int = delete(key)
 
-    def findAll(implicit db: SQLiteDatabase): Seq[CacheEntryData] = list
+    def findAll(implicit db: DB): Seq[CacheEntryData] = list
 
-    def findAllWithData(implicit db: SQLiteDatabase): Seq[CacheEntryData] = {
+    def findAllWithData(implicit db: DB): Seq[CacheEntryData] = {
       list(db.query(table.name, null, s"${Data.name} IS NOT NULL", Array.empty, null, null, null))
     }
 
-    def findAllExpired(currentTime: Long)(implicit db: SQLiteDatabase): Seq[CacheEntryData] = {
+    def findAllExpired(currentTime: Long)(implicit db: DB): Seq[CacheEntryData] = {
       list(db.query(table.name, null, s"${LastUsed.name} + ${Timeout.name} < $currentTime", null, null, null, null))
     }
 
-    def deleteExpired(currentTime: Long)(implicit db: SQLiteDatabase): Unit = {
+    def deleteExpired(currentTime: Long)(implicit db: DB): Unit = {
       db.delete(table.name, s"${LastUsed.name} + ${Timeout.name} < $currentTime", null)
     }
   }
 
   trait CacheEntryDataUpgrades {
-    def setPathForFileEntries(path: File)(implicit db: SQLiteDatabase): Unit = {
-      val values = returning(new ContentValues) { _.put("path", FileTranslator.literal(path)) }
+    def setPathForFileEntries(path: File)(implicit db: DB): Unit = {
+      val values = returning(DB.ContentValues()) { _.put("path", FileTranslator.literal(path)) }
       db.update("CacheEntry", values, s"data IS NULL AND path IS NULL", null)
     }
 
-    def moveToTimeouts()(implicit db: SQLiteDatabase): Unit = {
+    def moveToTimeouts()(implicit db: DB): Unit = {
       db.execSQL(s"UPDATE CacheEntry SET lastUsed = created, timeout = 604800000") // default to a timeout of one week after the upgrade
     }
   }

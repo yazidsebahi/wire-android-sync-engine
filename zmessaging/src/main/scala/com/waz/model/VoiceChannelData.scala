@@ -19,14 +19,13 @@ package com.waz.model
 
 import java.util.concurrent.TimeUnit
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api
 import com.waz.api.VoiceChannel.VideoCaptureDevice
 import com.waz.api._
 import com.waz.db.Dao2
 import com.waz.db.Col._
 import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -172,13 +171,13 @@ object VoiceParticipantData extends ((ConvId, UserId, api.ConnectionState, Boole
 
     override val table = Table("VoiceParticipants", ConvId, UserId, State, Muted, SendsVideo)
 
-    override def apply(implicit cursor: Cursor): VoiceParticipantData = VoiceParticipantData(ConvId, UserId, State, Muted, SendsVideo)
+    override def apply(implicit cursor: DBCursor): VoiceParticipantData = VoiceParticipantData(ConvId, UserId, State, Muted, SendsVideo)
 
-    def deleteForChannel(id: ConvId)(implicit db: SQLiteDatabase) = delete(ConvId, id)
+    def deleteForChannel(id: ConvId)(implicit db: DB) = delete(ConvId, id)
 
-    def listForChannel(id: ConvId)(implicit db: SQLiteDatabase) = list(find(ConvId, id))
+    def listForChannel(id: ConvId)(implicit db: DB) = list(find(ConvId, id))
 
-    def hasActiveParticipant(id: ConvId, user: UserId)(implicit db: SQLiteDatabase) =
+    def hasActiveParticipant(id: ConvId, user: UserId)(implicit db: DB) =
       single(db.query(table.name, null, s"${ConvId.name} = ? and ${UserId.name} = ? and ${State.name} in (?, ?)", Array(id.str, user.str, State.col.sqlLiteral(ConnectionState.Connected), State.col.sqlLiteral(ConnectionState.Connecting)), null, null, null)).isDefined
   }
 }

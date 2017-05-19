@@ -17,26 +17,25 @@
  */
 package com.waz.service.images
 
-import android.graphics.Bitmap
-import android.net.Uri
-import android.support.v4.content.ContextCompat
+import android.graphics.{Bitmap => ABitmap}
 import com.waz.RobolectricUtils
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.cache.LocalData
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
-import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
 import com.waz.service.assets.AssetService.BitmapResult
+import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
 import com.waz.threading.CancellableFuture
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.Regular
+import com.waz.utils.wrappers.{Bitmap, URI}
 import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Try
 
 @Config(manifest = "/src/main/AndroidManifest.xml", reportSdk = 17)
 class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
@@ -49,21 +48,22 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   var gifResult: AssetData => Option[Gif] = { _ => None }
   var rawDataResult: AssetData => Option[LocalData] = { _ => None }
   var cachedDataResult: AssetData => Option[LocalData] = { _ => None }
+  var assetSource: AssetId => Option[AssetData] = { _ => None }
   var loadDelay: AssetData => FiniteDuration = { _ => Duration.Zero }
-  
-  def mockBitmap(im: AssetData) = Some(Bitmap.createBitmap(im.dimensions.width, im.dimensions.height, Bitmap.Config.ARGB_8888))
+
+  def mockBitmap(im: AssetData) = Some(Bitmap(ABitmap.createBitmap(im.dimensions.width, im.dimensions.height, ABitmap.Config.ARGB_8888)))
   def mockDelay(preview: FiniteDuration = Duration.Zero, medium: FiniteDuration = Duration.Zero)(im: AssetData) = im.tag match {
     case Medium => medium
     case _ => preview
   }
 
-  lazy val imageCache = new MemoryImageCache(testContext)
+  lazy val imageCache = MemoryImageCache(testContext)
 
   lazy val loader = new ImageLoader(testContext, null, imageCache, null, null, null) {
 
-    override def hasCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Boolean] = CancellableFuture.successful(cachedBitmapResult(asset).isDefined)
+    override def hasCachedBitmap(asset: AssetData, req: BitmapRequest): Future[Boolean] = Future.successful(cachedBitmapResult(asset).isDefined)
 
-    override def hasCachedData(asset: AssetData): CancellableFuture[Boolean] = CancellableFuture.successful(cachedDataResult(asset).isDefined)
+    override def hasCachedData(asset: AssetData): Future[Boolean] = Future.successful(cachedDataResult(asset).isDefined)
 
     override def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = cachedBitmapResult(asset).fold(CancellableFuture.cancelled[Bitmap]())(CancellableFuture.successful)
 
@@ -80,70 +80,63 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   class SignalListener(asset: AssetData, req: BitmapRequest) {
     var results = Seq.empty[BitmapResult]
-    val signal = new AssetBitmapSignal(asset, req, loader, imageCache)
+    val signal = new AssetBitmapSignal(asset, req, loader, { id => Future.successful(assetSource(id)) })
     val obs = signal { result => results = results :+ result }
     
     def medium = results.collectFirst { case BitmapLoaded(b, _) => b }
   }
 
   before {
-    Try { ContextCompat.getDrawable(testContext, android.R.color.transparent) } // force resource loading
     cachedBitmapResult = { _ => None }
     cachedGifResult = { _ => None }
     gifResult = { _ => None }
     bitmapResult = mockBitmap
     rawDataResult = { _ => None }
     cachedDataResult = { _ => None }
+    assetSource = { _ => None }
     loadDelay = mockDelay(medium = 500.millis)
   }
 
-  def checkLoaded(req: BitmapRequest, preview: Option[(Int, Int)] = None, full: Option[(Int, Int)] = None, delay: FiniteDuration = Duration.Zero)(data: AssetData) = {
+  def image(w: Int, h: Int, mime: Mime = Mime.Image.Png, preview: Option[AssetId] = None) =
+    AssetData(mime = mime, metaData = Some(AssetMetaData.Image(Dim2(w, h))), previewId = preview)
+
+  def checkLoaded(req: BitmapRequest, result: Option[(Int, Int)] = None, delay: FiniteDuration = Duration.Zero)(data: AssetData) = {
     val listener = new SignalListener(data, req)
     awaitUi(delay)
     withDelay {
       withClue(listener.results.mkString(", ")) {
-        listener.medium.map(b => (b.getWidth, b.getHeight)) shouldEqual full
+        listener.medium.map(b => (b.getWidth, b.getHeight)) shouldEqual result
       }
     }
   }
 
   feature("Wire asset loading") {
 
-    scenario("Load asset with invalid metadata") {
-      checkLoaded(Regular(500), Some((500, 500)), Some((996, 660)))(AssetData(metaData = Some(AssetMetaData.Image(Dim2(996, 660), Medium))))
-    }
-
-    scenario("Request small image when only preview is available") {
-      fail()
+    scenario("Request same size image without a preview") {
       // result should be reported as full image
-//      checkLoaded(Regular(64), None, Some((64,64)))(image("preview", 64, 64, 512, 512))
-//
-//      cachedBitmapResult = mockBitmap // result should be the same when loaded from cache
-//      checkLoaded(Regular(64), None, Some((64,64)))(image("preview", 64, 64, 512, 512))
+      checkLoaded(Regular(64), Some((64,64)))(image(64, 64))
+
+      cachedBitmapResult = mockBitmap // result should be the same when loaded from cache
+      checkLoaded(Regular(64), Some((64,64)))(image(64, 64))
     }
 
-    scenario("Load big image when only preview is available") {
-      fail()
-//      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(64, 64), "preview")))
-//      checkLoaded(Regular(500), Some((500,500)), None)(image("preview", 64, 64, 512, 512))
-//
-//      cachedBitmapResult = mockBitmap // result should be the same when loaded from cache
-//      checkLoaded(Regular(500), Some((500,500)), None)(image("preview", 64, 64, 512, 512))
+    scenario("Load big size with small source image - no scaling") {
+      checkLoaded(Regular(500), Some((64,64)))(image(64, 64))
+
+      cachedBitmapResult = mockBitmap // result should be the same when loaded from cache
+      checkLoaded(Regular(500), Some((64,64)))(image(64, 64))
     }
 
-    scenario("Load image when both versions are available") {
-      fail()
-//      checkLoaded(Regular(500), Some((500,500)), Some((512, 512)))(image("preview", 64, 64, 512, 512), image("medium", 512, 512, 512, 512))
+    scenario("Load image from preview when small image is requested") {
+      val preview = image(64, 64)
+      assetSource = { _ => Some(preview) }
+      checkLoaded(Regular(65), Some((64, 64)))(image(512, 512, preview = Some(preview.id)))
     }
 
-    scenario("Only full image available") {
-      checkLoaded(Regular(500), None, Some((512, 512)))(AssetData(metaData = Some(AssetMetaData.Image(Dim2(512, 512), Medium))))
-    }
-
-    scenario("Loading full image, then preview") {
-      fail()
-//      loadDelay = mockDelay(preview = 500.millis)
-//      checkLoaded(Regular(500), None, Some((512, 512)), 1.second)(image("preview", 64, 64, 512, 512), image("medium", 512, 512, 512, 512))
+    scenario("Load full image when requested is bigger than preview") {
+      val preview = image(32, 32)
+      assetSource = { _ => Some(preview) }
+      checkLoaded(Regular(65), Some((512, 512)))(image(512, 512, preview = Some(preview.id)))
     }
   }
 
@@ -152,7 +145,7 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     def gif = GifReader(gifStream).get
 
     scenario("Load gif from local source") {
-      lazy val asset = AssetData(AssetId(), metaData = Some(Image(Dim2(0, 0), Medium)), source = Some(Uri.parse("content://test")), convId = Some(RConvId()))
+      lazy val asset = AssetData(AssetId(), mime = Mime.Image.Gif, metaData = Some(Image(Dim2(0, 0), Medium)), source = Some(URI.parse("content://test")), convId = Some(RConvId()))
       gifResult = { _ => Some(gif) }
       rawDataResult = { _ => Some(LocalData(gifStream, -1))}
       val listener = new SignalListener(asset, Regular(200))
@@ -161,21 +154,6 @@ class BitmapSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
           listener.results.size should be > 10 // animated gif will produce several frames
         }
       }
-    }
-
-    scenario("Load local gif with preview") {
-      fail()
-//      lazy val asset = ImageAssetData(AssetId(), RConvId(), Seq(image("preview", 64, 64, 512, 512), ImageData("full", Mime.Unknown, 512, 512, 512, 512, 0, url = Some("content://test"))))
-//      gifResult = { _ => Some(gif) }
-//      rawDataResult = { _ => Some(LocalData(gifStream, -1))}
-//      loadDelay = { data => if (data.tag == "preview") Duration.Zero else 250.millis }
-//      val listener = new SignalListener(asset, Regular(200))
-//      withDelay {
-//        withClue(listener.results.mkString(", ")) {
-//          listener.preview.map(b => (b.getWidth, b.getHeight)) shouldEqual Some((200, 200)) // results should include preview
-//          listener.results.size should be > 10 // animated gif will produce several frames
-//        }
-//      }
     }
   }
 }

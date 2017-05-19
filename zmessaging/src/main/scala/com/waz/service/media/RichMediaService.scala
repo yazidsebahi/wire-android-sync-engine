@@ -17,7 +17,6 @@
  */
 package com.waz.service.media
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{MediaProvider, Message}
@@ -28,6 +27,7 @@ import com.waz.service.messages.MessagesContentUpdater
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
@@ -99,7 +99,7 @@ class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, s
     case _           => Future.successful(Right(content))
   }
 
-  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[Uri]] = media.provider match {
+  def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[URI]] = media.provider match {
     case MediaProvider.YOUTUBE    => youTube.prepareStreaming(media)
     case MediaProvider.SOUNDCLOUD => soundCloud.prepareStreaming(media)
     case MediaProvider.SPOTIFY    => spotify.prepareStreaming(media)

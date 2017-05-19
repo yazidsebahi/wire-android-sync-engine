@@ -17,43 +17,42 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
 import com.waz.db.{Dao, Dao2}
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.service.SearchKey
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class ConversationData(id: ConvId,
-                            remoteId: RConvId,
-                            name: Option[String],
-                            creator: UserId,
-                            convType: ConversationType,
-                            lastEventTime: Instant = Instant.EPOCH,
-                            status: Option[ConversationStatus] = None,
-                            lastRead: Instant = Instant.EPOCH,
-                            muted: Boolean = false,
-                            muteTime: Instant = Instant.EPOCH,
-                            archived: Boolean = false,
-                            archiveTime: Instant = Instant.EPOCH,
-                            cleared: Instant = Instant.EPOCH,
-                            generatedName: String = "",
-                            searchKey: Option[SearchKey] = None,
-                            unreadCount: Int = 0,
-                            failedCount: Int = 0,
-                            hasVoice: Boolean = false,
-                            unjoinedCall: Boolean = false,
-                            missedCallMessage: Option[MessageId] = None,
+case class ConversationData(id:                   ConvId,
+                            remoteId:             RConvId,
+                            name:                 Option[String],
+                            creator:              UserId,
+                            convType:             ConversationType,
+                            lastEventTime:        Instant = Instant.EPOCH,
+                            status:               Option[ConversationStatus] = None,
+                            lastRead:             Instant = Instant.EPOCH,
+                            muted:                Boolean = false,
+                            muteTime:             Instant = Instant.EPOCH,
+                            archived:             Boolean = false,
+                            archiveTime:          Instant = Instant.EPOCH,
+                            cleared:              Instant = Instant.EPOCH,
+                            generatedName:        String = "",
+                            searchKey:            Option[SearchKey] = None,
+                            unreadCount:          Int = 0,
+                            failedCount:          Int = 0,
+                            hasVoice:             Boolean = false,
+                            unjoinedCall:         Boolean = false,
+                            missedCallMessage:    Option[MessageId] = None,
                             incomingKnockMessage: Option[MessageId] = None,
-                            renameEvent: Instant = Instant.EPOCH,
-                            voiceMuted: Boolean = false,
-                            hidden: Boolean = false,
-                            verified: Verification = Verification.UNKNOWN,
-                            ephemeral: EphemeralExpiration = EphemeralExpiration.NONE) {
+                            renameEvent:          Instant = Instant.EPOCH,
+                            voiceMuted:           Boolean = false,
+                            hidden:               Boolean = false,
+                            verified:             Verification = Verification.UNKNOWN,
+                            ephemeral:            EphemeralExpiration = EphemeralExpiration.NONE) {
 
   def activeMember = status.contains(ConversationStatus.Active)
 
@@ -213,16 +212,16 @@ object ConversationData {
 
     override val idCol = Id
     override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
-    override def apply(implicit cursor: Cursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
+    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
 
     import com.waz.model.ConversationData.ConversationType._
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS Conversation_search_key on Conversations (${SKey.name})")
     }
 
-    def establishedConversations(implicit db: SQLiteDatabase) = iterating(db.rawQuery(
+    def establishedConversations(implicit db: DB) = iterating(db.rawQuery(
       s"""SELECT *
          |  FROM ${table.name}
          | WHERE (${ConvType.name} = ${ConvType(ConversationType.OneToOne)} OR ${ConvType.name} = ${ConvType(ConversationType.Group)})
@@ -230,13 +229,13 @@ object ConversationData {
          |   AND ${Hidden.name} = 0
       """.stripMargin, null))
 
-    def allConversations(implicit db: SQLiteDatabase) =
+    def allConversations(implicit db: DB) =
       db.rawQuery(s"SELECT *, ${ConvType.name} = ${Self.id} as is_self, ${ConvType.name} = ${Incoming.id} as is_incoming, ${Archived.name} = 1 as is_archived FROM ${table.name} WHERE ${Hidden.name} = 0 ORDER BY is_self DESC, ${HasVoice.name} DESC, is_archived ASC, is_incoming DESC, ${LastEventTime.name} DESC", null)
 
     import ConversationMemberData.{ConversationMemberDataDao => CM}
     import UserData.{UserDataDao => U}
 
-    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean)(implicit db: SQLiteDatabase) ={
+    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean)(implicit db: DB) ={
       val select =
         s"""SELECT DISTINCT c.*
             |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
@@ -269,25 +268,25 @@ object ConversationMemberData {
 
     override val idCol = (UserId, ConvId)
     override val table = Table("ConversationMembers", UserId, ConvId)
-    override def apply(implicit cursor: Cursor): ConversationMemberData = ConversationMemberData(UserId, ConvId)
+    override def apply(implicit cursor: DBCursor): ConversationMemberData = ConversationMemberData(UserId, ConvId)
 
-    override def onCreate(db: SQLiteDatabase): Unit = {
+    override def onCreate(db: DB): Unit = {
       super.onCreate(db)
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_conv on ConversationMembers (${ConvId.name})")
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (${UserId.name})")
     }
 
-    def listForConv(convId: ConvId)(implicit db: SQLiteDatabase) = list(find(ConvId, convId))
-    def listForUser(userId: UserId)(implicit db: SQLiteDatabase) = list(find(UserId, userId))
-    def findForConv(convId: ConvId)(implicit db: SQLiteDatabase) = iterating(find(ConvId, convId))
-    def findForUser(userId: UserId)(implicit db: SQLiteDatabase) = iterating(find(UserId, userId))
+    def listForConv(convId: ConvId)(implicit db: DB) = list(find(ConvId, convId))
+    def listForUser(userId: UserId)(implicit db: DB) = list(find(UserId, userId))
+    def findForConv(convId: ConvId)(implicit db: DB) = iterating(find(ConvId, convId))
+    def findForUser(userId: UserId)(implicit db: DB) = iterating(find(UserId, userId))
 
-    def get(convId: ConvId, userId: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, userId.toString), null, null, null))
+    def get(convId: ConvId, userId: UserId)(implicit db: DB) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, userId.toString), null, null, null))
 
-    def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: SQLiteDatabase) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.mkString("'", "','", "'")})", Array(convId.toString), null, null, null))
+    def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: DB) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.mkString("'", "','", "'")})", Array(convId.toString), null, null, null))
 
-    def isActiveMember(convId: ConvId, user: UserId)(implicit db: SQLiteDatabase) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, user.toString), null, null, null)).isDefined
+    def isActiveMember(convId: ConvId, user: UserId)(implicit db: DB) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, user.toString), null, null, null)).isDefined
 
-    def deleteForConv(id: ConvId)(implicit db: SQLiteDatabase) = delete(ConvId, id)
+    def deleteForConv(id: ConvId)(implicit db: DB) = delete(ConvId, id)
   }
 }

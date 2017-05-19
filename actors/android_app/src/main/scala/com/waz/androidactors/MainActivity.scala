@@ -36,7 +36,6 @@ class MainActivity extends Activity with ActivityEventContext {
 
   lazy val etName = findViewById(R.id.etName).asInstanceOf[EditText]
   lazy val spBackend = findViewById(R.id.spBackend).asInstanceOf[Spinner]
-  lazy val cbOtrOnly = findViewById(R.id.cbOtrOnly).asInstanceOf[CheckBox]
   lazy val cbBackground = findViewById(R.id.cbBackground).asInstanceOf[CheckBox]
   lazy val tvStatus = findViewById(R.id.tvStatus).asInstanceOf[TextView]
 
@@ -61,8 +60,6 @@ class MainActivity extends Activity with ActivityEventContext {
 
     service.background.signal.on(Threading.Ui) { cbBackground.setChecked }
 
-    service.otrOnly.signal.on(Threading.Ui) { cbOtrOnly.setChecked }
-
     etName.addTextChangedListener(new TextWatcher {
       override def beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int): Unit = ()
 
@@ -75,10 +72,6 @@ class MainActivity extends Activity with ActivityEventContext {
       override def onNothingSelected(parent: AdapterView[_]): Unit = ()
 
       override def onItemSelected(parent: AdapterView[_], view: View, position: Int, id: Long): Unit = service.backendPref := backends(position).environment
-    })
-
-    cbOtrOnly.setOnCheckedChangeListener(new OnCheckedChangeListener {
-      override def onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean): Unit = service.otrOnly := isChecked
     })
 
     cbBackground.setOnCheckedChangeListener(new OnCheckedChangeListener {

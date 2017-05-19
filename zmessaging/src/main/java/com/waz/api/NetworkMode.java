@@ -23,5 +23,6 @@ public enum NetworkMode {
     _3G,
     _4G,
     WIFI,
-    OFFLINE
+    OFFLINE,
+    UNKNOWN
 }

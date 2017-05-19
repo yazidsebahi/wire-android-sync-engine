@@ -59,6 +59,8 @@ class YouTubeClient(netClient: ZNetClient) {
 object YouTubeClient {
   implicit val logTag = logTagFor[YouTubeClient]
 
+  val domainNames = Set("youtube.com", "youtu.be")
+
   val Base = "/proxy/youtube/v3"
 
   def requestById(resource: String, id: String, idName: String = "id", limit: Option[Int] = None) =

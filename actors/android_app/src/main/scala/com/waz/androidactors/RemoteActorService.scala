@@ -21,17 +21,19 @@ import java.io.File
 
 import akka.actor.ActorDSL._
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
-import akka.actor.{Terminated, ActorDSL, ActorRef, ActorSystem}
+import akka.actor.{ActorDSL, ActorRef, ActorSystem, Terminated}
 import akka.pattern.gracefulStop
 import android.app.{Notification, PendingIntent}
 import android.content.{Context, Intent}
 import android.net.wifi.WifiManager
 import com.typesafe.config.ConfigFactory
 import com.waz.ZLog._
+import com.waz.content.GlobalPreferences
+import com.waz.content.Preferences.PrefKey
 import com.waz.provision.RemoteProcessActor
-import com.waz.service.{BackendConfig, PreferenceService}
+import com.waz.service.BackendConfig
 import com.waz.threading.Threading
-import com.waz.utils.{Serialized, LoggedTry}
+import com.waz.utils.{LoggedTry, Serialized}
 import com.waz.utils.events.{ServiceEventContext, Signal}
 import com.waz.zms.FutureService
 import com.waz.znet.TestClientWrapper
@@ -44,12 +46,11 @@ class RemoteActorService(context: Context) {
   import android.os.Build._
   import com.waz.utils.events.EventContext.Implicits.global
   private implicit val tag: LogTag = logTagFor[RemoteActorService]
-  val preferences = new PreferenceService(context)
+  val prefs = GlobalPreferences(context)
 
-  val otrOnly = preferences.uiPreferenceBooleanSignal("otrOnly", false)
-  val background = preferences.uiPreferenceBooleanSignal("background", false)
-  val name = preferences.uiPreferenceStringSignal("name", s"$MANUFACTURER $MODEL")
-  val backendPref = preferences.uiPreferenceStringSignal("env", BackendConfig.StagingBackend.environment)
+  val background  = prefs.preference(PrefKey[Boolean]("background", false))
+  val name        = prefs.preference(PrefKey[String]("name", s"$MANUFACTURER $MODEL"))
+  val backendPref = prefs.preference(PrefKey[String]("env", BackendConfig.StagingBackend.environment))
 
   val backend = backendPref.signal map BackendConfig.byName
 
@@ -72,7 +73,7 @@ class RemoteActorService(context: Context) {
   } .get
 
   private val currentActor = Signal[ActorRef]()
-  private val actorConfig = Signal(name.signal, backend, otrOnly.signal)
+  private val actorConfig = Signal(name.signal, backend)
 
   ActorDSL.actor(new Act {
     currentActor { context.watch(_) }
@@ -81,24 +82,24 @@ class RemoteActorService(context: Context) {
       case Terminated(ref) =>
         if (currentActor.currentValue.contains(ref))
           actorConfig.currentValue foreach {
-            case (name, backend, otrOnly) => updateActor(name, backend, otrOnly)
+            case (name, backend) => updateActor(name, backend)
           }
     }
   })
 
   actorConfig.throttle(1.second) {
-    case (name, backend, otrOnly) => updateActor(name, backend, otrOnly)
+    case (name, backend) => updateActor(name, backend)
   }
 
-  private def updateActor(name: String, backend: BackendConfig, otrOnly: Boolean) = Serialized.future(this, "updateRemoteActor") {
-    println(s"updateActor($name, $backend, $otrOnly)")
+  private def updateActor(name: String, backend: BackendConfig) = Serialized.future(this, "updateRemoteActor") {
+    println(s"updateActor($name, $backend)")
     currentActor.currentValue.fold(Future successful true) { act => gracefulStop(act, 5.seconds) } map { stopped =>
-      println(s"prev actor stopped: $stopped, creating: ($name, $backend, $otrOnly)")
+      println(s"prev actor stopped: $stopped, creating: ($name, $backend)")
       val dbs = new File(context.getFilesDir.getParentFile, "databases")
       dbs.listFiles() foreach { db =>
         println(s"deleting db: $db, res:" + db.delete())
       }
-      currentActor ! actorSystem.actorOf(RemoteProcessActor.props(context, name, None, backend, otrOnly, TestClientWrapper), name.replaceAll("\\s+", "_"))
+      currentActor ! actorSystem.actorOf(RemoteProcessActor.props(context, name, None, backend, TestClientWrapper), name.replaceAll("\\s+", "_"))
     }
   }
 

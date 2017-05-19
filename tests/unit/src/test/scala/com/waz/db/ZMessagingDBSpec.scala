@@ -21,8 +21,8 @@ import android.content.ContentValues
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
-import android.net.Uri
 import com.waz.Generators
+import com.waz.utils.wrappers.{DB, DBHelper, URI}
 import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
@@ -42,7 +42,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
 
 class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with GeneratorDrivenPropertyChecks with BeforeAndAfter with RobolectricTests with DbLoader {
-  lazy val dbHelper = new ZMessagingDB(Robolectric.application, "")
+  lazy val dbHelper: DBHelper = new ZMessagingDB(Robolectric.application, "")
 
   after {
     dbHelper.close()
@@ -70,7 +70,7 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
     }
 
     scenario("Migrate UserData from 60") {
-      implicit val db = loadDb("/db/zmessaging_60.db")
+      implicit val db: DB = loadDb("/db/zmessaging_60.db")
 
       val numberOfUsersBeforeMigration = countUsers
       dbHelper.onUpgrade(db, 60, ZMessagingDB.DbVersion)
@@ -105,7 +105,7 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
       assets should have size 57
       forAll(assets) { _.isInstanceOf[AssetData] shouldEqual true }
 
-      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), Medium)), source = Some(Uri.parse("url")))
+      val data = AssetData(metaData = Some(AssetMetaData.Image(Dim2(12, 13), Medium)), source = Some(URI.parse("url")))
       val im = AssetDataDao.insertOrReplace(data)
       im shouldEqual data
       AssetDataDao.list should have size 58
@@ -259,5 +259,5 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
     }
   }
 
-  def countUsers(implicit db: SQLiteDatabase) = DatabaseUtils.queryNumEntries(db, "Users")
+  def countUsers(implicit db: DB) = DatabaseUtils.queryNumEntries(db, "Users")
 }

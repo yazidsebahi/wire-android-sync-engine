@@ -17,29 +17,29 @@
  */
 package com.waz.content
 
-import android.database.sqlite.{SQLiteDatabase, SQLiteOpenHelper}
 import com.waz.ZLog._
 import com.waz.db.{inReadTransaction, inTransaction}
 import com.waz.threading._
+import com.waz.utils.wrappers.{DB, DBHelper}
 
 import scala.concurrent.Future
 
 trait Database {
   implicit val dispatcher: SerialDispatchQueue
 
-  val dbHelper: SQLiteOpenHelper
+  val dbHelper: DBHelper
 
   lazy val readExecutionContext: DispatchQueue = new UnlimitedDispatchQueue(Threading.IO, name = "Database_readQueue_" + hashCode().toHexString)
 
-  def apply[A](f: SQLiteDatabase => A)(implicit logTag: LogTag = ""): CancellableFuture[A] = dispatcher {
-    implicit val db = dbHelper.getWritableDatabase
+  def apply[A](f: DB => A)(implicit logTag: LogTag = ""): CancellableFuture[A] = dispatcher {
+    implicit val db:DB = dbHelper.getWritableDatabase
     inTransaction(f(db))
   } ("Database_" + logTag)
 
-  def withTransaction[A](f: SQLiteDatabase => A)(implicit logTag: LogTag = ""): CancellableFuture[A] = apply(f)
+  def withTransaction[A](f: DB => A)(implicit logTag: LogTag = ""): CancellableFuture[A] = apply(f)
 
-  def read[A](f: SQLiteDatabase => A): Future[A] = Future {
-    implicit val db = dbHelper.getWritableDatabase
+  def read[A](f: DB => A): Future[A] = Future {
+    implicit val db:DB = dbHelper.getWritableDatabase
     inReadTransaction(f(db))
   } (readExecutionContext)
 

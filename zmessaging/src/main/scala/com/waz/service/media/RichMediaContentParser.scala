@@ -19,12 +19,13 @@ package com.waz.service.media
 
 import java.net.URLDecoder
 
-import android.net.Uri
 import android.util.Patterns
 import com.waz.ZLog._
 import com.waz.api.Message.Part
 import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
+import com.waz.sync.client.{SoundCloudClient, SpotifyClient, YouTubeClient}
+import com.waz.utils.wrappers.URI
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -37,14 +38,12 @@ class RichMediaContentParser {
 
   def findMatches(content: String, weblinkEnabled: Boolean = false) = {
 
-    val knownDomains = Map(
-      "youtu.be" -> YOUTUBE,
-      "youtube.com" -> YOUTUBE,
-      "soundcloud.com" -> SOUNDCLOUD,
-      "open.spotify.com" -> SPOTIFY
-    )
+    val knownDomains = (YouTubeClient.domainNames.map(_ -> YOUTUBE) ++
+                        SoundCloudClient.domainNames.map(_ -> SOUNDCLOUD) ++
+                        SpotifyClient.domainNames.map(_ -> SPOTIFY)
+                        ).toMap
 
-    def validate(content: String, uri: Uri, tpe: Part.Type): Boolean = tpe match {
+    def validate(content: String, uri: URI, tpe: Part.Type): Boolean = tpe match {
       case YOUTUBE     => youtubeVideoId(uri).isDefined
       case SOUNDCLOUD  => Option(uri.getPath).exists(_.nonEmpty)
       case TWITTER     => uri.toString.matches(TwitterRegex.regex)
@@ -53,11 +52,11 @@ class RichMediaContentParser {
       case _           => false
     }
 
-    def matchDomain(host: String): Part.Type = knownDomains.getOrElse(host, {
+    def matchDomain(host: String): Part.Type = knownDomains.find(entry => host.contains(entry._1)).getOrElse(host, {
       val dot = host.indexOf('.')
       if (dot >= 0) matchDomain(host.substring(dot + 1))
       else WEB_LINK
-    })
+    })._2
 
     def uriAndType(content: String): Option[Part.Type] = {
       val uri = parseUriWithScheme(content)
@@ -113,7 +112,7 @@ object RichMediaContentParser {
   val TwitterRegex = """(?i)(https?://)?(www\.)?twitter\.com/[0-9A-Za-z-_]+/status/\d*/?""".r
 
   def youtubeVideoId(youtubeUrl: String): Option[String] = decode(youtubeUrl)(youtubeVideoId)
-  private def youtubeVideoId(uri: Uri): Option[String] = try {
+  private def youtubeVideoId(uri: URI): Option[String] = try {
     Option(uri.getQueryParameter("v")).orElse {
       Option(uri.getLastPathSegment)
     }.filter(_.length > 10) // currently id is always 11 chars, this may change in future
@@ -121,7 +120,7 @@ object RichMediaContentParser {
     case NonFatal(e) => None
   }
 
-  private def decode[T](url: String)(op: Uri => Option[T]): Option[T] = op(Uri.parse(URLDecoder.decode(url, "UTF-8")))
+  private def decode[T](url: String)(op: URI => Option[T]): Option[T] = op(URI.parse(URLDecoder.decode(url, "UTF-8")))
 
   def textMessageContent(part: String) = MessageContent(if (containsOnlyEmojis(part)) TEXT_EMOJI_ONLY else TEXT, part)
 
@@ -160,9 +159,9 @@ object RichMediaContentParser {
 
   def parseUriWithScheme(content: String, defaultScheme: String = "http") = {
     val decoded = URLDecoder.decode(content, "utf-8")
-    val u = Uri.parse(decoded)
-    if (u.getScheme != null) u.normalizeScheme()
-    else Uri.parse(s"$defaultScheme://$content")
+    val u = URI.parse(decoded)
+    if (u.getScheme != null) u.normalizeScheme
+    else URI.parse(s"$defaultScheme://$content")
   }
 }
 

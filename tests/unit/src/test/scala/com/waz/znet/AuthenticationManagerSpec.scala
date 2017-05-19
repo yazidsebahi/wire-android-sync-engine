@@ -21,7 +21,7 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.waz.RobolectricUtils
-import com.waz.content.Preference
+import com.waz.content.Preferences.Preference
 import com.waz.model.{AccountId, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.testutils.Matchers._
@@ -69,13 +69,11 @@ class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with Befor
 
   def manager(callback: () => Unit = {() => }) = new AuthenticationManager(client, new BasicCredentials(EmailAddress(email), Some(password)) {
     override val userId: AccountId = test.userId
+
     override def onInvalidCredentials(): Unit = callback()
 
-    override val accessToken = new Preference[Option[Token]] {
-      override def default: Option[Token] = None
-      override def :=(value: Option[Token]): Future[Unit] = Future.successful { currentAccessToken = value }
-      override def apply(): Future[Option[Token]] = Future.successful(currentAccessToken)
-    }
+    override val accessToken = Preference[Option[Token]](None, Future.successful(currentAccessToken), token => Future.successful(currentAccessToken = token))
+
   })
 
   def loginReqJson = s"""{"email":"$email","label":"$userId","password":"$password"}"""

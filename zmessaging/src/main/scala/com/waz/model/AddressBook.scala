@@ -17,11 +17,10 @@
  */
 package com.waz.model
 
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.AddressBook.ContactHashes
+import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{Json, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
@@ -51,9 +50,9 @@ object AddressBook {
   val Empty = AddressBook(Nil, Nil)
   case class ContactHashes(id: ContactId, hashes: GenSet[String])
 
-  def load(implicit db: SQLiteDatabase): AddressBook = AddressBook(Seq.empty, ContactHashesDao.list)
+  def load(implicit db: DB): AddressBook = AddressBook(Seq.empty, ContactHashesDao.list)
 
-  def save(ab: AddressBook)(implicit db: SQLiteDatabase): Unit = {
+  def save(ab: AddressBook)(implicit db: DB): Unit = {
     ContactHashesDao.deleteAll
     ContactHashesDao.insertOrReplace(ab.contacts)
   }
@@ -65,7 +64,7 @@ object AddressBook {
     override val idCol = Id
     override val table = Table("ContactHashes", Id, Hashes)
 
-    override def apply(implicit cursor: Cursor): ContactHashes = ContactHashes(Id, Hashes.toSet)
+    override def apply(implicit cursor: DBCursor): ContactHashes = ContactHashes(Id, Hashes.toSet)
   }
 
   import com.waz.utils.JsonDecoder._

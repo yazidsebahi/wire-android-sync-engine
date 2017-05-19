@@ -18,24 +18,24 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
-import com.waz.content.{EditHistoryStorage, ReactionsStorage}
+import com.waz.content.{EditHistoryStorage, GlobalPreferences, ReactionsStorage}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.AssetStatus.UploadCancelled
+import com.waz.model.AssetStatus.{UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.ConversationsContentUpdater
-import com.waz.service.otr.VerificationStateUpdater
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
+import com.waz.service.otr.{OtrService, OtrServiceImpl, VerificationStateUpdater}
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
-import com.waz.utils.crypto.AESUtils
 import com.waz.utils.events.{EventContext, Signal}
 import org.threeten.bp.{Duration, Instant}
 
@@ -44,10 +44,20 @@ import scala.concurrent.Future
 import scala.concurrent.Future.{successful, traverse}
 import scala.util.Success
 
-class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService, users: UserService, convs: ConversationsContentUpdater,
-    reactions: ReactionsStorage, network: NetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts) {
+trait MessagesService {
+  def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]]
+  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]]
+  def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration): Future[Option[MessageData]]
+  def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false): Future[MessageData]
+  def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
+  def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
+}
+
+class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
+                          prefs: GlobalPreferences, users: UserServiceImpl, convs: ConversationsContentUpdaterImpl, reactions: ReactionsStorage,
+                          network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
+                          otr: OtrServiceImpl) extends MessagesService {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[MessagesService]
   private implicit val ec = EventContext.Global
 
   import content._
@@ -85,23 +95,16 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     } yield res
   }
 
+
   private def updateAssets(events: Seq[MessageEvent]) = {
 
-    def decryptData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = {
-      data.flatMap { arr =>
-        otrKey.map { key =>
-          if (sha.forall(_.str == com.waz.utils.sha2(arr))) LoggedTry(AESUtils.decrypt(key, arr)).toOption else None
-        }.getOrElse {
-          warn(s"got otr asset event without otr key: $assetId")
-          Some(arr)
-        }
-      }.filter(_.nonEmpty)
-    }
+    def decryptAssetData(assetData: AssetData, data: Option[Array[Byte]]): Option[Array[Byte]] =
+      otr.decryptAssetData(assetData.id, assetData.otrKey, assetData.sha, data, assetData.encryption)
 
     //ensure we always save the preview to the same id (GenericContent.Asset.unapply always creates new assets and previews))
     def saveAssetAndPreview(asset: AssetData, preview: Option[AssetData]) = {
-      assets.storage.mergeOrCreateAsset(asset).flatMap {
-        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.storage.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
+      assets.mergeOrCreateAsset(asset).flatMap {
+        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
         case _ => Future.successful(Option.empty[AssetData])
       }
     }
@@ -127,17 +130,20 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
           }
         case (Asset(a, p), Some(rId)) =>
           val forPreview = a.otrKey.isEmpty //For assets containing previews, the second GenericMessage contains remote information about the preview, not the asset
-          val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptData(a.id, a.otrKey, a.sha, data))
-          val preview = p.map(_.copy(remoteId = if (forPreview) Some(rId) else None, convId = convId, data = if (forPreview) decryptData(a.id, a.otrKey, a.sha, data) else None))
+          val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptAssetData(a, data))
+          val preview = p.map(_.copy(remoteId = if (forPreview) Some(rId) else None, convId = convId, data = if (forPreview) decryptAssetData(a, data) else None))
           verbose(s"Received asset v2 non-image (forPreview?: $forPreview): $asset with preview: $preview")
           saveAssetAndPreview(asset, preview)
         case (ImageAsset(a@AssetData.IsImageWithTag(Preview)), _) =>
           verbose(s"Received image preview for msg: $id. Dropping")
           Future successful None
         case (ImageAsset(a@AssetData.IsImageWithTag(Medium)), Some(rId)) =>
-          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptData(a.id, a.otrKey, a.sha, data))
+          val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptAssetData(a, data))
           verbose(s"Received asset v2 image: $asset")
-          assets.storage.mergeOrCreateAsset(asset)
+          assets.mergeOrCreateAsset(asset)
+        case (Asset(a, _), _) if a.status == UploadFailed && a.isImage =>
+          verbose(s"Received a message about a failed image upload: $id. Dropping")
+          Future successful None
         case (Asset(a, preview), _ ) =>
           val asset = a.copy(id = AssetId(id.str))
           verbose(s"Received asset without remote data - we will expect another update: $asset")
@@ -169,7 +175,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     if (toRemove.isEmpty) Future.successful(())
     else for {
       _ <- Future.traverse(toRemove)(id => content.messagesStorage.remove(MessageId(id.str)))
-      _ <- assets.storage.remove(toRemove)
+      _ <- assets.removeAssets(toRemove)
     } yield ()
   }
 
@@ -192,6 +198,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData(id, convId, Message.Type.AUDIO_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(AssetData.IsImage(), _) | ImageAsset(AssetData.IsImage()) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
+      case a@Asset(_, _) if a.original == null =>
+        MessageData(id, convId, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Asset(_, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(proto))
       case Location(_, _, _, _) =>
@@ -221,6 +229,8 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         MessageData.Empty
       case Asset(AssetData.IsImage(), _) | ImageAsset(AssetData.IsImage()) =>
         MessageData(id, convId, Message.Type.ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
+      case a@Asset(_, _) if a.original == null =>
+        MessageData(id, convId, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Asset(_, _) =>
         MessageData(id, convId, Message.Type.ANY_ASSET, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
       case Ephemeral(expiry, ect) =>
@@ -457,7 +467,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         if (toRemove.isEmpty) deleteMessage(msg) // FIXME: race condition
         else updateMessage(msg.id)(_.copy(members = toRemove)) // FIXME: race condition
 
-        if (toAdd.isEmpty) successful(()) else updateOrCreate(toAdd)
+        if (toAdd.isEmpty) successful(None) else updateOrCreate(toAdd)
       case _ =>
         updateOrCreate(users)
     }
@@ -528,7 +538,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     }
   }
 
-  def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+  override def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
     convs.convByRemoteId(rConvId).flatMap {
       case Some(conv) => addMissedCallMessage(conv.id, from, time)
       case None =>
@@ -536,10 +546,10 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
         Future.successful(None)
     }
 
-  def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
+  override def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]] =
     addMessage(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, from, time = time))
 
-  def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
+  override def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
     addMessage(MessageData(MessageId(), convId, Message.Type.SUCCESSFUL_CALL, from, time = time, duration = duration))
 
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
@@ -551,7 +561,7 @@ class MessagesService(selfUserId: UserId, val content: MessagesContentUpdater, e
     updateMessage(messageId) { _.copy(state = state) }
 
   def markMessageRead(convId: ConvId, id: MessageId) =
-    if (network.isOfflineMode) CancellableFuture.successful(None)
+    if (!network.isOnlineMode) CancellableFuture.successful(None)
     else
       updateMessage(id) { msg =>
         if (msg.state == Status.FAILED) msg.copy(state = Status.FAILED_READ)

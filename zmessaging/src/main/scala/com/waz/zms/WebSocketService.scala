@@ -19,22 +19,25 @@ package com.waz.zms
 
 import android.app.{AlarmManager, PendingIntent, Service}
 import android.content.{BroadcastReceiver, Context, Intent}
+import android.support.v4.app.NotificationCompat
 import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.NetworkMode
+import com.waz.content.GlobalPreferences.WsForegroundKey
 import com.waz.service.ZMessaging
+import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
-import com.waz.utils._
+import com.waz.utils.events.{ServiceEventContext, Signal}
 
 import scala.concurrent.Future
-import scala.concurrent.duration.Duration
 
 /**
   * Receiver called on boot or when app is updated.
   */
 class WebSocketBroadcastReceiver extends BroadcastReceiver {
   override def onReceive(context: Context, intent: Intent): Unit = {
-    debug(s"onReceive $intent")
+    debug(s"onReceive $intent")("WebSocketBroadcastReceiver")
     WakefulBroadcastReceiver.startWakefulService(context, new Intent(context, classOf[WebSocketService]))
   }
 }
@@ -43,57 +46,87 @@ class WebSocketBroadcastReceiver extends BroadcastReceiver {
 /**
   * Service keeping the process running as long as web socket should be connected.
   */
-class WebSocketService extends FutureService {
-
-  private def context = getApplicationContext
+class WebSocketService extends FutureService with ServiceEventContext {
+  import WebSocketService._
+  private implicit def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
   private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_CANCEL_CURRENT)
+  private lazy val launchIntent = PendingIntent.getActivity(getApplicationContext, 1, getPackageManager.getLaunchIntentForPackage(context.getPackageName), 0)
+
+  val zmessaging = ZMessaging.currentUi.currentZms
+
+  val restartIntervals = for {
+    Some(zms) <- zmessaging
+    true      <- zms.websocket.useWebSocketFallback
+    interval  <- zms.pingInterval.interval
+  } yield Option(interval)
+
+  val notificationsState = for {
+    Some(zms) <- zmessaging
+    true <- zms.websocket.useWebSocketFallback
+    true <- zms.prefs.preference(WsForegroundKey).signal // only when foreground service is enabled
+    offline <- zms.network.networkMode.map(_ == NetworkMode.OFFLINE)
+    connected <- zms.websocket.connected
+    error <- zms.websocket.connectionError
+  } yield Option(
+    if (offline) R.string.zms_websocket_connection_offline
+    else if (connected) R.string.zms_websocket_connected
+    else if (error) R.string.zms_websocket_connection_failed
+    else R.string.zms_websocket_connecting
+  )
+
+  restartIntervals.orElse(Signal const None).on(Threading.Ui) {
+    case Some(interval) =>
+      // schedule service restart every couple minutes to send ping on web socket (needed to keep connection alive)
+      verbose(s"scheduling restarts with interval: $interval")
+      alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + interval.toMillis, interval.toMillis, restartIntent)
+    case None =>
+      verbose("cancel restarts")
+      alarmService.cancel(restartIntent)
+  }
+
+  notificationsState.orElse(Signal const None).on(Threading.Ui) {
+    case None =>
+      verbose("stopForeground")
+      stopForeground(true)
+    case Some(state) =>
+      verbose(s"startForeground $state")
+      startForeground(ForegroundId, new NotificationCompat.Builder(context)
+        .setSmallIcon(R.drawable.ic_menu_logo)
+        .setContentTitle(context.getResources.getString(state))
+        .setContentText(context.getResources.getString(R.string.zms_websocket_connection_info))
+        .setContentIntent(launchIntent)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
+        .build()
+      )
+  }
 
   override def onStartCommand(intent: Intent, flags: Int, startId: Int): Int = wakeLock {
     verbose(s"onStartCommand($intent, $startId)")
 
-    Option(intent) foreach WakefulBroadcastReceiver.completeWakefulIntent
-
     onIntent(intent, startId).onComplete(_ => onComplete(startId))
+
+    Option(intent) foreach WakefulBroadcastReceiver.completeWakefulIntent
 
     Service.START_STICKY
   }
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock async {
-
-    // schedule service restart every couple minutes to send ping on web socket (needed to keep connection alive)
-    def scheduleRestarts(pingInterval: Duration) = {
-      alarmService.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + pingInterval.toMillis, pingInterval.toMillis, restartIntent)
-    }
-
-    val currentZms = Option(ZMessaging.currentAccounts).fold2(Future successful None, _.getCurrentZms)
-
-    currentZms flatMap {
+    zmessaging.head flatMap {
       case None =>
         warn("Current ZMessaging not available, stopping")
-        alarmService.cancel(restartIntent)
         Future successful None
 
       case Some(zms) =>
-        zms.websocket.wsActive.head flatMap {
-          case false =>
-            verbose(s"WebSocket does not need to be active, stopping")
-            alarmService.cancel(restartIntent)
-            Future successful None
-          case true =>
-            zms.pingInterval.interval.head flatMap { interval =>
-              verbose(s"current zms: $zms, scheduling restarts with interval: $interval")
-              scheduleRestarts(interval)
-              zms.websocket.verifyConnection() map { _ => Some(zms) } recover { case _ => Some(zms) }
-            }
-        }
+        // wait as long as web socket fallback is used, this keeps the wakeLock and service running
+        zms.websocket.useWebSocketFallback.filter(_ == false).head
     }
-  } flatMap {
-    case None => Future.successful(())
-    case Some(zms) => zms.websocket.awaitActive()
   }
 }
 
 object WebSocketService {
+  val ForegroundId = 41235
+
   def apply(context: Context) = context.startService(new Intent(context, classOf[WebSocketService]))
 }

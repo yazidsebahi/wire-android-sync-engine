@@ -19,13 +19,13 @@ package com.waz.znet
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.EmailAddress
 import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.RequestContent
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response._
@@ -73,7 +73,7 @@ class ZNetClient(credentials: CredentialsHandler,
    */
   def MaxConcurrentRequests = 4
   def LongRunning = 45.seconds
-  val baseUri = Uri.parse(backend.baseUrl)
+  val baseUri = URI.parse(backend.baseUrl)
   val auth = new AuthenticationManager(loginClient, credentials)
 
   def apply[A](r: Request[A]): CancellableFuture[Response] = {
@@ -92,16 +92,19 @@ class ZNetClient(credentials: CredentialsHandler,
     withErrorHandling(name, r) { case Response(SuccessHttpStatus(), _, _) => () } (ec)
 
   def withErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
-    apply(r) .map (pf .andThen (Right(_)) .orElse(errorHandling(name))) (ec)
+    apply(r).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+
 
   def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
-    apply(r) .flatMap (pf .orElse (errorHandling(name) andThen CancellableFuture.successful)) (ec)
+    apply(r).flatMap(pf.orElse(errorHandling(name) andThen CancellableFuture.successful))(ec)
+
 
   def withFutureErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOr[T] =
-    apply(r).future .map (pf .andThen (Right(_)) .orElse (errorHandling(name))) .recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
+    apply(r).future.map(pf.andThen(Right(_)).orElse(errorHandling(name))).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
+
 
   def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T] =
-    apply(r).future .flatMap (pf .orElse (errorHandling(name) andThen Future.successful)) (ec) .recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
+    apply(r).future.flatMap(pf.orElse(errorHandling(name) andThen Future.successful))(ec).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
 
   def close(): Future[Unit] = Future {
     closed = true
@@ -121,7 +124,9 @@ class ZNetClient(credentials: CredentialsHandler,
         ongoing += handle.id -> handle
 
         val request: Request[_] = handle.request
-        val uri = request.resourcePath.map(path => baseUri.buildUpon().encodedPath(path).build()).orElse(request.absoluteUri).get
+
+        val uri = request.resourcePath.map(path => baseUri.buildUpon.encodedPath(path).build).orElse(request.absoluteUri).get
+
         val future =
           if (request.requiresAuthentication) {
             CancellableFuture.lift(auth.currentToken()) flatMap {
@@ -139,7 +144,7 @@ class ZNetClient(credentials: CredentialsHandler,
             retry(handle, status.status == Status.RateLimiting)
           case Success(response)  => done(handle, response)
           case Failure(exc: CancelException) => done(handle, Response(Cancelled))
-          case Failure(exc)        => done(handle, Response(Response.InternalError(exc.getMessage, Some(exc))))
+          case Failure(exc) => done(handle, Response(Response.InternalError(exc.getMessage, Some(exc))))
         }
       }
     } else {
@@ -224,7 +229,7 @@ object ZNetClient {
   def nextId = handleId.incrementAndGet()
 
   class EmptyAsyncClient(wrapper: ClientWrapper = ClientWrapper) extends AsyncClient(wrapper = wrapper) {
-    override def apply(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
+    override def apply(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
@@ -243,10 +248,10 @@ object ZNetClient {
     case Response(ConnectionError(msg), _, _) =>
       Left(ErrorResponse(ErrorResponse.ConnectionErrorCode, s"request '$name' connection failed: $msg", "connection-error"))
     case Response(ErrorStatus(), ErrorResponse(code, msg, label), _) =>
-      warn(s"Error response to $name query: ${ErrorResponse(code, msg, label)}")
+      warn(s"$name response to $name query: ${ErrorResponse(code, msg, label)}")
       Left(ErrorResponse(code, msg, label))
-    case resp @ Response(ErrorStatus(), _, _) =>
-      warn(s"$name query failed: $resp")
+    case resp @ Response(ErrorStatus(), body, headers) =>
+      warn(s"Error $name query failed: $resp, body: $body, headers: $headers")
       Left(ErrorResponse(resp.status.status, resp.toString, "internal-error"))
     case resp @ Response(_, _, _) =>
       error(s"Unexpected response to $name query: $resp")

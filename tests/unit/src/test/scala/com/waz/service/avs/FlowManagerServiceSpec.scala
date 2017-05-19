@@ -21,9 +21,10 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.{AvsLogLevel, NetworkMode}
 import com.waz.call.FlowManager
+import com.waz.content.GlobalPreferences._
 import com.waz.model.UserId
-import com.waz.service.call.FlowManagerService
-import com.waz.service.call.FlowManagerService.AvsLogData
+import com.waz.service.call.DefaultFlowManagerService
+import com.waz.service.call.DefaultFlowManagerService.AvsLogData
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.{EventContext, Signal}
@@ -41,13 +42,13 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
   @volatile var notified = false
 
   lazy val zms = new MockZMessaging() {
-    override lazy val flowmanager: FlowManagerService = new FlowManagerService(context, zNetClient, websocket, prefs, network) {
+    override lazy val flowmanager: DefaultFlowManagerService = new DefaultFlowManagerService(context, zNetClient, websocket, prefs, network) {
       override lazy val flowManager = Some(new FlowManager(context, requestHandler) {
         override def networkChanged(): Unit = notified = true
       })
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
       override val connected = wsConnected
     }
   }
@@ -76,9 +77,9 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
 
     scenario("Enable/disable metrics") {
       withDelay { logData.value.metricsEnabled shouldEqual false }
-      zms.prefs.analyticsEnabledPref := true
+      zms.prefs.preference(AnalyticsEnabled) := true
       withDelay { logData.value.metricsEnabled shouldEqual true }
-      zms.prefs.analyticsEnabledPref := false
+      zms.prefs.preference(AnalyticsEnabled) := false
       withDelay { logData.value.metricsEnabled shouldEqual false }
     }
 

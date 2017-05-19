@@ -21,7 +21,6 @@ import java.io.InputStream
 
 import akka.pattern.ask
 import android.content.Context
-import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api._
 import com.waz.content.WireContentProvider.CacheUri
@@ -30,6 +29,7 @@ import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendAsset, Suc
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, returning}
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
@@ -231,8 +231,8 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   def contentCacheKey(asset: Asset) = {
     val p = Promise[CacheKey]
-    asset.getContentUri(new Asset.LoadCallback[Uri]() {
-      override def onLoaded(uri: Uri): Unit = CacheUri.unapply(context)(uri) match {
+    asset.getContentUri(new Asset.LoadCallback[URI]() {
+      override def onLoaded(uri: URI): Unit = CacheUri.unapply(context)(uri) match {
         case Some(key) => p.success(key)
         case None => p.failure(new Exception(s"Returned uri is not CacheUri: $uri"))
       }

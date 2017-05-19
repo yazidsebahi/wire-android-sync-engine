@@ -17,7 +17,6 @@
  */
 package com.waz.service.call
 
-import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.CauseForCallStateEvent
 import com.waz.api.impl.ErrorResponse
@@ -25,24 +24,25 @@ import com.waz.model.Event.CallProperties
 import com.waz.model.VoiceChannelData.ConnectionState
 import com.waz.model._
 import com.waz.service._
-import com.waz.service.call.FlowManagerService.EstablishedFlows
-import com.waz.service.conversation.ConversationsContentUpdater
-import com.waz.service.push.PushService
+import com.waz.service.call.DefaultFlowManagerService.EstablishedFlows
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
+import com.waz.service.push.PushServiceImpl
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.VoiceChannelClient
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, SourceSignal}
 import com.waz.utils.returning
+import com.waz.utils.wrappers.Context
 import org.threeten.bp.{Instant, Duration => Duration310}
 
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushService,
+class VoiceChannelService(val context: Context, val content: VoiceChannelContent, push: PushServiceImpl,
                           val lifecycle: ZmsLifecycle, val sync: SyncServiceHandle,
-                          val convs: ConversationsContentUpdater, users: UserService,
-                          private[call] val flows: FlowManagerService, val network: NetworkModeService,
+                          val convs: ConversationsContentUpdaterImpl, users: UserServiceImpl,
+                          private[call] val flows: DefaultFlowManagerService, val network: DefaultNetworkModeService,
                           errors: ErrorsService, client: VoiceChannelClient)
 
   extends VoiceChannelUiService { self =>

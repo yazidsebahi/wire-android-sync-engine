@@ -116,8 +116,13 @@ object ConversationsClient {
   object ConversationResponse {
     import com.waz.utils.JsonDecoder._
 
-    def memberDecoder(convId: ConvId) = new JsonDecoder[ConversationMemberData] {
-      override def apply(implicit js: JSONObject) = ConversationMemberData('id, convId)
+    def memberDecoder(convId: ConvId) = new JsonDecoder[Option[ConversationMemberData]] {
+      override def apply(implicit js: JSONObject) = {
+        if (decodeOptInt('status).forall(s => ConversationStatus(s) == ConversationStatus.Active))
+          Some(ConversationMemberData('id, convId))
+        else
+          None
+      }
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
@@ -147,7 +152,7 @@ object ConversationsClient {
 
         val conversation = conversationData(js, self)
 
-        ConversationResponse(conversation, array(members.getJSONArray("others"))(memberDecoder(conversation.id)))
+        ConversationResponse(conversation, array(members.getJSONArray("others"))(memberDecoder(conversation.id)).flatten)
       }
     }
 

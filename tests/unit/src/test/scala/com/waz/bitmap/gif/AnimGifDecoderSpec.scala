@@ -18,7 +18,6 @@
 package com.waz.bitmap.gif
 
 import com.waz.utils.IoUtils
-import org.robolectric.Robolectric
 import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.duration.Duration
@@ -28,7 +27,7 @@ class AnimGifDecoderSpec extends FeatureSpec with Matchers with RobolectricTests
   def load(resName: String) = GifReader(IoUtils.toByteArray(getClass.getResourceAsStream(resName)))
 
   scenario("Load first frame") {
-    val decoder = new AnimGifDecoder(Robolectric.application, load("/gifs/regular1.gif").get)
+    val decoder = new AnimGifDecoder(load("/gifs/regular1.gif").get)
 
     decoder.getFrameDelay shouldEqual Duration.Zero
     decoder.advanceNextFrame()
@@ -37,7 +36,7 @@ class AnimGifDecoderSpec extends FeatureSpec with Matchers with RobolectricTests
   }
 
   scenario("Decode artifacts1") {
-    val decoder = new AnimGifDecoder(Robolectric.application, load("/gifs/artifacts1.gif").get)
+    val decoder = new AnimGifDecoder(load("/gifs/artifacts1.gif").get)
 
     decoder.getFrameDelay shouldEqual Duration.Zero
     for (_ <- 1 to decoder.framesCount) {

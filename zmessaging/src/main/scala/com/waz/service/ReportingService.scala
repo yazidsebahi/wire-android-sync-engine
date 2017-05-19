@@ -21,16 +21,15 @@ import java.io._
 import java.util.concurrent.CountDownLatch
 
 import android.content.Context
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.cache.{CacheService, Expiration}
-import com.waz.content.AccountsStorage
+import com.waz.content.GlobalPreferences.PushToken
+import com.waz.content.{AccountsStorageImpl, GlobalPreferences}
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.model.AccountId
-import com.waz.service.push.GcmGlobalService
 import com.waz.model.{AccountId, Mime}
 import com.waz.threading.{SerialDispatchQueue, Threading}
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, RichFuture}
 import org.threeten.bp.Instant
 
@@ -71,18 +70,18 @@ class ZmsReportingService(user: AccountId, global: ReportingService) extends Rep
   global.addStateReporter(generateStateReport)(s"ZMessaging[$user]")
 }
 
-class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountsStorage, prefs: PreferenceService) extends ReportingService {
+class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountsStorageImpl, prefs: GlobalPreferences) extends ReportingService {
   import ReportingService._
   import Threading.Implicits.Background
   implicit val tag: LogTag = logTagFor[GlobalReportingService]
 
-  def generateReport(): Future[Uri] =
+  def generateReport(): Future[URI] =
     cache.createForFile(mime = Mime("text/txt"), name = Some("wire_debug_report.txt"), cacheLocation = Some(cache.intCacheDir))(Expiration.in(12.hours)) flatMap { entry =>
       @SuppressWarnings(Array("deprecation"))
       lazy val writer = new PrintWriter(new OutputStreamWriter(entry.outputStream))
 
       val rs = if (metadata.internalBuild)
-        VersionReporter +: GcmRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter
+        VersionReporter +: PushRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter
       else Seq(VersionReporter, LogCatReporter)
 
       RichFuture.processSequential(rs) { reporter =>
@@ -111,8 +110,8 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     }
   })
 
-  val GcmRegistrationReporter = Reporter("Gcm", { writer =>
-    prefs.withPreferences(GcmGlobalService.GcmRegistration.apply) map { writer.println }
+  val PushRegistrationReporter = Reporter("Push", { writer =>
+    prefs.preference(PushToken).apply().map(writer.println )
   })
 
   val LogCatReporter = Reporter("LogCat", { writer =>

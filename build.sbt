@@ -2,13 +2,13 @@ import java.lang.Runtime._
 
 import android.Keys._
 import com.android.tools.lint.checks.ApiDetector
-import sbt.Keys._
+import sbt.Keys.{libraryDependencies, _}
 import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "94"
-val MinorVersion = "2" // hotfix release
+val MajorVersion = "99"
+val MinorVersion = "0" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -110,8 +110,8 @@ lazy val zmessaging = project
       "com.koushikdutta.async" % "androidasync" % "2.1.8",
       "com.googlecode.libphonenumber" % "libphonenumber" % "7.1.1", // 7.2.x breaks protobuf
       "com.softwaremill.macwire" %% "macros" % "2.2.2" % Provided,
-      "com.google.android.gms" % "play-services-base" % "7.8.0" % Provided exclude("com.android.support", "support-v4"),
-      "com.google.android.gms" % "play-services-gcm" % "7.8.0" % Provided,
+      "com.google.android.gms" % "play-services-base" % "9.0.0" % Provided exclude("com.android.support", "support-v4"),
+      "com.google.firebase" % "firebase-messaging" % "9.0.0" % Provided,
       Deps.avs % Provided,
       Deps.cryptobox,
       Deps.genericMessage,
@@ -184,8 +184,12 @@ lazy val testutils = project.in(file("tests") / "utils")
     crossPaths := false,
     exportJars := false,
     libraryDependencies ++= Seq(
+      //Replacements for Android Dependencies
+      "org.apache.httpcomponents" % "httpclient" % "4.5.3",
+      Deps.scalaCheck,
       "org.scalatest" %% "scalatest" % "2.2.6",
       "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",
+      "org.scalamock" %% "scalamock-core" % "3.2.2",
       "com.wire" %% "robotest" % "0.7" exclude("org.scalatest", "scalatest"),
       "com.drewnoakes" % "metadata-extractor" % "2.8.1",
       "org.robolectric" % "android-all" % RobolectricVersion,

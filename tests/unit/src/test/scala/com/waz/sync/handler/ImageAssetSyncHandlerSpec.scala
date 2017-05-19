@@ -31,7 +31,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.sync.SyncResult
-import com.waz.sync.client.AssetClient
+import com.waz.sync.client.{AssetClient, AssetClientImpl}
 import com.waz.testutils.MockZMessaging
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.IoUtils
@@ -60,7 +60,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     convsStorage.insert(conv)
     usersStorage.insert(selfUser)
 
-    override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {
+    override lazy val assetClient: AssetClient = new AssetClientImpl(zNetClient) {
       override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId) = {
         postImageRequest = Some((asset, convId, data))
         CancellableFuture.successful(postImageResponse(asset, convId))
@@ -95,7 +95,7 @@ class ImageAssetSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
 
   scenario("post full image data") {
     val asset = generateImageAsset()
-    Await.ready(service.assets.storage.mergeOrCreateAsset(asset), 1.second)
+    Await.ready(service.assets.mergeOrCreateAsset(asset), 1.second)
     val file = Await.result(cache.getEntry(asset.cacheKey), 10.seconds).value.cacheFile
 
     file should exist

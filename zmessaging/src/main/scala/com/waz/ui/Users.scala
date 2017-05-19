@@ -64,7 +64,11 @@ class Users(implicit ui: UiModule) {
 
   def setSelfEmail(email: EmailAddress) = ui.getAccount flatMap (_.updateEmail(email))
 
+  def clearSelfEmail() = ui.getAccount flatMap (_.clearEmail())
+
   def setSelfPhone(phone: PhoneNumber)= ui.getAccount flatMap (_.updatePhone(phone))
+
+  def clearSelfPhone() = ui.getAccount flatMap (_.clearPhone())
 
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
     ui.getAccount flatMap { _.updatePassword(newPassword, currentPassword) }

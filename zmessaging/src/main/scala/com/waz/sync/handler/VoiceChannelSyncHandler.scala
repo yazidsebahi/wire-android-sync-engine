@@ -18,7 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
-import com.waz.content.ConversationStorage
+import com.waz.content.ConversationStorageImpl
 import com.waz.model.ConvId
 import com.waz.service.call.VoiceChannelService
 import com.waz.sync.SyncResult
@@ -27,7 +27,7 @@ import com.waz.threading.Threading
 
 import scala.concurrent.Future
 
-class VoiceChannelSyncHandler(client: VoiceChannelClient, callsService: VoiceChannelService, conversations: ConversationStorage) {
+class VoiceChannelSyncHandler(client: VoiceChannelClient, callsService: VoiceChannelService, conversations: ConversationStorageImpl) {
 
   import Threading.Implicits.Background
   private implicit val tag: LogTag = logTagFor[VoiceChannelSyncHandler]

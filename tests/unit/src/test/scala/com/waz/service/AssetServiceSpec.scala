@@ -27,7 +27,7 @@ import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService
-import com.waz.sync.client.AssetClient
+import com.waz.sync.client.{AssetClient, AssetClientImpl}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{MockZMessaging, RoboPermissionProvider}
 import com.waz.threading.CancellableFuture
@@ -51,7 +51,7 @@ class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   val asset = AssetData(convId = Some(RConvId()), sizeInBytes = mediumFile.length(), metaData = Some(AssetMetaData.Image(Dim2(240, 246), Medium)), remoteId = Some(RAssetId()))
 
   lazy val zms = new MockZMessaging() { self =>
-    override lazy val assetClient: AssetClient = new AssetClient(zNetClient) {
+    override lazy val assetClient: AssetClient = new AssetClientImpl(zNetClient) {
       override def loadAsset(req: Request[Unit]) = CancellableFuture.successful(loadImageResult)
     }
     permissions.setProvider(new RoboPermissionProvider)

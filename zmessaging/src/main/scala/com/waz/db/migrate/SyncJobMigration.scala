@@ -17,13 +17,13 @@
  */
 package com.waz.db.migrate
 
-import android.database.sqlite.SQLiteDatabase
 import com.waz.db._
 import com.waz.model.sync.SyncJob.SyncJobDao
+import com.waz.utils.wrappers.DB
 import org.json.JSONObject
 
 object SyncJobMigration {
-  lazy val v75: SQLiteDatabase => Unit = { implicit db =>
+  lazy val v75: DB => Unit = { implicit db =>
     val cmdsToDrop = Set("sync-search", "post-exclude-pymk")
 
     inTransaction {

@@ -22,11 +22,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{Date, Locale}
 
-import android.net.Uri
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
-import com.waz.model.GenericContent.Text
+import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserData.ConnectionStatus.{Accepted, PendingFromOther}
@@ -41,6 +40,7 @@ import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
 import com.waz.utils.sha2
+import com.waz.utils.wrappers.URI
 import com.waz.znet.AuthenticationManager.Token
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen._
@@ -68,10 +68,10 @@ object Generators {
 
   lazy val alphaNumStr = listOf(alphaNumChar).map(_.mkString)
 
-  implicit lazy val arbUri: Arbitrary[Uri] = Arbitrary(for {
+  implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
     scheme <- oneOf("file", "content", "http")
     path <- alphaNumStr
-  } yield Uri.parse(s"$scheme://$path"))
+  } yield URI.parse(s"$scheme://$path"))
 
   implicit lazy val arbConversationData: Arbitrary[ConversationData] = Arbitrary(for {
     id <- arbitrary[ConvId]
@@ -127,6 +127,7 @@ object Generators {
   implicit lazy val arbVoiceParticipantData: Arbitrary[VoiceParticipantData] = Arbitrary(resultOf(VoiceParticipantData))
 
   implicit lazy val arbOpenGraphData: Arbitrary[OpenGraphData] = Arbitrary(resultOf(OpenGraphData))
+
   implicit lazy val arbMessageContent: Arbitrary[MessageContent] = Arbitrary(resultOf(MessageContent))
   implicit lazy val arbGenericMessage: Arbitrary[GenericMessage] = Arbitrary(for {
     id <- arbitrary[Uid]
@@ -144,14 +145,15 @@ object Generators {
     token         <- optGen(arbitrary[AssetToken])
     otrKey        <- optGen(arbitrary[AESKey])
     sha           <- optGen(arbitrary[Sha256])
+    encryption    <- optGen(oneOf(EncryptionAlgorithm.AES_GCM, EncryptionAlgorithm.AES_CBC))
     name          <- optGen(alphaNumStr)
     previewId     <- optGen(arbitrary[AssetId])
     metaData      <- optGen(arbitrary[AssetMetaData])
-    source        <- optGen(arbitrary[Uri])
+    source        <- optGen(arbitrary[URI])
     proxyPath     <- optGen(arbitrary[String])
     convId        <- optGen(arbitrary[RConvId])
     data <- optGen(arbitrary[Array[Byte]])
-  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, name, previewId, metaData, source, proxyPath, convId, data))
+  } yield AssetData(id, mime, sizeInBytes, status, remoteId, token, otrKey, sha, encryption, name, previewId, metaData, source, proxyPath, convId, data))
 
 
   implicit lazy val arbAssetStatus: Arbitrary[AssetStatus] = Arbitrary(frequency((2, oneOf[AssetStatus](AssetStatus.UploadNotStarted,
@@ -188,7 +190,7 @@ object Generators {
       arbitrary[PostSelfPicture],
       arbitrary[PostConvJoin],
       arbitrary[PostConvLeave],
-      arbitrary[DeleteGcmToken],
+      arbitrary[DeletePushToken],
       arbitrary[PostAddressBook],
       arbitrary[PostInvitation],
       arbitrary[SyncPreKeys]))
@@ -209,14 +211,14 @@ object Generators {
       arbitrary[PostLiking],
       arbitrary[PostAssetStatus]))
 
-    lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncConnections, SyncConnectedUsers, ResetGcmToken))
+    lazy val arbSimpleSyncRequest: Arbitrary[SyncRequest] = Arbitrary(oneOf(SyncSelf, DeleteAccount, SyncConversations, SyncConnections, SyncConnectedUsers))
 
     implicit lazy val arbUsersSyncRequest: Arbitrary[SyncUser] = Arbitrary(listOf(arbitrary[UserId]) map { u => SyncUser(u.toSet) })
     implicit lazy val arbConvsSyncRequest: Arbitrary[SyncConversation] = Arbitrary(listOf(arbitrary[ConvId]) map { c => SyncConversation(c.toSet) })
     implicit lazy val arbSearchSyncRequest: Arbitrary[SyncSearchQuery] = Arbitrary(resultOf(SyncSearchQuery))
     implicit lazy val arbSelfPictureSyncRequest: Arbitrary[PostSelfPicture] = Arbitrary(resultOf(PostSelfPicture))
     implicit lazy val arbRichMediaSyncRequest: Arbitrary[SyncRichMedia] = Arbitrary(resultOf(SyncRichMedia))
-    implicit lazy val arbGcmSyncRequest: Arbitrary[DeleteGcmToken] = Arbitrary(resultOf(DeleteGcmToken))
+    implicit lazy val arbGcmSyncRequest: Arbitrary[DeletePushToken] = Arbitrary(resultOf(DeletePushToken))
     implicit lazy val arbCallStateSyncRequest: Arbitrary[SyncCallState] = Arbitrary(resultOf(SyncCallState))
     implicit lazy val arbPostConvSyncRequest: Arbitrary[PostConv] = Arbitrary(resultOf(PostConv))
     implicit lazy val arbPostLastReadRequest: Arbitrary[PostLastRead] = Arbitrary(resultOf(PostLastRead))
@@ -247,7 +249,7 @@ object Generators {
   implicit lazy val arbRAssetDataId: Arbitrary[RAssetId] = Arbitrary(sideEffect(RAssetId()))
   implicit lazy val arbAssetId: Arbitrary[AssetId]       = Arbitrary(sideEffect(AssetId()))
   implicit lazy val arbSyncId: Arbitrary[SyncId]         = Arbitrary(sideEffect(SyncId()))
-  implicit lazy val arbGcmId: Arbitrary[GcmId]           = Arbitrary(sideEffect(GcmId()))
+  implicit lazy val arbGcmId: Arbitrary[PushToken]           = Arbitrary(sideEffect(PushToken()))
   implicit lazy val arbMessageId: Arbitrary[MessageId]   = Arbitrary(sideEffect(MessageId()))
   implicit lazy val arbTrackingId: Arbitrary[TrackingId] = Arbitrary(sideEffect(TrackingId()))
   implicit lazy val arbContactId: Arbitrary[ContactId]   = Arbitrary(sideEffect(ContactId()))

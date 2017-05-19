@@ -21,7 +21,6 @@ import java.net.{ConnectException, UnknownHostException}
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
-import android.net.Uri
 import com.koushikdutta.async._
 import com.koushikdutta.async.callback.CompletedCallback.NullCompletedCallback
 import com.koushikdutta.async.callback.DataCallback.NullDataCallback
@@ -35,6 +34,7 @@ import com.waz.api.impl.ProgressIndicator
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.returning
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.{MultipartRequestContent, _}
 import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, Headers, HttpStatus, ResponseBodyDecoder}
@@ -52,7 +52,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
   val client = wrapper(new AsyncHttpClient(new AsyncServer))
 
-  def apply(uri: Uri, method: String = Request.GetMethod, body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
+  def apply(uri: URI, method: String = Request.GetMethod, body: RequestContent = EmptyRequestContent, headers: Map[String, String] = EmptyHeaders, followRedirect: Boolean = true, timeout: FiniteDuration = DefaultTimeout, decoder: Option[ResponseBodyDecoder] = None, downloadProgressCallback: Option[ProgressCallback] = None): CancellableFuture[Response] = {
     debug(s"Starting request[$method]($uri) with body: '${if (body.toString.contains("password")) "<body>" else body}', headers: '$headers'")
 
     val requestTimeout = if (method != Request.PostMethod) timeout else body match {
@@ -68,7 +68,9 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       @volatile var timeoutForPhase = requestTimeout
       val interval = 5.seconds min timeout
 
-      val httpFuture = client.execute(buildHttpRequest(uri, method, body, headers, followRedirect, timeoutForPhase), new HttpConnectCallback {
+      val request = buildHttpRequest(uri, method, body, headers, followRedirect, timeoutForPhase)
+
+      val callback = new HttpConnectCallback {
         override def onConnectCompleted(ex: Exception, response: AsyncHttpResponse): Unit = {
           debug(s"Connect completed for uri: '$uri', ex: '$ex', cancelled: $cancelled")
           timeoutForPhase = timeout
@@ -88,7 +90,9 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
             }
           }
         }
-      })
+      }
+
+      val httpFuture = client.execute(request, callback)
 
       returning(new CancellableFuture(p) {
         override def cancel()(implicit tag: LogTag): Boolean = {
@@ -105,7 +109,6 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
           if (timeSinceLastNetworkActivity > t.toMillis) CancellableFuture.successful {
             debug(s"cancelling due to inactivity: $timeSinceLastNetworkActivity")
             cancellable.fail(new TimeoutException("[AsyncClient] timedOut") with NoReporting)
-            cancellable.cancel()("[AsyncClient] timedOut cancel")
           } else CancellableFuture.delay(interval min (t - timeSinceLastNetworkActivity.millis)) flatMap { _ => cancelOnInactivity }
         }
 
@@ -117,8 +120,8 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
   def close(): Unit = client foreach { _.getServer.stop() }
 
-  private def buildHttpRequest(uri: Uri, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration): AsyncHttpRequest = {
-    val r = new AsyncHttpRequest(uri.normalizeScheme(), method)
+  private def buildHttpRequest(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration): AsyncHttpRequest = {
+    val r = new AsyncHttpRequest(URI.unwrap(uri.normalizeScheme), method)
     r.setTimeout(timeout.toMillis.toInt)
     r.setFollowRedirect(followRedirect)
     r.getHeaders.set(UserAgentHeader, userAgent)
@@ -127,7 +130,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
   }
 
   //XXX: has to be executed on Http thread (inside onConnectCompleted), since data callbacks have to be set before this callback completes,
-  private def processResponse(uri: Uri, response: AsyncHttpResponse, decoder: ResponseBodyDecoder = bodyDecoder, progressCallback: Option[ProgressCallback], networkActivityCallback: () => Unit): CancellableFuture[Response] = {
+  private def processResponse(uri: URI, response: AsyncHttpResponse, decoder: ResponseBodyDecoder = bodyDecoder, progressCallback: Option[ProgressCallback], networkActivityCallback: () => Unit): CancellableFuture[Response] = {
     val httpStatus = HttpStatus(response.code(), response.message())
     val contentLength = HttpUtil.contentLength(response.headers())
     val contentType = Option(response.headers().get(ContentTypeHeader)).getOrElse("")
@@ -139,7 +142,6 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
       progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(0, 0, api.ProgressIndicator.State.COMPLETED))) }
       CancellableFuture.successful(Response(httpStatus, headers = new Headers(response.headers())))
     } else {
-      debug(s"waiting for content from $uri")
 
       val p = Promise[Response]()
       val consumer = decoder(contentType, contentLength)
@@ -156,7 +158,7 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
             case Failure(t) =>
               progressCallback foreach { cb => Future(cb(ProgressIndicator.ProgressData(0, contentLength, api.ProgressIndicator.State.FAILED))) }
-              Success(Response(Response.InternalError(s"Response body consumer failed for request: $uri", Some(t), Some(httpStatus))))
+              Success(Response(Response.InternalError(s"Response body consumer failed for request: '$uri'", Some(t), Some(httpStatus))))
           }
         )
       }
@@ -230,4 +232,5 @@ object AsyncClient {
     case e: CancelException => Response(Response.Cancelled)
     case NonFatal(e) => Response(Response.InternalError(e.getMessage, Some(e)))
   }
+
 }
