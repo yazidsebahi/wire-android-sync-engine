@@ -25,7 +25,6 @@ import com.waz.api.IConversation
 import com.waz.api.VideoSendState._
 import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
@@ -49,7 +48,6 @@ class CallingService(context:             Context,
                      selfUserId:          UserId,
                      avs:                 AvsV3,
                      convs:               ConversationsContentUpdater,
-                     membersStorage:      MembersStorage,
                      otrSyncHandler:      OtrSyncHandler,
                      flowManagerService:  FlowManagerService,
                      messagesService:     MessagesService,
@@ -144,7 +142,9 @@ class CallingService(context:             Context,
       case Some(c) =>
         setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
         setCallMuted(c.muted) //Need to set muted only after call is established
-        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now)))
+        //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
+        val others = c.others + userId - selfUserId
+        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now), others = others))
       case None => warn("Received onEstablishedCall callback without a current active call"); None
     }
   }
@@ -225,21 +225,19 @@ class CallingService(context:             Context,
         currentCall ! Some(active(convId).copy(state = SELF_JOINING))
       case _ =>
         verbose("No active call, starting new call")
-        membersStorage.getByConv(conv.id).map { members =>
-          avs.startCall(conv.remoteId, isVideo, isGroup).map {
-            case 0 =>
-              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              val info = CallInfo(
-                conv.id,
-                selfUserId,
-                SELF_CALLING,
-                members.map(_.userId).filter(_ != selfUserId).toSet,
-                isVideoCall = isVideo,
-                videoSendState = if (isVideo) PREVIEW else DONT_SEND)
-              currentCall ! Some(info)
-              availableCalls.mutate(calls => calls + (conv.id -> info))
-            case err => warn(s"Unable to start call, reason: errno: $err")
-          }
+        avs.startCall(conv.remoteId, isVideo, isGroup).map {
+          case 0 =>
+            //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+            val info = CallInfo(
+              conv.id,
+              selfUserId,
+              SELF_CALLING,
+              if (conv.convType == Group) Set(selfUserId) else Set(UserId(conv.id.str)),
+              isVideoCall = isVideo,
+              videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+            currentCall ! Some(info)
+            availableCalls.mutate(calls => calls + (conv.id -> info))
+          case err => warn(s"Unable to start call, reason: errno: $err")
         }
     }
   }

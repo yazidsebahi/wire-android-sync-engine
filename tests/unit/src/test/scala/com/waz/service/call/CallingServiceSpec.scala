@@ -19,7 +19,6 @@ package com.waz.service.call
 
 import com.waz.api.VoiceChannelState.{OTHER_CALLING, SELF_CALLING, SELF_CONNECTED, SELF_JOINING}
 import com.waz.api.{NetworkMode, VoiceChannelState}
-import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{UserId, _}
 import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
@@ -45,7 +44,6 @@ class CallingServiceSpec extends AndroidFreeSpec {
   val mm             = mock[MediaManagerService]
   val network        = mock[NetworkModeService]
   val convs          = mock[ConversationsContentUpdater]
-  val members        = mock[MembersStorage]
   val callLogService = mock[CallLogService]
   val messages       = mock[MessagesService]
 
@@ -104,7 +102,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
     scenario("Outgoing 1:1 call goes through SELF_CALLING to SELF_JOINING to SELF_CONNECTED") {
       val otherUser = UserId("otherUser")
-      val _1t1Conv = ConversationData(ConvId(), RConvId(), Some("1:1 Conv"), selfUserId, ConversationType.OneToOne)
+      val _1t1Conv = ConversationData(ConvId(otherUser.str), RConvId(), Some("1:1 Conv"), selfUserId, ConversationType.OneToOne)
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
@@ -115,10 +113,6 @@ class CallingServiceSpec extends AndroidFreeSpec {
       val checkpoint3 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state == SELF_CONNECTED && cur.caller == selfUserId && cur.others == Set(otherUser)))
 
       (avsMock.startCall _).expects(*, *, *).once().returning(Future.successful(0))
-      (members.getByConv _).expects(*).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(selfUserId, _1t1Conv.id),
-        ConversationMemberData(otherUser, _1t1Conv.id)
-      )))
 
       service.startCall(_1t1Conv.id)
       result(checkpoint1.head)
@@ -140,16 +134,12 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       val service = initCallingService()
 
-      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CALLING && cur.caller == selfUserId && cur.others == Set(groupMember1, groupMember2)))
-      val checkpoint2 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_JOINING && cur.caller == selfUserId && cur.others == Set(groupMember1, groupMember2)))
-      val checkpoint3 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CONNECTED && cur.caller == selfUserId && cur.others == Set(groupMember1, groupMember2)))
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CALLING && cur.caller == selfUserId && cur.others == Set(selfUserId)))
+      val checkpoint2 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_JOINING && cur.caller == selfUserId && cur.others == Set(selfUserId)))
+      val checkpoint3 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CONNECTED && cur.caller == selfUserId && cur.others == Set(groupMember1)))
+      val checkpoint4 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CONNECTED && cur.caller == selfUserId && cur.others == Set(groupMember1, groupMember2)))
 
       (avsMock.startCall _).expects(*, *, *).once().returning(Future.successful(0))
-      (members.getByConv _).expects(*).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(selfUserId, groupConv.id),
-        ConversationMemberData(groupMember1, groupConv.id),
-        ConversationMemberData(groupMember2, groupConv.id)
-      )))
 
       service.startCall(groupConv.id)
       result(checkpoint1.head)
@@ -159,9 +149,11 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       //TODO which user from a group conversation gets passed down here?
       service.onEstablishedCall(groupConv.remoteId, groupMember1)
-      service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
-
+      println(result(service.currentCall.map(_.get.others).head))
       result(checkpoint3.head)
+
+      service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
+      result(checkpoint4.head)
     }
   }
 
@@ -237,7 +229,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       result(checkpoint3.head)
     }
 
-    scenario("Current: Cancel outgoing group call should remove it from background and active calls") {
+    scenario("Cancel outgoing group call should remove it from background and active calls") {
       val groupMember1 = UserId("groupUser1")
       val groupMember2 = UserId("groupUser2")
       val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), selfUserId, ConversationType.Group)
@@ -247,16 +239,10 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       val service = initCallingService()
 
-      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CALLING && cur.caller == selfUserId && cur.others == Set(groupMember1, groupMember2)))
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SELF_CALLING && cur.caller == selfUserId && cur.others == Set(selfUserId)))
       val checkpoint2 = callCheckpoint(service, _.isEmpty, _.isEmpty)
 
       (avsMock.startCall _).expects(*, *, *).once().returning(Future.successful(0))
-      (members.getByConv _).expects(*).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(selfUserId, groupConv.id),
-        ConversationMemberData(groupMember1, groupConv.id),
-        ConversationMemberData(groupMember2, groupConv.id)
-      )))
-
       service.startCall(groupConv.id)
       result(checkpoint1.head)
 
@@ -388,7 +374,6 @@ class CallingServiceSpec extends AndroidFreeSpec {
                          self:           UserId                      = selfUserId,
                          avs:            AvsV3                       = avsMock,
                          convs:          ConversationsContentUpdater = convs,
-                         members:        MembersStorage              = members,
                          flows:          FlowManagerService          = flows,
                          messages:       MessagesService             = messages,
                          media:          MediaManagerService         = mm,
@@ -408,7 +393,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       initPromise.success({})
       initPromise.future
     }
-    val service = new CallingService(context, self, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
+    val service = new CallingService(context, self, avs, convs, null, flows, messages, media, null, callLogService, network, null)
     result(initPromise.future)
     service
   }
