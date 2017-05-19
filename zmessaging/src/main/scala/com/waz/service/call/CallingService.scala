@@ -67,6 +67,7 @@ class CallingService(context:             Context,
   val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
   val availableCalls = Signal(Map.empty[ConvId, CallInfo]) //any call a user can potentially join
   val currentCall = Signal(Option.empty[CallInfo])
+  val previousCall = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
   //state about any call for which we should show the CallingActivity
   val otherSideCBR = Signal(false) // by default we assume the call is VBR
 
@@ -144,7 +145,7 @@ class CallingService(context:             Context,
         setCallMuted(c.muted) //Need to set muted only after call is established
         //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
         val others = c.others + userId - selfUserId
-        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now), others = others))
+        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now), others = others, maxParticipants = 2))
       case None => warn("Received onEstablishedCall callback without a current active call"); None
     }
   }
@@ -179,7 +180,8 @@ class CallingService(context:             Context,
           messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
           callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
         }
-        Some(call.copy(others = members))
+        //members doesn't include self - so add 1
+        Some(call.copy(others = members, maxParticipants = math.max(call.maxParticipants, members.size + 1)))
       case call =>
         //TODO should we keep track of this info for background calls?
         info("Group members changed for non-active call, ignoring"); call
@@ -345,6 +347,7 @@ class CallingService(context:             Context,
           case _ =>
             warn(s"Call closed from unexpected state: ${call.state}")
         }
+        previousCall ! Some(call)
         None
       case Some(call) =>
         verbose("A call other than the current one was closed - likely missed another incoming call.")
