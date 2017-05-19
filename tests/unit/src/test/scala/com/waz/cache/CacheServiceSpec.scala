@@ -41,11 +41,12 @@ class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val cacheDir = Robolectric.application.getCacheDir
 
   lazy val storage = new GlobalDatabase(Robolectric.application)
-  lazy val service = CacheService(Robolectric.application, storage)
+  lazy val cacheStorage = CacheStorage(storage, Robolectric.application)
+  lazy val service = CacheService(Robolectric.application, storage, cacheStorage)
 
   after {
     Thread.sleep(1000) // because some operations (deleting) are scheduled on background
-    service.cacheStorage.list().map { es => service.cacheStorage.remove(es.map(_.key)) }.await()
+    cacheStorage.list().map { es => cacheStorage.remove(es.map(_.key)) }.await()
   }
 
   feature("Create") {

@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.model._
-import com.waz.sync.client.EventsClient.{PagedNotificationsResponse, NotificationsResponse}
+import com.waz.sync.client.EventsClient.{NotificationsResponse, PagedNotificationsResponse}
 import com.waz.utils.JsonDecoder
 import com.waz.znet.JsonObjectResponse
 import org.json
@@ -120,6 +120,13 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
   }
 
+  scenario("removed identity event") {
+    Event.EventDecoder(new json.JSONObject(userUpdateEventRemovePhone)) match {
+      case cp: UserUpdateEvent => cp.removeIdentity shouldEqual true
+      case ev => fail("unexpected event: $ev")
+    }
+  }
+
   val TransientNotification =
     """
       { "id" : "fbe54fb4-463e-4746-9861-c28c2961bdd0",
@@ -214,6 +221,15 @@ class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       |  "type":"user.connection",
       |  "user":{
       |    "name":"some name"
+      |  }
+      |}""".stripMargin
+
+  val userUpdateEventRemovePhone =
+    """{
+      |  "type":"user.identity-remove",
+      |  "user":{
+      |    "phone":"+441787540048",
+      |    "id":"7ddb63d0-cd32-408b-a720-f33e5262bfd8"
       |  }
       |}""".stripMargin
 

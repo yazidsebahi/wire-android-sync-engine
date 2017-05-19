@@ -21,6 +21,7 @@ import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
@@ -46,7 +47,7 @@ class Accounts(val global: GlobalModule) {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  val currentAccountPref = prefs.preferenceStringSignal(CurrentAccountPref)
+  val currentAccountPref = prefs.preference(CurrentAccountPref)
 
   lazy val currentAccountData = currentAccountPref.signal.flatMap[Option[AccountData]] {
     case "" => Signal.const(Option.empty[AccountData])
@@ -97,7 +98,11 @@ class Accounts(val global: GlobalModule) {
   }
 
   def logout(account: AccountId) = currentAccountPref() flatMap {
-    case id if id == account.str => setAccount(None) map (_ => ())
+    case id if id == account.str =>
+      for {
+        _ <- setAccount(None)
+        _ <- storage.update(account, _.copy(registeredPush = None))
+      } yield {}
     case id =>
       verbose(s"logout($account) ignored, current id: $id")
       Future.successful(())
@@ -137,10 +142,10 @@ class Accounts(val global: GlobalModule) {
     def loginOnBackend() =
       loginClient.login(account.id, normalized).future map {
         case Right((token, c)) =>
-          Right(account.updated(normalized).copy(cookie = c, activated = true, accessToken = Some(token)))
+          Right(account.updated(normalized).copy(cookie = c, verified = true, accessToken = Some(token)))
         case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
           verbose(s"account pending activation: $normalized, $error")
-          Right(account.updated(normalized).copy(activated = false, cookie = None, accessToken = None))
+          Right(account.updated(normalized).copy(verified = false, cookie = None, accessToken = None))
         case Left((_, error)) =>
           verbose(s"login failed: $error")
           Left(error)
@@ -149,7 +154,7 @@ class Accounts(val global: GlobalModule) {
     loginOnBackend() flatMap {
       case Right(a) =>
         for {
-          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, activated = true, accessToken = a.accessToken), a)
+          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, verified = true, accessToken = a.accessToken), a)
           service <- getInstance(acc)
           _       <- setAccount(Some(acc.id))
           res     <- service.login(normalized)
@@ -191,7 +196,7 @@ class Accounts(val global: GlobalModule) {
         case Right((userInfo, cookie)) =>
           verbose(s"register($credentials) done, id: $accountId, user: $userInfo, cookie: $cookie")
           for {
-            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), activated = normalized.autoLoginOnRegistration))
+            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), verified = normalized.autoLoginOnRegistration))
             _       = verbose(s"created account: $acc")
             service <- getInstance(acc)
             _       <- setAccount(Some(accountId))
@@ -222,7 +227,5 @@ class Accounts(val global: GlobalModule) {
 
 object Accounts {
   private implicit val logTag: LogTag = logTagFor[Accounts]
-
-  val CurrentAccountPref = "CurrentUserPref"
 }
 

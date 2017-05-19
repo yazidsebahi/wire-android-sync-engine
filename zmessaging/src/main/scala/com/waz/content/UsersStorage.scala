@@ -18,7 +18,7 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{UserData, UserId}
 import com.waz.service.SearchKey
@@ -30,8 +30,9 @@ import com.waz.utils.events._
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
-class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") {
-  import com.waz.content.UsersStorage._
+trait UsersStorage extends CachedStorage[UserId, UserData]
+
+class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
   import EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "UsersStorage")
 
@@ -130,7 +131,7 @@ class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage
       cs.get(user).fold(setFullName(user))(name => setDisplayName(user, name.first))
     } else {
       def firstWithInitial(user: UserId) = cs.get(user).fold("")(_.firstWithInitial)
-      
+
       users.groupBy(firstWithInitial) map {
         case ("", us) => Future.sequence(us map setFullName)
         case (name, Seq(u)) => setDisplayName(u, name)
@@ -138,12 +139,4 @@ class UsersStorage(context: Context, storage: ZmsDatabase) extends CachedStorage
       }
     }
   }
-}
-
-object UsersStorage {
-  private implicit val tag: LogTag = logTagFor[UsersStorage]
-
-  sealed trait DbCmd
-  case class Insert(user: UserData) extends DbCmd
-  case class Delete(user: UserId) extends DbCmd
 }

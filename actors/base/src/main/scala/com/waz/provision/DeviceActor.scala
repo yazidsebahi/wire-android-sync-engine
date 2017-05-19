@@ -29,13 +29,14 @@ import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
-import com.waz.content.{Database, GlobalDatabase}
+import com.waz.content.GlobalPreferences.CallingV3Key
+import com.waz.content.Preferences.PrefKey
+import com.waz.content.{Database, GlobalDatabase, GlobalPreferences}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.VoiceChannelData.ChannelState
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
-import com.waz.service.PreferenceService.Pref
 import com.waz.service._
 import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits.{CoreListAsScala, _}
@@ -55,15 +56,13 @@ object DeviceActor {
   def props(deviceName: String,
             application: Context,
             backend: BackendConfig = BackendConfig.StagingBackend,
-            otrOnly: Boolean = false,
             wrapper: ClientWrapper) =
-  Props(new DeviceActor(deviceName, application, backend, otrOnly, wrapper)).withDispatcher("ui-dispatcher")
+  Props(new DeviceActor(deviceName, application, backend, wrapper)).withDispatcher("ui-dispatcher")
 }
 
 class DeviceActor(val deviceName: String,
                   val application: Context,
                   backend: BackendConfig = BackendConfig.StagingBackend,
-                  otrOnly: Boolean = false,
                   wrapper: ClientWrapper) extends Actor with ActorLogging {
 
   import ActorMessage._
@@ -80,7 +79,6 @@ class DeviceActor(val deviceName: String,
     ZMessaging.currentGlobal = this
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
     override lazy val clientWrapper: ClientWrapper = wrapper
-    if (otrOnly) prefs.editUiPreferences(_.putBoolean("zms_send_only_otr", true))
 
     override lazy val metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + Random.nextInt().toHexString
@@ -97,7 +95,7 @@ class DeviceActor(val deviceName: String,
   }
 
   lazy val instance = new Accounts(globalModule) {
-    override val currentAccountPref: Pref[String] = global.prefs.preferenceStringSignal("current_user_" + Random.nextInt().toHexString)
+    override val currentAccountPref = global.prefs.preference(PrefKey[String]("current_user_" + Random.nextInt().toHexString, ""))
   }
   lazy val ui = new UiModule(instance)
   lazy val api = {
@@ -488,10 +486,7 @@ class DeviceActor(val deviceName: String,
       }
 
     case SetCallingVersion(version) =>
-      prefs.editUiPreferences { _.putBoolean(prefs.callingV3Key, if (version == 3) true else false) }.future.map {
-        case true => Successful
-        case false => Failed("unable to set preferences to use calling v3")
-      }
+      (prefs.preference(CallingV3Key) := (if (version == 3) "2" else "0")).map(_ => Successful)
 
     case AcceptCall =>
       whenCallIncoming { channel =>
@@ -501,9 +496,9 @@ class DeviceActor(val deviceName: String,
 
     case StartCall(remoteId) =>
       whenConversationExists(remoteId) { conv =>
-        if (prefs.callingV3 == "2") zmessaging.calling.startCall(conv.id)
-        else {
-          conv.getVoiceChannel.join(spy.joinCallback)
+        prefs.preference(CallingV3Key).apply().map {
+          case "2" => zmessaging.calling.startCall(conv.id)
+          case __ => conv.getVoiceChannel.join(spy.joinCallback)
         }
         Successful
       }

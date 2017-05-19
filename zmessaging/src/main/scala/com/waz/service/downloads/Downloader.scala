@@ -90,7 +90,6 @@ class AssetDownloader(client: AssetClient, cache: CacheService) extends Download
             }
           case Left(err) =>
             error(s"loadAsset failed: $err")
-            onDownloadFailed ! (asset, err)
             CancellableFuture successful None
         }
     }

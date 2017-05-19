@@ -20,7 +20,7 @@ package com.waz.znet
 import java.io.File
 
 import com.waz.ShadowLogging
-import com.waz.content.{KeyValueStorage, ZmsDatabase}
+import com.waz.content.{UserPreferences, ZmsDatabase}
 import com.waz.model.{AccountId, EmailAddress}
 import com.waz.provision.ProvisionedSuite
 import com.waz.service.{GlobalModule, _}
@@ -44,7 +44,7 @@ class AuthenticationManagerBackendSpec extends FeatureSpec with Matchers with Be
   }
 
   lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
-  lazy val keyValue = new KeyValueStorage(Robolectric.application, storage)
+  lazy val keyValue = new UserPreferences(Robolectric.application, storage)
 
   lazy val client = new LoginClient(new AsyncClient(wrapper = TestClientWrapper), BackendConfig.StagingBackend)
 

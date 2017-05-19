@@ -17,18 +17,21 @@
  */
 package com.waz.utils.wrappers
 
-import com.waz.model.AssetData
-import com.waz.specs.AndroidFreeSpec
-import org.scalatest.FeatureSpec
+import com.localytics.android.{Localytics => ALocalytics}
 
-class URISpec extends FeatureSpec with AndroidFreeSpec {
+object Localytics {
+  private var util: Option[LocalyticsUtil] = Some(new LocalyticsUtil {
+    override def setPushDisabled(disabled: Boolean) = ALocalytics.setPushDisabled(disabled)
+    override def setPushRegistrationId(regId: String) = ALocalytics.setPushRegistrationId(regId)
+  })
 
-  scenario("Hello") {
+  def setUtil(util: Option[LocalyticsUtil]) = this.util = util
 
-    val uri = URI.parse("www.hello.com").buildUpon.appendQueryParameter("persist", "true").build
+  def setPushDisabled(disabled: Boolean): Unit = util.foreach(_.setPushDisabled(disabled))
+  def setPushRegistrationId(regId: String): Unit = util.foreach(_.setPushRegistrationId(regId))
+}
 
-    val test = AssetData(source = Some(uri))
-    println(test.source)
-
-  }
+trait LocalyticsUtil {
+  def setPushDisabled(disabled: Boolean): Unit
+  def setPushRegistrationId(regId: String): Unit
 }

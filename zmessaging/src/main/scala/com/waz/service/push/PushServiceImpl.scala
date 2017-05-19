@@ -19,9 +19,11 @@ package com.waz.service.push
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
-import com.waz.content.KeyValueStorage
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventPipeline
@@ -35,17 +37,24 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.{Future, Promise}
 
-class PushService(context: Context, keyValue: KeyValueStorage, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService, gcmService: GcmService) {
+trait PushService {
+
+  def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
+
+}
+
+class PushServiceImpl(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushService {
   self =>
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
-  private implicit val tag: LogTag = logTagFor[PushService]
   private implicit val ec = EventContext.Global
 
   private val wakeLock = new WakeLock(context)
 
   val lastNotification = new LastNotificationIdService(keyValue, signals, client, clientId)
 
-  var connectedPushPromise = Promise[PushService]()
+  var connectedPushPromise = Promise[PushServiceImpl]()
+
+  override val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
   /**
     * Drift to the BE time at the moment we fetch notifications
@@ -109,14 +118,14 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
       connectedPushPromise = Promise()
   }
 
-  //no need to sync history on GCM if websocket is connected
+  //no need to sync history on cloud messaging if websocket is connected
   webSocket.connected.flatMap {
-    case false => gcmService.notificationsToProcess
+    case false => cloudPushNotificationsToProcess
     case _ => Signal.empty[Set[Uid]]
   }.on(dispatcher) {
     notifications =>
       if (notifications.nonEmpty){
-        verbose("Sync history in response to gcm notification")
+        verbose("Sync history in response to cloud message notification")
         syncHistory()
       }
   }
@@ -143,7 +152,7 @@ class PushService(context: Context, keyValue: KeyValueStorage, client: EventsCli
         }
       }
     }.map {
-      _ => gcmService.notificationsToProcess mutate (_.filter(notificationId => !notifications.exists(_.id.equals(notificationId))))
+      _ => cloudPushNotificationsToProcess mutate (_ -- notifications.map(_.id).toSet)
     }
   }
 
@@ -186,19 +195,18 @@ class PushServiceSignals {
   * Keeps track of last received notifications and updates lastNotificationId preference accordingly.
   * Last id is fetched from backend whenever slow sync is requested.
   */
-class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
+class LastNotificationIdService(userPrefs: UserPreferences, signals: PushServiceSignals, client: EventsClient, clientId: ClientId) {
 
   import LastNotificationIdService._
 
-  private implicit val logTag = logTagFor[LastNotificationIdService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "LastNotificationIdService")
   private implicit val ec = EventContext.Global
 
-  import keyValueService._
+  import userPrefs._
 
   private var fetchLast = CancellableFuture.successful(())
 
-  private[push] val idPref = keyValuePref[Option[Uid]](LastNotificationIdKey, None)
+  private[push] val idPref = preference(LastStableNotification)
 
   def lastNotificationId() = Future(idPref()).flatten // future and flatten ensure that there is no race with onNotification
 
@@ -230,6 +238,5 @@ class LastNotificationIdService(keyValueService: KeyValueStorage, signals: PushS
 }
 
 object LastNotificationIdService {
-  val LastNotificationIdKey = "last_notification_id"
   val NoNotificationsId = Uid(0, 0)
 }

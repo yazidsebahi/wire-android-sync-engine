@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
-import com.waz.content.{DefaultMembersStorage, MessagesStorage}
+import com.waz.content.{GlobalPreferences, MembersStorageImpl, MessagesStorageImpl}
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -32,9 +32,9 @@ import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
-import com.waz.service.conversation.{ConversationEventsService, DefaultConversationsContentUpdater}
-import com.waz.service.messages.{DefaultMessagesService, MessagesContentUpdater}
-import com.waz.service.otr.OtrService
+import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdaterImpl}
+import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
+import com.waz.service.otr.OtrServiceImpl
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -50,11 +50,11 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
-                          client: MessagesClient, otr: OtrService, otrSync: OtrSyncHandler, convs: DefaultConversationsContentUpdater, storage: MessagesStorage,
-                          assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: PreferenceService,
-                          sync: SyncServiceHandle, assets: AssetService, users: UserService, cache: CacheService,
-                          members: DefaultMembersStorage, errors: ErrorsService, timeouts: Timeouts) {
+class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgContent: MessagesContentUpdater, convEvents: ConversationEventsService,
+                          client: MessagesClient, otr: OtrServiceImpl, otrSync: OtrSyncHandler, convs: ConversationsContentUpdaterImpl, storage: MessagesStorageImpl,
+                          assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: GlobalPreferences,
+                          sync: SyncServiceHandle, assets: AssetService, users: UserServiceImpl, cache: CacheService,
+                          members: MembersStorageImpl, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
 
@@ -239,7 +239,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
         case Right(origTime) =>
           convLock.release()
           //send preview
-          CancellableFuture.lift(asset.previewId.map(assets.storage.get).getOrElse(Future successful None)).flatMap {
+          CancellableFuture.lift(asset.previewId.map(assets.getAssetData).getOrElse(Future successful None)).flatMap {
             case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
               case Right(Some(updated)) =>
                 postAssetMessage(asset, Some(updated)).map {
@@ -266,7 +266,7 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
 
     //want to wait until asset meta and preview data is loaded before we send any messages
     AssetProcessing.get(ProcessingTaskKey(msg.assetId)).flatMap { _ =>
-      CancellableFuture lift assets.storage.get(msg.assetId).flatMap {
+      CancellableFuture lift assets.getAssetData(msg.assetId).flatMap {
         case None => CancellableFuture successful Left(internalError(s"no asset found for msg: $msg"))
         case Some(asset) if asset.status == AssetStatus.UploadCancelled => CancellableFuture successful Left(ErrorResponse.Cancelled)
         case Some(asset) =>
@@ -320,8 +320,8 @@ class MessagesSyncHandler(context: Context, service: DefaultMessagesService, msg
     for {
       conv   <- convs.storage.get(cid) or internalError(s"conversation $cid not found")
       msg    <- storage.get(mid) or internalError(s"message $mid not found")
-      aid     = msg.right.map(_.assetId)
-      asset <- aid.flatMapFuture(id => assets.storage.get(id).or(internalError(s"asset $id not found")))
+      aid    = msg.right.map(_.assetId)
+      asset  <- aid.flatMapFuture(id => assets.getAssetData(id).or(internalError(s"asset $id not found")))
       result <- conv.flatMapFuture(c => asset.flatMapFuture(a => post(c, a)))
     } yield result.fold(SyncResult(_), _ => SyncResult.Success)
   }

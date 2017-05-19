@@ -80,11 +80,15 @@ public interface Self extends UiObservable {
      */
     void setEmail(String email, CredentialsUpdateListener listener);
 
+    void clearEmail(CredentialsUpdateListener listener);
+
     /**
      * Sets/Updates the current user's phone number. This will send a phone number verification code as a text to the given phone number. Until then, the phone number
      * will remain unverified.
      */
     void setPhone(String phone, CredentialsUpdateListener listener);
+
+    void clearPhone(CredentialsUpdateListener listener);
 
     /**
      * Updates the current user's existing password.

@@ -103,9 +103,9 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
     entry
   }
 
-  class SignalListener(req: BitmapRequest, assetData: AssetData =assetData) {
+  class SignalListener(req: BitmapRequest, assetData: AssetData = assetData) {
     var results = Seq.empty[BitmapResult]
-    val signal = new AssetBitmapSignal(assetData, req, service, service.memoryCache)
+    val signal = new AssetBitmapSignal(assetData, req, service, BitmapSignal.EmptyAssetStore)
     val obs = signal { result => results = results :+ result }
   }
 
@@ -216,7 +216,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       prepareDownload()
 
       var results = Seq.empty[BitmapResult]
-      val signal = new AssetBitmapSignal(assetData, BitmapRequest.Regular(300), service, service.memoryCache)
+      val signal = new AssetBitmapSignal(assetData, BitmapRequest.Regular(300), service, BitmapSignal.EmptyAssetStore)
       val obs = signal { result => results = results :+ result }
       withDelay(results.count(_ != BitmapResult.Empty) shouldEqual 1)
       obs.destroy()
@@ -227,7 +227,6 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         results.filter(_ != BitmapResult.Empty) should have size 2
       }
     }
-
   }
 
   feature("Gif downloading") {
@@ -268,7 +267,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
       val asset = AssetData(metaData = Some(Image(Dim2(0, 0), Medium)), sizeInBytes = bytes.length, remoteId = Some(RAssetId()), data = Some(bytes), convId = Some(RConvId()))
 
       val bmp = Await.result(service.loadBitmap(asset, Regular(100)), 5.seconds)
-      //      TODO: fix ShadowIOBitmap to produce corrent image - this works on device
+      //      TODO: fix ShadowIOBitmap to produce correct image - this works on device
       //      bmp.getWidth shouldEqual 600
       //      bmp.getHeight shouldEqual 450
     }

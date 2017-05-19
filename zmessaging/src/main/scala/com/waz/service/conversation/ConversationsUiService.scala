@@ -31,7 +31,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.call.VoiceChannelService
-import com.waz.service.messages.DefaultMessagesService
+import com.waz.service.messages.MessagesServiceImpl
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
@@ -44,9 +44,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.higherKinds
 
-class ConversationsUiService(assets: AssetService, users: UserService, usersStorage: UsersStorage,
-                             storage: ZmsDatabase, messages: DefaultMessagesService, members: DefaultMembersStorage, assetStorage: AssetsStorage,
-                             convsContent: DefaultConversationsContentUpdater, convStorage: ConversationStorage, network: DefaultNetworkModeService,
+class ConversationsUiService(assets: AssetService, users: UserServiceImpl, usersStorage: UsersStorageImpl,
+                             storage: ZmsDatabase, messages: MessagesServiceImpl, members: MembersStorageImpl, assetStorage: AssetsStorage,
+                             convsContent: ConversationsContentUpdaterImpl, convStorage: ConversationStorageImpl, network: DefaultNetworkModeService,
                              convs: ConversationsService, voice: VoiceChannelService, sync: SyncServiceHandle, lifecycle: ZmsLifecycle,
                              errors: ErrorsService) {
 

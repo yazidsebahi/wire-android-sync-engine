@@ -84,8 +84,10 @@ object NameParts {
   }
 
   def maybeInitial(part: String): Option[String] = {
-    val first = part.codePointAt(0)
-    if (Character.isLetter(first)) Some(String.valueOf(Character.toChars(first))) else None
+    val first = if (part.isEmpty) None else Some(part.codePointAt(0))
+    first.flatMap{ char =>
+      if (Character.isLetter(char)) Some(String.valueOf(Character.toChars(char))) else None
+    }
   }
 
   def initialsAsianOrMixed(str: String): String = str.substring(0, math.min(str.length, 2))

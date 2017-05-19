@@ -22,10 +22,10 @@ import android.net.Uri
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache._
-import com.waz.content.Database
+import com.waz.content.{Database, Preferences}
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.{Mime, _}
-import com.waz.service.{NetworkModeService, PreferenceService}
+import com.waz.service.NetworkModeService
 import com.waz.service.downloads.{AssetDownloader, DownloadRequest, Downloader, DownloaderService}
 import com.waz.service.downloads.DownloadRequest.{AssetRequest, WireAssetRequest}
 import com.waz.testutils.Matchers._
@@ -205,12 +205,12 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   val database = stub[Database]
   val cacheStorage = stub[CacheStorage]
-  val cacheService = new CacheService(context, database, cacheStorage)
+  val cacheService = CacheService(context, database, cacheStorage)
   val result = new CacheEntry(CacheEntryData(CacheKey("...")), cacheService)
 
   private def createDownloader(ctx: Context = testContext,
                                cache: CacheService = global.cache,
-                               prefs: PreferenceService = global.prefs,
+                               prefs: Preferences = global.prefs,
                                network: NetworkModeService = global.network
                               )
                               (downloadOnceBody: (Int) => CancellableFuture[Option[CacheEntry]]) =

@@ -45,6 +45,8 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import com.waz.ZLog.ImplicitTag._
+import com.waz.content.GlobalPreferences
+import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.utils.wrappers.URI
 import com.waz.znet.LoginClient.LoginResult
 
@@ -93,7 +95,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, gcm) {
+          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
             override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("/"), zNetClient.auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
@@ -251,7 +253,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
         zmessagingCreated() shouldEqual false
       }
 
-      withDelay(global.prefs.preferences.getString(Accounts.CurrentAccountPref, "") should not be "")
+      withDelay(global.prefs.getFromPref(CurrentAccountPref) should not be "")
 
       val accountId = AccountId(api.ui.accounts.currentAccountPref().futureValue)
 

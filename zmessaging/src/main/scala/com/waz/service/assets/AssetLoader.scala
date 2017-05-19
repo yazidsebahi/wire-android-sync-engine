@@ -79,7 +79,7 @@ object AssetLoader {
   def apply(context: Context, downloader: DownloaderService, assetDownloader: Downloader[AssetRequest],
             streamDownloader: Downloader[AssetFromInputStream], videoDownloader: Downloader[VideoAsset],
             unencodedAudioDownloader: Downloader[UnencodedAudioAsset], cache: CacheService
-           ) =
+           ): AssetLoader =
     new AssetLoaderImpl(context, downloader, assetDownloader, streamDownloader, videoDownloader, unencodedAudioDownloader, cache)
 
 }

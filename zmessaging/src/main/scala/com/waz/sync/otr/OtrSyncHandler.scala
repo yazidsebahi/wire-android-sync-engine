@@ -20,19 +20,20 @@ package com.waz.sync.otr
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.ConversationStorage
+import com.waz.content.ConversationStorageImpl
 import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
-import com.waz.service.messages.DefaultMessagesService
-import com.waz.service.otr.OtrService
-import com.waz.service.{ErrorsService, UserService}
+import com.waz.service.messages.MessagesServiceImpl
+import com.waz.service.otr.OtrServiceImpl
+import com.waz.service.{ErrorsService, UserServiceImpl}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient.UploadResponse
 import com.waz.sync.client.MessagesClient.OtrMessage
@@ -45,9 +46,16 @@ import com.waz.znet.ZNetClient.ErrorOrResponse
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-                     convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: DefaultMessagesService,
-                     errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) {
+trait OtrSyncHandler {
+  def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]]
+  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None, nativePush: Boolean = true): Future[Either[ErrorResponse, Date]]
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]]
+  def postSessionReset(convId: ConvId, user: UserId, client: ClientId): Future[SyncResult]
+}
+
+class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrServiceImpl, assets: AssetService,
+                         convs: ConversationsService, convStorage: ConversationStorageImpl, users: UserServiceImpl, messages: MessagesServiceImpl,
+                         errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService) extends OtrSyncHandler {
 
   import OtrSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
@@ -182,8 +190,11 @@ class OtrSyncHandler(client: OtrClient, msgClient: MessagesClient, assetClient: 
 }
 
 object OtrSyncHandler {
-  private implicit val tag: LogTag = logTagFor[OtrSyncHandler]
-
   val MaxInlineSize  = 10 * 1024
   val MaxContentSize = 256 * 1024 // backend accepts 256KB for otr messages, but we would prefer to send less
+
+  def apply(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrServiceImpl, assets: AssetService,
+            convs: ConversationsService, convStorage: ConversationStorageImpl, users: UserServiceImpl, messages: MessagesServiceImpl,
+            errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService): OtrSyncHandler =
+    new OtrSyncHandlerImpl(client, msgClient, assetClient, service, assets, convs, convStorage, users, messages, errors, clientsSyncHandler, cache)
 }

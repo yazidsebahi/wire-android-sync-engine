@@ -38,7 +38,7 @@ import com.waz.model.{GenericContent, Mime, AssetStatus => _, MessageContent => 
 import com.waz.provision.ActorMessage._
 import com.waz.service.conversation.ConversationsUiService.LargeAssetWarningThresholdInBytes
 import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
-import com.waz.sync.otr.OtrSyncHandler
+import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, FeigningAsyncClient, TestResourceContentProvider}
@@ -666,7 +666,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
     override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
       new ApiZMessaging(clientId, user) {
 
-        override lazy val otrSync = new OtrSyncHandler(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
+        override lazy val otrSync = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
           override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] =
             super.postOtrMessage(convId, remoteId, message).andThen { case Success(r) if r.isRight => otrMessageSyncs :+=(remoteId, message, r) }(Threading.Background)
         }

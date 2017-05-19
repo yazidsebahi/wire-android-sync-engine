@@ -21,6 +21,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.api.{AvsLogLevel, NetworkMode}
 import com.waz.call.FlowManager
+import com.waz.content.GlobalPreferences._
 import com.waz.model.UserId
 import com.waz.service.call.DefaultFlowManagerService
 import com.waz.service.call.DefaultFlowManagerService.AvsLogData
@@ -47,7 +48,7 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
       })
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
       override val connected = wsConnected
     }
   }
@@ -76,9 +77,9 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
 
     scenario("Enable/disable metrics") {
       withDelay { logData.value.metricsEnabled shouldEqual false }
-      zms.prefs.analyticsEnabledPref := true
+      zms.prefs.preference(AnalyticsEnabled) := true
       withDelay { logData.value.metricsEnabled shouldEqual true }
-      zms.prefs.analyticsEnabledPref := false
+      zms.prefs.preference(AnalyticsEnabled) := false
       withDelay { logData.value.metricsEnabled shouldEqual false }
     }
 

@@ -18,9 +18,10 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message, Verification}
-import com.waz.content.{EditHistoryStorage, ReactionsStorage}
+import com.waz.content.{EditHistoryStorage, GlobalPreferences, ReactionsStorage}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.AssetStatus.{UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -28,8 +29,8 @@ import com.waz.model.GenericContent._
 import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.DefaultConversationsContentUpdater
-import com.waz.service.otr.{OtrService, VerificationStateUpdater}
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
+import com.waz.service.otr.{OtrService, OtrServiceImpl, VerificationStateUpdater}
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
@@ -47,14 +48,16 @@ trait MessagesService {
   def addMissedCallMessage(rConvId: RConvId, from: UserId, time: Instant): Future[Option[MessageData]]
   def addMissedCallMessage(convId: ConvId, from: UserId, time: Instant): Future[Option[MessageData]]
   def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration): Future[Option[MessageData]]
+  def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false): Future[MessageData]
+  def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
+  def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
 }
 
-class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
-                             prefs: PreferenceService, users: UserService, convs: DefaultConversationsContentUpdater, reactions: ReactionsStorage,
-                             network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
-                             otr: OtrService) extends MessagesService {
+class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
+                          prefs: GlobalPreferences, users: UserServiceImpl, convs: ConversationsContentUpdaterImpl, reactions: ReactionsStorage,
+                          network: DefaultNetworkModeService, sync: SyncServiceHandle, verificationUpdater: VerificationStateUpdater, timeouts: Timeouts,
+                          otr: OtrServiceImpl) extends MessagesService {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[DefaultMessagesService]
   private implicit val ec = EventContext.Global
 
   import content._
@@ -100,8 +103,8 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
 
     //ensure we always save the preview to the same id (GenericContent.Asset.unapply always creates new assets and previews))
     def saveAssetAndPreview(asset: AssetData, preview: Option[AssetData]) = {
-      assets.storage.mergeOrCreateAsset(asset).flatMap {
-        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.storage.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
+      assets.mergeOrCreateAsset(asset).flatMap {
+        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
         case _ => Future.successful(Option.empty[AssetData])
       }
     }
@@ -137,7 +140,7 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
         case (ImageAsset(a@AssetData.IsImageWithTag(Medium)), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptAssetData(a, data))
           verbose(s"Received asset v2 image: $asset")
-          assets.storage.mergeOrCreateAsset(asset)
+          assets.mergeOrCreateAsset(asset)
         case (Asset(a, _), _) if a.status == UploadFailed && a.isImage =>
           verbose(s"Received a message about a failed image upload: $id. Dropping")
           Future successful None
@@ -172,7 +175,7 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
     if (toRemove.isEmpty) Future.successful(())
     else for {
       _ <- Future.traverse(toRemove)(id => content.messagesStorage.remove(MessageId(id.str)))
-      _ <- assets.storage.remove(toRemove)
+      _ <- assets.removeAssets(toRemove)
     } yield ()
   }
 
@@ -464,7 +467,7 @@ class DefaultMessagesService(selfUserId: UserId, val content: MessagesContentUpd
         if (toRemove.isEmpty) deleteMessage(msg) // FIXME: race condition
         else updateMessage(msg.id)(_.copy(members = toRemove)) // FIXME: race condition
 
-        if (toAdd.isEmpty) successful(()) else updateOrCreate(toAdd)
+        if (toAdd.isEmpty) successful(None) else updateOrCreate(toAdd)
       case _ =>
         updateOrCreate(users)
     }

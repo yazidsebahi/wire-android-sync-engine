@@ -18,37 +18,32 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.otr.ClientId
-import com.waz.model.{AccountId, GcmId}
-import com.waz.service.push.GcmGlobalService.{GcmNotAvailableException, GcmRegistration}
-import com.waz.service.push.GcmService
+import com.waz.model.{AccountId, PushToken}
+import com.waz.service.BackendConfig
+import com.waz.service.push.PushTokenService
 import com.waz.sync.SyncResult
-import com.waz.sync.client.GcmClient
-import com.waz.sync.client.GcmClient.GcmToken
+import com.waz.sync.client.PushTokenClient
+import com.waz.sync.client.PushTokenClient.PushTokenRegistration
 import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future
 
-class GcmSyncHandler(user: AccountId, gcmService: GcmService, clientId: ClientId, client: GcmClient) {
+class PushTokenSyncHandler(user: AccountId, pushTokenService: PushTokenService, backend: BackendConfig, clientId: ClientId, client: PushTokenClient) {
 
   import Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[GcmSyncHandler]
 
-  def resetGcm(): Future[SyncResult] = {
-    def post(token: String) =
-      client.postPushToken(GcmToken(token, gcmService.gcmSenderId, clientId))
-
-    gcmService.resetGcm(r => post(r.token).map(_.isRight))
-      .map {
-        case Some(GcmRegistration(_, `user`, _)) => SyncResult.Success
-        case _ => SyncResult.Failure(None, shouldRetry = true)
-      }
-      .recover {
-        case e: GcmNotAvailableException => SyncResult.Failure(None, shouldRetry = false)
-      }
+  def registerPushToken(token: PushToken): Future[SyncResult] = {
+    debug(s"registerPushToken: $token")
+    client.postPushToken(PushTokenRegistration(token, backend.pushSenderId, clientId)).future.flatMap {
+      case Right(PushTokenRegistration(`token`, _, `clientId`, _)) => pushTokenService.onTokenRegistered(token).map(_ => SyncResult.Success)
+      case Right(_)  => Future.successful(SyncResult.Failure(None, shouldRetry = false))
+      case Left(err) => Future.successful(SyncResult.Failure(Some(err)))
+    }
   }
 
-  def deleteGcmToken(token: GcmId): CancellableFuture[SyncResult] = {
+  def deleteGcmToken(token: PushToken): CancellableFuture[SyncResult] = {
     debug(s"deleteGcmToken($token)")
     client.deletePushToken(token.str) map { _.fold(SyncResult(_), _ => SyncResult.Success) }
   }

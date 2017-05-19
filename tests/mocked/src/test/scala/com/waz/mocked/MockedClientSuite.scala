@@ -25,14 +25,14 @@ import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
 import com.waz.client.RegistrationClient
 import com.waz.client.RegistrationClient.ActivateResult
-import com.waz.content.KeyValueStorage
+import com.waz.content.UserPreferences
 import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service
 import com.waz.service._
 import com.waz.service.call.DefaultFlowManagerService
-import com.waz.service.push.PushService
+import com.waz.service.push.PushServiceImpl
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -42,6 +42,7 @@ import com.waz.sync.client.OtrClient.{ClientKey, MessageResponse}
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.sync.client._
+import com.waz.testutils.TestUserPreferences
 import com.waz.threading.CancellableFuture.successful
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.AuthenticationManager._
@@ -51,19 +52,16 @@ import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import org.scalatest.{Alerting, Informing, Suite}
 
-import scala.concurrent.Future
 import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
   private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
 
-  @volatile private var pushService = Option.empty[PushService]
+  @volatile private var pushService = Option.empty[PushServiceImpl]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
   class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "") extends StorageModule(context, accountId, prefix) {
-    override lazy val kvStorage: KeyValueStorage = new KeyValueStorage(context, db) {
-      override def getPref(key: String) = keyValueStoreOverrides.get(key).fold(super.getPref(key))(Future.successful)
-    }
+    override lazy val userPrefs: UserPreferences = new TestUserPreferences
   }
 
   class MockedUserModule(userId: UserId, account: AccountService) extends UserModule(userId, account) {
@@ -75,7 +73,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
 
-    override lazy val assetClient        = new AssetClient(zNetClient) {
+    override lazy val assetClient        = new AssetClientImpl(zNetClient) {
       override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = suite.postImageAssetData(asset, convId, data, nativePush)
     }
 
@@ -103,7 +101,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val abClient           = new AddressBookClient(zNetClient) {
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
     }
-    override lazy val gcmClient          = new GcmClient(zNetClient) {}
+    override lazy val gcmClient          = new PushTokenClient(zNetClient) {}
     override lazy val typingClient       = new TypingClient(zNetClient) {
       override def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = suite.updateTypingState(id, isTyping)
     }
@@ -120,9 +118,9 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, gcm) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
 
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.pushUrl), zNetClient.auth) {
+      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.websocketUrl), zNetClient.auth) {
         override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None
@@ -183,7 +181,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   override def pushGcm(notification: PushNotification, userId: UserId) =
     Option(ZMessaging.currentAccounts) foreach { accounts =>
       accounts.getCurrentZms.foreach {
-        case Some(zms) if zms.selfUserId == userId => zms.gcm.addNotificationToProcess(Uid(), Some(notification))
+        case Some(zms) if zms.selfUserId == userId => zms.push.cloudPushNotificationsToProcess.mutate(_ + notification.id)
         case _ =>
       }(Threading.Background)
     }

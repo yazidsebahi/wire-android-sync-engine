@@ -17,20 +17,35 @@
  */
 package com.waz.service
 
-import com.waz.service.push.GcmGlobalService.GcmSenderId
+import android.content.Context
+import com.google.firebase.FirebaseApp
+import com.waz.service.BackendConfig.FirebaseOptions
 
-case class BackendConfig(baseUrl: String, pushUrl: String, gcmSenderId: GcmSenderId, environment: String) {
-  import BackendConfig._
-  if (gcmSenderId != stagingSenderId && gcmSenderId != prodSenderId) throw new IllegalArgumentException(s"Unknown sender id: $gcmSenderId")
+case class BackendConfig(baseUrl: String, websocketUrl: String, firebaseOptions: FirebaseOptions, environment: String) {
+  val pushSenderId = firebaseOptions.pushSenderId
 }
 
 object BackendConfig {
-  val Seq(stagingSenderId, prodSenderId) = Seq("723990470614", "782078216207") map GcmSenderId
 
-  val StagingBackend = BackendConfig("https://staging-nginz-https.zinfra.io", "https://staging-nginz-ssl.zinfra.io/await", stagingSenderId, "staging")
-  val ProdBackend = BackendConfig("https://prod-nginz-https.wire.com", "https://prod-nginz-ssl.wire.com/await", prodSenderId, "prod")
+  case class FirebaseOptions(pushSenderId: String, appId: String, apiKey: String) {
+
+    def apply(context: Context) =
+      FirebaseApp.initializeApp(context, new com.google.firebase.FirebaseOptions.Builder()
+        .setApplicationId(appId)
+        .setApiKey(apiKey)
+        .setGcmSenderId(pushSenderId)
+        .build())
+  }
+
+  //This information can be found in downloadable google-services.json file from the BE console.
+  val StagingFirebaseOptions = FirebaseOptions("723990470614", "1:723990470614:android:9a1527f79aa62284", "AIzaSyAGCoJGUtDBLJJiQPLxHQRrdkbyI0wlbo8")
+  //TODO add api and app ids from BE config files
+  val ProdFirebaseOptions    = FirebaseOptions("782078216207", "", "")
+
+  val StagingBackend = BackendConfig("https://staging-nginz-https.zinfra.io", "https://staging-nginz-ssl.zinfra.io/await", StagingFirebaseOptions, "staging")
+  val ProdBackend    = BackendConfig("https://prod-nginz-https.wire.com",     "https://prod-nginz-ssl.wire.com/await",     ProdFirebaseOptions,    "prod")
 
   lazy val byName = Seq(StagingBackend, ProdBackend).map(b => b.environment -> b).toMap
 
-  def apply(baseUrl: String): BackendConfig = BackendConfig(baseUrl, "", stagingSenderId, "") // XXX only use for testing!
+  def apply(baseUrl: String): BackendConfig = BackendConfig(baseUrl, "", StagingFirebaseOptions, "") // XXX only use for testing!
 }

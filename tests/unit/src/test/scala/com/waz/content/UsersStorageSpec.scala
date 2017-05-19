@@ -43,7 +43,7 @@ class UsersStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   val notified: mutable.Map[UserId, Boolean] = mutable.Map().withDefaultValue(false)
   val added: mutable.Map[UserId, Boolean] = mutable.Map().withDefaultValue(false)
 
-  var users: UsersStorage = _
+  var users: UsersStorageImpl = _
   var storage: ZmsDatabase = _
 
   before {
@@ -53,7 +53,7 @@ class UsersStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     UserDataDao.deleteAll
     UserDataDao.insertOrReplace(testUsers)
 
-    users = new UsersStorage(Robolectric.application, storage)
+    users = new UsersStorageImpl(Robolectric.application, storage)
 
     notified.clear()
     added.clear()

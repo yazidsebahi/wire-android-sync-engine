@@ -72,7 +72,7 @@ object RConvEvent extends (Event => RConvId) {
   }
 }
 
-case class UserUpdateEvent(user: UserInfo) extends UserEvent
+case class UserUpdateEvent(user: UserInfo, removeIdentity: Boolean = false) extends UserEvent
 case class UserPropertiesSetEvent(key: String, value: String) extends UserEvent // value is always json string, so maybe we should parse it already (or maybe not)
 case class UserConnectionEvent(convId: RConvId, from: UserId, to: UserId, message: Option[String], status: ConnectionStatus, lastUpdated: Date, fromUserName: Option[String] = None) extends UserEvent with RConvEvent
 case class UserDeleteEvent(user: UserId) extends UserEvent
@@ -81,7 +81,7 @@ case class OtrClientRemoveEvent(client: ClientId) extends OtrClientEvent
 
 case class ContactJoinEvent(user: UserId, name: String) extends Event
 
-case class GcmTokenRemoveEvent(token: String, senderId: String, client: Option[String]) extends Event
+case class PushTokenRemoveEvent(token: PushToken, senderId: String, client: Option[String]) extends Event
 
 sealed trait ConversationEvent extends RConvEvent {
   val time: Date
@@ -230,7 +230,7 @@ object Event {
 
     def contactJoinEvent(implicit js: JSONObject) = ContactJoinEvent('id, 'name)
 
-    def gcmTokenRemoveEvent(implicit js: JSONObject) = GcmTokenRemoveEvent(token = 'token, senderId = 'app, client = 'client)
+    def gcmTokenRemoveEvent(implicit js: JSONObject) = PushTokenRemoveEvent(token = 'token, senderId = 'app, client = 'client)
 
     def joined(d: JSONObject): Boolean = d.getString("state") == Joined
 
@@ -272,6 +272,7 @@ object Event {
       if (evType.startsWith("conversation")) ConversationEventDecoder(js)
       else evType match {
         case "user.update" => UserUpdateEvent(JsonDecoder[UserInfo]('user))
+        case "user.identity-remove" => UserUpdateEvent(JsonDecoder[UserInfo]('user), true)
         case "user.connection" => connectionEvent(js.getJSONObject("connection"), JsonDecoder.opt('user, _.getJSONObject("user")) flatMap (JsonDecoder.decodeOptString('name)(_)))
         case "user.contact-join" => contactJoinEvent(js.getJSONObject("user"))
         case "user.push-remove" => gcmTokenRemoveEvent(js.getJSONObject("token"))

@@ -17,15 +17,24 @@
  */
 package com.waz.specs
 
-import com.waz.utils.wrappers._
-import com.waz.ZLog
-import com.waz.ZLog.LogLevel
-import com.waz.threading.{DispatchQueue, Threading}
-import com.waz.utils.isTest
-import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI}
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
-trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
+import com.waz.ZLog.LogTag
+import com.waz.threading.{SerialDispatchQueue, Threading}
+import com.waz.utils._
+import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
+import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
+import org.scalamock.scalatest.MockFactory
+import org.scalatest._
+import org.threeten.bp.Instant
+
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+
+//TODO somehow check other threads for failures that might normally be swallowed up and fail tests accordingly
+abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfter with Matchers with MockFactory { this: Suite =>
+
+  val defaultTimeout = 5.seconds
 
   //Ensures that Android wrappers are assigned with a non-Android implementation so that tests can run on the JVM
   override protected def beforeAll() = {
@@ -37,13 +46,57 @@ trait AndroidFreeSpec extends BeforeAndAfterAll { this: Suite =>
 
     isTest = true
 
-    ZLog.testLogLevel = LogLevel.Verbose
+//    ZLog.setTestLogging()
 
     Intent.setUtil(JVMIntentUtil)
 
-    Threading.setUi(new DispatchQueue {
-      override def execute(runnable: Runnable) = ???
-    })
+    Threading.setUi(new SerialDispatchQueue({
+      Threading.executionContext(Executors.newSingleThreadExecutor(new ThreadFactory {
+        override def newThread(r: Runnable) = {
+          new Thread(r, Threading.testUiThreadName)
+        }
+      }))
+    }, Threading.testUiThreadName))
+
+    Localytics.setUtil(None)
+
+    HockeyApp.setUtil(Some(new HockeyAppUtil {
+      override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
+        //TODO it might be nice to catch any swallowed-up exceptions and use them to fail the tests somehow
+        println("Exception sent to HockeyApp:")
+        println(description)
+        t.printStackTrace()
+      }
+    }))
   }
 
+  /**
+    * Here we wait for all threads to finish their current tasks as to allow each test to run with a clean threading profile.
+    * If there are still tasks pending, we fail, as it likely means an error somewhere.
+    */
+  override def withFixture(test: NoArgTest) = super.withFixture(test) match {
+    case Succeeded =>
+      if (!tasksCompletedAfterWait) {
+        Failed(new TimeoutException(s"Background tasks continued running after test for ${defaultTimeout.toSeconds} seconds: Potential threading issue!"))
+      } else Succeeded
+    case outcome => outcome
+  }
+
+  def result[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = Await.result(future, defaultDuration)
+
+  /**
+    * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
+    * performing a series of actions)
+    */
+  def awaitAllTasks(implicit timeout: FiniteDuration = defaultTimeout) = {
+    if (!tasksCompletedAfterWait) fail(new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds"))
+  }
+
+  private def tasksCompletedAfterWait(implicit timeout: FiniteDuration = defaultTimeout) = {
+    val start = Instant.now
+    import Threading._
+    def tasksRemaining = Seq(IO, ImageDispatcher, Ui, Background).exists(_.hasRemainingTasks)
+    while(tasksRemaining && Instant.now().isBefore(start + timeout)) Thread.sleep(10)
+    !tasksRemaining
+  }
 }

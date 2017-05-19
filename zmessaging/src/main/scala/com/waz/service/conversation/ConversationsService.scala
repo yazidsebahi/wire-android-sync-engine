@@ -22,14 +22,14 @@ import com.softwaremill.macwire._
 import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.api.ErrorType
-import com.waz.api.Verification._
 import com.waz.api.impl.ErrorResponse
+import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
-import com.waz.service.messages.{MessagesContentUpdater, DefaultMessagesService}
+import com.waz.service.messages.{MessagesServiceImpl, MessagesContentUpdater}
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -43,12 +43,12 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 import scala.util.control.NoStackTrace
 
-class ConversationsService(context: Context, push: PushServiceSignals, users: UserService, usersStorage: UsersStorage,
-                           messagesStorage: MessagesStorage, membersStorage: DefaultMembersStorage,
-                           convsStorage: ConversationStorage, val content: DefaultConversationsContentUpdater, listState: ConversationsListStateService,
+class ConversationsService(context: Context, push: PushServiceSignals, users: UserServiceImpl, usersStorage: UsersStorageImpl,
+                           messagesStorage: MessagesStorageImpl, membersStorage: MembersStorageImpl,
+                           convsStorage: ConversationStorageImpl, val content: ConversationsContentUpdaterImpl, listState: ConversationsListStateService,
                            sync: SyncServiceHandle, errors: ErrorsService,
-                           messages: DefaultMessagesService, assets: AssetService, storage: ZmsDatabase,
-                           msgContent: MessagesContentUpdater, kvService: KeyValueStorage, eventScheduler: => EventScheduler) {
+                           messages: MessagesServiceImpl, assets: AssetService, storage: ZmsDatabase,
+                           msgContent: MessagesContentUpdater, userPrefs: UserPreferences, eventScheduler: => EventScheduler) {
 
   private implicit val tag: LogTag = logTagFor[ConversationsService]
   private implicit val ev = EventContext.Global
@@ -75,11 +75,13 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     } yield ()
   }
 
-  kvService.shouldSyncConversations.map{
+  val shouldSyncConversations = userPrefs.preference(ShouldSyncConversations)
+
+  shouldSyncConversations.mutate {
     case Some(true) =>
       sync.syncConversations()
-      kvService.shouldSyncConversations = false
-    case _ =>
+      Some(false)
+    case v => v
   }
 
   errors.onErrorDismissed {

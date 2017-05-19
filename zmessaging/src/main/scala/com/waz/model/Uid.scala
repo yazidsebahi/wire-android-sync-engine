@@ -32,6 +32,7 @@ trait Id[A] extends Ordering[A] {
   def random(): A
   def decode(str: String): A
   def encode(id: A): String = id.toString
+  def empty: A = decode("")
 
   override def compare(x: A, y: A): Int = Ordering.String.compare(encode(x), encode(y))
 }
@@ -85,7 +86,7 @@ case class AccountId(str: String) {
   override def toString: String = str
 }
 
-object AccountId {
+object AccountId extends (String => AccountId) {
   def apply(): AccountId = Id.random()
 
   implicit object Id extends Id[AccountId] {
@@ -196,16 +197,16 @@ object SyncId {
   }
 }
 
-case class GcmId(str: String) {
+case class PushToken(str: String) {
   override def toString: String = str
 }
 
-object GcmId {
-  def apply(): GcmId = Id.random()
+object PushToken {
+  def apply(): PushToken = Id.random()
 
-  implicit object Id extends Id[GcmId] {
-    override def random(): GcmId = GcmId(Uid().toString)
-    override def decode(str: String): GcmId = GcmId(str)
+  implicit object Id extends Id[PushToken] {
+    override def random(): PushToken = PushToken(Uid().toString)
+    override def decode(str: String): PushToken = PushToken(str)
   }
 }
 

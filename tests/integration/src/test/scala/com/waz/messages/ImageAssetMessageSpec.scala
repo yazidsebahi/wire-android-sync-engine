@@ -23,16 +23,13 @@ import akka.pattern.ask
 import com.waz.api.MessageContent.Image
 import com.waz.api._
 import com.waz.api.impl.LocalImageAsset
-import com.waz.cache.{CacheEntry, LocalData}
-import com.waz.model.{RConvId, UserId}
+import com.waz.cache.CacheEntry
 import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
 import com.waz.service._
-import com.waz.sync.client.AssetClient
-import com.waz.sync.client.AssetClient.{OtrAssetMetadata, OtrAssetResponse}
+import com.waz.sync.client.AssetClientImpl
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.threading.CancellableFuture
 import com.waz.utils.IoUtils
 import com.waz.znet.Request
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -109,7 +106,7 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
     override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
       new ZMessaging(clientId, user) {
-        override lazy val assetClient = new AssetClient(zNetClient) {
+        override lazy val assetClient = new AssetClientImpl(zNetClient) {
 
           override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {
             downloads.incrementAndGet()

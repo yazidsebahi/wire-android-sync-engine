@@ -19,6 +19,7 @@ package com.waz.sync
 
 import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
+import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -83,7 +84,7 @@ class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
         override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delay(delay) map { _ => response.get }
       }
 
-      kvStorage.lastSlowSyncTimestamp = System.currentTimeMillis()
+      userPrefs.preference(LastSlowSyncTimeKey) := Some(System.currentTimeMillis())
       override lazy val usersSync: UsersSyncHandler = new UsersSyncHandler(assetSync, users, usersStorage, assets, usersClient, assetGenerator) {
         override def syncUsers(ids: UserId*) = {
           sync.syncUsers(ids: _*)

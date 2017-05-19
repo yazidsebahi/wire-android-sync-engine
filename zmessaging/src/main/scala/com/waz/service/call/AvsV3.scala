@@ -23,34 +23,13 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.call.Calling._
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.Signal
 import com.waz.utils.jna.{Size_t, Uint32_t}
 import com.waz.utils.returning
 import org.threeten.bp.Instant
 
 import scala.concurrent.{Future, Promise}
-
-trait CallingService {
-  def currentCall: Signal[Option[CallInfo]]
-  def availableCalls: Signal[Map[ConvId, CallInfo]]
-  def onReady(version: Int): Unit
-  def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean): Unit
-  def onOtherSideAnsweredCall(convId: RConvId): Unit
-  def onEstablishedCall(convId: RConvId, userId: UserId): Unit
-  def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId): Unit
-  def onMetricsReady(convId: RConvId, metricsJson: String): Unit
-  def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean): Unit
-  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState): Unit
-  def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String): Unit
-  def onBitRateStateChanged(): Unit
-  def onGroupChanged(convId: RConvId, members: Set[UserId]): Unit
-  def startCall(convId: ConvId, isVideo: Boolean = false): Unit
-  def endCall(convId: ConvId): Unit
-  def setVideoSendActive(convId: ConvId, send: Boolean): Unit
-}
 
 trait AvsV3 {
   def available: Future[Unit] //Fails if not available
@@ -76,7 +55,7 @@ trait AvsV3 {
   * Facilitates synchronous communication with AVS and also provides a wrapper around the native code which can be easily
   * mocked for testing the CallingService
   */
-class DefaultAvsV3(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
+class AvsV3Impl(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "AvsWrapper")
 
@@ -210,12 +189,14 @@ object AvsV3 {
     *   WCALL_REASON_ANSWERED_ELSEWHERE  5
     *   WCALL_REASON_IO_ERROR            6
     *   WCALL_REASON_STILL_ONGOING       7
+    *   WCALL_REASON_TIMEOUT_ECONN       8
+    *   WCALL_REASON_DATACHANNEL         9
     *
     *   interrupted - SE only (when interrupted by GSM call)
     */
   type ClosedReason = ClosedReason.Value
   object ClosedReason extends Enumeration {
-    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, IOError, StillOngoing, Interrupted = Value
+    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, IOError, StillOngoing, TimeoutEconn, DataChannel, Interrupted = Value
   }
 
   /**

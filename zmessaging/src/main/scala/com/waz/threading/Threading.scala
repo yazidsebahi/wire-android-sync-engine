@@ -18,22 +18,23 @@
 package com.waz.threading
 
 import java.util.Timer
-
-import android.os.{Handler, HandlerThread, Looper}
 import java.util.concurrent.{Executor, ExecutorService, Executors}
 
+import android.os.{Handler, HandlerThread, Looper}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ZmsVersion
 import com.waz.utils.returning
 
 import scala.concurrent.{ExecutionContext, Future, Promise, blocking}
+import scala.util.control.NonFatal
 
 object Threading {
 
   object Implicits {
-    implicit lazy val Background: DispatchQueue = Threading.ThreadPool
-    implicit lazy val Ui: DispatchQueue = Threading.Ui
-    implicit lazy val Image: DispatchQueue = Threading.ImageDispatcher
+    implicit lazy val Background: DispatchQueue    = Threading.ThreadPool
+    implicit lazy val Ui:         DispatchQueue    = Threading.Ui
+    implicit lazy val Image:      DispatchQueue    = Threading.ImageDispatcher
     implicit lazy val BlockingIO: ExecutionContext = Threading.BlockingIO
   }
 
@@ -60,6 +61,11 @@ object Threading {
 
   val IO = IOThreadPool
 
+  /**
+    * Image decoding/encoding dispatch queue. This operations are quite cpu intensive, we don't want them to use all cores (leaving one spare core for other tasks).
+    */
+  val ImageDispatcher = new LimitedDispatchQueue(Cpus - 1, ThreadPool, "ImageDispatcher")
+
   val BlockingIO: ExecutionContext = new ExecutionContext {
     val delegate = ExecutionContext.fromExecutor(null: Executor) // default impl that handles block contexts correctly
     override def execute(runnable: Runnable): Unit = delegate.execute(new Runnable {
@@ -72,19 +78,21 @@ object Threading {
   private var _ui: Option[DispatchQueue] = None
   def Ui: DispatchQueue = _ui match {
     case Some(ui) => ui
-    case None => returning(new UiDispatchQueue){ t => _ui = Some(t) }
+    case None => returning(new UiDispatchQueue)(setUi)
   }
 
   def setUi(ui: DispatchQueue) = this._ui = Some(ui)
 
+  val testUiThreadName = "TestUiThread"
+  def isUiThread = try {
+    Thread.currentThread() == Looper.getMainLooper.getThread
+  } catch {
+    case NonFatal(e) => Thread.currentThread().getName.contains(testUiThreadName)
+  }
+
   val Timer = new Timer(true)
 
   Timer.purge()
-
-  /**
-   * Image decoding/encoding dispatch queue. This operations are quite cpu intensive, we don't want them to use all cores (leaving one spare core for other tasks).
-   */
-  val ImageDispatcher = new LimitedDispatchQueue(Cpus - 1, ThreadPool, "ImageDispatcher")
 
   lazy val BackgroundHandler: Future[Handler] = {
     val looper = Promise[Looper]
@@ -95,6 +103,6 @@ object Threading {
     looper.future.map(new Handler(_))(Background)
   }
 
-  def assertUiThread(): Unit = if (AssertsEnabled && (Thread.currentThread ne Looper.getMainLooper.getThread)) throw new AssertionError(s"Should be run on Ui thread, but is using: ${Thread.currentThread().getName}")
-  def assertNotUiThread(): Unit = if (AssertsEnabled && (Thread.currentThread eq Looper.getMainLooper.getThread)) throw new AssertionError(s"Should be run on background thread, but is using: ${Thread.currentThread().getName}")
+  def assertUiThread(): Unit = if (AssertsEnabled && !isUiThread) throw new AssertionError(s"Should be run on Ui thread, but is using: ${Thread.currentThread().getName}")
+  def assertNotUiThread(): Unit = if (AssertsEnabled && isUiThread) throw new AssertionError(s"Should be run on background thread, but is using: ${Thread.currentThread().getName}")
 }

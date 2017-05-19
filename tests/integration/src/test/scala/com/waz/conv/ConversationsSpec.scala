@@ -175,7 +175,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
       self.setPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
 
       withPush {
-        case UserUpdateEvent(info) => info.picture.nonEmpty
+        case UserUpdateEvent(info, _) => info.picture.nonEmpty
       } {
         auto2 ? UpdateProfileImage("/images/penguin.png") should eventually(be(Successful))
       } (45.seconds)

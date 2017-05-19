@@ -20,7 +20,7 @@ package com.waz.service.messages
 import com.waz.ZLog._
 import com.waz.api.Message.Status.DELIVERED
 import com.waz.api.Message.Type._
-import com.waz.content.{ConversationStorage, MessagesStorage}
+import com.waz.content.{ConversationStorageImpl, MessagesStorageImpl}
 import com.waz.model.ConversationData.ConversationType.OneToOne
 import com.waz.model.sync.ReceiptType
 import com.waz.model.{MessageId, UserId}
@@ -32,7 +32,7 @@ import com.waz.utils.events.EventContext
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class ReceiptService(messages: MessagesStorage, convs: ConversationStorage, sync: SyncServiceHandle, selfUserId: UserId) {
+class ReceiptService(messages: MessagesStorageImpl, convs: ConversationStorageImpl, sync: SyncServiceHandle, selfUserId: UserId) {
   import ImplicitTag._
   import Threading.Implicits.Background
   import EventContext.Implicits.global

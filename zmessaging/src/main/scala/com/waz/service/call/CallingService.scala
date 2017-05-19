@@ -25,7 +25,6 @@ import com.waz.api.IConversation
 import com.waz.api.VideoSendState._
 import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
@@ -34,7 +33,7 @@ import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted, 
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
-import com.waz.service.push.PushService
+import com.waz.service.push.PushServiceImpl
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
@@ -45,19 +44,18 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
 
-class DefaultCallingService(context:             Context,
-                            selfUserId:          UserId,
-                            avs:                 AvsV3,
-                            convs:               ConversationsContentUpdater,
-                            membersStorage:      MembersStorage,
-                            otrSyncHandler:      OtrSyncHandler,
-                            flowManagerService:  FlowManagerService,
-                            messagesService:     MessagesService,
-                            mediaManagerService: MediaManagerService,
-                            pushService:         PushService,
-                            callLogService:      CallLogService,
-                            network:             NetworkModeService,
-                            errors:              ErrorsService) extends CallingService {
+class CallingService(context:             Context,
+                     selfUserId:          UserId,
+                     avs:                 AvsV3,
+                     convs:               ConversationsContentUpdater,
+                     otrSyncHandler:      OtrSyncHandler,
+                     flowManagerService:  FlowManagerService,
+                     messagesService:     MessagesService,
+                     mediaManagerService: MediaManagerService,
+                     pushService:         PushServiceImpl,
+                     callLogService:      CallLogService,
+                     network:             NetworkModeService,
+                     errors:              ErrorsService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -69,6 +67,7 @@ class DefaultCallingService(context:             Context,
   val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
   val availableCalls = Signal(Map.empty[ConvId, CallInfo]) //any call a user can potentially join
   val currentCall = Signal(Option.empty[CallInfo])
+  val previousCall = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
   //state about any call for which we should show the CallingActivity
   val otherSideCBR = Signal(false) // by default we assume the call is VBR
 
@@ -86,12 +85,12 @@ class DefaultCallingService(context:             Context,
     info.foreach(i => CallService(context, i.convId)) // start tracking
   }
 
-  override def onReady(version: Int) = {
+  def onReady(version: Int) = {
     verbose(s"Calling ready: avs version: $version")
     requestedCallVersion ! version
   }
 
-  override def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
+  def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
     otherSideCBR.mutate(_ => false)
     withConv(convId) { conv =>
       sendCallMessage(conv.id, GenericMessage(Uid(), GenericContent.Calling(msg)), ctx)
@@ -103,7 +102,7 @@ class DefaultCallingService(context:             Context,
     *                   true if someone called recently for group but false if the call was started more than 30 seconds ago"
     *                                                                                                               - Chris the All-Knowing.
     */
-  override def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
+  def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { conv =>
     verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
     otherSideCBR.mutate(_ => false)
 
@@ -124,7 +123,7 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  override def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
+  def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     currentCall.mutate {
       case Some(call) if call.convId == conv.id => Some(call.copy(state = SELF_JOINING))
@@ -133,34 +132,36 @@ class DefaultCallingService(context:             Context,
     }
   }
 
-  override def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean) = {
+  def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean) = {
     verbose(s"Missed call for conversation: $convId at $time from user $userId. Video: $videoCall")
     messagesService.addMissedCallMessage(convId, userId, time)
   }
 
-  override def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { conv =>
+  def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { conv =>
     verbose(s"call established for conv: ${conv.id}, userId: $userId")
     currentCall.mutate {
       case Some(c) =>
         setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
         setCallMuted(c.muted) //Need to set muted only after call is established
-        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now)))
+        //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
+        val others = c.others + userId - selfUserId
+        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now), others = others, maxParticipants = 2))
       case None => warn("Received onEstablishedCall callback without a current active call"); None
     }
   }
 
-  override def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { conv =>
+  def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { conv =>
     verbose(s"call closed for conv: ${conv.id} at $time, userId: $userId")
     if (reason != StillOngoing) availableCalls.mutate(calls => calls - conv.id)
     currentCall.mutate(onCallClosed(_, reason, conv, userId))
   }
 
   //TODO pass call metrics to tracking when AVS are ready for it.
-  override def onMetricsReady(convId: RConvId, metricsJson: String) = {
+  def onMetricsReady(convId: RConvId, metricsJson: String) = {
     verbose(s"Call metrics for $convId, metrics: $metricsJson")
   }
 
-  override def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
+  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
     verbose(s"video state changed: $videoReceiveState")
     currentCall.mutate {
       case Some(c) => Some(c.copy(videoReceiveState = videoReceiveState))
@@ -169,9 +170,9 @@ class DefaultCallingService(context:             Context,
   }
 
   //TODO should this be synchronised too?
-  override def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
+  def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
 
-  override def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { conv =>
+  def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { conv =>
     verbose(s"group members changed, convId: $convId, other members: $members")
     currentCall.mutate {
       case Some(call) if call.convId == conv.id =>
@@ -179,7 +180,8 @@ class DefaultCallingService(context:             Context,
           messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))
           callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
         }
-        Some(call.copy(others = members))
+        //members doesn't include self - so add 1
+        Some(call.copy(others = members, maxParticipants = math.max(call.maxParticipants, members.size + 1)))
       case call =>
         //TODO should we keep track of this info for background calls?
         info("Group members changed for non-active call, ignoring"); call
@@ -225,21 +227,19 @@ class DefaultCallingService(context:             Context,
         currentCall ! Some(active(convId).copy(state = SELF_JOINING))
       case _ =>
         verbose("No active call, starting new call")
-        membersStorage.getByConv(conv.id).map { members =>
-          avs.startCall(conv.remoteId, isVideo, isGroup).map {
-            case 0 =>
-              //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-              val info = CallInfo(
-                conv.id,
-                selfUserId,
-                SELF_CALLING,
-                members.map(_.userId).filter(_ != selfUserId).toSet,
-                isVideoCall = isVideo,
-                videoSendState = if (isVideo) PREVIEW else DONT_SEND)
-              currentCall ! Some(info)
-              availableCalls.mutate(calls => calls + (conv.id -> info))
-            case err => warn(s"Unable to start call, reason: errno: $err")
-          }
+        avs.startCall(conv.remoteId, isVideo, isGroup).map {
+          case 0 =>
+            //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
+            val info = CallInfo(
+              conv.id,
+              selfUserId,
+              SELF_CALLING,
+              if (conv.convType == Group) Set(selfUserId) else Set(UserId(conv.id.str)),
+              isVideoCall = isVideo,
+              videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+            currentCall ! Some(info)
+            availableCalls.mutate(calls => calls + (conv.id -> info))
+          case err => warn(s"Unable to start call, reason: errno: $err")
         }
     }
   }
@@ -347,6 +347,7 @@ class DefaultCallingService(context:             Context,
           case _ =>
             warn(s"Call closed from unexpected state: ${call.state}")
         }
+        previousCall ! Some(call)
         None
       case Some(call) =>
         verbose("A call other than the current one was closed - likely missed another incoming call.")

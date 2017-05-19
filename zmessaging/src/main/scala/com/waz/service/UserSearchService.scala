@@ -18,7 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
-import com.waz.content.{CommonConnectionsStorage, MessagesStorage, SearchQueryCacheStorage, UsersStorage}
+import com.waz.content.{CommonConnectionsStorage, MessagesStorageImpl, SearchQueryCacheStorage, UsersStorageImpl}
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{SearchQuery, _}
@@ -36,7 +36,7 @@ import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
 
 class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage: CommonConnectionsStorage,
-    userService: UserService, usersStorage: UsersStorage, timeouts: Timeouts, sync: SyncServiceHandle, messages: MessagesStorage) {
+                        userService: UserServiceImpl, usersStorage: UsersStorageImpl, timeouts: Timeouts, sync: SyncServiceHandle, messages: MessagesStorageImpl) {
 
   import Threading.Implicits.Background
   import com.waz.service.UserSearchService._

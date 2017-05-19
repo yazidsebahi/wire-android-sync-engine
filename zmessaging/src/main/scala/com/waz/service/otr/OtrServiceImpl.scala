@@ -23,14 +23,15 @@ import javax.crypto.Mac
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.{DefaultMembersStorage, OtrClientsStorage}
+import com.waz.content.{MembersStorageImpl, GlobalPreferences, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
 import com.waz.model.GenericContent._
 import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
-import com.waz.service.conversation.DefaultConversationsContentUpdater
+import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
@@ -47,10 +48,15 @@ import scala.concurrent.Future
 import scala.concurrent.Future.sequence
 import scala.concurrent.duration._
 
-class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
-                 cryptoBox: CryptoBoxService, members: DefaultMembersStorage, convs: DefaultConversationsContentUpdater,
+
+trait OtrService {
+  def decryptGcm(data: Array[Byte], mac: Array[Byte]): Future[Option[JSONObject]]
+}
+
+class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
+                 cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: ConversationsContentUpdaterImpl,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
-                 prefs: PreferenceService) {
+                 prefs: GlobalPreferences) extends OtrService {
   import EventContext.Implicits.global
   import OtrService._
   import Threading.Implicits.Background
@@ -89,6 +95,8 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
               case None =>
                 error(s"External message could not be decoded External($key, $sha), data: $extData")
                 Some(OtrErrorEvent(conv, time, from, DecryptionError("symmetric decryption failed", from, sender)))
+              case Some(GenericMessage(_, Calling(content))) =>
+                Some(CallMessageEvent(conv, time, from, sender, content)) //call messages need sender client id
               case Some(extMsg) =>
                 Some(GenericMessageEvent(conv, time, from, extMsg).withLocalTime(ev.localTime))
             }
@@ -287,7 +295,6 @@ class OtrService(selfUserId: UserId, clientId: ClientId, val clients: OtrClients
 }
 
 object OtrService {
-  private implicit val logTag: LogTag = logTagFor[OtrService]
 
   val random = new SecureRandom
 
