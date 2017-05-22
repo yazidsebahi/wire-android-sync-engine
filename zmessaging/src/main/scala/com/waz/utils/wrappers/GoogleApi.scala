@@ -29,6 +29,8 @@ import com.waz.utils.LoggedTry
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.GoogleApi.RequestGooglePlayServices
 
+import scala.util.Try
+
 trait GoogleApi {
   def isGooglePlayServicesAvailable: Signal[Boolean]
   def checkGooglePlayServicesAvailable(activity: Activity): Unit
@@ -43,7 +45,7 @@ class GoogleApiImpl(context: Context, beConfig: BackendConfig) extends GoogleApi
 
   private val firebaseApp = beConfig.firebaseOptions(context)
 
-  override val isGooglePlayServicesAvailable = Signal[Boolean](api.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS)
+  override val isGooglePlayServicesAvailable = Signal[Boolean](Try(api.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS).toOption.contains(true))
 
   override def checkGooglePlayServicesAvailable(activity: Activity) = api.isGooglePlayServicesAvailable(activity) match {
     case ConnectionResult.SUCCESS => isGooglePlayServicesAvailable ! true
