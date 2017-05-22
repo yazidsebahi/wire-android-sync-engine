@@ -19,7 +19,6 @@ package com.waz.utils.wrappers
 
 import android.app.Activity
 import com.google.android.gms.common.{ConnectionResult, GoogleApiAvailability}
-import com.google.firebase.{FirebaseApp, FirebaseOptions}
 import com.google.firebase.iid.FirebaseInstanceId
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
@@ -67,10 +66,10 @@ class GoogleApiImpl(context: Context, beConfig: BackendConfig) extends GoogleApi
   }
 
   override def getPushToken =
-    LoggedTry(FirebaseInstanceId.getInstance(firebaseApp).getToken(beConfig.pushSenderId, "FCM")).toOption.map(PushToken(_))
+    firebaseApp.flatMap(app => LoggedTry(FirebaseInstanceId.getInstance(app).getToken(beConfig.pushSenderId, "FCM")).toOption.map(PushToken(_)))
 
   override def deleteAllPushTokens(): Unit =
-    LoggedTry(FirebaseInstanceId.getInstance(firebaseApp).deleteInstanceId())
+    firebaseApp.foreach(app => LoggedTry(FirebaseInstanceId.getInstance(app).deleteInstanceId()))
 }
 
 object GoogleApi {
