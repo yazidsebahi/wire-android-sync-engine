@@ -17,15 +17,32 @@
  */
 package com.waz.model
 
+import com.waz.ZLog.debug
+import com.waz.ZLog.ImplicitTag._
 import com.waz.db.{Dao, Dao2}
 import com.waz.model.TeamMemberData.Permission
+import com.waz.utils.JsonDecoder
 import com.waz.utils.wrappers.{DB, DBCursor}
+import org.json.JSONObject
+
+import scala.collection.mutable
 
 case class TeamData(id:      TeamId,
                     name:    String,
-                    picture: Option[AssetId])
+                    picture: Option[AssetId] = None)
 
 object TeamData {
+
+  implicit lazy val Decoder: JsonDecoder[TeamData] = new JsonDecoder[TeamData] {
+
+    override def apply(implicit js: JSONObject): TeamData = {
+      import JsonDecoder._
+      debug(s"decoding response: $js")
+      //TODO icon/icon_key is being left out for now - may want to include later
+      TeamData('id, 'name, None)
+    }
+  }
+
   import com.waz.db.Col._
   implicit object TeamDataDoa extends Dao[TeamData, TeamId] {
     val Id       = id[TeamId]     ('_id, "PRIMARY KEY").apply(_.id)
@@ -49,15 +66,27 @@ object TeamMemberData {
 
   type Permission = Permission.Value
   object Permission extends Enumeration {
-    val CreateConversation,
-        DeleteConversation,
-        AddTeamMember,
-        RemoveTeamMember,
-        AddConversationMember,
-        RemoveConversationMember,
-        GetBilling,
-        SetBilling,
-        SetTeamData = Value
+    val CreateConversation,         // 0x001
+        DeleteConversation,         // 0x002
+        AddTeamMember,              // 0x004
+        RemoveTeamMember,           // 0x008
+        AddConversationMember,      // 0x010
+        RemoveConversationMember,   // 0x020
+        GetBilling,                 // 0x040
+        SetBilling,                 // 0x080
+        SetTeamData,                // 0x100
+        GetMemberPermissions,       // 0x200
+        GetTeamConversations,       // 0x400
+        DeleteTeam = Value          // 0x800
+  }
+
+  //TODO is there a more idiomatic way of doing this in Scala?
+  def permissionsFromBitMask(mask: Int): Set[Permission] = {
+    val builder = new mutable.SetBuilder[Permission, Set[Permission]](Set.empty)
+    (0 until Permission.values.size).map(math.pow(2, _).toInt).zipWithIndex.foreach {
+      case (one, pos) => if ((mask & one) != 0) builder += Permission(pos)
+    }
+    builder.result()
   }
 
   import com.waz.db.Col._

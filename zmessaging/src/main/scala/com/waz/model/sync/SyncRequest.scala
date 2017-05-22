@@ -67,6 +67,7 @@ object SyncRequest {
   case object SyncSelf extends BaseRequest(Cmd.SyncSelf)
   case object DeleteAccount extends BaseRequest(Cmd.DeleteAccount)
   case object SyncConversations extends BaseRequest(Cmd.SyncConversations)
+  case object SyncTeams extends BaseRequest(Cmd.SyncTeams)
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
@@ -321,6 +322,7 @@ object SyncRequest {
           case Cmd.SyncSelf              => SyncSelf
           case Cmd.DeleteAccount         => DeleteAccount
           case Cmd.SyncConversations     => SyncConversations
+          case Cmd.SyncTeams             => SyncTeams
           case Cmd.SyncConnectedUsers    => SyncConnectedUsers
           case Cmd.SyncConnections       => SyncConnections
           case Cmd.RegisterPushToken     => RegisterPushToken(decodeId[PushToken]('token))
@@ -428,7 +430,7 @@ object SyncRequest {
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncCallState(_, _) => () // nothing to do
-        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | DeleteAccount | SyncConversations | SyncTeams | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }

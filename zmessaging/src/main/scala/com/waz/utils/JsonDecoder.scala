@@ -141,6 +141,7 @@ object JsonDecoder {
   implicit def decodeUri(s: Symbol)(implicit js: JSONObject): URI = URI.parse(js.getString(s.name))
 
   implicit def decodeSeq[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A]): Vector[A] = decodeColl[A, Vector](s)
+  implicit def decodeSet[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A]): Set[A] = decodeColl[A, Set](s)
   implicit def decodeArray[A](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A], ct: ClassTag[A]): Array[A] = decodeColl[A, Array](s)
   def decodeColl[A, B[_]](s: Symbol)(implicit js: JSONObject, dec: JsonDecoder[A], cbf: CanBuild[A, B[A]]): B[A] = if (js.has(s.name) && !js.isNull(s.name)) arrayColl[A, B](js.getJSONArray(s.name)) else cbf.apply.result
 
@@ -165,6 +166,7 @@ object JsonDecoder {
   implicit def decodeFiniteDurationSeq(s: Symbol)(implicit js: JSONObject): Seq[FiniteDuration] = array[FiniteDuration](s)({ (arr, i) => FiniteDuration(arr.getLong(i), TimeUnit.MILLISECONDS) })
 
   implicit def decodeUserId(s: Symbol)(implicit js: JSONObject): UserId = UserId(js.getString(s.name))
+  implicit def decodeTeamId(s: Symbol)(implicit js: JSONObject): TeamId = TeamId(js.getString(s.name))
   implicit def decodeConvId(s: Symbol)(implicit js: JSONObject): ConvId = ConvId(js.getString(s.name))
   implicit def decodeRConvId(s: Symbol)(implicit js: JSONObject): RConvId = RConvId(js.getString(s.name))
   implicit def decodeAssetId(s: Symbol)(implicit js: JSONObject): AssetId = AssetId(js.getString(s.name))

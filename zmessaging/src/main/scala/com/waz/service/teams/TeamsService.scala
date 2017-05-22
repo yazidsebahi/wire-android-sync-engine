@@ -42,15 +42,17 @@ trait TeamsService {
 
   def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]): Future[Unit]
 
+  def onTeamMember
+
 }
 
 class TeamsServiceImpl(selfUser:          UserId,
-                       teamStorage:       TeamsStorage,
-                       userStorage:       UsersStorage,
-                       convsStorage:      ConversationStorage,
-                       teamMemberStorage: TeamMemberStorage,
-                       sync:              SyncServiceHandle,
-                       prefs:             UserPreferences) extends TeamsService {
+                      teamStorage:       TeamsStorage,
+                      userStorage:       UsersStorage,
+                      convsStorage:      ConversationStorage,
+                      teamMemberStorage: TeamMemberStorage,
+                      sync:              SyncServiceHandle,
+                      prefs:             UserPreferences) extends TeamsService {
 
   private implicit val dispatcher = SerialDispatchQueue()
 
@@ -97,6 +99,9 @@ class TeamsServiceImpl(selfUser:          UserId,
   override def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]) = {
     for {
       _ <- teamStorage.insert(teams)
+      _ <- teamMemberStorage.insert(members)
+    //TODO should we check first if we already have these users in the database?
+      _ <- sync.syncUsers(members.map(_.userId).toSeq: _* )
     } yield {}
   }
 
@@ -105,6 +110,7 @@ class TeamsServiceImpl(selfUser:          UserId,
     Future.successful(TeamData(teamId, "", None))
   }
 
+  //TODO what happens if we miss a remove event?
   private def onRemoved(id: TeamId) = {
     for {
       _ <- teamStorage.remove(id)

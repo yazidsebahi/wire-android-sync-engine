@@ -44,6 +44,7 @@ trait SyncServiceHandle {
   def deleteAccount(): Future[SyncId]
   def syncConversations(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None): Future[SyncId]
+  def syncTeams(): Future[SyncId]
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
@@ -102,6 +103,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
   def syncConversations(dependsOn: Option[SyncId]) = addRequest(SyncConversations, priority = Priority.High, dependsOn = dependsOn.toSeq)
+  def syncTeams(): Future[SyncId] = addRequest(SyncTeams, priority = Priority.High)
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
@@ -178,6 +180,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
     case SyncCallState(convId, fresh)          => zms.voicechannelSync.syncCallState(convId, fresh)
     case SyncConversations                     => zms.conversationSync.syncConversations()
+    case SyncTeams                             => zms.teamsSync.syncTeams()
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()
     case SyncConnections                       => zms.connectionsSync.syncConnections()
     case SyncSelf                              => zms.usersSync.syncSelfUser()

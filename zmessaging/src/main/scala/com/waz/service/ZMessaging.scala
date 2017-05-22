@@ -229,6 +229,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
   lazy val usersSync        = wire[UsersSyncHandler]
   lazy val conversationSync = wire[ConversationsSyncHandler]
+  lazy val teamsSync        = wire[TeamsSyncHandler]
   lazy val connectionsSync  = wire[ConnectionsSyncHandler]
   lazy val voicechannelSync = wire[VoiceChannelSyncHandler]
   lazy val addressbookSync  = wire[AddressBookSyncHandler]
