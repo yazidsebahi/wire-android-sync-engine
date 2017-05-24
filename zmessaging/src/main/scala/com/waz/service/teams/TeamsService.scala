@@ -42,8 +42,6 @@ trait TeamsService {
 
   def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]): Future[Unit]
 
-  def onTeamMember
-
 }
 
 class TeamsServiceImpl(selfUser:          UserId,
@@ -58,14 +56,17 @@ class TeamsServiceImpl(selfUser:          UserId,
 
 
   val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
-    RichFuture.processSequential(events)(handleTeamEvent)
+    import TeamEvent._
+    for {
+      _ <- onTeamsAdded(events.collect { case Create(id) => id }.toSet)
+      _ <- onTeamsRemoved(events.collect { case Delete(id) => id}.toSet)
+      _ <- RichFuture.processSequential(events)(handleTeamEvent)
+    } yield {}
   }
 
   private def handleTeamEvent(ev: TeamEvent) = {
     import TeamEvent._
     ev match {
-      case Create(id)                         => onAdded(id)
-      case Delete(id)                         => onRemoved(id)
       case Update(id, name, icon, iconKey)    => onUpdated(id, icon, iconKey)
       case MemberJoin(teamId, userId)         => onMemberJoin(teamId, userId)
       case MemberLeave(teamId, userId)        => onMemberLeave(teamId, userId)
@@ -76,7 +77,7 @@ class TeamsServiceImpl(selfUser:          UserId,
   }
 
   override def getMembers(teamId: TeamId) = for {
-    userIds  <- teamMemberStorage.getByTeam(teamId).map(_.map(_.userId))
+    userIds  <- teamMemberStorage.getByTeam(Set(teamId)).map(_.map(_.userId))
     userData <- userStorage.getAll(userIds)
   } yield userData.collect { case Some(data) => data }.toSet
 
@@ -105,13 +106,11 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield {}
   }
 
-  private def onAdded(teamId: TeamId) = {
-    //TODO
-    Future.successful(TeamData(teamId, "", None))
-  }
+  private def onTeamsAdded(ids: Set[TeamId]) =
+    sync.syncTeams(ids)
 
   //TODO what happens if we miss a remove event?
-  private def onRemoved(id: TeamId) = {
+  private def onTeamsRemoved(id: Set[TeamId]) = {
     for {
       _ <- teamStorage.remove(id)
       _ <- teamMemberStorage.removeByTeam(id)

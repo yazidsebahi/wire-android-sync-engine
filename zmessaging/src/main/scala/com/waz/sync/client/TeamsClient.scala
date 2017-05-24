@@ -32,7 +32,7 @@ import scala.util.Try
 
 trait TeamsClient {
   def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamsResponse]
-  def getTeam(id: TeamId): ErrorOrResponse[TeamData]
+  def getTeams(id: Set[TeamId]): ErrorOrResponse[TeamsResponse]
   def getTeamMembers(id: TeamId): ErrorOrResponse[Set[TeamMemberData]]
 }
 
@@ -41,14 +41,14 @@ class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
   import Threading.Implicits.Background
 
   override def getTeams(start: Option[TeamId]) = {
-    zNetClient.withErrorHandling("loadTeams", Request.Get(teamsPaginatedQuery(start))) {
+    zNetClient.withErrorHandling("loadAllTeams", Request.Get(teamsPaginatedQuery(start))) {
       case Response(SuccessHttpStatus(), TeamsResponse(teams, hasMore), _) => TeamsResponse(teams, hasMore)
     }
   }
 
-  override def getTeam(id: TeamId) = {
-    zNetClient.withErrorHandling("loadTeam", Request.Get(teamPath(id))) {
-      case Response(SuccessHttpStatus(), TeamResponse(teamData), _) => teamData
+  override def getTeams(ids: Set[TeamId]) = {
+    zNetClient.withErrorHandling("loadBatchTeams", Request.Get(teamsBatchQuery(ids))) {
+      case Response(SuccessHttpStatus(), TeamsResponse(teams, _), _) => TeamsResponse(teams, hasMore = false)
     }
   }
 
@@ -67,11 +67,13 @@ object TeamsClient {
   val TeamsPath = "/teams"
   val TeamsPageSize = 100
 
-  def teamPath(id: TeamId) = s"$TeamsPath/${id.str}"
-  def teamMembersPath(id: TeamId) = s"${teamPath(id)}/members"
+  def teamMembersPath(id: TeamId) = s"$TeamsPath/${id.str}/members"
 
   def teamsPaginatedQuery(start: Option[TeamId]): String =
     Request.query(TeamsPath, ("size", TeamsPageSize) :: start.toList.map("start" -> _.str) : _*)
+
+  def teamsBatchQuery(ids: Set[TeamId]): String =
+    Request.query(TeamsPath, ("ids", ids.mkString(",")))
 
   import JsonDecoder._
 
@@ -80,18 +82,8 @@ object TeamsClient {
   object TeamsResponse {
     def unapply(response: ResponseContent): Option[(Set[TeamData], Boolean)] =
       response match {
-        case JsonObjectResponse(js) if js.has("teams") && js.has("has_more") =>
-          Try(JsonDecoder.decodeSet('teams)(js, TeamData.Decoder), decodeBool('has_more)(js)).toOption
-        case _ =>
-          warn(s"Unexpected response: $response")
-          None
-      }
-  }
-
-  object TeamResponse {
-    def unapply(response: ResponseContent): Option[TeamData] =
-      response match {
-        case JsonObjectResponse(js) => Try(TeamData.Decoder(js)).toOption
+        case JsonObjectResponse(js) if js.has("teams") =>
+          Try(JsonDecoder.decodeSet('teams)(js, TeamData.Decoder), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
         case _ =>
           warn(s"Unexpected response: $response")
           None

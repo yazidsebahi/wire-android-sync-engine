@@ -33,8 +33,8 @@ class TeamsStorageImpl(context: Context, storage: Database) extends CachedStorag
 
 trait TeamMemberStorage extends CachedStorage[TeamMemberData.Key, TeamMemberData] {
   def getByUser(user: UserId): Future[Set[TeamMemberData]]
-  def getByTeam(team: TeamId): Future[Set[TeamMemberData]]
-  def removeByTeam(team: TeamId): Future[Set[UserId]]
+  def getByTeam(team: Set[TeamId]): Future[Set[TeamMemberData]]
+  def removeByTeam(teams: Set[TeamId]): Future[Unit]
 }
 
 class TeamMemberStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[TeamMemberData.Key, TeamMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(TeamMemberDataDoa, "TeamMemberStorage_Cached") with TeamMemberStorage {
@@ -43,10 +43,10 @@ class TeamMemberStorageImpl(context: Context, storage: Database) extends CachedS
 
   override def getByUser(user: UserId) = find(_.userId == user, TeamMemberDataDoa.findForUser(user)(_), identity)
 
-  override def getByTeam(team: TeamId) = find(_.teamId == team, TeamMemberDataDoa.findForTeam(team)(_), identity)
+  override def getByTeam(teams: Set[TeamId]) = find(data => teams.contains(data.teamId), TeamMemberDataDoa.findForTeams(teams)(_), identity)
 
-  override def removeByTeam(teamId: TeamId) = for {
-    users <- getByTeam(teamId).map(_.map(_.userId))
-    _     <- remove(users.map(_ -> teamId))
-  } yield users
+  override def removeByTeam(teams: Set[TeamId]) = for {
+    members <- getByTeam(teams)
+    _     <- remove(members.map(data => data.userId -> data.teamId))
+  } yield {}
 }

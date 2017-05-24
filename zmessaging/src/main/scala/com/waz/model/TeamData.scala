@@ -101,7 +101,7 @@ object TeamMemberData {
     override def apply(implicit cursor: DBCursor): TeamMemberData = TeamMemberData(UserId, TeamId, Permissions)
 
     def findForUser(userId: UserId)(implicit db: DB) = iterating(find(UserId, userId))
-    def findForTeam(teamId: TeamId)(implicit db: DB) = iterating(find(TeamId, teamId))
+    def findForTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(TeamId, teams))
 
   }
 }

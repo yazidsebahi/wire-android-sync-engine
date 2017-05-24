@@ -35,7 +35,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
   val client = mock[TeamsClient]
   val service = mock[TeamsService]
 
-  feature("Sync teams") {
+  feature("Sync all teams") {
 
     scenario("Basic single team with some members sync") {
 
@@ -46,12 +46,12 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
         TeamMemberData(UserId(), teamId, Set.empty)
       )
 
-      (client.getTeams _).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = false))))
+      (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = false))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Right(members)))
 
       (service.onTeamsSynced _).expects(teams, members).once().returning(Future.successful({}))
 
-      result(initHandler.syncTeams()) shouldEqual SyncResult.Success
+      result(initHandler.syncTeams(Set.empty)) shouldEqual SyncResult.Success
 
     }
 
@@ -69,7 +69,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
       }
 
       var callsToTeams = 0
-      (client.getTeams _).expects(*).twice().onCall { start: Option[TeamId] =>
+      (client.getTeams(_: Option[TeamId])).expects(*).twice().onCall { start: Option[TeamId] =>
         callsToTeams += 1
 
         val resp = callsToTeams match {
@@ -118,7 +118,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
 
         Future.successful({})
       }
-      result(initHandler.syncTeams()) shouldEqual SyncResult.Success
+      result(initHandler.syncTeams(Set.empty)) shouldEqual SyncResult.Success
     }
 
     scenario("Failed members download should fail entire sync") {
@@ -128,12 +128,12 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
 
       val timeoutError = ErrorResponse(ErrorResponse.ConnectionErrorCode, s"Request failed with timeout", "connection-error")
 
-      (client.getTeams _).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = false))))
+      (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = true))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Left(timeoutError)))
 
       (service.onTeamsSynced _).expects(*, *).never().returning(Future.successful({}))
 
-      result(initHandler.syncTeams()) shouldEqual SyncResult(timeoutError)
+      result(initHandler.syncTeams(Set.empty)) shouldEqual SyncResult(timeoutError)
     }
   }
 

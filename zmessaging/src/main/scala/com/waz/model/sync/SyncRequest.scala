@@ -67,11 +67,14 @@ object SyncRequest {
   case object SyncSelf extends BaseRequest(Cmd.SyncSelf)
   case object DeleteAccount extends BaseRequest(Cmd.DeleteAccount)
   case object SyncConversations extends BaseRequest(Cmd.SyncConversations)
-  case object SyncTeams extends BaseRequest(Cmd.SyncTeams)
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
   case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
+
+  case class SyncTeams(teams: Set[TeamId]) extends BaseRequest(Cmd.SyncTeams) {
+    override def mergeKey = (cmd, teams)
+  }
 
   case class PostAddressBook(addressBook: AddressBook) extends BaseRequest(Cmd.PostAddressBook) {
     override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(Merged(_))
@@ -322,7 +325,7 @@ object SyncRequest {
           case Cmd.SyncSelf              => SyncSelf
           case Cmd.DeleteAccount         => DeleteAccount
           case Cmd.SyncConversations     => SyncConversations
-          case Cmd.SyncTeams             => SyncTeams
+          case Cmd.SyncTeams             => SyncTeams(decodeTeamIdSeq('teams).toSet)
           case Cmd.SyncConnectedUsers    => SyncConnectedUsers
           case Cmd.SyncConnections       => SyncConnections
           case Cmd.RegisterPushToken     => RegisterPushToken(decodeId[PushToken]('token))
@@ -429,8 +432,10 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
+        case SyncTeams(teams) =>
+          o.put("teams", arrString(teams.toSeq.map(_.str)))
         case SyncCallState(_, _) => () // nothing to do
-        case SyncSelf | DeleteAccount | SyncConversations | SyncTeams | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }

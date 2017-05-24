@@ -24,7 +24,6 @@ import java.util.{Date, Locale, TimeZone}
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.push.PushTokenService.PushSenderId
 import com.waz.utils.wrappers.URI
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.{Duration, Instant}
@@ -162,6 +161,7 @@ object JsonDecoder {
   implicit def decodeDoubleSeq(s: Symbol)(implicit js: JSONObject): Seq[Double] = array[Double](s)({ _.getDouble(_) })
   implicit def decodeStringSeq(s: Symbol)(implicit js: JSONObject): Seq[String] = array[String](s)({ _.getString(_) })
   implicit def decodeClientIdSeq(s: Symbol)(implicit js: JSONObject): Seq[ClientId] = array[ClientId](s)({ (arr, i) => ClientId(arr.getString(i)) })
+  implicit def decodeTeamIdSeq(s: Symbol)(implicit js: JSONObject): Seq[TeamId] = array[TeamId](s)({ (arr, i) => TeamId(arr.getString(i)) })
   implicit def decodeFloatSeq(s: Symbol)(implicit js: JSONObject): Seq[Float] = array[Float](s)({ _.getDouble(_).toFloat })
   implicit def decodeFiniteDurationSeq(s: Symbol)(implicit js: JSONObject): Seq[FiniteDuration] = array[FiniteDuration](s)({ (arr, i) => FiniteDuration(arr.getLong(i), TimeUnit.MILLISECONDS) })
 
