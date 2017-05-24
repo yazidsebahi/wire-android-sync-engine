@@ -29,7 +29,7 @@ import scala.collection.mutable
 
 case class TeamData(id:      TeamId,
                     name:    String,
-                    picture: Option[AssetId] = None)
+                    icon:    Option[AssetId] = None)
 
 object TeamData {
 
@@ -47,7 +47,7 @@ object TeamData {
   implicit object TeamDataDoa extends Dao[TeamData, TeamId] {
     val Id       = id[TeamId]     ('_id, "PRIMARY KEY").apply(_.id)
     val Name     = text           ('name)(_.name)
-    val Picture  = opt(id[AssetId]('picture))(_.picture)
+    val Picture  = opt(id[AssetId]('picture))(_.icon)
 
     override val idCol = Id
     override val table = Table("Teams", Id, Name, Picture)
@@ -100,7 +100,7 @@ object TeamMemberData {
 
     override def apply(implicit cursor: DBCursor): TeamMemberData = TeamMemberData(UserId, TeamId, Permissions)
 
-    def findForUser(userId: UserId)(implicit db: DB) = iterating(find(UserId, userId))
+    def findForUsers(users: Set[UserId])(implicit db: DB) = iterating(findInSet(UserId, users))
     def findForTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(TeamId, teams))
 
   }

@@ -20,6 +20,8 @@ package com.waz.service.teams
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationDataDao
+import com.waz.model.UserData.ConnectionStatus.Unconnected
+import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.service.EventScheduler
 import com.waz.sync.SyncServiceHandle
@@ -67,7 +69,7 @@ class TeamsServiceImpl(selfUser:          UserId,
   private def handleTeamEvent(ev: TeamEvent) = {
     import TeamEvent._
     ev match {
-      case Update(id, name, icon, iconKey)    => onUpdated(id, icon, iconKey)
+      case Update(id, name, icon, iconKey)    => onUpdated(id, name, icon, iconKey)
       case MemberJoin(teamId, userId)         => onMemberJoin(teamId, userId)
       case MemberLeave(teamId, userId)        => onMemberLeave(teamId, userId)
       case ConversationCreate(teamId, convId) => onConversationCreated(teamId, convId)
@@ -82,7 +84,7 @@ class TeamsServiceImpl(selfUser:          UserId,
   } yield userData.collect { case Some(data) => data }.toSet
 
   override def getTeams(userId: UserId) = for {
-    teamIds  <- teamMemberStorage.getByUser(userId).map(_.map(_.teamId))
+    teamIds  <- teamMemberStorage.getByUser(Set(userId)).map(_.map(_.teamId))
     teamData <- teamStorage.getAll(teamIds)
   } yield teamData.collect { case Some(data) => data }.toSet
 
@@ -106,20 +108,21 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield {}
   }
 
-  private def onTeamsAdded(ids: Set[TeamId]) =
-    sync.syncTeams(ids)
+  private def onTeamsAdded(ids: Set[TeamId]) = sync.syncTeams(ids)
 
-  //TODO what happens if we miss a remove event?
   private def onTeamsRemoved(id: Set[TeamId]) = {
     for {
-      _ <- teamStorage.remove(id)
-      _ <- teamMemberStorage.removeByTeam(id)
+      _       <- teamStorage.remove(id)
+      removed <- teamMemberStorage.removeByTeam(id)
+      _       <- removeUnconnectedUsers(removed)
     } yield {}
   }
 
-  private def onUpdated(id: TeamId, icon: Option[RAssetId], iconKey: Option[AESKey]) = {
-    //TODO
-    Future.successful(TeamData(id, "", None))
+  private def onUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
+    //TODO handle processing of icon
+    teamStorage.update(id, team => team.copy(
+      name = name.getOrElse(team.name)
+    ))
   }
 
   private def onMemberJoin(teamId: TeamId, userId: UserId) = {
@@ -130,9 +133,21 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield memberData
   }
 
-  private def onMemberLeave(teamId: TeamId, userId: UserId) = {
-    //TODO
-    Future.successful({})
+  private def onMemberLeave(teamId: TeamId, userId: UserId) =
+    for {
+      _ <- teamMemberStorage.remove((userId, teamId))
+      _ <- removeUnconnectedUsers(Set(userId))
+    } yield {}
+
+
+  private def removeUnconnectedUsers(users: Set[UserId]): Future[Unit] = {
+    (for {
+      stillTeamMembers <- teamMemberStorage.getByUser(users).map(_.map(_.userId).toSet)
+      stillConnected   <- userStorage.find(u => users.contains(u.id), db => UserDataDao.findAll(users)(db), identity).map(_.filter(_.connection != Unconnected).map(_.id).toSet)
+    } yield {
+       val toRemove = users -- stillTeamMembers -- stillConnected
+      userStorage.remove(toRemove)
+    }).flatten
   }
 
   private def onConversationCreated(teamId: TeamId, convId: RConvId) = {
