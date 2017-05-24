@@ -17,8 +17,6 @@
  */
 package com.waz.service.conversation
 
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ConversationStorageImpl
 import com.waz.model.GenericContent._
 import com.waz.model._
@@ -58,11 +56,13 @@ object UnarchivingEventProcessingStage {
     case MemberLeaveEvent(_, _, _, leaving) if leaving contains selfUserId => false
     case GenericMessageEvent(_, _, _, GenericMessage(_, content)) =>
       content match {
-        case _: Text  => true
-        case _: ImageAsset => true
-        case _: Knock => true
-        case _: Ephemeral => true
-        case _        => false
+        case _: Text        => true
+        case _: ImageAsset  => true
+        case _: Knock       => true
+        case _: Ephemeral   => true
+        case _: Asset       => true
+        case _: Location    => true
+        case _              => false
       }
     case _: UnarchivingEvent => true
     case _ => false
