@@ -257,8 +257,6 @@ object GlobalPreferences {
   lazy val PushToken                  = PrefKey[Option[PushToken]]("PUSH_TOKEN")
 
   lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
-  lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")
-  lazy val AddressBookLastUpload      = PrefKey[Option[Instant]]("address_book_last_upload_time")
 
   lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED")
   lazy val LoggingEnabled             = PrefKey[Boolean]("PREF_KEY_AVS_LOGGING")
@@ -297,5 +295,8 @@ object UserPreferences {
   lazy val LastFetchedConvEventLocal = PrefKey[Instant]("last_fetched_local_time")
   lazy val GcmRegistrationTime       = PrefKey[Instant]("gcm_registration_time")
   lazy val GcmRegistrationRetry      = PrefKey[Int]    ("gcm_registration_retry_count")
+
+  lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")
+  lazy val AddressBookLastUpload      = PrefKey[Option[Instant]]("address_book_last_upload_time")
 
 }

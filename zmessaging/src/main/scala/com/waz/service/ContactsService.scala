@@ -31,7 +31,8 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.api.Permission.READ_CONTACTS
-import com.waz.content.GlobalPreferences.{AddressBookLastUpload, AddressBookVersion, ShareContacts}
+import com.waz.content.GlobalPreferences.ShareContacts
+import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
@@ -53,7 +54,7 @@ import scala.util.Success
 import scala.util.control.NoStackTrace
 
 class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
-                      userPrefs: UserPreferences, prefs: GlobalPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
+                      userPrefs: UserPreferences, globalPrefs: GlobalPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
                       convs: ConversationStorageImpl, permissions: PermissionsService) {
 
@@ -62,7 +63,6 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
   import Threading.Implicits.Background
   import lifecycle._
   import timeouts.contacts._
-  import userPrefs._
 
   private[service] val initFuture = init()
   private def init() = permissions.request(Set(READ_CONTACTS), delayUntilProviderIsSet = true).flatMap(_ =>
@@ -134,9 +134,9 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
     }
   }
 
-  private[waz] lazy val lastUploadTime                     = preference(AddressBookLastUpload)
-  private[service] lazy val addressBookVersionOfLastUpload = preference(AddressBookVersion)
-  private[service] lazy val shareContactsPref              = preference(ShareContacts)
+  private[waz] lazy val lastUploadTime                     = userPrefs.preference(AddressBookLastUpload)
+  private[service] lazy val addressBookVersionOfLastUpload = userPrefs.preference(AddressBookVersion)
+  private[service] lazy val shareContactsPref              = globalPrefs.preference(ShareContacts)
 
   private lazy val contactsObserver = new ContentObserverSignal(Contacts)(context)
   private lazy val contactsNeedReloading = new AtomicBoolean(true)
