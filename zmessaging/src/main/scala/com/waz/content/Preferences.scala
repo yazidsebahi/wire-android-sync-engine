@@ -117,6 +117,8 @@ object Preferences {
 
   case class PrefKey[A: PrefCodec](str: String, customDefault: A = null.asInstanceOf[A]) {
     val default = Option(customDefault).getOrElse(implicitly[PrefCodec[A]].default)
+
+    override def toString = s"$str (def: $default)"
   }
 }
 
