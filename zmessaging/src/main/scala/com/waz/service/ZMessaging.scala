@@ -36,7 +36,7 @@ import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
 import com.waz.service.push._
-import com.waz.service.teams.{TeamsService, TeamsServiceImpl}
+import com.waz.service.teams.TeamsServiceImpl
 import com.waz.sync.client._
 import com.waz.sync.handler._
 import com.waz.sync.otr.OtrSyncHandler
@@ -205,7 +205,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val convEvents: ConversationEventsService  = wire[ConversationEventsService]
   lazy val convsUi                                = wire[ConversationsUiService]
   lazy val convsStats                             = wire[ConversationsListStateService]
-  lazy val teams: TeamsService                    = wire[TeamsServiceImpl]
+  lazy val teams: TeamsServiceImpl                = wire[TeamsServiceImpl]
   lazy val messages: MessagesServiceImpl          = wire[MessagesServiceImpl]
   lazy val connection: ConnectionService          = wire[ConnectionService]
   lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
@@ -268,6 +268,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           voice.callStateEventsStage,
           voice.memberLeaveEventsStage,
           conversations.convStateEventProcessingStage,
+          teams.eventsProcessingStage,
           typing.typingEventStage,
           otrClientsService.otrClientsProcessingStage,
           pushToken.eventProcessingStage,

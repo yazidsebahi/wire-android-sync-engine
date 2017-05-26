@@ -17,16 +17,15 @@
  */
 package com.waz.service.teams
 
-import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{verbose, _}
+import com.waz.ZLog.verbose
 import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.UserData.ConnectionStatus.Unconnected
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
-import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService, ConversationsUiService}
+import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
