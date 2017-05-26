@@ -18,9 +18,11 @@
 package com.waz.content
 
 import android.content.Context
+import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.TeamMemberData.TeamMemberDataDoa
-import com.waz.model.{TeamData, TeamId, TeamMemberData, UserId}
+import com.waz.model._
+import com.waz.service.SearchKey
 import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
@@ -34,6 +36,7 @@ class TeamsStorageImpl(context: Context, storage: Database) extends CachedStorag
 trait TeamMemberStorage extends CachedStorage[TeamMemberData.Key, TeamMemberData] {
   def getByUser(user: Set[UserId]): Future[Set[TeamMemberData]]
   def getByTeam(team: Set[TeamId]): Future[Set[TeamMemberData]]
+  def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean): Future[Set[TeamMemberData]]
   def removeByTeam(teams: Set[TeamId]): Future[Set[UserId]]
 }
 
@@ -49,4 +52,6 @@ class TeamMemberStorageImpl(context: Context, storage: Database) extends CachedS
     members <- getByTeam(teams)
     _       <- remove(members.map(data => data.userId -> data.teamId))
   } yield members.map(_.userId)
+
+  override def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean) = storage(TeamMemberDataDoa.search(prefix, team, handleOnly)(_)).future
 }

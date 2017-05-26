@@ -20,7 +20,10 @@ package com.waz.model
 import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
 import com.waz.db.{Dao, Dao2}
+import com.waz.model.ConversationData.ConversationDataDao.list
 import com.waz.model.TeamMemberData.Permission
+import com.waz.model.UserData.UserDataDao
+import com.waz.service.SearchKey
 import com.waz.utils.JsonDecoder
 import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
@@ -102,6 +105,23 @@ object TeamMemberData {
 
     def findForUsers(users: Set[UserId])(implicit db: DB) = iterating(findInSet(UserId, users))
     def findForTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(TeamId, teams))
+
+    def search(prefix: SearchKey, team: TeamId, handleOnly: Boolean)(implicit db: DB) = {
+      import UserData.{UserDataDao => U}
+      val select =
+        s"""SELECT DISTINCT tm.*
+           |  FROM ${table.name} tm, ${U.table.name} u
+           | WHERE tm.${UserId.name} = u.${U.Id.name}""".stripMargin
+      val handleCondition =
+        if (handleOnly){
+          s"""AND u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
+        } else {
+          s"""AND (   u.${U.SKey.name} LIKE '${U.SKey(prefix)}%'
+             |     OR u.${U.SKey.name} LIKE '% ${U.SKey(prefix)}%'
+             |     OR u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
+        }
+      list(db.rawQuery(select + " " + handleCondition, null)).toSet
+    }
 
   }
 }

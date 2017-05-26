@@ -24,7 +24,7 @@ import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.UserData.ConnectionStatus.Unconnected
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
-import com.waz.service.EventScheduler
+import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.RichFuture
@@ -33,15 +33,15 @@ import scala.concurrent.Future
 
 trait TeamsService {
 
-  def getMembers(teamId: TeamId): Future[Set[UserData]]
-
   def getTeams(userId: UserId): Future[Set[TeamData]]
+
+  def searchTeamMembers(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[UserData]]
+
+  def searchTeamConversations(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[ConversationData]]
 
   def getSelfTeams: Future[Set[TeamData]]
 
   def getPermissions(userId: UserId, teamId: TeamId): Future[Option[Set[TeamMemberData.Permission]]]
-
-  def getTeamConversations(teamId: TeamId): Future[Set[ConversationData]]
 
   def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]): Future[Unit]
 
@@ -87,10 +87,24 @@ class TeamsServiceImpl(selfUser:          UserId,
     }
   }
 
-  override def getMembers(teamId: TeamId) = for {
-    userIds  <- teamMemberStorage.getByTeam(Set(teamId)).map(_.map(_.userId))
-    userData <- userStorage.getAll(userIds)
-  } yield userData.collect { case Some(data) => data }.toSet
+  //TODO - maybe include user permissions for supplied team
+  override def searchTeamMembers(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false) = {
+    for {
+      userIds  <- (query match {
+        case Some(q) => teamMemberStorage.searchByTeam(teamId, q, handleOnly)
+        case None =>    teamMemberStorage.getByTeam(Set(teamId))
+      }).map(_.map(_.userId) - selfUser)
+      userData <- userStorage.getAll(userIds)
+    } yield userData.collect { case Some(data) => data }.toSet
+  }
+
+  override def searchTeamConversations(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false) = {
+    import ConversationDataDao._
+    (query match {
+      case Some(q) => convsStorage.search(q, selfUser, handleOnly, Some(teamId))
+      case None    => convsStorage.find(_.team.contains(teamId), db => iterating(find(Team, Some(teamId))(db)), identity)
+    }).map(_.toSet)
+  }
 
   override def getTeams(userId: UserId) = for {
     teamIds  <- teamMemberStorage.getByUser(Set(userId)).map(_.map(_.teamId))
@@ -101,11 +115,6 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   override def getPermissions(userId: UserId, teamId: TeamId) =
     teamMemberStorage.get((userId, teamId)).map(_.map(_.permissions))
-
-  override def getTeamConversations(teamId: TeamId) = {
-    import ConversationDataDao._
-    convsStorage.find(_.team.contains(teamId), db => iterating(find(Team, Some(teamId))(db)), identity)
-  }
 
   //TODO we should clear team/teamMember storage on full sync. There's no way of knowing what teams we're not a part of...
   override def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]) = {

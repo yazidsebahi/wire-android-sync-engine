@@ -258,9 +258,9 @@ object ConversationData {
     import ConversationMemberData.{ConversationMemberDataDao => CM}
     import UserData.{UserDataDao => U}
 
-    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean)(implicit db: DB) ={
+    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB) ={
       val select =
-        s"""SELECT DISTINCT c.*
+        s"""SELECT c.* ${if (teamId.isDefined) ", COUNT(*)" else ""}
             |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
             | WHERE cm.${CM.ConvId.name} = c.${Id.name}
             |   AND cm.${CM.UserId.name} = u.${U.Id.name}
@@ -278,7 +278,13 @@ object ConversationData {
               |     OR u.${U.SKey.name} LIKE '% ${U.SKey(prefix)}%'
               |     OR u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
         }
-      list(db.rawQuery(select + " " + handleCondition, null))
+      val teamCondition = teamId.map(_ =>
+        s"""AND c.${Team.name} = ${Team(teamId)}
+           | GROUP BY cm.${CM.ConvId.name}
+           | HAVING COUNT(*) > 2
+         """.stripMargin)
+
+      list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null))
     }
   }
 }
