@@ -31,6 +31,7 @@ import com.waz.utils.RichFuture
 
 import scala.concurrent.Future
 
+//TODO - return Signals of the search results for UI??
 trait TeamsService {
 
   def getTeams(userId: UserId): Future[Set[TeamData]]

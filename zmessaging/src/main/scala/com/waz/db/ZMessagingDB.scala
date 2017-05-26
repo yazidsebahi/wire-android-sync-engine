@@ -38,6 +38,8 @@ import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
+import com.waz.model.TeamData.TeamDataDoa
+import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.VoiceParticipantData.VoiceParticipantDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
@@ -57,7 +59,7 @@ object ZMessagingDB {
   val DbVersion = 87
 
   lazy val daos = Seq (
-    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
+    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
