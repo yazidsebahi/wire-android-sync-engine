@@ -30,6 +30,7 @@ import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.RichFuture
 
 import scala.concurrent.Future
+import scala.concurrent.Future.traverse
 
 //TODO - return Signals of the search results for UI??
 trait TeamsService {
@@ -69,23 +70,22 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
     import TeamEvent._
+
+    def memberEvents(evs: Iterable[MemberEvent]): Map[TeamId, Set[UserId]] =
+      evs.groupBy { _.teamId }.map { case (t, ev) => t -> ev.map(_.userId).toSet}
+
+    def convEvents(evs: Iterable[ConversationEvent]): Map[TeamId, Set[RConvId]] =
+      evs.groupBy { _.teamId }.map { case (t, ev) => t -> ev.map(_.convId).toSet}
+
     for {
       _ <- onTeamsAdded(events.collect { case Create(id) => id }.toSet)
       _ <- onTeamsRemoved(events.collect { case Delete(id) => id}.toSet)
-      _ <- RichFuture.processSequential(events)(handleTeamEvent)
+      _ <- RichFuture.processSequential(events.collect { case e:Update => e}) { case Update(id, name, icon, iconKey) => onTeamUpdated(id, name, icon, iconKey) }
+      _ <- traverse(memberEvents(events.collect { case e:MemberJoin  => e})){ case (team, joined) => onMembersJoined(team, joined)}
+      _ <- traverse(memberEvents(events.collect { case e:MemberLeave => e})){ case (team, left)   => onMembersLeft(team, left)}
+      _ <- traverse(convEvents(events.collect { case e:ConversationCreate => e})) { case (team, created)   => onConversationsCreated(team, created)}
+      _ <- traverse(convEvents(events.collect { case e:ConversationDelete => e})) { case (team, deleted)   => onConversationsDeleted(team, deleted)}
     } yield {}
-  }
-
-  private def handleTeamEvent(ev: TeamEvent) = {
-    import TeamEvent._
-    ev match {
-      case Update(id, name, icon, iconKey)    => onUpdated(id, name, icon, iconKey)
-      case MemberJoin(teamId, userId)         => onMemberJoin(teamId, userId)
-      case MemberLeave(teamId, userId)        => onMemberLeave(teamId, userId)
-      case ConversationCreate(teamId, convId) => onConversationCreated(teamId, convId)
-      case ConversationDelete(teamId, convId) => onConversationDeleted(teamId, convId)
-      case _ => Future.successful({})
-    }
   }
 
   //TODO - maybe include user permissions for supplied team
@@ -137,7 +137,7 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield {}
   }
 
-  private def onUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
+  private def onTeamUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
     //TODO handle processing of icon
     teamStorage.update(id, team => team.copy(
       name = name.getOrElse(team.name)
@@ -146,13 +146,13 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   //TODO follow up on: https://github.com/wireapp/architecture/issues/13
   //At the moment, we need to re-fetch the entire list of team members as a workaround
-  private def onMemberJoin(teamId: TeamId, userId: UserId) =
+  private def onMembersJoined(teamId: TeamId, userId: Set[UserId]) =
     sync.syncTeams(Set(teamId))
 
-  private def onMemberLeave(teamId: TeamId, userId: UserId) =
+  private def onMembersLeft(teamId: TeamId, userIds: Set[UserId]) =
     for {
-      _ <- teamMemberStorage.remove((userId, teamId))
-      _ <- removeUnconnectedUsers(Set(userId))
+      _ <- teamMemberStorage.remove(userIds.map(u => u -> teamId))
+      _ <- removeUnconnectedUsers(userIds)
     } yield {}
 
 
@@ -166,12 +166,12 @@ class TeamsServiceImpl(selfUser:          UserId,
     }).flatten
   }
 
-  private def onConversationCreated(teamId: TeamId, convId: RConvId) = {
+  private def onConversationsCreated(teamId: TeamId, convs: Set[RConvId]) = {
     //TODO
     Future.successful({})
   }
 
-  private def onConversationDeleted(teamId: TeamId, convId: RConvId) = {
+  private def onConversationsDeleted(teamId: TeamId, convs: Set[RConvId]) = {
     //TODO
     Future.successful({})
   }
