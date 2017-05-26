@@ -90,18 +90,15 @@ object TeamsClient {
       }
   }
 
-  case class TeamMembersResponse(members: Set[(UserId, Set[TeamMemberData.Permission])])
-
   object TeamMembersResponse {
-    import TeamMemberData._
-    lazy val MemberDecoder = new JsonDecoder[(UserId, Set[Permission])] {
+    lazy val MemberDecoder = new JsonDecoder[(UserId, Long)] {
       override def apply(implicit js: JSONObject) = {
         //TODO do we want to keep the 'copy' permissions for display
-        (decodeId[UserId]('user), permissionsFromBitMask(decodeInt('self)('permissions)))
+        (decodeId[UserId]('user), decodeInt('self)('permissions))
       }
     }
 
-    def unapply(response: ResponseContent): Option[Set[(UserId, Set[Permission])]] = {
+    def unapply(response: ResponseContent): Option[Set[(UserId, Long)]] = {
       response match {
         case JsonObjectResponse(js) if js.has("members") =>
           Try(decodeSet('members)(js, MemberDecoder)).toOption

@@ -61,7 +61,10 @@ object TeamData {
 
 case class TeamMemberData(userId:      UserId,
                           teamId:      TeamId,
-                          permissions: Set[Permission])
+                          pmsBitmask:  Long) {
+  import TeamMemberData._
+  lazy val permissions = permissionsFromBitMask(pmsBitmask)
+}
 
 object TeamMemberData {
 
@@ -84,7 +87,7 @@ object TeamMemberData {
   }
 
   //TODO is there a more idiomatic way of doing this in Scala?
-  def permissionsFromBitMask(mask: Int): Set[Permission] = {
+  def permissionsFromBitMask(mask: Long): Set[Permission] = {
     val builder = new mutable.SetBuilder[Permission, Set[Permission]](Set.empty)
     (0 until Permission.values.size).map(math.pow(2, _).toInt).zipWithIndex.foreach {
       case (one, pos) => if ((mask & one) != 0) builder += Permission(pos)
@@ -96,7 +99,7 @@ object TeamMemberData {
   implicit object TeamMemberDataDoa extends Dao2[TeamMemberData, UserId, TeamId] {
     val UserId      = id[UserId]('user_id).apply(_.userId)
     val TeamId      = id[TeamId]('team_id).apply(_.teamId)
-    val Permissions = set[Permission]('permissions, _.mkString(","), _.split(",").toSet.map(Permission.withName))(_.permissions)
+    val Permissions = long('permissions)(_.pmsBitmask)
 
     override val idCol = (UserId, TeamId)
     override val table = Table("TeamMembers", UserId, TeamId, Permissions)
