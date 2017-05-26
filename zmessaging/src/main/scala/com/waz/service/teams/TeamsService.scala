@@ -24,6 +24,7 @@ import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.UserData.ConnectionStatus.Unconnected
 import com.waz.model.UserData.UserDataDao
 import com.waz.model._
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService, ConversationsUiService}
 import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
@@ -53,6 +54,7 @@ class TeamsServiceImpl(selfUser:          UserId,
                        teamStorage:       TeamsStorage,
                        userStorage:       UsersStorage,
                        convsStorage:      ConversationStorage,
+                       convsContent:      ConversationsContentUpdater,
                        teamMemberStorage: TeamMemberStorage,
                        sync:              SyncServiceHandle,
                        userPrefs:         UserPreferences) extends TeamsService {
@@ -166,10 +168,11 @@ class TeamsServiceImpl(selfUser:          UserId,
     }).flatten
   }
 
-  private def onConversationsCreated(teamId: TeamId, convs: Set[RConvId]) = {
-    //TODO
-    Future.successful({})
-  }
+  private def onConversationsCreated(teamId: TeamId, convs: Set[RConvId]) =
+    for {
+      convs <- Future.traverse(convs)(convsContent.convByRemoteId).map(_.collect { case Some(c) => c.id })
+      _     <- sync.syncConversations(convs)
+    } yield {}
 
   private def onConversationsDeleted(teamId: TeamId, convs: Set[RConvId]) = {
     //TODO
