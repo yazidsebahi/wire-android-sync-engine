@@ -99,7 +99,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
         sync.syncConversations()
         sync.syncTeams()
       case None     => sync.syncSelfUser().flatMap { dependency =>
-        sync.syncConversations(Some(dependency))
+        sync.syncConversations(Set.empty, Some(dependency))
         sync.syncTeams(Set.empty, Some(dependency))
       }
     }
@@ -179,7 +179,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     insertConversation(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
       membersStorage.add(conv.id, from +: members: _*) flatMap { ms =>
         addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
-          sync.syncConversation(conv.id) flatMap { _ => sync.syncCallState(conv.id, fromFreshNotification = false) }
+          sync.syncConversations(Set(conv.id)) flatMap { _ => sync.syncCallState(conv.id, fromFreshNotification = false) }
           conv
         }
       }

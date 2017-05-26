@@ -108,7 +108,7 @@ class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connection
       _  <- storage(InvitedContacts.forget(cs)(_)).future
       _  <- connections.handleUserConnectionEvents(Seq(event))
       mc <- conversations.content.convByRemoteId(event.convId)
-      _  <- mc.fold2(connections.syncConversationInitiallyAfterCreation(event.convId, event.from, event.to), c => sync.syncConversation(c.id))
+      _  <- mc.fold2(connections.syncConversationInitiallyAfterCreation(event.convId, event.from, event.to), c => sync.syncConversations(Set(c.id)))
       _  <- contacts.addContactsOnWire(cs.iterator.map(c => (event.to, c)).to[ArrayBuffer])
       _   = invitedContactsSource mutate (_ -- cs)
     } yield ()

@@ -42,8 +42,7 @@ trait SyncServiceHandle {
   def syncUsers(ids: UserId*): Future[SyncId]
   def syncSelfUser(): Future[SyncId]
   def deleteAccount(): Future[SyncId]
-  def syncConversations(dependsOn: Option[SyncId] = None): Future[SyncId]
-  def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None): Future[SyncId]
+  def syncConversations(ids: Set[ConvId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncTeams(ids: Set[TeamId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
@@ -102,12 +101,11 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncUsers(ids: UserId*) = addRequest(SyncUser(ids.toSet))
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
-  def syncConversations(dependsOn: Option[SyncId]) = addRequest(SyncConversations, priority = Priority.High, dependsOn = dependsOn.toSeq)
+  def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) = addRequest(if (ids.nonEmpty) SyncConversation(ids) else SyncConversations, priority = if (ids.nonEmpty) Priority.Normal else Priority.High, dependsOn = dependsOn.toSeq)
   def syncTeams(ids: Set[TeamId], dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeams(ids), priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
-  def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None) = addRequest(SyncConversation(Set(id)), dependsOn = dependsOn.toSeq)
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal) = addRequest(SyncCallState(id, fromFreshNotification = fromFreshNotification), priority = priority)
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
