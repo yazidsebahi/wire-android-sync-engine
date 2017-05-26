@@ -17,7 +17,9 @@
  */
 package com.waz.service.teams
 
+import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.{verbose, _}
 import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationDataDao
@@ -71,6 +73,7 @@ class TeamsServiceImpl(selfUser:          UserId,
   }
 
   val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
+    verbose(s"Handling events: $events")
     import TeamEvent._
 
     def memberEvents(evs: Iterable[MemberEvent]): Map[TeamId, Set[UserId]] =
@@ -92,6 +95,7 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   //TODO - maybe include user permissions for supplied team
   override def searchTeamMembers(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false) = {
+    verbose(s"searchTeamMembers: team: $teamId, query: $query, handlOnly?: $handleOnly")
     for {
       userIds  <- (query match {
         case Some(q) => teamMemberStorage.searchByTeam(teamId, q, handleOnly)
@@ -102,6 +106,7 @@ class TeamsServiceImpl(selfUser:          UserId,
   }
 
   override def searchTeamConversations(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false) = {
+    verbose(s"searchTeamConversations: team: $teamId, query: $query, handlOnly?: $handleOnly")
     import ConversationDataDao._
     (query match {
       case Some(q) => convsStorage.search(q, selfUser, handleOnly, Some(teamId))
@@ -109,10 +114,13 @@ class TeamsServiceImpl(selfUser:          UserId,
     }).map(_.toSet)
   }
 
-  override def getTeams(userId: UserId) = for {
-    teamIds  <- teamMemberStorage.getByUser(Set(userId)).map(_.map(_.teamId))
-    teamData <- teamStorage.getAll(teamIds)
-  } yield teamData.collect { case Some(data) => data }.toSet
+  override def getTeams(userId: UserId) = {
+    verbose(s"getTeams: user: $userId")
+    for {
+      teamIds  <- teamMemberStorage.getByUser(Set(userId)).map(_.map(_.teamId))
+      teamData <- teamStorage.getAll(teamIds)
+    } yield teamData.collect { case Some(data) => data }.toSet
+  }
 
   override def getSelfTeams = getTeams(selfUser)
 
@@ -121,6 +129,7 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   //TODO we should clear team/teamMember storage on full sync. There's no way of knowing what teams we're not a part of...
   override def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]) = {
+    verbose(s"onTeamsSynced: teams: $teams \nmembers: $members")
     for {
       _ <- teamStorage.insert(teams)
       _ <- teamMemberStorage.insert(members)
@@ -129,17 +138,22 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield {}
   }
 
-  private def onTeamsAdded(ids: Set[TeamId]) = sync.syncTeams(ids)
+  private def onTeamsAdded(ids: Set[TeamId]) = {
+    verbose(s"onTeamsAdded: $ids")
+    sync.syncTeams(ids)
+  }
 
-  private def onTeamsRemoved(id: Set[TeamId]) = {
+  private def onTeamsRemoved(ids: Set[TeamId]) = {
+    verbose(s"onTeamsRemoved: $ids")
     for {
-      _       <- teamStorage.remove(id)
-      removed <- teamMemberStorage.removeByTeam(id)
+      _       <- teamStorage.remove(ids)
+      removed <- teamMemberStorage.removeByTeam(ids)
       _       <- removeUnconnectedUsers(removed)
     } yield {}
   }
 
   private def onTeamUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
+    verbose(s"onTeamUpdated: $id, name: $name, icon: $icon, iconKey: $iconKey")
     //TODO handle processing of icon
     teamStorage.update(id, team => team.copy(
       name = name.getOrElse(team.name)
@@ -148,14 +162,18 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   //TODO follow up on: https://github.com/wireapp/architecture/issues/13
   //At the moment, we need to re-fetch the entire list of team members as a workaround
-  private def onMembersJoined(teamId: TeamId, userId: Set[UserId]) =
+  private def onMembersJoined(teamId: TeamId, users: Set[UserId]) = {
+    verbose(s"onTeamMembsJoined: $teamId, users: $users")
     sync.syncTeams(Set(teamId))
+  }
 
-  private def onMembersLeft(teamId: TeamId, userIds: Set[UserId]) =
+  private def onMembersLeft(teamId: TeamId, userIds: Set[UserId]) = {
+    verbose(s"onMembersLeft: team: $teamId, users: $userIds")
     for {
       _ <- teamMemberStorage.remove(userIds.map(u => u -> teamId))
       _ <- removeUnconnectedUsers(userIds)
     } yield {}
+  }
 
 
   private def removeUnconnectedUsers(users: Set[UserId]): Future[Unit] = {
@@ -163,18 +181,22 @@ class TeamsServiceImpl(selfUser:          UserId,
       stillTeamMembers <- teamMemberStorage.getByUser(users).map(_.map(_.userId).toSet)
       stillConnected   <- userStorage.find(u => users.contains(u.id), db => UserDataDao.findAll(users)(db), identity).map(_.filter(_.connection != Unconnected).map(_.id).toSet)
     } yield {
-       val toRemove = users -- stillTeamMembers -- stillConnected
+      val toRemove = users -- stillTeamMembers -- stillConnected
+      verbose(s"Removing users from database: $toRemove")
       userStorage.remove(toRemove)
     }).flatten
   }
 
-  private def onConversationsCreated(teamId: TeamId, convs: Set[RConvId]) =
+  private def onConversationsCreated(teamId: TeamId, convs: Set[RConvId]) = {
+    verbose(s"onConversationsCreated: $teamId, convs: $convs")
     for {
       convs <- Future.traverse(convs)(convsContent.convByRemoteId).map(_.collect { case Some(c) => c.id })
       _     <- sync.syncConversations(convs)
     } yield {}
+  }
 
   private def onConversationsDeleted(teamId: TeamId, convs: Set[RConvId]) = {
+    verbose(s"onConversationsDeleted: $teamId, convs: $convs")
     //TODO
     Future.successful({})
   }
