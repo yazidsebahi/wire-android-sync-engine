@@ -66,7 +66,6 @@ class TeamsServiceImpl(selfUser:          UserId,
     case v => v
   }
 
-
   val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
     import TeamEvent._
     for {

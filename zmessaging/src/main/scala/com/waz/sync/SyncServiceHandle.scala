@@ -44,7 +44,7 @@ trait SyncServiceHandle {
   def deleteAccount(): Future[SyncId]
   def syncConversations(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None): Future[SyncId]
-  def syncTeams(ids: Set[TeamId] = Set.empty): Future[SyncId]
+  def syncTeams(ids: Set[TeamId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
@@ -103,7 +103,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
   def syncConversations(dependsOn: Option[SyncId]) = addRequest(SyncConversations, priority = Priority.High, dependsOn = dependsOn.toSeq)
-  def syncTeams(ids: Set[TeamId]): Future[SyncId] = addRequest(SyncTeams(ids), priority = Priority.High)
+  def syncTeams(ids: Set[TeamId], dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeams(ids), priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)

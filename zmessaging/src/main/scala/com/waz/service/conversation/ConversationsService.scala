@@ -95,8 +95,13 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
 
   private def scheduleSlowSync() =
     getSelfUserId flatMap {
-      case Some(id) => sync.syncConversations()
-      case None     => sync.syncSelfUser() flatMap (dependency => sync.syncConversations(Some(dependency)))
+      case Some(_) =>
+        sync.syncConversations()
+        sync.syncTeams()
+      case None     => sync.syncSelfUser().flatMap { dependency =>
+        sync.syncConversations(Some(dependency))
+        sync.syncTeams(Set.empty, Some(dependency))
+      }
     }
 
   // TODO: this is just very basic implementation creating empty message
