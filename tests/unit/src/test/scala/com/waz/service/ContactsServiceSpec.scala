@@ -70,15 +70,6 @@ class ContactsServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     setLastCheckTime(EPOCH)
   }
 
-  scenario("init zms") {
-    zms.lifecycle.acquireUi("test")
-    service.initFuture.await()
-    withDelay {
-      zms.lifecycle.uiActive.currentValue shouldEqual Some(true)
-      uploadedAddressBook should be('defined)
-    }
-  }
-
   scenario("hash contacts") {
     val contacts = Seq(
       "max.musterman@example.com",
