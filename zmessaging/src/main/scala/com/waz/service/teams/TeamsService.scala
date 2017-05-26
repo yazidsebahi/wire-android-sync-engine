@@ -75,20 +75,22 @@ class TeamsServiceImpl(selfUser:          UserId,
     verbose(s"Handling events: $events")
     import TeamEvent._
 
+    val teamsAdded   = events.collect { case Create(id) => id }.toSet
+    val teamsRemoved = events.collect { case Delete(id) => id}.toSet
+
     def memberEvents(evs: Iterable[MemberEvent]): Map[TeamId, Set[UserId]] =
       evs.groupBy { _.teamId }.map { case (t, ev) => t -> ev.map(_.userId).toSet}
 
-    def convEvents(evs: Iterable[ConversationEvent]): Map[TeamId, Set[RConvId]] =
-      evs.groupBy { _.teamId }.map { case (t, ev) => t -> ev.map(_.convId).toSet}
-
+    val convsCreated = events.collect { case ConversationCreate(_, id) => id }.toSet
+    val convsDeleted = events.collect { case ConversationDelete(_, id) => id }.toSet
     for {
-      _ <- onTeamsAdded(events.collect { case Create(id) => id }.toSet)
-      _ <- onTeamsRemoved(events.collect { case Delete(id) => id}.toSet)
+      _ <- onTeamsAdded(teamsAdded -- teamsRemoved)
+      _ <- onTeamsRemoved(teamsRemoved -- teamsAdded)
       _ <- RichFuture.processSequential(events.collect { case e:Update => e}) { case Update(id, name, icon, iconKey) => onTeamUpdated(id, name, icon, iconKey) }
       _ <- traverse(memberEvents(events.collect { case e:MemberJoin  => e})){ case (team, joined) => onMembersJoined(team, joined)}
       _ <- traverse(memberEvents(events.collect { case e:MemberLeave => e})){ case (team, left)   => onMembersLeft(team, left)}
-      _ <- traverse(convEvents(events.collect { case e:ConversationCreate => e})) { case (team, created)   => onConversationsCreated(team, created)}
-      _ <- traverse(convEvents(events.collect { case e:ConversationDelete => e})) { case (team, deleted)   => onConversationsDeleted(team, deleted)}
+      _ <- onConversationsCreated(convsCreated -- convsDeleted)
+      _ <- onConversationsDeleted(convsDeleted -- convsCreated)
     } yield {}
   }
 
@@ -139,16 +141,18 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   private def onTeamsAdded(ids: Set[TeamId]) = {
     verbose(s"onTeamsAdded: $ids")
-    sync.syncTeams(ids)
+    if (ids.nonEmpty) sync.syncTeams(ids) else Future.successful({})
   }
 
   private def onTeamsRemoved(ids: Set[TeamId]) = {
     verbose(s"onTeamsRemoved: $ids")
-    for {
-      _       <- teamStorage.remove(ids)
-      removed <- teamMemberStorage.removeByTeam(ids)
-      _       <- removeUnconnectedUsers(removed)
-    } yield {}
+    if (ids.nonEmpty)
+      for {
+        _       <- teamStorage.remove(ids)
+        removed <- teamMemberStorage.removeByTeam(ids)
+        _       <- removeUnconnectedUsers(removed)
+      } yield {}
+    else Future.successful({})
   }
 
   private def onTeamUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
@@ -186,16 +190,18 @@ class TeamsServiceImpl(selfUser:          UserId,
     }).flatten
   }
 
-  private def onConversationsCreated(teamId: TeamId, convs: Set[RConvId]) = {
-    verbose(s"onConversationsCreated: $teamId, convs: $convs")
-    for {
-      convs <- Future.traverse(convs)(convsContent.convByRemoteId).map(_.collect { case Some(c) => c.id })
-      _     <- sync.syncConversations(convs)
-    } yield {}
+  private def onConversationsCreated(convs: Set[RConvId]) = {
+    verbose(s"onConversationsCreated: convs: $convs")
+    if (convs.nonEmpty)
+      for {
+        convs <- Future.traverse(convs)(convsContent.convByRemoteId).map(_.collect { case Some(c) => c.id })
+        _     <- sync.syncConversations(convs)
+      } yield {}
+    else Future.successful({})
   }
 
-  private def onConversationsDeleted(teamId: TeamId, convs: Set[RConvId]) = {
-    verbose(s"onConversationsDeleted: $teamId, convs: $convs")
+  private def onConversationsDeleted(convs: Set[RConvId]) = {
+    verbose(s"onConversationsDeleted: convs: $convs")
     //TODO
     Future.successful({})
   }
