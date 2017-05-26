@@ -18,6 +18,7 @@
 package com.waz.service.teams
 
 import com.waz.ZLog.ImplicitTag._
+import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.UserData.ConnectionStatus.Unconnected
@@ -47,14 +48,23 @@ trait TeamsService {
 }
 
 class TeamsServiceImpl(selfUser:          UserId,
-                      teamStorage:       TeamsStorage,
-                      userStorage:       UsersStorage,
-                      convsStorage:      ConversationStorage,
-                      teamMemberStorage: TeamMemberStorage,
-                      sync:              SyncServiceHandle,
-                      prefs:             UserPreferences) extends TeamsService {
+                       teamStorage:       TeamsStorage,
+                       userStorage:       UsersStorage,
+                       convsStorage:      ConversationStorage,
+                       teamMemberStorage: TeamMemberStorage,
+                       sync:              SyncServiceHandle,
+                       userPrefs:         UserPreferences) extends TeamsService {
 
   private implicit val dispatcher = SerialDispatchQueue()
+
+  val shouldSyncTeams = userPrefs.preference(ShouldSyncTeams)
+
+  shouldSyncTeams.mutate {
+    case true =>
+      sync.syncTeams()
+      false
+    case v => v
+  }
 
 
   val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
