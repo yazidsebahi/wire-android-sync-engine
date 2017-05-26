@@ -48,7 +48,7 @@ trait ConversationsContentUpdater {
   def setConversationStatusInactive(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
-  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false): Future[ConversationData]
+  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false, teamId: Option[TeamId] = None): Future[ConversationData]
 }
 
 class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
@@ -142,10 +142,21 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
 
   private def updateConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
 
-  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false) =
+  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false, teamId: Option[TeamId] = None) =
     for {
       user <- users.getUsers(members)
-      conv <- storage.insert(ConversationData(convId, remoteId, None, selfUserId, convType, generatedName = NameUpdater.generatedName(convType)(user), hidden = hidden, status = Some(ConversationStatus.Active)))
+      conv <- storage.insert(
+        ConversationData(
+          convId,
+          remoteId,
+          name          = None,
+          creator       = selfUserId,
+          convType      = convType,
+          generatedName = NameUpdater.generatedName(convType)(user),
+          hidden        = hidden,
+          status        = Some(ConversationStatus.Active),
+          team          = teamId,
+          isManaged     = teamId.map(_ => false)))
       _    <- addConversationMembers(convId, selfUserId, members)
     } yield conv
 

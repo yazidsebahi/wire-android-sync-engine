@@ -57,9 +57,9 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
 
     service = new MockZMessaging(selfUserId = selfUser.id) {
       override lazy val sync = new EmptySyncService {
-        override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String]) = {
+        override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String], t: Option[TeamId]) = {
           convSync = Some(id)
-          super.postConversation(id, us, n)
+          super.postConversation(id, us, n, t)
         }
       }
     }

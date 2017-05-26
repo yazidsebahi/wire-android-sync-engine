@@ -337,18 +337,42 @@ class ConversationsUiService(self:            UserId,
         }
       }
     case _ =>
-      sync.postConversation(ConvId(toUser.str), Seq(toUser), None)
+      sync.postConversation(ConvId(toUser.str), Seq(toUser), None, None)
       convsContent.createConversationWithMembers(ConvId(toUser.str), RConvId(), ConversationType.OneToOne, selfUserId, Seq(toUser)) flatMap { conv =>
         messages.addMemberJoinMessage(conv.id, selfUserId, Set(toUser), firstMessage = true) map (_ => conv)
       }
   }
 
-  def createGroupConversation(id: ConvId, members: Seq[UserId]): Future[ConversationData] = users.withSelfUserFuture { selfUserId =>
-    debug(s"createGroupConversation, id: $id, members: $members")
-    convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((selfUserId +: members).distinct: _*), ConversationType.Group, selfUserId, members) flatMap { conv =>
+  def createGroupConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId] = None): Future[ConversationData] = {
+    debug(s"createGroupConversation, id: $id, members: $members, team: $teamId")
+
+    def createAndPost = convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((self +: members).distinct: _*), ConversationType.Group, self, members, teamId = teamId) flatMap { conv =>
       debug(s"created: $conv")
-      sync.postConversation(id, members, conv.name)
-      messages.addMemberJoinMessage(conv.id, selfUserId, members.toSet, firstMessage = true) map (_ => conv)
+      sync.postConversation(id, members, conv.name, teamId)
+      messages.addMemberJoinMessage(conv.id, self, members.toSet, firstMessage = true) map (_ => conv)
+    }
+
+    teamId.fold(createAndPost) { teamId =>
+
+      members match {
+        case Seq(other) =>
+          verbose(s"Checking for 1:1 conversation with user: $other")
+          (for {
+            allConvs <- this.members.getByUsers(members.toSet + self).map(_.map(m => m.convId -> m.userId))
+            onlyUs = allConvs.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, self) => c}
+            data <- convStorage.getAll(onlyUs).map(_.flatten)
+          } yield data.filter(_.team.contains(teamId))).flatMap { convs =>
+            if (convs.isEmpty) {
+              verbose(s"No conversation with user $other found, creating new group conversation")
+              createAndPost
+            } else {
+              if (convs.size > 1) warn(s"Found ${convs.size} available team conversations with user: $other, returning first conversation found")
+              Future.successful(convs.head)
+            }
+          }
+
+        case _ => createAndPost
+      }
     }
   }
 

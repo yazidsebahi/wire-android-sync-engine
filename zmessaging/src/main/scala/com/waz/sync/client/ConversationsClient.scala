@@ -22,11 +22,12 @@ import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
-import com.waz.utils.{Json, JsonDecoder, JsonEncoder, RichOption}
+import com.waz.utils.{Json, JsonDecoder, JsonEncoder, RichOption, returning}
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
 import com.waz.znet._
+import org.json
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
@@ -78,11 +79,15 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
     }
 
-  def postConversation(users: Seq[UserId], name: Option[String] = None): ErrorOrResponse[ConversationResponse] = {
+  def postConversation(users: Seq[UserId], name: Option[String] = None, team: Option[TeamId]): ErrorOrResponse[ConversationResponse] = {
     debug(s"postConversation($users, $name)")
     val payload = JsonEncoder { o =>
       o.put("users", Json(users))
       name.foreach(o.put("name", _))
+      team.foreach(t => o.put("team", returning(new json.JSONObject()) { o =>
+        o.put("teamid", t.str)
+        o.put("managed", false)
+      }))
     }
     netClient.withErrorHandling("postConversation", Request.Post(ConversationsPath, payload)) {
       case Response(SuccessHttpStatus(), ConversationsResult(Seq(conv), _), _) => conv

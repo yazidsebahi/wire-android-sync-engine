@@ -62,7 +62,7 @@ trait SyncServiceHandle {
   def postConversationMemberJoin(id: ConvId, members: Seq[UserId]): Future[SyncId]
   def postConversationMemberLeave(id: ConvId, member: UserId): Future[SyncId]
   def postConversationState(id: ConvId, state: ConversationState): Future[SyncId]
-  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String]): Future[SyncId]
+  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]): Future[SyncId]
   def postLastRead(id: ConvId, time: Instant): Future[SyncId]
   def postCleared(id: ConvId, time: Instant): Future[SyncId]
   def postAddressBook(ab: AddressBook): Future[SyncId]
@@ -123,7 +123,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postConversationState(id: ConvId, state: ConversationState) = addRequest(PostConvState(id, state))
   def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = addRequest(PostConvJoin(id, members.toSet))
   def postConversationMemberLeave(id: ConvId, member: UserId) = addRequest(PostConvLeave(id, member))
-  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String]) = addRequest(PostConv(id, users, name))
+  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]) = addRequest(PostConv(id, users, name, team))
   def postLiking(id: ConvId, liking: Liking): Future[SyncId] = addRequest(PostLiking(id, liking))
   def postLastRead(id: ConvId, time: Instant) = addRequest(PostLastRead(id, time), priority = Priority.Low, delay = timeouts.messages.lastReadPostDelay)
   def postCleared(id: ConvId, time: Instant) = addRequest(PostCleared(id, time))
@@ -209,7 +209,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
       case PostAssetStatus(cid, mid, exp, status) => zms.messagesSync.postAssetStatus(cid, mid, exp, status)
       case PostConvJoin(convId, u)                => zms.conversationSync.postConversationMemberJoin(convId, u.toSeq)
       case PostConvLeave(convId, u)               => zms.conversationSync.postConversationMemberLeave(convId, u)
-      case PostConv(convId, u, name)              => zms.conversationSync.postConversation(convId, u, name)
+      case PostConv(convId, u, name, team)        => zms.conversationSync.postConversation(convId, u, name, team)
       case PostConvName(convId, name)             => zms.conversationSync.postConversationName(convId, name)
       case PostConvState(convId, state)           => zms.conversationSync.postConversationState(convId, state)
       case PostTypingState(convId, ts)            => zms.typingSync.postTypingState(convId, ts)

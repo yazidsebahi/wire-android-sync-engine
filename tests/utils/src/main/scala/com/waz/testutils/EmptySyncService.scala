@@ -56,7 +56,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = sid
   override def postConversationMemberLeave(id: ConvId, member: UserId) = sid
   override def postConversationState(id: ConvId, s: ConversationState) = sid
-  override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String]) = sid
+  override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String], t: Option[TeamId]) = sid
   override def postLastRead(id: ConvId, time: Instant) = sid
   override def postCleared(id: ConvId, time: Instant): Future[SyncId] = sid
   override def postAddressBook(ab: AddressBook) = sid

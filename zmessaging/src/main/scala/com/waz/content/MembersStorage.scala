@@ -26,7 +26,6 @@ import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{AggregatingSignal, Signal}
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
-import scala.collection._
 import scala.concurrent.Future
 
 trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberData] {
@@ -34,6 +33,7 @@ trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberD
   def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]]
   def isActiveMember(conv: ConvId, user: UserId): Future[Boolean]
   def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]]
+  def getByUsers(users: Set[UserId]): Future[IndexedSeq[ConversationMemberData]]
 }
 
 class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {
@@ -78,4 +78,6 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
   override def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
 
   def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
+
+  override def getByUsers(users: Set[UserId]) = find(mem => users.contains(mem.userId), ConversationMemberDataDao.findForUsers(users)(_), identity)
 }
