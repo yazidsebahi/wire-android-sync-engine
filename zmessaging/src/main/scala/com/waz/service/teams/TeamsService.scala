@@ -144,13 +144,10 @@ class TeamsServiceImpl(selfUser:          UserId,
     ))
   }
 
-  private def onMemberJoin(teamId: TeamId, userId: UserId) = {
-    for {
-      _ <- Future.successful({}) //userStorage.insert() TODO need to sync users?
-      memberData <- Future.successful(TeamMemberData(userId, teamId, Set.empty)) //TODO after syncing user, sync his team permissions
-      _ <- teamMemberStorage.insert(memberData)
-    } yield memberData
-  }
+  //TODO follow up on: https://github.com/wireapp/architecture/issues/13
+  //At the moment, we need to re-fetch the entire list of team members as a workaround
+  private def onMemberJoin(teamId: TeamId, userId: UserId) =
+    sync.syncTeams(Set(teamId))
 
   private def onMemberLeave(teamId: TeamId, userId: UserId) =
     for {
