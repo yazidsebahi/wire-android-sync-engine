@@ -69,7 +69,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
   class MockGlobal extends MockGlobalModule {
 
-    override lazy val client: AsyncClient = new AsyncClient(wrapper = TestClientWrapper()) {
+    override lazy val client: AsyncClientImpl = new AsyncClientImpl(wrapper = TestClientWrapper()) {
       override def apply(req: Request[_]): CancellableFuture[Response] = {
         val body = req.getBody
         val uri = req.absoluteUri.get
@@ -96,7 +96,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
             }
           }
           override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("/"), zNetClient.auth) {
+            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), zNetClient.auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }

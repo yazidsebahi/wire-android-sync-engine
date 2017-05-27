@@ -18,13 +18,23 @@
 package com.waz.testutils
 
 import com.waz.threading.CancellableFuture
-import com.waz.znet.{AsyncClient, Request, Response, TestClientWrapper}
+import com.waz.znet._
 
-class FeigningAsyncClient extends AsyncClient(wrapper = TestClientWrapper()) {
-  @volatile var simulateNetworkFailure = false
+import scala.concurrent.duration._
+import scala.util.matching.Regex
 
-  override def apply(request: Request[_]): CancellableFuture[Response] =
-    if (simulateNetworkFailure) CancellableFuture.successful(Response(Response.ConnectionError("somebody set up us the bomb")))
-    else super.apply(request)
+class UnreliableAsyncClientImpl extends AsyncClientImpl(wrapper = TestClientWrapper()) {
+  @volatile var delayInMillis: Long = 200L
+  @volatile var failFor: Option[(Regex, String)] = None
 
+  override def apply(request: Request[_]): CancellableFuture[Response] = {
+    CancellableFuture.delay(delayInMillis.millis) flatMap { _ =>
+      val fail = failFor exists { failFor =>
+        val (uriRegex, failingMethod) = failFor
+        failingMethod == request.httpMethod && uriRegex.pattern.matcher(request.absoluteUri.toString).matches
+      }
+      if (fail) CancellableFuture.successful(Response(Response.HttpStatus(500)))
+      else super.apply(request)
+    }
+  }
 }

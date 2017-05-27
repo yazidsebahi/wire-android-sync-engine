@@ -35,13 +35,20 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
-                  val userAgent: String = AsyncClient.userAgent(),
-                  val wrapper: Future[ClientWrapper] = ClientWrapper(),
-                  requestWorker: RequestWorker = new HttpRequestImplWorker,
-                  responseWorker: ResponseWorker = new ResponseImplWorker
-                 ) {
+trait AsyncClient {
+  def apply(request: Request[_]): CancellableFuture[Response]
+
+  def close(): Unit
+}
+
+class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
+                      val userAgent: String = AsyncClient.userAgent(),
+                      val wrapper: Future[ClientWrapper] = ClientWrapper(),
+                      requestWorker: RequestWorker = new HttpRequestImplWorker,
+                      responseWorker: ResponseWorker = new ResponseImplWorker
+                 ) extends AsyncClient {
   import AsyncClient._
+  import AsyncClientImpl._
 
   protected implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
@@ -115,6 +122,19 @@ class AsyncClient(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
 
 }
 
+object AsyncClientImpl {
+  private def exceptionStatus: PartialFunction[Throwable, Response] = {
+    case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
+    case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))
+    case e: ConnectionClosedException => Response(Response.ConnectionError(e.getMessage))
+    case e: ConnectionFailedException => Response(Response.ConnectionError(e.getMessage))
+    case e: RedirectLimitExceededException => Response(Response.ConnectionError(e.getMessage))
+    case e: TimeoutException => Response(Response.ConnectionError(e.getMessage))
+    case e: CancelException => Response(Response.Cancelled)
+    case NonFatal(e) => Response(Response.InternalError(e.getMessage, Some(e)))
+  }
+}
+
 object AsyncClient {
 
   val MultipartPostTimeout = 15.minutes
@@ -127,17 +147,6 @@ object AsyncClient {
   def userAgent(appVersion: String = "*", zmsVersion: String = "*") = {
     import android.os.Build._
     s"Wire/$appVersion (zms $zmsVersion; Android ${VERSION.RELEASE}; $MANUFACTURER $MODEL)"
-  }
-
-  private def exceptionStatus: PartialFunction[Throwable, Response] = {
-    case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
-    case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))
-    case e: ConnectionClosedException => Response(Response.ConnectionError(e.getMessage))
-    case e: ConnectionFailedException => Response(Response.ConnectionError(e.getMessage))
-    case e: RedirectLimitExceededException => Response(Response.ConnectionError(e.getMessage))
-    case e: TimeoutException => Response(Response.ConnectionError(e.getMessage))
-    case e: CancelException => Response(Response.Cancelled)
-    case NonFatal(e) => Response(Response.InternalError(e.getMessage, Some(e)))
   }
 
 }

@@ -35,7 +35,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
-import com.waz.znet.ZNetClient.{EmptyAsyncClient, ErrorOrResponse}
+import com.waz.znet.ZNetClient.{EmptyAsyncClientImpl, ErrorOrResponse}
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import net.hockeyapp.android.Constants
@@ -46,7 +46,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Random
 
 class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModule(Robolectric.application, BackendConfig.StagingBackend) { global =>
-  override lazy val client: AsyncClient = new EmptyAsyncClient(TestClientWrapper())
+  override lazy val client: AsyncClientImpl = new EmptyAsyncClientImpl(TestClientWrapper())
   override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   override lazy val storage: Database = new GlobalDatabase(context, dbSuffix)
 
@@ -120,7 +120,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
   }
 
   override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
-    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse("http://"), zNetClient.auth) {
+    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), zNetClient.auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
   }
