@@ -52,9 +52,9 @@ class ZNetClientSimpleSpec extends FeatureSpecLike with Matchers with BeforeAndA
     configureFor("localhost", wireMockPort)
     client = new ZNetClient(
       new BasicCredentials(EmailAddress(email), Some(password)),
-      new AsyncClient,
+      new AsyncClientImpl,
       BackendConfig("http://localhost:" + wireMockPort),
-      new LoginClient(new AsyncClient, BackendConfig("http://localhost:" + wireMockPort)))
+      new LoginClient(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort)))
   }
 
   after {

@@ -30,7 +30,7 @@ import com.waz.testutils.{DefaultPatienceConfig, prepareAddressBookEntries}
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import com.waz.utils.IoUtils
-import com.waz.znet.{AsyncClient, TestClientWrapper}
+import com.waz.znet.{AsyncClient, AsyncClientImpl, TestClientWrapper}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, GivenWhenThen, Matchers}
 
@@ -52,7 +52,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
   lazy val userId = AccountId()
 
-  lazy val client = new RegistrationClient(new AsyncClient(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
+  lazy val client = new RegistrationClient(new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
 
   lazy val assetGenerator = zmessaging.assetGenerator
 

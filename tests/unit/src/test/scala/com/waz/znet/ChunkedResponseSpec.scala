@@ -57,7 +57,7 @@ class ChunkedResponseSpec extends FeatureSpecLike with Matchers with BeforeAndAf
   }
 
   scenario("receive chunked response") {
-    val client = new AsyncClient
+    val client = new AsyncClientImpl
     val netClient = new ZNetClient(new BasicCredentials(EmailAddress("meep"), None), client, BackendConfig("http://localhost:9000"), loginClient = null)
 
     val response = Await.result(Future.traverse(1 to 20) { _ =>

@@ -46,7 +46,7 @@ class AuthenticationManagerBackendSpec extends FeatureSpec with Matchers with Be
   lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
   lazy val keyValue = new UserPreferences(Robolectric.application, storage)
 
-  lazy val client = new LoginClient(new AsyncClient(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
+  lazy val client = new LoginClient(new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
 
   lazy val email = provisionedEmail("auto1")
   lazy val passwd = "auto1_pass"

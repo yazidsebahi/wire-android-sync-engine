@@ -46,7 +46,7 @@ import scala.util.{Failure, Left, Try}
   * If the connection drops, it will automatically try to reconnect.
   */
 class WebSocketClient(context: Context,
-                      client: AsyncClient,
+                      client: AsyncClientImpl,
                       uri: => Uri,
                       auth: AccessTokenProvider,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
@@ -243,7 +243,7 @@ object WebSocketClient {
   val defaultBackoff = new ExponentialBackoff(250.millis, 5.minutes)
 
   def apply(context: Context, client: ZNetClient, pushUri: => Uri) =
-    new WebSocketClient(context, client.client, pushUri, client.auth)
+    new WebSocketClient(context, client.client.asInstanceOf[AsyncClientImpl], pushUri, client.auth)
 
   trait Disconnect
   object Disconnect {

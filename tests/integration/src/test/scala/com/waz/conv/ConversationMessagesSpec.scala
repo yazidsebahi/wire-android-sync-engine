@@ -29,7 +29,7 @@ import com.waz.model.{AssetData, ConvId, RConvId}
 import com.waz.provision._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.UnreliableAsyncClient
+import com.waz.testutils.UnreliableAsyncClientImpl
 import com.waz.utils._
 import com.waz.utils.events.EventContext
 import org.robolectric.Robolectric
@@ -59,7 +59,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
   }
   lazy val msgs = conv.getMessages
 
-  override lazy val testClient: UnreliableAsyncClient = new UnreliableAsyncClient
+  override lazy val testClient: UnreliableAsyncClientImpl = new UnreliableAsyncClientImpl
 
   var defaultNetworkInfo: NetworkInfo = _
 

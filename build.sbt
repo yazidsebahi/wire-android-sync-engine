@@ -186,6 +186,7 @@ lazy val testutils = project.in(file("tests") / "utils")
     libraryDependencies ++= Seq(
       //Replacements for Android Dependencies
       "org.apache.httpcomponents" % "httpclient" % "4.5.3",
+      "org.apache.httpcomponents" % "fluent-hc" % "4.5.3",
       Deps.scalaCheck,
       "org.scalatest" %% "scalatest" % "2.2.6",
       "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",

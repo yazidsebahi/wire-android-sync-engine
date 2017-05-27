@@ -36,7 +36,7 @@ class SyncIndicatorSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
 
   override val autoLogin: Boolean = false
 
-  override lazy val testClient = returning(new UnreliableAsyncClient)(_.delayInMillis = 500)
+  override lazy val testClient = returning(new UnreliableAsyncClientImpl)(_.delayInMillis = 500)
 
 
   feature("ConversationsList indicator") {

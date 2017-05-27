@@ -65,7 +65,7 @@ class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with Befor
   val cookie = "23cf0ff8e4b469b481dddab57ba286a58ca1787ad877aa769ec4d97f48cbc90f.1.1394989660.u.b6f21a36-fc02-4b44-a1e6-608a7465246d"
   val cookieResponse = s"zuid=$cookie; path=/access; expires=Sun, 16-Mar-2014 17:07:40 GMT; domain=z-infra.com; Secure; HttpOnly"
 
-  lazy val client = new LoginClient(new AsyncClient(), BackendConfig("http://localhost:" + wireMockPort))
+  lazy val client = new LoginClient(new AsyncClientImpl(), BackendConfig("http://localhost:" + wireMockPort))
 
   def manager(callback: () => Unit = {() => }) = new AuthenticationManager(client, new BasicCredentials(EmailAddress(email), Some(password)) {
     override val userId: AccountId = test.userId

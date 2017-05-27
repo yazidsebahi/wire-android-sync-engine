@@ -33,7 +33,7 @@ import com.waz.znet._
 
 import scala.util.Try
 
-class InternalBackendClient(client: AsyncClient, backend: BackendConfig) {
+class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
   private implicit val logTag: LogTag = logTagFor[InternalBackendClient]
 
   import scala.concurrent.ExecutionContext.Implicits.global

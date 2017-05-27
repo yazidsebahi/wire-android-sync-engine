@@ -41,7 +41,7 @@ import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, FeigningAsyncClient, TestResourceContentProvider}
+import com.waz.testutils.{DefaultPatienceConfig, FeigningAsyncClientImpl, TestResourceContentProvider}
 import com.waz.threading.Threading
 import com.waz.utils.returning
 import org.robolectric.Robolectric.{getShadowApplication, shadowOf}
@@ -673,7 +673,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       }
   }
 
-  override lazy val testClient = new FeigningAsyncClient
+  override lazy val testClient = new FeigningAsyncClientImpl
 }
 
 class AssetStatusSpy(asset: Asset) extends UpdateListener {
