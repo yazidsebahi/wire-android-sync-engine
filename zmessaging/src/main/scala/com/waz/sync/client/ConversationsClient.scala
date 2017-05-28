@@ -131,20 +131,31 @@ object ConversationsClient {
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
-      implicit val jsObj = self
+      val (creator, name, team, id, convType, lastEventTime) = {
+        implicit val jsObj = js
+        (
+          decodeUserId('creator),
+          decodeOptString('name),
+          decodeOptId[TeamId]('team),
+          decodeRConvId('id),
+          ConversationType(decodeInt('type)),
+          decodeISOInstant('last_event_time)
+        )
+      }
 
-      val id = decodeRConvId('id)(js)
-      val convType = ConversationType(decodeInt('type)(js))
-      val lastEventTime = decodeISOInstant('last_event_time)(js)
-      val team = decodeOptId('team)(js, TeamId.Id)
+      val status = {
+        implicit val jsObj = self
+        decodeOptInt('status)
+      }
+
       val renameEvt = if (convType == ConversationType.Group) lastEventTime else Instant.EPOCH
-
       val state = ConversationState.Decoder(self)
+      val isManaged = team.map(_ => false)
 
       //TODO Teams: how do we tell if a conversation is managed, currently defaulting to false
       ConversationData(
-        ConvId(id.str), id, decodeOptString('name)(js) filterNot (_.isEmpty), decodeUserId('creator)(js), convType, team, team.map(_ => false),
-        lastEventTime, decodeOptInt('status).fold2(Some(ConversationStatus.Active), i => Some(ConversationStatus(i))),
+        ConvId(id.str), id, name filterNot (_.isEmpty), creator, convType, team, isManaged,
+        lastEventTime, status.fold2(Some(ConversationStatus.Active), i => Some(ConversationStatus(i))),
         Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime), renameEvent = renameEvt
       )
     }
