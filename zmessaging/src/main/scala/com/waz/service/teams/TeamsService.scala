@@ -43,6 +43,8 @@ trait TeamsService {
 
   def searchTeamConversations(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[ConversationData]]
 
+  def findGuests(teamId: TeamId): Future[Set[UserId]]
+
   def getSelfTeams: Future[Set[TeamData]]
 
   def getPermissions(userId: UserId, teamId: TeamId): Future[Option[Set[TeamMemberData.Permission]]]
@@ -55,6 +57,7 @@ class TeamsServiceImpl(selfUser:          UserId,
                        teamStorage:       TeamsStorage,
                        userStorage:       UsersStorage,
                        convsStorage:      ConversationStorage,
+                       convMemberStorage: MembersStorage,
                        convsContent:      ConversationsContentUpdater,
                        teamMemberStorage: TeamMemberStorage,
                        sync:              SyncServiceHandle,
@@ -206,4 +209,12 @@ class TeamsServiceImpl(selfUser:          UserId,
     Future.successful({})
   }
 
+  override def findGuests(teamId: TeamId) = {
+    for {
+      convs       <- searchTeamConversations(teamId).map(_.map(_.id))
+      allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
+      teamMembers <- searchTeamMembers(teamId).map(_.map(_.id))
+    } yield allUsers -- teamMembers
+
+  }
 }

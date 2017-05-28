@@ -18,7 +18,6 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
@@ -30,6 +29,7 @@ import scala.concurrent.Future
 
 trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberData] {
   def getByConv(conv: ConvId): Future[IndexedSeq[ConversationMemberData]]
+  def getByConvs(conv: Set[ConvId]): Future[IndexedSeq[ConversationMemberData]]
   def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]]
   def isActiveMember(conv: ConvId, user: UserId): Future[Boolean]
   def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]]
@@ -80,4 +80,6 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
   def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
 
   override def getByUsers(users: Set[UserId]) = find(mem => users.contains(mem.userId), ConversationMemberDataDao.findForUsers(users)(_), identity)
+
+  override def getByConvs(convs: Set[ConvId]) = find(mem => convs.contains(mem.convId), ConversationMemberDataDao.findForConvs(convs)(_), identity)
 }

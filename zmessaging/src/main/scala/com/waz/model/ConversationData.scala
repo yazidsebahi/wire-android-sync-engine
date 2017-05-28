@@ -306,6 +306,7 @@ object ConversationMemberData {
     }
 
     def findForConv(convId: ConvId)(implicit db: DB) = iterating(find(ConvId, convId))
+    def findForConvs(convs: Set[ConvId])(implicit db: DB) = iterating(findInSet(ConvId, convs))
     def findForUser(userId: UserId)(implicit db: DB) = iterating(find(UserId, userId))
     def findForUsers(users: Set[UserId])(implicit db: DB) = iterating(findInSet(UserId, users))
   }
