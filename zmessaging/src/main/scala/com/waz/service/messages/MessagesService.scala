@@ -30,7 +30,7 @@ import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
-import com.waz.service.otr.{OtrService, OtrServiceImpl, VerificationStateUpdater}
+import com.waz.service.otr.{OtrServiceImpl, VerificationStateUpdater}
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}

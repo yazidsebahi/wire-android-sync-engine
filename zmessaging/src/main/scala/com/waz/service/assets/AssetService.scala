@@ -74,6 +74,7 @@ trait AssetService {
   def getContentUri(id: AssetId): CancellableFuture[Option[URI]]
   def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]]
   def removeAssets(ids: Iterable[AssetId]): Future[Unit]
+  def removeSource(id: AssetId): Future[Unit]
 }
 
 class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
@@ -99,7 +100,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
     if (m.isAssetMessage) markUploadFailed(m.assetId, UploadFailed)
   }
 
-  messages.onDeleted { msgs => storage.remove(msgs.map(id => AssetId(id.str))) }
+  messages.onDeleted { msgs => removeAssets(msgs.map(id => AssetId(id.str))) }
 
   storage.onDeleted { assets => media.releaseAnyOngoing(assets.map(AssetMediaKey)(breakOut)) }
 
@@ -191,7 +192,12 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
 
   def mergeOrCreateAsset(assetData: AssetData): Future[Option[AssetData]] = storage.mergeOrCreateAsset(assetData)
 
-  def removeAssets(ids: Iterable[AssetId]): Future[Unit] = storage.remove(ids)
+  def removeAssets(ids: Iterable[AssetId]): Future[Unit] = Future.traverse(ids)(removeSource).flatMap(_ => storage.remove(ids))
+
+  def removeSource(id: AssetId): Future[Unit] = storage.get(id)
+    .collect { case Some(asset) => asset.source }
+    .collect { case Some(source) => new File(source.getPath) }
+    .collect { case file if file.exists() => file.delete() }
 
   def addAsset(a: AssetForUpload, conv: RConvId): Future[AssetData] = {
     val uri = a match {

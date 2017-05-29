@@ -26,6 +26,7 @@ import com.waz.model.GenericContent._
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
+import com.waz.service.assets.AssetService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
@@ -37,7 +38,8 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 // TODO: obfuscate sent messages when they expire
-class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpdater, storage: MessagesStorageImpl, db: ZmsDatabase, sync: SyncServiceHandle) {
+class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpdater, storage: MessagesStorageImpl,
+                               db: ZmsDatabase, sync: SyncServiceHandle, assets: AssetService) {
   import EphemeralMessagesService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
@@ -103,11 +105,9 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
           ct.copy(content = obfuscate(ct.content), openGraph = None) //TODO: asset and rich media
         }
         msg.copy(expired = true, content = content, protos = Seq(GenericMessage(msg.id.uid, Text(obfuscate(msg.contentString))))) // TODO: obfuscate links
-      // TODO: delete assets, should be enough to replace remote id
-//      case ASSET =>
-//        ???
-//      case ANY_ASSET =>
-//        ???
+      case ASSET | ANY_ASSET | VIDEO_ASSET | AUDIO_ASSET =>
+        removeSource(msg)
+        msg.copy(expired = true)
       case LOCATION =>
         val (name, zoom) = msg.location.fold(("", 14)) { l => (obfuscate(l.getName), l.getZoom) }
         msg.copy(expired = true, content = Nil, protos = Seq(GenericMessage(msg.id.uid, Location(0, 0, name, zoom))))
@@ -115,6 +115,8 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
         msg.copy(expired = true)
     }
   }
+
+  private def removeSource(msg: MessageData) = assets.removeSource(AssetId(msg.id.str))
 
   // start expiration timer for ephemeral message
   def onMessageRead(id: MessageId) = storage.update(id, { msg =>
