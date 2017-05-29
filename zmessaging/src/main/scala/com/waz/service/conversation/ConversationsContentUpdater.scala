@@ -42,6 +42,13 @@ trait ConversationsContentUpdater {
   def hideConversation(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
   def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A]
+  def updateConversationLastRead(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationMuted(conv: ConvId, muted: Boolean): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None): Future[Option[(ConversationData, ConversationData)]]
+  def setConversationStatusInactive(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
+  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false): Future[ConversationData]
 }
 
 class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
@@ -67,32 +74,32 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
 
   def insertConversation(conv: ConversationData) = storage.insert(conv)
 
-  def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None) = storage.update(id, { conv =>
+  override def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None) = storage.update(id, { conv =>
       if (conv.convType == ConversationType.Group && time.forall(_ >= conv.renameEvent))
         conv.copy(name = if (name.isEmpty) None else Some(name), renameEvent = time.getOrElse(conv.renameEvent))
       else
         conv
     })
 
-  def setConversationStatusInactive(id: ConvId) = storage.update(id, _.copy(status = Some(ConversationStatus.Inactive)))
+  override def setConversationStatusInactive(id: ConvId) = storage.update(id, _.copy(status = Some(ConversationStatus.Inactive)))
 
   def updateConversationStatus(id: ConvId, status: ConversationStatus) = storage.update(id, { _.copy(status = Some(status))
   })
 
-  def updateConversationArchived(id: ConvId, archived: Boolean) = storage.update(id, { c =>
+  override def updateConversationArchived(id: ConvId, archived: Boolean) = storage.update(id, { c =>
     c.copy(archived = archived, archiveTime = c.lastEventTime)
   })
 
-  def updateConversationMuted(conv: ConvId, muted: Boolean) = storage.update(conv, { c =>
+  override def updateConversationMuted(conv: ConvId, muted: Boolean) = storage.update(conv, { c =>
     c.copy(muted = muted, muteTime = c.lastEventTime)
   })
 
-  def updateConversationLastRead(id: ConvId, time: Instant) = storage.update(id, { conv =>
+  override def updateConversationLastRead(id: ConvId, time: Instant) = storage.update(id, { conv =>
     verbose(s"updateConversationLastRead($id, $time)")
     conv.withLastRead(time)
   })
 
-  def updateConversationCleared(id: ConvId, time: Instant) = storage.update(id, { conv =>
+  override def updateConversationCleared(id: ConvId, time: Instant) = storage.update(id, { conv =>
     verbose(s"updateConversationCleared($id, $time)")
     conv.withCleared(time).withLastRead(time)
   })
@@ -135,7 +142,7 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
 
   private def updateConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
 
-  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false) =
+  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false) =
     for {
       user <- users.getUsers(members)
       conv <- storage.insert(ConversationData(convId, remoteId, None, selfUserId, convType, generatedName = NameUpdater.generatedName(convType)(user), hidden = hidden, status = Some(ConversationStatus.Active)))
