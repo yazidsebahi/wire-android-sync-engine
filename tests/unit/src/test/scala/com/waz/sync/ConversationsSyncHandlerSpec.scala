@@ -81,7 +81,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
         CancellableFuture.delayed(loadDelay)(test.convsResponse(start))
       }
 
-      override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
+      override def postConversation(users: Seq[UserId], name: Option[String], team: Option[TeamId]): ErrorOrResponse[ConversationResponse] = {
         postConvRequests :+= users
         CancellableFuture.successful(postConvResponse)
       }
@@ -127,7 +127,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
       postConvResponse = Right(ConversationResponse(conv, members.take(64).map(u => ConversationMemberData(u, conv.id))))
       postMemberJoinResponse = Right(Some(MemberJoinEvent(conv.remoteId, new Date, UserId(), members.drop(64), false)))
 
-      handler.postConversation(conv.id, members, Some("Test group")).futureValue shouldEqual SyncResult.Success
+      handler.postConversation(conv.id, members, Some("Test group"), None).futureValue shouldEqual SyncResult.Success
 
       postConvRequests shouldEqual Seq(members.take(64))
       postJoinRequests shouldEqual Seq((conv.remoteId, members.drop(64)))
@@ -143,7 +143,7 @@ class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaF
       val user2 = UserId()
       service.membersStorage.add(conv.id, user1, user2).futureValue
       postConvResponse = Left(ErrorResponse(403, "", "not-connected"))
-      Await.result(handler.postConversation(conv.id, Seq(user1, user2), None), 1.second) shouldEqual SyncResult.Failure(Some(postConvResponse.left.get), shouldRetry = false)
+      Await.result(handler.postConversation(conv.id, Seq(user1, user2), None, None), 1.second) shouldEqual SyncResult.Failure(Some(postConvResponse.left.get), shouldRetry = false)
       postConvRequests should not be empty
       ErrorDataDao.list should have size 1
       val err = ErrorDataDao.list.head

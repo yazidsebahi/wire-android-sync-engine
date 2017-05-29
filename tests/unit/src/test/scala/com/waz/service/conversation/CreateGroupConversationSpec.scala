@@ -57,9 +57,9 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
 
     service = new MockZMessaging(selfUserId = selfUser.id) {
       override lazy val sync = new EmptySyncService {
-        override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String]) = {
+        override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String], t: Option[TeamId]) = {
           convSync = Some(id)
-          super.postConversation(id, us, n)
+          super.postConversation(id, us, n, t)
         }
       }
     }
@@ -228,7 +228,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     convSync shouldEqual Some(convId)
 
     val remoteId = RConvId()
-    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, Some(ConversationStatus.Active)),
+    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, None, None, Instant.now, Some(ConversationStatus.Active)),
       Seq(ConversationMemberData(user1.id,ConvId(remoteId.str)), ConversationMemberData(user2.id, ConvId(remoteId.str)))))
 
     info(s"tempId: ${ConversationsService.generateTempConversationId(event.data.members.map(_.userId): _*)}")
@@ -249,7 +249,7 @@ class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeA
     Await.result(service.convsUi.createGroupConversation(convId, Seq(user1.id, user2.id)), timeout)
 
     val remoteId = RConvId()
-    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, Instant.now, Some(ConversationStatus.Active)),
+    val event = CreateConversationEvent(remoteId, new Date, selfUser.id, ConversationResponse(ConversationData(ConvId(remoteId.str), remoteId, Some(""), selfUser.id, ConversationType.Group, None, None, Instant.now, Some(ConversationStatus.Active)),
     Seq(ConversationMemberData(user1.id,ConvId(remoteId.str)), ConversationMemberData(user2.id, ConvId(remoteId.str)))))
 
     service.dispatchEvent(event)

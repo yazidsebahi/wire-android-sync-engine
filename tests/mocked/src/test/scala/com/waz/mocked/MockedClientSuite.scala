@@ -84,7 +84,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = suite.loadConversations(ids)
       override def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = suite.postMemberJoin(conv, members)
       override def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = suite.postMemberLeave(conv, member)
-      override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = suite.postConversation(users, name)
+      override def postConversation(users: Seq[UserId], name: Option[String], team: Option[TeamId]): ErrorOrResponse[ConversationResponse] = suite.postConversation(users, name)
       override def postConversationState(convId: RConvId, state: ConversationState): ErrorOrResponse[Boolean] = suite.postConversationState(convId, state)
       override def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = suite.postName(convId, name)
     }

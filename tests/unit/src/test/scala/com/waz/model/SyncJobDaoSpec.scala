@@ -61,7 +61,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
     scenario("SyncUser requests") { SyncUser(Set(UserId(), UserId(), UserId())) should beUnchangedByEncodingAndDecoding }
     scenario("SyncConversation requests") { SyncConversation(Set(ConvId(), ConvId(), ConvId())) should beUnchangedByEncodingAndDecoding }
     scenario("PostSelf requests") { PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, Some(TrackingId()))) should beUnchangedByEncodingAndDecoding }
-    scenario("PostConv requests") { PostConv(ConvId(), Seq(UserId(), UserId()), Some("name")) should beUnchangedByEncodingAndDecoding }
+    scenario("PostConv requests") { PostConv(ConvId(), Seq(UserId(), UserId()), Some("name"), Some(TeamId())) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvName requests") { PostConvName(ConvId(), "name") should beUnchangedByEncodingAndDecoding }
     scenario("PostConvState requests") { PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))) should beUnchangedByEncodingAndDecoding }
     scenario("PostTypingState requests") { PostTypingState(ConvId(), isTyping = true) should beUnchangedByEncodingAndDecoding }
@@ -94,7 +94,7 @@ class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyC
         SyncConversations,
         SyncUser(Set(UserId(), UserId(), UserId())),
         SyncConversation(Set(ConvId(), ConvId(), ConvId())),
-        PostConv(ConvId(), Seq(UserId()), None),
+        PostConv(ConvId(), Seq(UserId()), None, Some(TeamId())),
         DeletePushToken(PushToken()),
         PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, None)),
         PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))),

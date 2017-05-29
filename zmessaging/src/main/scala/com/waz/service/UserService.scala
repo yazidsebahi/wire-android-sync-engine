@@ -46,6 +46,7 @@ trait UserService {
   def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
   def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
+  def getUsers(ids: Seq[UserId]): Future[Seq[UserData]]
 }
 
 class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, userPrefs: UserPreferences, push: PushServiceSignals,

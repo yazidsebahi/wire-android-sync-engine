@@ -241,6 +241,8 @@ object UserData {
 
     def findByConnectionStatus(status: Set[ConnectionStatus])(implicit db: DB): Managed[Iterator[UserData]] = iterating(findInSet(Conn, status))
 
+    def findAll(users: Set[UserId])(implicit db: DB) = iterating(findInSet(Id, users))
+
     def listContacts(implicit db: DB) = list(db.query(table.name, null, s"(${Conn.name} = ? or ${Conn.name} = ?) and ${Deleted.name} = 0", Array(ConnectionStatus.Accepted.code, ConnectionStatus.Blocked.code), null, null, null))
 
     def topPeople(implicit db: DB): Managed[Iterator[UserData]] =

@@ -35,6 +35,8 @@ import scala.concurrent.Future
 
 trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
   def setUnknownVerification(convId: ConvId): Future[Option[(ConversationData, ConversationData)]]
+  def findByTeamId(teamId: TeamId): Future[Seq[ConversationData]]
+  def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None): Future[Vector[ConversationData]]
 }
 
 class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
@@ -135,7 +137,9 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
       }
     } yield res
 
-  def search(prefix: SearchKey, self: UserId, handleOnly: Boolean): Future[Vector[ConversationData]] = storage(ConversationDataDao.search(prefix, self, handleOnly)(_))
+  override def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None) = storage(ConversationDataDao.search(prefix, self, handleOnly, teamId)(_))
+
+  override def findByTeamId(teamId: TeamId) = ???
 }
 
 // this wrapper provides a check for content equality instead of the equality based on total ordering provided by the sorted set

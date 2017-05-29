@@ -62,7 +62,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
 
   def syncConversationInitiallyAfterCreation(convId: RConvId, selfUserId: UserId, userId: UserId) =
     getOneToOneConversation(userId, selfUserId, Some(convId), ConversationType.WaitForConnection) flatMap { conv =>
-      sync.syncConversation(conv.id)
+      sync.syncConversations(Set(conv.id))
     }
 
   def handleUserConnectionEvents(events: Seq[UserConnectionEvent]) = {
@@ -111,7 +111,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
             case _ =>
               Future.successful(())
           } map { _ =>
-            if (conv.hidden && !hidden) sync.syncConversation(conv.id)
+            if (conv.hidden && !hidden) sync.syncConversations(Set(conv.id))
             updated.fold(conv)(_._2)
           }
         }
@@ -157,7 +157,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     updateConnectionStatus(userId, ConnectionStatus.Accepted) map {
       case Some(_) =>
         sync.postConnectionStatus(userId, ConnectionStatus.Accepted) map { syncId =>
-          sync.syncConversation(ConvId(userId.str), Some(syncId))
+          sync.syncConversations(Set(ConvId(userId.str)), Some(syncId))
         }
       case _ =>
     } flatMap { _ =>
@@ -196,7 +196,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
       updateConnectionStatus(userId, ConnectionStatus.Accepted) map { user =>
         user foreach { _ =>
           sync.postConnectionStatus(userId, ConnectionStatus.Accepted) map { syncId =>
-            sync.syncConversation(ConvId(userId.str), Some(syncId)) // sync conversation after syncing connection state (conv is locked on backend while connection is blocked) TODO: we could use some better api for that
+            sync.syncConversations(Set(ConvId(userId.str)), Some(syncId)) // sync conversation after syncing connection state (conv is locked on backend while connection is blocked) TODO: we could use some better api for that
           }
         }
         user

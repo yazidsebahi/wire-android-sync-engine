@@ -32,6 +32,8 @@ case class ConversationData(id:                   ConvId,
                             name:                 Option[String],
                             creator:              UserId,
                             convType:             ConversationType,
+                            team:                 Option[TeamId] = None,
+                            isManaged:            Option[Boolean] = None,
                             lastEventTime:        Instant = Instant.EPOCH,
                             status:               Option[ConversationStatus] = None,
                             lastRead:             Instant = Instant.EPOCH,
@@ -137,48 +139,66 @@ object ConversationData {
   implicit lazy val Decoder: JsonDecoder[ConversationData] = new JsonDecoder[ConversationData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): ConversationData = ConversationData(
-      id = 'id, remoteId = 'remoteId, name = decodeOptString('name), creator = 'creator, convType = ConversationType('convType),
+      id = 'id,
+      remoteId = 'remoteId,
+      name = decodeOptString('name),
+      creator = 'creator,
+      convType = ConversationType('convType),
+      team = decodeOptId[TeamId]('team),
+      isManaged = decodeOptBoolean('is_managed),
       lastEventTime = decodeInstant('lastEventTime),
       status = decodeOptInt('status).map(ConversationStatus(_)),
       lastRead = decodeInstant('lastReadTime),
-      muted = 'muted, muteTime = decodeInstant('muteTime), archived = 'archived,
-      archiveTime = decodeInstant('archiveTime), cleared = decodeInstant('cleared),
-      generatedName = 'generatedName, searchKey = decodeOptString('name) map SearchKey,
-      unreadCount = 'unreadCount, failedCount = 'failedCount, hasVoice = 'hasVoice, unjoinedCall = 'unjoinedCall,
-      missedCallMessage = decodeOptMessageId('missedCallMessage), incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
-      renameEvent = decodeInstant('renameEventTime), voiceMuted = 'voiceMuted, hidden = 'hidden,
+      muted = 'muted,
+      muteTime = decodeInstant('muteTime),
+      archived = 'archived,
+      archiveTime = decodeInstant('archiveTime),
+      cleared = decodeInstant('cleared),
+      generatedName = 'generatedName,
+      searchKey = decodeOptString('name) map SearchKey,
+      unreadCount = 'unreadCount,
+      failedCount = 'failedCount,
+      hasVoice = 'hasVoice,
+      unjoinedCall = 'unjoinedCall,
+      missedCallMessage = decodeOptMessageId('missedCallMessage),
+      incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
+      renameEvent = decodeInstant('renameEventTime),
+      voiceMuted = 'voiceMuted,
+      hidden = 'hidden,
       verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
       ephemeral = EphemeralExpiration.getForMillis(decodeLong('ephemeral))
     )
   }
 
   implicit lazy val Encoder: JsonEncoder[ConversationData] = new JsonEncoder[ConversationData] {
-    override def apply(v: ConversationData): JSONObject = JsonEncoder { o =>
-      o.put("id", v.id.str)
-      o.put("remoteId", v.remoteId.str)
-      v.name foreach (o.put("name", _))
-      o.put("creator", v.creator.str)
-      o.put("convType", v.convType.id)
-      o.put("lastEventTime", v.lastEventTime.toEpochMilli)
-      v.status.foreach(status => o.put("status", status.value))
-      o.put("lastReadTime", v.lastRead.toEpochMilli)
-      o.put("muted", v.muted)
-      o.put("muteTime", v.muteTime.toEpochMilli)
-      o.put("archived", v.archived)
-      o.put("archiveTime", v.archiveTime.toEpochMilli)
-      o.put("cleared", v.cleared.toEpochMilli)
-      o.put("generatedName", v.generatedName)
-      o.put("unreadCount", v.unreadCount)
-      o.put("failedCount", v.failedCount)
-      o.put("hasVoice", v.hasVoice)
-      o.put("unjoinedCall", v.unjoinedCall)
-      v.missedCallMessage foreach (id => o.put("missedCallMessage", id.str))
-      v.incomingKnockMessage foreach (id => o.put("incomingKnockMessage", id.str))
-      o.put("renameEventTime", v.renameEvent.toEpochMilli)
-      o.put("voiceMuted", v.voiceMuted)
-      o.put("hidden", v.hidden)
-      o.put("trusted", v.verified)
-      o.put("ephemeral", v.ephemeral.milliseconds)
+    override def apply(c: ConversationData): JSONObject = JsonEncoder { o =>
+      o.put("id", c.id.str)
+      o.put("remoteId", c.remoteId.str)
+      c.name foreach (o.put("name", _))
+      o.put("creator", c.creator.str)
+      o.put("convType", c.convType.id)
+      c.team.foreach(v => o.put("team", v.str))
+      c.isManaged.foreach(v => o.put("is_managed", v))
+      o.put("lastEventTime", c.lastEventTime.toEpochMilli)
+      c.status.foreach(status => o.put("status", status.value))
+      o.put("lastReadTime", c.lastRead.toEpochMilli)
+      o.put("muted", c.muted)
+      o.put("muteTime", c.muteTime.toEpochMilli)
+      o.put("archived", c.archived)
+      o.put("archiveTime", c.archiveTime.toEpochMilli)
+      o.put("cleared", c.cleared.toEpochMilli)
+      o.put("generatedName", c.generatedName)
+      o.put("unreadCount", c.unreadCount)
+      o.put("failedCount", c.failedCount)
+      o.put("hasVoice", c.hasVoice)
+      o.put("unjoinedCall", c.unjoinedCall)
+      c.missedCallMessage foreach (id => o.put("missedCallMessage", id.str))
+      c.incomingKnockMessage foreach (id => o.put("incomingKnockMessage", id.str))
+      o.put("renameEventTime", c.renameEvent.toEpochMilli)
+      o.put("voiceMuted", c.voiceMuted)
+      o.put("hidden", c.hidden)
+      o.put("trusted", c.verified)
+      o.put("ephemeral", c.ephemeral.milliseconds)
     }
   }
 
@@ -187,6 +207,8 @@ object ConversationData {
     val RemoteId      = id[RConvId]('remote_id).apply(_.remoteId)
     val Name          = opt(text('name))(_.name.filterNot(_.isEmpty))
     val Creator       = id[UserId]('creator).apply(_.creator)
+    val Team          = opt(id[TeamId]('team))(_.team)
+    val IsManaged     = opt(bool('is_managed))(_.isManaged)
     val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
     val LastEventTime = timestamp('last_event_time)(_.lastEventTime)
     val Status        = opt(int[ConversationStatus]('status, _.value, ConversationStatus(_)))(_.status)
@@ -211,8 +233,9 @@ object ConversationData {
     val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
-    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
+    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
+
+    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
 
     import com.waz.model.ConversationData.ConversationType._
 
@@ -235,9 +258,9 @@ object ConversationData {
     import ConversationMemberData.{ConversationMemberDataDao => CM}
     import UserData.{UserDataDao => U}
 
-    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean)(implicit db: DB) ={
+    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB) ={
       val select =
-        s"""SELECT DISTINCT c.*
+        s"""SELECT c.* ${if (teamId.isDefined) ", COUNT(*)" else ""}
             |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
             | WHERE cm.${CM.ConvId.name} = c.${Id.name}
             |   AND cm.${CM.UserId.name} = u.${U.Id.name}
@@ -255,7 +278,13 @@ object ConversationData {
               |     OR u.${U.SKey.name} LIKE '% ${U.SKey(prefix)}%'
               |     OR u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
         }
-      list(db.rawQuery(select + " " + handleCondition, null))
+      val teamCondition = teamId.map(_ =>
+        s"""AND c.${Team.name} = ${Team(teamId)}
+           | GROUP BY cm.${CM.ConvId.name}
+           | HAVING COUNT(*) > 2
+         """.stripMargin)
+
+      list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null))
     }
   }
 }
@@ -276,17 +305,9 @@ object ConversationMemberData {
       db.execSQL(s"CREATE INDEX IF NOT EXISTS ConversationMembers_userid on ConversationMembers (${UserId.name})")
     }
 
-    def listForConv(convId: ConvId)(implicit db: DB) = list(find(ConvId, convId))
-    def listForUser(userId: UserId)(implicit db: DB) = list(find(UserId, userId))
     def findForConv(convId: ConvId)(implicit db: DB) = iterating(find(ConvId, convId))
+    def findForConvs(convs: Set[ConvId])(implicit db: DB) = iterating(findInSet(ConvId, convs))
     def findForUser(userId: UserId)(implicit db: DB) = iterating(find(UserId, userId))
-
-    def get(convId: ConvId, userId: UserId)(implicit db: DB) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, userId.toString), null, null, null))
-
-    def listMembers(convId: ConvId, users: Seq[UserId])(implicit db: DB) = list(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} in (${users.mkString("'", "','", "'")})", Array(convId.toString), null, null, null))
-
-    def isActiveMember(convId: ConvId, user: UserId)(implicit db: DB) = single(db.query(table.name, null, s"${ConvId.name} = ? AND ${UserId.name} = ?", Array(convId.toString, user.toString), null, null, null)).isDefined
-
-    def deleteForConv(id: ConvId)(implicit db: DB) = delete(ConvId, id)
+    def findForUsers(users: Set[UserId])(implicit db: DB) = iterating(findInSet(UserId, users))
   }
 }

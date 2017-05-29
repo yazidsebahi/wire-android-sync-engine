@@ -97,8 +97,6 @@ class AssetSyncHandler(cache: CacheService, client: AssetClient, assets: AssetSe
 
 }
 
-class SyncException(msg: String) extends Exception(msg) with NoStackTrace
-
 object AssetSyncHandler {
   val AssetTooLarge = "Failed to upload asset: Asset is too large"
 }

@@ -266,7 +266,7 @@ class VoiceChannelHandle(val id: ConvId, selfUserId: UserId, storage: VoiceChann
         service.postCallState(id, ConnectionState.Idle, Set.empty, cause) onComplete { _ =>
           if (prevState != ConnectionState.Connected) {
             // FIXME: we need to generate missed call message, but it's not easy without VoiceChannelDeactivate event, maybe backend will send this event to originating device also
-            service.sync.syncConversation(id)
+            service.sync.syncConversations(Set(id))
           }
           if (forceIdleState) setState(Idle, Some(Instant.now), requestedLocally = true)
         }
