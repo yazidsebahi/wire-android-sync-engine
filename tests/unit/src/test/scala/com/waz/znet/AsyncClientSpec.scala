@@ -160,7 +160,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     override def stop(): Unit = ???
   }
 
-  private def client = new AsyncClient(
+  private def client = new AsyncClientImpl(
     bodyDecoder = DefaultResponseBodyDecoder,
     userAgent="test",
     wrapper = Future { new FakeClientWrapper(Some(100L)) },
@@ -168,7 +168,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     responseWorker = new ResponseImplWorker
   )
 
-  private def clientWithDelay = new AsyncClient(
+  private def clientWithDelay = new AsyncClientImpl(
     bodyDecoder = DefaultResponseBodyDecoder,
     userAgent="test",
     wrapper = Future { new FakeClientWrapper(Some(3000L)) },
@@ -189,7 +189,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     Await.result(client(request), waitTime)
   }
 
-  private def doPost[A: ContentEncoder](path: String, data: A, auth: Boolean = false, timeout: FiniteDuration = AsyncClient.DefaultTimeout, waitTime: FiniteDuration = 500.millis, client: AsyncClient = client) = {
+  private def doPost[A: ContentEncoder](path: String, data: A, auth: Boolean = false, timeout: FiniteDuration = AsyncClient.DefaultTimeout, waitTime: FiniteDuration = 500.millis, client: AsyncClientImpl = client) = {
     val request = Request.Post(path, implicitly[ContentEncoder[A]].apply(data), baseUri = Some(URI.parse("http://localhost")), requiresAuthentication = auth, timeout = timeout)
     Await.result(client(request), waitTime)
   }
@@ -395,7 +395,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
       def stop(): Unit = {}
     }
 
-    lazy val mockedClient = new AsyncClient(
+    lazy val mockedClient = new AsyncClientImpl(
       bodyDecoder = DefaultResponseBodyDecoder,
       userAgent="test",
       wrapper = Future { clientWrapper },

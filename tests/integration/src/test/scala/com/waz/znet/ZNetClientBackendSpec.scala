@@ -35,7 +35,7 @@ class ZNetClientBackendSpec extends FeatureSpec with Matchers with ProvisionedSu
   override val provisionFile = "/three_users.json"
 
   lazy val Seq(client1, client2, client3) = 1 to 3 map { i =>
-    new ZNetClient(provisionedEmail(s"auto$i"), s"auto${i}_pass", new AsyncClient(wrapper = TestClientWrapper()))
+    new ZNetClient(provisionedEmail(s"auto$i"), s"auto${i}_pass", new AsyncClientImpl(wrapper = TestClientWrapper()))
   }
 
   lazy val globalModule = new GlobalModule(Robolectric.application, BackendConfig.StagingBackend) {

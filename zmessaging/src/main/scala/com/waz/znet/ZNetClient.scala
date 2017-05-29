@@ -47,7 +47,7 @@ class ZNetClient(credentials: CredentialsHandler,
                  loginClient: LoginClient) {
 
   def this(global: GlobalModule, email: String, passwd: String) = this(new BasicCredentials(EmailAddress(email), Some(passwd)), global.client, global.backend, global.loginClient)
-  def this(email: String, passwd: String, client: AsyncClient) =
+  def this(email: String, passwd: String, client: AsyncClientImpl) =
     this(new BasicCredentials(EmailAddress(email), Some(passwd)), client, BackendConfig.StagingBackend, new LoginClient(client, BackendConfig.StagingBackend)) // only used in tests!
 
   import ZNetClient._
@@ -224,12 +224,12 @@ object ZNetClient {
   private val handleId = new AtomicInteger(0)
   def nextId = handleId.incrementAndGet()
 
-  class EmptyAsyncClient(client: Future[ClientWrapper] = ClientWrapper()) extends AsyncClient(wrapper = client) {
+  class EmptyAsyncClientImpl(client: Future[ClientWrapper] = ClientWrapper()) extends AsyncClientImpl(wrapper = client) {
     override def apply(request: Request[_]): CancellableFuture[Response] =
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
-  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClient, BackendConfig.StagingBackend, new LoginClient(new EmptyAsyncClient, BackendConfig.StagingBackend)) {
+  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClientImpl, BackendConfig.StagingBackend, new LoginClient(new EmptyAsyncClientImpl, BackendConfig.StagingBackend)) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
     override def close(): Future[Unit] = Future.successful({})
   }

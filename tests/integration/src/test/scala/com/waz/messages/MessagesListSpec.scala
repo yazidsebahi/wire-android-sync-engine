@@ -23,7 +23,7 @@ import com.waz.api._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.service.RemoteZmsSpec
 import com.waz.testutils.Implicits._
-import com.waz.testutils.UnreliableAsyncClient
+import com.waz.testutils.UnreliableAsyncClientImpl
 import com.waz.utils.RichFuture
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 
@@ -37,7 +37,7 @@ class MessagesListSpec extends FeatureSpec with Matchers with BeforeAndAfterAll 
 
   lazy val auto2 = createRemoteZms()
 
-  override lazy val testClient = new UnreliableAsyncClient
+  override lazy val testClient = new UnreliableAsyncClientImpl
 
   feature("Syncing") {
     lazy val convs = api.getConversations

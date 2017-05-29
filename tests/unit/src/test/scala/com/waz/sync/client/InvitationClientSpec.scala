@@ -26,7 +26,7 @@ import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ContentEncoder.{ByteArrayRequestContent}
 import com.waz.znet.Response.{HttpStatus, Status}
-import com.waz.znet.ZNetClient.{EmptyAsyncClient, EmptyClient}
+import com.waz.znet.ZNetClient.{EmptyAsyncClientImpl, EmptyClient}
 import com.waz.znet._
 import org.json.JSONObject
 import org.scalatest._
@@ -115,7 +115,7 @@ class InvitationClientSpec extends FeatureSpec with Matchers with Inside with Sc
     }
   )
 
-  lazy val registrationClient = new RegistrationClient(new EmptyAsyncClient {
+  lazy val registrationClient = new RegistrationClient(new EmptyAsyncClientImpl {
     override def apply(request: Request[_]): CancellableFuture[Response] =
       CancellableFuture.successful(nextResponse)
   }, BackendConfig.StagingBackend)

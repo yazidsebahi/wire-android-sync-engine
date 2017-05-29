@@ -73,7 +73,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val tempFiles: TempFileService                            = wire[TempFileService]
 
   lazy val clientWrapper: Future[ClientWrapper] = ClientWrapper()
-  lazy val client: AsyncClient = new AsyncClient(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
+  lazy val client: AsyncClientImpl = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
 
   lazy val globalClient = new ZNetClient(global, "", "")
   lazy val imageLoader = {
