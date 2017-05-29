@@ -77,13 +77,13 @@ object TeamsClient {
 
   import JsonDecoder._
 
-  case class TeamsResponse(teams: Set[TeamData], hasMore: Boolean)
+  case class TeamsResponse(teams: Seq[TeamData], hasMore: Boolean)
 
   object TeamsResponse {
-    def unapply(response: ResponseContent): Option[(Set[TeamData], Boolean)] =
+    def unapply(response: ResponseContent): Option[(Seq[TeamData], Boolean)] =
       response match {
         case JsonObjectResponse(js) if js.has("teams") =>
-          Try(JsonDecoder.decodeSet('teams)(js, TeamData.Decoder), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
+          Try(JsonDecoder.decodeSeq('teams)(js, TeamData.Decoder), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
         case _ =>
           warn(s"Unexpected response: $response")
           None

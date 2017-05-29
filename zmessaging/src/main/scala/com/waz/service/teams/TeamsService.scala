@@ -49,7 +49,7 @@ trait TeamsService {
 
   def getPermissions(userId: UserId, teamId: TeamId): Future[Option[Set[TeamMemberData.Permission]]]
 
-  def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]): Future[Unit]
+  def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData], fullSync: Boolean = false): Future[Unit]
 
 }
 
@@ -131,15 +131,31 @@ class TeamsServiceImpl(selfUser:          UserId,
   override def getPermissions(userId: UserId, teamId: TeamId) =
     teamMemberStorage.get((userId, teamId)).map(_.map(_.permissions))
 
-  //TODO we should clear team/teamMember storage on full sync. There's no way of knowing what teams we're not a part of...
-  override def onTeamsSynced(teams: Set[TeamData], members: Set[TeamMemberData]) = {
-    verbose(s"onTeamsSynced: teams: $teams \nmembers: $members")
-    for {
-      _ <- teamStorage.insert(teams)
-      _ <- teamMemberStorage.insert(members)
-    //TODO should we check first if we already have these users in the database?
-      _ <- sync.syncUsers(members.map(_.userId).toSeq: _* )
-    } yield {}
+  override def onTeamsSynced(teamsFetched: Set[TeamData], members: Set[TeamMemberData], fullSync: Boolean) = {
+    verbose(s"onTeamsSynced: fullSync? $fullSync, teams: $teamsFetched \nmembers: $members")
+
+    def insertFetchedData() = {
+      for {
+        _ <- teamStorage.insert(teamsFetched)
+        _ <- teamMemberStorage.insert(members)
+        //TODO should we check first if we already have these users in the database?
+        _ <- sync.syncUsers(members.map(_.userId).toSeq: _* )
+      } yield {}
+    }
+
+    if (fullSync) {
+      for {
+        localTeams   <- teamStorage.list().map(_.toSet)
+        staleTeams   = (localTeams -- teamsFetched).map(_.id)
+        _            <- onTeamsRemoved(staleTeams)
+        staleConvs   <- {
+          import ConversationDataDao._
+          convsStorage.find(c => c.team.exists(staleTeams.contains), db => iterating(findInSet(Team, staleTeams.map(Option(_)))(db)), _.id)
+        }
+        _            <- convsStorage.remove(staleConvs)
+        _            <- insertFetchedData()
+      } yield {}
+    } else insertFetchedData()
   }
 
   private def onTeamsAdded(ids: Set[TeamId]) = {

@@ -40,7 +40,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
     scenario("Basic single team with some members sync") {
 
       val teamId = TeamId()
-      val teams = Set(TeamData(teamId, "My Team"))
+      val teams = Seq(TeamData(teamId, "My Team"))
       val members = Set(
         TeamMemberData(UserId(), teamId, 0),
         TeamMemberData(UserId(), teamId, 0)
@@ -49,7 +49,8 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
       (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = false))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Right(members)))
 
-      (service.onTeamsSynced _).expects(teams, members).once().returning(Future.successful({}))
+      val teamsFetched = teams.toSet
+      (service.onTeamsSynced _).expects(teamsFetched, members, true).once().returning(Future.successful({}))
 
       result(initHandler.syncTeams(Set.empty)) shouldEqual SyncResult.Success
 
@@ -75,10 +76,10 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
         val resp = callsToTeams match {
           case 1 =>
             start shouldEqual None
-            TeamsResponse(teams.init.toSet, hasMore = true)
+            TeamsResponse(teams.init, hasMore = true)
           case 2 =>
             start shouldEqual teamIds.headOption
-            TeamsResponse(teams.tail.toSet, hasMore = false)
+            TeamsResponse(teams.tail, hasMore = false)
           case _ => fail("Unexpected number of calls to getTeams")
         }
 
@@ -102,36 +103,23 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
         CancellableFuture.successful(Right(resp))
       }
 
-      var callsToSynced = 0
-      (service.onTeamsSynced _).expects(*, *).twice().onCall { (ts, ms) =>
-        callsToSynced += 1
-
-        callsToSynced match {
-          case 1 =>
-            ts shouldEqual teams.init.toSet
-            ms shouldEqual members.head
-          case 2 =>
-            ts shouldEqual teams.tail.toSet
-            ms shouldEqual members.last
-          case _ => fail("Unexpected number of calls to getTeamMembers")
-        }
-
-        Future.successful({})
-      }
+      val teamsReturned = teams.toSet
+      val membersReturned = members.flatten.toSet
+      (service.onTeamsSynced _).expects(teamsReturned, membersReturned, true).once().returning(Future.successful({}))
       result(initHandler.syncTeams(Set.empty)) shouldEqual SyncResult.Success
     }
 
     scenario("Failed members download should fail entire sync") {
 
       val teamId = TeamId()
-      val teams = Set(TeamData(teamId, "My Team"))
+      val teams = Seq(TeamData(teamId, "My Team"))
 
       val timeoutError = ErrorResponse(ErrorResponse.ConnectionErrorCode, s"Request failed with timeout", "connection-error")
 
       (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = true))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Left(timeoutError)))
 
-      (service.onTeamsSynced _).expects(*, *).never().returning(Future.successful({}))
+      (service.onTeamsSynced _).expects(*, *, *).never().returning(Future.successful({}))
 
       result(initHandler.syncTeams(Set.empty)) shouldEqual SyncResult(timeoutError)
     }

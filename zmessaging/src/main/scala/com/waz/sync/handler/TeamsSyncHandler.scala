@@ -20,13 +20,14 @@ package com.waz.sync.handler
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{debug, warn}
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.{TeamId, TeamMemberData}
+import com.waz.model.{TeamData, TeamId, TeamMemberData}
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.TeamsClient
 import com.waz.sync.client.TeamsClient.TeamsResponse
 import com.waz.sync.handler.TeamsSyncHandler.SyncException
-import com.waz.threading.Threading
+import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.znet.ZNetClient.ErrorOrResponse
 
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
@@ -44,30 +45,35 @@ class TeamsSyncHandlerImpl(client: TeamsClient, service: TeamsService) extends T
   override def syncTeams(ids: Set[TeamId]) =
     if (ids.isEmpty) syncAllTeams() else syncBatchTeams(ids)
 
-  private def syncAllTeams(start: Option[TeamId] = None): Future[SyncResult] = client.getTeams(start).future.flatMap {
-    case Right(TeamsResponse(teams, hasMore)) =>
-      debug(s"syncTeams received data: $teams, hasMore? $hasMore")
+  private def syncAllTeams(): Future[SyncResult] = {
 
-      downloadMembers(teams.map(_.id)).flatMap { teamMembers =>
-        val future = service.onTeamsSynced(teams, teamMembers).map(_ => SyncResult.Success)
-        if (hasMore) syncAllTeams(teams.lastOption.map(_.id)).flatMap(res => future.map(_ => res))
-        else future.map(_ => SyncResult.Success)
-      }.recover {
-        case e@SyncException(_, err) =>
-          warn("Failed to sync teams", e)
-          SyncResult(err)
+    def recursive(start: Option[TeamId], teamsDownloaded: Set[TeamData], membersDownloaded: Set[TeamMemberData]): ErrorOrResponse[(Set[TeamData], Set[TeamMemberData])] = {
+      client.getTeams(start).flatMap {
+        case Right(TeamsResponse(teams, hasMore)) =>
+          debug(s"syncTeams received data: $teams, hasMore? $hasMore")
+          CancellableFuture.lift(downloadMembers(teams.map(_.id).toSet)).flatMap { teamMembers =>
+            if (hasMore) recursive(teams.lastOption.map(_.id), teams.toSet, teamMembers)
+            else CancellableFuture.successful(Right((teams.toSet ++ teamsDownloaded, teamMembers ++ membersDownloaded)))
+          }
+        case Left(err) => CancellableFuture.successful(Left(err))
       }
+    }
 
-    case Left(error) =>
-      warn(s"TeamsClient.syncAllTeams($start) failed with error: $error")
-      Future.successful(SyncResult(error))
+    recursive(None, Set.empty, Set.empty).future.flatMap {
+      case Right((teams, members)) =>  service.onTeamsSynced(teams, members, fullSync = true).map(_ => SyncResult.Success)
+      case Left(err) => Future.successful(SyncResult(err))
+    }.recover {
+      case e@SyncException(_, err) =>
+        warn("Failed to sync teams", e)
+        SyncResult(err)
+    }
   }
 
   private def syncBatchTeams(ids: Set[TeamId]): Future[SyncResult] = client.getTeams(ids).future.flatMap {
     case Right(TeamsResponse(teams, _)) =>
       for {
         members <- downloadMembers(ids)
-        _       <- service.onTeamsSynced(teams, members)
+        _       <- service.onTeamsSynced(teams.toSet, members)
       } yield SyncResult.Success
     case Left(error) =>
       warn(s"TeamsClient.syncBatchTeams: $ids failed with error: $error")
