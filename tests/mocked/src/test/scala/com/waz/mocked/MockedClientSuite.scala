@@ -74,9 +74,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
 
-    override lazy val assetClient        = new AssetClientImpl(zNetClient) {
-      override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = suite.postImageAssetData(asset, convId, data, nativePush)
-    }
+    override lazy val assetClient        = new AssetClientImpl(zNetClient)
 
     override lazy val usersClient        = new MockedUsersClient(zNetClient)
     override lazy val convClient         = new ConversationsClient(zNetClient) {
@@ -281,7 +279,6 @@ trait MockedClient { test: ApiSpec =>
   def postConversationState(convId: RConvId, state: ConversationState): ErrorOrResponse[Boolean] = successful(Right(true))
   def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = successful(Right(None))
-  def postImageAssetData(asset: AssetData, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[RAssetId] = successful(Left(ErrorResponse.internalError("not implemented")))
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = successful(Right(()))
   def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadOtrClients(): ErrorOrResponse[Seq[Client]] = successful(Right(Seq.empty))

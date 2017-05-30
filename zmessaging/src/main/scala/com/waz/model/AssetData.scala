@@ -285,7 +285,6 @@ object AssetData {
       data.proxyPath    foreach (v => o.put("proxyPath",    v))
       data.convId       foreach (v => o.put("convId",       v.str))
       data.data64       foreach (v => o.put("data64",       v))
-      data.v2ProfileId  foreach (v => o.put("v2ProfileId",  v))
     }
   }
 
