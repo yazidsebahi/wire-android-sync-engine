@@ -148,11 +148,6 @@ class TeamsServiceImpl(selfUser:          UserId,
         localTeams   <- teamStorage.list().map(_.toSet)
         staleTeams   = (localTeams -- teamsFetched).map(_.id)
         _            <- onTeamsRemoved(staleTeams)
-        staleConvs   <- {
-          import ConversationDataDao._
-          convsStorage.find(c => c.team.exists(staleTeams.contains), db => iterating(findInSet(Team, staleTeams.map(Option(_)))(db)), _.id)
-        }
-        _            <- convsStorage.remove(staleConvs)
         _            <- insertFetchedData()
       } yield {}
     } else insertFetchedData()
@@ -167,9 +162,14 @@ class TeamsServiceImpl(selfUser:          UserId,
     verbose(s"onTeamsRemoved: $ids")
     if (ids.nonEmpty)
       for {
-        _       <- teamStorage.remove(ids)
-        removed <- teamMemberStorage.removeByTeam(ids)
-        _       <- removeUnconnectedUsers(removed)
+        _          <- teamStorage.remove(ids)
+        removed    <- teamMemberStorage.removeByTeam(ids)
+        _          <- removeUnconnectedUsers(removed)
+        staleConvs <- {
+          import ConversationDataDao._
+          convsStorage.find(c => c.team.exists(ids.contains), db => iterating(findInSet(Team, ids.map(Option(_)))(db)), _.id)
+        }
+        _          <- convsStorage.remove(staleConvs)
       } yield {}
     else Future.successful({})
   }
