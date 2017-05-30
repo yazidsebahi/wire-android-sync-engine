@@ -17,9 +17,8 @@
  */
 package com.waz.sync.client
 
-import com.waz.model.TeamMemberData
+import com.waz.model.TeamMemberData._
 import com.waz.model.TeamMemberData.Permission._
-import com.waz.model.TeamMemberData.permissionsFromBitMask
 import com.waz.specs.AndroidFreeSpec
 
 class TeamsClientSpec extends AndroidFreeSpec {
@@ -28,17 +27,24 @@ class TeamsClientSpec extends AndroidFreeSpec {
 
     scenario("Some permissions") {
       val permissions = 41 //101001
-      permissionsFromBitMask(permissions) shouldEqual Set(CreateConversation, RemoveTeamMember, RemoveConversationMember)
+      decodeBitmask(permissions) shouldEqual Set(CreateConversation, RemoveTeamMember, RemoveConversationMember)
     }
 
     scenario("No permissions") {
       val permissions = 0
-      permissionsFromBitMask(permissions) shouldEqual Set.empty
+      decodeBitmask(permissions) shouldEqual Set.empty
     }
 
     scenario("All permissions") {
-      val permissions = ~(TeamMemberData.Permission.values.size & 0)
-      permissionsFromBitMask(permissions) shouldEqual TeamMemberData.Permission.values
+      val permissions = ~(Permission.values.size & 0)
+      decodeBitmask(permissions) shouldEqual Permission.values
+    }
+
+    scenario("Encode/decode permissions") {
+      val ps = Set(CreateConversation, DeleteConversation, SetMemberPermissions)
+      val mask = encodeBitmask(ps)
+      val psOut = decodeBitmask(mask)
+      psOut shouldEqual ps
     }
 
   }

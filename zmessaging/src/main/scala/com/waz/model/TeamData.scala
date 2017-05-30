@@ -63,7 +63,8 @@ case class TeamMemberData(userId:      UserId,
                           teamId:      TeamId,
                           pmsBitmask:  Long) {
   import TeamMemberData._
-  lazy val permissions = permissionsFromBitMask(pmsBitmask)
+
+  lazy val permissions = decodeBitmask(pmsBitmask)
 }
 
 object TeamMemberData {
@@ -83,16 +84,25 @@ object TeamMemberData {
         SetTeamData,                // 0x100
         GetMemberPermissions,       // 0x200
         GetTeamConversations,       // 0x400
-        DeleteTeam = Value          // 0x800
+        DeleteTeam,                 // 0x800
+        SetMemberPermissions        // 0x1000
+    = Value
   }
 
-  //TODO is there a more idiomatic way of doing this in Scala?
-  def permissionsFromBitMask(mask: Long): Set[Permission] = {
+  def decodeBitmask(mask: Long): Set[Permission] = {
     val builder = new mutable.SetBuilder[Permission, Set[Permission]](Set.empty)
     (0 until Permission.values.size).map(math.pow(2, _).toInt).zipWithIndex.foreach {
       case (one, pos) => if ((mask & one) != 0) builder += Permission(pos)
     }
     builder.result()
+  }
+
+  def encodeBitmask(ps: Set[Permission]): Long = {
+    var mask = 0L
+    (0 until Permission.values.size).map(math.pow(2, _).toLong).zipWithIndex.foreach {
+      case (m, i) => if (ps.contains(Permission(i))) mask = mask | m
+    }
+    mask
   }
 
   import com.waz.db.Col._
