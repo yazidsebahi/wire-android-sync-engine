@@ -46,7 +46,7 @@ import scala.util.{Failure, Left, Try}
   * If the connection drops, it will automatically try to reconnect.
   */
 class WebSocketClient(context: Context,
-                      client: AsyncClient,
+                      client: AsyncClientImpl,
                       uri: => Uri,
                       auth: AccessTokenProvider,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
@@ -118,14 +118,14 @@ class WebSocketClient(context: Context,
       req.setHeader("Accept-Encoding", "identity") // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
       req.setHeader("User-Agent", client.userAgent)
 
-      CancellableFuture.lift(client.client) flatMap { client =>
+      CancellableFuture.lift(client.wrapper) flatMap { client =>
         val f = client.websocket(req, null, new WebSocketConnectCallback {
           override def onCompleted(ex: Exception, socket: WebSocket): Unit = {
             debug(s"WebSocket request finished, ex: $ex, socket: $socket")
             p.tryComplete(if (ex == null) Try(onConnected(socket)) else Failure(ex))
           }
         })
-        returning(new CancellableFuture(p).withTimeout(30.seconds)) { _.onFailure { case _ => f.cancel(true) } }
+        returning(new CancellableFuture(p).withTimeout(30.seconds)) { _.onFailure { case _ => f.cancel() } }
       }
     case Left(status) =>
       CancellableFuture.failed(new Exception(s"Authentication returned error status: $status"))
@@ -243,7 +243,7 @@ object WebSocketClient {
   val defaultBackoff = new ExponentialBackoff(250.millis, 5.minutes)
 
   def apply(context: Context, client: ZNetClient, pushUri: => Uri) =
-    new WebSocketClient(context, client.client, pushUri, client.auth)
+    new WebSocketClient(context, client.client.asInstanceOf[AsyncClientImpl], pushUri, client.auth)
 
   trait Disconnect
   object Disconnect {

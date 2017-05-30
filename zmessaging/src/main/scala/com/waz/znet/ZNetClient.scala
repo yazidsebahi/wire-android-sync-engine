@@ -26,8 +26,6 @@ import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
-import com.waz.znet.ContentEncoder.RequestContent
-import com.waz.znet.Request.ProgressCallback
 import com.waz.znet.Response._
 
 import scala.collection.mutable
@@ -49,7 +47,7 @@ class ZNetClient(credentials: CredentialsHandler,
                  loginClient: LoginClient) {
 
   def this(global: GlobalModule, email: String, passwd: String) = this(new BasicCredentials(EmailAddress(email), Some(passwd)), global.client, global.backend, global.loginClient)
-  def this(email: String, passwd: String, client: AsyncClient) =
+  def this(email: String, passwd: String, client: AsyncClientImpl) =
     this(new BasicCredentials(EmailAddress(email), Some(passwd)), client, BackendConfig.StagingBackend, new LoginClient(client, BackendConfig.StagingBackend)) // only used in tests!
 
   import ZNetClient._
@@ -123,17 +121,15 @@ class ZNetClient(credentials: CredentialsHandler,
         handle.startTime = System.currentTimeMillis()
         ongoing += handle.id -> handle
 
-        val request: Request[_] = handle.request
-
-        val uri = request.resourcePath.map(path => baseUri.buildUpon.encodedPath(path).build).orElse(request.absoluteUri).get
+        val request = handle.request.withBaseUriIfNone(baseUri)
 
         val future =
           if (request.requiresAuthentication) {
             CancellableFuture.lift(auth.currentToken()) flatMap {
-              case Right(token) => client(uri, request.httpMethod, request.getBody, request.headers ++ token.headers, request.followRedirect, request.timeout, request.decoder, request.downloadCallback)
+              case Right(token) => client(request.withHeaders(token.headers))
               case Left(status) => CancellableFuture.successful(Response(status))
             }
-          } else client(uri, request.httpMethod, request.getBody, request.headers, request.followRedirect, request.timeout, request.decoder, request.downloadCallback)
+          } else client(request)
 
         handle.httpFuture = Some(future)
 
@@ -228,12 +224,12 @@ object ZNetClient {
   private val handleId = new AtomicInteger(0)
   def nextId = handleId.incrementAndGet()
 
-  class EmptyAsyncClient(wrapper: ClientWrapper = ClientWrapper) extends AsyncClient(wrapper = wrapper) {
-    override def apply(uri: URI, method: String, body: RequestContent, headers: Map[String, String], followRedirect: Boolean, timeout: FiniteDuration, decoder: Option[ResponseBodyDecoder], downloadProgressCallback: Option[ProgressCallback]): CancellableFuture[Response] =
+  class EmptyAsyncClientImpl(client: Future[ClientWrapper] = ClientWrapper()) extends AsyncClientImpl(wrapper = client) {
+    override def apply(request: Request[_]): CancellableFuture[Response] =
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
-  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClient, BackendConfig.StagingBackend, new LoginClient(new EmptyAsyncClient, BackendConfig.StagingBackend)) {
+  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClientImpl, BackendConfig.StagingBackend, new LoginClient(new EmptyAsyncClientImpl, BackendConfig.StagingBackend)) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
     override def close(): Future[Unit] = Future.successful({})
   }

@@ -8,7 +8,7 @@ import sbtassembly.MappingSet
 import SharedSettings._
 
 val MajorVersion = "99"
-val MinorVersion = "5" // hotfix release
+val MinorVersion = "6" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -27,7 +27,7 @@ scalaVersion in ThisBuild := "2.11.8"
 javacOptions in ThisBuild ++= Seq("-source", "1.7", "-target", "1.7", "-encoding", "UTF-8")
 scalacOptions in ThisBuild ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8")
 
-platformTarget in ThisBuild := "android-23"
+platformTarget in ThisBuild := "android-24"
 
 licenses in ThisBuild += ("GPL-3.0", url("https://opensource.org/licenses/GPL-3.0"))
 
@@ -88,7 +88,7 @@ lazy val zmessaging = project
   .settings(
     name := "zmessaging-android",
     crossPaths := false,
-    platformTarget := "android-23",
+    platformTarget := "android-24",
     lintDetectors := Seq(ApiDetector.UNSUPPORTED),
     lintStrict := true,
     libraryProject := true,
@@ -186,6 +186,7 @@ lazy val testutils = project.in(file("tests") / "utils")
     libraryDependencies ++= Seq(
       //Replacements for Android Dependencies
       "org.apache.httpcomponents" % "httpclient" % "4.5.3",
+      "org.apache.httpcomponents" % "fluent-hc" % "4.5.3",
       Deps.scalaCheck,
       "org.scalatest" %% "scalatest" % "2.2.6",
       "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2",
@@ -206,7 +207,7 @@ lazy val testapp = project.in(file("tests") / "app")
     name := "testapp",
     crossPaths := false,
     libraryProject := false,
-    platformTarget := "android-23",
+    platformTarget := "android-24",
     proguardConfig ++= IO.readLines(file("tests") / "app" / "proguard.txt"),
     proguardCache := Seq(),
     typedResources := false,
@@ -237,7 +238,7 @@ lazy val testapp = project.in(file("tests") / "app")
       "com.google.android.gms" % "play-services-gcm" % "7.8.0",
       Deps.localytics,
       "junit" % "junit" % "4.12" % Test,
-      "com.android.support" % "support-annotations" % "23.0.1" % Test,
+      "com.android.support" % "support-annotations" % "24.2.0" % Test,
       "com.android.support.test" % "runner" % "0.5" % Test,
       "com.android.support.test" % "rules" % "0.5" % Test
     )
@@ -251,7 +252,7 @@ lazy val actors_android = project.in(file("actors") / "android_app")
     name := "androidactors",
     crossPaths := false,
     libraryProject := false,
-    platformTarget := "android-23",
+    platformTarget := "android-24",
     proguardOptions ++= IO.readLines(file("actors") / "android_app" / "proguard.txt"),
     proguardCache := Seq(),
     useProguard := true,

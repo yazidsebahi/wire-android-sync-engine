@@ -26,12 +26,12 @@ class JavaURIBuilder(uriBuilder: JURIBuilder) extends URIBuilder {
   //TODO figure out which methods map best to java.net.URI
   override def appendPath(path: String)                         = new JavaURIBuilder(uriBuilder.setPath(path))
   override def encodedPath(path: String)                        = ???
-  override def appendEncodedPath(path: String)                  = ???
+  override def appendEncodedPath(path: String)                  = new JavaURIBuilder(new JURIBuilder(uriBuilder.build().toString + path))
   override def appendQueryParameter(key: String, value: String) = new JavaURIBuilder(uriBuilder.setParameter(key, value))
   override def build                                            = new JavaURI(uriBuilder.build())
 }
 
-class JavaURI(uri: JURI) extends URI {
+class JavaURI(val uri: JURI) extends URI {
   override def buildUpon                      = new JavaURIBuilder(new JURIBuilder(uri))
   override def getPath                        = uri.getPath
   override def getScheme                      = uri.getScheme
@@ -40,7 +40,7 @@ class JavaURI(uri: JURI) extends URI {
   override def getPathSegments                = ???
   override def getLastPathSegment             = ???
   override def getQueryParameter(key: String) = ???
-  override def normalizeScheme                = ???
+  override def normalizeScheme                = JavaURIUtil.parse(uri.toString.toLowerCase)
   override def toString                       = uri.toString
 }
 

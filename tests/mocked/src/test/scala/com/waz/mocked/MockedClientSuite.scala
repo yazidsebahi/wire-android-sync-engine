@@ -52,6 +52,7 @@ import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import org.scalatest.{Alerting, Informing, Suite}
 
+import scala.concurrent.Future
 import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
@@ -120,7 +121,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
     override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
 
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client, Uri.parse(backend.websocketUrl), zNetClient.auth) {
+      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), zNetClient.auth) {
         override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None
@@ -186,9 +187,9 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       }(Threading.Background)
     }
 
-  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClient) extends GlobalModule(context, testBackend) {
-    override lazy val client: AsyncClient = testClient
-    override lazy val clientWrapper: ClientWrapper = TestClientWrapper
+  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModule(context, testBackend) {
+    override lazy val client: AsyncClientImpl = testClient
+    override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
     override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
       override def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
       override def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
@@ -207,7 +208,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val factory: ZMessagingFactory = new MockedZMessagingFactory(this)
   }
 
-  override lazy val testClient: AsyncClient = new EmptyAsyncClient
+  override lazy val testClient: AsyncClientImpl = new EmptyAsyncClientImpl
 
   override lazy val globalModule = new MockedGlobalModule(context, testBackend, testClient)
 

@@ -36,6 +36,8 @@ import com.waz.utils.Cache
 import com.waz.utils.wrappers.{GoogleApi, GoogleApiImpl}
 import com.waz.znet._
 
+import scala.concurrent.Future
+
 
 class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val storage:             Database                         = new GlobalDatabase(context)
@@ -70,8 +72,8 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
   lazy val tempFiles: TempFileService                            = wire[TempFileService]
 
-  lazy val clientWrapper: ClientWrapper = ClientWrapper
-  lazy val client: AsyncClient = new AsyncClient(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
+  lazy val clientWrapper: Future[ClientWrapper] = ClientWrapper()
+  lazy val client: AsyncClientImpl = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
 
   lazy val globalClient = new ZNetClient(global, "", "")
   lazy val imageLoader = {
