@@ -40,7 +40,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
     scenario("Basic single team with some members sync") {
 
       val teamId = TeamId()
-      val teams = Seq(TeamData(teamId, "My Team"))
+      val teams = Seq(TeamData(teamId, "My Team", UserId()))
       val members = Set(
         TeamMemberData(UserId(), teamId),
         TeamMemberData(UserId(), teamId)
@@ -60,7 +60,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
 
       val teamIds = Seq(TeamId("1"), TeamId("2"))
       val teams = teamIds.map { id =>
-        TeamData(id, s"Team: ${id.str}")
+        TeamData(id, s"Team: ${id.str}", UserId())
       }
       val members = teamIds.map { id =>
         Set(
@@ -112,7 +112,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
     scenario("Failed members download should fail entire sync") {
 
       val teamId = TeamId()
-      val teams = Seq(TeamData(teamId, "My Team"))
+      val teams = Seq(TeamData(teamId, "My Team", UserId()))
 
       val timeoutError = ErrorResponse(ErrorResponse.ConnectionErrorCode, s"Request failed with timeout", "connection-error")
 

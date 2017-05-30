@@ -27,6 +27,7 @@ import scala.collection.mutable
 
 case class TeamData(id:      TeamId,
                     name:    String,
+                    creator: UserId,
                     icon:    Option[AssetId] = None,
                     iconKey: Option[AESKey]  = None)
 
@@ -35,7 +36,7 @@ object TeamData {
   implicit lazy val Decoder: JsonDecoder[TeamData] = new JsonDecoder[TeamData] {
     override def apply(implicit js: JSONObject): TeamData = {
       import JsonDecoder._
-      TeamData('id, 'name, 'icon, decodeOptString('icon_key).map(AESKey))
+      TeamData('id, 'name, 'creator, 'icon, decodeOptString('icon_key).map(AESKey))
     }
   }
 
@@ -43,13 +44,14 @@ object TeamData {
   implicit object TeamDataDoa extends Dao[TeamData, TeamId] {
     val Id      = id[TeamId]      ('_id, "PRIMARY KEY").apply(_.id)
     val Name    = text            ('name)(_.name)
+    val Creator = id[UserId]      ('creator).apply(_.creator)
     val Icon    = opt(id[AssetId] ('icon))(_.icon)
     val IconKey = opt(text[AESKey]('icon_key, _.str, AESKey))(_.iconKey)
 
     override val idCol = Id
-    override val table = Table("Teams", Id, Name, Icon, IconKey)
+    override val table = Table("Teams", Id, Name, Creator, Icon, IconKey)
 
-    override def apply(implicit cursor: DBCursor): TeamData = new TeamData(Id, Name, Icon, IconKey)
+    override def apply(implicit cursor: DBCursor): TeamData = new TeamData(Id, Name, Creator, Icon, IconKey)
   }
 }
 
