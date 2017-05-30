@@ -275,7 +275,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
         else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
       } yield ()
     }
-  } else Future(Unit)
+  } else Future.successful({})
 
   private def selfUserHashes: Future[Vector[String]] =
     for {
