@@ -55,7 +55,7 @@ class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
   override def getTeamMembers(id: TeamId) = {
     zNetClient.withErrorHandling("loadTeamMembers", Request.Get(teamMembersPath(id))) {
       case Response(SuccessHttpStatus(), TeamMembersResponse(members), _) =>
-        members.map { case (userId, permissions) => TeamMemberData(userId, id, permissions)}
+        members.map { case (userId, selfPermissions, copyPermissions) => TeamMemberData(userId, id, selfPermissions, copyPermissions)}
     }
   }
 }
@@ -91,14 +91,11 @@ object TeamsClient {
   }
 
   object TeamMembersResponse {
-    lazy val MemberDecoder = new JsonDecoder[(UserId, Long)] {
-      override def apply(implicit js: JSONObject) = {
-        //TODO do we want to keep the 'copy' permissions for display
-        (decodeId[UserId]('user), decodeInt('self)('permissions))
-      }
+    lazy val MemberDecoder = new JsonDecoder[(UserId, Long, Long)] {
+      override def apply(implicit js: JSONObject) = (decodeId[UserId]('user), decodeInt('self)('permissions), decodeInt('copy)('permissions))
     }
 
-    def unapply(response: ResponseContent): Option[Set[(UserId, Long)]] = {
+    def unapply(response: ResponseContent): Option[Set[(UserId, Long, Long)]] = {
       response match {
         case JsonObjectResponse(js) if js.has("members") =>
           Try(decodeSet('members)(js, MemberDecoder)).toOption

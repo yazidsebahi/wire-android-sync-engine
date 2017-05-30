@@ -17,12 +17,9 @@
  */
 package com.waz.model
 
-import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.debug
 import com.waz.db.{Dao, Dao2}
-import com.waz.model.ConversationData.ConversationDataDao.list
-import com.waz.model.TeamMemberData.Permission
-import com.waz.model.UserData.UserDataDao
 import com.waz.service.SearchKey
 import com.waz.utils.JsonDecoder
 import com.waz.utils.wrappers.{DB, DBCursor}
@@ -61,10 +58,12 @@ object TeamData {
 
 case class TeamMemberData(userId:      UserId,
                           teamId:      TeamId,
-                          pmsBitmask:  Long) {
+                          private val _selfPermissions: Long = 0,
+                          private val _copyPermissions: Long = 0) {
   import TeamMemberData._
 
-  lazy val permissions = decodeBitmask(pmsBitmask)
+  lazy val selfPermissions = decodeBitmask(_selfPermissions)
+  lazy val copyPermissions = decodeBitmask(_copyPermissions)
 }
 
 object TeamMemberData {
@@ -107,14 +106,15 @@ object TeamMemberData {
 
   import com.waz.db.Col._
   implicit object TeamMemberDataDoa extends Dao2[TeamMemberData, UserId, TeamId] {
-    val UserId      = id[UserId]('user_id).apply(_.userId)
-    val TeamId      = id[TeamId]('team_id).apply(_.teamId)
-    val Permissions = long('permissions)(_.pmsBitmask)
+    val UserId          = id[UserId]('user_id).apply(_.userId)
+    val TeamId          = id[TeamId]('team_id).apply(_.teamId)
+    val SelfPermissions = long('self_permissions)(_._selfPermissions)
+    val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = (UserId, TeamId)
-    override val table = Table("TeamMembers", UserId, TeamId, Permissions)
+    override val table = Table("TeamMembers", UserId, TeamId, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): TeamMemberData = TeamMemberData(UserId, TeamId, Permissions)
+    override def apply(implicit cursor: DBCursor): TeamMemberData = TeamMemberData(UserId, TeamId, SelfPermissions, CopyPermissions)
 
     def findForUsers(users: Set[UserId])(implicit db: DB) = iterating(findInSet(UserId, users))
     def findForTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(TeamId, teams))

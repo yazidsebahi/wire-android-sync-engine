@@ -129,7 +129,7 @@ class TeamsServiceImpl(selfUser:          UserId,
   override def getSelfTeams = getTeams(selfUser)
 
   override def getPermissions(userId: UserId, teamId: TeamId) =
-    teamMemberStorage.get((userId, teamId)).map(_.map(_.permissions))
+    teamMemberStorage.get((userId, teamId)).map(_.map(_.selfPermissions))
 
   override def onTeamsSynced(teamsFetched: Set[TeamData], members: Set[TeamMemberData], fullSync: Boolean) = {
     verbose(s"onTeamsSynced: fullSync? $fullSync, teams: $teamsFetched \nmembers: $members")
