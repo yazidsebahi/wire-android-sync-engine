@@ -17,8 +17,6 @@
  */
 package com.waz.model
 
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.debug
 import com.waz.db.{Dao, Dao2}
 import com.waz.service.SearchKey
 import com.waz.utils.JsonDecoder
@@ -29,30 +27,29 @@ import scala.collection.mutable
 
 case class TeamData(id:      TeamId,
                     name:    String,
-                    icon:    Option[AssetId] = None)
+                    icon:    Option[AssetId] = None,
+                    iconKey: Option[AESKey]  = None)
 
 object TeamData {
 
   implicit lazy val Decoder: JsonDecoder[TeamData] = new JsonDecoder[TeamData] {
-
     override def apply(implicit js: JSONObject): TeamData = {
       import JsonDecoder._
-      debug(s"decoding response: $js")
-      //TODO icon/icon_key is being left out for now - may want to include later
-      TeamData('id, 'name, None)
+      TeamData('id, 'name, 'icon, decodeOptString('icon_key).map(AESKey))
     }
   }
 
   import com.waz.db.Col._
   implicit object TeamDataDoa extends Dao[TeamData, TeamId] {
-    val Id       = id[TeamId]     ('_id, "PRIMARY KEY").apply(_.id)
-    val Name     = text           ('name)(_.name)
-    val Picture  = opt(id[AssetId]('picture))(_.icon)
+    val Id      = id[TeamId]      ('_id, "PRIMARY KEY").apply(_.id)
+    val Name    = text            ('name)(_.name)
+    val Icon    = opt(id[AssetId] ('icon))(_.icon)
+    val IconKey = opt(text[AESKey]('icon_key, _.str, AESKey))(_.iconKey)
 
     override val idCol = Id
-    override val table = Table("Teams", Id, Name, Picture)
+    override val table = Table("Teams", Id, Name, Icon, IconKey)
 
-    override def apply(implicit cursor: DBCursor): TeamData = new TeamData(Id, Name, Picture)
+    override def apply(implicit cursor: DBCursor): TeamData = new TeamData(Id, Name, Icon, IconKey)
   }
 }
 
