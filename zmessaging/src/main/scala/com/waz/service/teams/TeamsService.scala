@@ -195,9 +195,10 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   private def onTeamUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
     verbose(s"onTeamUpdated: $id, name: $name, icon: $icon, iconKey: $iconKey")
-    //TODO handle processing of icon
     teamStorage.update(id, team => team.copy(
-      name = name.getOrElse(team.name)
+      name    = name.getOrElse(team.name),
+      icon    = icon.orElse(team.icon),
+      iconKey = iconKey.orElse(team.iconKey)
     ))
   }
 

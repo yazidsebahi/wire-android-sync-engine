@@ -28,7 +28,7 @@ import scala.collection.mutable
 case class TeamData(id:      TeamId,
                     name:    String,
                     creator: UserId,
-                    icon:    Option[AssetId] = None,
+                    icon:    Option[RAssetId] = None,
                     iconKey: Option[AESKey]  = None)
 
 object TeamData {
@@ -45,7 +45,7 @@ object TeamData {
     val Id      = id[TeamId]      ('_id, "PRIMARY KEY").apply(_.id)
     val Name    = text            ('name)(_.name)
     val Creator = id[UserId]      ('creator).apply(_.creator)
-    val Icon    = opt(id[AssetId] ('icon))(_.icon)
+    val Icon    = opt(id[RAssetId] ('icon))(_.icon)
     val IconKey = opt(text[AESKey]('icon_key, _.str, AESKey))(_.iconKey)
 
     override val idCol = Id
