@@ -30,7 +30,7 @@ import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.RichFuture
-import com.waz.utils.events.{RefreshingSignal, Signal}
+import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
 
 import scala.collection.{Map, Seq}
 import scala.concurrent.Future
@@ -126,13 +126,23 @@ class TeamsServiceImpl(selfUser:          UserId,
     def load = for {
       teamIds  <- teamMemberStorage.getByUser(Set(userId)).map(_.map(_.teamId))
       teamData <- teamStorage.getAll(teamIds)
-    } yield teamData.collect { case Some(data) => data.id -> data }.toMap
+    } yield teamData.collect { case Some(data) => data }.toSet
 
-    val allChanges = teamStorage.onChanged.map(_.map(_.id)).union(teamStorage.onDeleted)
+    /**
+      * Any additions/removals to teamsStorage will be shortly followed by additions/removals to TeamMembers, so we only need to
+      * listen to additions/removals there. Updates however, may be triggered on teams without changes to TeamMembers
+      */
+    val allChanges = EventStream.union(
+      teamStorage.onUpdated.map(_.map(_._2.id)),
+      EventStream.union {
+        teamMemberStorage.onChanged.map(_.map(m => m.userId -> m.teamId))
+        teamMemberStorage.onDeleted
+      }.collect { case evs => evs.filter(_._1 == userId)}.map(_.map(_._2))
+    )
 
     //TODO could be nice to avoid loading for updates/deletions, since we already know the loaded set of teams is for the target user
     //We need to check TeamMembersStorage for any new additions to check that they are for the target user, hence the refreshing signal.
-    new RefreshingSignal[Map[TeamId, TeamData], Seq[TeamId]](CancellableFuture.lift(load), allChanges).map(_.values.toSet)
+    new RefreshingSignal[Set[TeamData], Seq[TeamId]](CancellableFuture.lift(load), allChanges)
   }
 
   override def getSelfTeams = getTeams(selfUser)
