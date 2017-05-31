@@ -75,11 +75,21 @@ case class ConversationData(id:                   ConvId,
     val st = if (d.status.isDefined) d.status else status
     val nameSource = if (d.renameEvent.isAfter(renameEvent)) d else this
 
-    val updated = copy(remoteId = d.remoteId, name = nameSource.name, creator = d.creator, convType = ct,
-      lastEventTime = lastEventTime max d.lastEventTime, status = st,
-      lastRead = lastRead max d.lastRead, muted = d.muted,
-      muteTime = d.muteTime, archived = d.archived, cleared = cleared max d.cleared,
-      renameEvent = nameSource.renameEvent, searchKey = nameSource.searchKey)
+    val updated = copy(
+      remoteId = d.remoteId,
+      name = nameSource.name,
+      creator = d.creator,
+      team = d.team,
+      convType = ct,
+      lastEventTime = lastEventTime max d.lastEventTime,
+      status = st,
+      lastRead = lastRead max d.lastRead,
+      muted = d.muted,
+      muteTime = d.muteTime,
+      archived = d.archived,
+      cleared = cleared max d.cleared,
+      renameEvent = nameSource.renameEvent,
+      searchKey = nameSource.searchKey)
 
     if (updated == this) None else Some(updated)
   }
