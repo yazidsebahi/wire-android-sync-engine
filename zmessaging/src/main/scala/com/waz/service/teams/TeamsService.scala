@@ -172,21 +172,22 @@ class TeamsServiceImpl(selfUser:          UserId,
     } else insertFetchedData()
   }
 
-  private def onTeamsAdded(ids: Set[TeamId]) = {
-    verbose(s"onTeamsAdded: $ids")
-    if (ids.nonEmpty) sync.syncTeams(ids) else Future.successful({})
+  private def onTeamsAdded(teams: Set[TeamId]) = {
+    verbose(s"onTeamsAdded: $teams")
+    if (teams.nonEmpty) sync.syncTeams(teams) else Future.successful({})
   }
 
-  private def onTeamsRemoved(ids: Set[TeamId]) = {
-    verbose(s"onTeamsRemoved: $ids")
-    if (ids.nonEmpty)
+  private def onTeamsRemoved(teams: Set[TeamId]) = {
+    verbose(s"onTeamsRemoved: $teams")
+    if (teams.nonEmpty)
       for {
-        _          <- teamStorage.remove(ids)
-        removed    <- teamMemberStorage.removeByTeam(ids)
+        _          <- teamStorage.remove(teams)
+        removed    <- teamMemberStorage.removeByTeam(teams)
+        _          <- removeAllTeamConversations(teams)
         _          <- removeUnconnectedUsers(removed)
         staleConvs <- {
           import ConversationDataDao._
-          convsStorage.find(c => c.team.exists(ids.contains), db => iterating(findInSet(Team, ids.map(Option(_)))(db)), _.id)
+          convsStorage.find(c => c.team.exists(teams.contains), db => iterating(findInSet(Team, teams.map(Option(_)))(db)), _.id)
         }
         _          <- convsStorage.remove(staleConvs)
       } yield {}
@@ -205,28 +206,45 @@ class TeamsServiceImpl(selfUser:          UserId,
   //TODO follow up on: https://github.com/wireapp/architecture/issues/13
   //At the moment, we need to re-fetch the entire list of team members as a workaround
   private def onMembersJoined(teamId: TeamId, users: Set[UserId]) = {
-    verbose(s"onTeamMembsJoined: $teamId, users: $users")
+    verbose(s"onTeamMembersJoined: $teamId, users: $users")
     sync.syncTeams(Set(teamId))
   }
 
   private def onMembersLeft(teamId: TeamId, userIds: Set[UserId]) = {
-    verbose(s"onMembersLeft: team: $teamId, users: $userIds")
+    verbose(s"onTeamMembersLeft: team: $teamId, users: $userIds")
     for {
       _ <- teamMemberStorage.remove(userIds.map(u => u -> teamId))
+      _ <- removeUsersFromTeamConversations(teamId, userIds)
       _ <- removeUnconnectedUsers(userIds)
     } yield {}
   }
 
+  private def removeUsersFromTeamConversations(teamId: TeamId, users: Set[UserId]) = {
+    for {
+      convs           <- searchTeamConversations(teamId).map(_.map(_.id))
+      membersToRemove = for (u <- users; c <- convs) yield (u, c)
+      _               <- convMemberStorage.remove(membersToRemove)
+    } yield {}
+  }
+
+  private def removeAllTeamConversations(teams: Set[TeamId]) = {
+    for {
+      convs   <- convsStorage.findByTeams(teams).map(_.map(_.id))
+      _       <- convsStorage.remove(convs)
+      members <- convMemberStorage.getByConvs(convs).map(_.map(m => m.userId -> m.convId))
+      _       <- convMemberStorage.remove(members)
+    } yield {}
+  }
 
   private def removeUnconnectedUsers(users: Set[UserId]): Future[Unit] = {
     (for {
       stillTeamMembers <- teamMemberStorage.getByUser(users).map(_.map(_.userId).toSet)
       stillConnected   <- userStorage.find(u => users.contains(u.id), db => UserDataDao.findAll(users)(db), identity).map(_.filter(_.connection != Unconnected).map(_.id).toSet)
     } yield {
-      val toRemove = users -- stillTeamMembers -- stillConnected
-      verbose(s"Removing users from database: $toRemove")
-      userStorage.remove(toRemove)
-    }).flatten
+      returning(users -- stillTeamMembers -- stillConnected) { toRemove =>
+        verbose(s"Removing users from database: $toRemove")
+      }
+    }).flatMap(userStorage.remove)
   }
 
   private def onConversationsCreated(convs: Set[RConvId]) = {

@@ -268,7 +268,7 @@ object ConversationData {
     import ConversationMemberData.{ConversationMemberDataDao => CM}
     import UserData.{UserDataDao => U}
 
-    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB) ={
+    def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB) = {
       val select =
         s"""SELECT c.* ${if (teamId.isDefined) ", COUNT(*)" else ""}
             |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
@@ -296,6 +296,8 @@ object ConversationData {
 
       list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null))
     }
+
+    def findByTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(Team, teams.map(Option(_))))
   }
 }
 
