@@ -29,7 +29,7 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.RichFuture
+import com.waz.utils.{RichFuture, returning}
 import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
 
 import scala.collection.{Map, Seq}
@@ -134,10 +134,10 @@ class TeamsServiceImpl(selfUser:          UserId,
       */
     val allChanges = EventStream.union(
       teamStorage.onUpdated.map(_.map(_._2.id)),
-      EventStream.union {
-        teamMemberStorage.onChanged.map(_.map(m => m.userId -> m.teamId))
+      EventStream.union(
+        teamMemberStorage.onChanged.map(_.map(m => m.userId -> m.teamId)),
         teamMemberStorage.onDeleted
-      }.collect { case evs => evs.filter(_._1 == userId)}.map(_.map(_._2))
+    ).collect { case evs => evs.filter(_._1 == userId)}.map(_.map(_._2))
     )
 
     //TODO could be nice to avoid loading for updates/deletions, since we already know the loaded set of teams is for the target user
