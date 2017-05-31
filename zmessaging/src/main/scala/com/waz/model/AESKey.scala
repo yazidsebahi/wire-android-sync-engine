@@ -25,7 +25,7 @@ case class AESKey(str: String) {
   def symmetricCipher(mode: Int, iv: Array[Byte]) = AESUtils.cipher(this, iv, mode)
 }
 
-object AESKey {
+object AESKey extends (String => AESKey) {
   val Empty = AESKey("")
 
   def apply(): AESKey = AESUtils.randomKey()

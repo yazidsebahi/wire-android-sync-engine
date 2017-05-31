@@ -34,8 +34,8 @@ object EmptySyncService extends EmptySyncService
 
 trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncSearchQuery(query: SearchQuery) = sid
-  override def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None) = sid
-  override def syncConversations(dependsOn: Option[SyncId] = None) = sid
+  override def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId] = None) = sid
+  override def syncTeams(ids: Set[TeamId], dependsOn: Option[SyncId] = None) = sid
   override def syncSelfUser() = sid
   override def deleteAccount() = sid
   override def syncUsers(ids: UserId*) = sid
@@ -56,7 +56,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = sid
   override def postConversationMemberLeave(id: ConvId, member: UserId) = sid
   override def postConversationState(id: ConvId, s: ConversationState) = sid
-  override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String]) = sid
+  override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String], t: Option[TeamId]) = sid
   override def postLastRead(id: ConvId, time: Instant) = sid
   override def postCleared(id: ConvId, time: Instant): Future[SyncId] = sid
   override def postAddressBook(ab: AddressBook) = sid

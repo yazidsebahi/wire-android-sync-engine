@@ -36,6 +36,7 @@ import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
 import com.waz.service.push._
+import com.waz.service.teams.TeamsServiceImpl
 import com.waz.sync.client._
 import com.waz.sync.handler._
 import com.waz.sync.otr.OtrSyncHandler
@@ -70,20 +71,22 @@ class ZMessagingFactory(global: GlobalModule) {
 
 
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
-  lazy val db                = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val userPrefs         = wire[UserPreferences]
-  lazy val usersStorage      = wire[UsersStorageImpl]
-  lazy val otrClientsStorage = wire[OtrClientsStorage]
-  lazy val membersStorage    = wire[MembersStorageImpl]
-  lazy val assetsStorage     = wire[AssetsStorage]
-  lazy val voiceStorage      = wire[VoiceChannelStorage]
-  lazy val reactionsStorage  = wire[ReactionsStorage]
-  lazy val notifStorage      = wire[NotificationStorage]
-  lazy val convsStorage      = wire[ConversationStorageImpl]
-  lazy val msgDeletions      = wire[MsgDeletionStorage]
-  lazy val searchQueryCache  = wire[SearchQueryCacheStorage]
-  lazy val commonConnections = wire[CommonConnectionsStorage]
-  lazy val msgEdits          = wire[EditHistoryStorage]
+  lazy val db                                   = new ZmsDatabase(accountId, context, dbPrefix)
+  lazy val userPrefs                            = wire[UserPreferences]
+  lazy val usersStorage                         = wire[UsersStorageImpl]
+  lazy val otrClientsStorage                    = wire[OtrClientsStorage]
+  lazy val membersStorage                       = wire[MembersStorageImpl]
+  lazy val assetsStorage                        = wire[AssetsStorage]
+  lazy val voiceStorage                         = wire[VoiceChannelStorage]
+  lazy val reactionsStorage                     = wire[ReactionsStorage]
+  lazy val notifStorage                         = wire[NotificationStorage]
+  lazy val convsStorage                         = wire[ConversationStorageImpl]
+  lazy val teamsStorage:      TeamsStorage      = wire[TeamsStorageImpl]
+  lazy val teamMemberStorage: TeamMemberStorage = wire[TeamMemberStorageImpl]
+  lazy val msgDeletions                         = wire[MsgDeletionStorage]
+  lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
+  lazy val commonConnections                    = wire[CommonConnectionsStorage]
+  lazy val msgEdits                             = wire[EditHistoryStorage]
 }
 
 
@@ -144,6 +147,8 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def reactionsStorage  = storage.reactionsStorage
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
+  def teamsStorage      = storage.teamsStorage
+  def teamMemberStorage = storage.teamMemberStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache
@@ -161,6 +166,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetClient        = wire[AssetClient]
   lazy val usersClient        = wire[UsersClient]
   lazy val convClient         = wire[ConversationsClient]
+  lazy val teamClient         = wire[TeamsClient]
   lazy val eventsClient       = wire[EventsClient]
   lazy val voiceClient        = wire[VoiceChannelClient]
   lazy val abClient           = wire[AddressBookClient]
@@ -199,6 +205,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val convEvents: ConversationEventsService  = wire[ConversationEventsService]
   lazy val convsUi                                = wire[ConversationsUiService]
   lazy val convsStats                             = wire[ConversationsListStateService]
+  lazy val teams: TeamsServiceImpl                = wire[TeamsServiceImpl]
   lazy val messages: MessagesServiceImpl          = wire[MessagesServiceImpl]
   lazy val connection: ConnectionService          = wire[ConnectionService]
   lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
@@ -229,6 +236,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
   lazy val usersSync        = wire[UsersSyncHandler]
   lazy val conversationSync = wire[ConversationsSyncHandler]
+  lazy val teamsSync        = wire[TeamsSyncHandler]
   lazy val connectionsSync  = wire[ConnectionsSyncHandler]
   lazy val voicechannelSync = wire[VoiceChannelSyncHandler]
   lazy val addressbookSync  = wire[AddressBookSyncHandler]
@@ -260,6 +268,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           voice.callStateEventsStage,
           voice.memberLeaveEventsStage,
           conversations.convStateEventProcessingStage,
+          teams.eventsProcessingStage,
           typing.typingEventStage,
           otrClientsService.otrClientsProcessingStage,
           pushToken.eventProcessingStage,

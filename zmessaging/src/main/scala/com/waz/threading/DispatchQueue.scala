@@ -124,5 +124,8 @@ object LimitedDispatchQueue {
   val MaxBatchSize = 100
 }
 
-
 class SerialDispatchQueue(executor: ExecutionContext = Threading.ThreadPool, override val name: String = "serial_" + Random.nextInt().toHexString) extends LimitedDispatchQueue(1, executor)
+
+object SerialDispatchQueue {
+  def apply()(implicit logTag: LogTag): SerialDispatchQueue = new SerialDispatchQueue(name = s"${logTag}_SerialDispatchQueue")
+}

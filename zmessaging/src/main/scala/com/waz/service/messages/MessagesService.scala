@@ -30,7 +30,7 @@ import com.waz.model.{IdentityChangedError, MessageId, _}
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
-import com.waz.service.otr.{OtrService, OtrServiceImpl, VerificationStateUpdater}
+import com.waz.service.otr.{OtrServiceImpl, VerificationStateUpdater}
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
@@ -51,6 +51,15 @@ trait MessagesService {
   def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false): Future[MessageData]
   def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
   def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
+  def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData]
+  def addLocationMessage(convId: ConvId, content: Location): Future[MessageData]
+  def addAssetMessage(convId: ConvId, asset: AssetData): Future[MessageData]
+  def retryMessageSending(conv: ConvId, msgId: MessageId): Future[Option[SyncId]]
+  def updateMessageState(convId: ConvId, messageId: MessageId, state: Message.Status): Future[Option[MessageData]]
+  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING): Future[Option[MessageData]]
+  def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String): Future[Option[MessageData]]
+  def addMemberLeaveMessage(convId: ConvId, selfUserId: UserId, user: UserId): Future[Any]
+  def addKnockMessage(convId: ConvId, selfUserId: UserId): Future[MessageData]
 }
 
 class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdater, edits: EditHistoryStorage, assets: AssetService,
@@ -277,7 +286,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     }
   }
 
-  def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
+  override def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.convId != convId =>
         error(s"can not recall message belonging to other conversation: $msg, requested by $userId")
@@ -352,7 +361,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     }
   }
 
-  def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty): Future[MessageData] = {
+  override def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty) = {
     verbose(s"addTextMessage($convId, $content, $mentions)")
     val (tpe, ct) = MessageData.messageContent(content, mentions, weblinkEnabled = true)
     verbose(s"parsed content: $ct")
@@ -360,13 +369,13 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     addLocalMessage(MessageData(id, convId, tpe, selfUserId, ct, protos = Seq(GenericMessage(id.uid, Text(content, mentions, Nil))))) // FIXME: links
   }
 
-  def addLocationMessage(convId: ConvId, content: Location): Future[MessageData] = {
+  override def addLocationMessage(convId: ConvId, content: Location) = {
     verbose(s"addLocationMessage($convId, $content)")
     val id = MessageId()
     addLocalMessage(MessageData(id, convId, Type.LOCATION, selfUserId, protos = Seq(GenericMessage(id.uid, content))))
   }
 
-  def addAssetMessage(convId: ConvId, asset: AssetData): Future[MessageData] = {
+  override def addAssetMessage(convId: ConvId, asset: AssetData) = {
     val tpe = asset match {
       case AssetData.IsImage() => Message.Type.ASSET
       case AssetData.IsVideo() => Message.Type.VIDEO_ASSET
@@ -377,7 +386,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     addLocalMessage(MessageData(mid, convId, tpe, selfUserId, protos = Seq(GenericMessage(mid.uid, Asset(asset)))))
   }
 
-  def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String) =
+  override def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String) =
     updateOrCreateLocalMessage(convId, Message.Type.RENAME, _.copy(name = Some(name)), MessageData(MessageId(), convId, Message.Type.RENAME, selfUserId, name = Some(name)))
 
   def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false) = {
@@ -388,7 +397,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     if (fromSync) messagesStorage.insert(msg) else addLocalMessage(msg)
   }
 
-  def addKnockMessage(convId: ConvId, selfUserId: UserId) = {
+  override def addKnockMessage(convId: ConvId, selfUserId: UserId) = {
     debug(s"addKnockMessage($convId, $selfUserId)")
     addLocalMessage(MessageData(MessageId(), convId, Message.Type.KNOCK, selfUserId))
   }
@@ -488,7 +497,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     }
   }
 
-  def addMemberLeaveMessage(convId: ConvId, selfUserId: UserId, user: UserId) = {
+  override def addMemberLeaveMessage(convId: ConvId, selfUserId: UserId, user: UserId) = {
     // check if we have local join message with this user and just remove him from the list
     messagesStorage.lastLocalMessage(convId, Message.Type.MEMBER_JOIN) flatMap {
       case Some(msg) if msg.members == Set(user) => deleteMessage(msg) // FIXME: race condition
@@ -523,7 +532,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     }
   }
 
-  def retryMessageSending(conv: ConvId, msgId: MessageId) =
+  override def retryMessageSending(conv: ConvId, msgId: MessageId) =
     updateMessage(msgId) { msg =>
       if (msg.state == Status.SENT || msg.state == Status.PENDING) msg
       else msg.copy(state = Status.PENDING)
@@ -557,7 +566,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
       case Success(Some(m)) => content.messagesStorage.onMessageFailed ! (m, error)
     }
 
-  def updateMessageState(convId: ConvId, messageId: MessageId, state: Message.Status) =
+  override def updateMessageState(convId: ConvId, messageId: MessageId, state: Message.Status) =
     updateMessage(messageId) { _.copy(state = state) }
 
   def markMessageRead(convId: ConvId, id: MessageId) =

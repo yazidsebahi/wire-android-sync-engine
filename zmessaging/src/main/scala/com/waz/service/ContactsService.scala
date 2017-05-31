@@ -64,15 +64,6 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
   import lifecycle._
   import timeouts.contacts._
 
-  private[service] val initFuture = init()
-  private def init() = permissions.request(Set(READ_CONTACTS), delayUntilProviderIsSet = true).flatMap(_ =>
-    Future.sequence(Seq(requestUploadIfNeeded(), updateContactsAndMatchesOnStart())))
-
-  lifecycle.loggedIn.onChanged {
-    case true => if (initFuture.isCompleted) init()
-    case false =>
-  }(EventContext.Global)
-
   shareContactsPref.signal.onChanged {
     case true =>
       verbose(s"contact sharing allowed")
@@ -87,7 +78,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
   }(lifecycle)
 
   lifecycleState.on(Background) {
-    case LifecycleState.UiActive => initFuture.flatMap(_ => requestUploadIfNeeded())
+    case LifecycleState.UiActive => requestUploadIfNeeded()
     case state =>
   }(lifecycle)
 
@@ -261,29 +252,30 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
   def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit] = storage(ContactsOnWireDao.insertOrIgnore(rels)(_)).future.map(_ => contactsOnWire.mutate(_ ++ rels))
 
-  private[waz] def requestUploadIfNeeded() =
+  private[waz] def requestUploadIfNeeded() = if (permissions.isGranted(READ_CONTACTS)) {
     atMostOncePer(accountId, uploadCheckInterval) {
       verbose(s"requestUploadIfNeeded()")
 
       def atLeastOncePerUploadMaxDelayOrOnVersionUpgrade = for {
         timeOfLastUpload <- lastUploadTime()
-        lastVersion      <- addressBookVersionOfLastUpload()
+        lastVersion <- addressBookVersionOfLastUpload()
       } yield (lastVersion forall (_ < CurrentAddressBookVersion)) || (timeOfLastUpload exists uploadMaxDelay.elapsedSince)
 
       def atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn[A](current: AddressBook) = for {
-        timeOfLastUpload <- lastUploadTime()                if timeOfLastUpload exists uploadMinDelay.elapsedSince
-        prev             <- previouslyUploadedAddressBook() if (current - prev).nonEmpty
-        _                <- sync postAddressBook current
+        timeOfLastUpload <- lastUploadTime() if timeOfLastUpload exists uploadMinDelay.elapsedSince
+        prev <- previouslyUploadedAddressBook() if (current - prev).nonEmpty
+        _ <- sync postAddressBook current
       } yield ()
 
       for {
-        priorityUpload  <- atLeastOncePerUploadMaxDelayOrOnVersionUpgrade
-        sharingEnabled  <- shareContactsPref() if sharingEnabled || priorityUpload
-        hashes          <- addressBook // will be empty & only contain self hashes if sharing is disabled
-        _               <- if (priorityUpload) sync postAddressBook hashes
-                           else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
+        priorityUpload <- atLeastOncePerUploadMaxDelayOrOnVersionUpgrade
+        sharingEnabled <- shareContactsPref() if sharingEnabled
+        hashes <- addressBook // will be empty & only contain self hashes if sharing is disabled
+        _ <- if (priorityUpload) sync postAddressBook hashes
+        else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
       } yield ()
     }
+  } else Future.successful({})
 
   private def selfUserHashes: Future[Vector[String]] =
     for {

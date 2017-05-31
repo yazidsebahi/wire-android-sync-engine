@@ -25,6 +25,7 @@ public enum SyncCommand {
     SyncSelf("sync-self"),
     DeleteAccount("delete-account"),
     SyncConversations("sync-convs"),
+    SyncTeams("sync-teams"),
     SyncConnections("sync-connections"),
     SyncConversation("sync-conv"),
     SyncSearchQuery("sync-search"),

@@ -255,10 +255,10 @@ object GlobalPreferences {
   lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
   lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
 
-  lazy val PushEnabledKey             = PrefKey[Boolean]          ("PUSH_ENABLED", customDefault = true)
+  lazy val PushEnabledKey             = PrefKey[Boolean]("PUSH_ENABLED", customDefault = true)
   lazy val PushToken                  = PrefKey[Option[PushToken]]("PUSH_TOKEN")
 
-  lazy val ShareContacts              = PrefKey[Boolean]        ("PREF_KEY_PRIVACY_CONTACTS", customDefault = true)
+  lazy val ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS", customDefault = false)
 
   lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED")
   lazy val LoggingEnabled             = PrefKey[Boolean]("PREF_KEY_AVS_LOGGING")
@@ -284,6 +284,7 @@ object UserPreferences {
   lazy val SelectedConvId          = PrefKey[Option[ConvId]]      ("selected_conv_id")
   lazy val SpotifyRefreshToken     = PrefKey[Option[RefreshToken]]("spotify_refresh_token")
   lazy val ShouldSyncConversations = PrefKey[Option[Boolean]]     ("should_sync_conversations")
+  lazy val ShouldSyncTeams         = PrefKey[Boolean]             ("should_sync_teams", customDefault = true)
 
   lazy val LastUiVisibleTime      = PrefKey[Instant]    ("last_ui_visible_time")
   lazy val OtrLastPrekey          = PrefKey[Int]        ("otr_last_prekey_id")

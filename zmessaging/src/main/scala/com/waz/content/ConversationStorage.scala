@@ -23,18 +23,21 @@ import com.waz.api.Verification
 import com.waz.api.Verification.UNKNOWN
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationData.ConversationType.Group
+import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model._
 import com.waz.service.SearchKey
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events._
 
-import scala.collection._
 import scala.collection.immutable.SortedSet
+import scala.collection.{GenMap, GenSet, GenTraversableOnce, mutable}
 import scala.concurrent.Future
 
 trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
   def setUnknownVerification(convId: ConvId): Future[Option[(ConversationData, ConversationData)]]
+  def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None): Future[Vector[ConversationData]]
+  def findByTeams(teams: Set[TeamId]): Future[Set[ConversationData]]
 }
 
 class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
@@ -135,7 +138,9 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
       }
     } yield res
 
-  def search(prefix: SearchKey, self: UserId, handleOnly: Boolean): Future[Vector[ConversationData]] = storage(ConversationDataDao.search(prefix, self, handleOnly)(_))
+  override def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None) = storage(ConversationDataDao.search(prefix, self, handleOnly, teamId)(_))
+
+  override def findByTeams(teams: Set[TeamId]) = find(c => c.team.fold(false)(teams.contains), ConversationDataDao.findByTeams(teams)(_), identity)
 }
 
 // this wrapper provides a check for content equality instead of the equality based on total ordering provided by the sorted set

@@ -72,6 +72,10 @@ object SyncRequest {
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
   case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
 
+  case class SyncTeams(teams: Set[TeamId]) extends BaseRequest(Cmd.SyncTeams) {
+    override def mergeKey = (cmd, teams)
+  }
+
   case class PostAddressBook(addressBook: AddressBook) extends BaseRequest(Cmd.PostAddressBook) {
     override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(Merged(_))
     override def isDuplicateOf(req: SyncRequest): Boolean = req.cmd == Cmd.PostAddressBook
@@ -111,7 +115,7 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[SyncCallState](req)(other => Merged(other.copy(fromFreshNotification = fromFreshNotification || other.fromFreshNotification)))
   }
 
-  case class PostConv(convId: ConvId, users: Seq[UserId], name: Option[String]) extends RequestForConversation(Cmd.PostConv) with SerialExecutionWithinConversation {
+  case class PostConv(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]) extends RequestForConversation(Cmd.PostConv) with SerialExecutionWithinConversation {
     override def merge(req: SyncRequest) = mergeHelper[PostConv](req)(Merged(_))
   }
 
@@ -301,7 +305,7 @@ object SyncRequest {
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
           case Cmd.SyncCallState         => SyncCallState(convId, fromFreshNotification = false)
-          case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name)
+          case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team)
           case Cmd.PostConvName          => PostConvName(convId, 'name)
           case Cmd.PostConvState         => PostConvState(convId, JsonDecoder[ConversationState]('state))
           case Cmd.PostLastRead          => PostLastRead(convId, 'time)
@@ -321,6 +325,7 @@ object SyncRequest {
           case Cmd.SyncSelf              => SyncSelf
           case Cmd.DeleteAccount         => DeleteAccount
           case Cmd.SyncConversations     => SyncConversations
+          case Cmd.SyncTeams             => SyncTeams(decodeTeamIdSeq('teams).toSet)
           case Cmd.SyncConnectedUsers    => SyncConnectedUsers
           case Cmd.SyncConnections       => SyncConnections
           case Cmd.RegisterPushToken     => RegisterPushToken(decodeId[PushToken]('token))
@@ -410,9 +415,10 @@ object SyncRequest {
         case PostTypingState(_, typing) => o.put("typing", typing)
         case PostConvState(_, state) => o.put("state", JsonEncoder.encode(state))
         case PostConvName(_, name) => o.put("name", name)
-        case PostConv(_, users, name) =>
+        case PostConv(_, users, name, team) =>
           o.put("users", arrString(users.map(_.str)))
-          name foreach { o.put("name", _) }
+          name.foreach(o.put("name", _))
+          team.foreach(o.put("team", _))
         case PostAddressBook(ab) => o.put("addressBook", JsonEncoder.encode(ab))
         case PostInvitation(i) => o.put("invitation", JsonEncoder.encode(i))
         case PostLiking(_, liking) =>
@@ -427,6 +433,8 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
+        case SyncTeams(teams) =>
+          o.put("teams", arrString(teams.toSeq.map(_.str)))
         case SyncCallState(_, _) => () // nothing to do
         case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))

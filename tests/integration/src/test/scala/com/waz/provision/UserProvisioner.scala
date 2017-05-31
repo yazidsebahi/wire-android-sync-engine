@@ -84,7 +84,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
   def createConv(name: Option[String], users: UserId*) = {
     val (create, join) = users.splitAt(64)
 
-    convClient.postConversation(create, name) flatMap {
+    convClient.postConversation(create, name, None) flatMap {
       case Right(conv) if join.nonEmpty => convClient.postMemberJoin(conv.conversation.remoteId, join)
       case resp => CancellableFuture.successful(resp)
     }

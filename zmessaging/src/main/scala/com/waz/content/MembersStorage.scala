@@ -18,20 +18,22 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{AggregatingSignal, Signal}
-import com.waz.utils.{CachedStorageImpl, TrimmingLruCache}
+import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
-import scala.collection._
 import scala.concurrent.Future
 
-trait MembersStorage {
+trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberData] {
   def getByConv(conv: ConvId): Future[IndexedSeq[ConversationMemberData]]
+  def getByConvs(conv: Set[ConvId]): Future[IndexedSeq[ConversationMemberData]]
   def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]]
+  def isActiveMember(conv: ConvId, user: UserId): Future[Boolean]
+  def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]]
+  def getByUsers(users: Set[UserId]): Future[IndexedSeq[ConversationMemberData]]
 }
 
 class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {
@@ -61,7 +63,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
       }
     })
 
-  def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]] = {
+  override def remove(conv: ConvId, users: UserId*) = {
     getAll(users.map(_ -> conv)).flatMap(toBeRemoved => remove(users.map(_ -> conv)).map(_ => toBeRemoved.flatten))
   }
 
@@ -73,7 +75,11 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
     remove(conv, toRemove: _*).zip(add(conv, toAdd.toSeq: _*)).map(_ => ())
   }
 
-  def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
+  override def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
 
   def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
+
+  override def getByUsers(users: Set[UserId]) = find(mem => users.contains(mem.userId), ConversationMemberDataDao.findForUsers(users)(_), identity)
+
+  override def getByConvs(convs: Set[ConvId]) = find(mem => convs.contains(mem.convId), ConversationMemberDataDao.findForConvs(convs)(_), identity)
 }

@@ -116,6 +116,7 @@ class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheS
   def createForFile(key: CacheKey = CacheKey(), mime: Mime = Mime.Unknown, name: Option[String] = None, cacheLocation: Option[File] = None, length: Option[Long] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
     add(CacheEntryData(key, None, timeout = timeout.timeout, mimeType = mime, fileName = name, path = cacheLocation.orElse(Some(intCacheDir)), length = length)) // use internal storage for this files as those won't be encrypted
 
+
   def addData(key: CacheKey, data: Array[Byte])(implicit timeout: Expiration = CacheService.DefaultExpiryTime) =
     add(CacheEntryData(key, Some(data), timeout = timeout.timeout))
 

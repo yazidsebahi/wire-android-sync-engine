@@ -82,6 +82,22 @@ object UserId extends (String => UserId) {
   }
 }
 
+case class TeamId(str: String) {
+  override def toString = str
+}
+
+object TeamId extends (String => TeamId) {
+
+  val Empty = TeamId("")
+
+  def apply(): TeamId = Id.random()
+
+  implicit object Id extends Id[TeamId] {
+    override def random(): TeamId = TeamId(Uid().toString)
+    override def decode(str: String): TeamId = TeamId(str)
+  }
+}
+
 case class AccountId(str: String) {
   override def toString: String = str
 }

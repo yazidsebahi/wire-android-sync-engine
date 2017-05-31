@@ -56,6 +56,7 @@ trait CachedStorage[K, V] {
   val onAdded: EventStream[Seq[V]]
   val onUpdated: EventStream[Seq[(V, V)]]
   val onDeleted: EventStream[Seq[K]]
+  val onChanged: EventStream[Seq[V]]
 
   protected def load(key: K)(implicit db: DB): Option[V]
   protected def load(keys: Set[K])(implicit db: DB): Seq[V]

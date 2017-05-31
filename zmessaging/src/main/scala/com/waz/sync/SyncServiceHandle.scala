@@ -42,8 +42,8 @@ trait SyncServiceHandle {
   def syncUsers(ids: UserId*): Future[SyncId]
   def syncSelfUser(): Future[SyncId]
   def deleteAccount(): Future[SyncId]
-  def syncConversations(dependsOn: Option[SyncId] = None): Future[SyncId]
-  def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None): Future[SyncId]
+  def syncConversations(ids: Set[ConvId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
+  def syncTeams(ids: Set[TeamId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
@@ -62,7 +62,7 @@ trait SyncServiceHandle {
   def postConversationMemberJoin(id: ConvId, members: Seq[UserId]): Future[SyncId]
   def postConversationMemberLeave(id: ConvId, member: UserId): Future[SyncId]
   def postConversationState(id: ConvId, state: ConversationState): Future[SyncId]
-  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String]): Future[SyncId]
+  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]): Future[SyncId]
   def postLastRead(id: ConvId, time: Instant): Future[SyncId]
   def postCleared(id: ConvId, time: Instant): Future[SyncId]
   def postAddressBook(ab: AddressBook): Future[SyncId]
@@ -101,11 +101,11 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncUsers(ids: UserId*) = addRequest(SyncUser(ids.toSet))
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
-  def syncConversations(dependsOn: Option[SyncId]) = addRequest(SyncConversations, priority = Priority.High, dependsOn = dependsOn.toSeq)
+  def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) = addRequest(if (ids.nonEmpty) SyncConversation(ids) else SyncConversations, priority = if (ids.nonEmpty) Priority.Normal else Priority.High, dependsOn = dependsOn.toSeq)
+  def syncTeams(ids: Set[TeamId], dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeams(ids), priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
-  def syncConversation(id: ConvId, dependsOn: Option[SyncId] = None) = addRequest(SyncConversation(Set(id)), dependsOn = dependsOn.toSeq)
   def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal) = addRequest(SyncCallState(id, fromFreshNotification = fromFreshNotification), priority = priority)
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
@@ -123,7 +123,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def postConversationState(id: ConvId, state: ConversationState) = addRequest(PostConvState(id, state))
   def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = addRequest(PostConvJoin(id, members.toSet))
   def postConversationMemberLeave(id: ConvId, member: UserId) = addRequest(PostConvLeave(id, member))
-  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String]) = addRequest(PostConv(id, users, name))
+  def postConversation(id: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]) = addRequest(PostConv(id, users, name, team))
   def postLiking(id: ConvId, liking: Liking): Future[SyncId] = addRequest(PostLiking(id, liking))
   def postLastRead(id: ConvId, time: Instant) = addRequest(PostLastRead(id, time), priority = Priority.Low, delay = timeouts.messages.lastReadPostDelay)
   def postCleared(id: ConvId, time: Instant) = addRequest(PostCleared(id, time))
@@ -178,6 +178,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
     case SyncCallState(convId, fresh)          => zms.voicechannelSync.syncCallState(convId, fresh)
     case SyncConversations                     => zms.conversationSync.syncConversations()
+    case SyncTeams(teamIds)                    => zms.teamsSync.syncTeams(teamIds)
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()
     case SyncConnections                       => zms.connectionsSync.syncConnections()
     case SyncSelf                              => zms.usersSync.syncSelfUser()
@@ -208,7 +209,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
       case PostAssetStatus(cid, mid, exp, status) => zms.messagesSync.postAssetStatus(cid, mid, exp, status)
       case PostConvJoin(convId, u)                => zms.conversationSync.postConversationMemberJoin(convId, u.toSeq)
       case PostConvLeave(convId, u)               => zms.conversationSync.postConversationMemberLeave(convId, u)
-      case PostConv(convId, u, name)              => zms.conversationSync.postConversation(convId, u, name)
+      case PostConv(convId, u, name, team)        => zms.conversationSync.postConversation(convId, u, name, team)
       case PostConvName(convId, name)             => zms.conversationSync.postConversationName(convId, name)
       case PostConvState(convId, state)           => zms.conversationSync.postConversationState(convId, state)
       case PostTypingState(convId, ts)            => zms.typingSync.postTypingState(convId, ts)

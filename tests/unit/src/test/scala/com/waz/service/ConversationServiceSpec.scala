@@ -73,13 +73,13 @@ class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAf
         convStateSync = Some(id)
         super.postConversationState(id, s)
       }
-      override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String]) = {
+      override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String], t: Option[TeamId]) = {
         convSync = Some(id)
-        super.postConversation(id, u, n)
+        super.postConversation(id, u, n, t)
       }
-      override def syncConversation(id: ConvId, dependsOn: Option[SyncId]) = {
-        convSync = Some(id)
-        super.syncConversation(id, dependsOn)
+      override def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) = {
+        convSync = Some(ids.toSeq.head)
+        super.syncConversations(ids, dependsOn)
       }
     }
 
