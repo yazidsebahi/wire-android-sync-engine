@@ -18,15 +18,17 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.model.ConversationData.ConversationDataDao
+import com.waz.content.ContentChange.{Removed, Updated}
 import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model._
 import com.waz.service.SearchKey
 import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
+import com.waz.utils.events.EventStream
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
+import scala.collection.Seq
 import scala.concurrent.Future
 
 trait TeamsStorage extends CachedStorage[TeamId, TeamData]

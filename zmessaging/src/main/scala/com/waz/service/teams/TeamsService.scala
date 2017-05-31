@@ -28,16 +28,18 @@ import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.SyncServiceHandle
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.RichFuture
+import com.waz.utils.events.{RefreshingSignal, Signal}
 
+import scala.collection.{Map, Seq}
 import scala.concurrent.Future
 import scala.concurrent.Future.traverse
 
 //TODO - return Signals of the search results for UI??
 trait TeamsService {
 
-  def getTeams(userId: UserId): Future[Set[TeamData]]
+  def getTeams(userId: UserId): Signal[Set[TeamData]]
 
   def searchTeamMembers(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[UserData]]
 
@@ -45,7 +47,7 @@ trait TeamsService {
 
   def findGuests(teamId: TeamId): Future[Set[UserId]]
 
-  def getSelfTeams: Future[Set[TeamData]]
+  def getSelfTeams: Signal[Set[TeamData]]
 
   def getPermissions(userId: UserId, teamId: TeamId): Future[Option[Set[TeamMemberData.Permission]]]
 
@@ -120,10 +122,17 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   override def getTeams(userId: UserId) = {
     verbose(s"getTeams: user: $userId")
-    for {
+
+    def load = for {
       teamIds  <- teamMemberStorage.getByUser(Set(userId)).map(_.map(_.teamId))
       teamData <- teamStorage.getAll(teamIds)
-    } yield teamData.collect { case Some(data) => data }.toSet
+    } yield teamData.collect { case Some(data) => data.id -> data }.toMap
+
+    val allChanges = teamStorage.onChanged.map(_.map(_.id)).union(teamStorage.onDeleted)
+
+    //TODO could be nice to avoid loading for updates/deletions, since we already know the loaded set of teams is for the target user
+    //We need to check TeamMembersStorage for any new additions to check that they are for the target user, hence the refreshing signal.
+    new RefreshingSignal[Map[TeamId, TeamData], Seq[TeamId]](CancellableFuture.lift(load), allChanges).map(_.values.toSet)
   }
 
   override def getSelfTeams = getTeams(selfUser)
