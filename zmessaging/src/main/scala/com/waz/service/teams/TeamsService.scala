@@ -83,8 +83,11 @@ class TeamsServiceImpl(selfUser:          UserId,
     val teamsAdded   = events.collect { case Create(id) => id }.toSet
     val teamsRemoved = events.collect { case Delete(id) => id}.toSet
 
-    def memberEvents(evs: Iterable[MemberEvent]): Map[TeamId, Set[UserId]] =
-      evs.groupBy { _.teamId }.map { case (t, ev) => t -> ev.map(_.userId).toSet}
+    val membersJoined = events.collect { case MemberJoin(t, u)  => (t, u)}.toSet
+    val membersLeft   = events.collect { case MemberLeave(t, u)  => (t, u)}.toSet
+
+    def groupMemberEvents(evs: Iterable[(TeamId, UserId)]): Map[TeamId, Set[UserId]] =
+      evs.groupBy { _._1 }.map { case (t, ev) => t -> ev.map(_._2).toSet}
 
     val convsCreated = events.collect { case ConversationCreate(_, id) => id }.toSet
     val convsDeleted = events.collect { case ConversationDelete(_, id) => id }.toSet
@@ -92,8 +95,8 @@ class TeamsServiceImpl(selfUser:          UserId,
       _ <- onTeamsAdded(teamsAdded -- teamsRemoved)
       _ <- onTeamsRemoved(teamsRemoved -- teamsAdded)
       _ <- RichFuture.processSequential(events.collect { case e:Update => e}) { case Update(id, name, icon, iconKey) => onTeamUpdated(id, name, icon, iconKey) }
-      _ <- traverse(memberEvents(events.collect { case e:MemberJoin  => e})){ case (team, joined) => onMembersJoined(team, joined)}
-      _ <- traverse(memberEvents(events.collect { case e:MemberLeave => e})){ case (team, left)   => onMembersLeft(team, left)}
+      _ <- traverse(groupMemberEvents(membersJoined -- membersLeft)){ case (team, joined) => onMembersJoined(team, joined)}
+      _ <- traverse(groupMemberEvents(membersLeft -- membersJoined)){ case (team, left)   => onMembersLeft(team, left)}
       _ <- onConversationsCreated(convsCreated -- convsDeleted)
       _ <- onConversationsDeleted(convsDeleted -- convsCreated)
     } yield {}
