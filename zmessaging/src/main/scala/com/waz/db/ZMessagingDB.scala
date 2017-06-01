@@ -56,7 +56,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 87
+  val DbVersion = 88
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
@@ -144,6 +144,11 @@ object ZMessagingDB {
     Migration(86, 87) { db =>
       db.execSQL("ALTER TABLE Conversations ADD COLUMN team TEXT")
       db.execSQL("ALTER TABLE Conversations ADD COLUMN is_managed INTEGER")
+    },
+    Migration(87, 88) { db =>
+      db.execSQL("CREATE TABLE Teams (_id TEXT PRIMARY KEY, name TEXT, creator TEXT, icon TEXT, icon_key TEXT)")
+      db.execSQL("CREATE TABLE TeamMembers (user_id TEXT, team_id TEXT, self_permissions INTEGER, copy_permissions INTEGER, PRIMARY KEY (user_id, team_id))")
+      db.execSQL("UPDATE KeyValues SET value = true WHERE key = should_sync_teams")
     }
   )
 }
