@@ -46,7 +46,6 @@ trait AssetClient {
   import com.waz.sync.client.AssetClient._
 
   def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry]
-  def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId]
   def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse]
 }
 
@@ -64,20 +63,6 @@ class AssetClientImpl(netClient: ZNetClient) extends AssetClient {
       case Right(resp) => CancellableFuture successful Left(ErrorResponse.internalError(s"unexpected response: $resp"))
       case Left(err) => CancellableFuture successful Left(err)
     }
-  }
-
-  override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = {
-    asset match {
-      case AssetData.IsImage() =>
-        val content = new MultipartRequestContent(Seq(new JsonPart(imageMetadata(asset, nativePush)), new AssetDataPart(data, asset.mime.str)), "multipart/mixed")
-          netClient.withErrorHandling("postImageAssetData", Request.Post(postAssetPath(convId), content)) {
-            case Response(SuccessHttpStatus(), PostImageDataResponse(rId), _) =>
-              debug(s"postImageAssetData completed with resp: $rId")
-              rId
-          }
-      case _ => CancellableFuture.failed(new Exception("Tried posting non image data"))
-    }
-
   }
 
   override def uploadAsset(data: LocalData, mime: Mime, public: Boolean = false, retention: Retention = Retention.Persistent): ErrorOrResponse[UploadResponse] = {
