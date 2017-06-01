@@ -77,7 +77,6 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val otrClientsStorage                    = wire[OtrClientsStorage]
   lazy val membersStorage                       = wire[MembersStorageImpl]
   lazy val assetsStorage                        = wire[AssetsStorage]
-  lazy val voiceStorage                         = wire[VoiceChannelStorage]
   lazy val reactionsStorage                     = wire[ReactionsStorage]
   lazy val notifStorage                         = wire[NotificationStorage]
   lazy val convsStorage                         = wire[ConversationStorageImpl]
@@ -143,7 +142,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def otrClientsStorage = storage.otrClientsStorage
   def membersStorage    = storage.membersStorage
   def assetsStorage     = storage.assetsStorage
-  def voiceStorage      = storage.voiceStorage
   def reactionsStorage  = storage.reactionsStorage
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
@@ -168,7 +166,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val convClient         = wire[ConversationsClient]
   lazy val teamClient         = wire[TeamsClient]
   lazy val eventsClient       = wire[EventsClient]
-  lazy val voiceClient        = wire[VoiceChannelClient]
   lazy val abClient           = wire[AddressBookClient]
   lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
@@ -209,8 +206,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val messages: MessagesServiceImpl          = wire[MessagesServiceImpl]
   lazy val connection: ConnectionService          = wire[ConnectionService]
   lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
-  lazy val voiceContent                           = wire[VoiceChannelContent]
-  lazy val voice: VoiceChannelService             = wire[VoiceChannelService]
   lazy val avs: AvsV3                             = wire[AvsV3Impl]
   lazy val calling: CallingService                = wire[CallingService]
   lazy val contacts: ContactsService              = wire[ContactsService]
@@ -230,7 +225,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val receipts                               = wire[ReceiptService]
   lazy val ephemeral                              = wire[EphemeralMessagesService]
   lazy val handlesService                         = wire[HandlesService]
-  lazy val gsmService                             = wire[VoiceChannelGsmService]
+  lazy val gsmService                             = wire[GsmInterruptService]
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -238,7 +233,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val conversationSync = wire[ConversationsSyncHandler]
   lazy val teamsSync        = wire[TeamsSyncHandler]
   lazy val connectionsSync  = wire[ConnectionsSyncHandler]
-  lazy val voicechannelSync = wire[VoiceChannelSyncHandler]
   lazy val addressbookSync  = wire[AddressBookSyncHandler]
   lazy val gcmSync          = wire[PushTokenSyncHandler]
   lazy val typingSync       = wire[TypingSyncHandler]
@@ -265,8 +259,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           users.userDeleteEventsStage,
           flowmanager.callEventsStage,
           calling.callMessagesStage,
-          voice.callStateEventsStage,
-          voice.memberLeaveEventsStage,
           conversations.convStateEventProcessingStage,
           teams.eventsProcessingStage,
           typing.typingEventStage,

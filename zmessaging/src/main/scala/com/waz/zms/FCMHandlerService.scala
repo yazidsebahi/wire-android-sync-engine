@@ -34,7 +34,6 @@ import org.json
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
-import scala.collection.breakOut
 import scala.concurrent.Future
 
 /**
@@ -89,13 +88,13 @@ object FCMHandlerService {
         case CipherNotification(content, mac) =>
           decryptNotification(content, mac) flatMap {
             case Some(notification) =>
-              addNotificationToProcess(notification.id, Some(notification))
+              addNotificationToProcess(notification.id)
             case None =>
               Future.successful(())
           }
 
         case PlainNotification(userId, notification) if userId == self =>
-          addNotificationToProcess(notification.id, Some(notification))
+          addNotificationToProcess(notification.id)
 
         case PlainNotification(_, _) =>
           warn(s"Received notification for wrong user")
@@ -116,24 +115,12 @@ object FCMHandlerService {
           None
       }
 
-    private def addNotificationToProcess(nId: Uid, not: Option[PushNotification] = None): Future[Unit] = {
+    private def addNotificationToProcess(nId: Uid): Future[Unit] = {
       lifecycle.active.head flatMap {
         case true => Future.successful(()) // no need to process GCM when ui is active
         case _ =>
           verbose(s"addNotification: $nId")
-          // call state events can not be directly dispatched like the other events because they might be stale
-          not.foreach(n => syncCallStateForConversations(n.events.collect { case e: CallStateEvent => e }.map(_.withCurrentLocalTime())))
           Future.successful(push.cloudPushNotificationsToProcess.mutate(_ + nId))
-      }
-    }
-
-    //TODO can be removed after calling v2
-    private def syncCallStateForConversations(events: Seq[Event]): Unit = {
-      val convs: Set[RConvId] = events.collect { case e: CallStateEvent => e.convId }(breakOut)
-      Future.traverse(convs) { convId =>
-        convsContent.processConvWithRemoteId(convId, retryAsync = false) { conv =>
-          sync.syncCallState(conv.id, fromFreshNotification = true)
-        }
       }
     }
   }
@@ -169,6 +156,7 @@ object FCMHandlerService {
     def unapply(data: Map[String, String]): Option[Uid] =
       (data.get(TypeKey), data.get(DataKey)) match {
         case (Some("notice"), Some(content)) => LoggedTry(JsonDecoder.decodeUid('id)(new json.JSONObject(content))).toOption
+        case _ => None
     }
   }
 

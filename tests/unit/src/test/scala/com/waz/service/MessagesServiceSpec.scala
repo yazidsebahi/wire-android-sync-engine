@@ -244,15 +244,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       current should have size 59
     }
 
-    scenario("Process missed call event") {
-      delMessages(convId)
-      val event = VoiceChannelDeactivateEvent(RConvId(convId.str), new Date(), UserId(), Some("missed")).withCurrentLocalTime()
-
-      Await.ready(messages.processEvents(conv, Seq(event)), timeout)
-
-      listMessages(convId) shouldEqual List(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, event.from, Nil, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT))
-    }
-
     lazy val assetId = AssetId()
 
     scenario("Receive initial file asset event") {

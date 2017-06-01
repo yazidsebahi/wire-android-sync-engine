@@ -259,10 +259,6 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
         MessageData(id, convId, Message.Type.MEMBER_JOIN, from, members = userIds.toSet, time = time.instant, localTime = event.localTime.instant, firstMessage = firstEvent)
       case MemberLeaveEvent(_, time, from, userIds) =>
         MessageData(id, convId, Message.Type.MEMBER_LEAVE, from, members = userIds.toSet, time = time.instant, localTime = event.localTime.instant)
-      case MissedCallEvent(_, time, from) =>
-        MessageData(id, convId, Message.Type.MISSED_CALL, from, time = time.instant, localTime = event.localTime.instant)
-      case _: VoiceChannelDeactivateEvent =>
-        MessageData.Empty // don't add any message, interesting case is handled with MissedCallEvent extractor
       case OtrErrorEvent(_, time, from, IdentityChangedError(_, _)) =>
         MessageData (id, conv.id, Message.Type.OTR_IDENTITY_CHANGED, from, time = time.instant, localTime = event.localTime.instant)
       case OtrErrorEvent(_, time, from, otrError) =>

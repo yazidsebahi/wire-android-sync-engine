@@ -38,7 +38,6 @@ object Uris {
   val LoggingUri = Uri.parse(s"$Base/logging")
   val ConvMembersRootUri = Uri.parse(s"$Base/members")
   val ConnectionsRootUri = Uri.parse(s"$Base/conn")
-  val VoiceChannelsUri = Uri.parse(s"$Base/call")
   val UserSearchUri = UsersUri.buildUpon().appendPath("search").build()
   val ContactsUri = Uri.parse(s"$Base/contacts")
   val SpotifyUri = Uri.parse(s"$Base/spotify")
@@ -52,16 +51,6 @@ object Uris {
   def ConvMembersUri(convId: ConvId): Uri = ConvMembersRootUri.buildUpon().appendEncodedPath(convId.str).build()
 
   def CommonConnectionsUri(userId: UserId): Uri = ConnectionsRootUri.buildUpon().appendEncodedPath(userId.str).appendEncodedPath("comm").build()
-
-  object VoiceChannelUri {
-    private val Pattern = s"$VoiceChannelsUri/([0-9a-fA-F-]+)".r
-
-    def apply(convId: ConvId): Uri = VoiceChannelsUri.buildUpon().appendEncodedPath(convId.str).build()
-    def unapply(uri: Uri): Option[ConvId] = uri.toString match {
-      case Pattern(uid) => Some(ConvId(uid))
-      case _ => None
-    }
-  }
 
   def SyncIndicatorUri(base: Uri) = base.buildUpon().appendEncodedPath("sync-indicator").build()
 }

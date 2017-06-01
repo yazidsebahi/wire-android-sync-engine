@@ -18,11 +18,10 @@
 package com.waz.users
 
 import akka.pattern.ask
-import com.waz.api.{UpdateListener, VoiceChannel, _}
+import com.waz.api.{UpdateListener, _}
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.VoiceChannelData.ChannelState
 import com.waz.model.{ConvId, RConvId, UserId}
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
@@ -47,20 +46,6 @@ class BlockingSpec extends FeatureSpec with Matchers with ProvisionedApiSpec wit
   lazy val otherUserId = UserId(concurrent.Await.result(auto2 ? GetUser, 5.seconds).asInstanceOf[Successful].response)
 
   lazy val auto2 = registerDevice("BlockingSpec_auto2")
-
-  def trackStates(channel: VoiceChannel)(body: => Unit): List[ChannelState] = {
-    var states = List(channel.getState)
-    val listener = new UpdateListener {
-      override def updated(): Unit = states ::= channel.getState
-    }
-    channel.addUpdateListener(listener)
-    try {
-      body
-    } finally {
-      channel.removeUpdateListener(listener)
-    }
-    states.reverse
-  }
 
   feature("Block") {
 

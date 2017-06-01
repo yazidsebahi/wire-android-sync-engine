@@ -156,18 +156,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
       withConvFromStore { _ should not(beArchived) }
     }
 
-    scenario("On receiving a call, an archived conversation is unarchived") {
-      archive()
-      incomingCall()
-      withConvFromStore { _ should not(beArchived) }
-    }
-
-    scenario("On missing a call, an archived conversation is unarchived") {
-      archive()
-      missedCall()
-      withConvFromStore { _ should not(beArchived) }
-    }
-
     scenario("On member updates, an archived conversation stays archived") {
       archive()
       memberUpdate()
@@ -224,17 +212,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
       withConvFromStore { _ should not(beArchived) }
     }
 
-    scenario("On receiving a call, a muted archived conversation is unarchived") {
-      archiveAndMute()
-      incomingCall()
-      withConvFromStore { _ should not(beArchived) }
-    }
-
-    scenario("On missing a call, a muted archived conversation is unarchived") {
-      archiveAndMute()
-      missedCall()
-      withConvFromStore { _ should not(beArchived) }
-    }
   }
 
   feature("Not unarchiving on old events") {
@@ -280,19 +257,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
       withConvFromStore { _ should beArchived }
     }
 
-    scenario("On receiving an old incoming call notification, an unmuted archived conversation stays archived") {
-      archive()
-      incomingCall(old = true)
-      delay()
-      withConvFromStore { _ should beArchived }
-    }
-
-    scenario("On receiving an old missed call notification, an unmuted archived conversation stays archived") {
-      archive()
-      missedCall(old = true)
-      delay()
-      withConvFromStore { _ should beArchived }
-    }
   }
 
   def archiveAndMute(): ConversationData = {
@@ -326,9 +290,6 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
 
   def sendGenericImageMessage[T](old: Boolean = false): Unit =
     service.dispatchEvent(GenericMessageEvent(conv.remoteId, if (old) date(old) else date(old), user1.id, GenericMessage(Uid(), ImageAsset(AssetData(metaData = Some(Image(Dim2(0, 0), Preview)))))))
-
-  def incomingCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelActivateEvent(conv.remoteId, date(old), user1.id))
-  def missedCall(old: Boolean = false): Unit = service.dispatchEvent(VoiceChannelDeactivateEvent(conv.remoteId, date(old), user1.id, Some("missed")))
 
   def date(old: Boolean): Date = if (old) new Date(System.currentTimeMillis() - 100000) else new Date
 

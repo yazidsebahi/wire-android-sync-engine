@@ -50,7 +50,7 @@ trait FlowManagerService {
 }
 
 class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: GlobalPreferences, network: DefaultNetworkModeService) extends FlowManagerService {
-  import DefaultFlowManagerService._
+  import FlowManagerService._
 
   val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
   val avsAudioTestFlag: Long = 1 << 1
@@ -268,10 +268,10 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
     safeguardAgainstOldAvs(fm.setBackground(b), fallback = ())
   }
 
-  def getVideoCaptureDevices: Future[Vector[CaptureDeviceData]] = scheduleOr[Array[CaptureDevice]]({ fm =>
+  def getVideoCaptureDevices: Future[Vector[VideoCaptureDevice]] = scheduleOr[Array[CaptureDevice]]({ fm =>
     debug("getVideoCaptureDevices")
     safeguardAgainstOldAvs(fm.getVideoCaptureDevices, fallback = Array.empty)
-  }, Array.empty).map(_.map(d => CaptureDeviceData(d.devId, d.devName))(breakOut))
+  }, Array.empty).map(_.map(d => VideoCaptureDevice(d.devId, d.devName))(breakOut))
 
   def setVideoCaptureDevice(id: RConvId, deviceId: String): Future[Unit] = schedule { fm =>
     debug(s"setVideoCaptureDevice($id, $deviceId)")
@@ -329,10 +329,12 @@ case class AvsMetrics(rConvId: RConvId, private val bytes: Array[Byte]) {
   override def toString = s"AvsMetrics($rConvId, isVideoCall: $isVideoCall, kindOfCall: $kindOfCall, ${json.toString})"
 }
 
-object DefaultFlowManagerService {
+object FlowManagerService {
 
   case class AvsLogData(metricsEnabled: Boolean, loggingEnabled: Boolean, logLevel: AvsLogLevel)
   case class EstablishedFlows(convId: RConvId, users: Set[UserId])
+
+  case class VideoCaptureDevice(id: String, name: String)
 
   sealed trait StateOfReceivedVideo {
     def state: AvsVideoState

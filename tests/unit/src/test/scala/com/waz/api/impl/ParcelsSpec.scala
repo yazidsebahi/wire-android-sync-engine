@@ -19,7 +19,7 @@ package com.waz.api.impl
 
 import android.os.Parcelable
 import com.waz.Generators._
-import com.waz.model.{ConversationData, UserData, VoiceChannelData}
+import com.waz.model.{ConversationData, UserData}
 import com.waz.service.messages.MessageAndLikes
 import com.waz.testutils._
 import com.waz.{RobolectricUtils, api}
@@ -33,8 +33,6 @@ class ParcelsSpec extends FeatureSpec with Matchers with GeneratorDrivenProperty
   scenario("Personal invitation token")(forAll((_: api.Invitations.PersonalToken).shouldRemainEquivalentAfterParcelingInTermsOf(identity)))
   scenario("Conversation that exists in cache")(forAll((c: ConversationData) => ui.convs.getConversation(c).shouldRemainEquivalentAfterParcelingInTermsOf(_.data)))
   scenario("Conversation that is not cached yet")(forAll((c: ConversationData) => new Conversation(c.id, c).shouldRemainEquivalentAfterParcelingInTermsOf(_.data)))
-  scenario("Voice channel that exists in cache")(forAll((v: VoiceChannelData) => ui.channels.getVoiceChannel(v).shouldRemainEquivalentAfterParcelingInTermsOf(_.data)))
-  scenario("Voice channel that is not cached yet")(forAll((v: VoiceChannelData) => new VoiceChannel(v.id, v).shouldRemainEquivalentAfterParcelingInTermsOf(_.data)))
   scenario("User that exists in cache")(forAll((u: UserData) => ui.users.getUser(u).shouldRemainEquivalentAfterParcelingInTermsOf(_.data)))
   scenario("User that is not cached yet")(forAll((u: UserData) => new User(u.id, u)(ui).shouldRemainEquivalentAfterParcelingInTermsOf(_.data)))
 

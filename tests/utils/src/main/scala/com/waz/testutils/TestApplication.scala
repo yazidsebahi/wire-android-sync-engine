@@ -17,16 +17,13 @@
  */
 package com.waz.testutils
 
-import com.waz.model.VoiceChannelData
 import com.waz.service.push.NotificationService.NotificationInfo
 
 object TestApplication {
-  val notificationsSpy = new NotificationsSpy(Seq.empty, None, None, true)
+  val notificationsSpy = new NotificationsSpy(Seq.empty, true)
 }
 
 
 class NotificationsSpy(
   @volatile var gcms: Seq[Seq[NotificationInfo]],
-  @volatile var ongoingCall: Option[VoiceChannelData],
-  @volatile var incomingCall: Option[VoiceChannelData],
   @volatile var uiActive: Boolean)

@@ -143,7 +143,6 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
       def joined(updated: ConversationData) = ! conv.activeMember && updated.activeMember && updated.convType == ConversationType.Group
 
       def ensureConvActive() = updateConversationStatus(conv.id, ConversationStatus.Active).map(_.map(_._2).filter(joined))
-        .flatMapSome(_ => sync.syncCallState(conv.id, fromFreshNotification = false).map(Some(_)))
 
       for {
         _        <- users.syncNotExistingOrExpired(userIds)
@@ -179,7 +178,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     insertConversation(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
       membersStorage.add(conv.id, from +: members: _*) flatMap { ms =>
         addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
-          sync.syncConversations(Set(conv.id)) flatMap { _ => sync.syncCallState(conv.id, fromFreshNotification = false) }
+          sync.syncConversations(Set(conv.id))
           conv
         }
       }

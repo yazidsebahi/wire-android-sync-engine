@@ -44,7 +44,6 @@ trait SyncServiceHandle {
   def deleteAccount(): Future[SyncId]
   def syncConversations(ids: Set[ConvId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncTeams(ids: Set[TeamId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
-  def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId]
@@ -106,7 +105,6 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
-  def syncCallState(id: ConvId, fromFreshNotification: Boolean, priority: Int = Priority.Normal) = addRequest(SyncCallState(id, fromFreshNotification = fromFreshNotification), priority = priority)
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
@@ -176,7 +174,6 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case DeletePushToken(token)                 => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
-    case SyncCallState(convId, fresh)          => zms.voicechannelSync.syncCallState(convId, fresh)
     case SyncConversations                     => zms.conversationSync.syncConversations()
     case SyncTeams(teamIds)                    => zms.teamsSync.syncTeams(teamIds)
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()

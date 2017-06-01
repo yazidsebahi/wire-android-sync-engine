@@ -326,44 +326,6 @@ object ActorMessage {
    */
   case class UpdateProfileEmail(email: String) extends ActorMessage
 
-  /**
-    * Change the preference for calling version.
-    * @param version either 2 or 3
-    */
-  case class SetCallingVersion(version: Int) extends ActorMessage
-
-  /**
-   * Accept an incoming call on the remote device
-   */
-  case object AcceptCall extends ActorMessage
-
-  /**
-   * Disconnect from a call on a remote device
-   */
-  case object Disconnect extends ActorMessage
-
-  /**
-   * Start a call with a given conversation (group or 1:1)
-   * @param remoteId The (remote) conversation id. Note on [[RConvId]]: @see SendText
-   */
-  case class StartCall(remoteId: RConvId) extends ActorMessage
-
-  /**
-   * //TODO not too sure of the function of this message
-   */
-  case object ResetChannel extends ActorMessage
-
-  /**
-   * Wait until the remote device starts receiving a call, and then return successful. Does not answer
-   * the call
-   */
-  case object WaitCalling extends ActorMessage
-
-  /**
-   * Wait until the remote device has no more calls and is disconnected from all channels.
-   */
-  case object WaitDisconnected extends ActorMessage
-
   case object AwaitSyncCompleted extends ActorMessage
 
   case object ResetQueueStats extends ActorMessage
