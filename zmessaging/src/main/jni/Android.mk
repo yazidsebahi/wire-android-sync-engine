@@ -13,3 +13,9 @@ LOCAL_MODULE := jnidispatch
 LOCAL_SRC_FILES := $(TARGET_ARCH_ABI)/libjnidispatch.so
 include $(PREBUILT_SHARED_LIBRARY)
 
+include $(CLEAR_VARS)
+LOCAL_MODULE    := randombytes
+LOCAL_SRC_FILES := randombytes.c
+LOCAL_CFLAGS    := -std=c99 -O2 -Wall -pedantic -Wno-variadic-macros -lsodium
+LOCAL_LDLIBS    += src/main/jni/$(TARGET_ARCH_ABI)/libsodium.so
+include $(BUILD_SHARED_LIBRARY)
