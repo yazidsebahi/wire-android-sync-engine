@@ -50,7 +50,6 @@ case class ConversationData(id:                   ConvId,
                             unjoinedCall:         Boolean = false,
                             missedCallMessage:    Option[MessageId] = None,
                             incomingKnockMessage: Option[MessageId] = None,
-                            renameEvent:          Instant = Instant.EPOCH,
                             voiceMuted:           Boolean = false,
                             hidden:               Boolean = false,
                             verified:             Verification = Verification.UNKNOWN,
@@ -73,11 +72,10 @@ case class ConversationData(id:                   ConvId,
   def updated(d: ConversationData): Option[ConversationData] = {
     val ct = if (ConversationType.isOneToOne(convType) && d.convType != ConversationType.OneToOne) convType else d.convType
     val st = if (d.status.isDefined) d.status else status
-    val nameSource = if (d.renameEvent.isAfter(renameEvent)) d else this
 
     val updated = copy(
       remoteId = d.remoteId,
-      name = nameSource.name,
+      name = d.name,
       creator = d.creator,
       team = d.team,
       convType = ct,
@@ -88,8 +86,7 @@ case class ConversationData(id:                   ConvId,
       muteTime = d.muteTime,
       archived = d.archived,
       cleared = cleared max d.cleared,
-      renameEvent = nameSource.renameEvent,
-      searchKey = nameSource.searchKey)
+      searchKey = d.searchKey)
 
     if (updated == this) None else Some(updated)
   }
@@ -172,7 +169,6 @@ object ConversationData {
       unjoinedCall = 'unjoinedCall,
       missedCallMessage = decodeOptMessageId('missedCallMessage),
       incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
-      renameEvent = decodeInstant('renameEventTime),
       voiceMuted = 'voiceMuted,
       hidden = 'hidden,
       verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
@@ -204,7 +200,6 @@ object ConversationData {
       o.put("unjoinedCall", c.unjoinedCall)
       c.missedCallMessage foreach (id => o.put("missedCallMessage", id.str))
       c.incomingKnockMessage foreach (id => o.put("incomingKnockMessage", id.str))
-      o.put("renameEventTime", c.renameEvent.toEpochMilli)
       o.put("voiceMuted", c.voiceMuted)
       o.put("hidden", c.hidden)
       o.put("trusted", c.verified)
@@ -236,16 +231,15 @@ object ConversationData {
     val UnjoinedCall  = bool('unjoined_call)(_.unjoinedCall)
     val MissedCall    = opt(id[MessageId]('missed_call))(_.missedCallMessage)
     val IncomingKnock = opt(id[MessageId]('incoming_knock))(_.incomingKnockMessage)
-    val RenameEvent   = timestamp('rename_event_time)(_.renameEvent)
     val VoiceMuted    = bool('voice_muted)(_.voiceMuted)
     val Hidden        = bool('hidden)(_.hidden)
     val Verified      = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
     val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
+    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, UnjoinedCall, Verified, Ephemeral)
 
-    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
+    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, VoiceMuted, Hidden, Verified, Ephemeral)
 
     import com.waz.model.ConversationData.ConversationType._
 

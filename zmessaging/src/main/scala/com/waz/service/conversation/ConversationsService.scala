@@ -137,7 +137,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   }
 
   private def processUpdateEvent(conv: ConversationData, ev: ConversationEvent): Future[Any] = ev match {
-    case RenameConversationEvent(_, time, _, name) => updateConversationName(conv.id, name, Some(time.instant))
+    case RenameConversationEvent(_, _, _, name) => updateConversationName(conv.id, name)
 
     case MemberJoinEvent(convId, time, from, userIds, _) =>
       def joined(updated: ConversationData) = ! conv.activeMember && updated.activeMember && updated.convType == ConversationType.Group

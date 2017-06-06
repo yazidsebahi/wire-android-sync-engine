@@ -156,8 +156,7 @@ object ConversationsClient {
       ConversationData(
         ConvId(id.str), id, name filterNot (_.isEmpty), creator, convType, team, isManaged,
         lastEventTime, status.fold2(Some(ConversationStatus.Active), i => Some(ConversationStatus(i))),
-        Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime), renameEvent = renameEvt
-      )
+        Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime))
     }
 
     implicit lazy val Decoder: JsonDecoder[ConversationResponse] = new JsonDecoder[ConversationResponse] {
