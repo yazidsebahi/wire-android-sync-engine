@@ -40,13 +40,13 @@ class ConversationsListStateService(convs: ConversationStorageImpl, userPrefs: U
 
   implicit val dispatcher = new SerialDispatchQueue(name = "ConversationsListStateService")
 
-  private[conversation] case class ConversationListStats(unreadCount: Int = 0, unsentCount: Int = 0, voiceCount: Int = 0, pendingCount: Int = 0, selectedConversationId: Option[ConvId] = None)
+  private[conversation] case class ConversationListStats(unreadCount: Int = 0, unsentCount: Int = 0, pendingCount: Int = 0, selectedConversationId: Option[ConvId] = None)
 
   val selectedConvIdPref = userPrefs.preference(SelectedConvId)
   private[conversation] val listStats = Signal[ConversationListStats](ConversationListStats())
 
   val state = listStats map { stats =>
-    Data(unread = stats.unreadCount > 0, unsent = stats.unsentCount > 0, voice = stats.voiceCount > 0, pending = stats.pendingCount > 0)
+    Data(unread = stats.unreadCount > 0, unsent = stats.unsentCount > 0, pending = stats.pendingCount > 0)
   }
 
   private[conversation] var lastEventTime = Instant.EPOCH
@@ -71,7 +71,6 @@ class ConversationsListStateService(convs: ConversationStorageImpl, userPrefs: U
   private def addToCounts(c: ConversationData, sign: Int): Unit = listStats mutate { stats =>
     val sgn = math.signum(sign)
     stats.copy(
-      voiceCount = stats.voiceCount + (if (c.hasVoice) sgn else 0),
       unreadCount = stats.unreadCount + sgn * c.unreadCount,
       unsentCount = stats.unsentCount + sgn * c.failedCount,
       pendingCount = stats.pendingCount + (if (c.convType == ConversationType.WaitForConnection) sgn else 0)

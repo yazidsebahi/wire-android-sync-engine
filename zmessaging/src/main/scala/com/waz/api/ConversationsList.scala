@@ -32,7 +32,6 @@ object ConversationsList {
   trait ConversationsListState extends UiObservable {
     def hasUnread: Boolean
     def hasUnsent: Boolean
-    def hasVoice: Boolean
     def hasPending: Boolean
   }
 

@@ -210,7 +210,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
       } else Future(verbose(s"established: ${ids.size}, archived: ${ids.valuesIterator.count(identity)}"))
     }.recoverWithLog()
 
-  private def isEstablished(c: ConversationData) = (c.convType == ConversationType.OneToOne || c.convType == ConversationType.Group) && c.activeMember && ! c.hidden
+  private def isEstablished(c: ConversationData) = (c.convType == ConversationType.OneToOne || c.convType == ConversationType.Group) && c.isActive && ! c.hidden
 
   private def updateContactsAndMatches(): Future[Unit] =
     if (contactsNeedReloading.compareAndSet(true, false)) {

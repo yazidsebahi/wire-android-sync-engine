@@ -24,7 +24,7 @@ import java.util.{Date, Locale}
 
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
@@ -82,7 +82,7 @@ object Generators {
     lastEventTime <- arbitrary[Instant]
     team  <- arbitrary[Option[TeamId]]
     isManaged <- arbitrary[Option[Boolean]]
-    status <- arbitrary[Int]
+    isActive <- arbitrary[Boolean]
     muted <- arbitrary[Boolean]
     muteTime <- arbitrary[Instant]
     archived <- arbitrary[Boolean]
@@ -92,13 +92,10 @@ object Generators {
     searchKey = name map SearchKey
     unreadCount <- posNum[Int]
     failedCount <- posNum[Int]
-    hasVoice <- arbitrary[Boolean]
-    unjoinedCall <- arbitrary[Boolean]
     missedCall <- arbitrary[Option[MessageId]]
     incomingKnock <- arbitrary[Option[MessageId]]
-    voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, isActive, Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, missedCall, incomingKnock, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]

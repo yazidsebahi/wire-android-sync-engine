@@ -151,7 +151,7 @@ class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures
 
       JsonObjectResponse(json.getJSONArray("conversations").getJSONObject(0)) match {
         case ConversationsResult(Seq(conversation), false) => info(s"parsed conversation: $conversation")
-          conversation.conversation.status shouldEqual Some(ConversationData.ConversationStatus.Active)
+          conversation.conversation.isActive shouldEqual true
         case _ => fail("conversation response didn't match")
       }
     }

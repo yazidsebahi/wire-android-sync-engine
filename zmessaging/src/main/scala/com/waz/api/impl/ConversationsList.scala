@@ -131,10 +131,9 @@ class ConversationsListState(implicit ui: UiModule) extends com.waz.api.Conversa
 
   override def hasUnread: Boolean = data.unread
   override def hasUnsent: Boolean = data.unsent
-  override def hasVoice: Boolean = data.voice
   override def hasPending: Boolean = data.pending
 }
 
 object ConversationsListState {
-  case class Data(unread: Boolean = false, unsent: Boolean = false, voice: Boolean = false, pending: Boolean = false)
+  case class Data(unread: Boolean = false, unsent: Boolean = false, pending: Boolean = false)
 }

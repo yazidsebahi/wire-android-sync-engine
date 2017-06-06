@@ -28,7 +28,7 @@ import com.waz.utils._
 
 import scala.concurrent.Future
 
-class ConversationEventsService(convs: ConversationsContentUpdaterImpl, messages: MessagesServiceImpl, users: UserServiceImpl, sync: SyncServiceHandle, pipeline: EventPipeline) {
+class ConversationEventsService(convs: ConversationsContentUpdater, messages: MessagesServiceImpl, users: UserServiceImpl, sync: SyncServiceHandle, pipeline: EventPipeline) {
 
   private implicit val tag: LogTag = logTagFor[ConversationEventsService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
