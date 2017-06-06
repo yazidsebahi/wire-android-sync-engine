@@ -44,7 +44,7 @@ trait ConversationsContentUpdater {
   def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A]
   def updateConversationLastRead(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationMuted(conv: ConvId, muted: Boolean): Future[Option[(ConversationData, ConversationData)]]
-  def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationName(id: ConvId, name: String): Future[Option[(ConversationData, ConversationData)]]
   def setConversationStatusInactive(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
@@ -74,9 +74,9 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
 
   def insertConversation(conv: ConversationData) = storage.insert(conv)
 
-  override def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None) = storage.update(id, { conv =>
-      if (conv.convType == ConversationType.Group && time.forall(_ >= conv.renameEvent))
-        conv.copy(name = if (name.isEmpty) None else Some(name), renameEvent = time.getOrElse(conv.renameEvent))
+  override def updateConversationName(id: ConvId, name: String) = storage.update(id, { conv =>
+      if (conv.convType == ConversationType.Group)
+        conv.copy(name = if (name.isEmpty) None else Some(name))
       else
         conv
     })

@@ -96,10 +96,9 @@ object Generators {
     unjoinedCall <- arbitrary[Boolean]
     missedCall <- arbitrary[Option[MessageId]]
     incomingKnock <- arbitrary[Option[MessageId]]
-    renameEvent <- arbitrary[Instant]
     voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, voiceMuted, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]

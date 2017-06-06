@@ -131,10 +131,6 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
         conv.missedCallMessage shouldEqual None
         conv.incomingKnockMessage shouldEqual None
         conv.lastRead should be >= Instant.EPOCH
-        if (conv.convType == ConversationType.Group)
-          conv.renameEvent shouldEqual conv.lastEventTime
-        else
-          conv.renameEvent shouldEqual Instant.EPOCH
       }
     }
 

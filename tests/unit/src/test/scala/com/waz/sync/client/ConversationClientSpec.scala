@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model._
+import com.waz.model.{ConversationData, _}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.threading.CancellableFuture
@@ -151,7 +151,7 @@ class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures
 
       JsonObjectResponse(json.getJSONArray("conversations").getJSONObject(0)) match {
         case ConversationsResult(Seq(conversation), false) => info(s"parsed conversation: $conversation")
-          conversation.conversation.renameEvent shouldEqual conversation.conversation.lastEventTime
+          conversation.conversation.status shouldEqual Some(ConversationData.ConversationStatus.Active)
         case _ => fail("conversation response didn't match")
       }
     }
