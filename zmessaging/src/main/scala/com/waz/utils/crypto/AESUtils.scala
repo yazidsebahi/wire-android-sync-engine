@@ -18,7 +18,7 @@
 package com.waz.utils.crypto
 
 import java.io._
-import java.security.{DigestInputStream, DigestOutputStream, MessageDigest, SecureRandom}
+import java.security.{DigestInputStream, DigestOutputStream, MessageDigest}
 import javax.crypto.{BadPaddingException, Cipher, CipherInputStream, CipherOutputStream}
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
@@ -33,13 +33,13 @@ import com.waz.utils.{IoUtils, returning}
   */
 object AESUtils {
 
-  lazy val random = new SecureRandom()
+  lazy val randomBytes = new RandomBytes()
 
   def base64(key: Array[Byte]) = Base64.encodeToString(key, Base64.NO_WRAP | Base64.NO_CLOSE)
   def base64(key: String) = Base64.decode(key, Base64.NO_WRAP | Base64.NO_CLOSE)
 
-  def randomKey(): AESKey = AESKey(returning(new Array[Byte](32)) { random.nextBytes })
-  def randomKey128(): AESKey = AESKey(returning(new Array[Byte](16)) { random.nextBytes })
+  def randomKey(): AESKey = AESKey(randomBytes(32))
+  def randomKey128(): AESKey = AESKey(randomBytes(16))
 
   def cipher(key: AESKey, iv: Array[Byte], mode: Int) =
     returning(Cipher.getInstance("AES/CBC/PKCS5Padding")) { _.init(mode, new SecretKeySpec(key.bytes, "AES"), new IvParameterSpec(iv)) }
@@ -66,7 +66,7 @@ object AESUtils {
   }
 
   def outputStream(key: AESKey, os: OutputStream) = {
-    val iv = returning(new Array[Byte](16))(random.nextBytes)
+    val iv = randomBytes(16)
     os.write(iv)
     new CipherOutputStream(os, cipher(key, iv, Cipher.ENCRYPT_MODE))
   }
