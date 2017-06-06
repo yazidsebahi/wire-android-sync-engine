@@ -29,7 +29,6 @@ public enum SyncCommand {
     SyncConnections("sync-connections"),
     SyncConversation("sync-conv"),
     SyncSearchQuery("sync-search"),
-    SyncCallState("sync-call"),
     PostConv("post-conv"),
     PostConvName("post-conv-name"),
     PostConvState("post-conv-state"),

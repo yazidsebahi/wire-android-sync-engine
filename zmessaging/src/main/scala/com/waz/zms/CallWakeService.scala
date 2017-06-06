@@ -19,9 +19,9 @@ package com.waz.zms
 
 import android.content.{Context => AContext, Intent => AIntent}
 import com.waz.ZLog._
-import com.waz.api.VoiceChannelState._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConvId
-import com.waz.model.VoiceChannelData.{ChannelState, ConnectionState}
+import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.{Accounts, ZMessaging}
 import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
@@ -34,8 +34,8 @@ import scala.concurrent.{Future, Promise}
 /**
  * Background service keeping track of ongoing calls to make sure ZMessaging is running as long as a call is active.
  */
-class CallService extends FutureService {
-  import com.waz.zms.CallService._
+class CallWakeService extends FutureService {
+  import com.waz.zms.CallWakeService._
 
   implicit val ec = EventContext.Global
 
@@ -63,8 +63,7 @@ class CallService extends FutureService {
   }
 }
 
-object CallService {
-  private implicit val logTag: LogTag = logTagFor[CallService]
+object CallWakeService {
   val ConvIdExtra = "conv_id"
 
   val ActionTrack = "com.waz.zclient.call.ACTION_TRACK"
@@ -82,7 +81,7 @@ object CallService {
   }
 
   def intent(context: Context, conv: ConvId, action: String = ActionTrack) = {
-    returning(Intent(context, classOf[CallService])) { i =>
+    returning(Intent(context, classOf[CallWakeService])) { i =>
       i.setAction(action)
       i.putExtra(ConvIdExtra, conv.str)
     }
@@ -102,33 +101,18 @@ object CallService {
 
 class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
 
-  private implicit val logTag: LogTag = logTagFor[CallExecutor]
+  import CallExecutor._
   import Threading.Implicits.Background
 
-  def join(conv: ConvId, id: Int, withVideo: Boolean) = execute { zms =>
-    isV3Call(zms).flatMap {
-      case true => Future.successful(zms.calling.startCall(conv))
-      case _ => zms.voice.joinVoiceChannel(conv, withVideo) flatMap (_ => track(conv, zms))
-    }
-  }(s"CallExecutor.join($id, withVideo = $withVideo)")
+  def join(conv: ConvId, id: Int, withVideo: Boolean) =
+    execute(zms => Future.successful(zms.calling.startCall(conv)))(s"CallExecutor.join($id, withVideo = $withVideo)")
 
-  def leave(conv: ConvId, id: Int) = execute { zms =>
-    isV3Call(zms).flatMap {
-      case true => Future.successful(zms.calling.endCall(conv))
-      case _ => zms.voice.leaveVoiceChannel(conv)
-    }
-  }(s"CallExecutor.leave $id")
+  def leave(conv: ConvId, id: Int) =
+    execute(zms => Future.successful(zms.calling.endCall(conv)))(s"CallExecutor.leave $id")
 
-  def silence(conv: ConvId, id: Int) = execute { zms =>
-    isV3Call(zms).flatMap {
-      case true => Future.successful(zms.calling.endCall(conv))
-      case _ => zms.voice.silenceVoiceChannel(conv)
-    }
-  }(s"CallExecutor.silence $id")
+  def silence(conv: ConvId, id: Int) = execute(zms => Future.successful(zms.calling.endCall(conv)))(s"CallExecutor.silence $id")
 
   def track(conv: ConvId, id: Int): Future[Unit] = execute(track(conv, _)) (s"CallExecutor.track $id")
-
-  private def isV3Call(zms: ZMessaging) = zms.calling.currentCall.map { case Some(_) => true; case _ => false }.head
 
   /**
     * Sets up a cancellable future which will end the call after the `callConnectingTimeout`, unless
@@ -139,46 +123,30 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
     val promise = Promise[Unit]()
 
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
-      CancellableFuture.lift(isV3Call(zms)).flatMap {
-        case true =>
-          CancellableFuture.lift(zms.calling.currentCall.head.collect{case Some(i) => i.state}.map(ChannelState.isConnecting).map {
-            case true => zms.calling.endCall(conv)
-            case _ =>
-          })
+      CancellableFuture.lift(zms.calling.currentCall.head.collect{case Some(i) => i.state}.map(isConnectingStates.contains).map {
+        case true => zms.calling.endCall(conv)
         case _ =>
-          CancellableFuture.lift(zms.voice.getVoiceChannel(conv) flatMap {
-            case data if ChannelState.isConnecting(data.state) => zms.voice.leaveVoiceChannel(conv)
-            case _ => Future.successful(())
-          })
-      }
+      })
     }
 
-    def check() = isV3Call(zms).flatMap {
-      case true =>
-        zms.calling.currentCall.head map {
-          case Some(info) if info.state == SELF_CALLING =>
-            verbose(s"call in progress: $info")
-          case _ => promise.trySuccess({})
-        }
-      case false =>
-        zms.voice.getVoiceChannel(conv) map {
-          case data if data.deviceActive =>
-            verbose(s"call in progress: $data")
-            if (data.deviceState == ConnectionState.Connected) timeoutFuture.cancel()
-          case _ => promise.trySuccess({})
-        }
-      }
+    def check() = zms.calling.currentCall.head map {
+      case Some(info) if info.state == SelfCalling =>
+        verbose(s"call in progress: $info")
+      case _ => promise.trySuccess({})
+    }
 
-    val subscriberV2 = zms.voiceContent.activeChannel { _ => check() }
-    val subscriberV3 = zms.calling.currentCall.map(_.map(_.state)) { _ => check()}
+    val subscriber = zms.calling.currentCall.map(_.map(_.state)) { _ => check()}
 
     check()
 
     promise.future.onComplete { _ =>
       timeoutFuture.cancel()
-      subscriberV2.destroy()
-      subscriberV3.destroy()
+      subscriber.destroy()
     }
     promise.future
   }
+}
+
+object CallExecutor {
+  lazy val isConnectingStates = Set(SelfCalling, SelfJoining, OtherCalling)
 }

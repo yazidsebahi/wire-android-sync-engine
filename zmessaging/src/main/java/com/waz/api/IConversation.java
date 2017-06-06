@@ -117,20 +117,6 @@ public interface IConversation extends UiObservable, Parcelable {
     */
     boolean isMuted();
 
-    /*
-        Does the user participate in voip
-    */
-    boolean hasVoiceChannel();
-
-    boolean hasUnjoinedCall();
-
-    /*
-        If he participates in voip, did he mute the channel
-    */
-    boolean isVoiceChannelMuted();
-
-    VoiceChannel getVoiceChannel();
-
     void setArchived(boolean archived);
 
     void setMuted(boolean muted);

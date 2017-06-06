@@ -126,8 +126,6 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
     val zms = ZMessaging.currentUi.currentZms.collect { case Some(z) => z }
     zms.map(_.notifications).flatMap(_.notifications)(notificationsSpy.gcms :+= _)
-    zms.map(_.voiceContent).flatMap(_.activeChannels).map(_.ongoing)(notificationsSpy.ongoingCall = _)
-    zms.map(_.voiceContent).flatMap(_.activeChannels).map(_.incoming)(c => notificationsSpy.incomingCall = c.headOption)
     zms.flatMap(_.lifecycle.uiActive)(notificationsSpy.uiActive = _)
   }
 

@@ -41,7 +41,6 @@ import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model.UserData.UserDataDao
-import com.waz.model.VoiceParticipantData.VoiceParticipantDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
 
@@ -56,12 +55,12 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 88
+  val DbVersion = 89
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
-    SyncJobDao, CommonConnectionsDataDao, VoiceParticipantDataDao, NotificationDataDao, ErrorDataDao,
+    SyncJobDao, CommonConnectionsDataDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
     ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao, MessageContentIndexDao
   )
@@ -149,6 +148,9 @@ object ZMessagingDB {
       db.execSQL("CREATE TABLE Teams (_id TEXT PRIMARY KEY, name TEXT, creator TEXT, icon TEXT, icon_key TEXT)")
       db.execSQL("CREATE TABLE TeamMembers (user_id TEXT, team_id TEXT, self_permissions INTEGER, copy_permissions INTEGER, PRIMARY KEY (user_id, team_id))")
       db.execSQL("UPDATE KeyValues SET value = 'true' WHERE key = 'should_sync_teams'")
+    },
+    Migration(88, 89) { db =>
+      db.execSQL("DROP TABLE IF EXISTS VoiceParticipants")
     }
   )
 }

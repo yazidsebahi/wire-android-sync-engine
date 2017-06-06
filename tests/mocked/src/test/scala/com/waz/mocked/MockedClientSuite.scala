@@ -40,7 +40,6 @@ import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientKey, MessageResponse}
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.sync.client._
 import com.waz.testutils.TestUserPreferences
 import com.waz.threading.CancellableFuture.successful
@@ -92,10 +91,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val eventsClient       = new EventsClient(zNetClient) {
       override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOrResponse[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
       override def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] = suite.loadLastNotification()
-    }
-    override lazy val voiceClient        = new VoiceChannelClient(zNetClient) {
-      override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = suite.loadCallState(id)
-      override def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent = CauseForCallStateEvent.REQUESTED): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = suite.updateSelfCallState(id, deviceState, cause)
     }
     override lazy val abClient           = new AddressBookClient(zNetClient) {
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
@@ -270,7 +265,6 @@ trait MockedClient { test: ApiSpec =>
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = successful(Right(IndexedSeq()))
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
   def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
-  def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = successful(Right(Right(CallStateEvent(id, Some(Set.empty), cause = cause))))
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))

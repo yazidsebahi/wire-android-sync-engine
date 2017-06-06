@@ -122,27 +122,6 @@ class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matche
     }
   }
 
-  feature("Conversation state") {
-
-    scenario("load missed call info") {
-      val oneToOneConv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), user.id, ConversationType.Group, lastRead = Instant.now.minusSeconds(1000)))
-      service.dispatchEvent(VoiceChannelDeactivateEvent(oneToOneConv.remoteId, new Date(), user.id, Some("missed")))
-
-      withDelay {
-        Await.result(convsContent.convById(oneToOneConv.id), timeout).flatMap(_.missedCallMessage) should be('defined)
-      }
-    }
-
-    scenario("after a call ends, the conv updates its last event time") {
-      val oneToOneConv = insertConv(ConversationData(ConvId(), RConvId(), Some("convName"), user.id, ConversationType.Group))
-      val eventTime = new Date
-      service.dispatchEvent(VoiceChannelDeactivateEvent(oneToOneConv.remoteId, eventTime, user.id, None))
-      awaitUi(100.millis)
-      Await.result(convsContent.convById(oneToOneConv.id), timeout).map(_.lastEventTime) shouldEqual Some(eventTime.instant)
-    }
-  }
-
-
   feature("Archiving") {
 
     scenario("archive conversation") {

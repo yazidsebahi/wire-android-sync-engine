@@ -18,22 +18,18 @@
 package com.waz.service.call
 
 import com.sun.jna.Pointer
+import com.waz.api.VideoSendState
 import com.waz.api.VideoSendState._
-import com.waz.api.VoiceChannelState.NO_ACTIVE_USERS
-import com.waz.api.{VideoSendState, VoiceChannelState}
 import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.call.AvsV3.ClosedReason.Normal
 import com.waz.service.call.AvsV3.VideoReceiveState.Stopped
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
+import com.waz.service.call.CallInfo.CallState
 import org.threeten.bp.Instant
 
-/**
-  * Note - We use the v2 `VoiceChannelState` here to simplify state handling in the UI, however we only use
-  * a subset of them, namely: NO_ACTIVE_USERS, SELF_CALLING, OTHER_CALLING, SELF_JOINING and SELF_CONNECTED.
-  */
 case class CallInfo(convId:            ConvId,
                     caller:            UserId,
-                    state:             VoiceChannelState,
+                    state:             CallState,
                     others:            Set[UserId]                       = Set.empty,
                     maxParticipants:   Int                               = 0, //maintains the largest number of users that were ever in the call (for tracking)
                     muted:             Boolean                           = false,
@@ -62,5 +58,14 @@ case class CallInfo(convId:            ConvId,
        | closedReason       $closedReason
        | hasOutstandingMsg: ${outstandingMsg.isDefined}
     """.stripMargin
+
+}
+
+object CallInfo {
+
+  type CallState = CallState.Value
+  object CallState extends Enumeration {
+    val NotActive, SelfCalling, OtherCalling, SelfJoining, SelfConnected = Value
+  }
 
 }

@@ -35,7 +35,6 @@ import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, MessageResponse}
 import com.waz.sync.client.PushNotification
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
 import com.waz.znet.AuthenticationManager._
@@ -286,11 +285,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
 
   override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] =
     CancellableFuture.delayed(clientDelay)(Right(CallStateEvent(id, callParticipants.get(id), callDeviceState.get(id), CauseForCallStateEvent.REQUESTED, callParticipants.get(id).map(_ => callSessionId(id)))))
-
-  override def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = {
-    callDeviceState += id -> deviceState
-    CancellableFuture.delayed(clientDelay)(Right(Right(CallStateEvent(id, callParticipants.get(id), Some(deviceState), cause, callParticipants.get(id).map(_ => callSessionId(id))))))
-  }
 
   override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
     val conv = addGroupConversation(users, SystemTimeline, name = name)(PushBehaviour.NoPush)

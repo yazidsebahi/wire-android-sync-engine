@@ -23,7 +23,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.IConversation
 import com.waz.api.VideoSendState._
-import com.waz.api.VoiceChannelState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.otr.ClientId
@@ -31,6 +30,7 @@ import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service._
 import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted, StillOngoing}
 import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
+import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushServiceImpl
@@ -39,7 +39,7 @@ import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichDate, RichInstant}
-import com.waz.zms.CallService
+import com.waz.zms.CallWakeService
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
@@ -82,7 +82,7 @@ class CallingService(context:             Context,
 
   currentCall.onChanged { info =>
     verbose(s"Calling information changed: $info")
-    info.foreach(i => CallService(context, i.convId)) // start tracking
+    info.foreach(i => CallWakeService(context, i.convId)) // start tracking
   }
 
   def onReady(version: Int) = {
@@ -109,7 +109,7 @@ class CallingService(context:             Context,
     val callInfo = CallInfo(
       conv.id,
       userId,
-      OTHER_CALLING,
+      OtherCalling,
       Set(userId),
       isVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
@@ -126,7 +126,7 @@ class CallingService(context:             Context,
   def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { conv =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     currentCall.mutate {
-      case Some(call) if call.convId == conv.id => Some(call.copy(state = SELF_JOINING))
+      case Some(call) if call.convId == conv.id => Some(call.copy(state = SelfJoining))
       case Some(call) => warn("Other side answered non-active call, ignoring"); Some(call)
       case None => warn("Other side answered call without a current active call"); None
     }
@@ -145,7 +145,7 @@ class CallingService(context:             Context,
         setCallMuted(c.muted) //Need to set muted only after call is established
         //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
         val others = c.others + userId - selfUserId
-        Some(c.copy(state = SELF_CONNECTED, estabTime = Some(Instant.now), others = others, maxParticipants = 2))
+        Some(c.copy(state = SelfConnected, estabTime = Some(Instant.now), others = others, maxParticipants = 2))
       case None => warn("Received onEstablishedCall callback without a current active call"); None
     }
   }
@@ -212,10 +212,10 @@ class CallingService(context:             Context,
     } yield (current, active)).head.map {
       case (Some(cur), _) if cur.convId == convId =>
         cur.state match {
-          case OTHER_CALLING =>
+          case OtherCalling =>
             verbose(s"Answering call")
             avs.answerCall(conv.remoteId, isGroup)
-            currentCall.mutate(c => c.map(_.copy(state = SELF_JOINING)))
+            currentCall.mutate(c => c.map(_.copy(state = SelfJoining)))
           case _ =>
             warn("Tried to join an already joined/connecting call - ignoring")
         }
@@ -224,7 +224,7 @@ class CallingService(context:             Context,
       case (_, active) if active.contains(convId) =>
         verbose("Joining an ongoing background call")
         avs.answerCall(conv.remoteId, isGroup)
-        currentCall ! Some(active(convId).copy(state = SELF_JOINING))
+        currentCall ! Some(active(convId).copy(state = SelfJoining))
       case _ =>
         verbose("No active call, starting new call")
         avs.startCall(conv.remoteId, isVideo, isGroup).map {
@@ -233,7 +233,7 @@ class CallingService(context:             Context,
             val info = CallInfo(
               conv.id,
               selfUserId,
-              SELF_CALLING,
+              SelfCalling,
               if (conv.convType == Group) Set(selfUserId) else Set(UserId(conv.id.str)),
               isVideoCall = isVideo,
               videoSendState = if (isVideo) PREVIEW else DONT_SEND)
@@ -250,7 +250,7 @@ class CallingService(context:             Context,
       case Some(call) =>
         verbose(s"Call ended in state: ${call.state}")
         //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
-        if (call.state == OTHER_CALLING) avs.rejectCall(conv.remoteId, conv.convType == Group) else avs.endCall(conv.remoteId, conv.convType == Group)
+        if (call.state == OtherCalling) avs.rejectCall(conv.remoteId, conv.convType == Group) else avs.endCall(conv.remoteId, conv.convType == Group)
         Some(call.copy(hangupRequested = true))
       case None => warn("Tried to endCall without a current active call"); None
     }
@@ -260,7 +260,7 @@ class CallingService(context:             Context,
     case Some(info) =>
       (info.outstandingMsg, info.state) match {
         case (Some((msg, ctx)), _) => convs.storage.setUnknownVerification(info.convId).map(_ => sendCallMessage(info.convId, msg, ctx))
-        case (None, OTHER_CALLING) => convs.storage.setUnknownVerification(info.convId).map(_ => startCall(info.convId))
+        case (None, OtherCalling) => convs.storage.setUnknownVerification(info.convId).map(_ => startCall(info.convId))
         case _ => error(s"Tried resending message on invalid info: ${info.convId} in state ${info.state} with msg: ${info.outstandingMsg}")
       }
     case None => warn("Tried to continue degraded call without a current active call")
@@ -331,13 +331,13 @@ class CallingService(context:             Context,
       case Some(call) if call.convId == conv.id =>
         if (reason != AnsweredElsewhere) call.state match {
           //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
-          case SELF_CALLING =>
+          case SelfCalling =>
             verbose("Call timed out out the other didn't answer - add a \"you called\" message")
             messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
-          case OTHER_CALLING | SELF_JOINING =>
+          case OtherCalling | SelfJoining =>
             verbose("Call timed out out and we didn't answer - mark as missed call")
             messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
-          case SELF_CONNECTED =>
+          case SelfConnected =>
             verbose("Had a successful call, save duration as a message")
             call.estabTime.foreach { est =>
               messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(Instant.now))

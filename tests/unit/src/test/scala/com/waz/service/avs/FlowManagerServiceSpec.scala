@@ -24,7 +24,7 @@ import com.waz.call.FlowManager
 import com.waz.content.GlobalPreferences._
 import com.waz.model.UserId
 import com.waz.service.call.DefaultFlowManagerService
-import com.waz.service.call.DefaultFlowManagerService.AvsLogData
+import com.waz.service.call.FlowManagerService.AvsLogData
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.{EventContext, Signal}
