@@ -117,6 +117,78 @@ object ConversationDataMigration {
     }
   }
 
+  lazy val v90 = { implicit db: DB =>
+
+    val v90Cols = {
+      Seq(
+        id[ConvId]('_id, "PRIMARY KEY"),
+        id[RConvId]('remote_id),
+        opt(text('name)),
+        id[UserId]('creator),
+        opt(id[TeamId]('team)),
+        opt(bool('is_managed)),
+        int[ConversationType]('conv_type, _.id, ConversationType(_)),
+        timestamp('last_event_time),
+        bool('is_active),
+        timestamp('last_read),
+        bool('muted),
+        timestamp('mute_time),
+        bool('archived),
+        timestamp('archive_time),
+        timestamp('cleared),
+        text('generated_name),
+        opt(text[SearchKey]('search_key, _.asciiRepresentation, SearchKey.unsafeRestore)),
+        int('unread_count),
+        int('unsent_count),
+        bool('hidden),
+        opt(id[MessageId]('missed_call)),
+        opt(id[MessageId]('incoming_knock)),
+        text[Verification]('verified, _.name, Verification.valueOf),
+        long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)
+      )
+    }
+
+    val table = TableDesc("Conversations_tmp", v90Cols)
+
+    inTransaction { _: Transaction =>
+      db.execSQL("DROP TABLE IF EXISTS Conversations_tmp")
+      db.execSQL(table.createSql)
+
+      // copy all data
+      db.execSQL(
+        """
+          |INSERT INTO Conversations_tmp SELECT
+          |   _id,
+          |   remote_id,
+          |   name,
+          |   creator,
+          |   team,
+          |   is_managed,
+          |   conv_type,
+          |   last_event_time,
+          |   (CASE status WHEN 1 THEN 0 ELSE 1 END),
+          |   last_read,
+          |   muted,
+          |   mute_time,
+          |   archived,
+          |   archive_time,
+          |   cleared,
+          |   generated_name,
+          |   search_key,
+          |   unread_count,
+          |   unsent_count,
+          |   hidden,
+          |   missed_call,
+          |   incoming_knock,
+          |   verified,
+          |   ephemeral
+          |FROM Conversations""".stripMargin)
+
+      db.execSQL("DROP TABLE Conversations")
+      db.execSQL("ALTER TABLE Conversations_tmp RENAME TO Conversations")
+    }
+  }
+
   object Columns {
 
     object v63 {

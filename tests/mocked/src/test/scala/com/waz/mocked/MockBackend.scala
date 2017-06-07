@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.api.{ApiSpec, CauseForCallStateEvent}
 import com.waz.mocked.MockBackend._
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model.UserData.ConnectionStatus
@@ -146,7 +146,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   def removeUsersFromGroupConversation(users: Seq[UserId], id: RConvId, from: UserId = selfUserId, time: Timeline = SystemTimeline)(implicit p: PushBehaviour): MemberLeaveEvent = {
     val evt = MemberLeaveEvent(id, time.next(), from, users)
     members(id) = members(id).filter(u => users.contains(u.userId))
-    if (users contains selfUserId) conversations(id) = conversations(id).copy(status = Some(ConversationStatus.Inactive))
     addEvent(evt)
   }
 
@@ -161,7 +160,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     assert(prev.exists(_.userId == from), "only current member can add ppl to conv")
     members(convId) = prev ++ ms.map(id => ConversationMemberData(id, conv.id))
     val evt = MemberJoinEvent(convId, time.next(), from, ms)
-    if (users contains selfUserId) conversations(convId) = conversations(convId).copy(status = Some(ConversationStatus.Inactive))
     addEvent(evt)
     conv
   }

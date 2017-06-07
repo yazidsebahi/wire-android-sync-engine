@@ -401,7 +401,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("Notify messages list changed on message content type change") {
       val conv = ConvId()
-      Await.result(convsContent.insertConversation(new ConversationData(conv, RConvId(), None, UserId(), ConversationType.Group)), 1.second)
+      Await.result(convsStorage.insert(new ConversationData(conv, RConvId(), None, UserId(), ConversationType.Group)), 1.second)
       val msg = Await.result(messages.addTextMessage(conv, "Here is some text. https://www.youtube.com/watch?v=MWdG413nNkI"), 5.seconds)
       msg.msgType shouldEqual Message.Type.RICH_MEDIA
       msg.content shouldEqual Seq(MessageContent(TEXT, "Here is some text."), MessageContent(YOUTUBE, "https://www.youtube.com/watch?v=MWdG413nNkI"))

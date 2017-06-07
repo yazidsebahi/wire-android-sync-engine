@@ -21,7 +21,7 @@ import android.content.ContentValues
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
-import com.waz.Generators
+import com.waz.{Generators, ShadowLogging}
 import com.waz.utils.wrappers.{DB, DBHelper, URI}
 import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
@@ -37,6 +37,7 @@ import com.waz.model.sync.SyncJob.SyncJobDao
 import com.waz.model.sync.{SyncCommand, SyncJob}
 import com.waz.utils.{DbLoader, returning}
 import org.robolectric.Robolectric
+import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
@@ -238,6 +239,15 @@ class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with Ge
       SyncJobDao.list should have size 100
       SyncJobDao.list shouldEqual before
     }
+
+    scenario("Remove unused columns from Conversations in 90") {
+      implicit val db = loadDb("/db/zmessaging_60.db")
+      dbHelper.onUpgrade(db, 60, ZMessagingDB.DbVersion)
+      val convs = ConversationDataDao.list
+      convs should have size 72
+      convs.collect { case c if !c.isActive => c } should have size 1
+    }
+
   }
 
   scenario("Populate MessageContentIndex in 83") {

@@ -95,21 +95,6 @@ class ConversationDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAf
         else if (c.archived) c.lastEventTime.toEpochMilli + 1 - Long.MaxValue
         else c.lastEventTime.toEpochMilli).reverse
     }
-
-    scenario("conv with active voice should be right below self") {
-      val callConv = conv("call", ConversationType.OneToOne).copy(hasVoice = true)
-      val convs = callConv +: list(allConversations)
-      insertOrReplace(callConv)
-
-      info(s"${list(allConversations).map(_.name)}")
-
-      list(allConversations) shouldEqual convs.sortBy(c =>
-        if (c.convType == ConversationType.Self) Long.MaxValue
-        else if (c.hasVoice) Long.MaxValue - 1
-        else if (c.convType == ConversationType.Incoming) Long.MaxValue - 100000 + c.lastEventTime.toEpochMilli
-        else if (c.archived) c.lastEventTime.toEpochMilli + 1 - Long.MaxValue
-        else c.lastEventTime.toEpochMilli).reverse
-    }
   }
 
   def printCursor(c: Cursor, cols: String*) = {

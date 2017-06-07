@@ -274,7 +274,7 @@ class ConversationsUiService(self:            UserId,
     verbose(s"leaveConversation($conv)")
 
     for {
-      updated <- convsContent.setConversationStatusInactive(conv)
+      updated <- convsContent.setConvActive(conv, active = false)
       _ <- users.withSelfUserFuture {
         removeConversationMember(conv, _)
       }

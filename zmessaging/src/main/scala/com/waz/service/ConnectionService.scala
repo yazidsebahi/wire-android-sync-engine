@@ -43,7 +43,6 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
   private implicit val logTag: LogTag = logTagFor[ConnectionService]
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
-  import convs._
   import messages._
   import users._
 
@@ -61,7 +60,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
   }
 
   def syncConversationInitiallyAfterCreation(convId: RConvId, selfUserId: UserId, userId: UserId) =
-    getOneToOneConversation(userId, selfUserId, Some(convId), ConversationType.WaitForConnection) flatMap { conv =>
+    convs.getOneToOneConversation(userId, selfUserId, Some(convId), ConversationType.WaitForConnection) flatMap { conv =>
       sync.syncConversations(Set(conv.id))
     }
 
@@ -100,7 +99,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
       case _ => ConversationType.OneToOne
     }
     val hidden = user.connection == ConnectionStatus.Ignored || user.connection == ConnectionStatus.Blocked || user.connection == ConnectionStatus.Cancelled
-    getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
+    convs.getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
       members.add(conv.id, Seq(selfUserId, user.id): _*) flatMap { members =>
         convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden, lastEventTime = Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
@@ -141,14 +140,14 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     withSelfUserFuture { selfUserId =>
       connectIfUnconnected() flatMap {
         case Some(_) =>
-          getOneToOneConversation(userId, selfUserId, convType = ConversationType.WaitForConnection) flatMap { conv =>
+          convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.WaitForConnection) flatMap { conv =>
             verbose(s"connectToUser, conv: $conv")
             convStorage.update(conv.id, _.copy(convType = ConversationType.WaitForConnection, hidden = false)) flatMap { _ =>
               addConnectRequestMessage(conv.id, selfUserId, userId, message, name) map { _ => Some(conv) }
             }
           }
         case None => //already connected
-          convById(ConvId(userId.str))
+          convs.convById(ConvId(userId.str))
       }
     }
   }
@@ -161,8 +160,8 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
         }
       case _ =>
     } flatMap { _ =>
-      getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
-        updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) flatMap { updated =>
+      convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
+        convs.updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) flatMap { updated =>
           addMemberJoinMessage(conv.id, selfUserId, Set(selfUserId), firstMessage = true) map { _ =>
             updated.fold(conv)(_._2)
           }
@@ -175,14 +174,14 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     withSelfUserFuture { selfUserId =>
       updateConnectionStatus(userId, ConnectionStatus.Ignored) flatMap { user =>
         user.foreach { _ => sync.postConnectionStatus(userId, ConnectionStatus.Ignored) }
-        hideIncomingConversation(userId) map { _ => user }
+        convs.hideIncomingConversation(userId) map { _ => user }
       }
     }
   }
 
   def blockConnection(userId: UserId): Future[Option[UserData]] = {
     withSelfUserFuture { selfUserId =>
-      hideConversation(ConvId(userId.str)) flatMap { _ =>
+      convs.setConversationHidden(ConvId(userId.str), hidden = true) flatMap { _ =>
         updateConnectionStatus(userId, ConnectionStatus.Blocked) map { user =>
           user foreach { _ => sync.postConnectionStatus(userId, ConnectionStatus.Blocked) }
           user
@@ -201,8 +200,8 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
         }
         user
       } flatMap { _ =>
-        getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
-          updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) map { _.fold(conv)(_._2) } // TODO: what about messages
+        convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
+          convs.updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) map { _.fold(conv)(_._2) } // TODO: what about messages
         }
       }
     }
@@ -218,7 +217,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     }) flatMap {
       case Some((prev, user)) if prev != user =>
         sync.postConnectionStatus(userId, ConnectionStatus.Cancelled)
-        hideConversationOfUser(userId) map { _ => Some(user) }
+        convs.setConversationHidden(ConvId(user.id.str), hidden = true) map { _ => Some(user) }
       case None => Future successful None
     }
   }

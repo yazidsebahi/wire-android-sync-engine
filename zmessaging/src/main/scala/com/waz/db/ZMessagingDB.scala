@@ -55,7 +55,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 89
+  val DbVersion = 90
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
@@ -151,6 +151,9 @@ object ZMessagingDB {
     },
     Migration(88, 89) { db =>
       db.execSQL("DROP TABLE IF EXISTS VoiceParticipants")
+    },
+    Migration(89, 90) { db =>
+      ConversationDataMigration.v90(db)
     }
   )
 }
