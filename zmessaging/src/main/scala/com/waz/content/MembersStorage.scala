@@ -49,7 +49,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
     current -- inactive.map(_._1) ++ active.map(_._1)
   })
 
-  private def onConvMemberChanged(conv: ConvId) = onAdded.map(_.map(_.userId -> true)).union(onDeleted.map(_.map(_._1 -> false)))
+  private def onConvMemberChanged(conv: ConvId) = onAdded.map(_.filter(_.convId == conv).map(_.userId -> true)).union(onDeleted.map(_.filter(_._2 == conv).map(_._1 -> false)))
 
   def getActiveUsers(conv: ConvId): Future[Seq[UserId]] = getByConv(conv) map { _.map(_.userId) }
 
