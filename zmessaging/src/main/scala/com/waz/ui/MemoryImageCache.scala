@@ -35,7 +35,6 @@ class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry])
   def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap] = Option(lru.get(Key(id, tag(req)))) flatMap {
     case BitmapEntry(bmp) if bmp.getWidth >= req.width || (imgWidth > 0 && bmp.getWidth > imgWidth) => Some(bmp)
     case _ => None
-
   }
 
   def add(id: AssetId, req: BitmapRequest, bmp: Bitmap): Unit = if (bmp != null && !bmp.isEmpty) {
