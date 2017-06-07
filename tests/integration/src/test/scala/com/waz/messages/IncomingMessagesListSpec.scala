@@ -17,7 +17,6 @@
  */
 package com.waz.messages
 
-import com.waz.api.IncomingMessagesList.KnockListener
 import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.service.RemoteZmsSpec
@@ -44,11 +43,7 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with EitherValu
 
   lazy val msgs = conv.getMessages
   lazy val incoming = {
-    val list = api.getIncomingMessages
-    list.addKnockListener(new KnockListener() {
-      override def onKnock(knock: Message): Unit = lastKnock = Some(knock)
-    })
-    list
+    api.getIncomingMessages
   }
 
   lazy val auto2 = createRemoteZms()
@@ -114,18 +109,6 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with EitherValu
 
       Thread.sleep(500)
       incoming should have size 1
-    }
-  }
-
-  feature("Knocks")  {
-
-    scenario("Call knock listener on new knock") {
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.knock()))
-
-      withDelay {
-        lastKnock should be('defined)
-        incoming.last.getMessageType shouldEqual Message.Type.KNOCK
-      }
     }
   }
 }

@@ -25,19 +25,9 @@ object IncomingMessagesList {
      */
     def onIncomingMessage(msg: Message): Unit
   }
-
-  trait KnockListener {
-    /**
-     * Will be called whenever fresh knock event is received on push channel.
-     */
-    def onKnock(knock: Message): Unit
-  }
 }
 
 trait IncomingMessagesList extends CoreList[Message] {
-  def addKnockListener(listener: IncomingMessagesList.KnockListener): Unit
-
-  def removeKnockListener(listener: IncomingMessagesList.KnockListener): Unit
 
   def addMessageListener(listener: IncomingMessagesList.MessageListener): Unit
 
