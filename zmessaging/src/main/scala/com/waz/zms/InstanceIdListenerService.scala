@@ -17,23 +17,21 @@
  */
 package com.waz.zms
 
-import com.google.firebase.iid.{FirebaseInstanceId, FirebaseInstanceIdService}
+import com.google.firebase.iid.FirebaseInstanceIdService
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.model.PushToken
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 
 class InstanceIdListenerService extends FirebaseInstanceIdService with ZMessagingService {
   import Threading.Implicits.Background
 
-  //TODO figure out how to test
   override def onTokenRefresh(): Unit = {
-    val token = Option(FirebaseInstanceId.getInstance().getToken).map(PushToken(_))
+    val token = Option(ZMessaging.currentGlobal).flatMap(_.googleApi.getPushToken)
     info(s"FCM: onTokenRefresh() called. Got token: $token")
-    ZMessaging.currentAccounts.getCurrentZms map {
+    Option(ZMessaging.currentAccounts).foreach(_.getCurrentZms map {
       case Some(zms) => zms.pushToken.onTokenRefresh ! token
       case None =>
-    }
+    })
   }
 }
