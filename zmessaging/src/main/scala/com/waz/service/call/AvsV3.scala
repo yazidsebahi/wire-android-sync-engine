@@ -178,7 +178,7 @@ object AvsV3 {
   def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)
 
   def uint32_tTime(instant: Instant) =
-    returning(Uint32_t((Instant.now.toEpochMilli / 1000).toInt))(t => verbose(s"uint32_tTime for $instant = ${t.value}"))
+    returning(Uint32_t((instant.toEpochMilli / 1000).toInt))(t => verbose(s"uint32_tTime for $instant = ${t.value}"))
 
   /**
     *   WCALL_REASON_NORMAL              0
