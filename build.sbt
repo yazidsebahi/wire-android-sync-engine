@@ -122,7 +122,7 @@ lazy val zmessaging = project
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
       Deps.hockeyApp % Provided,
       Deps.localytics,
-      "net.java.dev.jna" % "jna" % "4.2.0",
+      "net.java.dev.jna" % "jna" % "4.4.0" % Provided,
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
   )
@@ -194,6 +194,7 @@ lazy val testutils = project.in(file("tests") / "utils")
       "com.wire" %% "robotest" % "0.7" exclude("org.scalatest", "scalatest"),
       "com.drewnoakes" % "metadata-extractor" % "2.8.1",
       "org.robolectric" % "android-all" % RobolectricVersion,
+      "net.java.dev.jna" % "jna" % "4.4.0",
       "org.java-websocket" % "Java-WebSocket" % "1.3.0",
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7"
     ),
