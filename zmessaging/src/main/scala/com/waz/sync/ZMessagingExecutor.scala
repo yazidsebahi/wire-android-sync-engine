@@ -19,8 +19,7 @@ package com.waz.sync
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.model.AccountId
-import com.waz.service.{AccountService, Accounts, ZMessaging}
+import com.waz.service.{Accounts, ZMessaging}
 import com.waz.threading.Threading
 
 import scala.concurrent.Future
@@ -51,28 +50,6 @@ trait ZMessagingExecutor extends ZmsExecutor {
 object ZMessagingExecutor {
   case object NoZMessagingException extends Exception("ZMessaging instance not available") with NoStackTrace
   case object NoAccountException extends Exception("AccountService instance not available") with NoStackTrace
-}
-
-trait AccountExecutor {
-  import Threading.Implicits.Background
-
-  val userId: AccountId
-  def context: Context
-  def accounts: Accounts
-
-  lazy val account = accounts.getInstance(userId)
-
-  def execute[A](body: AccountService => Future[A])(implicit logTag: LogTag): Future[A] = {
-    account flatMap {
-      case None =>
-        error(s"zmessaging not available")
-        Future.failed(ZMessagingExecutor.NoAccountException)
-      case Some(acc) =>
-        val future = Threading.Ui(acc.global.lifecycle.acquireSync(logTag)).future flatMap { _ => body(acc) }
-        future.onComplete(_ => acc.global.lifecycle.releaseSync(logTag))(Threading.Ui)
-        future
-    }
-  }
 }
 
 trait ActivePush extends ZMessagingExecutor {
