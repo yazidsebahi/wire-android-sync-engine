@@ -45,6 +45,7 @@ import org.threeten.bp.{Duration, Instant}
 import scala.concurrent.Future
 
 class CallingService(context:             Context,
+                     account:             AccountId,
                      selfUserId:          UserId,
                      avs:                 AvsV3,
                      convs:               ConversationsContentUpdater,
@@ -83,7 +84,7 @@ class CallingService(context:             Context,
 
   currentCall.onChanged { info =>
     verbose(s"Calling information changed: $info")
-    info.foreach(i => CallWakeService(context, i.convId)) // start tracking
+    info.foreach(i => CallWakeService(context, account, i.convId)) // start tracking
   }
 
   def onReady(version: Int) = {
@@ -203,9 +204,13 @@ class CallingService(context:             Context,
 
   /**
     * Either start a new call or join an active call (incoming/ongoing)
+    *
+    * Note: This method is called from background service, so it has to return Future which spans whole execution,
+    * this ensures that CallWakeService will keep a wake lock while this function runs
+    *
     * @param isVideo will be discarded if call is already active
     */
-  def startCall(convId: ConvId, isVideo: Boolean = false): Unit = withConv(convId) { conv =>
+  def startCall(convId: ConvId, isVideo: Boolean = false): Future[Any] = withConvAsync(convId) { conv =>
     verbose(s"startCall $convId, $isVideo")
 
     (for {
@@ -252,7 +257,10 @@ class CallingService(context:             Context,
     }
   }
 
-  def endCall(convId: ConvId): Unit = withConv(convId) { conv =>
+  /**
+   * @returns Future as this function is called from background service
+   */
+  def endCall(convId: ConvId): Future[Unit] = withConv(convId) { conv =>
     verbose(s"endCall: $convId")
     currentCall.mutate {
       case Some(call) =>
@@ -384,9 +392,14 @@ class CallingService(context:             Context,
     case _ => error(s"Unknown conv: $convId")
   }
 
-  private def withConv(convId: ConvId)(f: ConversationData => Unit): Unit = convs.convById(convId).map {
+  private def withConv(convId: ConvId)(f: ConversationData => Unit): Future[Unit] = convs.convById(convId) map {
     case Some(conv) => f(conv)
     case _ => error(s"Could not find conversation: $convId")
+  }
+
+  private def withConvAsync(convId: ConvId)(f: ConversationData => Future[_]): Future[Any] = convs.convById(convId) flatMap {
+    case Some(conv) => f(conv)
+    case _ => Future successful error(s"Could not find conversation: $convId")
   }
 
   /**

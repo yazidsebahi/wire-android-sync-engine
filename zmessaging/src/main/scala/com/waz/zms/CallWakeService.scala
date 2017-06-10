@@ -17,13 +17,12 @@
  */
 package com.waz.zms
 
-import android.content.{Context => AContext, Intent => AIntent}
-import com.waz.ZLog._
+import android.content.{Intent => AIntent}
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.ConvId
+import com.waz.ZLog._
+import com.waz.model.{AccountId, ConvId}
+import com.waz.service.ZMessaging
 import com.waz.service.call.CallInfo.CallState._
-import com.waz.service.{Accounts, ZMessaging}
-import com.waz.sync.ActivePush
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
 import com.waz.utils.returning
@@ -34,92 +33,47 @@ import scala.concurrent.{Future, Promise}
 /**
  * Background service keeping track of ongoing calls to make sure ZMessaging is running as long as a call is active.
  */
-class CallWakeService extends FutureService {
+class CallWakeService extends FutureService with ZMessagingService {
+  import Threading.Implicits.Background
   import com.waz.zms.CallWakeService._
-
   implicit val ec = EventContext.Global
 
-  lazy val executor = new CallExecutor(getApplicationContext, ZMessaging.currentAccounts)
-
-  override protected def onIntent(intent: AIntent, id: Int): Future[Any] = wakeLock.async {
+  override protected def onIntent(intent: AIntent, id: Int): Future[Any] = onZmsIntent(intent) { zms =>
     debug(s"onIntent $intent")
     if (intent != null && intent.hasExtra(ConvIdExtra)) {
       val convId = ConvId(intent.getStringExtra(ConvIdExtra))
       debug(s"convId: $convId")
 
-      intent.getAction match {
-        case ActionJoin => executor.join(convId, id, withVideo = false)
-        case ActionJoinGroup => executor.join(convId, id, withVideo = false)
-        case ActionJoinWithVideo => executor.join(convId, id, withVideo = true)
-        case ActionJoinGroupWithVideo => executor.join(convId, id, withVideo = true)
-        case ActionLeave => executor.leave(convId, id)
-        case ActionSilence => executor.silence(convId, id)
-        case _ => executor.track(convId, id)
-      }
+      zms.lifecycle.withPush {
+        intent.getAction match {
+          case ActionJoin => join(zms, convId, withVideo = false)
+          case ActionJoinGroup => join(zms, convId, withVideo = false)
+          case ActionJoinWithVideo => join(zms, convId, withVideo = true)
+          case ActionJoinGroupWithVideo => join(zms, convId, withVideo = true)
+          case ActionLeave => leave(zms, convId)
+          case ActionSilence => silence(zms, convId)
+          case _ => track(zms, convId)
+        }
+      } (s"CallWakeService[${intent.getAction}] $id")
     } else {
       error("missing intent extras")
       Future.successful({})
     }
   }
-}
 
-object CallWakeService {
-  val ConvIdExtra = "conv_id"
 
-  val ActionTrack = "com.waz.zclient.call.ACTION_TRACK"
-  val ActionJoin = "com.waz.zclient.call.ACTION_JOIN"
-  val ActionJoinGroup = "com.waz.zclient.call.ACTION_JOIN_GROUP"
-  val ActionJoinWithVideo = "com.waz.zclient.call.ACTION_JOIN_WITH_VIDEO"
-  val ActionJoinGroupWithVideo = "com.waz.zclient.call.ACTION_JOIN_GROUP_WITH_VIDEO"
-  val ActionLeave = "com.waz.zclient.call.ACTION_LEAVE"
-  val ActionSilence = "com.waz.zclient.call.ACTION_SILENCE"
+  def join(zms: ZMessaging, conv: ConvId, withVideo: Boolean) = zms.calling.startCall(conv, withVideo)
 
-  def apply(context: Context, conv: ConvId) = {
-    if (!context.startService(trackIntent(context, conv))) {
-      error(s"could not start CallService, make sure it's added to AndroidManifest")
-    }
-  }
+  def leave(zms: ZMessaging, conv: ConvId) = zms.calling.endCall(conv)
 
-  def intent(context: Context, conv: ConvId, action: String = ActionTrack) = {
-    returning(Intent(context, classOf[CallWakeService])) { i =>
-      i.setAction(action)
-      i.putExtra(ConvIdExtra, conv.str)
-    }
-  }
-
-  def trackIntent(context: Context, conv: ConvId) = intent(context, conv, ActionTrack)
-
-  def joinIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoin)
-  def joinGroupIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroup)
-  def joinWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinWithVideo)
-  def joinGroupWithVideoIntent(context: Context, conv: ConvId) = intent(context, conv, ActionJoinGroupWithVideo)
-
-  def leaveIntent(context: Context, conv: ConvId) = intent(context, conv, ActionLeave)
-
-  def silenceIntent(context: Context, conv: ConvId) = intent(context, conv, ActionSilence)
-}
-
-class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: EventContext) extends ActivePush {
-
-  import CallExecutor._
-  import Threading.Implicits.Background
-
-  def join(conv: ConvId, id: Int, withVideo: Boolean) =
-    execute(zms => Future.successful(zms.calling.startCall(conv)))(s"CallExecutor.join($id, withVideo = $withVideo)")
-
-  def leave(conv: ConvId, id: Int) =
-    execute(zms => Future.successful(zms.calling.endCall(conv)))(s"CallExecutor.leave $id")
-
-  def silence(conv: ConvId, id: Int) = execute(zms => Future.successful(zms.calling.endCall(conv)))(s"CallExecutor.silence $id")
-
-  def track(conv: ConvId, id: Int): Future[Unit] = execute(track(conv, _)) (s"CallExecutor.track $id")
+  def silence(zms: ZMessaging, conv: ConvId) = zms.calling.endCall(conv)
 
   /**
     * Sets up a cancellable future which will end the call after the `callConnectingTimeout`, unless
     * the promise is completed (which can be triggered by a successfully established call), at which
     * point the future will be cancelled, and the call allowed to continue indefinitely.
     */
-  private def track(conv: ConvId, zms: ZMessaging): Future[Unit] = {
+  private def track(zms: ZMessaging, conv: ConvId): Future[Unit] = {
     val promise = Promise[Unit]()
 
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
@@ -147,6 +101,41 @@ class CallExecutor(val context: AContext, val accounts: Accounts)(implicit ec: E
   }
 }
 
-object CallExecutor {
+object CallWakeService {
+  val ConvIdExtra = "conv_id"
+
+  val ActionTrack = "com.waz.zclient.call.ACTION_TRACK"
+  val ActionJoin = "com.waz.zclient.call.ACTION_JOIN"
+  val ActionJoinGroup = "com.waz.zclient.call.ACTION_JOIN_GROUP"
+  val ActionJoinWithVideo = "com.waz.zclient.call.ACTION_JOIN_WITH_VIDEO"
+  val ActionJoinGroupWithVideo = "com.waz.zclient.call.ACTION_JOIN_GROUP_WITH_VIDEO"
+  val ActionLeave = "com.waz.zclient.call.ACTION_LEAVE"
+  val ActionSilence = "com.waz.zclient.call.ACTION_SILENCE"
+
   lazy val isConnectingStates = Set(SelfCalling, SelfJoining, OtherCalling)
+
+  def apply(context: Context, user: AccountId, conv: ConvId) = {
+    if (!context.startService(trackIntent(context, user, conv))) {
+      error(s"could not start CallService, make sure it's added to AndroidManifest")
+    }
+  }
+
+  def intent(context: Context, user: AccountId, conv: ConvId, action: String = ActionTrack) = {
+    returning(Intent(context, classOf[CallWakeService])) { i =>
+      i.setAction(action)
+      i.putExtra(ConvIdExtra, conv.str)
+      i.putExtra(ZMessagingService.ZmsUserIdExtra, user.str)
+    }
+  }
+
+  def trackIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionTrack)
+
+  def joinIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionJoin)
+  def joinGroupIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionJoinGroup)
+  def joinWithVideoIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionJoinWithVideo)
+  def joinGroupWithVideoIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionJoinGroupWithVideo)
+
+  def leaveIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionLeave)
+
+  def silenceIntent(context: Context, user: AccountId, conv: ConvId) = intent(context, user, conv, ActionSilence)
 }
