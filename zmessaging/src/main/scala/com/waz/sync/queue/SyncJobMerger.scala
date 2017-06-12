@@ -17,7 +17,6 @@
  */
 package com.waz.sync.queue
 
-import com.waz.ZLog._
 import com.waz.api.SyncState
 import com.waz.content.SyncStorage
 import com.waz.model.SyncId
@@ -123,7 +122,6 @@ class SyncJobMerger(mergeKey: Any, storage: SyncStorage) {
 }
 
 object SyncJobMerger {
-  implicit val tag: LogTag = logTagFor[SyncJobMerger]
 
   sealed trait MergeResult[+A]
   case object Unchanged extends MergeResult[Nothing]

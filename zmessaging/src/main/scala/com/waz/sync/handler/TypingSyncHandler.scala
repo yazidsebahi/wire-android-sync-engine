@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConvId
 import com.waz.service.conversation._
 import com.waz.sync.SyncResult
@@ -29,7 +30,6 @@ import scala.concurrent.Future
 class TypingSyncHandler(client: TypingClient, convs: ConversationsContentUpdaterImpl, typingService: TypingService) {
 
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[TypingSyncHandler]
 
   def postTypingState(convId: ConvId, typing: Boolean): Future[SyncResult] = {
     convs.convById(convId) flatMap {

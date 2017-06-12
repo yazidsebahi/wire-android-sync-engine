@@ -23,6 +23,7 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.google.i18n.phonenumbers.Phonenumber.{PhoneNumber => GooglePhoneNumber}
 import com.waz.PermissionsService
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.PhoneNumber
 import com.waz.threading.SerialDispatchQueue
 
@@ -30,7 +31,6 @@ import scala.concurrent.Future
 import scala.util.Try
 
 class PhoneNumberService(context: Context, permissions: PermissionsService) {
-  private implicit val logTag: LogTag = logTagFor[PhoneNumberService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "PhoneNumberService")
 
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]

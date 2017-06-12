@@ -18,14 +18,13 @@
 package com.waz.service
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 
 import scala.concurrent.Future
 
 class ZmsLifecycle extends EventContext {
-  private implicit val logTag: LogTag = logTagFor[ZmsLifecycle]
-
   val lifecycleState = Signal(LifecycleState.Stopped)
   val uiActive = lifecycleState.map(_ == LifecycleState.UiActive)
   def active = lifecycleState.map(st => st == LifecycleState.UiActive || st == LifecycleState.Active)

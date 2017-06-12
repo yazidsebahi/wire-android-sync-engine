@@ -28,6 +28,7 @@ import android.view.View
 import android.view.View.OnClickListener
 import android.widget.{Button, ImageView}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.BitmapCallback
 import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api._
@@ -37,7 +38,6 @@ import com.waz.utils.{wrappers, _}
 import com.waz.utils.events.ActivityEventContext
 
 class EmptyTestActivity extends Activity with ActivityEventContext {
-  private implicit val Tag: LogTag = logTagFor[EmptyTestActivity]
   import com.waz.threading.Threading.Implicits.Ui
 
   lazy val btnCapture = findViewById(R.id.btnCapture).asInstanceOf[Button]

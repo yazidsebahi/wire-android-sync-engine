@@ -19,6 +19,7 @@ package com.waz.sync.client
 
 import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, Threading}
@@ -34,7 +35,6 @@ import scala.util.{Right, Try}
 class UsersClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
   import com.waz.sync.client.UsersClient._
-  private implicit val tag: LogTag = logTagFor[UsersClient]
 
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = {
 

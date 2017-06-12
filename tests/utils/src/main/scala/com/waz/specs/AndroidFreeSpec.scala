@@ -20,10 +20,11 @@ package com.waz.specs
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.LogTag
+import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
+import com.waz.{HockeyApp, HockeyAppUtil}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -46,7 +47,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     isTest = true
 
-    ZLog.setTestLogging()
+    InternalLog.reset()
+    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 

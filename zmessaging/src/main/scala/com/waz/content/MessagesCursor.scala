@@ -20,6 +20,7 @@ package com.waz.content
 import android.support.v4.util.LruCache
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.MessagesCursor.Entry
 import com.waz.db.{CursorIterator, Reader, ReverseCursorIterator}
 import com.waz.model._
@@ -209,7 +210,6 @@ class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val last
 }
 
 object MessagesCursor {
-  private implicit val tag: LogTag = "MessagesCursor"
   val WindowSize = 256
   val WindowMargin = WindowSize / 4
   val futureUnit = Future.successful(())
@@ -252,7 +252,6 @@ object MessagesCursor {
 
 class WindowLoader(cursor: DBCursor)(implicit dispatcher: SerialDispatchQueue) {
   import MessagesCursor._
-  private implicit val tag = logTagFor[WindowLoader]
 
   @volatile private[this] var window = IndexWindow.Empty
   @volatile private[this] var windowLoading = Future.successful(window)

@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.conversation.BaseConversation
 import com.waz.content.UsersStorageImpl
 import com.waz.model.ConversationData.ConversationType
@@ -33,7 +34,6 @@ class Conversation(override val id: ConvId, val initData: ConversationData = Con
   import Threading.Implicits.Background
 
   def this(data: ConversationData)(implicit ui: UiModule) = this(data.id, data)
-  private implicit val logTag: LogTag = logTagFor[Conversation]
   private var convIsOtto = false
 
   set(initData)

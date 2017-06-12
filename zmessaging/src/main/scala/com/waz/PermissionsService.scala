@@ -22,6 +22,7 @@ import java.util
 import android.content.Context
 import android.support.v4.content.ContextCompat
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Permission.Status
 import com.waz.api.Permission.Status._
 import com.waz.api.{Permission, PermissionProvider}
@@ -32,10 +33,8 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 
 class PermissionsService(context: Context) {
-  private implicit val logTag: LogTag = logTagFor[PermissionsService]
   private val providers = Signal(Vector.empty[PermissionProvider])
   private val providerSignal = providers.map(_.lastOption)
-
 
   def setProvider(p: PermissionProvider): Unit = {
     Threading.assertUiThread()

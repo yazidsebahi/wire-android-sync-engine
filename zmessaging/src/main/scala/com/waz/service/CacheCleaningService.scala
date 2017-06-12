@@ -20,6 +20,7 @@ package com.waz.service
 import java.lang.System._
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.CacheService
 import com.waz.content.GlobalPreferences
 import com.waz.content.GlobalPreferences.LastCacheCleanup
@@ -32,7 +33,6 @@ import scala.concurrent.duration._
 class CacheCleaningService(cache: CacheService, prefs: GlobalPreferences) {
   import CacheCleaningService._
   import Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[CacheCleaningService]
   private implicit val ec = EventContext.Global
 
   CancellableFuture.delayed(1.minute) { requestDeletionOfExpiredCacheEntries() }

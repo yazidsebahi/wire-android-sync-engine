@@ -20,6 +20,7 @@ package com.waz.sync.handler
 import android.content.Context
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
@@ -57,8 +58,6 @@ class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgCon
                           members: MembersStorageImpl, errors: ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
-
-  private implicit val logTag: LogTag = logTagFor[MessagesSyncHandler]
 
   def postDeleted(convId: ConvId, msgId: MessageId): Future[SyncResult] =
     convs.convById(convId) flatMap {

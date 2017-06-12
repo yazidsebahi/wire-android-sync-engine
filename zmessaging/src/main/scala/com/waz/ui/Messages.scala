@@ -20,6 +20,7 @@ package com.waz.ui
 import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.impl.Message
 import com.waz.model._
@@ -34,7 +35,6 @@ import scala.collection.Seq
 import scala.concurrent.Future
 
 class Messages(implicit module: UiModule) {
-  import Messages._
   import Threading.Implicits.Background
 
   val messages = new UiCache[MessageId, Message](lruSize = 50)
@@ -74,8 +74,4 @@ class Messages(implicit module: UiModule) {
   def updateLastRead(conv: ConvId, msg: MessageData) = module.zms.flatMapFuture(_.convsUi.setLastRead(conv, msg)).recoverWithLog(reportHockey = true)
 
   def retry(conv: ConvId, msg: MessageId): Unit = module.zms(_.messages.retryMessageSending(conv, msg)).future.recoverWithLog(reportHockey = true)
-}
-
-object Messages {
-  private implicit val logTag: LogTag = logTagFor[Messages]
 }

@@ -20,6 +20,7 @@ package com.waz.api.impl
 import java.util.{Collection, Locale}
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model._
 import com.waz.service.ContactsService.{TopContactsOnWire, UnifiedContacts}
 import com.waz.service.SearchKey
@@ -36,8 +37,6 @@ import scala.concurrent.duration._
 
 class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.Contacts with CoreList[api.Contact] with SignalLoading {
   import Contacts._
-
-  private implicit val logTag: LogTag = logTagFor[Contacts] + "@" + Integer.toHexString(hashCode)
 
   private val search = Signal(filtering.initial)
   private var content = Content(UnifiedContacts(Map.empty, Map.empty, Vector.empty, SeqMap.empty, TopContactsOnWire(Vector.empty, 0)), Vector.empty,

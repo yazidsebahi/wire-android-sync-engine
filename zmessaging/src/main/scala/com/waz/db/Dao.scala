@@ -18,7 +18,7 @@
 package com.waz.db
 
 import com.waz.ZLog
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor}
 import com.waz.utils.{Managed, returning}
 
@@ -108,8 +108,6 @@ abstract class DaoIdOps[T] extends BaseDao[T] {
 }
 
 abstract class BaseDao[T] extends Reader[T] {
-  private implicit val logTag: LogTag = logTagFor[BaseDao[T]]
-
   val table: Table[T]
 
   def onCreate(db: DB) = db.execSQL(table.createSql)

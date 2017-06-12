@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.KindOfSpotifyAccount
 import com.waz.api.Spotify.ConnectCallback
@@ -28,8 +29,6 @@ import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 
 class Spotify(implicit context: UiModule) extends api.Spotify with UiObservable with SignalLoading {
-  private implicit lazy val logTag: LogTag = logTagFor[Spotify]
-
   private var auth = Option.empty[Authentication]
 
   addLoader((_: ZMessaging).spotifyMedia.authentication)(setAuthentication)

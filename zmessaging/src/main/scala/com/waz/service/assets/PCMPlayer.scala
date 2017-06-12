@@ -26,6 +26,7 @@ import android.media.AudioManager.STREAM_MUSIC
 import android.media.AudioTrack
 import android.media.AudioTrack.{MODE_STREAM, OnPlaybackPositionUpdateListener, getMinBufferSize}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.service.assets.GlobalRecordAndPlayService.{MediaPointer, PCMContent}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import libcore.io.SizeOf
@@ -155,8 +156,6 @@ class PCMPlayer private (content: PCMContent, track: AudioTrack, totalSamples: L
 }
 
 object PCMPlayer {
-  private implicit val logTag: LogTag = logTagFor[PCMPlayer]
-
   def apply(content: PCMContent, observer: Player.Observer): Future[PCMPlayer] = Threading.BackgroundHandler.map { handler =>
     val track = new AudioTrack(STREAM_MUSIC, PCM.sampleRate, PCM.outputChannelConfig, PCM.sampleFormat, playerBufferSize, MODE_STREAM)
     verbose(s"created audio track; buffer size: $playerBufferSize")

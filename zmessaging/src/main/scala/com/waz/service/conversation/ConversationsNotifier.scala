@@ -18,6 +18,7 @@
 package com.waz.service.conversation
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ContentChange.{Added, Removed, Updated}
 import com.waz.content.{ContentChange, ConversationStorageImpl}
 import com.waz.model.{ConvId, ConversationData}
@@ -47,8 +48,6 @@ class ConversationsNotifier(convs: ConversationStorageImpl, service: Conversatio
 }
 
 object ConversationsNotifier {
-  implicit val tag: LogTag = logTagFor[ConversationsNotifier]
-
   val ConversationListOrdering = Ordering.by((c : ConversationData) => (c.convType == ConversationType.Self, c.lastEventTime)).reverse
   val ArchivedListOrdering = Ordering.by((c: ConversationData) => c.lastEventTime).reverse
 
@@ -76,9 +75,7 @@ object ConversationsNotifier {
 
     import com.waz.utils.events.EventContext.Implicits.global
 
-    implicit val tag: LogTag = logTagFor[SelfConversationSignal]
-
-    private implicit val dispatcher = new SerialDispatchQueue(name = tag)
+    private implicit val dispatcher = new SerialDispatchQueue(name = logTagFor[SelfConversationSignal])
 
     private val stream = new ConversationEventsEventStream(convs, { _.convType == ConversationType.Self })
     @volatile var observer = Option.empty[Subscription]

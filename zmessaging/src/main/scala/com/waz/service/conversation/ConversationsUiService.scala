@@ -18,6 +18,7 @@
 package com.waz.service.conversation
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.MessageContent.Asset.ErrorHandler
 import com.waz.api.MessageContent.Text
@@ -401,7 +402,5 @@ class ConversationsUiService(self:            UserId,
 }
 
 object ConversationsUiService {
-  private implicit val logTag: LogTag = logTagFor[ConversationsUiService]
-
   val LargeAssetWarningThresholdInBytes = 3145728L // 3MiB
 }

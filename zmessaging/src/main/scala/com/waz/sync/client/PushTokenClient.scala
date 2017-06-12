@@ -19,7 +19,6 @@ package com.waz.sync.client
 
 import com.waz.model.PushToken
 import com.waz.model.otr.ClientId
-import com.waz.service.push.PushTokenService.PushSenderId
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.SuccessHttpStatus

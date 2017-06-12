@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.ConversationStorageImpl
 import com.waz.model.GenericContent.LastRead
@@ -31,7 +32,6 @@ import scala.concurrent.Future
 
 class LastReadSyncHandler(selfUserId: UserId, convs: ConversationStorageImpl, metadata: MetaDataService, convSync: ConversationsSyncHandler, msgsSync: MessagesSyncHandler, otrSync: OtrSyncHandler) {
   import com.waz.threading.Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[LastReadSyncHandler]
 
   def postLastRead(convId: ConvId, time: Instant): Future[SyncResult] = {
     verbose(s"postLastRead($convId, $time)")

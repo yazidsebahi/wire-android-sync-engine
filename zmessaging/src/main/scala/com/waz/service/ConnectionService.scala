@@ -20,6 +20,7 @@ package com.waz.service
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
@@ -40,7 +41,6 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
                         messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
                         sync: SyncServiceHandle, scheduler: => EventScheduler) {
 
-  private implicit val logTag: LogTag = logTagFor[ConnectionService]
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
   import messages._

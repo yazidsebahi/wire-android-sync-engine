@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference
 import android.media.AudioRecord
 import android.media.AudioRecord._
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.Threading
 import com.waz.threading.Threading.BlockingIO
 import com.waz.utils._
@@ -46,7 +47,6 @@ trait PCMRecorder {
 
 object PCMRecorder {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[PCMRecorder]
 
   def startRecording(destination: File, maxDuration: FiniteDuration): PCMRecorder = {
     val limit = (maxDuration.toMillis * PCM.sampleRate) / 1000L

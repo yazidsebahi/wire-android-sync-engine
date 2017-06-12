@@ -19,6 +19,7 @@ package com.waz.znet
 
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, EmailCredentials, ErrorResponse}
 import com.waz.content.Preferences.Preference
 import com.waz.model.{AccountId, EmailAddress}
@@ -168,8 +169,6 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
 }
 
 object AuthenticationManager {
-  private implicit val logTag: LogTag = logTagFor[AuthenticationManager]
-
   val MaxRetryCount = 3
   val expireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
 

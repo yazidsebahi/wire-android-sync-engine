@@ -30,6 +30,7 @@ import android.provider.{BaseColumns, ContactsContract}
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.waz.PermissionsService
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Permission.READ_CONTACTS
 import com.waz.content.GlobalPreferences.ShareContacts
 import com.waz.content.UserPreferences._
@@ -425,7 +426,6 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 }
 
 object ContactsService {
-  private implicit val logTag: LogTag = logTagFor[ContactsService]
   val CurrentAddressBookVersion = 3
   val InitialContactsBatchSize = 101
 

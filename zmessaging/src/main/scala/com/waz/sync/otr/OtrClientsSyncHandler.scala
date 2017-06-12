@@ -20,6 +20,7 @@ package com.waz.sync.otr
 import android.content.Context
 import android.location.Geocoder
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ClientRegistrationState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
@@ -39,7 +40,6 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 
 class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, otrClients: OtrClientsService, storage: OtrClientsStorage, cryptoBox: CryptoBoxService, userPrefs: UserPreferences) {
-  import OtrClientsSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
   lazy val sessions = cryptoBox.sessions
@@ -201,6 +201,3 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
   }
 }
 
-object OtrClientsSyncHandler {
-  private implicit val tag: LogTag = logTagFor[OtrClientsSyncHandler]
-}

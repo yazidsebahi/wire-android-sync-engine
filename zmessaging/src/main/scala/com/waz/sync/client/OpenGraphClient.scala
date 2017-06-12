@@ -19,6 +19,7 @@ package com.waz.sync.client
 
 import com.koushikdutta.async.ByteBufferList
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.threading.CancellableFuture
 import com.waz.utils.wrappers.URI
@@ -81,7 +82,6 @@ class OpenGraphClient(netClient: ZNetClient) {
 }
 
 object OpenGraphClient {
-  private implicit val tag: LogTag = logTagFor[OpenGraphClient]
   val MaxHeaderLength = 16 * 1024 // maximum amount of data to load from website
   val DesktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
   val CookiePattern = """([^=]+)=([^\;]+)""".r

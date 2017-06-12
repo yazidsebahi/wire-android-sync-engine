@@ -28,6 +28,7 @@ import android.content.{Context, Intent}
 import android.net.wifi.WifiManager
 import com.typesafe.config.ConfigFactory
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.GlobalPreferences
 import com.waz.content.Preferences.PrefKey
 import com.waz.provision.RemoteProcessActor
@@ -45,7 +46,6 @@ class RemoteActorService(context: Context) {
   import Threading.Implicits.Background
   import android.os.Build._
   import com.waz.utils.events.EventContext.Implicits.global
-  private implicit val tag: LogTag = logTagFor[RemoteActorService]
   val prefs = GlobalPreferences(context)
 
   val background  = prefs.preference(PrefKey[Boolean]("background", false))

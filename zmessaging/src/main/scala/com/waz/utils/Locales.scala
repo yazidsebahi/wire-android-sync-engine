@@ -26,14 +26,13 @@ import android.annotation.TargetApi
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.{JELLY_BEAN_MR2, LOLLIPOP}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.service.ZMessaging
 
 import scala.annotation.tailrec
 import scala.util.Try
 
 object Locales {
-  private implicit val logTag: LogTag = logTagFor(Locales)
-
   def currentLocale =
     (for {
       context   <- Option(ZMessaging.context)
@@ -79,7 +78,7 @@ trait LanguageTags {
 @TargetApi(LOLLIPOP)
 object AndroidLanguageTags {
   def create(implicit logTag: LogTag): LanguageTags = new LanguageTags {
-    debug("using built-in Android language tag support")
+    debug("using built-in Android language tag support")(logTag)
     def languageTagOf(l: Locale): String = l.toLanguageTag
     def localeFor(t: String): Option[Locale] = Try(Locale.forLanguageTag(t)).toOption
   }
@@ -87,7 +86,7 @@ object AndroidLanguageTags {
 
 object FallbackLanguageTags {
   def create(implicit logTag: LogTag): LanguageTags = new LanguageTags {
-    debug("using fallback language tag support")
+    debug("using fallback language tag support")(logTag)
     def languageTagOf(l: Locale): String = {
       val language = if (l.getLanguage.nonEmpty) l.getLanguage else "und"
       val country = l.getCountry
@@ -112,7 +111,6 @@ trait Transliteration {
 }
 
 object Transliteration {
-  private implicit val logTag: LogTag = logTagFor(Transliteration)
   private val id = "Any-Latin; Latin-ASCII; Lower; [^\\ 0-9a-z] Remove"
   def chooseImplementation(id: String = id): Transliteration =
     if (Try(Class.forName("libcore.icu.Transliterator")).isSuccess) LibcoreTransliteration.create(id)
@@ -122,7 +120,7 @@ object Transliteration {
 @TargetApi(JELLY_BEAN_MR2)
 object LibcoreTransliteration {
   def create(id: String)(implicit logTag: LogTag): Transliteration = new Transliteration {
-    debug("using libcore transliteration")
+    debug("using libcore transliteration")(logTag)
     private val delegate = new libcore.icu.Transliterator(id)
     def transliterate(s: String): String = delegate.transliterate(s)
   }
@@ -130,7 +128,7 @@ object LibcoreTransliteration {
 
 object ICU4JTransliteration {
   def create(id: String)(implicit logTag: LogTag): Transliteration = new Transliteration {
-    debug("using ICU4J transliteration")
+    debug("using ICU4J transliteration")(logTag)
     private val delegate = com.ibm.icu.text.Transliterator.getInstance(id)
     def transliterate(s: String): String = delegate.transliterate(s)
   }
@@ -146,7 +144,7 @@ object LibcoreIndexing {
 
     private val delegate = new libcore.icu.AlphabeticIndex(locale).getImmutableIndex
 
-    verbose(s"using libcore indexing for locale $locale; buckets: ${delegate.getBucketCount}")
+    verbose(s"using libcore indexing for locale $locale; buckets: ${delegate.getBucketCount}")(logTag)
 
     override def labelFor(s: String): String = {
       val index = delegate.getBucketIndex(s)
@@ -180,7 +178,7 @@ object FallbackIndexing {
       if (block eq null) false else blocks(block)
     }
 
-    verbose(s"creating fallback indexing")(logTagFor(FallbackIndexing))
+    verbose(s"creating fallback indexing")
 
     @tailrec override def labelFor(s: String): String = {
       if (s.isEmpty) "#"

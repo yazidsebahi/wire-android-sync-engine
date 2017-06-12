@@ -18,6 +18,7 @@
 package com.waz.sync.queue
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.SyncState
 import com.waz.content._
 import com.waz.model.SyncId
@@ -39,7 +40,6 @@ import scala.concurrent.Future
 class SyncContentUpdater(storage: ZmsDatabase) {
   import EventContext.Implicits.global
 
-  private implicit val logTag: LogTag = logTagFor[SyncContentUpdater]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncContentUpdaterQueue")
 
   private val mergers = new mutable.HashMap[Any, SyncJobMerger]

@@ -20,7 +20,10 @@ package com.waz.api.impl
 import com.waz.{api, ZLog}
 
 object LogLevel {
-  val initialized = () == (if (! api.ZmsVersion.DEBUG) ZLog.minimumLogLevel = api.LogLevel.WARN.priority)
+  lazy val initialized = {
+    if (! api.ZmsVersion.DEBUG) setMinimumLogLevel(android.util.Log.WARN)
+    true
+  }
 
-  def setMinimumLogLevel(level: api.LogLevel): Unit = ZLog.minimumLogLevel = level.priority
+  def setMinimumLogLevel(level: Int): Unit = ZLog.minimumLogLevel = level
 }

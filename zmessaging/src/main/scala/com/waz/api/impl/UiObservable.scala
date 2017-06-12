@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.{Subscriber, Subscription, UpdateListener}
 import com.waz.service.{AccountService, ZMessaging}
 import com.waz.threading.Threading
@@ -25,8 +26,6 @@ import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
 
 trait UiObservable extends com.waz.api.UiObservable {
-  private implicit val logTag: LogTag = logTagFor[UiObservable]
-
   private val updateListeners = new ListenerList[UpdateListener]
 
   override def addUpdateListener(listener: UpdateListener): Unit = updateListeners.add(listener)

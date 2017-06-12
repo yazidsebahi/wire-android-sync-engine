@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
@@ -33,7 +34,6 @@ import scala.concurrent.Future
 
 class Accounts(val global: GlobalModule) {
 
-  import Accounts._
   implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
 
   private[waz] implicit val ec: EventContext = EventContext.Global
@@ -259,8 +259,3 @@ class Accounts(val global: GlobalModule) {
     }
   }
 }
-
-object Accounts {
-  private implicit val logTag: LogTag = logTagFor[Accounts]
-}
-

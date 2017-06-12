@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.OtrClientType
 import com.waz.sync.client._
 import com.waz.utils.{LoggedTry, returning}
@@ -29,7 +30,6 @@ import com.waz.utils.{LoggedTry, returning}
 import scala.util.Try
 
 class MetaDataService(context: Context) {
-  private implicit val logTag: LogTag = logTagFor[MetaDataService]
 
   lazy val metaData = LoggedTry {
     import scala.collection.JavaConverters._

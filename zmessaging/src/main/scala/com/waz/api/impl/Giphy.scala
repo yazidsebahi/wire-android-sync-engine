@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.model.AssetData
 import com.waz.service.media.GiphyService
@@ -26,7 +27,6 @@ import com.waz.ui.UiModule
 
 class Giphy(implicit ui: UiModule) extends com.waz.api.Giphy {
   import Threading.Implicits.Background
-  private implicit val tag = logTagFor[Giphy]
   
   override def random() = executeGiphyRequest((g, _, _) => g.getRandomGiphyImage)
 

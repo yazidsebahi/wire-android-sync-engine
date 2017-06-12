@@ -19,6 +19,7 @@ package com.waz.ui
 
 import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.bitmap
 import com.waz.model.AssetId
 import com.waz.threading.{CancellableFuture, Threading}
@@ -29,8 +30,6 @@ import com.waz.utils.wrappers.{Bitmap, Context}
 
 class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry]) {
   import MemoryImageCache._
-
-  private implicit val logTag: LogTag = logTagFor[MemoryImageCache]
 
   def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap] = Option(lru.get(Key(id, tag(req)))) flatMap {
     case BitmapEntry(bmp) if bmp.getWidth >= req.width || (imgWidth > 0 && bmp.getWidth > imgWidth) => Some(bmp)

@@ -22,6 +22,7 @@ import java.io.{File, InputStream}
 import android.graphics.BitmapFactory.Options
 import android.graphics.BitmapFactory
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.Bitmap
@@ -30,7 +31,6 @@ import com.waz.utils.wrappers
 class BitmapDecoder {
 
   private implicit lazy val dispatcher = Threading.ImageDispatcher
-  private implicit val logTag: LogTag = logTagFor[BitmapDecoder]
 
   def factoryOptions(sampleSize: Int) = returning(new Options) { opts =>
     opts.inSampleSize = sampleSize

@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.{ConversationStorageImpl, MessagesStorageImpl}
@@ -33,8 +34,6 @@ import scala.concurrent.Future
 
 class ClearedSyncHandler(convs: ConversationStorageImpl, convsContent: ConversationsContentUpdaterImpl, users: UserServiceImpl, msgs: MessagesStorageImpl, convSync: ConversationsSyncHandler, otrSync: OtrSyncHandler) {
   import com.waz.threading.Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[ClearedSyncHandler]
-
 
   // Returns actual timestamp to use for clear.
   // This is needed to take local (previously unsent) messages into account.

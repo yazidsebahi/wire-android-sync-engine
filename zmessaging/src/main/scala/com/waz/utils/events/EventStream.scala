@@ -20,6 +20,7 @@ package com.waz.utils.events
 import java.util.UUID.randomUUID
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.Events.Subscriber
 import com.waz.utils.{Serialized, returning}
@@ -102,7 +103,6 @@ class MapEventStream[E, V](source: EventStream[E], f: E => V) extends ProxyEvent
 }
 
 class FutureEventStream[E, V](source: EventStream[E], f: E => Future[V]) extends ProxyEventStream[E, V](source) {
-  import FutureEventStream._
   private val key = randomUUID()
 
   override protected[events] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit =
@@ -111,9 +111,6 @@ class FutureEventStream[E, V](source: EventStream[E], f: E => Future[V]) extends
       case Failure(t: NoSuchElementException) => // do nothing to allow Future.filter/collect
       case Failure(t) => error("async map failed", t)
     }(sourceContext.orElse(executionContext).getOrElse(Threading.Background)))
-}
-object FutureEventStream {
-  private implicit val logTag: LogTag = logTagFor(FutureEventStream)
 }
 
 class CollectEventStream[E, V](source: EventStream[E], pf: PartialFunction[E, V]) extends ProxyEventStream[E, V](source) {

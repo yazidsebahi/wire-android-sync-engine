@@ -20,6 +20,7 @@ package com.waz.mocked
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
@@ -55,7 +56,6 @@ import scala.concurrent.Future
 import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
-  private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
 
   @volatile private var pushService = Option.empty[PushServiceImpl]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]

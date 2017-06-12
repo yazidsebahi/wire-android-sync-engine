@@ -28,6 +28,7 @@ import com.coremedia.iso.boxes.{Box, TrackBox}
 import com.googlecode.mp4parser.FileDataSourceImpl
 import com.googlecode.mp4parser.util.{Matrix, Path}
 import com.waz.ZLog
+import com.waz.ZLog.ImplicitTag._
 import com.waz.utils.IoUtils
 import org.robolectric.annotation.{Implementation, Implements, Resetter}
 
@@ -87,7 +88,7 @@ class ShadowMediaMetadataRetriever2 {
       (tb.getWidth.toInt, tb.getHeight.toInt, rotation)
     }
 
-    ZLog.debug(s"getMeta, duration: $duration, dimens: $dimens")("ShadowMediaMetadataRetriever")
+    ZLog.debug(s"getMeta, duration: $duration, dimens: $dimens")
 
     Map(
       MediaMetadataRetriever.METADATA_KEY_DURATION -> duration.toMillis.toString,
@@ -100,13 +101,13 @@ class ShadowMediaMetadataRetriever2 {
   }
 
   @Implementation def setDataSource(path: String): Unit = {
-    ZLog.debug(s"getMeta, setDataSource $path")("ShadowMediaMetadataRetriever")
+    ZLog.debug(s"getMeta, setDataSource $path")
     meta = metadata.getOrElse(path, getMeta(new FileInputStream(path))).toMap
     frame = frames.getOrElse(path, Map.empty).toMap
   }
 
   @Implementation def setDataSource(context: Context, uri: Uri): Unit = {
-    ZLog.debug(s"getMeta, setDataSource $uri")("ShadowMediaMetadataRetriever")
+    ZLog.debug(s"getMeta, setDataSource $uri")
     meta = metadata.getOrElse(uri.toString, getMeta(context.getContentResolver.openInputStream(uri))).toMap
     frame = frames.getOrElse(uri.toString, Map.empty).toMap
   }

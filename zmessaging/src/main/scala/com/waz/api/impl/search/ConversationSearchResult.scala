@@ -18,6 +18,7 @@
 package com.waz.api.impl.search
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.IConversation
 import com.waz.api.impl.CoreList
@@ -28,7 +29,6 @@ import com.waz.utils.events.Signal
 
 class ConversationSearchResult(prefix: String, limit: Int, handleOnly: Boolean)(implicit ui: UiModule) extends api.ConversationSearchResult with CoreList[IConversation] with SignalLoading {
   import com.waz.threading.Threading.Implicits.Background
-  private implicit val tag = logTagFor[ConversationSearchResult]
 
   @volatile private var convs = Option.empty[Vector[ConvId]]
 

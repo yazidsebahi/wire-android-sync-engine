@@ -20,6 +20,7 @@ package com.waz.service.media
 import java.util.Locale
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message
 import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences.SpotifyRefreshToken
@@ -39,8 +40,6 @@ import scala.concurrent.Future
 class SpotifyMediaService(client: SpotifyClient, assets: AssetService, userPrefs: UserPreferences) {
   import SpotifyMediaService._
   import Threading.Implicits.Background
-
-  private implicit val logTag: LogTag = logTagFor[SpotifyMediaService]
 
   private val spotifyRefreshTokenPref = userPrefs.preference(SpotifyRefreshToken)
   private val accessToken = new SourceSignal[Option[AccessToken]](Some(None))
