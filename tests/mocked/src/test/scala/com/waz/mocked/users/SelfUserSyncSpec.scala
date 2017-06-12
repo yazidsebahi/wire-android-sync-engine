@@ -85,14 +85,6 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with OptionValues with 
     }
   }
 
-  override def postImageAssetData(asset: AssetData, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[RAssetId] = {
-    import Threading.Implicits.Background
-    def response(delay: FiniteDuration, id: String) = CancellableFuture.delayed(delay)(Right(RAssetId(id)))
-
-    if (asset.tag == "medium") response(2.seconds, "medium-picture")
-    else response(100.millis, "smallProfile-picture")
-  }
-
   override def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = {
     sentUserInfo = Some(info)
     super.updateSelf(info)

@@ -133,7 +133,6 @@ class UiModule(val accounts: Accounts) extends UiEventContext with ZMessagingRes
   lazy val messages: Messages = new Messages
   lazy val users: Users = new Users
   lazy val convs: Conversations = new Conversations()
-  lazy val channels = new Channels
   lazy val invitations = new Invitations(zms, convs, global.regClient)
   lazy val contactDetails = wire[ContactDetailsCache]
   lazy val assets = new UiCache[AssetId, Asset](10)(this)

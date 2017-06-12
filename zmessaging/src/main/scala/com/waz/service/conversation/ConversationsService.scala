@@ -25,7 +25,7 @@ import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences._
 import com.waz.content._
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
@@ -45,7 +45,7 @@ import scala.util.control.NoStackTrace
 
 class ConversationsService(context: Context, push: PushServiceSignals, users: UserServiceImpl, usersStorage: UsersStorageImpl,
                            messagesStorage: MessagesStorageImpl, membersStorage: MembersStorageImpl,
-                           convsStorage: ConversationStorageImpl, val content: ConversationsContentUpdaterImpl, listState: ConversationsListStateService,
+                           convsStorage: ConversationStorageImpl, val content: ConversationsContentUpdater, listState: ConversationsListStateService,
                            sync: SyncServiceHandle, errors: ErrorsService,
                            messages: MessagesServiceImpl, assets: AssetService, storage: ZmsDatabase,
                            msgContent: MessagesContentUpdater, userPrefs: UserPreferences, eventScheduler: => EventScheduler) {
@@ -53,7 +53,6 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   private implicit val tag: LogTag = logTagFor[ConversationsService]
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
-  import content._
   import messages._
   import users._
 
@@ -119,7 +118,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
       )}
 
     case ConversationEvent(rConvId, _, _) =>
-      convByRemoteId(rConvId) flatMap {
+      content.convByRemoteId(rConvId) flatMap {
         case Some(conv) => processUpdateEvent(conv, ev)
         case None if retryCount > 3 =>
           HockeyApp.saveException(new Exception("No conversation data found for event") with NoStackTrace, s"event: $ev")
@@ -131,19 +130,17 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
               createGroupConversationOnMemberJoin(rConvId, time.instant, from, members)
             case _ =>
               warn(s"No conversation data found for event: $ev on try: $retryCount")
-              processConvWithRemoteId(rConvId, retryAsync = true) { processUpdateEvent(_, ev) }
+              content.processConvWithRemoteId(rConvId, retryAsync = true) { processUpdateEvent(_, ev) }
           }
       }
   }
 
   private def processUpdateEvent(conv: ConversationData, ev: ConversationEvent): Future[Any] = ev match {
-    case RenameConversationEvent(_, time, _, name) => updateConversationName(conv.id, name, Some(time.instant))
+    case RenameConversationEvent(_, _, _, name) => content.updateConversationName(conv.id, name)
 
-    case MemberJoinEvent(convId, time, from, userIds, _) =>
-      def joined(updated: ConversationData) = ! conv.activeMember && updated.activeMember && updated.convType == ConversationType.Group
-
-      def ensureConvActive() = updateConversationStatus(conv.id, ConversationStatus.Active).map(_.map(_._2).filter(joined))
-        .flatMapSome(_ => sync.syncCallState(conv.id, fromFreshNotification = false).map(Some(_)))
+    case MemberJoinEvent(_, _, _, userIds, _) =>
+      def joined(updated: ConversationData) = !conv.isActive && updated.isActive && updated.convType == ConversationType.Group
+      def ensureConvActive() = content.setConvActive(conv.id, active = true).map(_.map(_._2).filter(joined))
 
       for {
         _        <- users.syncNotExistingOrExpired(userIds)
@@ -152,15 +149,15 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
         _        <- if (userIds.contains(selfUser)) ensureConvActive() else successful(None)
       } yield ()
 
-    case MemberLeaveEvent(convId, time, from, userIds) =>
+    case MemberLeaveEvent(_, _, _, userIds) =>
       membersStorage.remove(conv.id, userIds: _*) flatMap { _ =>
         withSelfUserFuture { selfUserId =>
-          if (userIds.contains(selfUserId)) updateConversationStatus(conv.id, ConversationStatus.Inactive)
+          if (userIds.contains(selfUserId)) content.setConvActive(conv.id, active = false)
           else successful(())
         }
       }
 
-    case MemberUpdateEvent(convId, time, from, state) => updateConversationState(conv.id, state)
+    case MemberUpdateEvent(_, _, _, state) => content.updateConversationState(conv.id, state)
 
     case ConnectRequestEvent(_, _, from, _, recipient, _, _) =>
       debug(s"ConnectRequestEvent(from = $from, recipient = $recipient")
@@ -176,10 +173,10 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   }
 
   private def createGroupConversationOnMemberJoin(remoteId: RConvId, time: Instant, from: UserId, members: Seq[UserId]) = {
-    insertConversation(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
+    convsStorage.insert(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
       membersStorage.add(conv.id, from +: members: _*) flatMap { ms =>
         addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
-          sync.syncConversations(Set(conv.id)) flatMap { _ => sync.syncCallState(conv.id, fromFreshNotification = false) }
+          sync.syncConversations(Set(conv.id))
           conv
         }
       }
@@ -195,7 +192,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
         case _ => ConversationData(ConvId(id.str), RConvId(id.str), None, id, ConversationType.Self)
       }
 
-      convById(selfConvId) flatMap {
+      content.convById(selfConvId) flatMap {
         case Some(c) => successful(Some(c))
         case _ => generateSelfConv(selfId).flatMap(conv => convsStorage.getOrCreate(selfConvId, conv).map(Some(_)))
       }
@@ -225,7 +222,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
       def findExistingId = convsStorage { (convById, remoteMap) =>
         def byRemoteId(id: RConvId) = returning(remoteMap.get(id).flatMap(convById.get)) { res => verbose(s"byRemoteId($id) - $res")}
 
-        convs map { case cr @ ConversationResponse(conv, members) =>
+        convs map { case ConversationResponse(conv, members) =>
           val newId = if (ConversationType.isOneToOne(conv.convType)) oneToOneLocalId(members, selfUserId) else conv.id
 
           val matching = byRemoteId(conv.remoteId).orElse {
@@ -257,7 +254,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
 
     def updateMembers() = Future.sequence(convs map {
         case ConversationResponse(conv, members) =>
-          convByRemoteId(conv.remoteId) flatMap {
+          content.convByRemoteId(conv.remoteId) flatMap {
             case Some(c) => membersStorage.set(c.id, selfUserId +: members.map(_.userId))
             case _ =>
               error(s"updateMembers() didn't find conv with given remote id for: $conv")
@@ -276,7 +273,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   }
 
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]] =
-    updateConversationArchived(id, archived) flatMap {
+    content.updateConversationArchived(id, archived) flatMap {
       case Some((_, conv)) =>
         sync.postConversationState(id, ConversationState(archived = Some(conv.archived), archiveTime = Some(conv.archiveTime))) map { _ => Some(conv) }
       case None =>

@@ -92,17 +92,9 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
   override def setEphemeralExpiration(expiration: EphemeralExpiration): Unit =
     ui.zms.flatMapFuture { _.convsUi.setEphemeral(id, expiration) }
 
-  override def isMemberOfConversation: Boolean = data.activeMember
-
-  override def getVoiceChannel: VoiceChannel = ui.channels.getVoiceChannel(id)
+  override def isMemberOfConversation: Boolean = data.isActive
 
   override def hasMissedCall: Boolean = data.missedCallMessage.isDefined
-
-  override def hasVoiceChannel: Boolean = data.hasVoice
-
-  override def hasUnjoinedCall: Boolean = data.unjoinedCall
-
-  override def isVoiceChannelMuted: Boolean = data.voiceMuted
 
   override def getUnreadCount: Int = data.unreadCount
 
@@ -121,7 +113,7 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 
   override def getBackground = ImageAsset.Empty
 
-  def isActive = data.activeMember
+  def isActive = data.isActive
 
   override def getVerified: Verification = data.verified
 

@@ -244,15 +244,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
       current should have size 59
     }
 
-    scenario("Process missed call event") {
-      delMessages(convId)
-      val event = VoiceChannelDeactivateEvent(RConvId(convId.str), new Date(), UserId(), Some("missed")).withCurrentLocalTime()
-
-      Await.ready(messages.processEvents(conv, Seq(event)), timeout)
-
-      listMessages(convId) shouldEqual List(MessageData(MessageId(), convId, Message.Type.MISSED_CALL, event.from, Nil, time = event.time.instant, localTime = event.localTime.instant, state = Status.SENT))
-    }
-
     lazy val assetId = AssetId()
 
     scenario("Receive initial file asset event") {
@@ -410,7 +401,7 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
 
     scenario("Notify messages list changed on message content type change") {
       val conv = ConvId()
-      Await.result(convsContent.insertConversation(new ConversationData(conv, RConvId(), None, UserId(), ConversationType.Group)), 1.second)
+      Await.result(convsStorage.insert(new ConversationData(conv, RConvId(), None, UserId(), ConversationType.Group)), 1.second)
       val msg = Await.result(messages.addTextMessage(conv, "Here is some text. https://www.youtube.com/watch?v=MWdG413nNkI"), 5.seconds)
       msg.msgType shouldEqual Message.Type.RICH_MEDIA
       msg.content shouldEqual Seq(MessageContent(TEXT, "Here is some text."), MessageContent(YOUTUBE, "https://www.youtube.com/watch?v=MWdG413nNkI"))

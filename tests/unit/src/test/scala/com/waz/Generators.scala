@@ -24,7 +24,7 @@ import java.util.{Date, Locale}
 
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
@@ -60,8 +60,8 @@ object Generators {
       resultOf(ContactJoinEvent),
       resultOf(MemberJoinEvent),
       resultOf(MemberLeaveEvent),
-      resultOf(RenameConversationEvent),
-      resultOf(VoiceChannelDeactivateEvent(_: RConvId, _: Date, _: UserId, MissedCallEvent.MissedCallReason)))
+      resultOf(RenameConversationEvent)
+    )
   }
 
   implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))
@@ -82,7 +82,7 @@ object Generators {
     lastEventTime <- arbitrary[Instant]
     team  <- arbitrary[Option[TeamId]]
     isManaged <- arbitrary[Option[Boolean]]
-    status <- arbitrary[Int]
+    isActive <- arbitrary[Boolean]
     muted <- arbitrary[Boolean]
     muteTime <- arbitrary[Instant]
     archived <- arbitrary[Boolean]
@@ -92,14 +92,10 @@ object Generators {
     searchKey = name map SearchKey
     unreadCount <- posNum[Int]
     failedCount <- posNum[Int]
-    hasVoice <- arbitrary[Boolean]
-    unjoinedCall <- arbitrary[Boolean]
     missedCall <- arbitrary[Option[MessageId]]
     incomingKnock <- arbitrary[Option[MessageId]]
-    renameEvent <- arbitrary[Instant]
-    voiceMuted <- arbitrary[Boolean]
     hidden <- arbitrary[Boolean]
-  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, Some(ConversationStatus(status)), Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, hasVoice, unjoinedCall, missedCall, incomingKnock, renameEvent, voiceMuted, hidden))
+  } yield ConversationData(id, remoteId, name, creator, convType, team, isManaged, lastEventTime, isActive, Instant.EPOCH, muted, muteTime, archived, archiveTime, cleared, generatedName, searchKey, unreadCount, failedCount, missedCall, incomingKnock, hidden))
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]
@@ -119,14 +115,6 @@ object Generators {
     displayName <- arbitrary[String]
     handle <- arbitrary[Option[Handle]]
   } yield UserData(id, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, syncTimestamp, displayName, handle = handle))
-
-  implicit lazy val arbRevision: Arbitrary[Revision] = Arbitrary(resultOf(Revision))
-  implicit lazy val arbCaptureDeviceData: Arbitrary[CaptureDeviceData] = Arbitrary(resultOf(CaptureDeviceData))
-  implicit lazy val arbVideoCallData: Arbitrary[VideoCallData] = Arbitrary(resultOf(VideoCallData))
-  implicit lazy val arbCallTrackingData: Arbitrary[CallTrackingData] = Arbitrary(resultOf(CallTrackingData))
-  implicit lazy val arbVoiceChannelData: Arbitrary[VoiceChannelData] = Arbitrary(resultOf(VoiceChannelData) map { data => data.copy(participantsById = data.participantsById.values.map(p => p.userId -> p).toMap) })
-
-  implicit lazy val arbVoiceParticipantData: Arbitrary[VoiceParticipantData] = Arbitrary(resultOf(VoiceParticipantData))
 
   implicit lazy val arbOpenGraphData: Arbitrary[OpenGraphData] = Arbitrary(resultOf(OpenGraphData))
 
@@ -202,7 +190,6 @@ object Generators {
       arbitrary[PostConnectionStatus]))
 
     implicit lazy val arbConvBasedSyncRequest: Arbitrary[RequestForConversation] = Arbitrary(oneOf(
-      arbitrary[SyncCallState],
       arbitrary[PostConv],
       arbitrary[PostConvName],
       arbitrary[PostConvState],
@@ -221,7 +208,6 @@ object Generators {
     implicit lazy val arbSelfPictureSyncRequest: Arbitrary[PostSelfPicture] = Arbitrary(resultOf(PostSelfPicture))
     implicit lazy val arbRichMediaSyncRequest: Arbitrary[SyncRichMedia] = Arbitrary(resultOf(SyncRichMedia))
     implicit lazy val arbGcmSyncRequest: Arbitrary[DeletePushToken] = Arbitrary(resultOf(DeletePushToken))
-    implicit lazy val arbCallStateSyncRequest: Arbitrary[SyncCallState] = Arbitrary(resultOf(SyncCallState))
     implicit lazy val arbPostConvSyncRequest: Arbitrary[PostConv] = Arbitrary(resultOf(PostConv))
     implicit lazy val arbPostLastReadRequest: Arbitrary[PostLastRead] = Arbitrary(resultOf(PostLastRead))
     implicit lazy val arbPostConvNameSyncRequest: Arbitrary[PostConvName] = Arbitrary(resultOf(PostConvName))

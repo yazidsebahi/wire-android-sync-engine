@@ -105,8 +105,10 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
           ct.copy(content = obfuscate(ct.content), openGraph = None) //TODO: asset and rich media
         }
         msg.copy(expired = true, content = content, protos = Seq(GenericMessage(msg.id.uid, Text(obfuscate(msg.contentString))))) // TODO: obfuscate links
-      case ASSET | ANY_ASSET | VIDEO_ASSET | AUDIO_ASSET =>
+      case VIDEO_ASSET | AUDIO_ASSET =>
         removeSource(msg)
+        msg.copy(expired = true)
+      case ASSET | ANY_ASSET => // other assets are removed in removeExpired
         msg.copy(expired = true)
       case LOCATION =>
         val (name, zoom) = msg.location.fold(("", 14)) { l => (obfuscate(l.getName), l.getZoom) }
@@ -116,7 +118,9 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
     }
   }
 
-  private def removeSource(msg: MessageData) = assets.removeSource(AssetId(msg.id.str))
+  private def removeSource(msg: MessageData): Unit = assets.getAssetData(AssetId(msg.id.str)).collect {
+    case Some(asset) if selfUserId == msg.userId => assets.removeSource(asset.id) // only on the sender side - the receiver side is handled in removeExpired
+  }
 
   // start expiration timer for ephemeral message
   def onMessageRead(id: MessageId) = storage.update(id, { msg =>

@@ -29,16 +29,13 @@ import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
-import com.waz.content.GlobalPreferences.CallingV3Key
 import com.waz.content.Preferences.PrefKey
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.VoiceChannelData.ChannelState
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
 import com.waz.service._
-import com.waz.testutils.CallJoinSpy
 import com.waz.testutils.Implicits.{CoreListAsScala, _}
 import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
 import com.waz.ui.UiModule
@@ -109,8 +106,6 @@ class DeviceActor(val deviceName: String,
   lazy val prefs = zmessaging.prefs
   lazy val convs = api.getConversations
   lazy val archived = convs.getArchivedConversations
-  lazy val channels = api.getActiveVoiceChannels
-  lazy val spy = new CallJoinSpy
   lazy val search = api.search()
 
   //Using a large value so that the test processes will always timeout first, and not the remotes
@@ -201,10 +196,6 @@ class DeviceActor(val deviceName: String,
         case None =>
           senderRef ! Failed("UserId cannot be null")
       }
-
-    case ResetChannel =>
-      Option(channels.getOngoingCall).foreach(_.leave())
-      sender() ! Successful
 
     case message@_ =>
       log.error(s"unknown remote api command '$message'")
@@ -485,36 +476,6 @@ class DeviceActor(val deviceName: String,
         Successful
       }
 
-    case SetCallingVersion(version) =>
-      (prefs.preference(CallingV3Key) := (if (version == 3) "2" else "0")).map(_ => Successful)
-
-    case AcceptCall =>
-      whenCallIncoming { channel =>
-        channel.join(spy.joinCallback)
-        Successful
-      }
-
-    case StartCall(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        prefs.preference(CallingV3Key).apply().map {
-          case "2" => zmessaging.calling.startCall(conv.id)
-          case __ => conv.getVoiceChannel.join(spy.joinCallback)
-        }
-        Successful
-      }
-
-    case Disconnect =>
-      waitUntil(channels)(_.hasOngoingCall) map { channels =>
-        channels.getOngoingCall.leave()
-        Successful
-      }
-
-    case WaitCalling =>
-      whenCallIncoming { _ => Successful }
-
-    case WaitDisconnected =>
-      waitUntil(channels)(channels => !channels.hasIncomingCall && !channels.hasOngoingCall) map { _ => Successful }
-
     case SetMessageReaction(remoteId, messageId, action) =>
       waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
         val messages = findConvById(remoteId).getMessages
@@ -593,12 +554,6 @@ class DeviceActor(val deviceName: String,
 
   def whenConversationsLoaded(task: ConversationsList => ActorMessage): Unit = {
     waitUntil(convs)(_.size > 0) map task
-  }
-
-  def whenCallIncoming(task: VoiceChannel => ActorMessage): Future[Any] = {
-    waitUntil(channels)(_.hasIncomingCall) flatMap { chs =>
-      waitUntil(chs.getIncomingCall)(channel => channel.getState == ChannelState.OtherCalling || channel.getState == ChannelState.OthersConnected)
-    } map task
   }
 
   def whenSelfLoaded(task: Self => ActorMessage): Future[Any] = {

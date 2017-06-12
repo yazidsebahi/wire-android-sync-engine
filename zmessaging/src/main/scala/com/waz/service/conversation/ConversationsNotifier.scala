@@ -49,7 +49,7 @@ class ConversationsNotifier(convs: ConversationStorageImpl, service: Conversatio
 object ConversationsNotifier {
   implicit val tag: LogTag = logTagFor[ConversationsNotifier]
 
-  val ConversationListOrdering = Ordering.by((c : ConversationData) => (c.convType == ConversationType.Self, c.hasVoice, c.lastEventTime)).reverse
+  val ConversationListOrdering = Ordering.by((c : ConversationData) => (c.convType == ConversationType.Self, c.lastEventTime)).reverse
   val ArchivedListOrdering = Ordering.by((c: ConversationData) => c.lastEventTime).reverse
 
   class ConversationEventsEventStream(convs: ConversationStorageImpl, filter: ConversationData => Boolean) extends events.EventStream[ContentChange[ConvId, _ <: ConversationData]] {

@@ -215,11 +215,16 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   private def onMembersLeft(teamId: TeamId, userIds: Set[UserId]) = {
     verbose(s"onTeamMembersLeft: team: $teamId, users: $userIds")
-    for {
-      _ <- teamMemberStorage.remove(userIds.map(u => u -> teamId))
-      _ <- removeUsersFromTeamConversations(teamId, userIds)
-      _ <- removeUnconnectedUsers(userIds)
-    } yield {}
+    if (userIds.contains(selfUser)) {
+      verbose("Self user removed from team - will now remove team locally")
+      onTeamsRemoved(Set(teamId))
+    } else {
+      for {
+        _ <- teamMemberStorage.remove(userIds.map(u => u -> teamId))
+        _ <- removeUsersFromTeamConversations(teamId, userIds)
+        _ <- removeUnconnectedUsers(userIds)
+      } yield {}
+    }
   }
 
   private def removeUsersFromTeamConversations(teamId: TeamId, users: Set[UserId]) = {

@@ -17,8 +17,6 @@
  */
 package com.waz.sync.client
 
-import java.io._
-
 import com.waz.api.ProvisionedApiSpec
 import com.waz.cache.LocalData
 import com.waz.model.AssetData.RemoteData
@@ -38,8 +36,6 @@ import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.util.Random
 
 class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ScalaFutures with DefaultPatienceConfig {
 
@@ -49,74 +45,6 @@ class AssetClientSpec extends FeatureSpec with Matchers with ProvisionedApiSpec 
   implicit lazy val ec = Threading.Background
 
   def client: AssetClient = zmessaging.assetClient
-
-  feature("sending") {
-
-    scenario("post image asset data") {
-      val imageData = IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin_128.png"))
-
-      val conversations = api.getConversations
-      withDelay(conversations should not be empty)
-
-      val c = ConvId(conversations.get(0).getId)
-      val assetId = AssetId()
-      val asset = new AssetData(metaData = Some(AssetMetaData.Image(Dim2(128, 128), Medium)), mime = Mime("image/png"), sizeInBytes = imageData.length, remoteId = Some(RAssetId()), data = Some(imageData))
-
-      val response = for {
-        conv <- zmessaging.convsStorage.get(c)
-        res <- client.postImageAssetData(asset, LocalData(imageData), convId = conv.get.remoteId)
-      } yield res
-
-      val res = Await.result(response, 20.seconds)
-      info(s"got response: $res")
-      res should be('right)
-      val Right(rId) = res
-      //TODO Dean: no longer makes sense...
-      rId shouldEqual asset.copy(data = None, remoteId = Some(rId))
-    }
-
-    scenario("post image asset") {
-      val image = IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))
-
-      val conversations = api.getConversations
-      withDelay(conversations should not be empty)
-
-      val c = conversations.get(0).asInstanceOf[com.waz.api.impl.Conversation].data.remoteId
-      val input = api.ui.images.createImageAssetFrom(image).asInstanceOf[com.waz.api.impl.LocalImageAsset]
-      val response = for {
-        asset <- zmessaging.assetGenerator.generateWireAsset(input.data, profilePicture = false).future
-        _ <- zmessaging.assets.updateAssets(Seq(asset))
-        conv <- zmessaging.convsStorage.getByRemoteId(c)
-        res <- {
-          awaitUi(1.second)
-          zmessaging.cache.getEntry(asset.cacheKey) flatMap {
-            case Some(entry) => client.postImageAssetData(asset, entry, convId = conv.get.remoteId)
-            case None => Future.successful(Left("meep"))
-          }
-        }
-      } yield res
-
-      val results = Await.result(response, 60.seconds)
-      results should be('right)
-    }
-
-    scenario("post multiple assets") {
-      val file = File.createTempFile("penguin", "png")
-      IoUtils.copy(new ByteArrayInputStream(randomArray(14793)), file)
-
-      val conversations = api.getConversations
-      withDelay(conversations should not be empty)
-      val c = conversations.get(0).asInstanceOf[com.waz.api.impl.Conversation].data.remoteId
-
-      for (i <- 0 to 10) {
-        withClue(i) {
-          Await.result(client.postImageAssetData(AssetData(metaData = Some(AssetMetaData.Image(Dim2(100, 100), Medium)), mime = Mime("image/png"), sizeInBytes = file.length().toInt, remoteId = Some(RAssetId())), LocalData(file), nativePush = false, c), 5.seconds) shouldBe 'right
-        }
-      }
-    }
-
-    def randomArray(size: Int) = returning(new Array[Byte](size))(Random.nextBytes)
-  }
 
   feature("assets v3 api") {
     lazy val image = IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))

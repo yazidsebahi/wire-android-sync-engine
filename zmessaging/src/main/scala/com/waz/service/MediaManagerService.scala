@@ -27,7 +27,7 @@ import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{EventContext, SourceSignal}
+import com.waz.utils.events.{EventContext, Signal, SourceSignal}
 import com.waz.utils._
 import com.waz.zms.R
 import org.json.JSONObject
@@ -38,6 +38,7 @@ import scala.util.Try
 
 trait MediaManagerService {
   def mediaManager: Option[MediaManager]
+  def soundIntensity: Signal[IntensityLevel]
 }
 
 class DefaultMediaManagerService(context: Context, prefs: GlobalPreferences) extends MediaManagerService {
@@ -69,16 +70,11 @@ class DefaultMediaManagerService(context: Context, prefs: GlobalPreferences) ext
   private lazy val prefSome = Try(context.getResources.getString(R.string.pref_sound_value_some)).getOrElse("some")
   private lazy val prefNone = Try(context.getResources.getString(R.string.pref_sound_value_none)).getOrElse("none")
 
-
   private lazy val intensityMap = Map(prefAll -> IntensityLevel.FULL, prefSome -> IntensityLevel.SOME, prefNone -> IntensityLevel.NONE)
 
-  private lazy val soundsPref = prefs.preference(SoundsPrefKey)
+  lazy val soundIntensity = prefs.preference(SoundsPrefKey).signal.map(value => intensityMap.getOrElse(value, IntensityLevel.FULL))
 
-  soundsPref.signal { value =>
-    val intensity = intensityMap.getOrElse(value, IntensityLevel.FULL)
-    verbose(s"setting intensity to: $intensity")
-    withMedia { _.setIntensity(intensity) }
-  }
+  soundIntensity { intensity => withMedia { _.setIntensity(intensity) } }
 
   lazy val audioConfig =
     LoggedTry(new JSONObject(IoUtils.asString(context.getAssets.open(AudioConfigAsset)))).toOption

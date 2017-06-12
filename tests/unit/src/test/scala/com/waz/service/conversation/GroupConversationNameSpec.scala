@@ -42,7 +42,7 @@ class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAnd
   lazy val user1 = UserData("user 1")
 
   lazy val time = System.currentTimeMillis() - 100
-  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group, renameEvent = Instant.ofEpochMilli(time)).withFreshSearchKey
+  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group).withFreshSearchKey
 
   implicit def db: DB = service.db.dbHelper.getWritableDatabase
 

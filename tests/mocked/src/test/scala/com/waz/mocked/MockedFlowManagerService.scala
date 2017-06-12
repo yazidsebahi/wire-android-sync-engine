@@ -20,10 +20,11 @@ package com.waz.mocked
 import android.content.Context
 import com.waz.api.VideoSendState
 import com.waz.content.GlobalPreferences
-import com.waz.model.{CallSessionId, CaptureDeviceData, RConvId, UserId}
+import com.waz.model.{CallSessionId, RConvId, UserId}
 import com.waz.service.call.DefaultFlowManagerService
 import com.waz.service.push.WebSocketClientService
 import com.waz.service.DefaultNetworkModeService
+import com.waz.service.call.FlowManagerService.VideoCaptureDevice
 import com.waz.threading.SerialDispatchQueue
 import com.waz.znet.ZNetClient
 
@@ -50,7 +51,7 @@ class MockedFlowManagerService(context: Context, netClient: ZNetClient, websocke
   override def releaseFlows(convId: RConvId): Future[Unit] = Future { currentFlows -= convId }
   override def canSendVideo(convId: RConvId): Boolean = convsThatCanSendVideo contains convId
   override def setVideoSendState(id: RConvId, state: VideoSendState): Future[Unit] = Future { convsThatSendVideo += id -> state }
-  override def getVideoCaptureDevices = Future.successful(Vector(CaptureDeviceData("front", "front-facing cam"), CaptureDeviceData("back", "back-facing cam")))
+  override def getVideoCaptureDevices = Future.successful(Vector(VideoCaptureDevice("front", "front-facing cam"), VideoCaptureDevice("back", "back-facing cam")))
   override def setVideoCaptureDevice(id: RConvId, deviceId: String): Future[Unit] = Future.successful { videoCaptureDeviceId += id -> deviceId }
 
   override lazy val flowManager = None

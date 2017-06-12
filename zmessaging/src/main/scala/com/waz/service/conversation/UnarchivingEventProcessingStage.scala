@@ -69,8 +69,6 @@ object UnarchivingEventProcessingStage {
   }
 
   private def unarchiveMuted(event: Event): Boolean = event match {
-    case _: VoiceChannelActivateEvent => true
-    case _: VoiceChannelDeactivateEvent => true
     case GenericMessageEvent(_, _, _, GenericMessage(_, _: Knock)) => true
     case _ => false
   }

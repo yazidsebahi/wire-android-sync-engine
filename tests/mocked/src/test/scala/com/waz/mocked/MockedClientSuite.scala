@@ -40,7 +40,6 @@ import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientKey, MessageResponse}
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.sync.client.VoiceChannelClient.JoinCallFailed
 import com.waz.sync.client._
 import com.waz.testutils.TestUserPreferences
 import com.waz.threading.CancellableFuture.successful
@@ -74,9 +73,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
 
-    override lazy val assetClient        = new AssetClientImpl(zNetClient) {
-      override def postImageAssetData(asset: AssetData, data: LocalData, nativePush: Boolean = true, convId: RConvId): ErrorOrResponse[RAssetId] = suite.postImageAssetData(asset, convId, data, nativePush)
-    }
+    override lazy val assetClient        = new AssetClientImpl(zNetClient)
 
     override lazy val usersClient        = new MockedUsersClient(zNetClient)
     override lazy val convClient         = new ConversationsClient(zNetClient) {
@@ -94,10 +91,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val eventsClient       = new EventsClient(zNetClient) {
       override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOrResponse[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
       override def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] = suite.loadLastNotification()
-    }
-    override lazy val voiceClient        = new VoiceChannelClient(zNetClient) {
-      override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = suite.loadCallState(id)
-      override def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent = CauseForCallStateEvent.REQUESTED): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = suite.updateSelfCallState(id, deviceState, cause)
     }
     override lazy val abClient           = new AddressBookClient(zNetClient) {
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
@@ -272,7 +265,6 @@ trait MockedClient { test: ApiSpec =>
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = successful(Right(IndexedSeq()))
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
   def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
-  def updateSelfCallState(id: RConvId, deviceState: CallDeviceState, cause: CauseForCallStateEvent): ErrorOrResponse[Either[JoinCallFailed, CallStateEvent]] = successful(Right(Right(CallStateEvent(id, Some(Set.empty), cause = cause))))
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
@@ -281,7 +273,6 @@ trait MockedClient { test: ApiSpec =>
   def postConversationState(convId: RConvId, state: ConversationState): ErrorOrResponse[Boolean] = successful(Right(true))
   def postName(convId: RConvId, name: String): ErrorOrResponse[Option[RenameConversationEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = successful(Right(None))
-  def postImageAssetData(asset: AssetData, convId: RConvId, data: LocalData, nativePush: Boolean): ErrorOrResponse[RAssetId] = successful(Left(ErrorResponse.internalError("not implemented")))
   def updateSelf(info: UserInfo): ErrorOrResponse[Unit] = successful(Right(()))
   def postMessage(convId: RConvId, msg: OtrMessage, ignoreMissing: Boolean): ErrorOrResponse[MessageResponse] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadOtrClients(): ErrorOrResponse[Seq[Client]] = successful(Right(Seq.empty))

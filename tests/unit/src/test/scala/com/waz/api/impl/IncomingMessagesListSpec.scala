@@ -157,6 +157,6 @@ class IncomingMessagesListSpec extends FeatureSpec with Matchers with BeforeAndA
 
   def createConv(muted: Boolean): ConversationData = {
     val conv = ConvId()
-    Await.result(service.convsContent.insertConversation(ConversationData(conv, RConvId(conv.str), None, UserId(), ConversationType.Group, muted = muted)), timeout)
+    Await.result(service.convsStorage.insert(ConversationData(conv, RConvId(conv.str), None, UserId(), ConversationType.Group, muted = muted)), timeout)
   }
 }

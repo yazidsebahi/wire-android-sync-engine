@@ -18,10 +18,10 @@
 package com.waz.service.conversation
 
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.content._
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.UserServiceImpl
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -39,16 +39,17 @@ trait ConversationsContentUpdater {
   def getOneToOneConversation(toUser: UserId, selfUserId: UserId, remoteId: Option[RConvId] = None, convType: ConversationType = ConversationType.OneToOne): Future[ConversationData]
   def updateConversation(id: ConvId, convType: Option[ConversationType] = None, hidden: Option[Boolean] = None): Future[Option[(ConversationData, ConversationData)]]
   def hideIncomingConversation(user: UserId): Future[Option[(ConversationData, ConversationData)]]
-  def hideConversation(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
-  def hideConversationOfUser(user: UserId): Future[Option[(ConversationData, ConversationData)]]
+  def setConversationHidden(id: ConvId, hidden: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A]
   def updateConversationLastRead(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationMuted(conv: ConvId, muted: Boolean): Future[Option[(ConversationData, ConversationData)]]
-  def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None): Future[Option[(ConversationData, ConversationData)]]
-  def setConversationStatusInactive(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationName(id: ConvId, name: String): Future[Option[(ConversationData, ConversationData)]]
+  def setConvActive(id: ConvId, active: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false, teamId: Option[TeamId] = None): Future[ConversationData]
+  def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
 }
 
 class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
@@ -66,25 +67,18 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
     }
   }
 
-  def convById(id: ConvId): Future[Option[ConversationData]] = storage.get(id)
+  override def convById(id: ConvId): Future[Option[ConversationData]] = storage.get(id)
 
-  def convByRemoteId(id: RConvId): Future[Option[ConversationData]] = storage.getByRemoteId(id)
+  override def convByRemoteId(id: RConvId): Future[Option[ConversationData]] = storage.getByRemoteId(id)
 
-  def isGroupConversation(id: ConvId) = convById(id).map(_.exists(_.convType == ConversationType.Group))
-
-  def insertConversation(conv: ConversationData) = storage.insert(conv)
-
-  override def updateConversationName(id: ConvId, name: String, time: Option[Instant] = None) = storage.update(id, { conv =>
-      if (conv.convType == ConversationType.Group && time.forall(_ >= conv.renameEvent))
-        conv.copy(name = if (name.isEmpty) None else Some(name), renameEvent = time.getOrElse(conv.renameEvent))
+  override def updateConversationName(id: ConvId, name: String) = storage.update(id, { conv =>
+      if (conv.convType == ConversationType.Group)
+        conv.copy(name = if (name.isEmpty) None else Some(name))
       else
         conv
     })
 
-  override def setConversationStatusInactive(id: ConvId) = storage.update(id, _.copy(status = Some(ConversationStatus.Inactive)))
-
-  def updateConversationStatus(id: ConvId, status: ConversationStatus) = storage.update(id, { _.copy(status = Some(status))
-  })
+  override def setConvActive(id: ConvId, active: Boolean) = storage.update(id, { _.copy(isActive = active)})
 
   override def updateConversationArchived(id: ConvId, archived: Boolean) = storage.update(id, { c =>
     c.copy(archived = archived, archiveTime = c.lastEventTime)
@@ -104,7 +98,7 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
     conv.withCleared(time).withLastRead(time)
   })
 
-  def updateConversationState(id: ConvId, state: ConversationState) = storage.update(id, { conv =>
+  override def updateConversationState(id: ConvId, state: ConversationState) = storage.update(id, { conv =>
     verbose(s"updateConversationState($conv, state: $state)")
 
     val (archived, archiveTime) = state match {
@@ -120,7 +114,7 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
     conv.copy(archived = archived, archiveTime = archiveTime, muted = muted, muteTime = muteTime)
   })
 
-  def updateLastEvent(id: ConvId, time: Instant) = storage.update(id, { conv =>
+  override def updateLastEvent(id: ConvId, time: Instant) = storage.update(id, { conv =>
     verbose(s"updateLastEvent($conv, $time)")
 
     if (conv.lastEventTime.isAfter(time)) conv
@@ -130,17 +124,13 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
     }
   })
 
-  def updateConversation(id: ConvId, convType: Option[ConversationType] = None, hidden: Option[Boolean] = None) =
+  override def updateConversation(id: ConvId, convType: Option[ConversationType] = None, hidden: Option[Boolean] = None) =
     storage.update(id, { conv =>
       if (convType.forall(_ == conv.convType) && hidden.forall(_ == conv.hidden)) conv
       else conv.copy(convType = convType.getOrElse(conv.convType), hidden = hidden.getOrElse(conv.hidden))
     })
 
-  def hideConversation(id: ConvId) = updateConversationHidden(id, hidden = true)
-
-  def unhideConversation(id: ConvId) = updateConversationHidden(id, hidden = false)
-
-  private def updateConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
+  override def setConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
 
   override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false, teamId: Option[TeamId] = None) =
     for {
@@ -154,7 +144,6 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
           convType      = convType,
           generatedName = NameUpdater.generatedName(convType)(user),
           hidden        = hidden,
-          status        = Some(ConversationStatus.Active),
           team          = teamId,
           isManaged     = teamId.map(_ => false)))
       _    <- addConversationMembers(convId, selfUserId, members)
@@ -170,12 +159,12 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
    * Will not post created conversation to backend.
    * TODO: improve - it looks too complicated and duplicates some code
    */
-  def getOneToOneConversation(toUser: UserId, selfUserId: UserId, remoteId: Option[RConvId] = None, convType: ConversationType = ConversationType.OneToOne) =
+  override def getOneToOneConversation(toUser: UserId, selfUserId: UserId, remoteId: Option[RConvId] = None, convType: ConversationType = ConversationType.OneToOne) =
     Serialized.future(('getOneToOneConversation, toUser)) {
       verbose(s"getOneToOneConversation($toUser, self: $selfUserId, remote: $remoteId, convType: $convType")
       val convId = ConvId(toUser.str)
 
-      def createConversation() = createConversationWithMembers(convId, remoteId.getOrElse(RConvId(toUser.str)), convType, selfUserId, Seq(toUser), false)
+      def createConversation() = createConversationWithMembers(convId, remoteId.getOrElse(RConvId(toUser.str)), convType, selfUserId, Seq(toUser))
 
       storage.get(convId) flatMap { localConv =>
         if (remoteId.forall(r => localConv.exists(_.remoteId == r)))
@@ -193,11 +182,9 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
       }
     }
 
-  def hideIncomingConversation(user: UserId) = storage.update(ConvId(user.str), { conv =>
+  override def hideIncomingConversation(user: UserId) = storage.update(ConvId(user.str), { conv =>
     if (conv.convType == ConversationType.Incoming) conv.copy(hidden = true) else conv
   })
-
-  def hideConversationOfUser(user: UserId) = storage.update(ConvId(user.str), _.copy(hidden = true))
 
   /**
    * Helper for event processing. Can be used whenever some event processing needs to access conversation by remoteId,
@@ -206,7 +193,7 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
    *
    * @param retryAsync - true if retry should be executed asynchronously, this should be used when executing from some ProcessingQueue, using delays in processing queue will block it
    */
-  def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A] = {
+  override def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A] = {
 
     def retry() = CancellableFuture.delay(ConversationsService.RetryBackoff.delay(retryCount)).future .flatMap { _ =>
       processConvWithRemoteId(remoteId, retryAsync = false, retryCount + 1)(processor)(tag, ec)

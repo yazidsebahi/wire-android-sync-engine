@@ -87,8 +87,6 @@ trait ZMessagingApi {
 
   def getIncomingMessages: IncomingMessagesList
 
-  def getActiveVoiceChannels: ActiveVoiceChannels
-
   def getUser(id: String): User
 
   def getMediaManager: MediaManager

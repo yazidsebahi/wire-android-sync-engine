@@ -133,10 +133,6 @@ case class MemberUpdateEvent(convId: RConvId, time: Date, from: UserId, state: C
 
 case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent with ConversationOrderEvent
 
-case class VoiceChannelEvent(convId: RConvId, time: Date, from: UserId, oldCount: Int, newCount: Int) extends ConversationEvent with ConversationOrderEvent
-case class VoiceChannelActivateEvent(convId: RConvId, time: Date, from: UserId) extends ConversationEvent with UnarchivingEvent
-case class VoiceChannelDeactivateEvent(convId: RConvId, time: Date, from: UserId, reason: Option[String]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
-
 sealed trait CallEvent extends Event {
   val convId: RConvId
 }
@@ -290,12 +286,6 @@ object Event {
   }
 }
 
-object MissedCallEvent {
-  val MissedCallReason = Some("missed")
-
-  def unapply(e: VoiceChannelDeactivateEvent): Option[(RConvId, Date, UserId)] = if (e.reason == MissedCallReason) Some((e.convId, e.time, e.from)) else None
-}
-
 object UserConnectionEvent {
   implicit lazy val Decoder: JsonDecoder[UserConnectionEvent] = new JsonDecoder[UserConnectionEvent] {
     override def apply(implicit js: JSONObject): UserConnectionEvent = EventDecoder.connectionEvent(js, name = None)
@@ -326,9 +316,6 @@ object ConversationEvent {
         case "conversation.member-leave" => MemberLeaveEvent('conversation, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-update" => MemberUpdateEvent('conversation, 'time, 'from, ConversationState.Decoder(data.get))
         case "conversation.connect-request" => ConnectRequestEvent('conversation, 'time, 'from, decodeString('message)(data.get), decodeUserId('recipient)(data.get), decodeString('name)(data.get), decodeOptString('email)(data.get))
-        case "conversation.voice-channel" => VoiceChannelEvent('conversation, 'time, 'from, decodeInt('old_member_count)(data.get), decodeInt('new_member_count)(data.get))
-        case "conversation.voice-channel-activate" => VoiceChannelActivateEvent('conversation, 'time, 'from)
-        case "conversation.voice-channel-deactivate" => VoiceChannelDeactivateEvent('conversation, 'time, 'from, data.flatMap(d => decodeOptString('reason)(d)))
         case "conversation.typing" => TypingEvent('conversation, 'time, 'from, isTyping = data.fold(false)(data => decodeString('status)(data) == "started"))
         case "conversation.otr-message-add" => otrMessageEvent('conversation, 'time, 'from)(data.get)
           //TODO remove after v2 transition period is over - no more clients should be sending v2

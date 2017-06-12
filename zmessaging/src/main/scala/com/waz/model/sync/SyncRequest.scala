@@ -111,10 +111,6 @@ object SyncRequest {
 
   sealed abstract class RequestForConversation(cmd: SyncCommand) extends BaseRequest(cmd) with ConversationReference
 
-  case class SyncCallState(convId: ConvId, fromFreshNotification: Boolean) extends RequestForConversation(Cmd.SyncCallState) {
-    override def merge(req: SyncRequest) = mergeHelper[SyncCallState](req)(other => Merged(other.copy(fromFreshNotification = fromFreshNotification || other.fromFreshNotification)))
-  }
-
   case class PostConv(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]) extends RequestForConversation(Cmd.PostConv) with SerialExecutionWithinConversation {
     override def merge(req: SyncRequest) = mergeHelper[PostConv](req)(Merged(_))
   }
@@ -304,7 +300,6 @@ object SyncRequest {
           case Cmd.SyncUser              => SyncUser(users)
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
-          case Cmd.SyncCallState         => SyncCallState(convId, fromFreshNotification = false)
           case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team)
           case Cmd.PostConvName          => PostConvName(convId, 'name)
           case Cmd.PostConvState         => PostConvState(convId, JsonDecoder[ConversationState]('state))
@@ -435,7 +430,6 @@ object SyncRequest {
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncTeams(teams) =>
           o.put("teams", arrString(teams.toSeq.map(_.str)))
-        case SyncCallState(_, _) => () // nothing to do
         case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }

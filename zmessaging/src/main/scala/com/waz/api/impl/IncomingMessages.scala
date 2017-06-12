@@ -19,7 +19,7 @@ package com.waz.api.impl
 
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.IncomingMessagesList.{KnockListener, MessageListener}
+import com.waz.api.IncomingMessagesList.MessageListener
 import com.waz.model.MessageData
 import com.waz.service.messages.MessageAndLikes
 import com.waz.ui._
@@ -31,7 +31,6 @@ class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingM
   private implicit val logTag: LogTag = logTagFor[IncomingMessages]
 
   private var listeners = List[MessageListener]()
-  private var knockListeners = List[KnockListener]()
   private var messages = Array[(MessageData, Int)]()
   private var lastMessageTime = Instant.EPOCH
 
@@ -48,16 +47,9 @@ class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingM
         verbose(s"calling listeners for new message: $msg")
         val message = context.messages.cachedOrUpdated(MessageAndLikes(msg, Vector.empty, likedBySelf = false))
         listeners.foreach(_.onIncomingMessage(message))
-        if (msg.msgType == api.Message.Type.KNOCK) {
-          knockListeners.foreach(_.onKnock(message))
-        }
     }
     lastMessageTime = data.lastOption.fold(lastMessageTime)(_.localTime)
   }
-
-  override def addKnockListener(listener: KnockListener): Unit = knockListeners ::= listener
-
-  override def removeKnockListener(listener: KnockListener): Unit = knockListeners = knockListeners.filter(_ != listener)
 
   override def addMessageListener(listener: MessageListener): Unit = listeners ::= listener
 

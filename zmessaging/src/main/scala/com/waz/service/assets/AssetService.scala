@@ -195,7 +195,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
   def removeAssets(ids: Iterable[AssetId]): Future[Unit] = Future.traverse(ids)(removeSource).flatMap(_ => storage.remove(ids))
 
   def removeSource(id: AssetId): Future[Unit] = storage.get(id)
-    .collect { case Some(asset) => asset.source }
+    .collect { case Some(asset) if asset.isVideo || asset.isAudio => asset.source }
     .collect { case Some(source) => new File(source.getPath) }
     .collect { case file if file.exists() => file.delete() }
 

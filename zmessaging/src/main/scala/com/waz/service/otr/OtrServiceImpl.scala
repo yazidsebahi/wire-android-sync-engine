@@ -18,7 +18,6 @@
 package com.waz.service.otr
 
 import java.io._
-import java.security.SecureRandom
 import javax.crypto.Mac
 
 import com.waz.HockeyApp
@@ -295,8 +294,6 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
 }
 
 object OtrService {
-
-  val random = new SecureRandom
 
   val EncryptionFailedMsg = "\uD83D\uDCA3".getBytes("utf8")
 

@@ -20,7 +20,7 @@ package com.waz.model
 import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
 import com.waz.db.{Dao, Dao2}
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.service.SearchKey
 import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
@@ -32,31 +32,25 @@ case class ConversationData(id:                   ConvId,
                             name:                 Option[String],
                             creator:              UserId,
                             convType:             ConversationType,
-                            team:                 Option[TeamId] = None,
-                            isManaged:            Option[Boolean] = None,
-                            lastEventTime:        Instant = Instant.EPOCH,
-                            status:               Option[ConversationStatus] = None,
-                            lastRead:             Instant = Instant.EPOCH,
-                            muted:                Boolean = false,
-                            muteTime:             Instant = Instant.EPOCH,
-                            archived:             Boolean = false,
-                            archiveTime:          Instant = Instant.EPOCH,
-                            cleared:              Instant = Instant.EPOCH,
-                            generatedName:        String = "",
-                            searchKey:            Option[SearchKey] = None,
-                            unreadCount:          Int = 0,
-                            failedCount:          Int = 0,
-                            hasVoice:             Boolean = false,
-                            unjoinedCall:         Boolean = false,
-                            missedCallMessage:    Option[MessageId] = None,
-                            incomingKnockMessage: Option[MessageId] = None,
-                            renameEvent:          Instant = Instant.EPOCH,
-                            voiceMuted:           Boolean = false,
-                            hidden:               Boolean = false,
-                            verified:             Verification = Verification.UNKNOWN,
+                            team:                 Option[TeamId]      = None,
+                            isManaged:            Option[Boolean]     = None,
+                            lastEventTime:        Instant             = Instant.EPOCH,
+                            isActive:             Boolean             = true,
+                            lastRead:             Instant             = Instant.EPOCH,
+                            muted:                Boolean             = false,
+                            muteTime:             Instant             = Instant.EPOCH,
+                            archived:             Boolean             = false,
+                            archiveTime:          Instant             = Instant.EPOCH,
+                            cleared:              Instant             = Instant.EPOCH,
+                            generatedName:        String              = "",
+                            searchKey:            Option[SearchKey]   = None,
+                            unreadCount:          Int                 = 0,
+                            failedCount:          Int                 = 0,
+                            missedCallMessage:    Option[MessageId]   = None,
+                            incomingKnockMessage: Option[MessageId]   = None,
+                            hidden:               Boolean             = false,
+                            verified:             Verification        = Verification.UNKNOWN,
                             ephemeral:            EphemeralExpiration = EphemeralExpiration.NONE) {
-
-  def activeMember = status.contains(ConversationStatus.Active)
 
   def displayName = if (convType == ConversationType.Group) name.getOrElse(generatedName) else generatedName
 
@@ -72,24 +66,21 @@ case class ConversationData(id:                   ConvId,
 
   def updated(d: ConversationData): Option[ConversationData] = {
     val ct = if (ConversationType.isOneToOne(convType) && d.convType != ConversationType.OneToOne) convType else d.convType
-    val st = if (d.status.isDefined) d.status else status
-    val nameSource = if (d.renameEvent.isAfter(renameEvent)) d else this
 
     val updated = copy(
       remoteId = d.remoteId,
-      name = nameSource.name,
+      name = d.name,
       creator = d.creator,
       team = d.team,
       convType = ct,
       lastEventTime = lastEventTime max d.lastEventTime,
-      status = st,
+      isActive = d.isActive,
       lastRead = lastRead max d.lastRead,
       muted = d.muted,
       muteTime = d.muteTime,
       archived = d.archived,
       cleared = cleared max d.cleared,
-      renameEvent = nameSource.renameEvent,
-      searchKey = nameSource.searchKey)
+      searchKey = d.searchKey)
 
     if (updated == this) None else Some(updated)
   }
@@ -102,32 +93,17 @@ case class ConversationMemberData(userId: UserId, convId: ConvId)
 
 object ConversationData {
 
-  sealed trait ConversationStatus {
-    val value: Int
-  }
-  object ConversationStatus {
-    case object Active extends ConversationStatus {
-      override val value: Int = 0
-    }
-    case object Inactive extends ConversationStatus {
-      override val value: Int = 1
-    }
-
-    def apply(value: Int): ConversationStatus = if (value == 0) Active else Inactive
-  }
-
   val Empty = ConversationData(ConvId(), RConvId(), None, UserId(), IConversation.Type.UNKNOWN)
 
   // total (!) ordering for use in ordered sets; handwritten (instead of e.g. derived from tuples) to avoid allocations
   implicit val ConversationDataOrdering: Ordering[ConversationData] = new Ordering[ConversationData] {
     override def compare(b: ConversationData, a: ConversationData): Int =
       if (a.id == b.id) 0
-      else if (a.hasVoice == b.hasVoice || a.unjoinedCall == b.unjoinedCall) {
+      else {
         val c = a.lastEventTime.compareTo(b.lastEventTime)
         if (c != 0) c
         else a.id.str.compareTo(b.id.str)
       }
-      else if (a.hasVoice) 1 else if (b.hasVoice) -1 else if (a.unjoinedCall) 1 else -1
   }
 
   type ConversationType = IConversation.Type
@@ -149,34 +125,30 @@ object ConversationData {
   implicit lazy val Decoder: JsonDecoder[ConversationData] = new JsonDecoder[ConversationData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): ConversationData = ConversationData(
-      id = 'id,
-      remoteId = 'remoteId,
-      name = decodeOptString('name),
-      creator = 'creator,
-      convType = ConversationType('convType),
-      team = decodeOptId[TeamId]('team),
-      isManaged = decodeOptBoolean('is_managed),
-      lastEventTime = decodeInstant('lastEventTime),
-      status = decodeOptInt('status).map(ConversationStatus(_)),
-      lastRead = decodeInstant('lastReadTime),
-      muted = 'muted,
-      muteTime = decodeInstant('muteTime),
-      archived = 'archived,
-      archiveTime = decodeInstant('archiveTime),
-      cleared = decodeInstant('cleared),
-      generatedName = 'generatedName,
-      searchKey = decodeOptString('name) map SearchKey,
-      unreadCount = 'unreadCount,
-      failedCount = 'failedCount,
-      hasVoice = 'hasVoice,
-      unjoinedCall = 'unjoinedCall,
-      missedCallMessage = decodeOptMessageId('missedCallMessage),
+      id                   = 'id,
+      remoteId             = 'remoteId,
+      name                 = decodeOptString('name),
+      creator              = 'creator,
+      convType             = ConversationType('convType),
+      team                 = decodeOptId[TeamId]('team),
+      isManaged            = decodeOptBoolean('is_managed),
+      lastEventTime        = decodeInstant('lastEventTime),
+      isActive             = decodeBool('is_active),
+      lastRead             = decodeInstant('lastReadTime),
+      muted                = 'muted,
+      muteTime             = decodeInstant('muteTime),
+      archived             = 'archived,
+      archiveTime          = decodeInstant('archiveTime),
+      cleared              = decodeInstant('cleared),
+      generatedName        = 'generatedName,
+      searchKey            = decodeOptString('name) map SearchKey,
+      unreadCount          = 'unreadCount,
+      failedCount          = 'failedCount,
+      missedCallMessage    = decodeOptMessageId('missedCallMessage),
       incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
-      renameEvent = decodeInstant('renameEventTime),
-      voiceMuted = 'voiceMuted,
-      hidden = 'hidden,
-      verified = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
-      ephemeral = EphemeralExpiration.getForMillis(decodeLong('ephemeral))
+      hidden               = 'hidden,
+      verified             = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
+      ephemeral            = EphemeralExpiration.getForMillis(decodeLong('ephemeral))
     )
   }
 
@@ -190,7 +162,7 @@ object ConversationData {
       c.team.foreach(v => o.put("team", v.str))
       c.isManaged.foreach(v => o.put("is_managed", v))
       o.put("lastEventTime", c.lastEventTime.toEpochMilli)
-      c.status.foreach(status => o.put("status", status.value))
+      o.put("is_active", c.isActive)
       o.put("lastReadTime", c.lastRead.toEpochMilli)
       o.put("muted", c.muted)
       o.put("muteTime", c.muteTime.toEpochMilli)
@@ -200,12 +172,8 @@ object ConversationData {
       o.put("generatedName", c.generatedName)
       o.put("unreadCount", c.unreadCount)
       o.put("failedCount", c.failedCount)
-      o.put("hasVoice", c.hasVoice)
-      o.put("unjoinedCall", c.unjoinedCall)
       c.missedCallMessage foreach (id => o.put("missedCallMessage", id.str))
       c.incomingKnockMessage foreach (id => o.put("incomingKnockMessage", id.str))
-      o.put("renameEventTime", c.renameEvent.toEpochMilli)
-      o.put("voiceMuted", c.voiceMuted)
       o.put("hidden", c.hidden)
       o.put("trusted", c.verified)
       o.put("ephemeral", c.ephemeral.milliseconds)
@@ -217,11 +185,11 @@ object ConversationData {
     val RemoteId      = id[RConvId]('remote_id).apply(_.remoteId)
     val Name          = opt(text('name))(_.name.filterNot(_.isEmpty))
     val Creator       = id[UserId]('creator).apply(_.creator)
+    val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
     val Team          = opt(id[TeamId]('team))(_.team)
     val IsManaged     = opt(bool('is_managed))(_.isManaged)
-    val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
     val LastEventTime = timestamp('last_event_time)(_.lastEventTime)
-    val Status        = opt(int[ConversationStatus]('status, _.value, ConversationStatus(_)))(_.status)
+    val IsActive      = bool('is_active)(_.isActive)
     val LastRead      = timestamp('last_read)(_.lastRead)
     val Muted         = bool('muted)(_.muted)
     val MutedTime     = timestamp('mute_time)(_.muteTime)
@@ -232,20 +200,16 @@ object ConversationData {
     val SKey          = opt(text[SearchKey]('search_key, _.asciiRepresentation, SearchKey.unsafeRestore))(_.searchKey)
     val UnreadCount   = int('unread_count)(_.unreadCount)
     val FailedCount   = int('unsent_count)(_.failedCount)
-    val HasVoice      = bool('has_voice)(_.hasVoice)
-    val UnjoinedCall  = bool('unjoined_call)(_.unjoinedCall)
+    val Hidden        = bool('hidden)(_.hidden)
     val MissedCall    = opt(id[MessageId]('missed_call))(_.missedCallMessage)
     val IncomingKnock = opt(id[MessageId]('incoming_knock))(_.incomingKnockMessage)
-    val RenameEvent   = timestamp('rename_event_time)(_.renameEvent)
-    val VoiceMuted    = bool('voice_muted)(_.voiceMuted)
-    val Hidden        = bool('hidden)(_.hidden)
     val Verified      = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
     val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, VoiceMuted, Hidden, MissedCall, IncomingKnock, RenameEvent, UnjoinedCall, Verified, Ephemeral)
+    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, IsActive, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, Hidden, MissedCall, IncomingKnock, Verified, Ephemeral)
 
-    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, Status, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, HasVoice, UnjoinedCall, MissedCall, IncomingKnock, RenameEvent, VoiceMuted, Hidden, Verified, Ephemeral)
+    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, IsActive, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, MissedCall, IncomingKnock, Hidden, Verified, Ephemeral)
 
     import com.waz.model.ConversationData.ConversationType._
 
@@ -258,12 +222,12 @@ object ConversationData {
       s"""SELECT *
          |  FROM ${table.name}
          | WHERE (${ConvType.name} = ${ConvType(ConversationType.OneToOne)} OR ${ConvType.name} = ${ConvType(ConversationType.Group)})
-         |   AND ${Status.name} = ${ConversationStatus.Active.value}
+         |   AND ${IsActive.name} = ${IsActive(true)}
          |   AND ${Hidden.name} = 0
       """.stripMargin, null))
 
     def allConversations(implicit db: DB) =
-      db.rawQuery(s"SELECT *, ${ConvType.name} = ${Self.id} as is_self, ${ConvType.name} = ${Incoming.id} as is_incoming, ${Archived.name} = 1 as is_archived FROM ${table.name} WHERE ${Hidden.name} = 0 ORDER BY is_self DESC, ${HasVoice.name} DESC, is_archived ASC, is_incoming DESC, ${LastEventTime.name} DESC", null)
+      db.rawQuery(s"SELECT *, ${ConvType.name} = ${Self.id} as is_self, ${ConvType.name} = ${Incoming.id} as is_incoming, ${Archived.name} = 1 as is_archived FROM ${table.name} WHERE ${Hidden.name} = 0 ORDER BY is_self DESC, is_archived ASC, is_incoming DESC, ${LastEventTime.name} DESC", null)
 
     import ConversationMemberData.{ConversationMemberDataDao => CM}
     import UserData.{UserDataDao => U}
@@ -277,7 +241,7 @@ object ConversationData {
             |   AND c.${ConvType.name} = ${ConvType(ConversationType.Group)}
             |   AND c.${Hidden.name} = ${Hidden(false)}
             |   AND u.${U.Id.name} != '${U.Id(self)}'
-            |   AND (c.${Cleared.name} < c.${LastEventTime.name} OR c.${Status.name} = ${ConversationStatus.Active.value})""".stripMargin
+            |   AND (c.${Cleared.name} < c.${LastEventTime.name} OR c.${IsActive.name} = ${IsActive(true)})""".stripMargin
       val handleCondition =
         if (handleOnly){
           s"""AND u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin

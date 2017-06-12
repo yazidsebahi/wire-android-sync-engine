@@ -17,7 +17,6 @@
  */
 package com.waz.testutils
 
-import com.waz.api.VoiceChannel.Participant
 import com.waz.api.{CoreList, IConversation, User, Contact}
 import com.waz.api.impl
 import com.waz.model._
@@ -35,7 +34,6 @@ object HasId {
 
   implicit val ConversationDataHasId = new HasId[ConversationData] { type Id = ConvId; def idOf(a: ConversationData) = a.id }
   implicit val IConversationHasId = new HasId[IConversation] { type Id = ConvId; def idOf(a: IConversation) = ConvId(a.getId) }
-  implicit val ParticipantHasId = new HasId[Participant] { type Id = UserId; def idOf(a: Participant) = UserId(a.getUser.getId) }
   implicit val UserInfoHasId = new HasId[UserInfo] { type Id = UserId; def idOf(a: UserInfo) = a.id }
   implicit val UserHasId = new HasId[User] { type Id = UserId; def idOf(a: User) = UserId(a.getId) }
   implicit val ContactHasId = new HasId[Contact] {

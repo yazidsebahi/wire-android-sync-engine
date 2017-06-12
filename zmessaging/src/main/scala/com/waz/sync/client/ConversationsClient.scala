@@ -18,11 +18,11 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
-import com.waz.model.ConversationData.{ConversationStatus, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
-import com.waz.utils.{Json, JsonDecoder, JsonEncoder, RichOption, returning}
+import com.waz.utils.{Json, JsonDecoder, JsonEncoder, returning}
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
@@ -122,12 +122,7 @@ object ConversationsClient {
     import com.waz.utils.JsonDecoder._
 
     def memberDecoder(convId: ConvId) = new JsonDecoder[Option[ConversationMemberData]] {
-      override def apply(implicit js: JSONObject) = {
-        if (decodeOptInt('status).forall(s => ConversationStatus(s) == ConversationStatus.Active))
-          Some(ConversationMemberData('id, convId))
-        else
-          None
-      }
+      override def apply(implicit js: JSONObject) = Some(ConversationMemberData('id, convId))
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
@@ -142,22 +137,13 @@ object ConversationsClient {
           decodeISOInstant('last_event_time)
         )
       }
-
-      val status = {
-        implicit val jsObj = self
-        decodeOptInt('status)
-      }
-
-      val renameEvt = if (convType == ConversationType.Group) lastEventTime else Instant.EPOCH
       val state = ConversationState.Decoder(self)
+      //TODO Teams: how do we tell if a conversation is managed, currently defaulting to false
       val isManaged = team.map(_ => false)
 
-      //TODO Teams: how do we tell if a conversation is managed, currently defaulting to false
       ConversationData(
-        ConvId(id.str), id, name filterNot (_.isEmpty), creator, convType, team, isManaged,
-        lastEventTime, status.fold2(Some(ConversationStatus.Active), i => Some(ConversationStatus(i))),
-        Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime), renameEvent = renameEvt
-      )
+        ConvId(id.str), id, name filterNot (_.isEmpty), creator, convType, team, isManaged, lastEventTime, isActive = true,
+        Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime))
     }
 
     implicit lazy val Decoder: JsonDecoder[ConversationResponse] = new JsonDecoder[ConversationResponse] {
@@ -167,9 +153,7 @@ object ConversationsClient {
         debug(s"decoding response: $js")
         val members = js.getJSONObject("members")
         val self = members.getJSONObject("self")
-
         val conversation = conversationData(js, self)
-
         ConversationResponse(conversation, array(members.getJSONArray("others"))(memberDecoder(conversation.id)).flatten)
       }
     }

@@ -17,20 +17,20 @@
  */
 package com.waz.service.call
 
-import android.content.Context
+import android.content.Context.TELEPHONY_SERVICE
 import android.telephony.{PhoneStateListener, TelephonyManager}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.Context
 
-class VoiceChannelGsmService(voice: VoiceChannelService, callingService: CallingService) {
-  import voice._
+class GsmInterruptService(context: Context, callingService: CallingService) {
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = Threading.Ui
-  private implicit val logTag: LogTag = logTagFor[VoiceChannelGsmService]
 
-  private lazy val telephonyManager = context.getSystemService[TelephonyManager](Context.TELEPHONY_SERVICE)
+  private lazy val telephonyManager = context.getSystemService[TelephonyManager](TELEPHONY_SERVICE)
 
   private var listening = false
 
@@ -49,10 +49,7 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
     }
   }
 
-  (for {
-    hasContent <- content.activeChannel.map(_.isDefined)
-    v3call <- callingService.currentCall.map(_.isDefined)
-  } yield hasContent || v3call).on(dispatcher) {
+  callingService.currentCall.map(_.isDefined).on(dispatcher) {
     case false => stopListening()
     case true =>
       if (hasGsmCall) {
@@ -61,9 +58,7 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
       }
       else startListening()
   }
-
-  voice.content.activeChannels.map(_.incoming.headOption).on(dispatcher)(_ foreach { _ => if (hasGsmCall) dropWireCalls() })
-
+  
   private def startListening() = if (!listening) {
     info("startListening")
     telephonyManager.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
@@ -78,8 +73,6 @@ class VoiceChannelGsmService(voice: VoiceChannelService, callingService: Calling
 
   def hasGsmCall = telephonyManager.getCallState == TelephonyManager.CALL_STATE_OFFHOOK
 
-  def dropWireCalls() = {
-    interruptActiveVoiceChannels()
-    callingService.onInterrupted()
-  }
+  def dropWireCalls() = callingService.onInterrupted()
+
 }

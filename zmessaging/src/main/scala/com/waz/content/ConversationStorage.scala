@@ -17,13 +17,12 @@
  */
 package com.waz.content
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.Verification
 import com.waz.api.Verification.UNKNOWN
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationData.ConversationType.Group
-import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model._
 import com.waz.service.SearchKey
 import com.waz.threading.SerialDispatchQueue
@@ -97,7 +96,7 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
 
   private val init = for {
     convs <- find[ConversationData, Vector[ConversationData]](_ => true, db => ConversationDataDao.iterating(ConversationDataDao.listCursor(db)), identity)
-    updater = (c: ConversationData) => c.copy(hasVoice = false, unjoinedCall = false, searchKey = c.savedOrFreshSearchKey) // on initial app start, no calls are assumed to be ongoing or even unjoined
+    updater = (c: ConversationData) => c.copy(searchKey = c.savedOrFreshSearchKey)
     convUpdates <- updateAll2(convs.map(_.id), updater)
   } yield {
     val updated = convs map updater
