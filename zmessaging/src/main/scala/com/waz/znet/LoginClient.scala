@@ -55,7 +55,7 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
 
   def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = throttled(loginNow(accountId, credentials))
 
-  def access(cookie: Cookie, token: Option[Token]) = throttled(accessNow(cookie, token))
+  def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = throttled(accessNow(cookie, token))
 
   def throttled(request: => CancellableFuture[LoginResult]): CancellableFuture[LoginResult] = dispatcher {
     loginFuture = loginFuture.recover {

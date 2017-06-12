@@ -113,6 +113,33 @@ class Accounts(val global: GlobalModule) {
     currentAccountPref := acc.fold("")(_.str)
   }
 
+  /**
+    * Logs out of the current account and switches to another specified by the AccountId. If the other cannot be authorized
+    * (no cookie) or if anything else goes wrong, we leave the user logged out so they'll be prompted for details again.
+    */
+  def switchAccount(accountId: AccountId) = {
+    verbose(s"switchAccount: $accountId")
+    for {
+      cur      <- getCurrent.map(_.map(_.id))
+      if !cur.contains(accountId)
+      _        <- logout()
+      account  <- storage.get(accountId).collect { case Some(a) if a.cookie.isDefined => a }
+      _        <- setAccount(Some(account.id))
+      _        <- getInstance(account)
+      _   <- loginClient.access(account.cookie.get, account.accessToken).future.flatMap {
+        case Right((token, cookieOpt)) =>
+          verbose(s"Account successfully switched. Got token: ${token.accessToken.take(5)} and cookie: ${cookieOpt.map(_.str.take(5))}")
+          storage.update(accountId, _.copy(accessToken = Some(token), cookie = cookieOpt.orElse(account.cookie)))
+        case Left((_, ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
+          verbose(s"access request failed (label: $label, message: $message), leaving user logged out")
+          Future.successful({})
+        case Left((_, err)) =>
+          error(s"Access failed with unexpected error, leaving user logged out: $err")
+          Future.successful({})
+      }
+    } yield {}
+  }
+
   private def switchAccount(credentials: Credentials) = {
     verbose(s"switchAccount($credentials)")
     for {
