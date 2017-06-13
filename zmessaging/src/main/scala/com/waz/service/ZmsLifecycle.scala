@@ -21,6 +21,8 @@ import com.waz.ZLog._
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 
+import scala.concurrent.Future
+
 class ZmsLifecycle extends EventContext {
   private implicit val logTag: LogTag = logTagFor[ZmsLifecycle]
 
@@ -58,6 +60,24 @@ class ZmsLifecycle extends EventContext {
   def releaseSync(source: String = ""): Unit = release('sync, syncCount > 0, syncCount -= 1, source)
   def releasePush(source: String = ""): Unit = release('push, pushCount > 0, pushCount -= 1, source)
   def releaseUi(source: String = ""): Unit = release('ui, uiCount > 0, uiCount -= 1, source)
+
+  def withSync[Result](body: => Future[Result])(implicit source: LogTag = ""): Future[Result] =
+    withStateCounter(acquireSync(source), releaseSync(source))(body)
+
+  def withPush[Result](body: => Future[Result])(implicit source: LogTag = ""): Future[Result] =
+    withStateCounter(acquirePush(source), releasePush(source))(body)
+
+  def withUi[Result](body: => Future[Result])(implicit source: LogTag = ""): Future[Result] =
+    withStateCounter(acquireUi(source), releaseUi(source))(body)
+
+  private def withStateCounter[Result](acquire: => Unit, release: => Unit)(body: => Future[Result]): Future[Result] = {
+    import Threading.Implicits.Background
+    for {
+      _ <- Future(acquire)(Threading.Ui)
+      result <- body
+      _ <- Future(release)(Threading.Ui)
+    } yield result
+  }
 
   private def release(name: Symbol, predicate: => Boolean, action: => Unit, source: String): Unit = {
     Threading.assertUiThread()

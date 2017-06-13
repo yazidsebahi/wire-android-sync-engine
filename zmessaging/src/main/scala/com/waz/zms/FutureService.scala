@@ -22,14 +22,16 @@ import android.content.Intent
 import android.os.IBinder
 import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog._
-import com.waz.service.ZMessaging
+import com.waz.ZLog.ImplicitTag._
+import com.waz.model.AccountId
+import com.waz.service.{AccountService, ZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils.WakeLock
 
 import scala.concurrent.Future
+import scala.util.control.NoStackTrace
 
 abstract class FutureService extends Service {
-  private implicit val logTag: LogTag = logTagFor[FutureService]
 
   protected lazy val wakeLock = new WakeLock(getApplicationContext)
 
@@ -58,8 +60,47 @@ abstract class FutureService extends Service {
 }
 
 trait ZMessagingService extends Service {
+  import ZMessagingService._
+  import Threading.Implicits.Background
+
   final abstract override def onCreate(): Unit = {
     super.onCreate()
     ZMessaging.onCreate(getApplicationContext)
   }
+
+  private lazy val wakeLock = new WakeLock(getApplicationContext)
+  private def accounts = ZMessaging.currentAccounts
+
+  def onAccountIntent[Result](intent: Intent)(execute: AccountService => Future[Result]): Future[Result] = wakeLock.async {
+    if (intent != null && intent.hasExtra(ZmsUserIdExtra)) {
+      val userId = AccountId(intent.getStringExtra(ZmsUserIdExtra))
+      accounts.getInstance(userId) flatMap {
+        case Some(acc) => execute(acc)
+        case None =>
+          error(s"zmessaging not available")
+          Future.failed(NoAccountException(userId))
+      }
+    } else {
+      error("intent has no ZUserId extra")
+      Future.failed(InvalidIntentException)
+    }
+  }
+
+  def onZmsIntent[Result](intent: Intent)(execute: ZMessaging => Future[Result]): Future[Result] =
+    onAccountIntent(intent) { acc =>
+      acc.getZMessaging flatMap {
+        case Some(zms) => execute(zms)
+        case None =>
+          error(s"zmessaging not available")
+          Future.failed(NoZMessagingException(acc.id))
+      }
+    }
+}
+
+object ZMessagingService {
+  val ZmsUserIdExtra = "zms_user_id"
+
+  case object InvalidIntentException extends Exception(s"Invalid ZMessagingService intent") with NoStackTrace
+  case class NoZMessagingException(id: AccountId) extends Exception(s"ZMessaging instance not available with id: $id") with NoStackTrace
+  case class NoAccountException(id: AccountId) extends Exception(s"AccountService instance not available with id: $id") with NoStackTrace
 }
