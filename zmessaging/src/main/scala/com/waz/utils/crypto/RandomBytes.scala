@@ -22,6 +22,8 @@ import java.security.SecureRandom
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 
+import scala.util.Try
+
 class RandomBytes {
   RandomBytes.ensureLibraryLoaded()
 
@@ -35,9 +37,13 @@ class RandomBytes {
     */
   def apply(count: Int) : Array[Byte] = {
     val buffer = Array.ofDim[Byte](count)
-    if (!randomBytes(buffer, count)) {
-      warn(s"Libsodium failed to generate $count random bytes. Falling back to SecureRandom")
-      random.nextBytes(buffer)
+
+    Try(randomBytes(buffer, count)).toOption match {
+      case Some(true) => // woop woop, all good
+      case _ => {
+        warn(s"Libsodium failed to generate $count random bytes. Falling back to SecureRandom")
+        random.nextBytes(buffer)
+      }
     }
     buffer
   }
@@ -48,7 +54,10 @@ class RandomBytes {
 
 object RandomBytes {
 
-  private val loadLibrary = { System.loadLibrary("randombytes") }
+  private val loadLibrary = Try {
+    System.loadLibrary("sodium")
+    System.loadLibrary("randombytes")
+  }
 
   private def ensureLibraryLoaded() = loadLibrary
 
