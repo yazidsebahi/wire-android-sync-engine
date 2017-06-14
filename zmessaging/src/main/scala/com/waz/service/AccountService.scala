@@ -260,7 +260,8 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   def clearEmail(): ErrorOr[Unit] =
     credentialsClient.clearEmail().future.flatMap {
       case Left(err) => Future successful Left(err)
-      case Right(_) => accountsStorage.update(id, _.copy(email = None)) .map(_ => Right(()))
+      case Right(_)  => updateSelfAccountAndUser(_.copy(email = None), _.copy(email = None)).map(_ => Right({}))
+
     }
 
   def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] = credentialsClient.updatePhone(phone)
@@ -268,7 +269,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   def clearPhone(): ErrorOr[Unit] =
     credentialsClient.clearPhone().future.flatMap {
       case Left(err) => Future successful Left(err)
-      case Right(_) => accountsStorage.update(id, _.copy(phone = None)) .map(_ => Right(()))
+      case Right(_)  => updateSelfAccountAndUser(_.copy(phone = None), _.copy(phone = None)).map(_ => Right({}))
     }
 
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
@@ -283,15 +284,22 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   def updateHandle(handle: Handle): ErrorOr[Unit] =
     credentialsClient.updateHandle(handle).future.flatMap {
       case Left(err) => Future successful Left(err)
-      case Right(_) => accountsStorage.update(id, _.copy(handle = Some(handle))) .map(_ => Right(()))
+      case Right(_)  => updateSelfAccountAndUser(_.copy(handle = Some(handle)), _.copy(handle = Some(handle))).map(_ => Right({}))
     }
+
+  private def updateSelfAccountAndUser(acc: AccountData => AccountData, user: UserData => UserData) = {
+    for {
+      _         <- accountsStorage.update(id, acc)
+      Some(zms) <- getZMessaging
+      _         <- zms.usersStorage.update(zms.selfUserId, user)
+    } yield {}
+  }
 
   def updatePrivateMode(privateMode: Boolean): ErrorOrResponse[Unit] =
     account.userId match {
       case Some(uId) => usersClient.updateSelf(UserInfo(uId, privateMode = Some(privateMode)))
       case _ => CancellableFuture(Left(ErrorResponse.internalError("User info hasn't been loaded yet")))
     }
-
 
   private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
