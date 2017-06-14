@@ -256,6 +256,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   }
 
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] = credentialsClient.updateEmail(email)
+
   def clearEmail(): ErrorOr[Unit] =
     credentialsClient.clearEmail().future.flatMap {
       case Left(err) => Future successful Left(err)
@@ -263,11 +264,13 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
     }
 
   def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] = credentialsClient.updatePhone(phone)
+
   def clearPhone(): ErrorOr[Unit] =
     credentialsClient.clearPhone().future.flatMap {
       case Left(err) => Future successful Left(err)
       case Right(_) => accountsStorage.update(id, _.copy(phone = None)) .map(_ => Right(()))
     }
+
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
     credentialsClient.updatePassword(newPassword, currentPassword).future flatMap {
       case Left(err) => Future successful Left(err)
@@ -276,7 +279,12 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
           getZMessaging map { _ => Right(()) }
         }
     }
-  def updateHandle(handle: Handle): ErrorOrResponse[Unit] = credentialsClient.updateHandle(handle)
+
+  def updateHandle(handle: Handle): ErrorOr[Unit] =
+    credentialsClient.updateHandle(handle).future.flatMap {
+      case Left(err) => Future successful Left(err)
+      case Right(_) => accountsStorage.update(id, _.copy(handle = Some(handle))) .map(_ => Right(()))
+    }
 
   def updatePrivateMode(privateMode: Boolean): ErrorOrResponse[Unit] =
     account.userId match {
