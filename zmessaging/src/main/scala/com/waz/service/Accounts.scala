@@ -24,7 +24,7 @@ import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
@@ -46,6 +46,14 @@ class Accounts(val global: GlobalModule) {
   val phoneNumbers  = global.phoneNumbers
   val regClient     = global.regClient
   val loginClient   = global.loginClient
+
+  val accounts = {
+    val changes = EventStream.union(
+      storage.onChanged.map(_.map(_.id)),
+      storage.onDeleted
+    )
+    new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
+  }
 
   val currentAccountPref = prefs.preference(CurrentAccountPref)
 
