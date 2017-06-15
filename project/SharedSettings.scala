@@ -19,7 +19,7 @@ object SharedSettings {
   val avsVersion = "2.8.61"
   val audioVersion = "1.195.0"
   val RobolectricVersion = "5.0.0_r2-robolectric-1"
-  val supportLibVersion = "24.2.0"
+  val supportLibVersion = "25.4.0"
   val cryptoboxVersion = "1.0.0"
 
   object Deps {

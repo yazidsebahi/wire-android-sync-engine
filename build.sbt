@@ -40,7 +40,8 @@ resolvers in ThisBuild ++= Seq(
   "Maven central 1" at "http://repo1.maven.org/maven2",
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
   "Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases",
-  "Localytics" at "http://maven.localytics.com/public"
+  "Localytics" at "http://maven.localytics.com/public",
+  "Google Maven repo" at "https://maven.google.com"
 )
 
 
@@ -239,7 +240,7 @@ lazy val testapp = project.in(file("tests") / "app")
       "com.google.android.gms" % "play-services-gcm" % "7.8.0",
       Deps.localytics,
       "junit" % "junit" % "4.12" % Test,
-      "com.android.support" % "support-annotations" % "24.2.0" % Test,
+      "com.android.support" % "support-annotations" % supportLibVersion % Test,
       "com.android.support.test" % "runner" % "0.5" % Test,
       "com.android.support.test" % "rules" % "0.5" % Test
     )
