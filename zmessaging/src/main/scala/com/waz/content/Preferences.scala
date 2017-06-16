@@ -276,7 +276,7 @@ object GlobalPreferences {
   lazy val DownloadImagesWifi         = "wifi"
   lazy val DownloadImages             = PrefKey[String]("zms_pref_image_download", customDefault = DownloadImagesAlways) // hardcoded value used in tests
 
-
+  lazy val GPSErrorDialogShowCount    = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 }
 
 object UserPreferences {

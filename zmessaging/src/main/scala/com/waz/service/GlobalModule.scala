@@ -40,11 +40,11 @@ import scala.concurrent.Future
 
 
 class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
+  val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
-  val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend)
+  val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
 
   lazy val storage:             Database                         = new GlobalDatabase(context)
-  lazy val prefs:               GlobalPreferences                = GlobalPreferences(context)
   lazy val metadata:            MetaDataService                  = wire[MetaDataService]
   lazy val cache:               CacheService                     = CacheService(context, storage)
   lazy val bitmapDecoder:       BitmapDecoder                    = wire[BitmapDecoder]
