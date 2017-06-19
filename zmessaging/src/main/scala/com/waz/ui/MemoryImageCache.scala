@@ -49,6 +49,8 @@ class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry])
     Option(lru.get(key)) getOrElse lru.put(key, EmptyEntry(size))
   }
 
+  def clear(): Unit = lru.evictAll()
+
   def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[ABitmap]): CancellableFuture[ABitmap] =
     get(id, req, imgWidth) match {
       case Some(bitmap) =>
