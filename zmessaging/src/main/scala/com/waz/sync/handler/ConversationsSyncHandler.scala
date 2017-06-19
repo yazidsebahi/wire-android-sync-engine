@@ -20,6 +20,7 @@ package com.waz.sync.handler
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MessagesStorageImpl
@@ -48,7 +49,6 @@ class ConversationsSyncHandler(assetSync: AssetSyncHandler,
 
   import Threading.Implicits.Background
   import com.waz.sync.handler.ConversationsSyncHandler._
-  private implicit val tag: LogTag = logTagFor[ConversationsSyncHandler]
   private implicit val ec = EventContext.Global
 
   def syncConversations(ids: Seq[ConvId]): Future[SyncResult] = {

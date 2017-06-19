@@ -18,6 +18,7 @@
 package com.waz.service.conversation
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.GenericContent.{MsgDeleted, MsgEdit, MsgRecall, Reaction, Receipt}
 import com.waz.model._
 import com.waz.service.messages.MessagesServiceImpl
@@ -30,7 +31,6 @@ import scala.concurrent.Future
 
 class ConversationEventsService(convs: ConversationsContentUpdater, messages: MessagesServiceImpl, users: UserServiceImpl, sync: SyncServiceHandle, pipeline: EventPipeline) {
 
-  private implicit val tag: LogTag = logTagFor[ConversationEventsService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
 
   val selfUserId = users.selfUserId

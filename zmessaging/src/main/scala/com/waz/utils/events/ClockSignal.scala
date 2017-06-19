@@ -17,7 +17,6 @@
  */
 package com.waz.utils.events
 
-import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.CancellableFuture
 import com.waz.threading.CancellableFuture.delayed

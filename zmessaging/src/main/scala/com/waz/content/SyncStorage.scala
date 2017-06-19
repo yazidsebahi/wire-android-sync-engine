@@ -18,6 +18,7 @@
 package com.waz.content
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.SyncId
 import com.waz.model.sync.SyncJob
 import com.waz.model.sync.SyncJob.SyncJobDao
@@ -34,7 +35,6 @@ import scala.concurrent.duration._
  */
 class SyncStorage(storage: ZmsDatabase, jobs: Seq[SyncJob]) {
   import SyncStorage._
-  private implicit val logTag: LogTag = logTagFor[SyncStorage]
 
   private val jobsMap = new mutable.HashMap[SyncId, SyncJob]
 

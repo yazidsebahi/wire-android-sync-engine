@@ -19,6 +19,7 @@ package com.waz.service.messages
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.api.Message.Status
 import com.waz.content._
@@ -35,7 +36,6 @@ import scala.concurrent.Future
 
 class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorageImpl, convs: ConversationStorageImpl, users: UserServiceImpl, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
 
-  private implicit val tag: LogTag = logTagFor[MessagesContentUpdater]
   import Threading.Implicits.Background
 
   val contentParser = new RichMediaContentParser

@@ -18,6 +18,7 @@
 package com.waz.service.media
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message
 import com.waz.model._
 import com.waz.model.messages.media.MediaAssetData
@@ -32,8 +33,6 @@ import scala.concurrent.Future
 
 class YouTubeMediaService(client: YouTubeClient, assets: AssetService) {
   import Threading.Implicits.Background
-
-  private implicit val logTag: LogTag = logTagFor[YouTubeMediaService]
 
   def updateMedia(msg: MessageData, content: MessageContent): ErrorOr[MessageContent] = {
     RichMediaContentParser.youtubeVideoId(content.content) match {

@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
@@ -40,7 +41,6 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 
 class OpenGraphSyncHandler(convs: ConversationStorageImpl, messages: MessagesStorageImpl, otrService: OtrServiceImpl, assetSync: AssetSyncHandler, assetsStorage: AssetsStorage, otrSync: OtrSyncHandler, client: OpenGraphClient, imageGenerator: ImageAssetGenerator, imageLoader: ImageLoader, assetClient: AssetClient) {
-  import OpenGraphSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
   def postMessageMeta(convId: ConvId, msgId: MessageId, editTime: Instant): Future[SyncResult] = messages.getMessage(msgId) flatMap {
@@ -168,8 +168,4 @@ class OpenGraphSyncHandler(convs: ConversationStorageImpl, messages: MessagesSto
           Right(LinkPreview(URI.parse(prev.url), prev.urlOffset, meta.title, meta.description, imageAsset.map(Asset(_)), meta.permanentUrl))
       }
   }
-}
-
-object OpenGraphSyncHandler {
-  private implicit val tag: LogTag = logTagFor[OpenGraphSyncHandler]
 }

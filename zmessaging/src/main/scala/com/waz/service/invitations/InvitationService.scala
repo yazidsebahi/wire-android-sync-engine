@@ -20,6 +20,7 @@ package com.waz.service.invitations
 import java.util.Locale
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ZmsDatabase
 import com.waz.model.Contact.{EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model._
@@ -38,7 +39,6 @@ class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connection
                         conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts) {
 
   import EventContext.Implicits.global
-  import InvitationService._
   import timeouts.contacts._
 
   private implicit lazy val dispatcher = new SerialDispatchQueue(name = "serial_InvitationService")
@@ -115,8 +115,4 @@ class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connection
   }
 
   private def similarTo(method: Either[EmailAddress, PhoneNumber]) = storage.read(db => method.fold(EmailAddressesDao.findBy(_)(db), PhoneNumbersDao.findBy(_)(db)))
-}
-
-object InvitationService {
-  private implicit val logTag: LogTag = logTagFor[InvitationService]
 }

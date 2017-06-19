@@ -20,6 +20,7 @@ package com.waz.service.images
 import android.content.Context
 import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.bitmap.BitmapUtils.Mime
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
@@ -42,7 +43,6 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
   import com.waz.service.images.ImageAssetGenerator._
 
   implicit private val dispatcher  = Threading.ImageDispatcher
-  implicit private val tag: LogTag = "ImageAssetGenerator"
 
   lazy val saveDir = AssetService.assetDir(context)
 

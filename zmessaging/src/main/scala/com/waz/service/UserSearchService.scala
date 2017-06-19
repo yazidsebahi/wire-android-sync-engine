@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.{CommonConnectionsStorage, MessagesStorageImpl, SearchQueryCacheStorage, UsersStorageImpl}
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
@@ -134,7 +135,6 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, commonConnsStorage:
 }
 
 object UserSearchService {
-  private implicit val tag: LogTag = logTagFor[UserSearchService]
   val MinCommonConnections = 4
   val MaxTopPeople = 10
 }

@@ -20,6 +20,7 @@ package com.waz.provision
 import java.io.InputStream
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.service.GlobalModule
 import com.waz.utils.JsonDecoder
 import org.json.JSONObject
@@ -31,7 +32,6 @@ import scala.io.Source
 import scala.util.Random
 
 trait ProvisionedSuite extends EmailClientSuite { suite: Suite =>
-  private implicit val logTag: LogTag = logTagFor[ProvisionedSuite]
   import com.waz.provision.ProvisionedSuite._
 
   val provisionFile: String
@@ -80,7 +80,7 @@ trait ProvisionedSuite extends EmailClientSuite { suite: Suite =>
 
   override protected def beforeAll(): Unit = {
     import com.waz.ZLog._
-    info("--- start of provisioning ----------------------------------------------------------------")(logTagFor[ProvisionedSuite])
+    info("--- start of provisioning ----------------------------------------------------------------")
     val registered = userProvs.values.map(_.register())
 
     if (registered.exists(_.isLeft)) println(s"register failed for emails: $provisionEmails: error message: ${registered.head.left.get}")
@@ -105,7 +105,7 @@ trait ProvisionedSuite extends EmailClientSuite { suite: Suite =>
       userProvs(us.head).createConv(name, ids.tail: _*)
     }
 
-    info("--- end of provisioning ------------------------------------------------------------------")(logTagFor[ProvisionedSuite])
+    info("--- end of provisioning ------------------------------------------------------------------")
 
     super.beforeAll()
   }

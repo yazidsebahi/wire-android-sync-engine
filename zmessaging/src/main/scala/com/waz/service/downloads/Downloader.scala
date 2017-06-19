@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import android.content.Context
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ProgressIndicator._
 import com.waz.api.impl.{ErrorResponse, ProgressIndicator}
 import com.waz.bitmap.video.VideoTranscoder
@@ -57,7 +58,6 @@ object Downloader {
 
 class AssetDownloader(client: AssetClient, cache: CacheService) extends Downloader[AssetRequest] {
   import com.waz.threading.Threading.Implicits.Background
-  private implicit val tag = logTagFor[AssetDownloader]
 
   val onDownloadStarting = EventStream[AssetRequest]()
   val onDownloadDone     = EventStream[AssetRequest]()
@@ -135,7 +135,7 @@ object InputStreamAssetLoader {
         .map(Some(_))
         .recover {
           case e: Throwable =>
-            warn(s"addStreamToCache failed", e)("InputStreamAssetLoader")
+            warn(s"addStreamToCache failed", e)
             None
         }
     }
@@ -147,7 +147,6 @@ object InputStreamAssetLoader {
 }
 
 class VideoAssetLoader(context: Context, cache: => CacheService) extends Downloader[VideoAsset] {
-  private implicit val tag: LogTag = logTagFor[VideoAssetLoader]
 
   override def load(asset: VideoAsset, callback: Callback): CancellableFuture[Option[CacheEntry]] = {
     import Threading.Implicits.Background
@@ -168,8 +167,6 @@ class VideoAssetLoader(context: Context, cache: => CacheService) extends Downloa
 
 class UnencodedAudioAssetLoader(context: Context, cache: => CacheService, tempFiles: TempFileService) extends Downloader[UnencodedAudioAsset] {
   import Threading.Implicits.Background
-
-  private implicit def tag: LogTag = logTagFor[UnencodedAudioAssetLoader]
   private val transcode = new AudioTranscoder(tempFiles, context)
 
   override def load(request: UnencodedAudioAsset, callback: Callback): CancellableFuture[Option[CacheEntry]] = {

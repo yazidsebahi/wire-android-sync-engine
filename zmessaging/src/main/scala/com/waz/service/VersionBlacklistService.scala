@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.GlobalPreferences
 import com.waz.content.GlobalPreferences._
 import com.waz.model.VersionBlacklist
@@ -31,7 +32,6 @@ import scala.concurrent.duration._
 class VersionBlacklistService(metadata: MetaDataService, prefs: GlobalPreferences, client: VersionBlacklistClient) {
 
   import Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[VersionBlacklistService]
   private implicit val ec = EventContext.Global
   import metadata._
 

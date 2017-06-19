@@ -23,6 +23,7 @@ import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
 import android.media.AudioManager
 import android.telephony.TelephonyManager
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
@@ -418,8 +419,6 @@ class GlobalRecordAndPlayService(cache: CacheService, context: Context) {
 }
 
 object GlobalRecordAndPlayService {
-  private implicit val logTag: LogTag = logTagFor[GlobalRecordAndPlayService]
-
   sealed trait State
   case object Idle extends State
   case class Playing(player: Player, key: MediaKey) extends State

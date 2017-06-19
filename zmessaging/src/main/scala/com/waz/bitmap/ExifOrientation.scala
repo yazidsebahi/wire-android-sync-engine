@@ -20,6 +20,7 @@ package com.waz.bitmap
 import java.io.InputStream
 import android.media.ExifInterface
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 
 import scala.util.control.NonFatal
 
@@ -28,8 +29,6 @@ import scala.util.control.NonFatal
  * TODO: make it prettier
  */
 object ExifOrientation {
-  private implicit val tag: LogTag = logTagFor(ExifOrientation)
-
   def apply(in: InputStream): Int = try {
 
     def readShort(be: Boolean = true) =

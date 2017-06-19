@@ -20,6 +20,7 @@ package com.waz.sync.client
 import java.net.URLEncoder
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.AssetData
@@ -60,8 +61,6 @@ object SoundCloudClient {
   import com.waz.utils.JsonDecoder._
 
   val domainNames = Set("soundcloud.com")
-
-  implicit val logTag = logTagFor[SoundCloudClient]
 
   def proxyPath(resource: String, url: String) = s"/proxy/soundcloud/$resource?url=${URLEncoder.encode(url, "utf8")}"
 

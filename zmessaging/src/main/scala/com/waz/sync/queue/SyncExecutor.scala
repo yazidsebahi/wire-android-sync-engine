@@ -19,6 +19,7 @@ package com.waz.sync.queue
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.SyncState
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.SyncId
@@ -34,7 +35,6 @@ import scala.util.Failure
 import scala.util.control.NoStackTrace
 
 class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, network: NetworkModeService, handler: => SyncHandler) {
-  import SyncExecutor._
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncExecutorQueue")
 
   def apply(job: SyncJob): Future[SyncResult] = job.request match {
@@ -132,8 +132,6 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
 }
 
 object SyncExecutor {
-  implicit val tag: LogTag = logTagFor[SyncExecutor]
-
   val RequestRetryBackoff = new ExponentialBackoff(5.seconds, 1.day)
   val ConvRequestRetryBackoff = new ExponentialBackoff(5.seconds, 1.hour)
 

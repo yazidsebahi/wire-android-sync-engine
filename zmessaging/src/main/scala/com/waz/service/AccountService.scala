@@ -19,6 +19,7 @@ package com.waz.service
 
 import com.softwaremill.macwire._
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
 import com.waz.content.Preferences.Preference
@@ -42,7 +43,6 @@ import scala.util.Right
 
 class UserModule(val userId: UserId, val account: AccountService) {
   import Threading.Implicits.Background
-  private implicit val Tag: LogTag = logTagFor[UserModule]
 
   def context = account.global.context
   def db = account.storage.db
@@ -401,7 +401,5 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
 }
 
 object AccountService {
-  private implicit val tag: LogTag = logTagFor[AccountService]
-
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
 }

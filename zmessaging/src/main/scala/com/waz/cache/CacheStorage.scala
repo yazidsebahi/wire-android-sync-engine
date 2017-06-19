@@ -21,6 +21,7 @@ import java.io.File
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.cache.CacheStorage.EntryCache
 import com.waz.content.Database
@@ -39,7 +40,6 @@ class CacheStorageImpl(storage: Database, context: Context) extends CachedStorag
   import com.waz.cache.CacheStorage._
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private implicit val logTag: LogTag = logTagFor[CacheStorage]
   private implicit val dispatcher = new SerialDispatchQueue(name = "CacheStorage")
 
   onUpdated { _ foreach {

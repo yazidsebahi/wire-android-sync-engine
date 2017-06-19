@@ -19,6 +19,7 @@ package com.waz.sync
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -87,8 +88,6 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
 
   import com.waz.model.sync.SyncRequest._
 
-  private implicit val logTag: LogTag = logTagFor[AndroidSyncServiceHandle]
-
   private def addRequest(req: SyncRequest, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, optional: Boolean = false, timeout: Long = 0, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] = {
     debug(s"addRequest: $req, prio: $priority, timeout: $timeout")
     val timestamp = SyncJob.timestamp
@@ -149,7 +148,6 @@ trait SyncHandler {
 
 class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHandler) extends SyncHandler {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[AccountSyncHandler]
 
   import com.waz.model.sync.SyncRequest._
 

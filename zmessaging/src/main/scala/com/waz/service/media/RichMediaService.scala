@@ -18,6 +18,7 @@
 package com.waz.service.media
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{MediaProvider, Message}
 import com.waz.model._
@@ -34,7 +35,6 @@ import scala.concurrent.Future
 
 class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService) {
   import com.waz.api.Message.Part.Type._
-  private implicit val logTag: LogTag = logTagFor[RichMediaService]
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
 

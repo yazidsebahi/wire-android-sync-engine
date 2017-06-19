@@ -127,7 +127,7 @@ class ThrottledProcessingQueue[A](delay: FiniteDuration, processor: Seq[A] => Fu
         val d = math.max(0, lastDispatched - System.currentTimeMillis() + delay.toMillis)
         verbose(s"processQueue, delaying: $d millis")
         waitFuture = CancellableFuture.delay(d.millis)
-        if (!waiting.get()) waitFuture.cancel() // to avoid race conditions with `flush`
+        if (!waiting.get()) waitFuture.cancel()(logTag) // to avoid race conditions with `flush`
         waitFuture.future.flatMap { _ =>
           CancellableFuture.lift(processQueueNow())
         } .recover {
@@ -145,7 +145,7 @@ class ThrottledProcessingQueue[A](delay: FiniteDuration, processor: Seq[A] => Fu
 
   def flush() = {
     waiting.set(false)
-    waitFuture.cancel()
+    waitFuture.cancel()(logTag)
     post {
       processQueueNow()
     }

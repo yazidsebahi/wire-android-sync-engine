@@ -19,6 +19,7 @@ package com.waz.service.otr
 
 import android.util.Base64
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{AggregatingSignal, EventStream}
 import com.waz.utils.{LoggedTry, returning}
@@ -27,7 +28,6 @@ import com.wire.cryptobox.{CryptoBox, CryptoSession, PreKey}
 import scala.concurrent.Future
 
 class CryptoSessionService(cryptoBox: CryptoBoxService) {
-  import CryptoSessionService._
 
   private val dispatchers = Array.fill(17)(new SerialDispatchQueue(name = s"CryptoSessionDispatchQueue"))
 
@@ -94,9 +94,4 @@ class CryptoSessionService(cryptoBox: CryptoBoxService) {
 
     new AggregatingSignal[Option[Array[Byte]], Option[Array[Byte]]](stream, fingerprint, (prev, next) => next)
   }
-}
-
-object CryptoSessionService {
-  private implicit val logTag: LogTag = logTagFor[CryptoSessionService]
-
 }

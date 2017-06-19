@@ -20,6 +20,7 @@ package com.waz.ui
 import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.IConversation
 import com.waz.api.impl._
@@ -31,8 +32,6 @@ import com.waz.utils.{JsonDecoder, returning}
 class Users(implicit ui: UiModule) {
   import com.waz.threading.Threading.Implicits.Background
   import ui.{convs, images, zms}
-
-  private implicit val tag: LogTag = logTagFor[Users]
 
   def getPicture(imageId: Option[AssetId]): api.ImageAsset = imageId.fold[api.ImageAsset](ImageAsset.Empty)(images.getImageAsset)
 

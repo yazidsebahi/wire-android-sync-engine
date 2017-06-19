@@ -18,6 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model._
@@ -34,7 +35,6 @@ import scala.util.control.NonFatal
 class UserSearchClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
   import UserSearchClient._
-  private implicit val tag: LogTag = logTagFor[UserSearchClient]
 
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = {
     debug(s"graphSearch('$query', $limit)")
@@ -89,7 +89,6 @@ object UserSearchClient {
   }
 
   object UserSearchResponse {
-    private implicit val logTag: LogTag = logTagFor(UserSearchResponse)
 
     def unapply(resp: ResponseContent): Option[Seq[UserSearchEntry]] = resp match {
       case JsonObjectResponse(js) if js.has("documents") =>

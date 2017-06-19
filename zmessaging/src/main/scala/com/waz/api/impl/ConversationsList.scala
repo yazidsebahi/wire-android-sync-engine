@@ -21,6 +21,7 @@ import java.lang.Iterable
 
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.ConversationsList.{ConversationCallback, VerificationStateCallback}
 import com.waz.api.impl.ConversationsListState.Data
@@ -40,7 +41,6 @@ import scala.collection.JavaConverters._
 
 class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList with BaseConversationsList {
   import ConversationsList._
-  private implicit val logTag: LogTag = logTagFor[ConversationsList]
 
   lazy val incoming = new SearchableConversationsList(conversations, IncomingListFilter)
 
@@ -117,8 +117,6 @@ class SearchableConversationsList(val conversations: Conversations, override val
   extends com.waz.api.ConversationsList.SearchableConversationsList with BaseConversationsList
 
 class ConversationsListState(implicit ui: UiModule) extends com.waz.api.ConversationsList.ConversationsListState with UiObservable with SignalLoading {
-  private implicit val logTag: LogTag = logTagFor[ConversationsListState]
-
   var data = Data()
 
   addLoader(_.convsStats.state) { data =>

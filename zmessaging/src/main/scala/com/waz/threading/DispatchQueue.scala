@@ -38,7 +38,7 @@ trait DispatchQueue extends ExecutionContext {
   def apply[A](task: => A)(implicit tag: LogTag = ""): CancellableFuture[A] = CancellableFuture(task)(this, tag)
 
   //TODO: this implements ExecutionContext.reportFailure, should we use different log here? or maybe do something else
-  override def reportFailure(t: Throwable): Unit = error("reportFailure called", t)(logTagFor[DispatchQueue])
+  override def reportFailure(t: Throwable): Unit = error("reportFailure called", t)(name)
 
   //used for waiting in tests
   def hasRemainingTasks: Boolean = false

@@ -19,6 +19,7 @@ package com.waz.api.impl
 
 import android.os.Parcel
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api._
 import com.waz.api.impl.otr.OtrClients
@@ -32,8 +33,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   def this(id: UserId)(implicit ui: UiModule) = this(id, UserData(id, ""))
   def this(data: UserData)(implicit ui: UiModule) = this(data.id, data)
-
-  import User._
 
   require(id == data.id)
 
@@ -152,10 +151,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   override def getUsername: String = data.handle.fold("")(_.string)
 
   override def getCommonConnectionsCount = getCommonConnections.getTotalCount //TODO: STUB
-}
-
-object User {
-  private implicit val logTag: LogTag = logTagFor[User]
 }
 
 object EmptyUser extends com.waz.api.User {

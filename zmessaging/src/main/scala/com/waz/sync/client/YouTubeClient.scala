@@ -18,6 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.MediaProvider
 import com.waz.model.messages.media.MediaAssetData.{MediaWithImages, Thumbnail}
 import com.waz.model.AssetData
@@ -57,7 +58,6 @@ class YouTubeClient(netClient: ZNetClient) {
 }
 
 object YouTubeClient {
-  implicit val logTag = logTagFor[YouTubeClient]
 
   val domainNames = Set("youtube.com", "youtu.be")
 

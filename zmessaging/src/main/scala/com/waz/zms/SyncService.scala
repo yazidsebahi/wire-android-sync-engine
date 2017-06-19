@@ -25,6 +25,7 @@ import com.waz.model.AccountId
 import scala.concurrent.Future
 
 class SyncService extends FutureService with ZMessagingService {
+
   import com.waz.threading.Threading.Implicits.Background
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] =

@@ -20,6 +20,7 @@ package com.waz.sync.queue
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConvId
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.threading.SerialDispatchQueue
@@ -101,7 +102,6 @@ class SyncSerializer {
 }
 
 object SyncSerializer {
-  private implicit val tag: LogTag = logTagFor[SyncSerializer]
   private val seq = new AtomicLong(0)
 
   abstract class WaitHandle[A] {

@@ -42,6 +42,7 @@ object SharedSettings {
 
   lazy val androidSdkDir = settingKey[File]("Android sdk dir from ANDROID_HOME")
   lazy val generateZmsVersion = taskKey[Seq[File]]("generate ZmsVersion.java")
+  lazy val generateDebugMode = taskKey[Seq[File]]("generate DebugMode.scala")
   lazy val generateCredentials = taskKey[Seq[File]]("generate InternalCredentials.scala")
   lazy val actorsResources = taskKey[File]("Creates resources zip for remote actor")
   lazy val nativeLibs = taskKey[Classpath]("directories containing native libs for osx and linux build")

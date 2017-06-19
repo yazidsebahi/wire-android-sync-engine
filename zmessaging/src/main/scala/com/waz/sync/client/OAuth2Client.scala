@@ -21,6 +21,7 @@ import java.net.URLEncoder
 
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.sync.client.OAuth2Client._
 import com.waz.threading.Threading
@@ -76,8 +77,6 @@ class OAuth2Client(netClient: ZNetClient)(implicit app: AppInfo) {
 
 object OAuth2Client {
   import JsonDecoder._
-
-  implicit val logTag = logTagFor[OAuth2Client]
 
   case class AppInfo(id: ClientId, tokenPath: String, redirectUri: Uri)
   case class ClientId(str: String) extends AnyVal

@@ -18,6 +18,7 @@
 package com.waz.client
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.model._
@@ -40,7 +41,6 @@ import scala.concurrent.duration._
 class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   import Threading.Implicits.Background
   import com.waz.client.RegistrationClient._
-  private implicit val tag: LogTag = logTagFor[RegistrationClient]
 
   def register(userId: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
     val json = JsonEncoder { o =>
@@ -133,7 +133,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
         warn(s"invitation token not found: $token")
         Left(ErrorResponse(NotFound, "no such invitation code", "invalid-invitation-code"))
       case other =>
-        ZNetClient.errorHandling("getInvitationInfo")(tag)(other)
+        ZNetClient.errorHandling("getInvitationInfo")("RegistrationClient")(other)
     }
   }
 

@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api._
 import com.waz.api.impl.otr.OtrClients
@@ -35,7 +36,6 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
 
   var data = Option.empty[AccountData]
 
-  private implicit val logTag: LogTag = logTagFor[Self]
   private var upToDate = true
 
   private def users = ui.users

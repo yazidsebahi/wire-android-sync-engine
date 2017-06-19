@@ -21,6 +21,7 @@ import java.io.File
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Verification
 import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences.OtrLastPrekey
@@ -110,8 +111,6 @@ class CryptoBoxService(context: Context, userId: AccountId, metadata: MetaDataSe
 }
 
 object CryptoBoxService {
-  private implicit val Tag: LogTag = logTagFor[CryptoBoxService]
-
   val PreKeysCount = 100
   val LowPreKeysThreshold = 50
   val LocalPreKeysLimit = 16 * 1024

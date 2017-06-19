@@ -19,6 +19,7 @@ package com.waz.model.sync
 
 import com.waz.HockeyApp
 import com.waz.ZLog.error
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.EphemeralExpiration
 import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus

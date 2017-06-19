@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.SearchQueryCacheStorage
 import com.waz.model.SearchQuery
 import com.waz.service.UserSearchService
@@ -34,7 +35,6 @@ object UserSearchSyncHandler {
 
 class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient) {
   import Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[UserSearchSyncHandler]
 
   def syncSearchQuery(query: SearchQuery): Future[SyncResult] = {
     debug(s"starting sync for: $query")

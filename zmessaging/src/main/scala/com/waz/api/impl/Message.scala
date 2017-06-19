@@ -20,6 +20,7 @@ package com.waz.api.impl
 import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.Message.{Part, Status, Type}
 import com.waz.api.MessageContent.{Location, Text}
@@ -42,7 +43,6 @@ import scala.collection.breakOut
 
 class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[UserId], var likedBySelf: Boolean)(implicit context: UiModule) extends api.Message with SignalLoading with UiObservable {
 
-  private implicit val logTag: LogTag = logTagFor[Message]
   private val convId = if (data == MessageData.Empty) Signal[ConvId]() else Signal(data.convId)
   private var parts = Array.empty[Part]
   private var lastMessageFromSelf = false

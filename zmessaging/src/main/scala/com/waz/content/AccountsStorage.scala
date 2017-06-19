@@ -18,7 +18,6 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._

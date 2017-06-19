@@ -21,6 +21,7 @@ import java.io.{File, InputStream}
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
 import com.waz.api.AudioEffect
@@ -49,7 +50,6 @@ abstract class AssetForUpload(val id: AssetId) extends api.AssetForUpload {
   def openDataStream(context: Context): InputStream
 }
 object AssetForUpload {
-  private implicit val Tag: LogTag = logTagFor[AssetForUpload]
 
   def apply(i: AssetId, n: Option[String], m: Mime, s: Option[Long])(f: Context => InputStream): AssetForUpload = new AssetForUpload(i) {
     override val name = successful(n)
@@ -86,8 +86,6 @@ case class AudioAssetForUpload(override val id: AssetId, data: CacheEntry, durat
   override def getPlaybackControls: api.PlaybackControls = new PlaybackControls(AssetMediaKey(id), PCMContent(data.cacheFile), _ => Signal.const(duration))(ZMessaging.currentUi)
   override def getDuration: bp.Duration = duration
 
-  private implicit def logTag: LogTag = logTagFor[AudioAssetForUpload]
-
   override def delete(): Unit = {
     verbose(s"delete() $this")
     data.delete()
@@ -99,7 +97,7 @@ case class AudioAssetForUpload(override val id: AssetId, data: CacheEntry, durat
       case Success(asset) =>
         callback.onLoaded(asset)
       case Failure(cause) =>
-        error("effect application failed", cause)(logTagFor[AudioAssetForUpload])
+        error("effect application failed", cause)
         callback.onLoadFailed()
     }(Threading.Ui)
   }

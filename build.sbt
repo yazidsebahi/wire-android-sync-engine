@@ -371,6 +371,7 @@ lazy val macrosupport = project
     crossPaths := false,
     exportJars := true,
     name := "zmessaging-android-macrosupport",
+    sourceGenerators in Compile += generateDebugMode.taskValue,
     bintrayRepository := "releases",
     libraryDependencies ++= Seq(
       "org.scala-lang" % "scala-reflect" % (scalaVersion in ThisBuild).value % Provided,
@@ -389,6 +390,23 @@ generateZmsVersion in zmessaging := {
                   |   public static final boolean DEBUG = %b;
                   |}
                 """.stripMargin.format(version.value, avsVersion, MajorVersion, sys.env.get("BUILD_NUMBER").isEmpty || sys.props.getOrElse("debug", "false").toBoolean)
+  IO.write(file, content)
+  Seq(file)
+}
+
+generateDebugMode in macrosupport := {
+  val file = (sourceManaged in Compile in macrosupport).value / "com"/ "waz" / "DebugMode.scala"
+  val content = """package com.waz
+                  |
+                  |import scala.reflect.macros.blackbox.Context
+                  |
+                  |object DebugMode {
+                  |  def DEBUG(c: Context) = {
+                  |    import c.universe._
+                  |    Literal(Constant(%b))
+                  |  }
+                  |}
+                """.stripMargin.format(sys.env.get("BUILD_NUMBER").isEmpty || sys.props.getOrElse("debug", "false").toBoolean)
   IO.write(file, content)
   Seq(file)
 }
