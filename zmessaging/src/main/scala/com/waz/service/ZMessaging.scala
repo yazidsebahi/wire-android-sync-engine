@@ -84,7 +84,6 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val teamMemberStorage: TeamMemberStorage = wire[TeamMemberStorageImpl]
   lazy val msgDeletions                         = wire[MsgDeletionStorage]
   lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
-  lazy val commonConnections                    = wire[CommonConnectionsStorage]
   lazy val msgEdits                             = wire[EditHistoryStorage]
 }
 
@@ -150,7 +149,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache
-  def commonConnections = storage.commonConnections
 
   lazy val messagesStorage: MessagesStorageImpl = wire[MessagesStorageImpl]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]

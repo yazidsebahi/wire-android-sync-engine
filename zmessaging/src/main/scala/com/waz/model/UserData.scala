@@ -154,11 +154,11 @@ object UserData {
 
   def apply(entry: UserSearchEntry): UserData =
     UserData(
-      id = entry.id,
-      name = entry.name,
-      accent = entry.colorId.getOrElse(0),
+      id        = entry.id,
+      name      = entry.name,
+      accent    = entry.colorId.getOrElse(0),
       searchKey = SearchKey(entry.name),
-      handle = Some(entry.handle)
+      handle    = Some(entry.handle)
     ) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =

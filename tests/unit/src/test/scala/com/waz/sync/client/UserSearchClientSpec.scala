@@ -268,7 +268,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
   feature("Response parsing") {
     scenario("graphSearch") {
       val client = new TestUserSearchClient(searchQueryResponse)
-      val result = Await.result(client.graphSearch(Recommended("z"), 10), 5.seconds)
+      val result = Await.result(client.getContacts(Recommended("z"), 10), 5.seconds)
 
       result should be('right)
       result.right.get.length should be(3)
@@ -276,7 +276,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
     scenario("graphSearch 1") {
       val client = new TestUserSearchClient(searchQueryResponse1)
-      val result = Await.result(client.graphSearch(Recommended("z"), 10), 5.seconds)
+      val result = Await.result(client.getContacts(Recommended("z"), 10), 5.seconds)
 
       result should be('right)
       result.right.get.length should be(6)
@@ -284,7 +284,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
     scenario("graphSearch 2") {
       val client = new TestUserSearchClient(searchQueryResponse2)
-      val result = Await.result(client.graphSearch(Recommended("a"), 10), 5.seconds)
+      val result = Await.result(client.getContacts(Recommended("a"), 10), 5.seconds)
 
       result should be('right)
       result.right.get.length should be(1)
@@ -295,7 +295,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
   feature("Requests") {
     scenario("graphSearch request") {
       val client = new TestUserSearchClient(searchQueryResponse)
-      Await.result(client.graphSearch(Recommended("z"), 10), 5.seconds)
+      Await.result(client.getContacts(Recommended("z"), 10), 5.seconds)
 
       request.httpMethod should be("GET")
       request.resourcePath should be(Some("/search/contacts?q=z&size=10&l=3&d=1"))
@@ -303,7 +303,7 @@ class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
     scenario("request for the top people") {
       val client = new TestUserSearchClient(searchQueryResponse)
-      Await.result(client.graphSearch(TopPeople, 10), 5.seconds)
+      Await.result(client.getContacts(TopPeople, 10), 5.seconds)
 
       request.httpMethod should be("GET")
       request.resourcePath should be(Some("/search/top?size=10"))

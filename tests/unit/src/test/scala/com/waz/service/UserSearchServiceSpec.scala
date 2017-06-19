@@ -175,7 +175,7 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   def backendResults(results: Seq[UserData]): SearchQuery => Future[Unit] = { query =>
     service.updateSearchResults(query, results.map { r =>
-      UserSearchEntry(r.id, r.name, r.email, r.phone, r.accent, Some(r.connection == ConnectionStatus.ACCEPTED), r.connection == ConnectionStatus.BLOCKED, r.relation, handle = r.handle)
+      UserSearchEntry(r.id, r.name, Some(r.accent), handle = r.handle.get)
     })
   }
 
