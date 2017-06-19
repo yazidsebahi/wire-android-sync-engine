@@ -29,6 +29,7 @@ trait Cache[K, V] {
   def put(key: K, value: V): V
   def get(key: K): V
   def remove(key: K): V
+  def evictAll(): Unit
 }
 
 class TrimmingLruCache[K, V](val context: Context, size: CacheSize) extends LruCache[K, V](size.bytes(context)) with AutoTrimming with Cache[K, V]
