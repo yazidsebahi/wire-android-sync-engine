@@ -57,12 +57,9 @@ object InternalLog {
     case _ =>
   } }
 
-  def addAndroidLog() = add(new AndroidLogOutput)
-  def addBufferedLog(fileName: String, bufferSize: Long = 1024L * 1024L) = add(new BufferedLogOutput(fileName, bufferSize))
-
   def init(basePath: String) = {
-    addAndroidLog()
-    addBufferedLog(basePath + "/internalLog.log")
+    add(new AndroidLogOutput)
+    add(new BufferedLogOutput(basePath))
   }
 
   def error(msg: String, cause: Throwable, tag: LogTag) = log(msg, cause, Error, tag)

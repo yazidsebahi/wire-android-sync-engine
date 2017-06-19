@@ -141,11 +141,14 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
     }
 
     Future.sequence(outputs.map( _.flush() )).map { _ =>
-      outputs.map(o => new File(o.fileName)).filter(_.exists).foreach { file =>
-        IoUtils.withResource(new BufferedReader(new InputStreamReader(new FileInputStream(file)))) { reader =>
-          Iterator.continually(reader.readLine()).takeWhile(_ != null).foreach(writer.println)
-        }
-      }
+      outputs.flatMap(_.getPaths) // paths should be sorted from the oldest to the youngest
+             .map(new File(_))
+             .filter(_.exists)
+             .foreach { file =>
+               IoUtils.withResource(new BufferedReader(new InputStreamReader(new FileInputStream(file)))) {
+                 reader => Iterator.continually(reader.readLine()).takeWhile(_ != null).foreach(writer.println)
+               }
+             }
     }
   })
 }
