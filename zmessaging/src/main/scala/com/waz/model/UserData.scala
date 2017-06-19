@@ -32,24 +32,24 @@ import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
 
 case class UserData(
-                     id: UserId,
-                     name: String,
-                     email: Option[EmailAddress],
-                     phone: Option[PhoneNumber],
-                     trackingId: Option[TrackingId] = None,
-                     picture: Option[AssetId] = None,
-                     accent: Int = 0, // accent color id
-                     searchKey: SearchKey,
-                     connection: ConnectionStatus = ConnectionStatus.Unconnected,
-                     connectionLastUpdated: Date = new Date(0), // server side timestamp of last connection update
-                     connectionMessage: Option[String] = None, // incoming connection request message
-                     conversation: Option[RConvId] = None, // remote conversation id with this contact (one-to-one)
-                     relation: Relation = Relation.Other,
-                     syncTimestamp: Long = 0,
-                     displayName: String = "",
-                     verified: Verification = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
-                     deleted: Boolean = false,
-                     handle: Option[Handle]
+                     id:                    UserId,
+                     name:                  String,
+                     email:                 Option[EmailAddress]  = None,
+                     phone:                 Option[PhoneNumber]   = None,
+                     trackingId:            Option[TrackingId]    = None,
+                     picture:               Option[AssetId]       = None,
+                     accent:                Int                   = 0, // accent color id
+                     searchKey:             SearchKey,
+                     connection:            ConnectionStatus      = ConnectionStatus.Unconnected,
+                     connectionLastUpdated: Date                  = new Date(0), // server side timestamp of last connection update
+                     connectionMessage:     Option[String]        = None, // incoming connection request message
+                     conversation:          Option[RConvId]       = None, // remote conversation id with this contact (one-to-one)
+                     relation:              Relation              = Relation.Other, //unused - remove in future migration
+                     syncTimestamp:         Long                  = 0,
+                     displayName:           String                = "",
+                     verified:              Verification          = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
+                     deleted:               Boolean               = false,
+                     handle:                Option[Handle]
                    ) {
 
   def isConnected = ConnectionStatus.isConnected(connection)
@@ -79,14 +79,9 @@ case class UserData(
 
   def updated(user: UserSearchEntry): UserData = copy(
     name = user.name,
-    email = user.email.orElse(email),
-    phone = user.phone.orElse(phone),
     searchKey = SearchKey(user.name),
-    relation = user.level,
-    handle = user.handle match {
-      case Some(h) if !h.toString.isEmpty => Some(h)
-      case _ => handle
-    }
+    accent = user.colorId.getOrElse(accent),
+    handle = Some(user.handle)
   )
 
   def updated(name: Option[String] = None,
@@ -158,10 +153,13 @@ object UserData {
   def apply(id: UserId, name: String): UserData = UserData(id, name, None, None, searchKey = SearchKey(name), handle = None)
 
   def apply(entry: UserSearchEntry): UserData =
-    UserData(entry.id, entry.name, entry.email, entry.phone, None, None, entry.colorId, SearchKey(entry.name),
-      relation = entry.level,
-      connection = if (entry.connected.getOrElse(false)) ConnectionStatus.Accepted else ConnectionStatus.Unconnected,
-      handle = entry.handle) // TODO: improve connection, relation, search level stuff
+    UserData(
+      id = entry.id,
+      name = entry.name,
+      accent = entry.colorId.getOrElse(0),
+      searchKey = SearchKey(entry.name),
+      handle = Some(entry.handle)
+    ) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =
     UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
