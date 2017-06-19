@@ -24,7 +24,6 @@ import com.waz.db.migrate._
 import com.waz.model.AddressBook.ContactHashesDao
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.CallLogEntry.CallLogEntryDao
-import com.waz.model.CommonConnectionsData.CommonConnectionsDataDao
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
@@ -55,12 +54,12 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 90
+  val DbVersion = 91
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
-    SyncJobDao, CommonConnectionsDataDao, NotificationDataDao, ErrorDataDao,
+    SyncJobDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
     ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao, MessageContentIndexDao
   )
@@ -154,6 +153,9 @@ object ZMessagingDB {
     },
     Migration(89, 90) { db =>
       ConversationDataMigration.v90(db)
+    },
+    Migration(90, 91) { db =>
+      db.execSQL("DROP TABLE IF EXISTS CommonConnections")
     }
   )
 }

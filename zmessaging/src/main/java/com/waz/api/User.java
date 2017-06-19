@@ -80,11 +80,6 @@ public interface User extends UiObservable, Parcelable {
      */
     IConversation getConversation();
 
-    @Deprecated
-    CommonConnections getCommonConnections();
-
-    int getCommonConnectionsCount();
-
     IConversation acceptConnection();
 
     void ignoreConnection();

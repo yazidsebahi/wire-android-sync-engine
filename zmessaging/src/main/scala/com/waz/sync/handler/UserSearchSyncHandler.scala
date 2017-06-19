@@ -29,16 +29,12 @@ import com.waz.threading.Threading
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-object UserSearchSyncHandler {
-  val DefaultLimit = 10
-}
-
 class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient) {
   import Threading.Implicits.Background
 
   def syncSearchQuery(query: SearchQuery): Future[SyncResult] = {
     debug(s"starting sync for: $query")
-    client.graphSearch(query, UserSearchSyncHandler.DefaultLimit).future flatMap {
+    client.getContacts(query).future flatMap {
       case Right(results) =>
         debug(s"searchSync, got: $results")
         userSearch.updateSearchResults(query, results).map(_ => SyncResult.Success)

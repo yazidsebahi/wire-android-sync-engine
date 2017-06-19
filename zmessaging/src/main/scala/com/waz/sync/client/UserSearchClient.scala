@@ -22,7 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle, TopPeople}
 import com.waz.model._
-import com.waz.threading.Threading
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder
 import com.waz.znet.Response.Status.NotFound
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
@@ -36,17 +36,19 @@ class UserSearchClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
   import UserSearchClient._
 
-  def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = {
+  def getContacts(query: SearchQuery, limit: Int = DefaultLimit): ErrorOrResponse[Seq[UserSearchEntry]] = {
     debug(s"graphSearch('$query', $limit)")
     query match {
-      case TopPeople                 => extractUsers("TopPeople", Request.Get(Request.query(TopUserPath, "size" -> limit)))
-      case Recommended(prefix)       => extractUsers(s"Recommended($prefix)", Request.Get(graphSearchQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
-      case RecommendedHandle(prefix) => extractUsers(s"RecommendedHandle($prefix)", Request.Get(graphSearchQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
+      case Recommended(prefix)       => extractUsers(s"Recommended($prefix)", Request.Get(contactsQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
+      case RecommendedHandle(prefix) => extractUsers(s"RecommendedHandle($prefix)", Request.Get(contactsQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
+      case TopPeople                 =>
+        warn("A request to /search/top was made - this is now only handled locally")
+        CancellableFuture.successful(Right(Seq.empty))
     }
   }
 
-  def graphSearchQuery(query: String, limit: Int, level: Int, useDirectory: Boolean): String =
-    Request.query(GraphSearchPath, "q" -> query, "size" -> limit, "l" -> level, "d" -> (if (useDirectory) 1 else 0))
+  def contactsQuery(query: String, limit: Int, level: Int, useDirectory: Boolean): String =
+    Request.query(ContactsPath, "q" -> query, "size" -> limit, "l" -> level, "d" -> (if (useDirectory) 1 else 0))
 
   private def extractUsers(name: String, req: Request[Unit]): ErrorOrResponse[Seq[UserSearchEntry]] = {
     val handling404s: PartialFunction[Response, Either[ErrorResponse, Seq[UserSearchEntry]]] = {
@@ -63,28 +65,18 @@ class UserSearchClient(netClient: ZNetClient) {
 }
 
 object UserSearchClient {
-  val GraphSearchPath = "/search/contacts"
-  val TopUserPath = "/search/top"
+  val ContactsPath = "/search/contacts"
 
-  case class UserSearchEntry(id: UserId,
-                             name: String,
-                             email: Option[EmailAddress],
-                             phone: Option[PhoneNumber],
-                             colorId: Int,
-                             connected: Option[Boolean],
-                             blocked: Boolean,
-                             level: Relation,
-                             commonCount: Option[Int] = None,
-                             common: Seq[UserId] = Nil,
-                             handle: Option[Handle])
+  val DefaultLimit = 10
+
+  case class UserSearchEntry(id: UserId, name: String, colorId: Option[Int], handle: Handle)
 
   object UserSearchEntry {
     import JsonDecoder._
 
     implicit lazy val Decoder: JsonDecoder[UserSearchEntry] = new JsonDecoder[UserSearchEntry] {
       override def apply(implicit js: JSONObject): UserSearchEntry =
-        UserSearchEntry('id, 'name, 'email, 'phone, decodeOptInt('accent_id).getOrElse(0), 'connected, 'blocked,
-          decodeOptInt('level).fold(Relation.Other)(Relation.withId), 'total_mutual_friends, decodeStringSeq('mutual_friends).map(UserId(_)), decodeOptHandle('handle))
+        UserSearchEntry('id, 'name, 'accent_id, 'handle)
     }
   }
 
