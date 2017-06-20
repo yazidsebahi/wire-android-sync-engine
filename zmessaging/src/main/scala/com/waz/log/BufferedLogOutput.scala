@@ -23,50 +23,59 @@ import com.waz.ZLog.LogTag
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.returning
 
+import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.util.Random
 
-class BufferedLogOutput(val fileName: String, val bufferSize: Long) extends LogOutput {
-  override val id = fileName
+class BufferedLogOutput(val basePath: String,
+                        val maxBufferSize: Long = BufferedLogOutput.defMaxBufferSize,
+                        val maxFileSize: Long = BufferedLogOutput.defMaxFileSize,
+                        val maxRollFiles: Int = BufferedLogOutput.defMaxRollFiles) extends LogOutput {
+  assert(maxBufferSize < maxFileSize)
+  assert(maxRollFiles > 0)
+
+  override val id = basePath
 
   private implicit val dispatcher = new SerialDispatchQueue(Threading.IO, "BufferedLogOutput" + Random.nextInt().toHexString)
 
   private val buffer = StringBuilder.newBuilder
+  private var paths = List[String](basePath + "0.log")
+
+  def currentPath = paths.head
+  def getPaths = paths.reverse // internally the first path is the youngest one, but to the outside we want to show paths from the oldest to the youngest
 
   override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = this.synchronized {
     buffer.append(InternalLog.dateTag).append('/').append(level).append('/').append(tag).append(": ").append(str).append('\n')
-    if (size > bufferSize) flush()
+    if (size > maxBufferSize) flush()
   }
 
   override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit = this.synchronized {
     buffer.append(InternalLog.dateTag).append('/').append(level).append("/").append(tag).append(": ").append(str).append('\n')
           .append(InternalLog.stackTrace(cause)).append('\n')
-    if (size > bufferSize) flush()
+    if (size > maxBufferSize) flush()
   }
 
   override def close(): Future[Unit] = flush()
 
   def empty = buffer.isEmpty
 
-  /*
- * This part (estimating the string length in bytes) of the Wire software
- * is based on an answer posted on the StackOverflow site.
- * (https://stackoverflow.com/a/4387559/2975925)
- *
- * That work is licensed under a Creative Commons Attribution-ShareAlike 2.5 Generic License.
- * (http://creativecommons.org/licenses/by-sa/2.5)
- *
- * Contributors on StackOverflow:
- *  - finnw (https://stackoverflow.com/users/12048/finnw)
- */
-  def size = buffer.length * 2L
+  def size = buffer.length
 
   // TODO: In this implementation we risk that writing to the file fails and we lose the contents.
   // But if we wait for the result of writeToFile, we risk that meanwhile someone will add something
   // to the buffer and we will lose that.
   override def flush(): Future[Unit] = this.synchronized {
-    if (!empty) returning(Future { writeToFile(fileName, buffer.toString) }) { _ => buffer.clear() }
-    else Future.successful {}
+    if (!empty) {
+      val contents = buffer.toString
+      val path = currentPath
+      if (new File(path).length() + size > maxFileSize) paths = (basePath + paths.size + ".log") :: paths
+      returning(Future {
+        writeToFile(path, contents)
+        if (paths.size > maxRollFiles) {
+          paths = BufferedLogOutput.roll(paths.reverse)
+        }
+      }) { _ => buffer.clear() }
+    } else Future.successful {}
   }
 
   private def writeToFile(fileName: String, contents: String): Unit = this.synchronized {
@@ -81,7 +90,6 @@ class BufferedLogOutput(val fileName: String, val bufferSize: Long) extends LogO
 
       returning(new BufferedWriter(new FileWriter(file, true))) { writer =>
         writer.write(contents)
-        writer.newLine()
         writer.flush()
         writer.close()
       }
@@ -89,4 +97,21 @@ class BufferedLogOutput(val fileName: String, val bufferSize: Long) extends LogO
       case ex: IOException => ex.printStackTrace()
     }
   }
+
+}
+
+object BufferedLogOutput {
+  val defMaxBufferSize = 256L * 1024L
+  val defMaxFileSize = 4L * defMaxBufferSize
+  val defMaxRollFiles = 10
+  val defFileName = "internalLog"
+
+  @tailrec
+  private def roll(pathsSorted: List[String], newPaths: List[String] = Nil): List[String] = pathsSorted match {
+    case first :: second :: tail =>
+      new File(second).renameTo(new File(first))
+      if (tail != Nil) roll(second :: tail, first :: newPaths) else first :: newPaths
+    case _ => newPaths
+  }
+
 }
