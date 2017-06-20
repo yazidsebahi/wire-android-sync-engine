@@ -380,12 +380,4 @@ object TeamEvent {
 
     }
   }
-
-
-
-
-
-
-
-
 }
