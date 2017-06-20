@@ -28,7 +28,7 @@ import org.scalatest._
 class ConversationEventsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
 
   lazy val zms = new MockZMessaging()
-  lazy val service = zms.convEvents
+  lazy val service = zms.convOrder
 
   scenario("Ignore like events") {
     service.filterConvOrderEvents(Seq(GenericMessageEvent(RConvId(), new Date, UserId(), GenericMessage(Uid(), Reaction(MessageId(), Liking.Action.Like))))) shouldBe empty

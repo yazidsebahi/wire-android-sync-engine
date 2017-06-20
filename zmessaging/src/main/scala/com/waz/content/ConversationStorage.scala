@@ -37,6 +37,7 @@ trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
   def setUnknownVerification(convId: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None): Future[Vector[ConversationData]]
   def findByTeams(teams: Set[TeamId]): Future[Set[ConversationData]]
+  def getByRemoteIds(remoteId: Traversable[RConvId]): Future[Seq[ConvId]]
 }
 
 class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
@@ -120,7 +121,7 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
     remoteMap.get(remoteId).flatMap(convById.get)
   }
 
-  def getByRemoteIds(remoteId: Traversable[RConvId]): Future[Seq[ConvId]] = init map { convById =>
+  override def getByRemoteIds(remoteId: Traversable[RConvId]): Future[Seq[ConvId]] = init map { convById =>
     remoteId.flatMap(remoteMap.get).toVector
   }
 
