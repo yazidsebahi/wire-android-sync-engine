@@ -147,7 +147,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override def postClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = suite.postOtrClient(userId, client, lastKey, keys, password)
     override def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = suite.loadPreKeys(users)
     override def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = suite.loadRemainingPreKeys(id)
-    override def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
+    override def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
   }
 
   class MockedZMessagingFactory(global: GlobalModule) extends ZMessagingFactory(global) {
@@ -279,6 +279,6 @@ trait MockedClient { test: ApiSpec =>
   def postOtrClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = successful(Right(client))
   def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = successful(Right(Map.empty))
   def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = successful(Right(Nil))
-  def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))
+  def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))
   def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = successful(Right(()))
 }

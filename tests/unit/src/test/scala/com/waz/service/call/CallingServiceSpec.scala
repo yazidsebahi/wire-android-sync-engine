@@ -27,7 +27,7 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import org.threeten.bp.Instant
