@@ -43,10 +43,10 @@ object InternalLog {
 
   def flush() = outputs.values.foreach( _.flush )
 
-  def get(id: String) = outputs.get(id)
+  def apply(id: String) = outputs.get(id)
 
   def add(output: LogOutput) = this.synchronized {
-    get(output.id).getOrElse {
+    outputs.get(output.id).getOrElse {
       outputs += (output.id -> output)
       output
     }

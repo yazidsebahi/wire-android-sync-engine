@@ -24,24 +24,40 @@ import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.returning
 
 import scala.annotation.tailrec
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.util.Random
 
-class BufferedLogOutput(val basePath: String,
-                        val maxBufferSize: Long = BufferedLogOutput.defMaxBufferSize,
-                        val maxFileSize: Long = BufferedLogOutput.defMaxFileSize,
-                        val maxRollFiles: Int = BufferedLogOutput.defMaxRollFiles) extends LogOutput {
+class BufferedLogOutput(val baseDir: String,
+                        val maxBufferSize: Long = BufferedLogOutput.DefMaxBufferSize,
+                        val maxFileSize: Long = BufferedLogOutput.DefMaxFileSize,
+                        val maxRollFiles: Int = BufferedLogOutput.DefMaxRollFiles) extends LogOutput {
   assert(maxBufferSize < maxFileSize)
   assert(maxRollFiles > 0)
 
-  override val id = basePath
+  override val id = "BufferedLogOutput" + Random.nextInt().toHexString
 
-  private implicit val dispatcher = new SerialDispatchQueue(Threading.IO, "BufferedLogOutput" + Random.nextInt().toHexString)
+  private implicit val dispatcher = new SerialDispatchQueue(Threading.IO, id)
 
   private val buffer = StringBuilder.newBuilder
-  private var paths = List[String](basePath + "0.log")
+  private val pathRegex = (s"${baseDir}/${BufferedLogOutput.DefFileName}([0-9]+).log").r
+  private var paths = this.synchronized {
+    asScalaIterator(new File(baseDir).listFiles().iterator)
+      .map(_.getAbsolutePath)
+      .collect { case path@pathRegex(index) => (path, -index.toInt) }
+      .toList
+      .sortBy(_._2)
+      .map(_._1)
+  }
 
-  def currentPath = paths.head
+  private def newPath = s"${baseDir}/${BufferedLogOutput.DefFileName}${paths.size}.log"
+
+  def currentPath = {
+    if (paths.isEmpty) paths = List(newPath)
+    while (new File(paths.head).length > maxFileSize) paths = newPath :: paths
+    paths.head
+  }
+
   def getPaths = paths.reverse // internally the first path is the youngest one, but to the outside we want to show paths from the oldest to the youngest
 
   override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = this.synchronized {
@@ -66,15 +82,13 @@ class BufferedLogOutput(val basePath: String,
   // to the buffer and we will lose that.
   override def flush(): Future[Unit] = this.synchronized {
     if (!empty) {
-      val contents = buffer.toString
       val path = currentPath
-      if (new File(path).length() + size > maxFileSize) paths = (basePath + paths.size + ".log") :: paths
-      returning(Future {
+      val contents = buffer.toString
+      buffer.clear()
+      Future {
         writeToFile(path, contents)
-        if (paths.size > maxRollFiles) {
-          paths = BufferedLogOutput.roll(paths.reverse)
-        }
-      }) { _ => buffer.clear() }
+        while (paths.size > maxRollFiles) paths = BufferedLogOutput.roll(paths.reverse)
+      }
     } else Future.successful {}
   }
 
@@ -98,19 +112,25 @@ class BufferedLogOutput(val basePath: String,
     }
   }
 
+  // delete the old "internalLog.log" file, from before rolling was introduced - this code can be deleted after some time
+  private def deleteOldInternalLog() = {
+    val oldLog = new File(s"${baseDir}/internalLog.log")
+    if(oldLog.exists()) oldLog.delete()
+  }
+  deleteOldInternalLog()
 }
 
 object BufferedLogOutput {
-  val defMaxBufferSize = 256L * 1024L
-  val defMaxFileSize = 4L * defMaxBufferSize
-  val defMaxRollFiles = 10
-  val defFileName = "internalLog"
+  val DefMaxBufferSize = 256L * 1024L
+  val DefMaxFileSize = 4L * DefMaxBufferSize
+  val DefMaxRollFiles = 10
+  val DefFileName = "internalLog"
 
   @tailrec
   private def roll(pathsSorted: List[String], newPaths: List[String] = Nil): List[String] = pathsSorted match {
     case first :: second :: tail =>
       new File(second).renameTo(new File(first))
-      if (tail != Nil) roll(second :: tail, first :: newPaths) else first :: newPaths
+      roll(second :: tail, first :: newPaths)
     case _ => newPaths
   }
 

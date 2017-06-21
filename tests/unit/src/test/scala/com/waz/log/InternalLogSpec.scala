@@ -25,13 +25,14 @@ import com.waz.utils.IoUtils
 
 import scala.util.Random
 
+import scala.collection.JavaConversions._
+
 class InternalLogSpec extends AndroidFreeSpec {
   val tag = "InternalLogSuite"
   val tempDir = System.getProperty("java.io.tmpdir")+"tmp"+System.nanoTime()
 
-  def tempBasePath = tempDir + "/" + System.nanoTime()
-
   def filesNumberInTempDir = new File(tempDir).listFiles().length
+  def pathsInTempDir = asScalaIterator(new File(tempDir).listFiles().iterator).map(_.getAbsolutePath).toList
 
   def overflow(log: BufferedLogOutput) = {
     var prevSize = -1L
@@ -74,11 +75,10 @@ class InternalLogSpec extends AndroidFreeSpec {
   feature("adding and removing log outputs") {
     scenario("adds and removes a buffered log output") {
       InternalLog.getOutputs.size shouldEqual(0)
-      val basePath = tempBasePath
-      InternalLog.add(new BufferedLogOutput(basePath))
+      val logId = InternalLog.add(new BufferedLogOutput(tempDir)).id
       InternalLog.getOutputs.size shouldEqual(1)
 
-      val log = InternalLog.get(basePath).getOrElse(fail(s"No log output: $basePath"))
+      val log = InternalLog(logId).getOrElse(fail(s"No log output: $tempDir"))
       log.isInstanceOf[BufferedLogOutput] shouldEqual(true)
 
       InternalLog.remove(log)
@@ -90,7 +90,7 @@ class InternalLogSpec extends AndroidFreeSpec {
       InternalLog.add(new AndroidLogOutput)
       InternalLog.getOutputs.size shouldEqual(1)
 
-      val log = InternalLog.get("android").getOrElse(fail(s"No log output for Android"))
+      val log = InternalLog("android").getOrElse(fail(s"No log output for Android"))
       log.isInstanceOf[AndroidLogOutput] shouldEqual(true)
 
       InternalLog.remove(log)
@@ -99,7 +99,7 @@ class InternalLogSpec extends AndroidFreeSpec {
 
     scenario("reset log outputs") {
       InternalLog.getOutputs.size shouldEqual(0)
-      InternalLog.add(new BufferedLogOutput(tempBasePath))
+      InternalLog.add(new BufferedLogOutput(tempDir))
       InternalLog.add(new AndroidLogOutput)
       InternalLog.getOutputs.size shouldEqual(2)
       InternalLog.reset()
@@ -109,13 +109,13 @@ class InternalLogSpec extends AndroidFreeSpec {
 
   feature("writing logs to the buffer") {
     scenario("creates an empty buffer") {
-      val log = new BufferedLogOutput(tempBasePath)
+      val log = new BufferedLogOutput(tempDir)
       InternalLog.add(log)
       log.empty shouldEqual(true)
     }
 
     scenario("appends to the buffer") {
-      val log = new BufferedLogOutput(tempBasePath)
+      val log = new BufferedLogOutput(tempDir)
       InternalLog.add(log)
       log.empty should equal(true)
       InternalLog.debug("something", tag)
@@ -123,7 +123,7 @@ class InternalLogSpec extends AndroidFreeSpec {
     }
 
     scenario("clears the buffer when full") {
-      val log = new BufferedLogOutput(tempBasePath, 128L)
+      val log = new BufferedLogOutput(tempDir, 128L)
       InternalLog.add(log)
       log.empty shouldEqual(true)
 
@@ -138,10 +138,9 @@ class InternalLogSpec extends AndroidFreeSpec {
 
   feature("writing logs to the file") {
     scenario("creates a log file") {
-      val basePath = tempBasePath
       filesNumberInTempDir shouldEqual(0)
 
-      val log = new BufferedLogOutput(basePath, 128L)
+      val log = new BufferedLogOutput(tempDir, 128L)
       InternalLog.add(log)
       filesNumberInTempDir shouldEqual(0)
 
@@ -151,7 +150,7 @@ class InternalLogSpec extends AndroidFreeSpec {
     }
 
     scenario("appends to the log file when the buffer is full") {
-      val log = new BufferedLogOutput(tempBasePath, 128L)
+      val log = new BufferedLogOutput(tempDir, 128L)
       InternalLog.add(log)
       overflow(log)
       val fileSize1 = new File(log.currentPath).length()
@@ -165,7 +164,7 @@ class InternalLogSpec extends AndroidFreeSpec {
 
     scenario("receives logs written to ZLog") {
       ZmsVersion.DEBUG shouldEqual(true)
-      val log = new BufferedLogOutput(tempBasePath)
+      val log = new BufferedLogOutput(tempDir)
       InternalLog.add(log)
       log.empty shouldEqual(true)
 
@@ -183,7 +182,7 @@ class InternalLogSpec extends AndroidFreeSpec {
     val maxFileSize = maxBufferSize * 4L
 
     scenario("creates a new file when the max file size limit is exceeded") {
-      val log = new BufferedLogOutput(tempBasePath, maxBufferSize, maxFileSize)
+      val log = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize)
       InternalLog.add(log)
       exists(log.currentPath) shouldEqual(false)
       filesNumberInTempDir shouldEqual(0)
@@ -202,7 +201,7 @@ class InternalLogSpec extends AndroidFreeSpec {
     }
 
     scenario("it's ok for the file to be a bit bigger than the limit") {
-      val log = new BufferedLogOutput(tempBasePath, maxBufferSize, maxFileSize)
+      val log = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize)
       InternalLog.add(log)
 
       val firstPath = log.currentPath
@@ -217,7 +216,7 @@ class InternalLogSpec extends AndroidFreeSpec {
     }
 
     scenario("returns all file paths") {
-      val log = new BufferedLogOutput(tempBasePath, maxBufferSize, maxFileSize)
+      val log = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize)
       InternalLog.add(log)
       
       (1 to 5).foreach( _ => overflow(log) )
@@ -236,7 +235,7 @@ class InternalLogSpec extends AndroidFreeSpec {
 
     scenario("deletes the oldest file and rolls the rest") {
       val maxRollFiles = 4
-      val log = new BufferedLogOutput(tempBasePath, maxBufferSize, maxFileSize, maxRollFiles)
+      val log = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
       InternalLog.add(log)
 
       while (filesNumberInTempDir < maxRollFiles) overflow(log)
@@ -265,6 +264,185 @@ class InternalLogSpec extends AndroidFreeSpec {
       for (i <- 0 to newFiles.size - 3) {
         oldFiles(i+1) shouldEqual(newFiles(i))
       }
+    }
+  }
+
+  feature("InternalLog restarting") {
+    val maxBufferSize = 256L
+    val maxFileSize = maxBufferSize * 4L
+    val maxRollFiles = 4
+
+    scenario("sets the current file to the same as before if one non-full file present") {
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+      overflow(oldLog)
+
+      val oldPath = oldLog.currentPath
+      val paths = pathsInTempDir
+      paths.size shouldEqual(1)
+      paths(0) shouldEqual(oldPath)
+
+      InternalLog.reset()
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      newLog.currentPath shouldEqual(oldPath)
+    }
+
+    scenario("sets the current file to the same as before if if two files present") {
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+      val oldPath = oldLog.currentPath
+      (1 to 5).foreach( _ => overflow(oldLog) )
+      val newPath = oldLog.currentPath
+      newPath should not equal(oldPath)
+
+      InternalLog.reset()
+
+      val paths = pathsInTempDir
+      paths.size shouldEqual(2)
+      paths(0) shouldEqual(oldPath)
+      paths(1) shouldEqual(newPath)
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      newLog.currentPath shouldEqual(newPath)
+    }
+
+    scenario("sets the current file to the same as before if more files present") {
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+      val oldPath = oldLog.currentPath
+      (1 to 5).foreach( _ => overflow(oldLog) )
+      val newPath = oldLog.currentPath
+      newPath should not equal(oldPath)
+
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      val newerPath = oldLog.currentPath
+      newerPath should not equal(oldPath)
+      newerPath should not equal(newPath)
+
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      val newestPath = oldLog.currentPath
+      newestPath should not equal(oldPath)
+      newestPath should not equal(newPath)
+      newestPath should not equal(newerPath)
+
+      InternalLog.reset()
+
+      val paths = pathsInTempDir
+      paths.size shouldEqual(4)
+      paths(0) shouldEqual(oldPath)
+      paths(1) shouldEqual(newPath)
+      paths(2) shouldEqual(newerPath)
+      paths(3) shouldEqual(newestPath)
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      newLog.currentPath shouldEqual(newestPath)
+    }
+
+    scenario("sets the current file to the same as before if maxFileSize grows") {
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+      val oldPath = oldLog.currentPath
+      (1 to 5).foreach( _ => overflow(oldLog) )
+      val newPath = oldLog.currentPath
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      val newerPath = oldLog.currentPath
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      val newestPath = oldLog.currentPath
+
+      InternalLog.reset()
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize * 2L, maxRollFiles)
+      newLog.currentPath shouldEqual(newestPath)
+    }
+
+    scenario("sets the current file to the same as before if maxFileSize shrinks") {
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+      val oldPath = oldLog.currentPath
+      (1 to 5).foreach( _ => overflow(oldLog) )
+      val newPath = oldLog.currentPath
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      val newerPath = oldLog.currentPath
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      val newestPath = oldLog.currentPath
+
+      InternalLog.reset()
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize / 2L, maxRollFiles)
+      newLog.currentPath shouldEqual(newestPath)
+    }
+
+    scenario("sets the paths to the same as before"){
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+      (1 to 5).foreach( _ => overflow(oldLog) )
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      (1 to 4).foreach( _ => overflow(oldLog) )
+
+      val oldPaths = oldLog.getPaths
+      val pathsInDir = pathsInTempDir
+      oldPaths.toSet shouldEqual(pathsInDir.toSet)
+
+      InternalLog.reset()
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      val newPaths = newLog.getPaths
+      newPaths shouldEqual(oldPaths)
+    }
+
+    scenario("if maxFileSize shrinks old files are not affected"){
+      val shrunkSize = maxFileSize / 2L
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, maxRollFiles)
+      InternalLog.add(oldLog)
+
+      val oldPath = oldLog.currentPath
+      while (new File(oldPath).length <= shrunkSize) overflow(oldLog)
+      InternalLog.reset()
+
+      val oldPaths = oldLog.getPaths
+      oldPaths.size shouldEqual(1)
+      oldPaths(0) shouldEqual(oldPath)
+      val oldFileSize = new File(oldPath).length
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize / 2L, maxRollFiles)
+      InternalLog.add(newLog)
+      overflow(newLog)
+
+      new File(oldPath).length shouldEqual(oldFileSize)
+      newLog.getPaths.size shouldEqual(2)
+      newLog.currentPath should not equal oldPath
+      new File(newLog.currentPath).length() > 0 shouldEqual(true)
+    }
+
+    scenario("if maxRollFiles is changed to less than the current number of files, old ones are deleted"){
+      val oldLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, 4)
+      InternalLog.add(oldLog)
+      (1 to 5).foreach( _ => overflow(oldLog) )
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      (1 to 4).foreach( _ => overflow(oldLog) )
+      InternalLog.reset()
+
+      val oldPaths = oldLog.getPaths
+      val pathsInDir = pathsInTempDir
+      oldPaths.toSet shouldEqual(pathsInDir.toSet)
+
+      oldPaths.size shouldEqual(4)
+      val oldFirstFileStr = read(oldPaths(0))
+      val thisShouldBeNewFirst = read(oldPaths(2))
+
+      val newLog = new BufferedLogOutput(tempDir, maxBufferSize, maxFileSize, 2)
+      newLog.getPaths shouldEqual(oldPaths) // we don't change anything until the next flush
+
+      InternalLog.add(newLog)
+      overflow(newLog)
+
+      val newPaths = newLog.getPaths
+      newPaths.size shouldEqual(2)
+
+      val newFirstFileStr = read(newPaths(0))
+      newFirstFileStr should not equal oldFirstFileStr
+      newFirstFileStr shouldEqual(thisShouldBeNewFirst)
     }
   }
 
