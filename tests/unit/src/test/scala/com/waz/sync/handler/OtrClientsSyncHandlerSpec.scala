@@ -62,8 +62,8 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
         CancellableFuture.successful(Right(clients))
       }
 
-      override def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = {
-        updatedKeys = prekeys
+      override def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = {
+        updatedKeys = prekeys.get
         CancellableFuture.successful(Right(()))
       }
 

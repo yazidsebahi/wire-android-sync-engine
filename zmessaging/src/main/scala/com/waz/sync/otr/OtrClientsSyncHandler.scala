@@ -26,7 +26,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.{ClientRegistrationState, ZmsVersion}
 import com.waz.content.UserPreferences.ClientRegVersion
 import com.waz.content.{OtrClientsStorage, UserPreferences}
-import com.waz.model.otr.{Client, ClientId, Location, UserClients}
+import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
 import com.waz.model.{AccountId, UserId}
 import com.waz.service.otr._
 import com.waz.sync.SyncResult
@@ -55,7 +55,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
           verbose(s"remaining prekeys: $ids")
           cryptoBox.generatePreKeysIfNeeded(ids) flatMap {
             case keys if keys.isEmpty => Future.successful(SyncResult.Success)
-            case keys => netClient.updateKeys(id, keys).future map {
+            case keys => netClient.updateKeys(id, Some(keys)).future map {
               case Right(_) => SyncResult.Success
               case Left(error) => SyncResult(error)
             }
@@ -140,6 +140,18 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
   def syncPreKeys(clients: Map[UserId, Seq[ClientId]]): Future[SyncResult] = syncSessions(clients) map {
     case Some(error) => SyncResult(error)
     case None => SyncResult.Success
+  }
+
+  def registerSignalingKey(): Future[SyncResult] = {
+    clientId.head.flatMap(_.fold(Future.successful(Option.empty[Client]))(otrClients.getClient(userId, _))).flatMap {
+      case Some(client) =>
+        val sk = Some(SignalingKey())
+        netClient.updateKeys(client.id, sigKey = sk).future flatMap {
+          case Right(_)  => otrClients.updateClients(Map(userId -> Seq(client.copy(signalingKey = sk)))).map(_ => SyncResult.Success)
+          case Left(err) => Future.successful(SyncResult.Failure(Some(err)))
+        }
+      case _ => Future.successful(SyncResult.Failure(None, shouldRetry = false))
+    }
   }
 
   private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] =
