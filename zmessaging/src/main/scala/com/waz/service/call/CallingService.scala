@@ -356,7 +356,7 @@ class CallingService(context:             Context,
             messagesService.addMissedCallMessage(conv.id, selfUserId, Instant.now)
           case OtherCalling | SelfJoining =>
             verbose("Call timed out out and we didn't answer - mark as missed call")
-            messagesService.addMissedCallMessage(conv.id, userId, Instant.now)
+            messagesService.addMissedCallMessage(conv.id, call.caller, Instant.now)
           case SelfConnected =>
             verbose("Had a successful call, save duration as a message")
             call.estabTime.foreach { est =>
