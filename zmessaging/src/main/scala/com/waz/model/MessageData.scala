@@ -145,6 +145,7 @@ case class MessageContent(
                          ) {
 
   def contentAsUri: URI = RichMediaContentParser.parseUriWithScheme(content)
+  override def toString: String = s"MessageContent($tpe, ${content.take(4)}..., $richMedia, $openGraph, $asset, $width, $height, $syncNeeded, $mentions)"
 }
 
 object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData], Option[OpenGraphData], Option[AssetId], Int, Int, Boolean, Map[UserId, String]) => MessageContent) {
