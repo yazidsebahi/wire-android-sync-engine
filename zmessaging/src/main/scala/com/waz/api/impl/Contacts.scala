@@ -59,7 +59,7 @@ class Contacts(filtering: ContactsFiltering)(implicit ui: UiModule) extends api.
 
   override def search(token: String): Unit = search ! filtering.basedOn(token)
 
-  search.throttle(400.millis).on(Threading.Ui) { newFilter =>
+  search.throttle(400.millis).onUi { newFilter =>
     currentUpdate = currentUpdate.flatMap { _ =>
       updateFiltering(content.copy(filter = newFilter))
     }(Threading.Ui).recoverWithLog()

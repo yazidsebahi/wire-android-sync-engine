@@ -30,7 +30,7 @@ class ValidatedHandles()(implicit ui: UiModule) extends com.waz.api.ValidatedUse
   ui.currentZms.flatMap{
     case None => Signal.empty[Map[Handle, UsernameValidation]]
     case Some(zms) => zms.handlesService.validatedHandles
-  }.onChanged.on(Threading.Ui){
+  }.onChanged.onUi{
     _ => notifyChanged()
   }
 

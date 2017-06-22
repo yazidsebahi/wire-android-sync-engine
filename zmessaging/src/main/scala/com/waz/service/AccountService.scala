@@ -223,7 +223,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
     }
   }
 
-  isLoggedIn.on(Threading.Ui) { lifecycle.setLoggedIn }
+  isLoggedIn.onUi { lifecycle.setLoggedIn }
 
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 

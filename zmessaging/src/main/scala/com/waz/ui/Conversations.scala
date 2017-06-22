@@ -80,7 +80,7 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
       }.filter(_.nonEmpty)
 
     zms {
-      changeStream(_).on(Threading.Ui) { _ foreach {
+      changeStream(_).onUi { _ foreach {
           case (prev, conv) => callback.onVerificationStateChanged(conv.id.str, prev.verified, conv.verified)
         }
       }
