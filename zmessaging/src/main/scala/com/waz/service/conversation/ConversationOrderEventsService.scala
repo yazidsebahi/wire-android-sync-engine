@@ -27,7 +27,6 @@ import com.waz.service.{EventPipeline, EventScheduler, UserServiceImpl}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
-import com.waz.utils.events.Signal
 
 import scala.concurrent.Future
 
@@ -40,20 +39,16 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
 
-  val processing = Signal(false)
   val selfUserId = users.selfUserId
   val conversationOrderEventsStage = EventScheduler.Stage[ConversationOrderEvent] { (convId, es) =>
 
     val orderChanges    = processConversationOrderEvents(convId, filterConvOrderEvents(es))
     val unarchiveConvs  = processConversationUnarchiveEvents(convId, es.collect { case e: UnarchivingEvent => e })
 
-    processing ! true
-    (for {
+    for {
       _ <- orderChanges
       _ <- unarchiveConvs
-    } yield {}).andThen {
-      case _ => processing ! false
-    }
+    } yield {}
   }
 
   def handlePostConversationEvent(event: ConversationEvent) = {

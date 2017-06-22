@@ -56,6 +56,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
 
   var connectedPushPromise = Promise[PushServiceImpl]()
 
+  val processing = Signal(false)
   override val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
   /**
@@ -135,7 +136,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
   def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
 
   private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
-    debug(s"gotPushNotifications: $allNs")
+    debug(s"gotPushNotifications: ${allNs.size}")
 
     val ns = allNs.filter(_.hasEventForClient(clientId))
 
@@ -146,6 +147,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
   }
 
   private def processNotifications(notifications: Seq[PushNotification]) = wakeLock.async {
+    processing ! true
     pipeline {
       returning(notifications.flatMap(_.eventsForClient(clientId))) {
         _.foreach { ev =>
@@ -155,6 +157,8 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
       }
     }.map {
       _ => cloudPushNotificationsToProcess mutate (_ -- notifications.map(_.id).toSet)
+    }.andThen {
+      case _ => processing ! false
     }
   }
 
