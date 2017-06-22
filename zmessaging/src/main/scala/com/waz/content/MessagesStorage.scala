@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.{ErrorResponse, Message, MessageFilter}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
@@ -45,7 +46,6 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private implicit val tag: LogTag = logTagFor[MessagesStorageImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "MessagesStorage")
 
   val messageAdded = onAdded
@@ -248,7 +248,6 @@ object MessagesStorage {
 
 class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: Timeouts) {
   import scala.collection.breakOut
-  private implicit val tag: LogTag = logTagFor[IncomingMessages]
 
   private val messagesSource = new SourceSignal[SortedMap[(Long, MessageId), MessageData]](Some(initial.map(m => (m.localTime.toEpochMilli, m.id) -> m)(breakOut)))
 
@@ -285,8 +284,6 @@ class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: 
 class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorageImpl, likings: ReactionsStorage) {
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
-
-  private implicit val tag: LogTag = logTagFor[MessageAndLikesStorage]
 
   val onUpdate = EventStream[MessageId]() // TODO: use batching, maybe report new message data instead of just id
 

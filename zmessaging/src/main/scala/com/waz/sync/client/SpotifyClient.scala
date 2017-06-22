@@ -19,6 +19,7 @@ package com.waz.sync.client
 
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.AssetData
@@ -74,8 +75,6 @@ object SpotifyClient {
   import JsonDecoder._
 
   val domainNames = Set("open.spotify.com", "play.spotify.com")
-
-  implicit val logTag = logTagFor[SpotifyClient]
 
   private val Base = "https://api.spotify.com/v1"
   val MeUri = uri(Base)(_ / "me")

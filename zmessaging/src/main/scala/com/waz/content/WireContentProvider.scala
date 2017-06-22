@@ -23,6 +23,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.cache.{CacheEntryData, Expiration}
 import com.waz.model.CacheKey
 import com.waz.service.ZMessaging
@@ -123,7 +124,6 @@ class WireContentProvider extends ContentProvider {
 }
 
 object WireContentProvider {
-  private implicit val Tag: LogTag = logTagFor[WireContentProvider]
   private val Cache = "cache"
 
   object CacheUri {

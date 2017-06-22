@@ -22,6 +22,7 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.bitmap.BitmapUtils
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.content.AssetsStorage
@@ -43,7 +44,6 @@ import scala.util.Try
 class MetaDataService(context: Context, cache: CacheService, storage: AssetsStorage, assets: => AssetService,
                       generator: ImageAssetGenerator) {
   import com.waz.threading.Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[MetaDataService]
 
   def loadMetaData(asset: AssetData, data: LocalData): CancellableFuture[Option[AssetMetaData]] = {
     def load(entry: CacheEntry) = {

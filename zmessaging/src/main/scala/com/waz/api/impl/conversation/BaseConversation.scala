@@ -19,6 +19,7 @@ package com.waz.api.impl.conversation
 
 import android.os.Parcel
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.impl._
 import com.waz.api.{EphemeralExpiration, IConversation, MessageContent, Verification}
@@ -154,14 +155,13 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 }
 
 object BaseConversation {
-  implicit val logTag: LogTag = logTagFor[BaseConversation]
 
   lazy val UnknownName = Try(ZMessaging.context.getResources.getString(com.waz.zms.R.string.zms_unknown_conversation_name)).getOrElse("…")
 
   private def conversationName(data: ConversationData) = {
     val name = if (data.convType == IConversation.Type.GROUP) data.name.filter(!_.isEmpty).getOrElse(data.generatedName) else data.generatedName
     if (name.isEmpty) {
-      warn(s"Name is empty for: $data")(logTagFor[Conversation])
+      warn(s"Name is empty for: $data")
       UnknownName
     } else name
   }

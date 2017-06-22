@@ -27,7 +27,7 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import org.threeten.bp.Instant
@@ -50,6 +50,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   val messages       = mock[MessagesService]
 
   val self     = UserId("selfUserId")
+  val account  = AccountId(self.str)
 
   feature("Basics") {
     scenario("CallingService intialization") {
@@ -465,7 +466,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       initPromise.success({})
       initPromise.future
     }
-    val service = new CallingService(context, self, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
+    val service = new CallingService(context, account, self, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
     result(initPromise.future)
     service
   }

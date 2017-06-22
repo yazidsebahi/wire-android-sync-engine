@@ -18,6 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -68,8 +69,6 @@ class ConnectionsClient(netClient: ZNetClient) {
 }
 
 object ConnectionsClient {
-  private implicit val logTag: LogTag = logTagFor[ConnectionsClient]
-
   val ConnectionsPath = "/connections"
   val PageSize = 100
 

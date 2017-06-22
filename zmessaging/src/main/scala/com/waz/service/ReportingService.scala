@@ -27,6 +27,7 @@ import com.waz.cache.{CacheService, Expiration}
 import com.waz.content.GlobalPreferences.PushToken
 import com.waz.content.{AccountsStorageImpl, GlobalPreferences}
 import com.waz.content.WireContentProvider.CacheUri
+import com.waz.log.{BufferedLogOutput, InternalLog}
 import com.waz.model.{AccountId, Mime}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
@@ -81,7 +82,7 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
       lazy val writer = new PrintWriter(new OutputStreamWriter(entry.outputStream))
 
       val rs = if (metadata.internalBuild)
-        VersionReporter +: PushRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter
+        VersionReporter +: PushRegistrationReporter +: ZUsersReporter +: reporters :+ LogCatReporter :+ InternalLogReporter
       else Seq(VersionReporter, LogCatReporter)
 
       RichFuture.processSequential(rs) { reporter =>
@@ -131,5 +132,23 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
       Process(Seq("logcat", "-d", "-v", "time")).run(new ProcessIO({in => latch.await(); in.close() }, writeAll, writeAll))
       latch.await()
     } (Threading.IO)
+  })
+
+  val InternalLogReporter = Reporter("InternalLog", { writer =>
+    val outputs = InternalLog.getOutputs.flatMap {
+      case o: BufferedLogOutput => Some(o)
+      case _ => None
+    }
+
+    Future.sequence(outputs.map( _.flush() )).map { _ =>
+      outputs.flatMap(_.getPaths) // paths should be sorted from the oldest to the youngest
+             .map(new File(_))
+             .filter(_.exists)
+             .foreach { file =>
+               IoUtils.withResource(new BufferedReader(new InputStreamReader(new FileInputStream(file)))) {
+                 reader => Iterator.continually(reader.readLine()).takeWhile(_ != null).foreach(writer.println)
+               }
+             }
+    }
   })
 }

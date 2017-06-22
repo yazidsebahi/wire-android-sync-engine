@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.{Event, RConvEvent, RConvId}
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -67,8 +68,6 @@ class EventScheduler(layout: EventScheduler.Stage) {
 }
 
 object EventScheduler {
-  private implicit val logTag: LogTag = logTagFor[EventScheduler]
-
   sealed trait Strategy
   sealed trait SchedulingStrategy extends Strategy
   sealed trait ExecutionStrategy extends Strategy
@@ -93,8 +92,6 @@ object EventScheduler {
     def apply(strategy: SchedulingStrategy)(stages: Stage*): Composite = Composite(strategy, stages.toVector)
 
     def apply[A <: Event](processor: (RConvId, Vector[A]) => Future[Any], include: A => Boolean = (_: A) => true)(implicit EligibleEvent: ClassTag[A]): Atomic = new Atomic {
-      implicit lazy val logTag: LogTag = s"${logTagFor[Stage]}[${EligibleEvent.runtimeClass.getSimpleName}]"
-
       def isEligible(e: Event): Boolean = e match {
         case EligibleEvent(a) if include(a) => true
         case _ => false
@@ -102,7 +99,7 @@ object EventScheduler {
 
       def apply(conv: RConvId, es: Traversable[Event]): Future[Any] = {
         val events: Vector[A] = es.collect { case EligibleEvent(a) if include(a) => a }(breakOut)
-        verbose(s"processing ${events.size} ${if (events.size == 1) "event" else "events"}: ${events.take(10)} ${if (events.size > 10) "..." else ""}")
+        verbose(s"processing ${events.size} ${if (events.size == 1) "event" else "events"}: ${events.take(10)} ${if (events.size > 10) "..." else ""}")(s"${logTagFor[Stage]}[${EligibleEvent.runtimeClass.getSimpleName}]")
         processor(conv, events)
       }
     }

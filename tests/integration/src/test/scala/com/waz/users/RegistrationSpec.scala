@@ -25,12 +25,12 @@ import com.waz.content.GlobalPreferences.ShareContacts
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
 import com.waz.provision.EmailClientSuite
-import com.waz.service.{BackendConfig, ContactsService}
+import com.waz.service.{BackendConfig}
 import com.waz.testutils.{DefaultPatienceConfig, prepareAddressBookEntries}
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading
 import com.waz.utils.IoUtils
-import com.waz.znet.{AsyncClient, AsyncClientImpl, TestClientWrapper}
+import com.waz.znet.{AsyncClientImpl, TestClientWrapper}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, GivenWhenThen, Matchers}
 

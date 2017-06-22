@@ -31,8 +31,6 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.ref.WeakReference
 
 object Signal {
-  private implicit val logTag: LogTag = logTagFor(Signal)
-
   def apply[A]() = new SourceSignal[A] with NoAutowiring
   def apply[A](e: A) = new SourceSignal[A](Some(e)) with NoAutowiring
   def empty[A]: Signal[A] = new ConstSignal[A](None)
@@ -113,7 +111,7 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
 
   final def currentValue(implicit logTag: LogTag): Option[A] = {
     if (!wired) {
-      ZLog.warn(s"Accessing value of unwired signal: $this, autowiring will be disabled, returning value: $value")
+      ZLog.warn(s"Accessing value of unwired signal: $this, autowiring will be disabled, returning value: $value")(logTag)
       disableAutowiring()
     }
     value
@@ -340,7 +338,7 @@ class RefreshingSignal[A, B](loader: => CancellableFuture[A], refreshEvent: Even
   @volatile private var subscription = Option.empty[Subscription]
 
   private def reload() = subscription foreach { _ =>
-    loadFuture.cancel()
+    loadFuture.cancel()(tag)
     val p = Promise[Unit]
     val thisReload = CancellableFuture.lift(p.future)
     loadFuture = thisReload
@@ -360,7 +358,7 @@ class RefreshingSignal[A, B](loader: => CancellableFuture[A], refreshEvent: Even
     Future {
       subscription.foreach(_.unsubscribe())
       subscription = None
-      loadFuture.cancel()
+      loadFuture.cancel()(tag)
       value = None
     }(queue)
   }

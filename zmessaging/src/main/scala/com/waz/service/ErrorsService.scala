@@ -19,6 +19,7 @@ package com.waz.service
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
 import com.waz.content.MessagesStorageImpl
 import com.waz.model.ErrorData.ErrorDataDao
@@ -38,7 +39,6 @@ class ErrorsService(context: Context, storage: ZmsDatabase, lifecycle: ZmsLifecy
   import lifecycle._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ErrorsService")
-  private implicit val logTag: LogTag = logTagFor[ErrorsService]
 
   private var dismissHandler: PartialFunction[ErrorData, Future[_]] = PartialFunction.empty
 

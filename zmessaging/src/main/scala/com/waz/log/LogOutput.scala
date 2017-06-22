@@ -15,26 +15,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api;
+package com.waz.log
 
-import android.util.Log;
+import com.waz.ZLog.LogTag
 
-public enum LogLevel {
-    VERBOSE(Log.VERBOSE),
-    DEBUG(Log.DEBUG),
-    INFO(Log.INFO),
-    WARN(Log.WARN),
-    ERROR(Log.ERROR),
-    ASSERT(Log.ASSERT),
-    SUPPRESS(Integer.MAX_VALUE);
+import scala.concurrent.Future
 
-    public final int priority;
+trait LogOutput {
+  val id: String
 
-    public static void setMinimumLogLevel(LogLevel level) {
-        com.waz.api.impl.LogLevel.setMinimumLogLevel(level);
-    }
-
-    LogLevel(int priority) {
-        this.priority = priority;
-    }
+  def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit
+  def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit
+  def close(): Future[Unit]
+  def flush(): Future[Unit]
 }

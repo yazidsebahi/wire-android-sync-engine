@@ -21,13 +21,13 @@ import android.content.ContentValues
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
-import com.waz.{Generators, ShadowLogging}
+import com.waz.Generators
 import com.waz.utils.wrappers.{DB, DBHelper, URI}
 import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.CallLogEntry.CallLogEntryDao
-import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
+import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
@@ -37,7 +37,6 @@ import com.waz.model.sync.SyncJob.SyncJobDao
 import com.waz.model.sync.{SyncCommand, SyncJob}
 import com.waz.utils.{DbLoader, returning}
 import org.robolectric.Robolectric
-import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant

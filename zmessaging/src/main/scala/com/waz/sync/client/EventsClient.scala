@@ -18,6 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.model.otr.ClientId
@@ -123,7 +124,6 @@ object PushNotification {
 }
 
 object EventsClient {
-  private implicit val logTag: LogTag = logTagFor[EventsClient]
   val NotificationsPath = "/notifications"
   val LastNotificationPath = "/notifications/last"
   val PageSize = 1000

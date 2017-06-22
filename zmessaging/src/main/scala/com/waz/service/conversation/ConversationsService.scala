@@ -21,6 +21,7 @@ import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences._
@@ -50,7 +51,6 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
                            messages: MessagesServiceImpl, assets: AssetService, storage: ZmsDatabase,
                            msgContent: MessagesContentUpdater, userPrefs: UserPreferences, eventScheduler: => EventScheduler) {
 
-  private implicit val tag: LogTag = logTagFor[ConversationsService]
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
   import messages._

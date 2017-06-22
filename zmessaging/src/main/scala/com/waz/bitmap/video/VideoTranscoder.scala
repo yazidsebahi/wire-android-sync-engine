@@ -25,6 +25,7 @@ import android.media._
 import android.os.Build
 import android.view.Surface
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ProgressIndicator.{ProgressData, ProgressReporter}
 import com.waz.bitmap.video.VideoTranscoder.CodecResponse._
 import com.waz.bitmap.video.VideoTranscoder.{CodecResponse, MediaCodecIterator}
@@ -42,7 +43,6 @@ trait VideoTranscoder {
 }
 
 object VideoTranscoder {
-  implicit val tag: LogTag = logTagFor[VideoTranscoder]
 
   val BaseVideoSize = 320
   val MaxFileSizeBytes = 20 * 1024 * 1024 // smaller than backend limit to account for audio and other overhead

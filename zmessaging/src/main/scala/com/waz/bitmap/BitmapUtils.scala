@@ -23,11 +23,10 @@ import android.graphics.Bitmap.Config
 import android.graphics._
 import android.media.ExifInterface
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.utils.IoUtils
 
 object BitmapUtils {
-
-  private implicit val logTag: LogTag = logTagFor(BitmapUtils)
 
   object Mime {
     val Gif = "image/gif"

@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.Asset.LoadCallback
 import com.waz.model.AssetMetaData.{HasDimensions, HasDuration, Loudness}
@@ -93,7 +94,6 @@ class Asset(id: AssetId, msg: MessageId)(implicit ui: UiModule) extends BaseAsse
 }
 
 object Asset {
-  private implicit val logTag: LogTag = logTagFor[Asset]
 
   object Empty extends BaseAsset {
     protected override def asset = AssetData.Empty

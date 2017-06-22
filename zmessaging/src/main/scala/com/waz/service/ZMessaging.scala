@@ -17,7 +17,7 @@
  */
 package com.waz.service
 
-import android.content.Context
+import android.content.{ComponentCallbacks2, Context}
 import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
@@ -40,13 +40,13 @@ import com.waz.service.teams.TeamsServiceImpl
 import com.waz.sync.client._
 import com.waz.sync.handler._
 import com.waz.sync.otr.OtrSyncHandler
-import com.waz.threading.{SerialDispatchQueue, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
 import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
 import com.waz.znet.{CredentialsHandler, _}
-import net.hockeyapp.android.Constants
+import net.hockeyapp.android.{Constants, ExceptionHandler}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -84,7 +84,6 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val teamMemberStorage: TeamMemberStorage = wire[TeamMemberStorageImpl]
   lazy val msgDeletions                         = wire[MsgDeletionStorage]
   lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
-  lazy val commonConnections                    = wire[CommonConnectionsStorage]
   lazy val msgEdits                             = wire[EditHistoryStorage]
 }
 
@@ -150,7 +149,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache
-  def commonConnections = storage.commonConnections
 
   lazy val messagesStorage: MessagesStorageImpl = wire[MessagesStorageImpl]
   lazy val msgAndLikes: MessageAndLikesStorage = wire[MessageAndLikesStorage]
@@ -350,4 +348,18 @@ object ZMessaging { self =>
       Threading.Background { Locales.preloadTransliterator(); ContentSearchQuery.preloadTransliteration(); } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
   }
+
+  // should be called on low memory events
+  def onTrimMemory(level: Int): CancellableFuture[Unit] = level match {
+    case ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN |
+         ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW |
+         ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL =>
+      ExceptionHandler.saveException(new RuntimeException(s"onTrimMemory($level)"), null, null)
+      Threading.Background {
+        currentGlobal.cache.deleteExpired()
+        currentGlobal.imageCache.clear()
+      }
+    case _ => CancellableFuture.successful {}
+  }
+
 }

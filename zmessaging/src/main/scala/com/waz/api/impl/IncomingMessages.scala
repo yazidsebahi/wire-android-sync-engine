@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.IncomingMessagesList.MessageListener
 import com.waz.model.MessageData
@@ -27,8 +28,6 @@ import com.waz.utils._
 import org.threeten.bp.Instant
 
 class IncomingMessages(implicit context: UiModule) extends com.waz.api.IncomingMessagesList with CoreList[api.Message] with SignalLoading {
-
-  private implicit val logTag: LogTag = logTagFor[IncomingMessages]
 
   private var listeners = List[MessageListener]()
   private var messages = Array[(MessageData, Int)]()

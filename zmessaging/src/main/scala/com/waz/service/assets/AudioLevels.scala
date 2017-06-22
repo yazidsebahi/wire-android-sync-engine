@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import android.content.Context
 import android.media.{MediaCodec, MediaExtractor, MediaFormat}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.bitmap.video.{MediaCodecHelper, TrackDecoder}
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.Mime
@@ -140,8 +141,6 @@ case class AudioLevels(context: Context) {
 }
 
 object AudioLevels {
-  private implicit val logTag: LogTag = logTagFor[AudioLevels]
-
   case class TrackInfo(index: Int, format: MediaFormat, mime: String, samplingRate: Int, channels: Int, duration: FiniteDuration, samples: Double)
 
   def loudnessOverview(buckets: Int, rmsOfBuffers: Array[Double]): Vector[Float] = {

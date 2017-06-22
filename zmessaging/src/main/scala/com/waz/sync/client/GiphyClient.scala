@@ -20,6 +20,7 @@ package com.waz.sync.client
 import java.net.URLEncoder
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.{AssetData, AssetMetaData, Dim2, Mime}
@@ -65,8 +66,6 @@ class GiphyClient(netClient: ZNetClient) {
 }
 
 object GiphyClient {
-  implicit val logTag: LogTag = logTagFor[GiphyClient]
-
   val BasePath = "/proxy/giphy/v1/gifs"
 
   val RandomGifPath = s"$BasePath/random"

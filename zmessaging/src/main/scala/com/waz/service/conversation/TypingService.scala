@@ -20,6 +20,7 @@ package com.waz.service.conversation
 import java.util.Date
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ConversationStorageImpl
 import com.waz.model._
 import com.waz.service._
@@ -36,7 +37,6 @@ class TypingService(conversations: ConversationStorageImpl, timeouts: Timeouts, 
 
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "TypingService")
-  private implicit val tag: LogTag = logTagFor[TypingService]
 
   private var typing: ConvId Map IndexedSeq[TypingUser] = Map().withDefaultValue(Vector.empty)
 

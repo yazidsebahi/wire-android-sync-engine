@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.SearchQueryCacheStorage
 import com.waz.model.SearchQuery
 import com.waz.service.UserSearchService
@@ -28,17 +29,12 @@ import com.waz.threading.Threading
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-object UserSearchSyncHandler {
-  val DefaultLimit = 10
-}
-
 class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient) {
   import Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[UserSearchSyncHandler]
 
   def syncSearchQuery(query: SearchQuery): Future[SyncResult] = {
     debug(s"starting sync for: $query")
-    client.graphSearch(query, UserSearchSyncHandler.DefaultLimit).future flatMap {
+    client.getContacts(query).future flatMap {
       case Right(results) =>
         debug(s"searchSync, got: $results")
         userSearch.updateSearchResults(query, results).map(_ => SyncResult.Success)

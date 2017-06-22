@@ -7,8 +7,8 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "101"
-val MinorVersion = "2" // hotfix release
+val MajorVersion = "102"
+val MinorVersion = "0" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -40,7 +40,8 @@ resolvers in ThisBuild ++= Seq(
   "Maven central 1" at "http://repo1.maven.org/maven2",
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
   "Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases",
-  "Localytics" at "http://maven.localytics.com/public"
+  "Localytics" at "http://maven.localytics.com/public",
+  "Google Maven repo" at "https://maven.google.com"
 )
 
 
@@ -110,8 +111,8 @@ lazy val zmessaging = project
       "com.koushikdutta.async" % "androidasync" % "2.1.8",
       "com.googlecode.libphonenumber" % "libphonenumber" % "7.1.1", // 7.2.x breaks protobuf
       "com.softwaremill.macwire" %% "macros" % "2.2.2" % Provided,
-      "com.google.android.gms" % "play-services-base" % "10.0.1" % Provided exclude("com.android.support", "support-v4"),
-      "com.google.firebase" % "firebase-messaging" % "10.0.1" % Provided,
+      "com.google.android.gms" % "play-services-base" % "11.0.0" % Provided exclude("com.android.support", "support-v4"),
+      "com.google.firebase" % "firebase-messaging" % "11.0.0" % Provided,
       Deps.avs % Provided,
       Deps.cryptobox,
       Deps.genericMessage,
@@ -239,7 +240,7 @@ lazy val testapp = project.in(file("tests") / "app")
       "com.google.android.gms" % "play-services-gcm" % "7.8.0",
       Deps.localytics,
       "junit" % "junit" % "4.12" % Test,
-      "com.android.support" % "support-annotations" % "24.2.0" % Test,
+      "com.android.support" % "support-annotations" % supportLibVersion % Test,
       "com.android.support.test" % "runner" % "0.5" % Test,
       "com.android.support.test" % "rules" % "0.5" % Test
     )
@@ -370,6 +371,7 @@ lazy val macrosupport = project
     crossPaths := false,
     exportJars := true,
     name := "zmessaging-android-macrosupport",
+    sourceGenerators in Compile += generateDebugMode.taskValue,
     bintrayRepository := "releases",
     libraryDependencies ++= Seq(
       "org.scala-lang" % "scala-reflect" % (scalaVersion in ThisBuild).value % Provided,
@@ -388,6 +390,23 @@ generateZmsVersion in zmessaging := {
                   |   public static final boolean DEBUG = %b;
                   |}
                 """.stripMargin.format(version.value, avsVersion, MajorVersion, sys.env.get("BUILD_NUMBER").isEmpty || sys.props.getOrElse("debug", "false").toBoolean)
+  IO.write(file, content)
+  Seq(file)
+}
+
+generateDebugMode in macrosupport := {
+  val file = (sourceManaged in Compile in macrosupport).value / "com"/ "waz" / "DebugMode.scala"
+  val content = """package com.waz
+                  |
+                  |import scala.reflect.macros.blackbox.Context
+                  |
+                  |object DebugMode {
+                  |  def DEBUG(c: Context) = {
+                  |    import c.universe._
+                  |    Literal(Constant(%b))
+                  |  }
+                  |}
+                """.stripMargin.format(sys.env.get("BUILD_NUMBER").isEmpty || sys.props.getOrElse("debug", "false").toBoolean)
   IO.write(file, content)
   Seq(file)
 }

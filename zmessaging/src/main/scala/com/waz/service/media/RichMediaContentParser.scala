@@ -21,6 +21,7 @@ import java.net.URLDecoder
 
 import android.util.Patterns
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message.Part
 import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
@@ -33,8 +34,6 @@ import scala.util.control.NonFatal
 class RichMediaContentParser {
   import Part.Type._
   import com.waz.service.media.RichMediaContentParser._
-
-  private implicit val logTag: LogTag = logTagFor[RichMediaContentParser]
 
   def findMatches(content: String, weblinkEnabled: Boolean = false) = {
 

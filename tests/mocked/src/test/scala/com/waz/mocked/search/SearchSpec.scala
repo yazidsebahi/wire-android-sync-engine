@@ -230,6 +230,6 @@ class SearchSpec extends FeatureSpec with Inspectors with ScaledTimeSpans with M
   def uids(strs: String*) = strs map UserId
   def cid(str: String) = ContactId(sha2(str))
 
-  implicit class EnrichedUserInfo(user: UserInfo) { def entry(rel: Relation = Relation.First) = UserSearchEntry(user.id, user.name.get, None, None, user.accentId.getOrElse(0), Some(rel == Relation.First), blocked = false, rel, handle = None) }
+  implicit class EnrichedUserInfo(user: UserInfo) { def entry(rel: Relation = Relation.First) = UserSearchEntry(user.id, user.name.get, user.accentId, Handle(user.name.get)) }
   implicit class EnrichedUserArray(users: Array[User]) { def userInfo: Seq[UserInfo] = users.map(u => UserInfo(UserId(u.getId), Some(u.getName)))(breakOut) }
 }

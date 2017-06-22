@@ -18,6 +18,7 @@
 package com.waz.service.otr
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastSelfClientsSyncRequestedTime
@@ -37,7 +38,6 @@ import scala.concurrent.duration._
 
 class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, userPrefs: UserPreferences, storage: OtrClientsStorage, sync: SyncServiceHandle, lifecycle: ZmsLifecycle, updater: VerificationStateUpdater) {
 
-  import OtrClientsService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -166,8 +166,4 @@ class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netC
         cs.clients.get(id)
       case _ => None
     }
-}
-
-object OtrClientsService {
-  private implicit val tag: LogTag = logTagFor[OtrClientsService]
 }

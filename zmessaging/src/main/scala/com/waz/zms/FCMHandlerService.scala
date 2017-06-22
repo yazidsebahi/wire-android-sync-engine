@@ -90,7 +90,8 @@ object FCMHandlerService {
             case Some(notification) =>
               addNotificationToProcess(notification.id)
             case None =>
-              Future.successful(())
+              warn(s"gcm decoding failed: triggering notification history sync in case this notification is for us.")
+              push.syncHistory()
           }
 
         case PlainNotification(userId, notification) if userId == self =>
@@ -110,9 +111,7 @@ object FCMHandlerService {
     private def decryptNotification(content: Array[Byte], mac: Array[Byte]) =
       otrService.decryptGcm(content, mac) map {
         case Some(DecryptedNotification(notification)) => Some(notification)
-        case resp =>
-          warn(s"gcm decoding failed: $resp")
-          None
+        case _ => None
       }
 
     private def addNotificationToProcess(nId: Uid): Future[Unit] = {

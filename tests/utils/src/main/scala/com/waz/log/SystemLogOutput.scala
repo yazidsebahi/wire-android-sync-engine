@@ -15,11 +15,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.log
 
-trait CommonConnections extends UiObservable {
+import com.waz.ZLog.LogTag
 
-  def getTopConnections: Array[User]
-  def getTotalCount: Int
-  def getFullList: UsersList
+import scala.concurrent.Future
+
+class SystemLogOutput extends LogOutput {
+  override val id = SystemLogOutput.id
+
+  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = println(s"${InternalLog.dateTag}/$level/$tag: $str")
+  override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit = {
+    println(s"${InternalLog.dateTag}/$level/$tag: $str")
+    println(InternalLog.stackTrace(cause))
+  }
+
+  override def close(): Future[Unit] = Future.successful {}
+  override def flush(): Future[Unit] = Future.successful {}
+}
+
+object SystemLogOutput {
+  val id = "system"
 }

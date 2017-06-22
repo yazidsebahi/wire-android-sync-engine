@@ -18,6 +18,7 @@
 package com.waz.api.impl.search
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.impl.CoreList
 import com.waz.model.SearchQuery.TopPeople
@@ -26,8 +27,6 @@ import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.SeqMap
 
 class UserSearchResult(query: SearchQuery = TopPeople, limit: Int, filter: Set[String])(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
-  import UserSearchResult._
-
   private var users = Option.empty[SeqMap[UserId, UserData]]
 
   addLoader(_.userSearch.searchUserData(query, Some(limit + filter.size)), SeqMap.empty[UserId, UserData]) { us =>
@@ -42,8 +41,4 @@ class UserSearchResult(query: SearchQuery = TopPeople, limit: Int, filter: Set[S
   override def get(position: Int): api.User = ui.users.getUser(currentUsers at position)
   override def size: Int = currentUsers.size
   override def getAll: Array[api.User] = currentUsers.valuesIterator.map(ui.users.getUser).toArray
-}
-
-object UserSearchResult {
-  private implicit val tag: LogTag = logTagFor[UserSearchResult]
 }

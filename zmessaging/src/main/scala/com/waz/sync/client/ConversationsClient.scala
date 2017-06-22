@@ -18,6 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
@@ -96,8 +97,6 @@ class ConversationsClient(netClient: ZNetClient) {
 }
 
 object ConversationsClient {
-  private implicit val logTag: LogTag = logTagFor[ConversationsClient]
-
   val ConversationsPath = "/conversations"
   val ConversationIdsPath = "/conversations/ids"
   val ConversationsPageSize = 100
@@ -147,8 +146,6 @@ object ConversationsClient {
     }
 
     implicit lazy val Decoder: JsonDecoder[ConversationResponse] = new JsonDecoder[ConversationResponse] {
-      implicit val logTag: LogTag = "ConversationResponse.Decoder"
-
       override def apply(implicit js: JSONObject): ConversationResponse = {
         debug(s"decoding response: $js")
         val members = js.getJSONObject("members")

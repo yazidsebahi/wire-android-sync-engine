@@ -25,6 +25,7 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever._
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.service.assets.MetaDataRetriever
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
@@ -94,8 +95,6 @@ object AssetMetaData {
   case object Empty extends AssetMetaData('empty)
 
   object Video {
-    private implicit val Tag: LogTag = "AssetMetaData.Video"
-
     def apply(file: File): Future[Either[String, Video]] = MetaDataRetriever(file)(apply)
 
     def apply(context: Context, uri: Uri): Future[Either[String, Video]] = MetaDataRetriever(context, uri)(apply)

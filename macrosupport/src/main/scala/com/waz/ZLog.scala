@@ -19,23 +19,13 @@ package com.waz
 
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
-import android.util.Log
 
 import scala.annotation.tailrec
 
 object ZLog {
   type LogTag = String
 
-  type LogLevel = LogLevel.Value
-  object LogLevel extends Enumeration {
-    val Verbose, Debug, Warn, Info, Error = Value
-  }
-
-  var testLogLevel: LogLevel = LogLevel.Error
-  def setTestLogging() = this.testLogLevel = LogLevel.Verbose
-  def testLogging: Boolean = this.testLogLevel == LogLevel.Verbose
-
-  @volatile var minimumLogLevel: Int = Log.VERBOSE
+  @volatile var minimumLogLevel: Int = android.util.Log.VERBOSE
 
   def logTagFor[A <: Singleton](a: A): String = macro ZLogMacros.logTagForSingleton[A]
   def logTagFor[A]: String = macro ZLogMacros.logTagFor[A]
@@ -59,91 +49,73 @@ private object ZLogMacros {
 
   def errorWithCause(c: Context)(message: c.Expr[String], cause: c.Expr[Throwable])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Error) ${reify(println(s"E: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message, $cause)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.error($message, $cause, $tag)"
+      case _ => q""
+    }
   }
 
   def error(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Error) ${reify(println(s"E: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.ERROR) android.util.Log.e($tag, $message)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.error($message, $tag)"
+      case _ => q""
+    }
   }
 
   def warnWithCause(c: Context)(message: c.Expr[String], cause: c.Expr[Throwable])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Warn) ${reify(println(s"W: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message, $cause)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.warn($message, $cause, $tag)"
+      case _ => q""
+    }
   }
 
   def warn(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if(com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Warn) ${reify(println(s"W: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.WARN) android.util.Log.w($tag, $message)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.warn($message, $tag)"
+      case _ => q""
+    }
   }
 
   def info(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Info) ${reify(println(s"I: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.INFO) android.util.Log.i($tag, $message)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.info($message, $tag)"
+      case _ => q""
+    }
   }
 
   def debug(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Info) ${reify(println(s"D: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.DEBUG) android.util.Log.d($tag, $message)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.debug($message, $tag)"
+      case _ => q""
+    }
   }
 
   def verbose(c: Context)(message: c.Expr[String])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""
-        if (com.waz.utils.isTest) {
-          if (com.waz.ZLog.testLogLevel <= com.waz.ZLog.LogLevel.Verbose) ${reify(println(s"V: ${tag.splice}: ${message.splice}"))}
-        }
-        else
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.VERBOSE) android.util.Log.v($tag, $message)
-      """
+    DebugMode.DEBUG(c) match {
+      case Literal(Constant(d: Boolean)) if d => q"com.waz.log.InternalLog.verbose($message, $tag)"
+      case _ => q""
+    }
   }
 
   def logTime[A](c: Context)(message: c.Expr[String])(body: c.Expr[A])(tag: c.Expr[LogTag]) = {
     import c.universe._
-    q"""val time = System.nanoTime
+    DebugMode.DEBUG(c) match {
+      case Expr(Literal(Constant(d: Boolean))) if d =>
+        q"""val time = System.nanoTime
         try {
           $body
         } finally {
-          if (com.waz.ZLog.minimumLogLevel <= android.util.Log.VERBOSE)
-            android.util.Log.v($tag, $message + ": " + ((System.nanoTime - time) / 1000 / 1000f) + " ms")
+           com.waz.log.InternalLog.verbose($message + ": " + ((System.nanoTime - time) / 1000 / 1000f) + " ms", $tag)
         }
-    """
+        """
+      case _ => q"try { $body } finally { }"
+    }
   }
 
   def logTagForSingleton[A <: Singleton](c: Context)(a: c.Expr[A])(implicit tag: c.WeakTypeTag[A]) = logTagFor[A](c)
@@ -169,4 +141,5 @@ private object ZLogMacros {
 
     q"$name"
   }
+
 }

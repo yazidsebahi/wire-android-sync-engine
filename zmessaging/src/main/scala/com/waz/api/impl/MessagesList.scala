@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.content.Uris.SyncIndicatorUri
 import com.waz.content.{MessagesCursor, Uris}
@@ -35,7 +36,6 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 
 class MessagesList(convId: ConvId)(implicit ui: UiModule) extends com.waz.api.MessagesList with CoreList[api.Message] with SignalLoading { list =>
-  private implicit val logTag: LogTag = logTagFor[MessagesList]
 
   var lastRead = Instant.EPOCH
 

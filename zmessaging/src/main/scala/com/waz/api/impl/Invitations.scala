@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Invitations._
 import com.waz.client.RegistrationClient
 import com.waz.model.PersonalInvitationToken
@@ -30,7 +31,6 @@ import com.waz.utils._
 import scala.util.{Failure, Success}
 
 class Invitations(zms: ZMessagingResolver, convs: => Conversations, regClient: => RegistrationClient) extends com.waz.api.Invitations {
-  private implicit val logTag: LogTag = logTagFor[Invitations]
 
   override def generateInvitationUri(callback: InvitationUriCallback): Unit = zms.flatMapFuture(_.invitations.generateInvitationUri())(Threading.Background).map {
     case Some(uri) => callback.onInvitationGenerated(uri)

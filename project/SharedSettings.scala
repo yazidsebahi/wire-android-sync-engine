@@ -19,7 +19,7 @@ object SharedSettings {
   val avsVersion = "2.8.61"
   val audioVersion = "1.195.0"
   val RobolectricVersion = "5.0.0_r2-robolectric-1"
-  val supportLibVersion = "24.2.0"
+  val supportLibVersion = "25.4.0"
   val cryptoboxVersion = "1.0.0"
 
   object Deps {
@@ -31,7 +31,7 @@ object SharedSettings {
     lazy val spotifyPlayer = "com.wire" % "spotify-player" % "1.0.0-beta13"
     lazy val spotifyAuth = "com.spotify.android" % "auth" % "1.0.0-alpha"
     lazy val localytics = "com.localytics.android" % "library" % "3.8.0"
-    lazy val hockeyApp = "net.hockeyapp.android" % "HockeySDK" % "3.7.2"
+    lazy val hockeyApp = "net.hockeyapp.android" % "HockeySDK" % "4.1.4"
     lazy val supportV4 = "com.android.support" % "support-v4" % supportLibVersion
     lazy val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.12.5" % Test
     lazy val wireMock = "com.github.tomakehurst" % "wiremock" % "1.53" % Test // current versions requires Java 8...
@@ -42,6 +42,7 @@ object SharedSettings {
 
   lazy val androidSdkDir = settingKey[File]("Android sdk dir from ANDROID_HOME")
   lazy val generateZmsVersion = taskKey[Seq[File]]("generate ZmsVersion.java")
+  lazy val generateDebugMode = taskKey[Seq[File]]("generate DebugMode.scala")
   lazy val generateCredentials = taskKey[Seq[File]]("generate InternalCredentials.scala")
   lazy val actorsResources = taskKey[File]("Creates resources zip for remote actor")
   lazy val nativeLibs = taskKey[Classpath]("directories containing native libs for osx and linux build")
@@ -99,8 +100,8 @@ object SharedSettings {
       "org.apache.httpcomponents" % "httpclient" % "4.5.1", // to override version included in robolectric
       "junit" % "junit" % "4.8.2", //to override version included in robolectric
       "com.android.support" % "support-v4" % supportLibVersion,
-      "com.google.android.gms" % "play-services-base" % "9.0.0" % Provided exclude("com.android.support", "support-v4"),
-      "com.google.firebase" % "firebase-messaging" % "9.0.0" % Provided,
+      "com.google.android.gms" % "play-services-base" % "11.0.0" % Provided exclude("com.android.support", "support-v4"),
+      "com.google.firebase" % "firebase-messaging" % "11.0.0" % Provided,
       Deps.avs,
       Deps.cryptobox,
       "com.wire" % "avs-native" % avsVersion % Native,

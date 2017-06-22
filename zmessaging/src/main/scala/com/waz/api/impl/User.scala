@@ -19,10 +19,10 @@ package com.waz.api.impl
 
 import android.os.Parcel
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api._
 import com.waz.api.impl.otr.OtrClients
-import com.waz.content.Uris
 import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.ui._
@@ -32,8 +32,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   def this(id: UserId)(implicit ui: UiModule) = this(id, UserData(id, ""))
   def this(data: UserData)(implicit ui: UiModule) = this(data.id, data)
-
-  import User._
 
   require(id == data.id)
 
@@ -53,13 +51,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
     firstContact = cont.map(c => ui.contactDetails.getOrElseUpdate(c.id, new ContactDetails(c, false)(ui)))
     notifyChanged()
   }
-
-  val commonConnections = ui.cached(Uris.CommonConnectionsUri(id), new CommonConnections(id)(ui))
-  commonConnections.addUpdateListener(new UpdateListener {
-    override def updated(): Unit = {
-      notifyChanged()
-    }
-  })
 
   def set(d: UserData): Unit = {
     require(this.id == d.id)
@@ -131,8 +122,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def cancelConnection(): Unit = ui.users.cancelConnection(this)
 
-  override def getCommonConnections = commonConnections
-
   override def isContact: Boolean = firstContact.nonEmpty
 
   override def getFirstContact: api.ContactDetails = firstContact.orNull
@@ -150,12 +139,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   override def describeContents(): Int = 0
 
   override def getUsername: String = data.handle.fold("")(_.string)
-
-  override def getCommonConnectionsCount = getCommonConnections.getTotalCount //TODO: STUB
-}
-
-object User {
-  private implicit val logTag: LogTag = logTagFor[User]
 }
 
 object EmptyUser extends com.waz.api.User {
@@ -178,8 +161,6 @@ object EmptyUser extends com.waz.api.User {
   override def getInitials: String = ""
   override def ignoreConnection(): Unit = ()
   override def getAccent: api.AccentColor = AccentColor()
-  override def getCommonConnections = null
-  override def getCommonConnectionsCount = 0
   override def removeUpdateListener(listener: UpdateListener): Unit = ()
   override def addUpdateListener(listener: UpdateListener): Unit = ()
   override def writeToParcel(dest: Parcel, flags: Int): Unit = ()

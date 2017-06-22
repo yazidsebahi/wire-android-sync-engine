@@ -41,6 +41,8 @@ trait PushService {
 
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
 
+  def syncHistory(): Future[Unit]
+
 }
 
 class PushServiceImpl(context: Context, keyValue: UserPreferences, client: EventsClient, clientId: ClientId, signals: PushServiceSignals, pipeline: EventPipeline, webSocket: WebSocketClientService) extends PushService {
@@ -156,7 +158,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
     }
   }
 
-  private def syncHistory() =
+  override def syncHistory() =
     lastNotification.lastNotificationId() flatMap {
       case None =>
         debug("no last notification Id on connect, will schedule slow sync")

@@ -19,50 +19,31 @@ package com.waz.zms
 
 import android.content.{Context, Intent}
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AccountId
-import com.waz.service.{Accounts, ZMessaging}
-import com.waz.sync.AccountExecutor
-import com.waz.threading.SerialDispatchQueue
 
-import scala.collection.mutable
 import scala.concurrent.Future
 
 class SyncService extends FutureService with ZMessagingService {
 
-  implicit val dispatcher = new SerialDispatchQueue(name = "SyncService")
-  private implicit val logTag: LogTag = logTagFor[SyncService]
+  import com.waz.threading.Threading.Implicits.Background
 
-  val executors = new mutable.HashMap[AccountId, SyncService.Executor]
-
-  def accounts = ZMessaging.currentAccounts
-
-  override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
-    debug(s"onIntent $intent")
-    if (intent != null && intent.hasExtra(SyncService.ZUserIdExtra)) {
-      val userId = AccountId(intent.getStringExtra(SyncService.ZUserIdExtra))
-      executors.getOrElseUpdate(userId, new SyncService.Executor(getApplicationContext, userId, accounts)).sync(id)
-    } else {
-      error("intent has no ZUserId extra")
-      Future.successful(())
+  override protected def onIntent(intent: Intent, id: Int): Future[Any] =
+    onAccountIntent(intent) { acc =>
+      debug(s"onIntent $intent")
+      acc.global.lifecycle.withSync {
+        acc.userModule.head flatMap {
+          _.syncRequests.scheduler.awaitRunning
+        }
+      }
     }
-  }
 }
 
 object SyncService {
 
-  val ZUserIdExtra = "user_id"
-
   def intent(context: Context, user: AccountId) = {
     val intent = new Intent(context, classOf[SyncService])
-    intent.putExtra(ZUserIdExtra, user.str)
+    intent.putExtra(ZMessagingService.ZmsUserIdExtra, user.str)
     intent
-  }
-
-  class Executor(val context: Context, val userId: AccountId, val accounts: Accounts) extends AccountExecutor {
-    import com.waz.threading.Threading.Implicits.Background
-
-    def sync(id: Int) = execute { acc =>
-      acc.userModule.head flatMap { _.syncRequests.scheduler.awaitRunning }
-    } (s"SyncService.Executor $id")
   }
 }

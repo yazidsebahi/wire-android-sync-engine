@@ -20,6 +20,7 @@ package com.waz.api.impl
 import android.net.Uri
 import com.koushikdutta.async.http.WebSocket
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.{ClientRegistrationState, CredentialsFactory, InitListener, LoginListener}
 import com.waz.client.RegistrationClient
@@ -266,7 +267,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
       idle(1.second)
       ui.accounts.storage.update(accountId, _.copy(password = None)).futureValue
       api.account.foreach { acc =>
-        debug(s"closing db: ${acc.storage.db.dbHelper.getDatabaseName}")("RegistrationSpec")
+        debug(s"closing db: ${acc.storage.db.dbHelper.getDatabaseName}")
         acc.storage.db.close().await()
       }
       ui.accounts.ec.onContextStop()
@@ -288,7 +289,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
           Response(HttpStatus(403), JsonObjectResponse(Json("code" -> 403, "message" -> "invalid credentials", "label" -> "")))
       }
 
-      debug("##### starting new api")(logTagFor[RegistrationSpec])
+      debug("##### starting new api")
 
       val api2 = new ZMessagingApi()(MockUiModule(new MockAccounts(global)))
       api2.onCreate(context)

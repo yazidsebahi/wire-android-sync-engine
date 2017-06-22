@@ -18,6 +18,7 @@
 package com.waz.service.messages
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.{Likes, ReactionsStorage}
 import com.waz.model._
 import com.waz.service.UserServiceImpl
@@ -30,7 +31,6 @@ import org.threeten.bp.Instant.EPOCH
 import scala.concurrent.Future
 
 class ReactionsService(storage: ReactionsStorage, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserServiceImpl, selfUserId: UserId) {
-  import ReactionsService._
   import Threading.Implicits.Background
 
   def like(conv: ConvId, msg: MessageId): Future[Likes] = addReaction(conv, msg, Liking.Action.Like)
@@ -52,10 +52,6 @@ class ReactionsService(storage: ReactionsStorage, messages: MessagesContentUpdat
   })
 
   def processReactions(likings: Seq[Liking]): Future[Seq[Likes]] = Future.traverse(likings) { storage.addOrUpdate } // FIXME: use batching
-}
-
-object ReactionsService {
-  private implicit val logTag: LogTag = logTagFor[ReactionsService]
 }
 
 case class MessageAndLikes(message: MessageData, likes: IndexedSeq[UserId], likedBySelf: Boolean)

@@ -34,7 +34,7 @@ import com.waz.testutils._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.sha2
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import com.waz.znet.{AsyncClient, AsyncClientImpl, TestClientWrapper}
+import com.waz.znet.{AsyncClientImpl, TestClientWrapper}
 import org.robolectric.shadows.ShadowContentResolver
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
 
@@ -154,7 +154,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
         // server response will not update immediately with newly registered users, thus we fail the sync request
         // which will cause the search to use local suggestions, which should find the contacts because
         // address book upload will initiate a sync for the matched users
-        override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.successful(Left(ErrorResponse.InternalError))
+        override def getContacts(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.successful(Left(ErrorResponse.InternalError))
       }
     }
   }

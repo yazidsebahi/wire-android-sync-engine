@@ -18,7 +18,9 @@
 package com.waz.service
 
 import com.softwaremill.macwire._
+import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
 import com.waz.content.Preferences.Preference
@@ -35,6 +37,8 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.CredentialsHandler
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
+import org.threeten.bp.Instant
+import com.waz.utils.RichInstant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -42,7 +46,6 @@ import scala.util.Right
 
 class UserModule(val userId: UserId, val account: AccountService) {
   import Threading.Implicits.Background
-  private implicit val Tag: LogTag = logTagFor[UserModule]
 
   def context = account.global.context
   def db = account.storage.db
@@ -69,7 +72,7 @@ class UserModule(val userId: UserId, val account: AccountService) {
   lazy val syncRequests: SyncRequestService   = wire[SyncRequestService]
   lazy val syncHandler: SyncHandler           = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
 
-  def ensureClientRegistered(account: AccountData): Future[Either[ErrorResponse, AccountData]] =
+  def ensureClientRegistered(account: AccountData): ErrorOr[AccountData] =
     if (account.clientId.isDefined) Future successful Right(account)
     else {
       import com.waz.api.ClientRegistrationState._
@@ -126,11 +129,6 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
       }
     }
 
-    // listen to client changes, logout and delete cryptobox if current client is removed
-    val otrClient = accountData.map(a => (a.userId, a.clientId)).flatMap {
-      case (Some(userId), Some(cId)) => storage.otrClientsStorage.optSignal(userId).map(_.flatMap(_.clients.get(cId)))
-      case _                         => Signal const Option.empty[Client]
-    }
     var hasClient = false
     otrClient.map(_.isDefined) { exists =>
       if (hasClient && !exists) {
@@ -139,6 +137,12 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
       }
       hasClient = exists
     }
+  }
+
+  // listen to client changes, logout and delete cryptobox if current client is removed
+  lazy val otrClient = accountData.map(a => (a.userId, a.clientId)).flatMap {
+    case (Some(userId), Some(cId)) => storage.otrClientsStorage.optSignal(userId).map(_.flatMap(_.clients.get(cId)))
+    case _                         => Signal const Option.empty[Client]
   }
 
   lazy val cryptoBox          = global.factory.cryptobox(id, storage)
@@ -198,12 +202,25 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
     }
   } (EventContext.Global)
 
-  accountData.zip(isLoggedIn) {
-    case (acc, loggedIn) =>
-      if (loggedIn && acc.verified && (acc.userId.isEmpty || acc.clientId.isEmpty)) {
+  for {
+    acc          <- accountData
+    loggedIn     <- isLoggedIn
+    Some(client) <- otrClient
+  } {
+    if (loggedIn && acc.verified) {
+      if (acc.userId.isEmpty || acc.clientId.isEmpty) {
         verbose(s"account data needs registration: $acc")
-        Serialized.future(self) { ensureFullyRegistered() }
+        Serialized.future(self)(ensureFullyRegistered())
       }
+
+      if (client.signalingKey.isEmpty) {
+        returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
+          warn(msg)
+          HockeyApp.saveException(new IllegalStateException(msg), msg)
+        }
+        Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
+      }
+    }
   }
 
   isLoggedIn.on(Threading.Ui) { lifecycle.setLoggedIn }
@@ -256,18 +273,22 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
   }
 
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] = credentialsClient.updateEmail(email)
+
   def clearEmail(): ErrorOr[Unit] =
     credentialsClient.clearEmail().future.flatMap {
       case Left(err) => Future successful Left(err)
-      case Right(_) => accountsStorage.update(id, _.copy(email = None)) .map(_ => Right(()))
+      case Right(_)  => updateSelfAccountAndUser(_.copy(email = None), _.copy(email = None)).map(_ => Right({}))
+
     }
 
   def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] = credentialsClient.updatePhone(phone)
+
   def clearPhone(): ErrorOr[Unit] =
     credentialsClient.clearPhone().future.flatMap {
       case Left(err) => Future successful Left(err)
-      case Right(_) => accountsStorage.update(id, _.copy(phone = None)) .map(_ => Right(()))
+      case Right(_)  => updateSelfAccountAndUser(_.copy(phone = None), _.copy(phone = None)).map(_ => Right({}))
     }
+
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
     credentialsClient.updatePassword(newPassword, currentPassword).future flatMap {
       case Left(err) => Future successful Left(err)
@@ -276,14 +297,26 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
           getZMessaging map { _ => Right(()) }
         }
     }
-  def updateHandle(handle: Handle): ErrorOrResponse[Unit] = credentialsClient.updateHandle(handle)
+
+  def updateHandle(handle: Handle): ErrorOr[Unit] =
+    credentialsClient.updateHandle(handle).future.flatMap {
+      case Left(err) => Future successful Left(err)
+      case Right(_)  => updateSelfAccountAndUser(_.copy(handle = Some(handle)), _.copy(handle = Some(handle))).map(_ => Right({}))
+    }
+
+  private def updateSelfAccountAndUser(acc: AccountData => AccountData, user: UserData => UserData) = {
+    for {
+      _         <- accountsStorage.update(id, acc)
+      Some(zms) <- getZMessaging
+      _         <- zms.usersStorage.update(zms.selfUserId, user)
+    } yield {}
+  }
 
   def updatePrivateMode(privateMode: Boolean): ErrorOrResponse[Unit] =
     account.userId match {
       case Some(uId) => usersClient.updateSelf(UserInfo(uId, privateMode = Some(privateMode)))
       case _ => CancellableFuture(Left(ErrorResponse.internalError("User info hasn't been loaded yet")))
     }
-
 
   private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
@@ -385,7 +418,5 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
 }
 
 object AccountService {
-  private implicit val tag: LogTag = logTagFor[AccountService]
-
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
 }

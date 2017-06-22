@@ -18,13 +18,14 @@
 package com.waz.service
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
@@ -33,7 +34,6 @@ import scala.concurrent.Future
 
 class Accounts(val global: GlobalModule) {
 
-  import Accounts._
   implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
 
   private[waz] implicit val ec: EventContext = EventContext.Global
@@ -46,6 +46,14 @@ class Accounts(val global: GlobalModule) {
   val phoneNumbers  = global.phoneNumbers
   val regClient     = global.regClient
   val loginClient   = global.loginClient
+
+  val accounts = {
+    val changes = EventStream.union(
+      storage.onChanged.map(_.map(_.id)),
+      storage.onDeleted
+    )
+    new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
+  }
 
   val currentAccountPref = prefs.preference(CurrentAccountPref)
 
@@ -111,6 +119,33 @@ class Accounts(val global: GlobalModule) {
   private def setAccount(acc: Option[AccountId]) = {
     verbose(s"setAccount($acc)")
     currentAccountPref := acc.fold("")(_.str)
+  }
+
+  /**
+    * Logs out of the current account and switches to another specified by the AccountId. If the other cannot be authorized
+    * (no cookie) or if anything else goes wrong, we leave the user logged out so they'll be prompted for details again.
+    */
+  def switchAccount(accountId: AccountId) = {
+    verbose(s"switchAccount: $accountId")
+    for {
+      cur      <- getCurrent.map(_.map(_.id))
+      if !cur.contains(accountId)
+      _        <- logout()
+      account  <- storage.get(accountId).collect { case Some(a) if a.cookie.isDefined => a }
+      _        <- setAccount(Some(account.id))
+      _        <- getInstance(account)
+      _   <- loginClient.access(account.cookie.get, account.accessToken).future.flatMap {
+        case Right((token, cookieOpt)) =>
+          verbose(s"Account successfully switched. Got token: ${token.accessToken.take(5)} and cookie: ${cookieOpt.map(_.str.take(5))}")
+          storage.update(accountId, _.copy(accessToken = Some(token), cookie = cookieOpt.orElse(account.cookie)))
+        case Left((_, ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
+          verbose(s"access request failed (label: $label, message: $message), leaving user logged out")
+          Future.successful({})
+        case Left((_, err)) =>
+          error(s"Access failed with unexpected error, leaving user logged out: $err")
+          Future.successful({})
+      }
+    } yield {}
   }
 
   private def switchAccount(credentials: Credentials) = {
@@ -224,8 +259,3 @@ class Accounts(val global: GlobalModule) {
     }
   }
 }
-
-object Accounts {
-  private implicit val logTag: LogTag = logTagFor[Accounts]
-}
-

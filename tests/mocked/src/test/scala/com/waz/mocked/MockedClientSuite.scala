@@ -20,6 +20,7 @@ package com.waz.mocked
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
@@ -55,7 +56,6 @@ import scala.concurrent.Future
 import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
-  private implicit val logTag: LogTag = logTagFor[MockedClientSuite]
 
   @volatile private var pushService = Option.empty[PushServiceImpl]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
@@ -104,7 +104,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     }
     override lazy val giphyClient        = new GiphyClient(zNetClient) {}
     override lazy val userSearchClient   = new UserSearchClient(zNetClient) {
-      override def graphSearch(query: SearchQuery, limit: Int) = suite.graphSearch(query, limit)
+      override def getContacts(query: SearchQuery, limit: Int) = suite.graphSearch(query, limit)
     }
     override lazy val connectionsClient  = new ConnectionsClient(zNetClient) {
       override def loadConnections(start: Option[UserId], pageSize: Int): ErrorOrResponse[Seq[UserConnectionEvent]] = suite.loadConnections(start, pageSize)
@@ -147,7 +147,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override def postClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = suite.postOtrClient(userId, client, lastKey, keys, password)
     override def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = suite.loadPreKeys(users)
     override def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = suite.loadRemainingPreKeys(id)
-    override def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
+    override def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
   }
 
   class MockedZMessagingFactory(global: GlobalModule) extends ZMessagingFactory(global) {
@@ -279,6 +279,6 @@ trait MockedClient { test: ApiSpec =>
   def postOtrClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = successful(Right(client))
   def loadPreKeys(users: Map[UserId, Seq[ClientId]]): ErrorOrResponse[Map[UserId, Seq[ClientKey]]] = successful(Right(Map.empty))
   def loadRemainingPreKeys(id: ClientId): ErrorOrResponse[Seq[Int]] = successful(Right(Nil))
-  def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))
+  def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey], sigKey: Option[SignalingKey]): ErrorOrResponse[Unit] = successful(Right(()))
   def updateTypingState(id: RConvId, isTyping: Boolean): ErrorOrResponse[Unit] = successful(Right(()))
 }

@@ -20,6 +20,7 @@ package com.waz.api.impl
 import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.PermissionProvider
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
@@ -39,7 +40,6 @@ import scala.util.{Failure, Success, Try}
 class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi {
 
   import Threading.Implicits.Ui
-  private implicit val logTag: LogTag = logTagFor[ZMessagingApi]
 
   private[waz] var account: Option[AccountService] = None
   private[waz] def zmessaging = account match {

@@ -18,6 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.Invitation
 import com.waz.service.UserServiceImpl
@@ -32,7 +33,6 @@ import scala.concurrent.Future
 
 class InvitationSyncHandler(invitationService: InvitationService, userService: UserServiceImpl, userSync: UsersSyncHandler, client: InvitationClient, connections: ConnectionsClient) {
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[InvitationSyncHandler]
 
   def postInvitation(i: Invitation): Future[SyncResult] =
     client.postInvitation(i).future.flatMap {

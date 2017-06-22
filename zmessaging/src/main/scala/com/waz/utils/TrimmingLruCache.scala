@@ -22,12 +22,14 @@ import android.content.res.Configuration
 import android.content.{ComponentCallbacks2, Context}
 import android.support.v4.util.LruCache
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.utils.TrimmingLruCache.CacheSize
 
 trait Cache[K, V] {
   def put(key: K, value: V): V
   def get(key: K): V
   def remove(key: K): V
+  def evictAll(): Unit
 }
 
 class TrimmingLruCache[K, V](val context: Context, size: CacheSize) extends LruCache[K, V](size.bytes(context)) with AutoTrimming with Cache[K, V]
@@ -68,7 +70,6 @@ object TrimmingLruCache {
 
 trait AutoTrimming extends ComponentCallbacks2 { self: LruCache[_, _] =>
   import com.waz.utils.AutoTrimming._
-  private implicit val tag: LogTag = logTagFor[AutoTrimming]
 
   def context: Context
 

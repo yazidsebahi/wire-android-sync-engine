@@ -19,6 +19,7 @@ package com.waz.service.downloads
 
 import android.content.Context
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.NetworkMode
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
@@ -192,8 +193,6 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 object DownloaderService {
 
   case object DownloadOnWifiOnlyException extends Exception("Downloading is disabled by download preference.")
-
-  private implicit val tag: LogTag = logTagFor[DownloaderService]
 
   val MaxConcurrentDownloads = 4
   // number of concurrent downloads for request not immediately required by UI

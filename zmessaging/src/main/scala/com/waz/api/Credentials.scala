@@ -21,10 +21,9 @@ import com.waz.model.{ConfirmationCode, PhoneNumber, EmailAddress}
 import org.json.JSONObject
 import com.waz.model.PersonalInvitationToken
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 
 object CredentialsFactory {
-  private implicit val logTag: LogTag = logTagFor(CredentialsFactory)
-
   def emailCredentials(email: String, password: String): Credentials = impl.EmailCredentials(EmailAddress(email), Option(password))
   def phoneCredentials(phone: String, confirmationCode: String): Credentials = {
     assert(Option(confirmationCode).exists(_.nonEmpty), "Empty/missing phone confirmation code. Please always pass a phone confirmation code here.")

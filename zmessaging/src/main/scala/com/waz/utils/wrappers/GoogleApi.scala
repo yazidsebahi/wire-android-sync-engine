@@ -21,34 +21,44 @@ import android.app.Activity
 import com.google.android.gms.common.{ConnectionResult, GoogleApiAvailability}
 import com.google.firebase.iid.FirebaseInstanceId
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.warn
+import com.waz.ZLog.{info, warn}
+import com.waz.content.GlobalPreferences
+import com.waz.content.GlobalPreferences.GPSErrorDialogShowCount
 import com.waz.model.PushToken
 import com.waz.service.BackendConfig
 import com.waz.utils.LoggedTry
 import com.waz.utils.events.Signal
-import com.waz.utils.wrappers.GoogleApi.RequestGooglePlayServices
 
 import scala.util.Try
 
 trait GoogleApi {
   def isGooglePlayServicesAvailable: Signal[Boolean]
   def checkGooglePlayServicesAvailable(activity: Activity): Unit
-  def onActivityResult(requestCode: Int, resultCode: Int)
+  def onActivityResult(requestCode: Int, resultCode: Int): Unit
   def getPushToken: Option[PushToken]
   def deleteAllPushTokens(): Unit
 }
 
-class GoogleApiImpl(context: Context, beConfig: BackendConfig) extends GoogleApi {
+class GoogleApiImpl(context: Context, beConfig: BackendConfig, prefs: GlobalPreferences) extends GoogleApi {
+
+  import GoogleApi._
 
   private val api = GoogleApiAvailability.getInstance()
 
   private val firebaseApp = beConfig.firebaseOptions(context)
 
-  override val isGooglePlayServicesAvailable = Signal[Boolean](Try(api.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS).toOption.contains(true))
+  private def isGPSAvailable = Try(api.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS).toOption.contains(true)
+
+  override val isGooglePlayServicesAvailable = Signal[Boolean](isGPSAvailable)
 
   override def checkGooglePlayServicesAvailable(activity: Activity) = api.isGooglePlayServicesAvailable(activity) match {
-    case ConnectionResult.SUCCESS => isGooglePlayServicesAvailable ! true
-    case code if api.isUserResolvableError(code) => api.getErrorDialog(activity, code, RequestGooglePlayServices)
+    case ConnectionResult.SUCCESS =>
+      info("Google Play Services available")
+      isGooglePlayServicesAvailable ! true
+    case code if api.isUserResolvableError(code) && prefs.getFromPref(GPSErrorDialogShowCount) <= MaxErrorDialogShowCount =>
+      info(s"Google Play Services not available (error: $code), requesting action from user")
+      prefs.preference(GPSErrorDialogShowCount).mutate(_ + 1)
+      api.getErrorDialog(activity, code, RequestGooglePlayServices).show()
     case code =>
       isGooglePlayServicesAvailable ! false
       warn(s"Google Play Services not available: error code: $code")
@@ -56,12 +66,10 @@ class GoogleApiImpl(context: Context, beConfig: BackendConfig) extends GoogleApi
 
   override def onActivityResult(requestCode: Int, resultCode: Int) = requestCode match {
     case RequestGooglePlayServices =>
-      resultCode match {
-        case Activity.RESULT_OK => isGooglePlayServicesAvailable ! true
-        case _ =>
-          isGooglePlayServicesAvailable ! false
-          warn("Failed to update/install Google Play Services")
-      }
+      info(s"Google Play Services request completed, result: $resultCode")
+      //It's quite natural for the user to click the back button after updating GPS, which results in a ACTIVITY_CANCELLED
+      //result code. So just check if the services are available again on any result.
+      isGooglePlayServicesAvailable ! isGPSAvailable
     case _ => //
   }
 
@@ -74,4 +82,5 @@ class GoogleApiImpl(context: Context, beConfig: BackendConfig) extends GoogleApi
 
 object GoogleApi {
   val RequestGooglePlayServices = 7976
+  val MaxErrorDialogShowCount = 3
 }

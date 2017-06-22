@@ -37,7 +37,7 @@ import scala.concurrent.Future
   */
 class WebSocketBroadcastReceiver extends BroadcastReceiver {
   override def onReceive(context: Context, intent: Intent): Unit = {
-    debug(s"onReceive $intent")("WebSocketBroadcastReceiver")
+    debug(s"onReceive $intent")
     WakefulBroadcastReceiver.startWakefulService(context, new Intent(context, classOf[WebSocketService]))
   }
 }

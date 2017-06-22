@@ -18,6 +18,7 @@
 package com.waz.api.impl
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.InputStateIndicator.KnockState
 import com.waz.api.UsersList
@@ -27,8 +28,6 @@ import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.EventContext
 
 class InputStateIndicator(conv: ConvId)(implicit ui: UiModule) extends api.InputStateIndicator with UiObservable with SignalLoading  {
-
-  private implicit val logTag: LogTag = logTagFor[InputStateIndicator]
   import Threading.Implicits.Background
   private implicit val ev = EventContext.Global
   private val typingUsers = new TypingUsersList(conv)

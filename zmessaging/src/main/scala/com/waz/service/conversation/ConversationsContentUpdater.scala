@@ -54,6 +54,7 @@ trait ConversationsContentUpdater {
 
 class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
+
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
 
   val conversationsSignal: Signal[ConversationsSet] = storage.convsSignal

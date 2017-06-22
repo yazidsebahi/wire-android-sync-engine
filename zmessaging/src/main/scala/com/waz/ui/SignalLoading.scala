@@ -18,6 +18,7 @@
 package com.waz.ui
 
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.service.{AccountService, ZMessaging}
 import com.waz.threading.Threading
 import com.waz.ui.SignalLoader.{AccountLoaderHandle, LoaderHandle, LoadingReference, ZmsLoaderHandle}
@@ -90,8 +91,6 @@ object LoaderSubscription {
 abstract class SignalLoader[A](handle: LoaderHandle[A])(implicit ui: UiModule) extends LoaderSubscription {
   import ui.eventContext
 
-  implicit val tag: LogTag = s"SignalLoader[${handle.loading.getClass.getName}]"
-
   ui.onResumed { _ => SignalLoader.dropQueue() }
 
   val ref = new LoadingReference(this, handle)
@@ -110,7 +109,7 @@ abstract class SignalLoader[A](handle: LoaderHandle[A])(implicit ui: UiModule) e
   }
 
   def destroy(): Unit = {
-    verbose("destroy()")
+    verbose("destroy()")(s"SignalLoader[${handle.loading.getClass.getName}]")
     observer.destroy()
     ref.get.foreach { handle => handle.loading.loaderHandles -= handle }
     ref.clear()
@@ -126,7 +125,6 @@ class AccountSignalLoader[A](handle: AccountLoaderHandle[A])(implicit ui: UiModu
 }
 
 object SignalLoader {
-  implicit val tag: LogTag = logTagFor(SignalLoader)
 
   private val queue = new ReferenceQueue[LoaderHandle[_]]
 

@@ -21,6 +21,7 @@ import java.lang.Iterable
 
 import akka.pattern.ask
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ConversationsList.ConversationCallback
 import com.waz.api.ErrorsList.{ErrorDescription, ErrorListener}
 import com.waz.api.IConversation.Type._
@@ -42,8 +43,6 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with ProvisionedApiSpec with ProcessActorSpec with ScalaFutures with DefaultPatienceConfig { test =>
-
-  private implicit val logTag: LogTag = logTagFor[ConversationsSpec]
 
   override val provisionFile = "/conversations.json"
 

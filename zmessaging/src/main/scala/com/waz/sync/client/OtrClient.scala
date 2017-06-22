@@ -112,12 +112,11 @@ class OtrClient(netClient: ZNetClient) {
     }
   }
 
-
-  def updateKeys(id: ClientId, prekeys: Seq[PreKey], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = {
+  def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]] = None, lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = {
     val data = JsonEncoder { o =>
       lastKey.foreach(k => o.put("lastkey", JsonEncoder.encode(k)))
       sigKey.foreach(k => o.put("sigkeys", JsonEncoder.encode(k)))
-      o.put("prekeys", JsonEncoder.arr(prekeys))
+      prekeys.foreach(ks => o.put("prekeys", JsonEncoder.arr(ks)))
     }
     netClient.withErrorHandling("postClient", Request.Put(clientPath(id), data)) {
       case Response(SuccessHttpStatus(), _, _) => ()

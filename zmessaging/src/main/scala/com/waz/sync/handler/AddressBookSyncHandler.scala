@@ -19,6 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AddressBook
 import com.waz.service._
 import com.waz.sync.SyncResult
@@ -31,8 +32,6 @@ import scala.util.control.NoStackTrace
 class AddressBookSyncHandler(contacts: ContactsService, client: AddressBookClient) {
 
   import Threading.Implicits.Background
-  private implicit val logTag: LogTag = logTagFor[AddressBookSyncHandler]
-
   def postAddressBook(ab: AddressBook): Future[SyncResult] = {
     verbose(s"postAddressBook()")
     if (ab == AddressBook.Empty) Future.successful(SyncResult.Success)

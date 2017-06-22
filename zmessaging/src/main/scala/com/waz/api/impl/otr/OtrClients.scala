@@ -21,6 +21,7 @@ import java.util.Locale
 
 import android.os.Parcel
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.OtrClient.{DeleteCallback, ResetCallback}
 import com.waz.api.impl.{CoreList, ErrorResponse, UiObservable, UiSignal}
@@ -41,7 +42,6 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 
 class OtrClients(signal: AccountService => Signal[(UserId, Vector[Client])])(implicit ui: UiModule) extends CoreList[ApiClient] with SignalLoading {
-  import OtrClients._
   private var items = IndexedSeq.empty[OtrClient]
 
   accountLoader(signal) { case (user, clients) =>
@@ -58,7 +58,6 @@ class OtrClients(signal: AccountService => Signal[(UserId, Vector[Client])])(imp
 
 object OtrClients {
   import Threading.Implicits.Background
-  private implicit val tag: LogTag = logTagFor[OtrClients]
 
   // ascending by model and desc by time
   // clients for other users will always have model and time empty, in that case we sort by id
@@ -206,8 +205,6 @@ class OtrClient(val userId: UserId, val clientId: ClientId, var data: Client)(im
 }
 
 object OtrClient {
-  private implicit val tag: LogTag = logTagFor[OtrClient]
-
   def fromParcel(p: Parcel)(implicit ui: UiModule): OtrClient = {
     import JsonDecoder._
     implicit val js = new JSONObject(p.readString())

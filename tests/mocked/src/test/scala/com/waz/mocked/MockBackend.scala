@@ -206,7 +206,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def addSearchResults(query: SearchQuery, numConnected: Int = 0, numUnconnected: Int = 0, numUnknownConnected: Int = 0, numUnknownUnconnected: Int = 0, numBlocked: Int = 0) = {
-    def entry(connected: Option[Boolean], blocked: Boolean)(id: UserId) = UserSearchEntry(id, "dummy", None, None, -1, connected = connected, blocked = blocked, Relation.Other, handle = None)
+    def entry(connected: Option[Boolean], blocked: Boolean)(id: UserId) = UserSearchEntry(id, "dummy", None, Handle("dummy"))
 
     val (connected, unknown) = connections.keys.take(numConnected + numUnknownConnected) .splitAt(numConnected)
     val (unconnected, blockedAndUnknown) = Seq.fill(numUnconnected + numUnknownUnconnected + numBlocked) { UserId() } .splitAt(numUnconnected)

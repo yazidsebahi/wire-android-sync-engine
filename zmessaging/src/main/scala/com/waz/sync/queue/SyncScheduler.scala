@@ -23,6 +23,7 @@ import android.app.{AlarmManager, PendingIntent}
 import android.content.Context
 import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
@@ -44,7 +45,6 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
   import EventContext.Implicits.global
   import content._
 
-  private implicit val tag = logTagFor[SyncScheduler]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncSchedulerQueue")
 
   private[sync] lazy val alarmSyncIntent = PendingIntent.getService(context, SyncScheduler.AlarmRequestCode, SyncService.intent(context, userId), PendingIntent.FLAG_UPDATE_CURRENT)
