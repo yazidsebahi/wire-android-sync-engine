@@ -48,6 +48,7 @@ trait EventSource[E] {
   val executionContext = Option.empty[ExecutionContext]
 
   def on(ec: ExecutionContext)(subscriber: Events.Subscriber[E])(implicit context: EventContext): Subscription
+  def onUi(subscriber: Events.Subscriber[E])(implicit context: EventContext): Subscription = on(Threading.Ui)(subscriber)(context)
   def apply(subscriber: Events.Subscriber[E])(implicit context: EventContext): Subscription
 }
 

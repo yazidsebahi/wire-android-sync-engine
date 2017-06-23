@@ -51,14 +51,14 @@ class MainActivity extends Activity with ActivityEventContext {
 
     spBackend.setAdapter(new ArrayAdapter[String](this, android.R.layout.simple_list_item_1, backends.map(_.environment)))
 
-    service.name.signal.on(Threading.Ui) { name =>
+    service.name.signal.onUi { name =>
       if (etName.getText.toString.isEmpty) etName.setText(name)
     }
-    service.backend.on(Threading.Ui) { b => spBackend.setSelection(backends.indexOf(b)) }
+    service.backend.onUi { b => spBackend.setSelection(backends.indexOf(b)) }
 
-    service.actorState.on(Threading.Ui) { st => tvStatus.setText(st.toString) }
+    service.actorState.onUi { st => tvStatus.setText(st.toString) }
 
-    service.background.signal.on(Threading.Ui) { cbBackground.setChecked }
+    service.background.signal.onUi { cbBackground.setChecked }
 
     etName.addTextChangedListener(new TextWatcher {
       override def beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int): Unit = ()

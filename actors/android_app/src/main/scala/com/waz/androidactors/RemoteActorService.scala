@@ -136,7 +136,7 @@ class BackgroundService extends FutureService with ServiceEventContext {
   override def onCreate(): Unit = {
     super.onCreate()
 
-    service.background.signal.on(Threading.Ui) {
+    service.background.signal.onUi {
       case true => startForeground(NotificationId, notification)
       case _ => stopForeground(true)
     }

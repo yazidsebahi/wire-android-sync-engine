@@ -104,7 +104,7 @@ abstract class SignalLoader[A](handle: LoaderHandle[A])(implicit ui: UiModule) e
 
   protected def signal: Signal[A]
 
-  val observer = signal.on(Threading.Ui) { data =>
+  val observer = signal.onUi { data =>
     ref.get.fold(destroy()) { _.asInstanceOf[LoaderHandle[A]].callback(data) }
   }
 

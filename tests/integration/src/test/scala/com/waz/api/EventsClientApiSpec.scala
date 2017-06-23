@@ -43,7 +43,7 @@ class EventsClientApiSpec extends FeatureSpec with Matchers with BeforeAndAfter 
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    client.onNotificationsPageLoaded.on(Threading.Ui) { r =>
+    client.onNotificationsPageLoaded.onUi { r =>
       lastResponse = Some(r)
     }
   }

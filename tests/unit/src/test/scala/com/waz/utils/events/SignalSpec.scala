@@ -283,11 +283,11 @@ class SignalSpec extends FeatureSpec with Matchers with OptionValues with Before
 
 
     scenario("Several concurrent mutations (subscriber on UI event and execution context)") {
-      concurrentMutations(10, 200, eventContext, Threading.Background)(s => g => s.on(Threading.Ui)(g)(eventContext))
+      concurrentMutations(10, 200, eventContext, Threading.Background)(s => g => s.onUi(g)(eventContext))
     }
 
     scenario("Several concurrent dispatches (subscriber on UI event and execution context)") {
-      concurrentDispatches(10, 200, eventContext, Some(Threading.Background), Threading.Background)(s => g => s.on(Threading.Ui)(g)(eventContext))
+      concurrentDispatches(10, 200, eventContext, Some(Threading.Background), Threading.Background)(s => g => s.onUi(g)(eventContext))
     }
   }
 

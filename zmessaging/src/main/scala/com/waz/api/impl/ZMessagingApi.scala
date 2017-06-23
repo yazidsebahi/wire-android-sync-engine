@@ -57,7 +57,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   lazy val cache = new ZCache(ui.global.cache)
 
-  accounts.current.on(Threading.Ui) { setAccount } (EventContext.Global)
+  accounts.current.onUi { setAccount } (EventContext.Global)
 
   override def onCreate(context: Context): Unit = {
     verbose(s"onCreate $context, count: $createCount")

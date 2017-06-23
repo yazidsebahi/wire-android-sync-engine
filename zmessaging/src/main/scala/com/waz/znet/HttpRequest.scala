@@ -37,10 +37,7 @@ class HttpRequestImpl(val req: AsyncHttpRequest) extends HttpRequest {
   override val absoluteUri: Option[URI] = Some(new AndroidURI(req.getUri()))
   override val httpMethod: String = req.getMethod()
   override val getBody: RequestContent = EmptyRequestContent // TODO
-  override val headers: Map[String, String] = {
-    val m = req.getHeaders().getMultiMap()
-    m.keySet().asScala.toSet[String].map(k => (k -> m.getString(k))).toMap
-  }
+  override val headers: Map[String, String] = HttpRequest.getHeaders(req)
   override val followRedirect: Boolean = req.getFollowRedirect()
   override val timeout: FiniteDuration = req.getTimeout().millis
 }
@@ -55,19 +52,32 @@ object HttpRequest {
     case wrapper: HttpRequestImpl => wrapper.req
     case _ => throw new IllegalArgumentException(s"Expected AsyncHttpRequest, but tried to unwrap: $req")
   }
+
+  def getHeaders(req: AsyncHttpRequest) = {
+    val m = req.getHeaders().getMultiMap()
+    m.keySet().asScala.toSet[String].map(k => (k -> m.getString(k))).toMap
+  }
 }
 
 trait RequestWorker {
-  def processRequest(request: HttpRequest): HttpRequest
+  def processRequest(request: HttpRequest, additionalHeaders: (String, String)*): HttpRequest
 }
 
 class HttpRequestImplWorker extends RequestWorker {
-  override def processRequest(request: HttpRequest): HttpRequest = {
+  override def processRequest(request: HttpRequest, additionalHeaders: (String, String)*): HttpRequest = {
     val r = new AsyncHttpRequest(URI.unwrap(request.absoluteUri.getOrElse(throw new IllegalArgumentException("URI not provided")).normalizeScheme), request.httpMethod)
     r.setTimeout(request.timeout.toMillis.toInt)
     r.setFollowRedirect(request.followRedirect)
-    r.getHeaders.set(AsyncClient.UserAgentHeader, AsyncClient.userAgent())
-    request.headers.foreach(p => r.getHeaders.set(p._1, p._2.trim))
+
+    // if 'r' is created with some headers, they have the highest priority, then headers from 'request', and only then 'additionalHeaders'
+    val h1 = HttpRequest.getHeaders(r).filter(_._2 != "")
+    val h2 = request.headers.filterKeys(key => !h1.contains(key))
+    val h3 = additionalHeaders.toMap.filterKeys(key => !h1.contains(key) && !h2.contains(key))
+    (h1 ++ h2 ++ h3).foreach {
+      case (key, value) => r.getHeaders.set(key, value)
+      case _ =>
+    }
+
     new HttpRequestImpl(request.getBody.apply(r))
   }
 }

@@ -75,7 +75,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
     else R.string.zms_websocket_connecting
   )
 
-  restartIntervals.orElse(Signal const None).on(Threading.Ui) {
+  restartIntervals.orElse(Signal const None).onUi {
     case Some(interval) =>
       // schedule service restart every couple minutes to send ping on web socket (needed to keep connection alive)
       verbose(s"scheduling restarts with interval: $interval")
@@ -85,7 +85,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
       alarmService.cancel(restartIntent)
   }
 
-  notificationsState.orElse(Signal const None).on(Threading.Ui) {
+  notificationsState.orElse(Signal const None).onUi {
     case None =>
       verbose("stopForeground")
       stopForeground(true)
