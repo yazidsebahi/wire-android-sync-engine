@@ -43,7 +43,7 @@ class OtrAssetSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
     withDelay { convs should not be empty }
     convs.get(0)
   }
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val auto2 = registerDevice("otr_auto2", otrOnly = true)
   lazy val auto2_1 = registerDevice("otr_auto2_1")
@@ -61,12 +61,12 @@ class OtrAssetSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
       auto2 ? SendImageData(conv.data.remoteId, IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))) should eventually(be(Successful))
 
       withDelay {
-        val last = msgs.getLastMessage
-        last.data.msgType shouldEqual Message.Type.ASSET
-        last.data.state shouldEqual Status.SENT
+        val last = msgs.last
+        last.msgType shouldEqual Message.Type.ASSET
+        last.state shouldEqual Status.SENT
       }
 
-      val img = msgs.getLastMessage.getImage
+      val img = new com.waz.api.impl.ImageAsset(msgs.last.assetId)
       withDelay {
         img.isEmpty shouldEqual false
         img.data.data shouldBe 'defined

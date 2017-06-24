@@ -34,13 +34,12 @@ import com.waz.sync.client.OtrClient.MessageResponse
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.TestApplication.notificationsSpy
-import com.waz.testutils.{TestApplication, UpdateSpy}
 import com.waz.threading.CancellableFuture.delay
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.znet.ZNetClient._
-import org.robolectric.annotation.Config
 import org.scalatest._
+import org.scalatest.matchers.Matcher
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
@@ -121,40 +120,30 @@ class MessageReactionsSpec extends FeatureSpec with Matchers with BeforeAndAfter
     (message should (beLiked and not(beLikedByThisUser) and haveLikesFrom(otherUser))).soon
 
     message.update(new Text("woo"))
-    (message.isDeleted shouldBe true).soon
-    (message should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)).soon
     soon {
-      val editedMessage = msgs.get(n)
-      editedMessage.isEdited shouldBe true
+      val editedMessage = msgs(n)
       editedMessage should (not(beLiked) and not(beLikedByThisUser) and notHaveLikes)
     }
   }
 
   scenario("Rapidly changing one's reaction") {
     val (n, message) = addMessage("amazeballs", conv)
-    soon(returning(UpdateSpy(message))(spy => forAsLongAs(2.seconds)(spy.numberOfTimesCalled shouldEqual 0)))
     val gate = Promise[Unit]()
     Serialized('PostReaction)(gate.future.lift)
     delayMessages = true
 
-    val spy = UpdateSpy(message)
     3.times {
       debug("like")
-      message.like()
-      (message should beLikedByThisUser).soon
+      msgs(n).like()
+      (msgs(n) should beLikedByThisUser).soon
       debug("unlike")
-      message.unlike()
-      (message should not(beLikedByThisUser)).soon
+      msgs(n).unlike()
+      (msgs(n) should not(beLikedByThisUser)).soon
     }
     debug("last like")
-    message.like()
-    (message should beLikedByThisUser).soon
-
-    (forAsLongAs(3.seconds)(spy.numberOfTimesCalled shouldEqual 7)).soon
-
+    msgs(n).like()
+    (msgs(n) should beLikedByThisUser).soon
     gate.success(())
-
-    (forAsLongAs(3.seconds)(spy.numberOfTimesCalled shouldEqual 7)).soon
   }
 
   before {
@@ -168,20 +157,27 @@ class MessageReactionsSpec extends FeatureSpec with Matchers with BeforeAndAfter
   lazy val otherUser = provisionedUserId("auto2")
   lazy val conv = conversations.find(_.getId == otherUser.str).value
   lazy val group = conversations.find(_.getType == GROUP).value
-  lazy val msgs = conv.getMessages
-  lazy val groupMsgs = group.getMessages
+  def msgs = listMessages(conv.id)
+  def groupMsgs = listMessages(group.id)
 
   lazy val otherUserClient = registerDevice(logTagFor[MessageReactionsSpec])
 
-  def addMessage(text: String, c: IConversation): (Int, Message) = {
-    val m = c.getMessages
+  def addMessage(text: String, c: IConversation): (Int, MessageData) = {
+    def m = listMessages(c.id)
     val n = m.size
     c.sendMessage(new Text(text))
     (m should have size (n + 1)).soon
-    (n, m.get(n))
+    (n, m(n))
   }
 
-  def otherUserDoes(action: Liking.Action, msg: Message, c: IConversation) = otherUserClient ? SetMessageReaction(c.data.remoteId, msg.data.id, action) should eventually(be(Successful))
+  def otherUserDoes(action: Liking.Action, msg: MessageData, c: IConversation) = otherUserClient ? SetMessageReaction(c.data.remoteId, msg.id, action) should eventually(be(Successful))
+
+  def getLikers(m: MessageData) = getLikes(m.id).likers.toSeq.sortBy(_._2.toEpochMilli).map(_._1)
+
+  def beLiked: Matcher[MessageData] = not(be(empty)).matcher[Seq[UserId]] compose getLikers
+  def beLikedByThisUser = contain(zmessaging.selfUserId).matcher[Seq[UserId]] compose getLikers
+  def notHaveLikes: Matcher[MessageData] = be(empty).matcher[Seq[UserId]] compose getLikers
+  def haveLikesFrom(ids: UserId*): Matcher[MessageData] = contain.theSameElementsInOrderAs(ids).matcher[Seq[UserId]] compose getLikers
 
   @volatile var delayMessages = false
 

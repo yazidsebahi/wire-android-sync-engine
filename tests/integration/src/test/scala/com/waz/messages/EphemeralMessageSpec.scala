@@ -30,7 +30,6 @@ import org.scalatest.concurrent.ScalaFutures
 import akka.pattern.ask
 import com.waz.api.Message.Part
 import com.waz.api.impl.DoNothingAndProceed
-import com.waz.model
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{AssetStatus => _, MessageContent => _, _}
 import org.threeten.bp.Instant
@@ -53,8 +52,8 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     withDelay { conversations should not be empty }
     conversations.find(_.getType == ConversationType.Group).get
   }
-  lazy val messages = conv.getMessages
-  lazy val grpMsgs = group.getMessages
+  def messages = listMessages(conv.id)
+  def grpMsgs = listMessages(group.id)
 
   lazy val auto2 = registerDevice("auto2")
   lazy val auto3 = registerDevice("auto3")
@@ -68,7 +67,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     conv.setEphemeralExpiration(EphemeralExpiration.FIVE_SECONDS)
   }
 
-  def withNewMessage(body: => Unit)(implicit msgs: MessagesList = messages): Message = {
+  def withNewMessage(body: => Unit)(implicit msgs: Seq[MessageData] = messages): MessageData = {
     val count = msgs.size
 
     body
@@ -76,7 +75,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     soon {
       msgs should have size (count + 1)
     }
-    msgs.getLastMessage
+    msgs.last
   }
 
   scenario("init remotes") {
@@ -94,46 +93,46 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     }
   }
 
-  def assertEphemeralSent(msg: Message) = {
-    Set(Message.Status.SENT, Message.Status.DELIVERED) should contain (msg.getMessageStatus)
+  def assertEphemeralSent(msg: MessageData) = {
+    Set(Message.Status.SENT, Message.Status.DELIVERED) should contain (msg.state)
     msg.isEphemeral shouldEqual true
-    msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-    val time = msg.getExpirationTime
+    msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+    val time = msg.expiryTime.getOrElse(Instant.MAX)
     time should be > Instant.now
-    time should be < (Instant.now + msg.getEphemeralExpiration.duration)
+    time should be < (Instant.now + msg.ephemeral.duration)
   }
 
   feature("Sending") {
 
     var messageId = MessageId()
 
-    def sendMessage(content: MessageContent)(assert: Message => Unit)(implicit p: PatienceConfig) = {
+    def sendMessage(content: MessageContent)(assert: MessageData => Unit)(implicit p: PatienceConfig) = {
       val msg = withNewMessage(conv.sendMessage(content))
       soon {
-        assertEphemeralSent(msg)
-        assert(msg)
+        assertEphemeralSent(getMessage(msg.id).get)
+        assert(getMessage(msg.id).get)
       }
     }
 
     scenario("Send text message") {
       sendMessage(new MessageContent.Text("test msg 1")) { msg =>
-        msg.getMessageType shouldEqual Message.Type.TEXT
-        msg.getBody shouldEqual "test msg 1"
+        msg.msgType shouldEqual Message.Type.TEXT
+        msg.contentString shouldEqual "test msg 1"
       }
     }
 
     scenario("Obfuscate text message when timer expires") {
-      val msg = messages.getLastMessage
-      msg.getBody shouldEqual "test msg 1"
-      messageId = msg.data.id
+      val msg = messages.last
+      msg.contentString shouldEqual "test msg 1"
+      messageId = msg.id
 
-      zmessaging.messagesStorage.update(msg.data.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
+      zmessaging.messagesStorage.update(msg.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
 
       soon {
-        msg.getExpirationTime should be < Instant.now
-        msg.isExpired shouldEqual true
-        msg.getBody should not equal "test msg 1"
-        msg.data.id shouldEqual messageId
+        msg.expiryTime.getOrElse(Instant.MAX) should be < Instant.now
+        msg.expired shouldEqual true
+        msg.contentString should not equal "test msg 1"
+        msg.id shouldEqual messageId
       }
 
       // message still exists on receiver side
@@ -143,21 +142,20 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
     scenario("Delete message when it's read on receiver side") {
       val count = messages.size
-      val msg = messages.getLastMessage
+      val msg = messages.last
 
-      auto2 ? MarkEphemeralRead(conv.data.remoteId, msg.data.id) should eventually(be(Successful))
+      auto2 ? MarkEphemeralRead(conv.data.remoteId, msg.id) should eventually(be(Successful))
 
       soon {
-        msg.isDeleted shouldEqual true
         messages.size shouldEqual (count - 1)
       }(patience(10.seconds))
     }
 
     scenario("Send link") {
       sendMessage(new MessageContent.Text("test link: www.wire.com")) { msg =>
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getBody shouldEqual "test link: www.wire.com"
-        msg.getParts.toSeq.map(_.getPartType) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.contentString shouldEqual "test link: www.wire.com"
+        msg.content.map(_.tpe) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
       }
     }
 
@@ -167,8 +165,8 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
       soon {
         messages should have size (count + 1)
-        val msg = messages.getLastMessage
-        msg.getMessageType shouldEqual Message.Type.KNOCK
+        val msg = messages.last
+        msg.msgType shouldEqual Message.Type.KNOCK
         assertEphemeralSent(msg)
       }
     }
@@ -179,8 +177,8 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
       soon {
         messages should have size (count + 1)
-        val msg = messages.getLastMessage
-        msg.getMessageType shouldEqual Message.Type.KNOCK
+        val msg = messages.last
+        msg.msgType shouldEqual Message.Type.KNOCK
         assertEphemeralSent(msg)
       }
     }
@@ -188,7 +186,7 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     scenario("Send image") {
       val asset = ImageAssetFactory.getImageAsset(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin_128.png")))
       sendMessage(new MessageContent.Image(asset)) { msg =>
-        msg.getMessageType shouldEqual Message.Type.ASSET
+        msg.msgType shouldEqual Message.Type.ASSET
       } (PatienceConfig(15.seconds))
     }
 
@@ -200,27 +198,27 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       }
 
       sendMessage(new MessageContent.Asset(asset, DoNothingAndProceed)) { msg =>
-        msg.getMessageType shouldEqual Message.Type.ANY_ASSET
+        msg.msgType shouldEqual Message.Type.ANY_ASSET
       }
     }
 
     scenario("Send location") {
       sendMessage(new MessageContent.Location(50f, 20f, "location", 13)) { msg =>
-        msg.getMessageType shouldEqual Message.Type.LOCATION
+        msg.msgType shouldEqual Message.Type.LOCATION
       }
     }
 
     scenario("Obfuscate location when timer expires") {
-      val msg = messages.getLastMessage
-      msg.getMessageType shouldEqual Message.Type.LOCATION
-      zmessaging.messagesStorage.update(msg.data.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
+      val msg = messages.last
+      msg.msgType shouldEqual Message.Type.LOCATION
+      zmessaging.messagesStorage.update(msg.id, _.copy(expiryTime = Some(Instant.now))) // update expiry to make it faster
 
       soon {
-        msg.getExpirationTime should be < Instant.now
-        msg.isExpired shouldEqual true
-        msg.getLocation.getLatitude shouldEqual 0f
-        msg.getLocation.getLongitude shouldEqual 0f
-        msg.getLocation.getName should not be "location"
+        msg.expiryTime.getOrElse(Instant.MAX) should be < Instant.now
+        msg.expired shouldEqual true
+        msg.location.get.getLatitude shouldEqual 0f
+        msg.location.get.getLongitude shouldEqual 0f
+        msg.location.get.getName should not be "location"
       }
     }
   }
@@ -240,35 +238,32 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
       soon {
         messages should have size (count + 1)
-        val msg = messages.getLastMessage
-        msg.getBody shouldEqual "test msg 2"
+        val msg = messages.last
+        msg.contentString shouldEqual "test msg 2"
         msg.isEphemeral shouldEqual true
-        msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-        msg.getExpirationTime shouldEqual Instant.MAX
+        msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+        msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
       }
     }
 
     scenario("Start expiry timer when message is read - has update listener") {
-      val msg = messages.get(messages.size - 1)
-      msg.getExpirationTime shouldEqual Instant.MAX
+      val msg = messages(messages.size - 1)
+      msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
 
-      msg.addUpdateListener(new UpdateListener {
-        override def updated(): Unit = ()
-      })
+      zmessaging.ephemeral.onMessageRead(msg.id)
 
       soon {
-        msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
+        msg.expiryTime.getOrElse(Instant.MAX) should be < (Instant.now + msg.ephemeral.duration)
       }
     }
 
     scenario("Delete message once the timer expires") {
-      val msg = messages.getLastMessage
-      msg.getBody shouldEqual "test msg 2"
-      messageId = msg.data.id
+      val msg = messages.last
+      msg.contentString shouldEqual "test msg 2"
+      messageId = msg.id
 
       soon {
-        msg.isDeleted shouldEqual true
-        messages.getLastMessage.getId should not equal msg.getId
+        messages.last.id should not equal msg.id
       }
     }
 
@@ -283,10 +278,10 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       val msg = withNewMessage {
         auto2 ? Knock(conv.data.remoteId) should eventually(be(Successful))
       }
-      msg.getMessageType shouldEqual Message.Type.KNOCK
+      msg.msgType shouldEqual Message.Type.KNOCK
       msg.isEphemeral shouldEqual true
-      msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-      msg.getExpirationTime shouldEqual Instant.MAX
+      msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+      msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
     }
 
     scenario("Receive link") {
@@ -294,11 +289,11 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         auto2 ? SendText(conv.data.remoteId, "link: www.wire.com") should eventually(be(Successful))
       }
       soon {
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts.toSeq.map(_.getPartType) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content.map(_.tpe) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
         msg.isEphemeral shouldEqual true
-        msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-        msg.getExpirationTime shouldEqual Instant.MAX
+        msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+        msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
       }
     }
 
@@ -306,21 +301,18 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       val msg = withNewMessage {
         auto2 ? SendImageData(conv.data.remoteId, IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))) should eventually(be(Successful))
       }
-      msg.getMessageType shouldEqual Message.Type.ASSET
+      msg.msgType shouldEqual Message.Type.ASSET
       msg.isEphemeral shouldEqual true
-      msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-      msg.getExpirationTime shouldEqual Instant.MAX
+      msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+      msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
     }
 
     scenario("Start timer when full image is uploaded") {
-      val msg = messages.get(messages.size - 1)
-      msg.getMessageType shouldEqual Message.Type.ASSET
+      val msg = messages(messages.size - 1)
+      msg.msgType shouldEqual Message.Type.ASSET
 
-      var image = msg.getImage
-
-      msg.addUpdateListener(new UpdateListener {
-        override def updated(): Unit = image = msg.getImage
-      })
+      val image = new com.waz.api.impl.ImageAsset(msg.assetId)
+      zmessaging.ephemeral.onMessageRead(msg.id)
 
       soon {
         image should not be null
@@ -328,22 +320,22 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         withClue(s"$image, data: ${image.data}") {
           image.data shouldNot be theSameInstanceAs AssetData.Empty // full image received
         }
-        msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
+        msg.expiryTime.getOrElse(Instant.MAX) should be < (Instant.now + msg.ephemeral.duration)
       } (DefaultPatience.PatienceConfig(15.seconds))
     }
 
     scenario("Delete asset when timer expires") {
-      val msg = messages.getLastMessage
-      msg.getMessageType shouldEqual Message.Type.ASSET
+      val count = messages.size
+      val msg = messages.last
+      msg.msgType shouldEqual Message.Type.ASSET
 
-      val image = msg.getImage
+      val image = new com.waz.api.impl.ImageAsset(msg.assetId)
+      zmessaging.ephemeral.onMessageRead(msg.id)
 
       soon {
-        msg.isDeleted shouldEqual true
-        messages.getLastMessage.getId should not equal msg.getId
+        messages.size should be < count
+        messages.last.id should not equal msg.id
       }
-
-      msg.getImage.isEmpty shouldEqual true
 
       // image data should be removed from local storage, and there should be no way to download it anymore (no remoteId)
       val spy = new BitmapSpy(image)
@@ -359,30 +351,27 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         val Successful(mid) = (auto2 ? SendAsset(conv.data.remoteId, assetData, "application/octet-stream", "random.dat")).await()
         messageId = MessageId(mid)
       }
-      msg.getMessageType shouldEqual Message.Type.ANY_ASSET
+      msg.msgType shouldEqual Message.Type.ANY_ASSET
       msg.isEphemeral shouldEqual true
-      msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-      msg.getExpirationTime shouldEqual Instant.MAX
+      msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+      msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
     }
 
     scenario("Start timer when file is uploaded") {
-      val msg = messages.get(messages.size - 1)
-      msg.getMessageType shouldEqual Message.Type.ANY_ASSET
+      val msg = messages(messages.size - 1)
+      msg.msgType shouldEqual Message.Type.ANY_ASSET
 
-      var asset = msg.getAsset
-
-      msg.addUpdateListener(new UpdateListener {
-        override def updated(): Unit = asset = msg.getAsset
-      })
+      val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
+      zmessaging.ephemeral.onMessageRead(msg.id)
 
       soon {
         asset.getStatus shouldEqual AssetStatus.UPLOAD_IN_PROGRESS
       }
-      msg.getExpirationTime shouldEqual Instant.MAX
+      msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
 
       soon {
         asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE
-        msg.getExpirationTime should be < (Instant.now + msg.getEphemeralExpiration.duration)
+        msg.expiryTime.getOrElse(Instant.MAX) should be < (Instant.now + msg.ephemeral.duration)
       }
     }
 
@@ -391,11 +380,11 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         val Successful(mid) = (auto2 ? SendLocation(conv.data.remoteId, 51f, 20f, "location", 13)).await()
         messageId = MessageId(mid)
       }
-      msg.getMessageType shouldEqual Message.Type.LOCATION
+      msg.msgType shouldEqual Message.Type.LOCATION
       msg.isEphemeral shouldEqual true
-      msg.getEphemeralExpiration shouldEqual EphemeralExpiration.FIVE_SECONDS
-      msg.getExpirationTime shouldEqual Instant.MAX
-      msg.getLocation shouldEqual new MessageContent.Location(51f, 20f, "location", 13)
+      msg.ephemeral shouldEqual EphemeralExpiration.FIVE_SECONDS
+      msg.expiryTime.getOrElse(Instant.MAX) shouldEqual Instant.MAX
+      msg.location shouldEqual new MessageContent.Location(51f, 20f, "location", 13)
     }
   }
 
@@ -407,30 +396,29 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       group.setEphemeralExpiration(EphemeralExpiration.FIVE_SECONDS)
     }
 
-    def sendMessage(content: MessageContent)(assert: Message => Unit)(implicit p: PatienceConfig) = {
+    def sendMessage(content: MessageContent)(assert: MessageData => Unit)(implicit p: PatienceConfig) = {
       val msg = withNewMessage(group.sendMessage(content))(grpMsgs)
       soon {
-        assertEphemeralSent(msg)
-        assert(msg)
+        assertEphemeralSent(getMessage(msg.id).get)
+        assert(getMessage(msg.id).get)
       }
     }
 
     scenario("Send text message") {
       sendMessage(new MessageContent.Text("test msg 1")) { msg =>
-        msg.getMessageType shouldEqual Message.Type.TEXT
-        msg.getBody shouldEqual "test msg 1"
+        msg.msgType shouldEqual Message.Type.TEXT
+        msg.contentString shouldEqual "test msg 1"
       }
     }
 
     scenario("Delete message when it's read by one of receivers") {
       val count = grpMsgs.size
-      val msg = grpMsgs.getLastMessage
-      messageId = msg.data.id
+      val msg = grpMsgs.last
+      messageId = msg.id
 
-      auto2 ? MarkEphemeralRead(group.data.remoteId, msg.data.id) should eventually(be(Successful))
+      auto2 ? MarkEphemeralRead(group.data.remoteId, msg.id) should eventually(be(Successful))
 
       soon {
-        msg.isDeleted shouldEqual true
         grpMsgs.size shouldEqual (count - 1)
       }(patience(10.seconds))
     }

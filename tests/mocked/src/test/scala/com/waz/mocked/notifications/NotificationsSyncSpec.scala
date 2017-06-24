@@ -119,11 +119,10 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
         }
       }
 
-      // check messages count in UI list
-      val msgs = addedConvs.map(c => c -> c.getMessages)
       withDelay {
-        msgs foreach { case (c, ms) =>
-          ms should have size msgCount(c.getType)
+        // check messages count in UI list
+        addedConvs foreach { c =>
+          listMessages(c.id) should have size msgCount(c.getType)
         }
         Await.result(zmessaging.syncRequests.content.syncStorage(_.getJobs), 1.second) shouldBe empty
       } (10.seconds)

@@ -47,8 +47,8 @@ class MockedConvsListSpec extends FeatureSpec with Matchers with Inspectors with
     withDelay(convs.size should be > 0)
     convs.getConversation(user2.str)
   }
-  lazy val msgs = conv.getMessages
   lazy val self = api.getSelf
+  def msgs = listMessages(conv.id)
 
   override protected def beforeAll(): Unit = {
     addConnection(user2)
@@ -102,7 +102,7 @@ class MockedConvsListSpec extends FeatureSpec with Matchers with Inspectors with
 
     scenario("message from self on another device while app is in background") {
       convs.getIncomingConversations.foreach(c => addMessageEvents(c.data.remoteId, count = 10))
-      withDelay(forAll(convs.getIncomingConversations.toSeq)(c => c.getMessages.size shouldEqual 11))
+      withDelay(forAll(convs.getIncomingConversations.toSeq)(c => listMessages(c.id).size shouldEqual 11))
 
       val conv = convs.getIncomingConversations.last
       val convId = conv.data.remoteId

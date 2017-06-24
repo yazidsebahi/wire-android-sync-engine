@@ -31,6 +31,7 @@ import com.waz.service._
 import com.waz.sync.client.InvitationClient
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.testutils.Matchers._
+import com.waz.testutils.Implicits._
 import com.waz.testutils._
 import com.waz.threading.CancellableFuture.lift
 import com.waz.threading.Threading
@@ -108,13 +109,12 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
 
         lazy val self = api.getSelf
         lazy val convs = api.getConversations
-        lazy val messages = convs.get(0).getMessages
         soon {
           self.isLoggedIn shouldBe true
           self.getName shouldEqual "Android Test Invited"
           convs should have size 1
           convs.get(0).getOtherParticipant.getName shouldEqual "auto1 user"
-          messages should have size 1 // started using device
+          listMessages(convs.get(0).id) should have size 1 // started using device
         }
       }
 

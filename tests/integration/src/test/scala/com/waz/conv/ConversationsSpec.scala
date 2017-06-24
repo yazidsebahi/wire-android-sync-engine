@@ -20,12 +20,9 @@ package com.waz.conv
 import java.lang.Iterable
 
 import akka.pattern.ask
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ConversationsList.ConversationCallback
 import com.waz.api.ErrorsList.{ErrorDescription, ErrorListener}
 import com.waz.api.IConversation.Type._
-import com.waz.api.impl.ImageAsset
 import com.waz.api._
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model._
@@ -33,7 +30,6 @@ import com.waz.provision.ActorMessage._
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.testutils.Implicits._
-import com.waz.utils._
 import com.waz.utils.wrappers.DB
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FeatureSpec, Matchers, OptionValues}
@@ -144,9 +140,10 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
         override def onError(error: ErrorDescription): Unit = receivedError = Some(error)
       })
       val count = conversations.size()
-      var msgs = Option.empty[MessagesList]
+      var msgs = Seq.empty[MessageData]
       conversations.createGroupConversation(users.asJava, new ConversationCallback {
-        override def onConversationsFound(conversations: Iterable[IConversation]): Unit = msgs = conversations.asScala.headOption map (_.getMessages)
+        override def onConversationsFound(conversations: Iterable[IConversation]): Unit =
+          conversations.asScala.headOption foreach { c => msgs = listMessages(c.id) }
       })
 
       withDelay {
@@ -155,72 +152,16 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
         withClue(conversations.map(c => (c.getName, c.getType)).mkString(", ")) {
           conversations should have size (count + 1)
         }
-        msgs.value should not be empty
+        msgs should not be empty
       }
       // dismiss error
       receivedError.get.dismiss()
       withDelay {
         errors should be(empty)
         conversations should have size count
-        msgs.value should be(empty)
+        msgs should be(empty)
       }
       ErrorDataDao.list should be(empty)
-    }
-  }
-
-  feature("Conversation background on first sync") {
-
-    scenario("set user picture") {
-      self.setPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin.png"))))
-
-      withPush {
-        case UserUpdateEvent(info, _) => info.picture.nonEmpty
-      } {
-        auto2 ? UpdateProfileImage("/images/penguin.png") should eventually(be(Successful))
-      } (45.seconds)
-
-      withDelay(auto2User.getPicture should not be empty)
-    }
-
-    scenario("Get background for self conversation") {
-      withDelay(selfConv.getBackground should be (empty))
-    }
-
-    scenario("Get background for one-to-one conversation") {
-      val members = auto2Conv.getUsers
-      withDelay {
-        members should have size 1
-        members should contain(auto2User)
-        auto2User.getPicture should not be empty
-        auto2Conv.getBackground shouldEqual ImageAsset.Empty
-      }
-    }
-
-    scenario("Get background for group conversation") {
-      debug(s"gotConv: ${conv.getId}")
-
-      info(s"gotConv: ${conv.getName}, id: ${conv.getId}")
-
-      val messages = conv.getMessages
-      withDelay(messages should not be empty)
-
-      var lastMsg = messages.last
-      var lastUser = lastMsg.getUser
-
-      def lastMessagePicture = {
-        val l = messages.last
-        if (l != lastMsg) lastMsg = l
-        lastUser = lastMsg.getUser
-        lastUser.getPicture
-      }
-
-      withClue(s"lastUser name: ${lastUser.getName}, id: ${lastUser.getId}, accent: ${lastUser.getAccent}, pic: ${lastUser.getPicture}, lastMsg: ${lastMsg.getBody}") {
-        withDelay(lastMessagePicture should not be ImageAsset.Empty)(15.seconds)
-      }
-
-      info(s"lastMessage: ${lastMsg.getBody}, lastUser: ${lastUser.getName}")
-
-      withDelay(conv.getBackground should be (ImageAsset.Empty))(10.seconds)
     }
   }
 
@@ -251,7 +192,6 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
 
     scenario("Add member to conversation") {
       val members = conv.getUsers
-      val msgs = conv.getMessages
       withDelay(members should have size 1)
 
       val user = api.getUser(provisionedUserId("auto2").str)
@@ -260,32 +200,31 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
       withDelay(members should have size 2)
 
       withDelay {
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.MEMBER_JOIN
-        msgs.getLastMessage.data.isLocal shouldEqual false
+        lastMessage(conv.id).get.msgType shouldEqual Message.Type.MEMBER_JOIN
+        lastMessage(conv.id).get.isLocal shouldEqual false
       }
     }
 
     scenario("Try adding not connected user to conversation") {
       val members = conv.getUsers
-      val msgs = conv.getMessages
       val errors = api.getErrors
       errors.dismissAll()
 
       withDelay {
         members should have size 2
-        msgs should not be empty
+        listMessages(conv.id) should not be empty
         errors should be(empty)
       }
 
       awaitUi(1.second)
-      val count = msgs.size()
+      val count = listMessages(conv.id).size
 
       conv.addMembers(List(api.getUser(provisionedUserId("auto5").str).asInstanceOf[com.waz.api.User]).asJava)
 
       withDelay {
         errors should have size 1
         members should have size 2
-        msgs should have size count
+        listMessages(conv.id) should have size count
       }
       val error = errors.head
       info(s"got error: ${error.getResponse}")
@@ -293,7 +232,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
       error.dismiss()
 
       withDelay {
-        msgs should have size count
+        listMessages(conv.id) should have size count
         members should have size 2
         errors should be(empty)
       }

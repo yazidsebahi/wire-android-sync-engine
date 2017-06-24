@@ -78,14 +78,13 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         convResult should have size 1
       }
 
-      val msgs = convResult.headOption.value.getMessages
-      withDelay (msgs should have size 1)
-      val msg = msgs.getLastMessage
+      val conv = convResult.headOption.value
+      withDelay (listMessages(conv.id) should have size 1)
 
       withDelay {
-        msg.getMessageType shouldEqual ApiMessage.Type.MEMBER_JOIN
-        msg.data.isLocal shouldEqual true
-        msg.getMembers shouldEqual users
+        lastMessage(conv.id).get.msgType shouldEqual ApiMessage.Type.MEMBER_JOIN
+        lastMessage(conv.id).get.isLocal shouldEqual true
+        lastMessage(conv.id).get.members shouldEqual users.map(_.id)
       }
     }
 
@@ -107,9 +106,8 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         conv.getName shouldEqual "auto4 user"
       }
 
-      val msgs = conv.getMessages
-      withDelay { msgs should not be empty }
-      info(s"msgs: ${msgs.map(m => (m.getMessageType, m.getBody))}")
+      withDelay { listMessages(conv.id) should not be empty }
+      info(s"msgs: ${listMessages(conv.id).map(m => (m.msgType, m.contentString))}")
 
       withDelay {
         self.getUser should not be null
@@ -128,13 +126,12 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
       val conv = conversations.find(_.getId == auto4Id.str)
       conv should be('defined)
       conv.get.getType shouldEqual ConversationType.OneToOne
-      val msgs = conv.get.getMessages
       withDelay {
-        msgs should have size 2
-        val msg = msgs.getLastMessage
-        msg.getMessageType shouldEqual ApiMessage.Type.MEMBER_JOIN
-        msg.getMembers.map(_.getId) shouldEqual Array(auto4Id.str)
-        msg.data.isLocal shouldEqual false
+        listMessages(conv.get.id) should have size 2
+        val msg = lastMessage(conv.get.id).get
+        msg.msgType shouldEqual ApiMessage.Type.MEMBER_JOIN
+        msg.members shouldEqual Set(auto4Id)
+        msg.isLocal shouldEqual false
       }
     }
   }
@@ -163,20 +160,19 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         members.map(_.data.id) should contain theSameElementsAs auto1Members
       }
 
-      val msgs = conv.getMessages
-      withDelay (msgs should have size 1)
+      withDelay (listMessages(conv.id) should have size 1)
 
-      val msg = msgs.getLastMessage
       withDelay {
-        msg.getMessageType shouldEqual ApiMessage.Type.MEMBER_JOIN
-        msg.getMembers.map(_.data.id) should contain theSameElementsAs auto1Members
+        val msg = lastMessage(conv.id).get
+        msg.msgType shouldEqual ApiMessage.Type.MEMBER_JOIN
+        msg.members should contain theSameElementsAs auto1Members
       }
 
       api.zmessaging.futureValue.value.pushSignals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis)
 
       awaitUi(1.second)
       withDelay {
-        msgs should have size 1
+        listMessages(conv.id) should have size 1
       }
     }
 
@@ -191,11 +187,10 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
       withDelay(incomingConvs should not be empty)
       val conv = incomingConvs.head
       conv.getType shouldEqual ConversationType.Incoming
-      val msgs = conv.getMessages
-      withDelay(msgs should not be empty)
-      val m = msgs.getLastMessage
-      m.getMessageType shouldEqual ApiMessage.Type.CONNECT_REQUEST
-      m.getBody shouldEqual "connect message"
+      withDelay(listMessages(conv.id) should not be empty)
+      val m = lastMessage(conv.id).get
+      m.msgType shouldEqual ApiMessage.Type.CONNECT_REQUEST
+      m.contentString shouldEqual "connect message"
 
       withDelay(conv.getName shouldEqual "auto5 user")
     }
@@ -227,11 +222,10 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         incomingConvs should be(empty)
         conversations should have size (count + 1)
       }
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 2)
-      val m = msgs.getLastMessage
-      m.getMessageType shouldEqual ApiMessage.Type.MEMBER_JOIN
-      m.getMembers shouldEqual Array(self.getUser)
+      withDelay(listMessages(conv.id) should have size 2)
+      val m = lastMessage(conv.id).get
+      m.msgType shouldEqual ApiMessage.Type.MEMBER_JOIN
+      m.members shouldEqual Set(self.getUser.id)
     }
   }
 }

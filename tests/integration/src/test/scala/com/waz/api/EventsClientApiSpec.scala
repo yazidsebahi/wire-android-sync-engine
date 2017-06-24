@@ -23,7 +23,6 @@ import com.waz.model.otr.ClientId
 import com.waz.sync.client.EventsClient
 import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.testutils.Matchers._
-import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 import org.scalatest._
 

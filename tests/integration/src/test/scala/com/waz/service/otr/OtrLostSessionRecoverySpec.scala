@@ -39,7 +39,7 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     withDelay(convs should not be empty)
     convs.head
   }
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val auto2 = registerDevice("otr_auto2")
 
@@ -66,9 +66,9 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     auto2 ? SendText(RConvId(provisionedUserId("auto1").str), "Test message 1") should eventually(be(Successful))
 
     withDelay {
-      msgs.map(_.getBody) should contain allOf("Test message", "Test message 1")
-      msgs.filter(_.getBody.startsWith("Test message")) foreach { msg =>
-        msg.getMessageStatus shouldEqual Message.Status.SENT
+      msgs.map(_.contentString) should contain allOf("Test message", "Test message 1")
+      msgs.filter(_.contentString.startsWith("Test message")) foreach { msg =>
+        msg.state shouldEqual Message.Status.SENT
       }
     }
 
@@ -76,9 +76,9 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     auto2 ? SendText(RConvId(provisionedUserId("auto1").str), "Test message 3") should eventually(be(Successful))
 
     withDelay {
-      msgs.map(_.getBody) should contain allOf("Test message", "Test message 1", "Test message 2", "Test message 3")
-      msgs.filter(_.getBody.startsWith("Test message")) foreach { msg =>
-        msg.getMessageStatus shouldEqual Message.Status.SENT
+      msgs.map(_.contentString) should contain allOf("Test message", "Test message 1", "Test message 2", "Test message 3")
+      msgs.filter(_.contentString.startsWith("Test message")) foreach { msg =>
+        msg.state shouldEqual Message.Status.SENT
       }
     }
   }
@@ -93,8 +93,8 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
 
     withDelay {
       session.exists() shouldEqual true // session should be recreated
-      msgs.getLastMessage.getBody shouldEqual "Test message 4"
-      msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      msgs.last.contentString shouldEqual "Test message 4"
+      msgs.last.state shouldEqual Message.Status.SENT
     }
   }
 
@@ -103,8 +103,8 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     auto2 ? SendText(RConvId(provisionedUserId("auto1").str), "Test message 5") should eventually(be(Successful))
 
     withDelay {
-      msgs.getLastMessage.getBody shouldEqual "Test message 5"
-      msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      msgs.last.contentString shouldEqual "Test message 5"
+      msgs.last.state shouldEqual Message.Status.SENT
       msgs should have size (count + 1)
     }
   }
@@ -121,8 +121,8 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
 
     withDelay {
       msgs should have size (count + 1)
-      msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
-      msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_ERROR
+      msgs.last.state shouldEqual Message.Status.SENT
+      msgs.last.msgType shouldEqual Message.Type.OTR_ERROR
     }
   }
 }

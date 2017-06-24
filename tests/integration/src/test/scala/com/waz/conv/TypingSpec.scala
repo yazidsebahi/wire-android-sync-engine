@@ -37,7 +37,6 @@ class TypingSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with 
   }.get
 
   lazy val self = api.getSelf
-  lazy val msgs = conv.getMessages
 
   lazy val inputState = conv.getInputStateIndicator
   lazy val typingUsers = inputState.getTypingUsers

@@ -26,13 +26,12 @@ import com.waz.model._
 import com.waz.service.Timeouts
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, MessageResponse}
-import com.waz.testutils.TestApplication
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import org.robolectric.annotation.Config
 import org.scalatest._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.testutils.Implicits._
 
 import scala.concurrent.duration._
 
@@ -67,38 +66,34 @@ class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeA
   scenario("init") {
     addMessageEvents(convId, count = 5)
 
-    lazy val msgs = conv.getMessages
-
     withDelay {
       convs should not be empty
-      msgs should have size 8
+      listMessages(conv.id) should have size 8
     }
   }
 
   feature("Message retrying") {
-    lazy val msgs = conv.getMessages
-
     val serverError = { _: OtrMessage => Left(ErrorResponse(500, "server error", "error")) }
 
     scenario("Retry when post fails with server error") {
       postMessageResponse = serverError
       conv.sendMessage(new Text("test"))
 
-      withDelay { msgs should have size 9 }
+      withDelay { listMessages(conv.id) should have size 9 }
 
-      val msg = msgs.getLastMessage
-      msg.getBody shouldEqual "test"
-      msg.getMessageStatus shouldEqual Message.Status.PENDING
+      val msg = lastMessage(conv.id).get
+      msg.contentString shouldEqual "test"
+      msg.state shouldEqual Message.Status.PENDING
 
       withDelay {
         postRequests.length should be >= 2
       } (15.seconds)
 
-      msg.getMessageStatus shouldEqual Message.Status.PENDING
+      lastMessage(conv.id).get.state shouldEqual Message.Status.PENDING
 
       postMessageResponse = successResponse
       withDelay {
-        msg.getMessageStatus shouldEqual Message.Status.SENT
+        lastMessage(conv.id).get.state shouldEqual Message.Status.SENT
       } (20.seconds)
     }
 
@@ -107,15 +102,15 @@ class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeA
       postMessageResponse = serverError
       conv.sendMessage(new Text("test 1"))
 
-      withDelay { msgs should have size 10 }
+      withDelay { listMessages(conv.id) should have size 10 }
 
-      val msg = msgs.getLastMessage
-      msg.getBody shouldEqual "test 1"
-      msg.getMessageStatus shouldEqual Message.Status.PENDING
+      val msg = lastMessage(conv.id).get
+      msg.contentString shouldEqual "test 1"
+      msg.state shouldEqual Message.Status.PENDING
 
       withDelay {
         postRequests should not be empty
-        msg.getMessageStatus shouldEqual Message.Status.FAILED
+        lastMessage(conv.id).get.state shouldEqual Message.Status.FAILED
       } (15.seconds)
     }
 
@@ -128,20 +123,19 @@ class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeA
       conv.sendMessage(new Text("test 2"))
       inputState.textCleared()
 
-      withDelay { msgs should have size 11 }
+      withDelay { listMessages(conv.id) should have size 11 }
 
-      val msg = msgs.getLastMessage
-      msg.getBody shouldEqual "test 2"
+      lastMessage(conv.id).get.contentString shouldEqual "test 2"
 
       withDelay {
         postRequests should not be empty
-        msg.getMessageStatus shouldEqual Message.Status.FAILED
+        lastMessage(conv.id).get.state shouldEqual Message.Status.FAILED
       }
       postRequests = Nil
 
       zmessaging.network.networkMode ! NetworkMode.WIFI
       awaitUi(5.seconds)
-      msg.getMessageStatus shouldEqual Message.Status.FAILED
+      lastMessage(conv.id).get.state shouldEqual Message.Status.FAILED
       postRequests shouldBe empty
     }
   }

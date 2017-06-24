@@ -41,7 +41,6 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
     withDelay(convs.size should be > 0)
     convs.getConversation(provisionedUserId("auto2").str)
   }
-  lazy val msgs = conv.getMessages
   lazy val self = api.getSelf
 
   lazy val Seq(unconnected1, unconnected2) = Seq("auto5", "auto6") map provisionedUserId
@@ -60,15 +59,14 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
 
     scenario("reorder after new message is received on push channel") {
       val lastConv = convs.last
-      val msgs = lastConv.getMessages
 
-      withDelay(msgs should not be empty)(15.seconds)
+      withDelay(listMessages(lastConv.id) should not be empty)(15.seconds)
 
       zmessaging.eventPipeline(Seq(GenericMessageEvent(lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message", Map.empty)).withCurrentLocalTime()))
 
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "test message"
-        lastConv.data.lastEventTime shouldEqual msgs.getLastMessage.getTime
+        lastMessage(lastConv.id).get.contentString shouldEqual "test message"
+        lastConv.data.lastEventTime shouldEqual lastMessage(lastConv.id).get.time
 
         convs.get(0) shouldEqual lastConv
       }
@@ -78,15 +76,14 @@ class ConversationsListSpec extends FeatureSpec with Matchers with ProvisionedAp
 
     scenario("reorder on otr message") {
       val lastConv = convs.last
-      val msgs = lastConv.getMessages
 
-      withDelay(msgs should not be empty)(15.seconds)
+      withDelay(listMessages(lastConv.id) should not be empty)(15.seconds)
 
       zmessaging.eventPipeline(Seq(GenericMessageEvent(lastConv.data.remoteId, new Date(), self.getUser.id, TextMessage("test message 1", Map.empty)).withCurrentLocalTime()))
 
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "test message 1"
-        lastConv.data.lastEventTime shouldEqual msgs.getLastMessage.getTime
+        lastMessage(lastConv.id).get.contentString shouldEqual "test message 1"
+        lastConv.data.lastEventTime shouldEqual lastMessage(lastConv.id).get.time
 
         convs.get(0) shouldEqual lastConv
       }

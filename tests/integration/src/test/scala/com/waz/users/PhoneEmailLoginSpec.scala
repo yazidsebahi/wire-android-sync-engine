@@ -36,7 +36,7 @@ class PhoneEmailLoginSpec extends FeatureSpec with Matchers with GivenWhenThen w
   lazy val phone = randomPhoneNumber
   lazy val convs = api.getConversations
   lazy val conv = convs.get(0)
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
   lazy val self = api.getSelf
 
   lazy val auto2 = registerDevice("auto2")
@@ -64,7 +64,7 @@ class PhoneEmailLoginSpec extends FeatureSpec with Matchers with GivenWhenThen w
 
     withDelay {
       msgs should not be empty
-      msgs.getLastMessage.getBody shouldEqual "test message"
+      msgs.last.contentString shouldEqual "test message"
     }
   }
 
@@ -82,13 +82,12 @@ class PhoneEmailLoginSpec extends FeatureSpec with Matchers with GivenWhenThen w
 
     lazy val convs = api.getConversations
     lazy val conv = convs.get(0)
-    lazy val msgs = conv.getMessages
 
     withDelay {
       self.isLoggedIn shouldEqual true
       convs should not be empty
-      msgs should not be empty
-      msgs.getLastMessage.getBody shouldEqual "test message"
+      listMessages(conv.id) should not be empty
+      lastMessage(conv.id).get.contentString shouldEqual "test message"
     }
   }
 }
