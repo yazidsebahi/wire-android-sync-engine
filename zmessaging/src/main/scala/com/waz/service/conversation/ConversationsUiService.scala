@@ -160,7 +160,7 @@ class ConversationsUiService(self:            UserId,
 
     content match {
       case m: api.MessageContent.Text =>
-        debug(s"send text message ${m.getContent.take(4)}...")
+        debug(s"send text message ${m.getContent}")
         if (m.getMentions.isEmpty) sendTextMessage(m.getContent)
         else mentionsMap(m.getMentions) flatMap { ms => sendTextMessage(m.getContent, ms) }
       case m: api.MessageContent.Location =>
