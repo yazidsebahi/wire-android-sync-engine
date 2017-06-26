@@ -18,6 +18,7 @@
 package com.waz.utils.wrappers
 
 import android.app.Activity
+import com.google.android.gms.common.ConnectionResult._
 import com.google.android.gms.common.{ConnectionResult, GoogleApiAvailability}
 import com.google.firebase.iid.FirebaseInstanceId
 import com.waz.ZLog.ImplicitTag._
@@ -47,18 +48,18 @@ class GoogleApiImpl(context: Context, beConfig: BackendConfig, prefs: GlobalPref
 
   private val firebaseApp = beConfig.firebaseOptions(context)
 
-  private def isGPSAvailable = Try(api.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS).toOption.contains(true)
+  private def isGPSAvailable = Try(api.isGooglePlayServicesAvailable(context) == SUCCESS).toOption.contains(true)
 
   override val isGooglePlayServicesAvailable = Signal[Boolean](isGPSAvailable)
 
   override def checkGooglePlayServicesAvailable(activity: Activity) = api.isGooglePlayServicesAvailable(activity) match {
-    case ConnectionResult.SUCCESS =>
+    case SUCCESS =>
       info("Google Play Services available")
       isGooglePlayServicesAvailable ! true
-    case code if api.isUserResolvableError(code) && prefs.getFromPref(GPSErrorDialogShowCount) <= MaxErrorDialogShowCount =>
-      info(s"Google Play Services not available (error: $code), requesting action from user")
+    case SERVICE_VERSION_UPDATE_REQUIRED if prefs.getFromPref(GPSErrorDialogShowCount) <= MaxErrorDialogShowCount =>
+      info(s"Google Play Services requires update - prompting user")
       prefs.preference(GPSErrorDialogShowCount).mutate(_ + 1)
-      api.getErrorDialog(activity, code, RequestGooglePlayServices).show()
+      api.getErrorDialog(activity, SERVICE_VERSION_UPDATE_REQUIRED, RequestGooglePlayServices).show()
     case code =>
       isGooglePlayServicesAvailable ! false
       warn(s"Google Play Services not available: error code: $code")
