@@ -358,7 +358,7 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
   }
 
   override def addTextMessage(convId: ConvId, content: String, mentions: Map[UserId, String] = Map.empty) = {
-    verbose(s"addTextMessage($convId, $content, $mentions)")
+    verbose(s"addTextMessage($convId, ${content.take(4)}, $mentions)")
     val (tpe, ct) = MessageData.messageContent(content, mentions, weblinkEnabled = true)
     verbose(s"parsed content: $ct")
     val id = MessageId()
