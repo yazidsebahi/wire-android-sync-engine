@@ -557,32 +557,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
     }
   }
 
-  feature("Incoming messages list") {
-
-    scenario("receive single knock") {
-      val user1 = UserDataDao.insertOrReplace(UserData("test"))
-      val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
-
-      @volatile var updateCount = 0
-      val incoming = messagesStorage.getIncomingMessages
-      incoming { _ => updateCount += 1}
-
-      withDelay(updateCount shouldEqual 1)
-      service.dispatch(GenericMessageEvent(conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock())).withCurrentLocalTime())
-
-      withDelay {
-        updateCount shouldEqual 2
-        val last = incoming.currentValue.get.last
-        last.msgType shouldEqual Message.Type.KNOCK
-        last.convId shouldEqual conv.id
-
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.head.msgType shouldEqual Message.Type.KNOCK
-      }
-    }
-  }
-
   feature("Unread count") {
 
     scenario("count unread messages") {

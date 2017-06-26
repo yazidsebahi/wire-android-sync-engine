@@ -173,18 +173,4 @@ class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndA
   def beCurrent: Matcher[MessageData] = be(System.currentTimeMillis() +- 100) compose (_.localTime.toEpochMilli)
   def haveSameId(id: MessageId): Matcher[MessageData] = be(id) compose (_.id)
 
-  feature("receive incoming knocks") {
-
-    scenario("receive single knock") {
-      val incoming = service.messagesStorage.getIncomingMessages
-      testutils.withUpdate(incoming) {
-        service.dispatchEvent(GenericMessageEvent(conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock())).withCurrentLocalTime())
-      }
-
-      withDelay {
-        listMessages(conv.id) should have size 1
-        lastMessage(conv.id).map(_.msgType) shouldEqual Some(Message.Type.KNOCK)
-      }
-    }
-  }
 }

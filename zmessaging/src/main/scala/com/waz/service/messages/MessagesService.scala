@@ -273,15 +273,6 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     }
   }
 
-  def getIncomingMessages = messagesStorage.getIncomingMessages flatMap { msgs =>
-    Signal.future {
-      convs.storage.getAll(msgs.map(_.convId).distinct) map { cs =>
-        val muted = cs.flatten.filter(_.muted).map(_.id).toSet
-        msgs filterNot { msg => muted(msg.convId) }
-      }
-    }
-  }
-
   override def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = Instant.now(), state: Message.Status = Message.Status.PENDING) =
     content.getMessage(msgId) flatMap {
       case Some(msg) if msg.convId != convId =>
