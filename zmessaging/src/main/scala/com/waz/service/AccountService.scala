@@ -101,7 +101,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
 
     account.userId foreach { userId =>
       // ensure that self user is present on start
-      storage.usersStorage.updateOrCreate(userId, identity, UserData(userId, "", account.email, account.phone, searchKey = SearchKey(""), connection = UserData.ConnectionStatus.Self, handle = account.handle))
+      storage.usersStorage.updateOrCreate(userId, identity, UserData(userId, None, "", account.email, account.phone, searchKey = SearchKey(""), connection = UserData.ConnectionStatus.Self, handle = account.handle))
     }
 
     val selfUserData = accountData.map(_.userId).flatMap {
@@ -256,12 +256,12 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
     case None =>
       Serialized.future(this) {
         accountsStorage.get(id) flatMap {
-          case Some(ad @ AccountData(_, _, _, _, _, _, _, None, _, _, _, _, _, _)) =>
+          case Some(ad) if ad.cookie == None =>
             verbose(s"account data has no cookie, user not logged in: $ad")
             Future successful None
           case Some(acc) =>
             ensureFullyRegistered() flatMap {
-              case Right(a @ AccountData(_, _, _, _, _, _, _, _, _, _, Some(_), Some(_), _, _)) if a.verified =>
+              case Right(a) if a.userId != None && a.clientId != None && a.verified =>
                 zmessaging.filter(_.isDefined).head // wait until loaded
               case _ =>
                 zmessaging.head

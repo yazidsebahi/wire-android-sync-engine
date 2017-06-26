@@ -18,42 +18,12 @@
 package com.waz.content
 
 import android.content.Context
-import com.waz.content.ContentChange.{Removed, Updated}
 import com.waz.model.TeamData.TeamDataDoa
-import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model._
-import com.waz.service.SearchKey
-import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.events.EventStream
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
-import scala.collection.Seq
-import scala.concurrent.Future
 
 trait TeamsStorage extends CachedStorage[TeamId, TeamData]
-class TeamsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[TeamId, TeamData](new TrimmingLruCache(context, Fixed(1024)), storage)(TeamDataDoa, "TeamStorage_Cached") with TeamsStorage
-
-
-trait TeamMemberStorage extends CachedStorage[TeamMemberData.Key, TeamMemberData] {
-  def getByUser(user: Set[UserId]): Future[Set[TeamMemberData]]
-  def getByTeam(team: Set[TeamId]): Future[Set[TeamMemberData]]
-  def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean): Future[Set[TeamMemberData]]
-  def removeByTeam(teams: Set[TeamId]): Future[Set[UserId]]
-}
-
-class TeamMemberStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[TeamMemberData.Key, TeamMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(TeamMemberDataDoa, "TeamMemberStorage_Cached") with TeamMemberStorage {
-
-  import Threading.Implicits.Background
-
-  override def getByUser(users: Set[UserId]) = find(data => users.contains(data.userId), TeamMemberDataDoa.findForUsers(users)(_), identity)
-
-  override def getByTeam(teams: Set[TeamId]) = find(data => teams.contains(data.teamId), TeamMemberDataDoa.findForTeams(teams)(_), identity)
-
-  override def removeByTeam(teams: Set[TeamId]) = for {
-    members <- getByTeam(teams)
-    _       <- remove(members.map(data => data.userId -> data.teamId))
-  } yield members.map(_.userId)
-
-  override def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean) = storage(TeamMemberDataDoa.search(prefix, team, handleOnly)(_)).future
-}
+class TeamsStorageImpl(context: Context, storage: Database)
+  extends CachedStorageImpl[TeamId, TeamData](new TrimmingLruCache(context, Fixed(1024)), storage)(TeamDataDoa, "TeamStorage_Cached") with TeamsStorage

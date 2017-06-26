@@ -81,7 +81,6 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val notifStorage                         = wire[NotificationStorage]
   lazy val convsStorage                         = wire[ConversationStorageImpl]
   lazy val teamsStorage:      TeamsStorage      = wire[TeamsStorageImpl]
-  lazy val teamMemberStorage: TeamMemberStorage = wire[TeamMemberStorageImpl]
   lazy val msgDeletions                         = wire[MsgDeletionStorage]
   lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
   lazy val msgEdits                             = wire[EditHistoryStorage]
@@ -145,7 +144,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
   def teamsStorage      = storage.teamsStorage
-  def teamMemberStorage = storage.teamMemberStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache

@@ -33,7 +33,7 @@ import scala.util.Try
 trait TeamsClient {
   def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamsResponse]
   def getTeams(id: Set[TeamId]): ErrorOrResponse[TeamsResponse]
-  def getTeamMembers(id: TeamId): ErrorOrResponse[Set[TeamMemberData]]
+  def getTeamMembers(id: TeamId): ErrorOrResponse[Set[UserId]]
 }
 
 class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
@@ -54,8 +54,7 @@ class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
 
   override def getTeamMembers(id: TeamId) = {
     zNetClient.withErrorHandling("loadTeamMembers", Request.Get(teamMembersPath(id))) {
-      case Response(SuccessHttpStatus(), TeamMembersResponse(members), _) =>
-        members.map { case (userId, selfPermissions, copyPermissions) => TeamMemberData(userId, id, selfPermissions, copyPermissions)}
+      case Response(SuccessHttpStatus(), TeamMembersResponse(members), _) => members.map(_._1)
     }
   }
 }

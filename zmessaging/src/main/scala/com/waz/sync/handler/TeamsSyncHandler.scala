@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{debug, warn}
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.{TeamData, TeamId, TeamMemberData}
+import com.waz.model._
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.TeamsClient
@@ -33,9 +33,7 @@ import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
 trait TeamsSyncHandler {
-
   def syncTeams(teams: Set[TeamId]): Future[SyncResult]
-
 }
 
 class TeamsSyncHandlerImpl(client: TeamsClient, service: TeamsService) extends TeamsSyncHandler {
@@ -47,7 +45,7 @@ class TeamsSyncHandlerImpl(client: TeamsClient, service: TeamsService) extends T
 
   private def syncAllTeams(): Future[SyncResult] = {
 
-    def recursive(start: Option[TeamId], teamsDownloaded: Set[TeamData], membersDownloaded: Set[TeamMemberData]): ErrorOrResponse[(Set[TeamData], Set[TeamMemberData])] = {
+    def recursive(start: Option[TeamId], teamsDownloaded: Set[TeamData], membersDownloaded: Set[UserId]): ErrorOrResponse[(Set[TeamData], Set[UserId])] = {
       client.getTeams(start).flatMap {
         case Right(TeamsResponse(teams, hasMore)) =>
           debug(s"syncTeams received data: $teams, hasMore? $hasMore")
@@ -80,7 +78,7 @@ class TeamsSyncHandlerImpl(client: TeamsClient, service: TeamsService) extends T
       Future.successful(SyncResult(error))
   }
 
-  private def downloadMembers(teams: Set[TeamId]): Future[Set[TeamMemberData]] =
+  private def downloadMembers(teams: Set[TeamId]): Future[Set[UserId]] =
     Future.traverse(teams) { id =>
       client.getTeamMembers(id).future.map {
         case Right(teamMembers) =>
