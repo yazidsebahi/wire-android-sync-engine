@@ -39,15 +39,15 @@ import scala.concurrent.Future.traverse
 //TODO - return Signals of the search results for UI??
 trait TeamsService {
 
-  def getTeam(userId: UserId): Signal[Option[TeamData]]
+  def team(userId: UserId): Signal[Option[TeamData]]
 
   def searchTeamMembers(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[UserData]]
 
   def searchTeamConversations(teamId: TeamId, query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[ConversationData]]
 
-  def findGuests(teamId: TeamId): Future[Set[UserId]]
+  def guests(teamId: TeamId): Signal[Set[UserId]]
 
-  def getSelfTeam: Signal[Option[TeamData]]
+  def selfTeam: Signal[Option[TeamData]]
 
   def onTeamsSynced(teams: Set[TeamData], members: Set[UserId], fullSync: Boolean = false): Future[Unit]
 
@@ -114,7 +114,7 @@ class TeamsServiceImpl(selfUser:          UserId,
     }).map(_.toSet)
   }
 
-  override def getTeam(userId: UserId) = {
+  override def team(userId: UserId) = {
     verbose(s"getTeam: user: $userId")
 
     def load: Future[Option[TeamData]] = {
@@ -130,7 +130,26 @@ class TeamsServiceImpl(selfUser:          UserId,
     new RefreshingSignal[Option[TeamData], Seq[TeamId]](CancellableFuture.lift(load), allChanges)
   }
 
-  override def getSelfTeam = getTeam(selfUser)
+  override def guests(teamId: TeamId) = {
+    verbose(s"findGuests: team: $teamId")
+
+    def load: Future[Set[UserId]] = for {
+      convs       <- searchTeamConversations(teamId).map(_.map(_.id))
+      allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
+      teamMembers <- userStorage.getByTeam(Set(teamId)).map(_.map(_.id))
+    } yield allUsers -- teamMembers
+
+    // TODO: findGuests as a signal, then in UI listen to this isgnal in TeamsAndUserController
+    val allChanges = {
+      val ev1 = convMemberStorage.onUpdated.map(_.map(_._2.userId))
+      val ev2 = convMemberStorage.onDeleted.map(_.map(_._1))
+      EventStream.union(ev1, ev2)
+    }
+
+    new RefreshingSignal[Set[UserId], Seq[UserId]](CancellableFuture.lift(load), allChanges)
+  }
+
+  override def selfTeam = team(selfUser)
 
   override def onTeamsSynced(teamsFetched: Set[TeamData], members: Set[UserId], fullSync: Boolean) = {
     verbose(s"onTeamsSynced: fullSync? $fullSync, teams: $teamsFetched \nmembers: $members")
@@ -248,12 +267,4 @@ class TeamsServiceImpl(selfUser:          UserId,
     Future.successful({})
   }
 
-  override def findGuests(teamId: TeamId) = {
-    for {
-      convs       <- searchTeamConversations(teamId).map(_.map(_.id))
-      allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
-      teamMembers <- userStorage.getByTeam(Set(teamId)).map(_.map(_.id))
-    } yield allUsers -- teamMembers
-
-  }
 }

@@ -157,8 +157,8 @@ object ZMessagingDB {
       db.execSQL("DROP TABLE IF EXISTS CommonConnections")
     },
     Migration(91, 92) { db =>
-      db.execSQL("ALTER TABLE Users ADD COLUMN self_permissions INTEGER")
-      db.execSQL("ALTER TABLE Users ADD COLUMN copy_permissions INTEGER")
+      db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER")
+      db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER")
       db.execSQL("DROP TABLE IF EXISTS TeamMembers")
     }
   )
