@@ -70,11 +70,12 @@ object InternalLog {
   def debug(msg: String, tag: LogTag)                   = log(msg, Debug, tag)
   def verbose(msg: String, tag: LogTag)                 = log(msg, Verbose, tag)
 
-  def stackTrace(cause: Throwable) = {
-    val result = new StringWriter()
-    val printWriter = new PrintWriter(result)
-    cause.printStackTrace(printWriter)
-    result.toString
+  def stackTrace(cause: Throwable) = Option(cause) match {
+    case Some(c) => val result = new StringWriter()
+                    c.printStackTrace(new PrintWriter(result))
+                    result.toString
+
+    case None    => ""
   }
 
   def dateTag = {
