@@ -20,7 +20,7 @@ package com.waz.service
 import com.waz.ZLog._
 import com.waz.model.GenericContent._
 import com.waz.model._
-import com.waz.service.conversation.{ConversationEventsService, ConversationsContentUpdaterImpl}
+import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdaterImpl}
 import com.waz.service.messages.{MessagesContentUpdater, ReactionsService, ReceiptService}
 import com.waz.utils._
 import org.threeten.bp.Instant
@@ -28,7 +28,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future.traverse
 
 class GenericMessageService(messages: MessagesContentUpdater, convs: ConversationsContentUpdaterImpl,
-                            convEvents: ConversationEventsService, reactions: ReactionsService,
+                            convEvents: ConversationOrderEventsService, reactions: ReactionsService,
                             receipts: ReceiptService) {
 
   private implicit val tag: LogTag = logTagFor[GenericMessageService]

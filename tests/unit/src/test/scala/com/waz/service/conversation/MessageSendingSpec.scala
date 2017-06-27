@@ -241,7 +241,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       lastReadSync shouldEqual None
       val time = new Date()
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
+        service.convOrder.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
     }
@@ -256,7 +256,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
       val time = new Date
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
+        service.convOrder.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
       Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(time.instant)

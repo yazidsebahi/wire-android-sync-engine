@@ -39,7 +39,7 @@ import scala.concurrent.Future
 
 class ConnectionService(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
                         messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
-                        sync: SyncServiceHandle, scheduler: => EventScheduler) {
+                        sync: SyncServiceHandle) {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global

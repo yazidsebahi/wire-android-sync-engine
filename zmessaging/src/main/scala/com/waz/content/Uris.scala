@@ -30,7 +30,6 @@ object Uris {
   val SelfConversationUri = Uri.parse(s"$Base/conv/self")
   val ConversationsStateUri = ConversationsUri.buildUpon().appendEncodedPath("state").build()
   val MessagesRootUri = Uri.parse(s"$Base/msgs")
-  val IncomingMsgsUri = Uri.parse(s"$Base/incoming")
   val UsersUri = Uri.parse(s"$Base/users")
   val ErrorsUri = Uri.parse(s"$Base/errors")
   val TrackingUri = Uri.parse(s"$Base/tracking")

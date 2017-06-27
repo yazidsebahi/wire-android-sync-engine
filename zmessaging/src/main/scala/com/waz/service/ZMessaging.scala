@@ -183,47 +183,47 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
-  lazy val push: PushServiceImpl                  = wire[PushServiceImpl]
-  lazy val pushToken: PushTokenService            = wire[PushTokenService]
-  lazy val pushSignals                            = wire[PushServiceSignals]
-  lazy val errors                                 = wire[ErrorsService]
-  lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)
-  lazy val pingInterval: PingIntervalService      = wire[PingIntervalService]
-  lazy val websocket: WebSocketClientService      = wire[WebSocketClientService]
-  lazy val userSearch                             = wire[UserSearchService]
-  lazy val assetGenerator                         = wire[ImageAssetGenerator]
-  lazy val assetMetaData                          = wire[com.waz.service.assets.MetaDataService]
-  lazy val assets: AssetService                   = wire[AssetService]
-  lazy val users: UserServiceImpl                 = wire[UserServiceImpl]
-  lazy val conversations: ConversationsService    = wire[ConversationsService]
-  lazy val convsNotifier                          = wire[ConversationsNotifier]
-  lazy val convEvents: ConversationEventsService  = wire[ConversationEventsService]
-  lazy val convsUi                                = wire[ConversationsUiService]
-  lazy val convsStats                             = wire[ConversationsListStateService]
-  lazy val teams: TeamsServiceImpl                = wire[TeamsServiceImpl]
-  lazy val messages: MessagesServiceImpl          = wire[MessagesServiceImpl]
-  lazy val connection: ConnectionService          = wire[ConnectionService]
-  lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
-  lazy val avs: AvsV3                             = wire[AvsV3Impl]
-  lazy val calling: CallingService                = wire[CallingService]
-  lazy val contacts: ContactsService              = wire[ContactsService]
-  lazy val typing: TypingService                  = wire[TypingService]
-  lazy val invitations                            = wire[InvitationService]
-  lazy val richmedia                              = wire[RichMediaService]
-  lazy val giphy                                  = wire[GiphyService]
-  lazy val youtubeMedia                           = wire[YouTubeMediaService]
-  lazy val soundCloudMedia                        = wire[SoundCloudMediaService]
-  lazy val spotifyMedia                           = wire[SpotifyMediaService]
-  lazy val otrService: OtrServiceImpl             = wire[OtrServiceImpl]
-  lazy val genericMsgs: GenericMessageService     = wire[GenericMessageService]
-  lazy val reactions: ReactionsService            = wire[ReactionsService]
-  lazy val notifications: NotificationService     = wire[NotificationService]
-  lazy val callLog                                = wire[DefaultCallLogService]
-  lazy val recordAndPlay                          = wire[RecordAndPlayService]
-  lazy val receipts                               = wire[ReceiptService]
-  lazy val ephemeral                              = wire[EphemeralMessagesService]
-  lazy val handlesService                         = wire[HandlesService]
-  lazy val gsmService                             = wire[GsmInterruptService]
+  lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
+  lazy val pushToken: PushTokenService                = wire[PushTokenService]
+  lazy val pushSignals                                = wire[PushServiceSignals]
+  lazy val errors                                     = wire[ErrorsService]
+  lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
+  lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
+  lazy val websocket: WebSocketClientService          = wire[WebSocketClientService]
+  lazy val userSearch                                 = wire[UserSearchService]
+  lazy val assetGenerator                             = wire[ImageAssetGenerator]
+  lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
+  lazy val assets: AssetService                       = wire[AssetService]
+  lazy val users: UserServiceImpl                     = wire[UserServiceImpl]
+  lazy val conversations: ConversationsService        = wire[ConversationsService]
+  lazy val convsNotifier                              = wire[ConversationsNotifier]
+  lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
+  lazy val convsUi                                    = wire[ConversationsUiService]
+  lazy val convsStats                                 = wire[ConversationsListStateService]
+  lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
+  lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
+  lazy val connection: ConnectionService              = wire[ConnectionService]
+  lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
+  lazy val avs: AvsV3                                 = wire[AvsV3Impl]
+  lazy val calling: CallingService                    = wire[CallingService]
+  lazy val contacts: ContactsService                  = wire[ContactsService]
+  lazy val typing: TypingService                      = wire[TypingService]
+  lazy val invitations                                = wire[InvitationService]
+  lazy val richmedia                                  = wire[RichMediaService]
+  lazy val giphy                                      = wire[GiphyService]
+  lazy val youtubeMedia                               = wire[YouTubeMediaService]
+  lazy val soundCloudMedia                            = wire[SoundCloudMediaService]
+  lazy val spotifyMedia                               = wire[SpotifyMediaService]
+  lazy val otrService: OtrServiceImpl                 = wire[OtrServiceImpl]
+  lazy val genericMsgs: GenericMessageService         = wire[GenericMessageService]
+  lazy val reactions: ReactionsService                = wire[ReactionsService]
+  lazy val notifications: NotificationService         = wire[NotificationService]
+  lazy val callLog                                    = wire[DefaultCallLogService]
+  lazy val recordAndPlay                              = wire[RecordAndPlayService]
+  lazy val receipts                                   = wire[ReceiptService]
+  lazy val ephemeral                                  = wire[EphemeralMessagesService]
+  lazy val handlesService                             = wire[HandlesService]
+  lazy val gsmService                                 = wire[GsmInterruptService]
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -257,17 +257,18 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           users.userDeleteEventsStage,
           flowmanager.callEventsStage,
           calling.callMessagesStage,
-          conversations.convStateEventProcessingStage,
           teams.eventsProcessingStage,
           typing.typingEventStage,
           otrClientsService.otrClientsProcessingStage,
           pushToken.eventProcessingStage,
-          Stage(Parallel)(
-            UnarchivingEventProcessingStage(users, convsStorage),
-            convEvents.conversationEventsStage,
-            Stage(Interleaved)(
-              messages.messageEventProcessingStage,
-              genericMsgs.eventProcessingStage
+          Stage(Sequential)(
+            convOrder.conversationOrderEventsStage,
+            Stage(Parallel)(
+              conversations.convStateEventProcessingStage,
+              Stage(Interleaved)(
+                messages.messageEventProcessingStage,
+                genericMsgs.eventProcessingStage
+              )
             )
           )
         ),

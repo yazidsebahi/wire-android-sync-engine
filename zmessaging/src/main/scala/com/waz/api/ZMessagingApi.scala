@@ -85,8 +85,6 @@ trait ZMessagingApi {
 
   def getCache: ZCache
 
-  def getIncomingMessages: IncomingMessagesList
-
   def getUser(id: String): User
 
   def getMediaManager: MediaManager

@@ -59,10 +59,6 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
   private val indexes = new ConcurrentHashMap[ConvId, ConvMessagesIndex]
   private val filteredIndexes = new MultiKeyLruCache[ConvId, MessageFilter, ConvMessagesIndex](MessagesStorage.filteredMessagesCacheSize)
 
-  lazy val incomingMessages = storage {
-    MessageDataDao.listIncomingMessages(userId, System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis)(_)
-  } map { new IncomingMessages(userId, _, timeouts) }
-
   def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] =
     Option(indexes.get(conv)).fold {
       Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage))(indexes.put(conv, _)))
@@ -80,19 +76,16 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
   def msgsFilteredIndex(conv: ConvId): Seq[ConvMessagesIndex] = filteredIndexes.get(conv).values.toSeq
 
   onAdded { added =>
-    Future.traverse(added.groupBy(_.convId)) { case (convId, msgs) =>{
-        msgsFilteredIndex(convId).foreach(_.add(msgs))
-        msgsIndex(convId).flatMap { index =>
-          index.add(msgs).flatMap(_ => index.firstMessageId) map { first =>
-            // XXX: calling update here is a bit ugly
-            val ms = msgs.map {
-              case msg if first.contains(msg.id) =>
-                update(msg.id, _.copy(firstMessage = first.contains(msg.id)))
-                msg.copy(firstMessage = first.contains(msg.id))
-              case msg => msg
-            }
-
-            updateIncomingMessagesList(convId, ms)
+    Future.traverse(added.groupBy(_.convId)) { case (convId, msgs) =>
+      msgsFilteredIndex(convId).foreach(_.add(msgs))
+      msgsIndex(convId).flatMap { index =>
+        index.add(msgs).flatMap(_ => index.firstMessageId) map { first =>
+          // XXX: calling update here is a bit ugly
+          val ms = msgs.map {
+            case msg if first.contains(msg.id) =>
+              update(msg.id, _.copy(firstMessage = first.contains(msg.id)))
+              msg.copy(firstMessage = first.contains(msg.id))
+            case msg => msg
           }
         }
       }
@@ -105,14 +98,9 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
         for {
           index <- msgsIndex(convId)
           _ <- index.update(msgs)
-          _ <- updateIncomingMessagesList(convId, msgs.map(_._2))
         } yield ()
       } .recoverWithLog(reportHockey = true)
     }
-  }
-
-  onDeleted { ids =>
-    incomingMessages.map { _.remove(ids.toSet) }
   }
 
   convs.convUpdated.on(dispatcher) {
@@ -144,8 +132,6 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
   def getMessage(id: MessageId): Future[Option[MessageData]] = get(id)
 
   def getMessages(ids: MessageId*): Future[Seq[Option[MessageData]]] = getAll(ids)
-
-  def getIncomingMessages: Signal[List[MessageData]] = Signal.future(incomingMessages).flatMap(_.messages)
 
   def getEntries(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.messagesCursor)
 
@@ -210,7 +196,6 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
       _ <- deleteCached(m => m.convId == conv && ! m.time.isAfter(upTo))
       _ <- Future(msgsFilteredIndex(conv).foreach(_.delete(upTo)))
       _ <- msgsIndex(conv).flatMap(_.delete(upTo))
-      _ <- incomingMessages.map(_.remove(conv))
     } yield ()
   }
 
@@ -226,15 +211,8 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
       _ <- deleteCached(_.convId == conv)
       _ <- Future(msgsFilteredIndex(conv).foreach(_.delete()))
       _ <- msgsIndex(conv).flatMap(_.delete())
-      _ <- incomingMessages.map(_.remove(conv))
     } yield ()
   }
-
-  private def updateIncomingMessagesList(convId: ConvId, msgs: Seq[MessageData]) =
-    convs.get(convId) flatMap { conv =>
-      if (conv.exists(_.muted)) Future.successful(())
-      else incomingMessages map { _.add(msgs) }
-    }
 }
 
 object MessagesStorage {
@@ -243,41 +221,6 @@ object MessagesStorage {
   val FirstMessageTypes = {
     import Message.Type._
     Set(TEXT, TEXT_EMOJI_ONLY, KNOCK, ASSET, ANY_ASSET, VIDEO_ASSET, AUDIO_ASSET, LOCATION)
-  }
-}
-
-class IncomingMessages(selfUserId: UserId, initial: Seq[MessageData], timeouts: Timeouts) {
-  import scala.collection.breakOut
-
-  private val messagesSource = new SourceSignal[SortedMap[(Long, MessageId), MessageData]](Some(initial.map(m => (m.localTime.toEpochMilli, m.id) -> m)(breakOut)))
-
-  def sinceTime = System.currentTimeMillis - timeouts.messages.incomingTimeout.toMillis
-
-  val messages = messagesSource map { msgs =>
-    val time = sinceTime
-    msgs.dropWhile(_._1._1 < time).values.toList
-  }
-
-  def add(msgs: Seq[MessageData]) = {
-    val time = sinceTime
-    val ms = msgs filter(m => m.userId != selfUserId && m.localTime.toEpochMilli > time) map { msg => (msg.localTime.toEpochMilli, msg.id) -> msg }
-    val ids = msgs.map(_.id).toSet
-    messagesSource.mutate { _.dropWhile(_._1._1 < time).filter(e => !ids.contains(e._1._2)) ++ ms }
-  }
-
-  def remove(ids: Set[MessageId]) =
-    messagesSource.mutate(_.from((sinceTime, MessageId.Empty)).filter(e => !ids.contains(e._1._2)))
-
-  def remove(msg: MessageData) = {
-    messagesSource.mutate(_ - (msg.localTime.toEpochMilli -> msg.id))
-  }
-
-  def remove(conv: ConvId) = {
-    messagesSource.mutate(_.filter { case (k, v) => v.convId != conv})
-  }
-
-  def remove(conv: ConvId, upTo: Instant) = {
-    messagesSource.mutate(_.filter { case (k, v) => v.convId != conv || v.time.isAfter(upTo)})
   }
 }
 
