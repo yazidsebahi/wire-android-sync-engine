@@ -18,7 +18,7 @@
 package com.waz.sync.handler
 
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.{TeamData, TeamId, TeamMemberData, UserId}
+import com.waz.model.{TeamData, TeamId, UserId}
 import com.waz.service.teams.TeamsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncResult
@@ -41,10 +41,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
 
       val teamId = TeamId()
       val teams = Seq(TeamData(teamId, "My Team", UserId()))
-      val members = Set(
-        TeamMemberData(UserId(), teamId),
-        TeamMemberData(UserId(), teamId)
-      )
+      val members = Set(UserId(), UserId())
 
       (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = false))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Right(members)))
@@ -64,8 +61,8 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
       }
       val members = teamIds.map { id =>
         Set(
-          TeamMemberData(UserId(s"User 1 team ${id.str}"), id),
-          TeamMemberData(UserId(s"User 2 team ${id.str}"), id)
+          UserId(s"User 1 team ${id.str}"),
+          UserId(s"User 2 team ${id.str}")
         )
       }
 
