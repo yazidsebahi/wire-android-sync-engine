@@ -88,8 +88,8 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
       override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
     }
     override lazy val factory = new MockZMessagingFactory(this) {
-      override def zmessaging(clientId: ClientId, userModule: UserModule): service.ZMessaging =
-        new service.ZMessaging(clientId, userModule) {
+      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): service.ZMessaging =
+        new service.ZMessaging(teamId, clientId, userModule) {
           override lazy val sync = new EmptySyncService {
             override def syncSelfUser(): Future[SyncId] = {
               selfUserSyncRequested = true

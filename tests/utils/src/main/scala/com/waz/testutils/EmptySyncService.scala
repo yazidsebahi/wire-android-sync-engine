@@ -35,7 +35,7 @@ object EmptySyncService extends EmptySyncService
 trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncSearchQuery(query: SearchQuery) = sid
   override def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId] = None) = sid
-  override def syncTeams(ids: Set[TeamId], dependsOn: Option[SyncId] = None) = sid
+  override def syncTeam(dependsOn: Option[SyncId] = None) = sid
   override def syncSelfUser() = sid
   override def deleteAccount() = sid
   override def syncUsers(ids: UserId*) = sid

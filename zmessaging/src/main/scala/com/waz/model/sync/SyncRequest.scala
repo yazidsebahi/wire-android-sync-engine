@@ -73,9 +73,7 @@ object SyncRequest {
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
   case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
 
-  case class SyncTeams(teams: Set[TeamId]) extends BaseRequest(Cmd.SyncTeams) {
-    override def mergeKey = (cmd, teams)
-  }
+  case object SyncTeam extends BaseRequest(Cmd.SyncTeam)
 
   case class PostAddressBook(addressBook: AddressBook) extends BaseRequest(Cmd.PostAddressBook) {
     override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(Merged(_))
@@ -321,7 +319,7 @@ object SyncRequest {
           case Cmd.SyncSelf              => SyncSelf
           case Cmd.DeleteAccount         => DeleteAccount
           case Cmd.SyncConversations     => SyncConversations
-          case Cmd.SyncTeams             => SyncTeams(decodeTeamIdSeq('teams).toSet)
+          case Cmd.SyncTeam              => SyncTeam
           case Cmd.SyncConnectedUsers    => SyncConnectedUsers
           case Cmd.SyncConnections       => SyncConnections
           case Cmd.RegisterPushToken     => RegisterPushToken(decodeId[PushToken]('token))
@@ -429,9 +427,7 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
-        case SyncTeams(teams) =>
-          o.put("teams", arrString(teams.toSeq.map(_.str)))
-        case SyncSelf | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
         case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }

@@ -44,7 +44,7 @@ trait SyncServiceHandle {
   def syncSelfUser(): Future[SyncId]
   def deleteAccount(): Future[SyncId]
   def syncConversations(ids: Set[ConvId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
-  def syncTeams(ids: Set[TeamId] = Set.empty, dependsOn: Option[SyncId] = None): Future[SyncId]
+  def syncTeam(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId]
@@ -100,7 +100,7 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService,
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
   def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) = addRequest(if (ids.nonEmpty) SyncConversation(ids) else SyncConversations, priority = if (ids.nonEmpty) Priority.Normal else Priority.High, dependsOn = dependsOn.toSeq)
-  def syncTeams(ids: Set[TeamId], dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeams(ids), priority = Priority.High, dependsOn = dependsOn.toSeq)
+  def syncTeam(dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeam, priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
@@ -169,11 +169,11 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case SyncUser(u)                           => zms.usersSync.syncUsers(u.toSeq: _*)
     case SyncSearchQuery(query)                => zms.usersearchSync.syncSearchQuery(query)
     case SyncRichMedia(messageId)              => zms.richmediaSync.syncRichMedia(messageId)
-    case DeletePushToken(token)                 => zms.gcmSync.deleteGcmToken(token)
+    case DeletePushToken(token)                => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
     case SyncConversations                     => zms.conversationSync.syncConversations()
-    case SyncTeams(teamIds)                    => zms.teamsSync.syncTeams(teamIds)
+    case SyncTeam                              => zms.teamsSync.syncTeam()
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()
     case SyncConnections                       => zms.connectionsSync.syncConnections()
     case SyncSelf                              => zms.usersSync.syncSelfUser()

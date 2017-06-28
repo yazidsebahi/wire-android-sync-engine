@@ -24,7 +24,6 @@ import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.db.Col._
 import com.waz.db.Dao
-import com.waz.model.UserData.apply
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
@@ -42,6 +41,7 @@ import scala.collection.mutable
  * @param password - will not be stored in db
  */
 case class AccountData(id:             AccountId,
+                       teamId:         Option[TeamId]          = None,
                        email:          Option[EmailAddress],
                        hash:           String,
                        phone:          Option[PhoneNumber],
@@ -62,6 +62,7 @@ case class AccountData(id:             AccountId,
   override def toString: String =
     s"""AccountData:
        | id:              $id
+       | teamId:          $teamId
        | email:           $email
        | hash:            $hash
        | phone:           $phone
@@ -104,11 +105,13 @@ case class AccountData(id:             AccountId,
     case _ => Credentials.Empty
   }
 
-  def updated(user: UserInfo) =
+  def updated(user: UserInfo): AccountData =
     copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), verified = true, handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
 
-  def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState) =
+  def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
     copy(userId = userId orElse this.userId, verified = this.verified | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
+
+  def updated(teamId: TeamId): AccountData = copy(teamId = Some(teamId))
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
@@ -125,14 +128,14 @@ case class ConfirmationCode(str: String) extends AnyVal {
 }
 
 object AccountData {
-  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
+  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, None, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
 
   def apply(id: AccountId, credentials: Credentials): AccountData =
-    new AccountData(id, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
+    new AccountData(id, None, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
+    AccountData(id, None, Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
   }
 
   type Permission = Permission.Value
@@ -180,6 +183,7 @@ object AccountData {
 
   implicit object AccountDataDao extends Dao[AccountData, AccountId] {
     val Id = id[AccountId]('_id, "PRIMARY KEY").apply(_.id)
+    val TeamId = opt(id[TeamId]('teamId))(_.teamId)
     val Email = opt(emailAddress('email))(_.email)
     val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
@@ -196,9 +200,9 @@ object AccountData {
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, TeamId, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, TeamId, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
@@ -207,6 +211,9 @@ object AccountData {
       iterating(db.query(table.name, null, s"${Phone.name} = ?", Array(phone.str), null, null, null))
 
     def deleteForEmail(email: EmailAddress)(implicit db: DB) = delete(Email, Some(email))
+
   }
+
+
 
 }

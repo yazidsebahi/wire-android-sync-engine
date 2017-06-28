@@ -66,7 +66,7 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
 }
 
 class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(global) {
-  override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(clientId, user)
+  override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(teamId, clientId, user)
 }
 
 class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts(global) {
@@ -78,7 +78,7 @@ class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts
   }
 }
 
-class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, "", None, handle = None), accounts.global, accounts) {
+class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, None, "", None, handle = None), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -93,10 +93,11 @@ class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec:
 
 class MockUserModule(val mockAccount: MockAccountService = new MockAccountService(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
 
-class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), clientId: ClientId = ClientId()) extends ZMessaging(clientId, mockUser) { zms =>
-  def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), ClientId())
-  def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), clientId)
-  def this(account: MockAccountService, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), ClientId())
+class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId: Option[TeamId] = None, clientId: ClientId = ClientId()) extends ZMessaging(teamId, clientId, mockUser) { zms =>
+  def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), None, ClientId())
+  def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), None, clientId)
+  def this(selfUserId: UserId, teamId: TeamId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), Some(teamId), clientId)
+  def this(account: MockAccountService, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), None, ClientId())
 
   override lazy val sync: SyncServiceHandle = new EmptySyncService
   import Threading.Implicits.Background
@@ -104,7 +105,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
   var timeout = 5.seconds
 
   storage.usersStorage.put(selfUserId, UserData(selfUserId, None, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
-  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+  global.accountsStorage.put(accountId, AccountData(accountId, None, Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 

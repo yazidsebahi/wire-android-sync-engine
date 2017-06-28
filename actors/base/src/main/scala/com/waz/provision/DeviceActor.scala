@@ -84,8 +84,8 @@ class DeviceActor(val deviceName: String,
     }
 
     override lazy val factory: ZMessagingFactory = new ZMessagingFactory(this) {
-      override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
-        new ZMessaging(clientId, user) {
+      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging =
+        new ZMessaging(teamId, clientId, user) {
 
         }
     }

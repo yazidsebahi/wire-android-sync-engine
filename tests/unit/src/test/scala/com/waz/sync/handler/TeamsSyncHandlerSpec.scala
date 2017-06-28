@@ -23,7 +23,7 @@ import com.waz.service.teams.TeamsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncResult
 import com.waz.sync.client.TeamsClient
-import com.waz.sync.client.TeamsClient.TeamsResponse
+import com.waz.sync.client.TeamsClient.TeamBindingResponse$
 import com.waz.threading.CancellableFuture
 
 import scala.concurrent.Future
@@ -43,7 +43,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
       val teams = Seq(TeamData(teamId, "My Team", UserId()))
       val members = Set(UserId(), UserId())
 
-      (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = false))))
+      (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamBindingResponse(teams, hasMore = false))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Right(members)))
 
       val teamsFetched = teams.toSet
@@ -73,10 +73,10 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
         val resp = callsToTeams match {
           case 1 =>
             start shouldEqual None
-            TeamsResponse(teams.init, hasMore = true)
+            TeamBindingResponse(teams.init, hasMore = true)
           case 2 =>
             start shouldEqual teamIds.headOption
-            TeamsResponse(teams.tail, hasMore = false)
+            TeamBindingResponse(teams.tail, hasMore = false)
           case _ => fail("Unexpected number of calls to getTeams")
         }
 
@@ -113,7 +113,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
 
       val timeoutError = ErrorResponse(ErrorResponse.ConnectionErrorCode, s"Request failed with timeout", "connection-error")
 
-      (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamsResponse(teams, hasMore = true))))
+      (client.getTeams(_: Option[TeamId])).expects(None).once().returning(CancellableFuture.successful(Right(TeamBindingResponse(teams, hasMore = true))))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Left(timeoutError)))
 
       (service.onTeamsSynced _).expects(*, *, *).never().returning(Future.successful({}))

@@ -53,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 91
+  val DbVersion = 92
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa,
@@ -157,8 +157,10 @@ object ZMessagingDB {
       db.execSQL("DROP TABLE IF EXISTS CommonConnections")
     },
     Migration(91, 92) { db =>
-      db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER")
-      db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER")
+      db.execSQL("ALTER TABLE Accounts ADD COLUMN teamId TEXT")
+      db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER DEFAULT 0")
+      db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER DEFAULT 0")
+      db.execSQL("ALTER TABLE Users ADD COLUMN teamId TEXT")
       db.execSQL("DROP TABLE IF EXISTS TeamMembers")
     }
   )
