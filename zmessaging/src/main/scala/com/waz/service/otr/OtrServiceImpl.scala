@@ -21,10 +21,10 @@ import java.io._
 import javax.crypto.Mac
 
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.{MembersStorageImpl, GlobalPreferences, OtrClientsStorage}
+import com.waz.content.{GlobalPreferences, MembersStorageImpl, OtrClientsStorage}
 import com.waz.model.GenericContent.ClientAction.SessionReset
 import com.waz.model.GenericContent._
 import com.waz.model._
@@ -245,7 +245,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
 
   def fingerprintSignal(userId: UserId, cId: ClientId): Signal[Option[Array[Byte]]] =
     if (userId == selfUserId && cId == clientId) Signal.future(cryptoBox { cb => Future successful cb.getLocalFingerprint })
-    else sessions.remoteFingerprint(sessionId(userId, clientId))
+    else cryptoBox.sessions.remoteFingerprint(sessionId(userId, cId))
 
   def encryptAssetDataCBC(key: AESKey, data: LocalData): Future[(Sha256, LocalData, EncryptionAlgorithm)] = {
     import Threading.Implicits.Background
