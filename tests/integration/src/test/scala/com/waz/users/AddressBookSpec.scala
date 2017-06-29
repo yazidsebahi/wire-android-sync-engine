@@ -149,7 +149,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   def newClient = new RegistrationClient(new AsyncClientImpl(wrapper = TestClientWrapper()), testBackend)
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, user) {
       override lazy val userSearchClient: UserSearchClient = new UserSearchClient(netClient) {
         // server response will not update immediately with newly registered users, thus we fail the sync request
         // which will cause the search to use local suggestions, which should find the contacts because

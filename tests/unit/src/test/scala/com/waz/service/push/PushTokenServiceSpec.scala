@@ -51,6 +51,9 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
   val defaultDuration = 5.seconds
 
+  def accountData(token: PushToken): AccountData = AccountData(accountId, None, None, "", None, None, Some(token))
+  def accountData(token: Option[PushToken]): AccountData = AccountData(accountId, None, None, "", None, None, token)
+
   after {
 
     prefs.reset()
@@ -105,7 +108,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val oldToken = PushToken("oldToken")
       val newToken = PushToken("token")
 
-      accountSignal ! AccountData(accountId, None, "", None, None, Some(oldToken))
+      accountSignal ! accountData(oldToken)
       currentAccount := accountId.str
 
       currentToken := Some(newToken)
@@ -131,7 +134,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val oldToken = PushToken("oldToken")
       val newToken = PushToken("newToken")
 
-      accountSignal ! AccountData(accountId, None, "", None, None, Some(oldToken))
+      accountSignal ! accountData(oldToken)
       currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
@@ -159,7 +162,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("After user is logged out, clearing their current push token should NOT trigger new registration") {
       val token = PushToken("token")
 
-      accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      accountSignal ! accountData(token)
       currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
@@ -173,7 +176,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       result(service.pushActive.filter(_ == true).head)
 
       currentAccount := "" //user is logged out
-      accountSignal ! AccountData(accountId, None, "", None, None, None)
+      accountSignal ! accountData(None)
 
       result(service.pushActive.filter(_ == false).head)
 
@@ -193,7 +196,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
     scenario("Push should be active if push is enabled and inactive if not") {
       val token = PushToken("token")
-      accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      accountSignal ! accountData(token)
       currentAccount := accountId.str
       pushEnabled := true //set active
       googlePlayAvailable ! true
@@ -209,7 +212,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
     scenario("Push should be active if app is in background and inactive if not") {
       val token = PushToken("token")
-      accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      accountSignal ! accountData(token)
       currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
@@ -226,7 +229,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
     scenario("Push should be inactive if play services are unavailable") {
       val token = PushToken("token")
-      accountSignal ! AccountData(accountId, None, "", None, None, Some(token))
+      accountSignal ! accountData(token)
       currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true
@@ -243,7 +246,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be inactive if user is not currently registered") {
 
       val token = PushToken("token")
-      accountSignal ! AccountData(accountId, None, "", None, None, None)
+      accountSignal ! accountData(None)
       currentAccount := accountId.str
       pushEnabled := true
       googlePlayAvailable ! true

@@ -39,19 +39,15 @@ class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service:
   import Threading.Implicits.Background
 
   override def syncTeam(): Future[SyncResult] = teamId match {
-    case Some(id) =>
-      client.getTeamData(id).future.flatMap {
-        case Right(data) => for { members <- downloadMembers(id); _ <- service.onTeamSynced(data, members) } yield SyncResult.Success
-        case Left(error) => warn(s"TeamsClient.syncTeam: $id failed with error: $error"); Future.successful(SyncResult(error))
-      }
+    case Some(id) => client.getTeamData(id).future.flatMap {
+      case Right(data) =>
+        client.getTeamMembers(id).future.flatMap {
+          case Left(errorResponse) => Future.successful(SyncResult(errorResponse))
+          case Right(members) => for { _ <- service.onTeamSynced(data, members) } yield SyncResult.Success
+        }
+      case Left(error) => warn(s"TeamsClient.syncTeam: $id failed with error: $error"); Future.successful(SyncResult(error))
+    }
     case None => Future.successful(SyncResult.Success)
-  }
-
-  private def downloadMembers(id: TeamId): Future[Set[UserId]] = client.getTeamMembers(id).future.map {
-    case Right(teamMembers) =>
-      debug(s"Received members for team: $id, $teamMembers")
-      teamMembers
-    case Left(err) => throw SyncException(s"Failed to download members for team: $id", err)
   }
 
 }

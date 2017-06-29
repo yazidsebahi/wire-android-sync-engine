@@ -25,7 +25,7 @@ import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.GenericContent.LastRead
 import com.waz.model.otr.ClientId
-import com.waz.model.{ConvId, GenericMessage, RConvId, UserId}
+import com.waz.model._
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
 import com.waz.service._
 import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
@@ -60,7 +60,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   }
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, userModule: UserModule): ZMessaging = new ApiZMessaging(clientId, userModule) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, userModule) {
 
 
       override lazy val otrSync: OtrSyncHandler = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {

@@ -115,8 +115,8 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   @volatile private var isAudioMessageFromTest = Set.empty[CacheKey]
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
-      new ApiZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): service.ZMessaging =
+      new ApiZMessaging(teamId, clientId, userModule) {
         override lazy val assetMetaData = new MetaDataService(context, cache, assetsStorage, assets, assetGenerator) {
           override def loadMetaData(asset: AssetData, data: LocalData): CancellableFuture[Option[AssetMetaData]] = (asset.mime, data) match {
             case (Mime.Audio(), entry: CacheEntry) if isAudioMessageFromTest(entry.data.key) =>

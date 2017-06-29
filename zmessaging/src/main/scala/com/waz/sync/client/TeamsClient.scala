@@ -31,28 +31,16 @@ import org.json.JSONObject
 import scala.util.Try
 
 trait TeamsClient {
-  def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamBindingResponse]
-  def getTeams(id: Set[TeamId]): ErrorOrResponse[TeamBindingResponse]
   def getTeamMembers(id: TeamId): ErrorOrResponse[Set[UserId]]
   def getTeamData(id: TeamId): ErrorOrResponse[TeamData]
   def getTeamId(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamId]]
+
+  def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamBindingResponse] // only for tests
 }
 
 class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
   import TeamsClient._
   import Threading.Implicits.Background
-
-  override def getTeams(start: Option[TeamId]) = {
-    zNetClient.withErrorHandling("loadAllTeams", Request.Get(teamsPaginatedQuery(start))) {
-      case Response(SuccessHttpStatus(), TeamBindingResponse(teams, hasMore), _) => TeamBindingResponse(teams, hasMore)
-    }
-  }
-
-  override def getTeams(ids: Set[TeamId]) = {
-    zNetClient.withErrorHandling("loadBatchTeams", Request.Get(teamsBatchQuery(ids))) {
-      case Response(SuccessHttpStatus(), TeamBindingResponse(teams, _), _) => TeamBindingResponse(teams, hasMore = false)
-    }
-  }
 
   override def getTeamMembers(id: TeamId) = {
     zNetClient.withErrorHandling("loadTeamMembers", Request.Get(teamMembersPath(id))) {
@@ -75,6 +63,12 @@ class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
         case None if hasMore => getTeamId(teams.lastOption.map(_._1))
         case None => CancellableFuture.successful(Right(None))
       }
+  }
+
+  override def getTeams(start: Option[TeamId]) = {
+    zNetClient.withErrorHandling("loadAllTeams", Request.Get(teamsPaginatedQuery(start))) {
+      case Response(SuccessHttpStatus(), TeamBindingResponse(teams, hasMore), _) => TeamBindingResponse(teams, hasMore)
+    }
   }
 }
 

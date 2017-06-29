@@ -162,6 +162,7 @@ class TeamsServiceImpl(selfUser:          UserId,
     verbose(s"onTeamMembersLeft: users: $userIds")
     if (userIds.contains(selfUser)) {
       warn("Self user removed from team")
+      Future.successful {}
     } else {
       for {
         _ <- userStorage.remove(userIds)

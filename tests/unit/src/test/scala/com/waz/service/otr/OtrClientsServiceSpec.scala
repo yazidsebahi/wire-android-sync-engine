@@ -57,7 +57,7 @@ class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues 
     }
   }
 
-  lazy val service = new MockZMessaging(userModule, ClientId("client1")) {
+  lazy val service = new MockZMessaging(userModule, None, ClientId("client1")) {
     usersStorage.addOrOverwrite(selfUser).futureValue
   }
 
