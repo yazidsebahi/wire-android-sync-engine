@@ -116,5 +116,6 @@ class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Ins
         updated shouldEqual changed
       }
     }
+
   }
 }

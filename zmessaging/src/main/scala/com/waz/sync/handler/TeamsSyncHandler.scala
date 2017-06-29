@@ -24,7 +24,6 @@ import com.waz.model._
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.TeamsClient
-import com.waz.sync.handler.TeamsSyncHandler.SyncException
 import com.waz.threading.Threading
 
 import scala.concurrent.Future
@@ -43,7 +42,7 @@ class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service:
       case Right(data) =>
         client.getTeamMembers(id).future.flatMap {
           case Left(errorResponse) => Future.successful(SyncResult(errorResponse))
-          case Right(members) => for { _ <- service.onTeamSynced(data, members) } yield SyncResult.Success
+          case Right(members) => service.onTeamSynced(data, members).map(_ => SyncResult.Success)
         }
       case Left(error) => warn(s"TeamsClient.syncTeam: $id failed with error: $error"); Future.successful(SyncResult(error))
     }

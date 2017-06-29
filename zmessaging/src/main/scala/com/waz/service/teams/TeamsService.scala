@@ -22,14 +22,12 @@ import com.waz.ZLog._
 import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationDataDao
-import com.waz.model.UserData.ConnectionStatus.Unconnected
-import com.waz.model.UserData.UserDataDao
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventScheduler, SearchKey}
-import com.waz.sync.SyncServiceHandle
+import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.{RichFuture, returning}
+import com.waz.utils.RichFuture
 import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
 
 import scala.collection.Seq
@@ -52,13 +50,13 @@ trait TeamsService {
 
 class TeamsServiceImpl(selfUser:          UserId,
                        teamId:            Option[TeamId],
-                       accountsStorage:   AccountsStorage,
                        teamStorage:       TeamsStorage,
                        userStorage:       UsersStorage,
                        convsStorage:      ConversationStorage,
                        convMemberStorage: MembersStorage,
                        convsContent:      ConversationsContentUpdater,
                        sync:              SyncServiceHandle,
+                       syncRequestService:SyncRequestService,
                        userPrefs:         UserPreferences) extends TeamsService {
 
   private implicit val dispatcher = SerialDispatchQueue()
@@ -90,26 +88,27 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield {}
   }
 
-  //TODO - maybe include user permissions for supplied team
-  override def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId.map(id => query match {
-    case Some(q) => userStorage.searchByTeam(id, q, handleOnly)
-    case None => userStorage.getByTeam(Set(id))
-  }).getOrElse(Future.successful(Set.empty))
+  override def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId match {
+    case None => Future.successful(Set.empty)
+    case Some(id) => query match {
+      case Some(q) => userStorage.searchByTeam(id, q, handleOnly)
+      case None => userStorage.getByTeam(Set(id))
+    }
+  }
 
-  override def searchTeamConversations(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId.map(id => {
-    verbose(s"searchTeamConversations: team: $teamId, query: $query, handleOnly?: $handleOnly")
-    import ConversationDataDao._
-    (query match {
-      case Some(q) => convsStorage.search(q, selfUser, handleOnly, Some(id))
-      case None    => convsStorage.find(_.team.contains(id), db => iterating(find(Team, Some(id))(db)), identity)
-    }).map(_.toSet)
-  }).getOrElse(Future.successful(Set.empty))
+  override def searchTeamConversations(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId match {
+    case None => Future.successful(Set.empty)
+    case Some(id) => verbose(s"searchTeamConversations: team: $teamId, query: $query, handleOnly?: $handleOnly")
+                     import ConversationDataDao._
+                    (query match {
+                      case Some(q) => convsStorage.search(q, selfUser, handleOnly, Some(id))
+                      case None    => convsStorage.find(_.team.contains(id), db => iterating(find(Team, Some(id))(db)), identity)
+                    }).map(_.toSet)
+  }
 
+  override lazy val guests = {
+    def load(id: TeamId): Future[Set[UserId]] = for {
 
-  override lazy val guests = teamId.map(id => {
-    verbose(s"findGuests: team: $teamId")
-
-    def load: Future[Set[UserId]] = for {
       convs       <- searchTeamConversations().map(_.map(_.id))
       allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
       teamMembers <- userStorage.getByTeam(Set(id)).map(_.map(_.id))
@@ -121,24 +120,29 @@ class TeamsServiceImpl(selfUser:          UserId,
       EventStream.union(ev1, ev2)
     }
 
-    new RefreshingSignal[Set[UserId], Seq[UserId]](CancellableFuture.lift(load), allChanges)
-  }).getOrElse(Signal.empty[Set[UserId]])
+    teamId match {
+      case None => Signal.const(Set.empty[UserId])
+      case Some(id) => new RefreshingSignal[Set[UserId], Seq[UserId]](CancellableFuture.lift(load(id)), allChanges)
+    }
+  }
 
-  override lazy val selfTeam: Signal[Option[TeamData]] = teamId.map(id => {
-    verbose(s"selfTeam")
-
-    val allChanges = teamStorage.onUpdated.map(_.map(_._2.id))
-
-    new RefreshingSignal[Option[TeamData], Seq[TeamId]](CancellableFuture.lift(teamStorage.get(id)), allChanges)
-  }).getOrElse(Signal.empty[Option[TeamData]])
+  override lazy val selfTeam: Signal[Option[TeamData]] = teamId match {
+    case None => Signal.const[Option[TeamData]](None)
+    case Some(id) => new RefreshingSignal[Option[TeamData], Seq[TeamId]](
+      CancellableFuture.lift(teamStorage.get(id)),
+      teamStorage.onChanged.map(_.map(_.id))
+    )
+  }
 
   override def onTeamSynced(team: TeamData, members: Set[UserId]) = {
     verbose(s"onTeamSynced: team: $team \nmembers: $members")
 
     for {
       _ <- teamStorage.insert(team)
-      //TODO should we check first if we already have these users in the database?
-      _ <- sync.syncUsers(members.toSeq: _* )
+      oldMembers <- userStorage.getByTeam(Set(team.id))
+      _ <- userStorage.remove(oldMembers.map(_.id) -- members)
+      _ <- sync.syncUsers(members.toSeq: _* ).flatMap(syncRequestService.scheduler.await)
+      _ <- userStorage.updateAll2(members, _.updated(teamId))
     } yield {}
   }
 
@@ -151,11 +155,12 @@ class TeamsServiceImpl(selfUser:          UserId,
     ))
   }
 
-  //TODO follow up on: https://github.com/wireapp/architecture/issues/13
-  //At the moment, we need to re-fetch the entire list of team members as a workaround
-  private def onMembersJoined(users: Set[UserId]) = {
-    verbose(s"onTeamMembersJoined: users: $users")
-    sync.syncTeam()
+  private def onMembersJoined(members: Set[UserId]) = {
+    verbose(s"onTeamMembersJoined: members: $members")
+    for {
+      _ <- sync.syncUsers(members.toSeq: _* ).flatMap(syncRequestService.scheduler.await)
+      _ <- userStorage.updateAll2(members, _.updated(teamId))
+    } yield {}
   }
 
   private def onMembersLeft(userIds: Set[UserId]) = {
@@ -167,7 +172,6 @@ class TeamsServiceImpl(selfUser:          UserId,
       for {
         _ <- userStorage.remove(userIds)
         _ <- removeUsersFromTeamConversations(userIds)
-        _ <- removeUnconnectedUsers(userIds)
       } yield {}
     }
   }
@@ -178,16 +182,6 @@ class TeamsServiceImpl(selfUser:          UserId,
       membersToRemove = for (u <- users; c <- convs) yield (u, c)
       _               <- convMemberStorage.remove(membersToRemove)
     } yield {}
-  }
-
-  private def removeUnconnectedUsers(users: Set[UserId]): Future[Unit] = {
-    (for {
-      stillConnected   <- userStorage.find(u => users.contains(u.id), db => UserDataDao.findAll(users)(db), identity).map(_.filter(_.connection != Unconnected).map(_.id).toSet)
-    } yield {
-      returning(users -- stillConnected) { toRemove =>
-        verbose(s"Removing users from database: $toRemove")
-      }
-    }).flatMap(userStorage.remove)
   }
 
   private def onConversationsCreated(convs: Set[RConvId]) = {
