@@ -96,10 +96,10 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     getSelfUserId flatMap {
       case Some(_) =>
         sync.syncConversations()
-        sync.syncTeams()
+        sync.syncTeam()
       case None     => sync.syncSelfUser().flatMap { dependency =>
         sync.syncConversations(Set.empty, Some(dependency))
-        sync.syncTeams(Set.empty, Some(dependency))
+        sync.syncTeam(Some(dependency))
       }
     }
 

@@ -60,13 +60,15 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
+  def teamsClient(client: ZNetClient) = new TeamsClientImpl(client)
+
   def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
 
   def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.userPrefs)
 
   def userModule(userId: UserId, account: AccountService) = wire[UserModule]
 
-  def zmessaging(clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
+  def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
 }
 
 
@@ -81,14 +83,13 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val notifStorage                         = wire[NotificationStorage]
   lazy val convsStorage                         = wire[ConversationStorageImpl]
   lazy val teamsStorage:      TeamsStorage      = wire[TeamsStorageImpl]
-  lazy val teamMemberStorage: TeamMemberStorage = wire[TeamMemberStorageImpl]
   lazy val msgDeletions                         = wire[MsgDeletionStorage]
   lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
   lazy val msgEdits                             = wire[EditHistoryStorage]
 }
 
 
-class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
+class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userModule: UserModule) {
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
@@ -98,6 +99,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   val global     = account.global
 
   val selfUserId = userModule.userId
+
   val accountId  = account.id
 
   val zNetClient = account.netClient
@@ -145,7 +147,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
   def teamsStorage      = storage.teamsStorage
-  def teamMemberStorage = storage.teamMemberStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache

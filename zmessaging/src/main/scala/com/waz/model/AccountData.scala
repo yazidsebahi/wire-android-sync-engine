@@ -32,6 +32,8 @@ import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 
+import scala.collection.mutable
+
 /**
  * Represents a local user account.
  *
@@ -39,6 +41,7 @@ import com.waz.znet.AuthenticationManager.{Cookie, Token}
  * @param password - will not be stored in db
  */
 case class AccountData(id:             AccountId,
+                       teamId:         Option[TeamId]          = None,
                        email:          Option[EmailAddress],
                        hash:           String,
                        phone:          Option[PhoneNumber],
@@ -51,11 +54,15 @@ case class AccountData(id:             AccountId,
                        userId:         Option[UserId]          = None,
                        clientId:       Option[ClientId]        = None,
                        clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
-                       privateMode:    Boolean                 = false) {
+                       privateMode:    Boolean                 = false,
+                       private val _selfPermissions: Long      = 0,
+                       private val _copyPermissions: Long      = 0
+                      ) {
 
   override def toString: String =
     s"""AccountData:
        | id:              $id
+       | teamId:          $teamId
        | email:           $email
        | hash:            $hash
        | phone:           $phone
@@ -70,6 +77,10 @@ case class AccountData(id:             AccountId,
        | clientRegState:  $clientRegState
        | privateMode:     $privateMode
     """.stripMargin
+
+
+  lazy val selfPermissions = AccountData.decodeBitmask(_selfPermissions)
+  lazy val copyPermissions = AccountData.decodeBitmask(_copyPermissions)
 
   def authorized(credentials: Credentials) = credentials match {
     case EmailCredentials(e, Some(passwd), _) if email.contains(e) && AccountData.computeHash(id, passwd) == hash =>
@@ -94,11 +105,13 @@ case class AccountData(id:             AccountId,
     case _ => Credentials.Empty
   }
 
-  def updated(user: UserInfo) =
+  def updated(user: UserInfo): AccountData =
     copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), verified = true, handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
 
-  def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState) =
+  def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
     copy(userId = userId orElse this.userId, verified = this.verified | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
+
+  def updated(teamId: TeamId): AccountData = copy(teamId = Some(teamId))
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
@@ -115,14 +128,48 @@ case class ConfirmationCode(str: String) extends AnyVal {
 }
 
 object AccountData {
-  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
+  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, None, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
 
   def apply(id: AccountId, credentials: Credentials): AccountData =
-    new AccountData(id, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
+    new AccountData(id, None, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
+    AccountData(id, None, Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
+  }
+
+  type Permission = Permission.Value
+  object Permission extends Enumeration {
+    val CreateConversation,         // 0x001
+    DeleteConversation,         // 0x002
+    AddTeamMember,              // 0x004
+    RemoveTeamMember,           // 0x008
+    AddConversationMember,      // 0x010
+    RemoveConversationMember,   // 0x020
+    GetBilling,                 // 0x040
+    SetBilling,                 // 0x080
+    SetTeamData,                // 0x100
+    GetMemberPermissions,       // 0x200
+    GetTeamConversations,       // 0x400
+    DeleteTeam,                 // 0x800
+    SetMemberPermissions        // 0x1000
+    = Value
+  }
+
+  def decodeBitmask(mask: Long): Set[Permission] = {
+    val builder = new mutable.SetBuilder[Permission, Set[Permission]](Set.empty)
+    (0 until Permission.values.size).map(math.pow(2, _).toInt).zipWithIndex.foreach {
+      case (one, pos) => if ((mask & one) != 0) builder += Permission(pos)
+    }
+    builder.result()
+  }
+
+  def encodeBitmask(ps: Set[Permission]): Long = {
+    var mask = 0L
+    (0 until Permission.values.size).map(math.pow(2, _).toLong).zipWithIndex.foreach {
+      case (m, i) => if (ps.contains(Permission(i))) mask = mask | m
+    }
+    mask
   }
 
   def computeHash(id: AccountId, password: String) =
@@ -136,6 +183,7 @@ object AccountData {
 
   implicit object AccountDataDao extends Dao[AccountData, AccountId] {
     val Id = id[AccountId]('_id, "PRIMARY KEY").apply(_.id)
+    val TeamId = opt(id[TeamId]('teamId))(_.teamId)
     val Email = opt(emailAddress('email))(_.email)
     val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
@@ -148,11 +196,13 @@ object AccountData {
     val ClientId = opt(id[ClientId]('client_id))(_.clientId)
     val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
     val PrivateMode = bool('private_mode)(_.privateMode)
+    val SelfPermissions = long('self_permissions)(_._selfPermissions)
+    val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush)
+    override val table = Table("Accounts", Id, TeamId, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, TeamId, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
@@ -161,6 +211,9 @@ object AccountData {
       iterating(db.query(table.name, null, s"${Phone.name} = ?", Array(phone.str), null, null, null))
 
     def deleteForEmail(email: EmailAddress)(implicit db: DB) = delete(Email, Some(email))
+
   }
+
+
 
 }

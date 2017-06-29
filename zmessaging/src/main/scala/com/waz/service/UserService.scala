@@ -93,7 +93,7 @@ class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, us
 
   def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
     sync.syncUsers(id)
-    UserData(id, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName), handle = None)
+    UserData(id, None, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName), handle = None)
   })
 
   def getSelfUserId: Future[Option[UserId]] = Future successful Some(selfUserId)

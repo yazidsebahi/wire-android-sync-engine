@@ -149,8 +149,8 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
   lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
-      new service.ZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): service.ZMessaging =
+      new service.ZMessaging(teamId, clientId, user) {
         override lazy val invitationClient = new InvitationClient(zNetClient) {
           override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] =
             lift(super.postInvitation(i).andThen { case Success(Right(Right(inv))) => invitation = Some(inv) })

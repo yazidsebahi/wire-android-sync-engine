@@ -24,6 +24,7 @@ import com.waz.api.MessageContent.Image
 import com.waz.api._
 import com.waz.api.impl.LocalImageAsset
 import com.waz.cache.CacheEntry
+import com.waz.model.TeamId
 import com.waz.model.otr.ClientId
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, Successful}
 import com.waz.service._
@@ -104,8 +105,8 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
   }
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
-      new ZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging =
+      new ZMessaging(teamId, clientId, user) {
         override lazy val assetClient = new AssetClientImpl(zNetClient) {
 
           override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {

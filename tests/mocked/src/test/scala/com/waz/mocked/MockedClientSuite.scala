@@ -68,7 +68,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val otrClient: OtrClient = new MockedOtrClient(account.netClient)
   }
 
-  class MockedZMessaging(clientId: ClientId, userModule: UserModule) extends ZMessaging(clientId, userModule) {
+  class MockedZMessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) extends ZMessaging(teamId, clientId, userModule) {
 
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
     override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
@@ -162,7 +162,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
     override def userModule(userId: UserId, account: AccountService) = new MockedUserModule(userId, account)
 
-    override def zmessaging(clientId: ClientId, userModule: UserModule): ZMessaging = new MockedZMessaging(clientId, userModule)
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): ZMessaging = new MockedZMessaging(teamId, clientId, userModule)
 
   }
 

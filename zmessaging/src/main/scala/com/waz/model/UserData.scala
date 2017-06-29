@@ -31,8 +31,11 @@ import com.waz.utils._
 import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
 
+import scala.collection.mutable
+
 case class UserData(
                      id:                    UserId,
+                     teamId:                Option[TeamId]        = None,
                      name:                  String,
                      email:                 Option[EmailAddress]  = None,
                      phone:                 Option[PhoneNumber]   = None,
@@ -103,6 +106,8 @@ case class UserData(
     }
   )
 
+  def updated(teamId: Option[TeamId]): UserData = copy(teamId = teamId)
+
   def updateConnectionStatus(status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): UserData = {
     if (time.exists(_.before(this.connectionLastUpdated))) this
     else if (this.connection == status) time.fold(this) { time => this.copy(connectionLastUpdated = time) }
@@ -148,13 +153,14 @@ object UserData {
   }
 
   // used for testing only
-  def apply(name: String): UserData = UserData(UserId(), name, None, None, searchKey = SearchKey(name), handle = None)
+  def apply(name: String): UserData = UserData(UserId(), None, name, None, None, searchKey = SearchKey(name), handle = None)
 
-  def apply(id: UserId, name: String): UserData = UserData(id, name, None, None, searchKey = SearchKey(name), handle = None)
+  def apply(id: UserId, name: String): UserData = UserData(id, None, name, None, None, searchKey = SearchKey(name), handle = None)
 
   def apply(entry: UserSearchEntry): UserData =
     UserData(
       id        = entry.id,
+      teamId    = None,
       name      = entry.name,
       accent    = entry.colorId.getOrElse(0),
       searchKey = SearchKey(entry.name),
@@ -162,14 +168,14 @@ object UserData {
     ) // TODO: improve connection, relation, search level stuff
 
   def apply(user: UserInfo): UserData =
-    UserData(user.id, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
+    UserData(user.id, None, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
       user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted,
       handle = user.handle)
 
   implicit lazy val Decoder: JsonDecoder[UserData] = new JsonDecoder[UserData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): UserData = UserData(
-      id = 'id, name = 'name, email = decodeOptEmailAddress('email), phone = decodeOptPhoneNumber('phone),
+      id = 'id, teamId = decodeOptTeamId('teamId), name = 'name, email = decodeOptEmailAddress('email), phone = decodeOptPhoneNumber('phone),
       trackingId = decodeOptId[TrackingId]('trackingId), picture = decodeOptAssetId('assetId), accent = decodeInt('accent), searchKey = SearchKey('name),
       connection = ConnectionStatus('connection), connectionLastUpdated = new Date(decodeLong('connectionLastUpdated)), connectionMessage = decodeOptString('connectionMessage),
       conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation),
@@ -180,6 +186,7 @@ object UserData {
   implicit lazy val Encoder: JsonEncoder[UserData] = new JsonEncoder[UserData] {
     override def apply(v: UserData): JSONObject = JsonEncoder { o =>
       o.put("id", v.id.str)
+      v.teamId foreach (id => o.put("teamId", id.str))
       o.put("name", v.name)
       v.email foreach (o.put("email", _))
       v.phone foreach (o.put("phone", _))
@@ -201,6 +208,7 @@ object UserData {
 
   implicit object UserDataDao extends Dao[UserData, UserId] {
     val Id = id[UserId]('_id, "PRIMARY KEY").apply(_.id)
+    val TeamId = opt(id[TeamId]('teamId))(_.teamId)
     val Name = text('name)(_.name)
     val Email = opt(emailAddress('email))(_.email)
     val Phone = opt(phoneNumber('phone))(_.phone)
@@ -220,10 +228,10 @@ object UserData {
     val Handle = opt(handle('handle))(_.handle)
 
     override val idCol = Id
-    override val table = Table("Users", Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
+    override val table = Table("Users", Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
     override def apply(implicit cursor: DBCursor): UserData =
-      new UserData(Id, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
+      new UserData(Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
 
     override def onCreate(db: DB): Unit = {
       super.onCreate(db)
@@ -261,10 +269,28 @@ object UserData {
         Array(s"${query.asciiRepresentation}%", s"% ${query.asciiRepresentation}%", prefix, s"%${query.asciiRepresentation}%"))
     }
 
-    private def search(whereClause: String, args: Array[String])(implicit db: DB): Managed[Iterator[UserData]] =
+    def search(whereClause: String, args: Array[String])(implicit db: DB): Managed[Iterator[UserData]] =
       iterating(db.query(table.name, null, whereClause, args, null, null,
         s"case when ${Conn.name} = '${Conn(ConnectionStatus.Accepted)}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
 
+    def search(prefix: SearchKey, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB): Set[UserData] = {
+      val select = s"SELECT u.* ${if (teamId.isDefined) ", COUNT(*)" else ""} FROM ${table.name} u"
+      val handleCondition =
+        if (handleOnly){
+          s"""AND u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
+        } else {
+          s"""AND (
+             |     u.${SKey.name} LIKE '${SKey(prefix)}%'
+             |     OR u.${SKey.name} LIKE '% ${SKey(prefix)}%'
+             |     OR u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
+        }
+      val teamCondition = teamId.map(_ => s"AND u.${TeamId.name} = ${teamId}")
+
+      list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null)).toSet
+    }
+
     def findWireBots(implicit db: DB) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
+
+    def findForTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(TeamId, teams.map(Option(_))))
   }
 }

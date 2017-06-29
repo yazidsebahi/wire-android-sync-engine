@@ -186,7 +186,7 @@ class MessageReactionsSpec extends FeatureSpec with Matchers with BeforeAndAfter
   @volatile var delayMessages = false
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, user) {
       override lazy val messagesClient = new MessagesClient(netClient) {
         override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, receivers: Option[Set[UserId]] = None): ErrorOrResponse[MessageResponse] =
           if (! delayMessages) super.postMessage(conv, content, ignoreMissing, receivers)

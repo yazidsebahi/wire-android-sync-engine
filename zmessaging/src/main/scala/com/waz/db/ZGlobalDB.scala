@@ -52,7 +52,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 17
+  val DbVersion = 18
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao)
 
@@ -100,6 +100,11 @@ object ZGlobalDB {
       }},
       Migration(16, 17) { db =>
         db.execSQL(s"ALTER TABLE Accounts ADD COLUMN registered_push TEXT")
+      },
+      Migration(17, 18) { db =>
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN teamId TEXT")
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER DEFAULT 0")
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER DEFAULT 0")
       }
     )
 

@@ -38,7 +38,6 @@ import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.TeamData.TeamDataDoa
-import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
@@ -54,10 +53,10 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 91
+  val DbVersion = 92
 
   lazy val daos = Seq (
-    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
+    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
@@ -156,6 +155,10 @@ object ZMessagingDB {
     },
     Migration(90, 91) { db =>
       db.execSQL("DROP TABLE IF EXISTS CommonConnections")
+    },
+    Migration(91, 92) { db =>
+      db.execSQL("ALTER TABLE Users ADD COLUMN teamId TEXT")
+      db.execSQL("DROP TABLE IF EXISTS TeamMembers")
     }
   )
 }

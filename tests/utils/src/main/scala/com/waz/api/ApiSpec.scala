@@ -66,10 +66,10 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   protected case object InitManually extends InitBehaviour
 
   lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(clientId, user)
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, user)
   }
 
-  class ApiZMessaging(clientId: ClientId, user: UserModule) extends ZMessaging(clientId, user) {
+  class ApiZMessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule) extends ZMessaging(teamId, clientId, user) {
     override lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), events =>
       returning(eventScheduler.enqueue(events))(_ => eventSpies.get.foreach(pf => events.foreach(e => pf.applyOrElse(e, (_: Event) => ())))))
 

@@ -99,6 +99,7 @@ object Generators {
 
   implicit lazy val arbUserData: Arbitrary[UserData] = Arbitrary(for {
     id <- arbitrary[UserId]
+    teamId <- arbitrary[Option[TeamId]]
     name <- arbitrary[String]
     email <- arbitrary[Option[EmailAddress]]
     phone <- arbitrary[Option[PhoneNumber]]
@@ -114,7 +115,7 @@ object Generators {
     syncTimestamp <- posNum[Long]
     displayName <- arbitrary[String]
     handle <- arbitrary[Option[Handle]]
-  } yield UserData(id, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, syncTimestamp, displayName, handle = handle))
+  } yield UserData(id, teamId, name, email, phone, trackingId, picture, accent, searchKey, connection, connectionLastUpdated, connectionMessage, conversation, relation, syncTimestamp, displayName, handle = handle))
 
   implicit lazy val arbOpenGraphData: Arbitrary[OpenGraphData] = Arbitrary(resultOf(OpenGraphData))
 
