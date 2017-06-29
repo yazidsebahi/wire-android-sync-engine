@@ -336,7 +336,7 @@ object ZMessaging { self =>
   // mutable for testing FIXME: get rid of that
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModule = _
-  private [waz] var currentAccounts: Accounts = _
+  var currentAccounts: Accounts = _
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()
@@ -363,5 +363,7 @@ object ZMessaging { self =>
       }
     case _ => CancellableFuture.successful {}
   }
+
+
 
 }
