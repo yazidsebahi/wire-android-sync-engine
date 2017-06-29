@@ -63,7 +63,7 @@ case class AccountData(id:             AccountId,
        | registeredPush:  $registeredPush
        | verified:        $verified
        | cookie:          ${cookie.take(6)}
-       | password         ... left out ...
+       | password:        In memory?: ${password.isDefined}
        | accessToken:     ${accessToken.take(6)}
        | userId:          $userId
        | clientId:        $clientId
