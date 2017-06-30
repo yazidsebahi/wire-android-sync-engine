@@ -18,17 +18,16 @@
 package com.waz.service.downloads
 
 import android.content.Context
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator
 import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
-import com.waz.content.GlobalPreferences._
-import com.waz.content.Preferences
+import com.waz.content.UserPreferences.DownloadImagesOnWifiOnly
 import com.waz.model.CacheKey
-import com.waz.service.NetworkModeService
+import com.waz.service.{NetworkModeService, ZMessaging}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
@@ -50,7 +49,7 @@ import scala.util.{Failure, Success}
  * we could then remove background downloads limit, which is currently used to make sure there is
  * some bandwidth reserved for important requests
  */
-class DownloaderService(context: Context, cache: CacheService, prefs: Preferences, network: NetworkModeService) {
+class DownloaderService(context: Context, cache: CacheService, network: NetworkModeService) {
   import DownloaderService._
   private implicit val dispatcher = new SerialDispatchQueue(name = "DownloaderService")
   private implicit val ev = EventContext.Global
@@ -61,10 +60,23 @@ class DownloaderService(context: Context, cache: CacheService, prefs: Preference
 
   private val onAdded = EventStream[DownloadEntry]()
 
-  private lazy val downloadPref = prefs.preference(DownloadImages).signal
-  private lazy val downloadEnabled = Signal.or(downloadPref.map(_ == DownloadImagesAlways), network.networkMode.map(_ == NetworkMode.WIFI))
+  private val downloadEnabled = {
+    //Will be set by UserPreferences when available, defaults to always download (false) otherwise.
+    val downloadOnWifiOnly = {
+      Option(ZMessaging.currentAccounts).map(_.currentZms).map {
+        _.flatMap {
+          case None => Signal.const(false)
+          case Some(z) => z.userPrefs.preference(DownloadImagesOnWifiOnly).signal
+        }
+      }
+    }.getOrElse {
+      warn("No CurrentAccounts available - this may be being called too early...")
+      Signal.const(false)
+    }
 
-  downloadEnabled.disableAutowiring()
+    Signal.or(downloadOnWifiOnly.map(!_), network.networkMode.map(_ == NetworkMode.WIFI))
+  }.disableAutowiring()
+
 
   def getDownload(key: CacheKey): Signal[Option[DownloadEntry]] =
     new AggregatingSignal[DownloadEntry, Option[DownloadEntry]](onAdded.filter(_.req.cacheKey == key), Future(downloads.get(key)), { (_, added) => Some(added) })

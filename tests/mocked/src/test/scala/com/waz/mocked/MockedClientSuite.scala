@@ -26,7 +26,7 @@ import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
 import com.waz.client.RegistrationClient
 import com.waz.client.RegistrationClient.ActivateResult
-import com.waz.content.UserPreferences
+import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
@@ -60,7 +60,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   @volatile private var pushService = Option.empty[PushServiceImpl]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
-  class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "") extends StorageModule(context, accountId, prefix) {
+  class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "", globalPreferences: GlobalPreferences) extends StorageModule(context, accountId, prefix, globalPreferences) {
     override lazy val userPrefs: UserPreferences = new TestUserPreferences
   }
 
@@ -70,8 +70,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
   class MockedZMessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) extends ZMessaging(teamId, clientId, userModule) {
 
-    override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, prefs, network)
-    override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, prefs)
+    override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, userPrefs, prefs, network)
+    override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, userPrefs)
 
     override lazy val assetClient        = new AssetClientImpl(zNetClient)
 
@@ -158,7 +158,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
     override def credentialsClient(netClient: ZNetClient): CredentialsUpdateClient = new MockedCredentialsUpdateClient(netClient)
 
-    override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(global.context, accountId, Random.nextInt.toHexString)
+    override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(global.context, accountId, Random.nextInt.toHexString, global.prefs)
 
     override def userModule(userId: UserId, account: AccountService) = new MockedUserModule(userId, account)
 

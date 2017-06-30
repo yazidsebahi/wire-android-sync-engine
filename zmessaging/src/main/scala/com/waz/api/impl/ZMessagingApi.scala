@@ -194,15 +194,9 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   
   override def getUser(id: String): User = ui.users.getUser(UserId(id))
 
-  override def getMediaManager: MediaManager = ui.global.mediaManager.mediaManager.orNull
-
-  override def getMediaResourceUri(name: String): Uri = ui.global.mediaManager.getSoundUri(name).orNull
-
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
   override def getInvitations: Invitations = ui.invitations
-
-  override def getAvs: Avs = ui.cached(Uris.AvsUri, new Avs)
 
   override def getContacts: Contacts = ui.cached(Uris.ContactsUri, new Contacts(SearchKeyFiltering()))
 

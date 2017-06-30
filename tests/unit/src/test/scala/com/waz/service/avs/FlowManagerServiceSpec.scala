@@ -19,12 +19,10 @@ package com.waz.service.avs
 
 import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
-import com.waz.api.{AvsLogLevel, NetworkMode}
+import com.waz.api.NetworkMode
 import com.waz.call.FlowManager
-import com.waz.content.GlobalPreferences._
 import com.waz.model.UserId
 import com.waz.service.call.DefaultFlowManagerService
-import com.waz.service.call.FlowManagerService.AvsLogData
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.MockZMessaging
 import com.waz.utils.events.{EventContext, Signal}
@@ -42,7 +40,7 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
   @volatile var notified = false
 
   lazy val zms = new MockZMessaging() {
-    override lazy val flowmanager: DefaultFlowManagerService = new DefaultFlowManagerService(context, zNetClient, websocket, prefs, network) {
+    override lazy val flowmanager: DefaultFlowManagerService = new DefaultFlowManagerService(context, zNetClient, websocket, userPrefs, global.prefs, network) {
       override lazy val flowManager = Some(new FlowManager(context, requestHandler) {
         override def networkChanged(): Unit = notified = true
       })
@@ -56,41 +54,7 @@ class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues
 
   implicit def db: SQLiteDatabase = zms.db.dbHelper.getWritableDatabase
 
-  @volatile var logData = Option.empty[AvsLogData]
-
   before { notified = false }
-
-  feature("AVS logging and metrics") {
-    scenario("Wire signal") {
-      service.avsLogDataSignal { logData =>
-        this.logData = Some(logData)
-      }
-    }
-
-    scenario("Enable/disable logging") {
-      withDelay { logData.value.loggingEnabled shouldEqual false }
-      service.setLoggingEnabled(true)
-      withDelay { logData.value.loggingEnabled shouldEqual true }
-      service.setLoggingEnabled(false)
-      withDelay { logData.value.loggingEnabled shouldEqual false }
-    }
-
-    scenario("Enable/disable metrics") {
-      withDelay { logData.value.metricsEnabled shouldEqual false }
-      zms.prefs.preference(AnalyticsEnabled) := true
-      withDelay { logData.value.metricsEnabled shouldEqual true }
-      zms.prefs.preference(AnalyticsEnabled) := false
-      withDelay { logData.value.metricsEnabled shouldEqual false }
-    }
-
-    scenario("Set log level") {
-      withDelay { logData.value.logLevel shouldEqual AvsLogLevel.DEBUG }
-      service.setLogLevel(AvsLogLevel.ERROR)
-      withDelay { logData.value.logLevel shouldEqual AvsLogLevel.ERROR }
-      service.setLogLevel(AvsLogLevel.INFO)
-      withDelay { logData.value.logLevel shouldEqual AvsLogLevel.INFO }
-    }
-  }
 
   feature("Notifying AVS about network changes") {
     val delay = 5.millis

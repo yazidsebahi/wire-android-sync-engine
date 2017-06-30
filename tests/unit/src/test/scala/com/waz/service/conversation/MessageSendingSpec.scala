@@ -58,7 +58,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val global = new MockGlobalModule {
     override lazy val factory: MockZMessagingFactory = new MockZMessagingFactory(this) {
-      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, Random.nextInt().toHexString)
+      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, Random.nextInt().toHexString, prefs)
     }
   }
 

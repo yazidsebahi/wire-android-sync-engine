@@ -91,7 +91,7 @@ trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Sui
       override val cryptoBoxDirName: String = "otr_" + dataTag
     }
     override lazy val factory: ZMessagingFactory = new ZMessagingFactory(global) {
-      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, dataTag)
+      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, dataTag, prefs)
     }
   }
 

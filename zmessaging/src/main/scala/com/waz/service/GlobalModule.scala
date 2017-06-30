@@ -70,7 +70,6 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val cacheCleanup                                          = wire[CacheCleaningService]
 
   lazy val accountsStorage                                       = wire[AccountsStorageImpl]
-  lazy val mediaManager                                          = wire[DefaultMediaManagerService]
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
   lazy val tempFiles: TempFileService                            = wire[TempFileService]
 

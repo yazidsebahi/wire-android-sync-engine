@@ -54,7 +54,7 @@ import scala.util.Try
 
 class ZMessagingFactory(global: GlobalModule) {
 
-  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "")
+  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 
   def client(credentials: CredentialsHandler) = new ZNetClient(credentials, global.client, global.backend, global.loginClient)
 
@@ -72,9 +72,9 @@ class ZMessagingFactory(global: GlobalModule) {
 }
 
 
-class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
+class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
   lazy val db                                   = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val userPrefs                            = wire[UserPreferences]
+  lazy val userPrefs                            = UserPreferences.apply(context, db, globalPreferences)
   lazy val usersStorage                         = wire[UsersStorageImpl]
   lazy val otrClientsStorage                    = wire[OtrClientsStorage]
   lazy val membersStorage                       = wire[MembersStorageImpl]
@@ -125,7 +125,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def bitmapDecoder     = global.bitmapDecoder
   def timeouts          = global.timeouts
   def cache             = global.cache
-  def mediamanager      = global.mediaManager
   def globalRecAndPlay  = global.recordingAndPlayback
   def tempFiles         = global.tempFiles
   def metadata          = global.metadata
@@ -204,6 +203,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
   lazy val connection: ConnectionService              = wire[ConnectionService]
+  lazy val mediamanager                               = wire[DefaultMediaManagerService]
   lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
   lazy val avs: AvsV3                                 = wire[AvsV3Impl]
   lazy val calling: CallingService                    = wire[CallingService]

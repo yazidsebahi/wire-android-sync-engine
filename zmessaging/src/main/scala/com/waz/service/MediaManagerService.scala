@@ -19,29 +19,27 @@ package com.waz.service
 
 import android.content.Context
 import android.net.Uri
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.content.GlobalPreferences
-import com.waz.content.GlobalPreferences.SoundsPrefKey
-import com.waz.media.manager.{MediaManager, MediaManagerListener}
+import com.waz.ZLog._
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.Sounds
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
+import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{EventContext, Signal, SourceSignal}
 import com.waz.utils._
-import com.waz.zms.R
+import com.waz.utils.events.{EventContext, Signal, SourceSignal}
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
-import scala.util.Try
 
 trait MediaManagerService {
   def mediaManager: Option[MediaManager]
   def soundIntensity: Signal[IntensityLevel]
 }
 
-class DefaultMediaManagerService(context: Context, prefs: GlobalPreferences) extends MediaManagerService {
+class DefaultMediaManagerService(context: Context, prefs: UserPreferences) extends MediaManagerService {
   import com.waz.service.MediaManagerService._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
@@ -66,13 +64,7 @@ class DefaultMediaManagerService(context: Context, prefs: GlobalPreferences) ext
     }
   }
 
-  private lazy val prefAll = Try(context.getResources.getString(R.string.pref_sound_value_all)).getOrElse("all")
-  private lazy val prefSome = Try(context.getResources.getString(R.string.pref_sound_value_some)).getOrElse("some")
-  private lazy val prefNone = Try(context.getResources.getString(R.string.pref_sound_value_none)).getOrElse("none")
-
-  private lazy val intensityMap = Map(prefAll -> IntensityLevel.FULL, prefSome -> IntensityLevel.SOME, prefNone -> IntensityLevel.NONE)
-
-  lazy val soundIntensity = prefs.preference(SoundsPrefKey).signal.map(value => intensityMap.getOrElse(value, IntensityLevel.FULL))
+  lazy val soundIntensity = prefs.preference(Sounds).signal
 
   soundIntensity { intensity => withMedia { _.setIntensity(intensity) } }
 
