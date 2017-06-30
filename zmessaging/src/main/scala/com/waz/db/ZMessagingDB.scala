@@ -159,6 +159,7 @@ object ZMessagingDB {
     Migration(91, 92) { db =>
       db.execSQL("ALTER TABLE Users ADD COLUMN teamId TEXT")
       db.execSQL("DROP TABLE IF EXISTS TeamMembers")
+      db.execSQL("UPDATE KeyValues SET value = 'true' WHERE key = 'should_sync_teams'")
     }
   )
 }
