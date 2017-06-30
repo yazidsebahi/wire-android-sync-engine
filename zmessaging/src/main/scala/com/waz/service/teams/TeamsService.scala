@@ -28,7 +28,7 @@ import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.RichFuture
-import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
+import com.waz.utils.events.{RefreshingSignal, Signal}
 
 import scala.collection.Seq
 import scala.concurrent.Future
@@ -40,9 +40,9 @@ trait TeamsService {
 
   def searchTeamConversations(query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[ConversationData]]
 
-  val guests: Signal[Set[UserId]]
-
   val selfTeam: Signal[Option[TeamData]]
+
+  def isGuest(id: UserId): Signal[Boolean]
 
   def onTeamSynced(team: TeamData, members: Set[UserId]): Future[Unit]
 
@@ -106,31 +106,19 @@ class TeamsServiceImpl(selfUser:          UserId,
                     }).map(_.toSet)
   }
 
-  override lazy val guests = {
-    def load(id: TeamId): Future[Set[UserId]] = for {
-
-      convs       <- searchTeamConversations().map(_.map(_.id))
-      allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
-      teamMembers <- userStorage.getByTeam(Set(id)).map(_.map(_.id))
-    } yield allUsers -- teamMembers
-
-    val allChanges = {
-      val ev1 = convMemberStorage.onUpdated.map(_.map(_._2.userId))
-      val ev2 = convMemberStorage.onDeleted.map(_.map(_._1))
-      EventStream.union(ev1, ev2)
-    }
-
-    teamId match {
-      case None => Signal.const(Set.empty[UserId])
-      case Some(id) => new RefreshingSignal[Set[UserId], Seq[UserId]](CancellableFuture.lift(load(id)), allChanges)
-    }
-  }
-
   override lazy val selfTeam: Signal[Option[TeamData]] = teamId match {
     case None => Signal.const[Option[TeamData]](None)
     case Some(id) => new RefreshingSignal[Option[TeamData], Seq[TeamId]](
       CancellableFuture.lift(teamStorage.get(id)),
       teamStorage.onChanged.map(_.map(_.id))
+    )
+  }
+
+  override def isGuest(userId: UserId): Signal[Boolean] = teamId match {
+    case None => Signal.const(false)
+    case Some(teamId) => new RefreshingSignal[Boolean, Seq[UserId]](
+      CancellableFuture.lift(userStorage.get(userId).map(_.map(_.teamId) == teamId)),
+      userStorage.onChanged.map(_.map(_.id))
     )
   }
 
