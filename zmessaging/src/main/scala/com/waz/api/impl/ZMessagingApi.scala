@@ -182,7 +182,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def logout() = ui.currentAccount.head flatMap {
     case Some(acc) =>
       verbose(s"logout $acc")
-      acc.logout()
+      acc.logout(flushCredentials = true)
     case None => Future.successful(())
   }
 

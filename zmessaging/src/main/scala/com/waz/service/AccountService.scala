@@ -168,7 +168,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
     override val accessToken: Preference[Option[Token]] = Preference[Option[Token]](None, accountsStorage.get(id).map(_.flatMap(_.accessToken)), { token => accountsStorage.update(id, _.copy(accessToken = token)) })
     override def credentials: Credentials = self.credentials
 
-    override def onInvalidCredentials(): Unit = logout()
+    override def onInvalidCredentials(): Unit = logout(flushCredentials = true)
   }
 
   lazy val accountData = accountsStorage.signal(id)
@@ -249,9 +249,9 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
       accountsStorage.updateOrCreate(id, _.updated(credentials), account.updated(credentials)) flatMap { _ => ensureFullyRegistered() }
     }
 
-  def logout(): Future[Unit] = {
+  def logout(flushCredentials: Boolean): Future[Unit] = {
     verbose(s"logout($id)")
-    accounts.logout(id)
+    accounts.logout(id, flushCredentials)
   }
 
   def getZMessaging: Future[Option[ZMessaging]] = zmessaging.head flatMap {
@@ -439,7 +439,7 @@ class AccountService(@volatile var account: AccountData, val global: GlobalModul
 
   private def logoutAndResetClient() =
     for {
-      _ <- logout()
+      _ <- logout(true)
       _ <- cryptoBox.deleteCryptoBox()
       _ =  _zmessaging = None // drop zmessaging instance, we need to create fresh one with new clientId // FIXME: dropped instance will still be active and using the same ZmsLifecycle instance
       _ <- accountsStorage.update(id, _.copy(clientId = None, clientRegState = ClientRegistrationState.UNKNOWN))

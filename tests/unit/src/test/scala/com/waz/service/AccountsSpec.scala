@@ -113,7 +113,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
     }
 
     scenario("log out") {
-      accounts.logout().await()
+      accounts.logout(flushCredentials = false).await()
     }
 
     scenario("log in with email") {
@@ -131,7 +131,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
     }
 
     scenario("log out again") {
-      accounts.logout().await()
+      accounts.logout(flushCredentials = false).await()
     }
 
     scenario("log in with new password (after changing it on backend)") {

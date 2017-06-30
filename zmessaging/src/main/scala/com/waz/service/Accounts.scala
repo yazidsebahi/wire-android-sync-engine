@@ -17,14 +17,15 @@
  */
 package com.waz.service
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.model._
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.service.Accounts.SwapAccountCallback
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
@@ -47,13 +48,29 @@ class Accounts(val global: GlobalModule) {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  val accounts = {
+  val loggedInAccounts = {
     val changes = EventStream.union(
       storage.onChanged.map(_.map(_.id)),
       storage.onDeleted
     )
     new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
-  }
+  }.map(_.filter(_.cookie.isDefined))
+
+
+  // XXX Temporary stuff to handle team account in signup/signin - start
+  private var _loggedInAccounts = Seq.empty[AccountData]
+
+  loggedInAccounts(_loggedInAccounts = _)
+
+  def getLoggedInAccounts = _loggedInAccounts
+
+  def hasLoggedInAccount = _loggedInAccounts.nonEmpty
+
+  def fallbackToLastAccount(callback: SwapAccountCallback) =
+    if (_loggedInAccounts.nonEmpty)
+      switchAccount(_loggedInAccounts.head.id).map(_ => callback.onSwapComplete())(Threading.Ui)
+    else callback.onSwapFailed()
+  // XXX Temporary stuff to handle team account in signup/signin - end
 
   val currentAccountPref = prefs.preference(CurrentAccountPref)
 
@@ -100,20 +117,19 @@ class Accounts(val global: GlobalModule) {
       Future successful None
   }
 
-  def logout() = current.head flatMap {
-    case Some(account) => account.logout()
+  def logout(flushCredentials: Boolean) = current.head flatMap {
+    case Some(account) => account.logout(flushCredentials)
     case None => Future.successful(())
   }
 
-  def logout(account: AccountId) = currentAccountPref() flatMap {
-    case id if id == account.str =>
-      for {
-        _ <- setAccount(None)
-        _ <- storage.update(account, _.copy(registeredPush = None))
-      } yield {}
-    case id =>
-      verbose(s"logout($account) ignored, current id: $id")
-      Future.successful(())
+  def logout(account: AccountId, flushCredentials: Boolean) = {
+    currentAccountPref() flatMap {
+      case id =>
+        for {
+          _ <- if (id == account.str) setAccount(None) else Future.successful(())
+          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else storage.update(account, _.copy(registeredPush = None))
+        } yield {}
+    }
   }
 
   private def setAccount(acc: Option[AccountId]) = {
@@ -130,11 +146,11 @@ class Accounts(val global: GlobalModule) {
     for {
       cur      <- getCurrent.map(_.map(_.id))
       if !cur.contains(accountId)
-      _        <- logout()
+      _        <- logout(flushCredentials = false)
       account  <- storage.get(accountId).collect { case Some(a) if a.cookie.isDefined => a }
       _        <- setAccount(Some(account.id))
       _        <- getInstance(account)
-      _   <- loginClient.access(account.cookie.get, account.accessToken).future.flatMap {
+      _        <- loginClient.access(account.cookie.get, account.accessToken).future.flatMap {
         case Right((token, cookieOpt)) =>
           verbose(s"Account successfully switched. Got token: ${token.accessToken.take(5)} and cookie: ${cookieOpt.map(_.str.take(5))}")
           storage.update(accountId, _.copy(accessToken = Some(token), cookie = cookieOpt.orElse(account.cookie)))
@@ -151,7 +167,7 @@ class Accounts(val global: GlobalModule) {
   private def switchAccount(credentials: Credentials) = {
     verbose(s"switchAccount($credentials)")
     for {
-      _          <- logout()
+      _          <- logout(flushCredentials = false)
       normalized <- normalizeCredentials(credentials)
       matching   <- storage.find(normalized)
       account    =  matching.flatMap(_.authorized(normalized))
@@ -257,5 +273,12 @@ class Accounts(val global: GlobalModule) {
       case (normalized, None, None) =>
         register(AccountId(), normalized)
     }
+  }
+}
+
+object Accounts {
+  trait SwapAccountCallback {
+    def onSwapComplete(): Unit
+    def onSwapFailed(): Unit
   }
 }
