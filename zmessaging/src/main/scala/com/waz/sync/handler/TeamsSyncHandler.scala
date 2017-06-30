@@ -17,8 +17,6 @@
  */
 package com.waz.sync.handler
 
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{debug, warn}
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.service.teams.TeamsService
@@ -44,7 +42,7 @@ class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service:
           case Left(errorResponse) => Future.successful(SyncResult(errorResponse))
           case Right(members) => service.onTeamSynced(data, members).map(_ => SyncResult.Success)
         }
-      case Left(error) => warn(s"TeamsClient.syncTeam: $id failed with error: $error"); Future.successful(SyncResult(error))
+      case Left(error) => Future.successful(SyncResult(error))
     }
     case None => Future.successful(SyncResult.Success)
   }
