@@ -63,9 +63,9 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       within(1.second)(messages should have size (fromBefore + 1))
 
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
-      lazy val preview = message.getImage
+      lazy val message = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(message.assetId, message.id)
+      lazy val preview = new com.waz.api.impl.ImageAsset(message.assetId)
 
       soon {
         asset.isEmpty shouldBe false
@@ -75,8 +75,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
         asset.getHeight shouldEqual unrotatedVideoDimensions.height
         preview.getWidth shouldEqual previewBitmap.getWidth
         preview.getHeight shouldEqual previewBitmap.getHeight
-        message.getImageWidth shouldEqual previewBitmap.getWidth
-        message.getImageHeight shouldEqual previewBitmap.getHeight
+        message.imageDimensions.get.width shouldEqual previewBitmap.getWidth
+        message.imageDimensions.get.height shouldEqual previewBitmap.getHeight
         asset.getStatus shouldEqual AssetStatus.UPLOAD_NOT_STARTED // preview should be avaible before sync even started
       }
 
@@ -88,8 +88,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
         asset.getHeight shouldEqual unrotatedVideoDimensions.height
         preview.getWidth shouldEqual previewBitmap.getWidth
         preview.getHeight shouldEqual previewBitmap.getHeight
-        message.getImageWidth shouldEqual previewBitmap.getWidth
-        message.getImageHeight shouldEqual previewBitmap.getHeight
+        message.imageDimensions.get.width shouldEqual previewBitmap.getWidth
+        message.imageDimensions.get.height shouldEqual previewBitmap.getHeight
       }
     }
 
@@ -98,8 +98,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       val video = videoForUpload
       isDownloadingFromProvider += video.cacheKey
 
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       reusableLatch.ofSize(1) { latch =>
         conv.sendMessage(new MessageContent.Asset(video, DoNothingAndProceed))
@@ -125,8 +125,8 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       val video = videoForUpload
       isDownloadingFromProvider += video.cacheKey
 
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       reusableLatch.ofSize(1) { latch =>
         conv.sendMessage(new MessageContent.Asset(video, DoNothingAndProceed))
@@ -167,7 +167,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
-  lazy val messages = conv.getMessages
+  def messages = listMessages(conv.id)
   lazy val resolver = shadowOf(getShadowApplication.getContentResolver)
 
   lazy val auto2 = registerDevice("auto2")

@@ -35,7 +35,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
   lazy val self = provisionedUserId("auto1")
   lazy val otherUser = provisionedUserId("auto2")
   lazy val conv = conversations.get(0)
-  lazy val msgs = conv.getMessages
+  lazy val msgs = listMessages(conv.id)
 
   lazy val otherUserClient = registerDevice("other_user")
   lazy val secondClient = registerDevice("second_client")
@@ -58,21 +58,21 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       conv.sendMessage(new Text("test msg to edit"))
       withDelay {
         msgs should have size 2
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.state shouldEqual Message.Status.SENT
       }
 
-      val msg = msgs.getLastMessage
+      val msg = msgs.last
 
-      msg.update(new Text("edited message"))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("edited message"))
 
       withDelay {
         msgs should have size 2
-        msg.isDeleted shouldEqual true
-        val last = msgs.getLastMessage
-        last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
-        last.getBody shouldEqual "edited message"
-        last.getId should not equal msg.getId
-        last.getMessageStatus shouldEqual Message.Status.SENT
+        getMessage(msg.id) shouldBe 'empty
+        val last = msgs.last
+        last.editTime.toEpochMilli should be > msg.time.toEpochMilli
+        last.contentString shouldEqual "edited message"
+        last.id should not equal msg.id
+        last.state shouldEqual Message.Status.SENT
       }
     }
 
@@ -85,162 +85,158 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       withDelay { msgs should have size 3 }
 
-      val msg = msgs.getLastMessage
-      msg.getId shouldEqual m.id.str
+      msgs.last.id shouldEqual m.id
 
       lock.release() // start sync now
 
       withDelay {
         msgs should have size 3
-        msg.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.state shouldEqual Message.Status.SENT
       }
 
       val remote = (otherUserClient ? GetMessages(conv.data.remoteId)).await().asInstanceOf[ConvMessages].msgs.toSeq
       info(s"messages on remote: $remote")
       info(s"updated: $m1")
-      info(s"last: ${msgs.getLastMessage.data}")
+      info(s"last: ${msgs.last}")
 
-      remote should have size msgs.size()
+      remote should have size msgs.size
       remote.last.id shouldEqual m.id
 
-      msg.getBody shouldEqual "updated"
+      msgs.last.contentString shouldEqual "updated"
     }
 
     scenario("Send emoji only message and edit it") {
-      val count = msgs.size()
+      val count = msgs.size
       conv.sendMessage(new Text("\u263A"))
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.TEXT_EMOJI_ONLY
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.msgType shouldEqual Message.Type.TEXT_EMOJI_ONLY
+        msgs.last.state shouldEqual Message.Status.SENT
       }
 
-      val msg = msgs.getLastMessage
+      val msg = msgs.last
 
-      msg.update(new Text("\u263B"))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("\u263B"))
 
       withDelay {
         msgs should have size (count + 1)
-        msg.isDeleted shouldEqual true
-        val last = msgs.getLastMessage
-        last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
-        last.getMessageType shouldEqual Message.Type.TEXT_EMOJI_ONLY
-        last.getBody shouldEqual "\u263B"
-        last.getId should not equal msg.getId
-        last.getMessageStatus shouldEqual Message.Status.SENT
+        getMessage(msg.id) shouldBe 'empty
+        val last = msgs.last
+        last.editTime.toEpochMilli should be > msg.time.toEpochMilli
+        last.msgType shouldEqual Message.Type.TEXT_EMOJI_ONLY
+        last.contentString shouldEqual "\u263B"
+        last.id should not equal msg.id
+        last.state shouldEqual Message.Status.SENT
       }
     }
 
     scenario("Receive text message and edit from other user") {
-      val count = msgs.size()
+      val count = msgs.size
       otherUserClient ? SendText(conv.data.remoteId, "test message 1") should eventually(be(Successful))
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.getBody shouldEqual "test message 1"
+        msgs.last.contentString shouldEqual "test message 1"
       }
 
-      val msg = msgs.getLastMessage
+      val msg = msgs.last
 
       conv.sendMessage(new Text("test"))
 
       withDelay(msgs should have size (count + 2))
 
-      otherUserClient ? UpdateText(msg.data.id, "updated") should eventually(be(Successful))
+      otherUserClient ? UpdateText(msg.id, "updated") should eventually(be(Successful))
 
       withDelay {
-        msg.isDeleted shouldEqual true
-        msgs.get(count).getBody shouldEqual "updated"
-        msgs.get(count).getMessageStatus shouldEqual Message.Status.SENT
-        msgs.get(count).getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
+        getMessage(msg.id) shouldBe 'empty
+        msgs(count).contentString shouldEqual "updated"
+        msgs(count).state shouldEqual Message.Status.SENT
+        msgs(count).editTime.toEpochMilli should be > msg.time.toEpochMilli
       }
     }
 
     scenario("Edit on two devices in the same time") {
-      val count = msgs.size()
+      val count = msgs.size
       secondClient ? SendText(conv.data.remoteId, "test message 2") should eventually(be(Successful))
       withDelay {
         msgs should have size (count + 1)
-        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
-          msgs.getLastMessage.getBody shouldEqual "test message 2"
+        withClue(msgs.map(m => (m.msgType, m.contentString)).mkString(", ")) {
+          msgs.last.contentString shouldEqual "test message 2"
         }
       }
 
-      val msg = msgs.getLastMessage
-      secondClient ? UpdateText(msg.data.id, "updated on remote") //should eventually(be(Successful))
-      msg.update(new Text("updated locally"))
+      val msg = msgs.last
+      secondClient ? UpdateText(msg.id, "updated on remote") //should eventually(be(Successful))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("updated locally"))
 
       withDelay {
-        msg.isDeleted shouldEqual true
-        val last = msgs.getLastMessage
-        last.getMessageStatus shouldEqual Message.Status.SENT
-        last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
+        getMessage(msg.id) shouldBe 'empty
+        val last = msgs.last
+        last.state shouldEqual Message.Status.SENT
+        last.editTime.toEpochMilli should be > msg.time.toEpochMilli
       }
 
       val remote = (secondClient ? GetMessages(conv.data.remoteId)).await().asInstanceOf[ConvMessages].msgs
 
-      info(s"last msg: ${msgs.getLastMessage.data}")
-      remote.last.id shouldEqual msgs.getLastMessage.data.id
-      remote.last.time shouldEqual msgs.getLastMessage.data.time
+      info(s"last msg: ${msgs.last}")
+      remote.last.id shouldEqual msgs.last.id
+      remote.last.time shouldEqual msgs.last.time
     }
   }
 
   feature("Edit link message") {
     scenario("Send link with text and edit it") {
-      val count = msgs.size()
+      val count = msgs.size
       conv.sendMessage(new Text("test wire.com edit"))
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msgs.getLastMessage.getParts.toSeq.map(_.getPartType) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT)
+        msgs.last.state shouldEqual Message.Status.SENT
+        msgs.last.msgType shouldEqual Message.Type.RICH_MEDIA
+        msgs.last.content.map(_.tpe) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT)
       }
 
-      val msg = msgs.getLastMessage
-
-      msg.update(new Text("edited message facebook.com"))
+      val msg = msgs.last
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("edited message facebook.com"))
 
       withDelay {
         msgs should have size (count + 1)
-        msg.isDeleted shouldEqual true
-        val last = msgs.getLastMessage
-        last.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
-        last.getBody shouldEqual "edited message facebook.com"
-        last.getId should not equal msg.getId
-        last.getMessageStatus shouldEqual Message.Status.SENT
-        last.getMessageType shouldEqual Message.Type.RICH_MEDIA
+        val last = msgs.last
+        last.editTime.toEpochMilli should be > msg.time.toEpochMilli
+        last.contentString shouldEqual "edited message facebook.com"
+        last.id should not equal msg.id
+        last.state shouldEqual Message.Status.SENT
+        last.msgType shouldEqual Message.Type.RICH_MEDIA
 
-        last.getParts.toSeq.map(_.getPartType) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
-        last.getParts()(1).getContentUri shouldEqual Uri.parse("http://facebook.com")
+        last.content.map(_.tpe) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
+        last.content(1).contentAsUri shouldEqual Uri.parse("http://facebook.com")
       }
     }
 
     scenario("Receive link with text and edit update") {
-      val count = msgs.size()
+      val count = msgs.size
       otherUserClient ? SendText(conv.data.remoteId, "test message wire.com") should eventually(be(Successful))
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.getBody shouldEqual "test message wire.com"
+        msgs.last.contentString shouldEqual "test message wire.com"
       }
 
-      val msg = msgs.getLastMessage
+      val msg = msgs.last
 
       conv.sendMessage(new Text("test"))
 
       withDelay(msgs should have size (count + 2))
 
-      otherUserClient ? UpdateText(msg.data.id, "updated facebook.com test") should eventually(be(Successful))
+      otherUserClient ? UpdateText(msg.id, "updated facebook.com test") should eventually(be(Successful))
 
       withDelay {
-        msg.isDeleted shouldEqual true
         msgs should have size (count + 2)
-        val updated = msgs.get(count)
-        updated.getId should not equal msg.getId
-        updated.getBody shouldEqual "updated facebook.com test"
-        updated.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        updated.getParts.toSeq.map(_.getPartType) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT)
-        updated.getParts()(1).getContentUri shouldEqual Uri.parse("http://facebook.com")
-        updated.getMessageStatus shouldEqual Message.Status.SENT
-        updated.getEditTime.toEpochMilli should be > msg.getTime.toEpochMilli
+        val updated = msgs(count)
+        updated.id should not equal msg.id
+        updated.contentString shouldEqual "updated facebook.com test"
+        updated.msgType shouldEqual Message.Type.RICH_MEDIA
+        updated.content.map(_.tpe) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT)
+        updated.content(1).contentAsUri shouldEqual Uri.parse("http://facebook.com")
+        updated.state shouldEqual Message.Status.SENT
+        updated.editTime.toEpochMilli should be > msg.time.toEpochMilli
       }
     }
   }
@@ -248,7 +244,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
   feature("editing scenarios") {
 
     scenario("post multiple, edit, post more") {
-      val count = msgs.size()
+      val count = msgs.size
 
       otherUserClient ? SendText(conv.data.remoteId, "other 1") should eventually(be(Successful))
       otherUserClient ? SendText(conv.data.remoteId, "other 2") should eventually(be(Successful))
@@ -261,16 +257,16 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       withDelay {
         msgs should have size (count + 7)
-        msgs.toSeq.drop(count).map(_.getBody) shouldEqual Seq("other 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3")
+        msgs.drop(count).map(_.contentString) shouldEqual Seq("other 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3")
       }
 
-      val msg = msgs.get(count)
+      val msg = msgs(count)
 
-      otherUserClient ? UpdateText(msg.data.id, "updated 1") should eventually(be(Successful))
+      otherUserClient ? UpdateText(msg.id, "updated 1") should eventually(be(Successful))
 
       withDelay {
         msgs should have size (count + 7)
-        msgs.toSeq.drop(count).map(_.getBody) shouldEqual Seq("updated 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3")
+        msgs.drop(count).map(_.contentString) shouldEqual Seq("updated 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3")
       }
 
       otherUserClient ? SendText(conv.data.remoteId, "other 5") should eventually(be(Successful))
@@ -278,36 +274,35 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       withDelay {
         msgs should have size (count + 9)
-        msgs.toSeq.drop(count).map(_.getBody) shouldEqual Seq("updated 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3", "other 5", "other 6")
+        msgs.drop(count).map(_.contentString) shouldEqual Seq("updated 1", "other 2", "other 3", "other 4", "self 1", "self 2", "self 3", "other 5", "other 6")
       }
     }
 
     scenario("Edit emoji only message multiple times") {
-      val count = msgs.size()
-      var msg = msgs.getLastMessage
+      val count = msgs.size
+      var msg = msgs.last
 
       otherUserClient ? SendText(conv.data.remoteId, "\u263A") should eventually(be(Successful))
 
       withDelay {
         msgs should have size (count + 1)
-        msg = msgs.getLastMessage
-        msg.getBody shouldEqual "\u263A"
-        msg.getMessageType shouldEqual Message.Type.TEXT_EMOJI_ONLY
+        msg = msgs.last
+        msg.contentString shouldEqual "\u263A"
+        msg.msgType shouldEqual Message.Type.TEXT_EMOJI_ONLY
         msgs should have size (count + 1)
       }
 
 
       Seq("\u263B", "\u263C", "\u263D") foreach { text =>
-        otherUserClient ? UpdateText(msg.data.id, text) should eventually(be(Successful))
+        otherUserClient ? UpdateText(msg.id, text) should eventually(be(Successful))
 
         withDelay {
           msgs should have size (count + 1)
-          msg.isDeleted shouldEqual true
 
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.TEXT_EMOJI_ONLY
-          msgs.getLastMessage.getBody shouldEqual text
+          msgs.last.msgType shouldEqual Message.Type.TEXT_EMOJI_ONLY
+          msgs.last.contentString shouldEqual text
         }
-        msg = msgs.getLastMessage
+        msg = msgs.last
       }
     }
   }

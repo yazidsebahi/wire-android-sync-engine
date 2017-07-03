@@ -102,10 +102,9 @@ class ConnectionSpec extends FeatureSpec with Matchers with ProvisionedApiSpec w
         conv.getName shouldEqual "auto2 user"
       }
 
-      val msgs = conv.getMessages
       conv.sendMessage(new Text("first msg"))
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "first msg"
+        lastMessage(conv.id).map(_.contentString) shouldEqual Some("first msg")
       }
     }
 
@@ -179,14 +178,14 @@ class ConnectionSpec extends FeatureSpec with Matchers with ProvisionedApiSpec w
     }
 
     scenario("auto3: send message after connecting") {
-      val msgs = convs.getConversation(provisionedUserId("auto3").str).getMessages
-      withDelay { msgs should have size 2 }
+      val conv = convs.getConversation(provisionedUserId("auto3").str)
+      withDelay { listMessages(conv.id) should have size 2 }
 
       auto3 ? SendText(RConvId(api.getSelf.getUser.getId), "hello world") should eventually(be(Successful))
 
       withDelay {
-        msgs should have size 3
-        msgs.getLastMessage.getBody shouldEqual "hello world"
+        listMessages(conv.id) should have size 3
+        lastMessage(conv.id).map(_.contentString) shouldEqual Some("hello world")
       }
     }
 

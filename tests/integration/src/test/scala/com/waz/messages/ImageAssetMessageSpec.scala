@@ -39,13 +39,12 @@ import org.scalatest.{FeatureSpec, Matchers}
 import scala.concurrent.duration._
 
 class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ThreadActorSpec {
-  import com.waz.threading.Threading.Implicits.Background
   override val provisionFile: String = "/two_users_connected.json"
 
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
-  lazy val messages = conv.getMessages
+  def messages = listMessages(conv.id)
 
   lazy val auto2 = registerDevice("auto2")
 
@@ -61,8 +60,8 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
   scenario("Post text in new conv") {
     conv.sendMessage(new MessageContent.Text("first msg"))
     withDelay {
-      messages.getLastMessage.getMessageType shouldEqual Message.Type.TEXT
-      messages.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      messages.last.msgType shouldEqual Message.Type.TEXT
+      messages.last.state shouldEqual Message.Status.SENT
     }
   }
 
@@ -71,16 +70,16 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
     conv.sendMessage(new MessageContent.Image(asset))
 
     withDelay {
-      messages.getLastMessage.getMessageType shouldEqual Message.Type.ASSET
-      messages.getLastMessage.getMessageStatus shouldEqual Message.Status.PENDING
+      messages.last.msgType shouldEqual Message.Type.ASSET
+      messages.last.state shouldEqual Message.Status.PENDING
     }
-    val assetMsg = messages.getLastMessage
+    val assetMsg = messages.last
 
     conv.sendMessage(new MessageContent.Text("test message"))
 
     withDelay {
-      assetMsg.getMessageStatus shouldEqual Message.Status.SENT
-      messages.getLastMessage.getMessageType shouldEqual Message.Type.TEXT
+      assetMsg.state shouldEqual Message.Status.SENT
+      messages.last.msgType shouldEqual Message.Type.TEXT
     }
   }
 
@@ -95,7 +94,7 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
     conv.sendMessage(new Image(imageFromGiphy))
     (messages should have size 2).soon
 
-    val postedImage = messages(1).getImage
+    val postedImage = new com.waz.api.impl.ImageAsset(messages(1).assetId)
 
     postedImage should not(be(a[LocalImageAsset]))
     postedImage.shouldBeAnAnimatedGif

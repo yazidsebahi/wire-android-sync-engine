@@ -48,8 +48,7 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
   feature("Loading previously uploaded asset") {
 
-    lazy val message = messages.get(1)
-    lazy val asset = message.getAsset
+    lazy val asset = new com.waz.api.impl.Asset(messages(1).assetId, messages(1).id)
 
     scenario("Send asset") {
       conv.sendMessage(new MessageContent.Asset(new impl.AssetForUpload(AssetId()) {
@@ -63,7 +62,7 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       soon {
         messages should not be empty
-        message.getMessageType shouldEqual Message.Type.ANY_ASSET
+        messages(1).msgType shouldEqual Message.Type.ANY_ASSET
         asset.getStatus shouldEqual AssetStatus.DOWNLOAD_DONE
       }
     }
@@ -87,12 +86,12 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       auto2 ? SendAsset(conv.data.remoteId, assetData, "application/octet-stream", "random.dat") should eventually(beMatching { case Successful(_) => })
 
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       soon {
         messages should have size (fromBefore + 1)
-        msg.getMessageType shouldEqual Message.Type.ANY_ASSET
+        messages.last.msgType shouldEqual Message.Type.ANY_ASSET
         asset.getName shouldEqual "random.dat"
         asset.getMimeType shouldEqual "application/octet-stream"
         asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE
@@ -101,8 +100,8 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
 
     scenario("Download received asset") {
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       val cacheKey = contentCacheKey(asset).await()
 
@@ -123,12 +122,12 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       auto2 ? SendAsset(conv.data.remoteId, returning(Array.ofDim[Byte](3 * 1024 * 1024))(Random.nextBytes), Mime.Default.str, "random1.dat") should eventually(beMatching { case Successful(_) => })
 
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       soon {
         messages should have size (fromBefore + 1)
-        msg.getMessageType shouldEqual Message.Type.ANY_ASSET
+        messages.last.msgType shouldEqual Message.Type.ANY_ASSET
         asset.getName shouldEqual "random1.dat"
         asset.getMimeType shouldEqual "application/octet-stream"
         asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE
@@ -177,8 +176,8 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
 
     scenario("Cancel download right away - before it actually starts downloading") {
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       val downloadFuture = contentCacheKey(asset)
 
@@ -197,8 +196,8 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     }
 
     scenario("Cancel running download") {
-      lazy val msg = messages.getLastMessage
-      lazy val asset = msg.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       val downloadFuture = contentCacheKey(asset)
 
@@ -225,7 +224,7 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
-  lazy val messages = conv.getMessages
+  def messages = listMessages(conv.id)
 
   lazy val auto2 = registerDevice("auto2")
 

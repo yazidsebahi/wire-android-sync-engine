@@ -57,7 +57,6 @@ package object testutils {
     implicit def iconv_to_conv(conv: IConversation): Conversation = conv.asInstanceOf[Conversation]
     implicit def apimsg_to_msg(msg: com.waz.api.Message): Message = msg.asInstanceOf[Message]
     implicit def apiuser_to_user(user: com.waz.api.User): User = user.asInstanceOf[User]
-    implicit def apiml_to_ml(list: com.waz.api.MessagesList): MessagesList = list.asInstanceOf[MessagesList]
     implicit def apiim_to_im(im: com.waz.api.ImageAsset): ImageAsset = im.asInstanceOf[ImageAsset]
     implicit def apiself_to_self(s: com.waz.api.Self): Self = s.asInstanceOf[Self]
     implicit def apiclient_to_client(s: com.waz.api.OtrClient): otr.OtrClient = s.asInstanceOf[otr.OtrClient]

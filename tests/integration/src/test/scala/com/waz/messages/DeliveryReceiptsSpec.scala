@@ -43,16 +43,15 @@ class DeliveryReceiptsSpec extends FeatureSpec with Matchers with BeforeAndAfter
   lazy val friend2Conv = conversations.find(c => c.getType == ONE_TO_ONE && UserId(c.getId) == friend1).get
   lazy val groupConv = conversations.find(c => c.getType == GROUP).get
   lazy val (friend1RConv, friend2RConv, groupRConv) = (friend1Conv.data.remoteId, friend2Conv.data.remoteId, groupConv.data.remoteId)
-  lazy val (friend1Msgs, friend2Msgs, groupMsgs) = (friend1Conv.getMessages, friend2Conv.getMessages, groupConv.getMessages)
 
   lazy val friend1Client = registerDevice(logTagFor[DeliveryReceiptsSpec] + "_1")
   lazy val friend2Client = registerDevice(logTagFor[DeliveryReceiptsSpec] + "_2")
 
   scenario("Initial sync") {
     soon {
-      friend1Msgs should have size 1
-      friend2Msgs should have size 1
-      groupMsgs should have size 1
+      listMessages(friend1Conv.id) should have size 1
+      listMessages(friend2Conv.id) should have size 1
+      listMessages(groupConv.id) should have size 1
     }
   }
 
@@ -66,16 +65,16 @@ class DeliveryReceiptsSpec extends FeatureSpec with Matchers with BeforeAndAfter
   feature("Delivery receipts") {
     scenario("Receipt in 1-on-1 conv") {
       friend1Conv.sendMessage(new Text("meep"))
-      (friend1Msgs should have size 2).soon
-      (friend1Msgs.getLastMessage.getMessageStatus shouldEqual SENT).soon
-      (friend1Msgs.getLastMessage.getMessageStatus shouldEqual DELIVERED).soon
+      (listMessages(friend1Conv.id) should have size 2).soon
+      (lastMessage(friend1Conv.id).get.state shouldEqual SENT).soon
+      (lastMessage(friend1Conv.id).get.state shouldEqual DELIVERED).soon
     }
 
     scenario("No receipt in group conv") {
       groupConv.sendMessage(new Text("moop"))
-      (groupMsgs should have size 2).soon
-      (groupMsgs.getLastMessage.getMessageStatus shouldEqual SENT).soon
-      forAsLongAs(3.seconds)(groupMsgs.getLastMessage.getMessageStatus shouldEqual SENT)
+      (listMessages(groupConv.id) should have size 2).soon
+      (lastMessage(groupConv.id).get.state shouldEqual SENT).soon
+      forAsLongAs(3.seconds)(lastMessage(groupConv.id).get.state shouldEqual SENT)
     }
   }
 }

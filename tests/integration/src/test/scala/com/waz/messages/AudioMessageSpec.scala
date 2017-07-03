@@ -21,7 +21,7 @@ import java.io.ByteArrayInputStream
 
 import akka.pattern.ask
 import com.waz.api._
-import com.waz.api.impl.DoNothingAndProceed
+import com.waz.api.impl.{DoNothingAndProceed}
 import com.waz.cache._
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.otr.ClientId
@@ -62,9 +62,8 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       within(1.second)(messages should have size (fromBefore + 1))
 
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
-      lazy val preview = message.getImage
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       within(10.seconds) {
         asset.isEmpty shouldBe false
@@ -99,7 +98,7 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
-  lazy val messages = conv.getMessages
+  lazy val messages = listMessages(conv.id)
   lazy val resolver = shadowOf(getShadowApplication.getContentResolver)
 
   lazy val auto2 = registerDevice("auto2")

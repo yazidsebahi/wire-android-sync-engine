@@ -38,7 +38,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
     withDelay(convs should not be empty)
     convs.head
   }
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val auto2 = createRemoteZms()
 
@@ -74,7 +74,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
 
       withDelay {
         msgs should have size 2
-        msgs.getLastMessage.getBody shouldEqual "self message 1"
+        msgs.last.contentString shouldEqual "self message 1"
       }
     }
   }
@@ -107,7 +107,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
 
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.getBody shouldEqual "test message 1"
+        msgs.last.contentString shouldEqual "test message 1"
       }
     }
 
@@ -118,7 +118,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
 
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.getBody shouldEqual "remote message 1"
+        msgs.last.contentString shouldEqual "remote message 1"
       }
     }
   }

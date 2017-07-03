@@ -27,14 +27,12 @@ import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.MessageResponse
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.testutils.Implicits._
-import com.waz.testutils.{HasId, ReusableCountDownLatch, TestApplication, UpdateSpy}
+import com.waz.testutils.{HasId, ReusableCountDownLatch}
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import org.robolectric.annotation.Config
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Inside, Matchers}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 class ClearConversationSpec extends FeatureSpec with Matchers with Inside with BeforeAndAfterAll with MockedClientApiSpec with MockBackend with RobolectricUtils {
@@ -77,13 +75,10 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
   feature("Clearing conversations") {
     scenario("Group conversation, local device, clear") {
       val (convId, others, conv) = usingGroupConversation(0)
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 11)
-      val spy = UpdateSpy(msgs)
+      withDelay(listMessages(conv.id) should have size 11)
 
       conv.clear()
       conv.shouldBeCleared()
-      spy.numberOfTimesCalled should be >= 1
 
       addMessageEvents(convId, count = 1, from = others.head)
       conv.shouldBeActiveWith(messageCount = 1)()
@@ -91,21 +86,20 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("Group conversation, local device, leave") {
       val (convId, others, conv) = usingGroupConversation(1)
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 11)
+      withDelay(listMessages(conv.id) should have size 11)
 
       conv.leave()
       withDelay {
         conv shouldBe 'archived
         conv should not be 'active
-        msgs should have size 12 // got leave message
+        listMessages(conv.id) should have size 12 // got leave message
       }
     }
 
     scenario("Clear previously left group conv") {
       val (_, _, conv) = usingGroupConversation(1)
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 12)
+      val msgs = listMessages(conv.id)
+      withDelay(listMessages(conv.id) should have size 12)
 
       conv.clear()
       conv.shouldBeInactiveAndCleared()
@@ -113,9 +107,9 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("One-to-one conversation, local device, clear") {
       val (convId, friend, conv) = usingOneToOneConversation(0)
-      val msgs = conv.getMessages
+      val msgs = listMessages(conv.id)
       awaitUi(2.seconds)
-      withDelay(conv.getMessages should have size 11)
+      withDelay(listMessages(conv.id) should have size 11)
 
       conv.clear()
       conv.shouldBeCleared()
@@ -126,13 +120,10 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("Group conversation, other device, clear") {
       val (convId, others, conv) = usingGroupConversation(2)
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 11)
-      val spy = UpdateSpy(msgs)
+      withDelay(listMessages(conv.id) should have size 11)
 
       clearConversation(convId)
       conv.shouldBeCleared()
-      spy.numberOfTimesCalled should be >= 1
 
       addMessageEvents(convId, count = 5, from = others.head)
       conv.shouldBeActiveWith(messageCount = 5)()
@@ -140,24 +131,22 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("Group conversation, other device, leave") {
       val (convId, others, conv) = usingGroupConversation(3)
-      val msgs = conv.getMessages
-      withDelay { msgs should have size 11 }
+      withDelay { listMessages(conv.id) should have size 11 }
 
       leaveGroupConversation(convId, selfUserId)
 
       withDelay {
         conv shouldBe 'archived
         conv should not be 'active
-        msgs should have size 12 // got leave message
+        listMessages(conv.id) should have size 12 // got leave message
       }
     }
 
     scenario("Group conversation, get kicked out") {
       val (convId, others, conv) = usingGroupConversation(10)
-      val msgs = conv.getMessages
       withDelay {
-        msgs should have size 11
-        msgs.getUnreadCount shouldEqual 10
+        listMessages(conv.id) should have size 11
+        getUnreadCount(conv.id) shouldEqual 10
       }
 
       removeUsersFromGroupConversation(Seq(selfUserId), convId, others.head, SystemTimeline)
@@ -167,7 +156,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("One-to-one conversation, other device") {
       val (convId, friend, conv) = usingOneToOneConversation(1)
-      withDelay(conv.getMessages should have size 11)
+      withDelay(listMessages(conv.id) should have size 11)
 
       clearConversation(convId)
       conv.shouldBeCleared()
@@ -178,7 +167,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("One-to-one conversation, local device, only unarchive") {
       val (convId, friend, conv) = usingOneToOneConversation(2)
-      withDelay(conv.getMessages should have size 11)
+      withDelay(listMessages(conv.id) should have size 11)
 
       conv.clear()
       conv.shouldBeCleared()
@@ -194,11 +183,10 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("Sync cleared group conversation with unobserved message") {
       val (convId, others, conv) = usingGroupConversation(5)
-      val msgs = conv.getMessages
 
       withDelay { // history not available so the messages that would unarchive this conv are also not there on this device
-        msgs should have size 1 // "started using this device"
-        msgs.getUnreadCount shouldBe 0
+        listMessages(conv.id) should have size 1 // "started using this device"
+        getUnreadCount(conv.id) shouldBe 0
         conv shouldBe 'archived
         conv shouldBe 'active
         inside(conv) { case baseConv: BaseConversation => baseConv.data.completelyCleared shouldBe false }
@@ -210,7 +198,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("Clear conversation while there are unsync'd local messages") {
       val (convId, others, conv) = usingGroupConversation(6)
-      withDelay(conv.getMessages should have size 11)
+      withDelay(listMessages(conv.id) should have size 11)
 
       latch.ofSize(1) { l =>
         (1 to 5).foreach(i => conv.sendMessage(new com.waz.api.MessageContent.Text(s"meep: $i")))
@@ -224,8 +212,8 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
 
     scenario("Group conversation, leave and clear") {
       val (convId, others, conv) = usingGroupConversation(7)
-      val msgs = conv.getMessages
-      withDelay(msgs should have size 11)
+      val msgs = listMessages(conv.id)
+      withDelay(listMessages(conv.id) should have size 11)
 
       conv.leave()
       conv.clear()
@@ -245,13 +233,13 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
   }
 
   implicit class EnrichedConversation(val conv: IConversation) {
-    lazy val msgs = conv.getMessages
 
     def shouldBeCleared(): Unit = withDelay {
-      withClue(msgs.map(m => (m.getBody, m.getMessageType))) {
+      val msgs = listMessages(conv.id)
+      withClue(msgs.map(m => (m.contentString, m.msgType))) {
         msgs shouldBe empty
       }
-      msgs.getUnreadCount shouldBe 0
+      getUnreadCount(conv.id) shouldBe 0
       conv shouldBe 'archived
       conv shouldBe 'active
       inside(conv) { case baseConv: BaseConversation => baseConv.data.completelyCleared shouldBe true }
@@ -261,8 +249,8 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
     }
 
     def shouldBeActiveWith(messageCount: Int)(unreadCount: Int = messageCount): Unit = withDelay {
-      msgs should have size messageCount
-      msgs.getUnreadCount shouldEqual unreadCount
+      listMessages(conv.id) should have size messageCount
+      getUnreadCount(conv.id) shouldEqual unreadCount
       conv should not be 'archived
       conv shouldBe 'active
       inside(conv) { case baseConv: BaseConversation =>
@@ -275,8 +263,8 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
     }
 
     def shouldBeInactiveAndCleared(): Unit = withDelay {
-      msgs should have size 0
-      msgs.getUnreadCount shouldBe 0
+      listMessages(conv.id) should have size 0
+      getUnreadCount(conv.id) shouldBe 0
       conv shouldBe 'archived
       conv should not be 'active
       inside(conv) { case baseConv: BaseConversation => baseConv.data.completelyCleared shouldBe true }
@@ -286,8 +274,8 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
     }
 
     def shouldBeInactiveButNotCleared(messageCount: Int)(unreadCount: Int = messageCount): Unit = withDelay {
-      msgs should have size messageCount
-      msgs.getUnreadCount shouldEqual unreadCount
+      listMessages(conv.id) should have size messageCount
+      getUnreadCount(conv.id) shouldEqual unreadCount
       conv should not be 'archived
       conv should not be 'active
       inside(conv) { case baseConv: BaseConversation => baseConv.data.completelyCleared shouldBe false }

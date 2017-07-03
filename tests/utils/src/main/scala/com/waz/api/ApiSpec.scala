@@ -45,13 +45,17 @@ import net.hockeyapp.android.Constants
 import org.scalatest._
 import org.scalatest.enablers.{Containing, Emptiness, Length}
 import com.waz.ZLog.ImplicitTag._
+import com.waz.api.MessageContent.Text
+import com.waz.content.Likes
+import com.waz.model.MessageData.MessageDataDao
+import org.threeten.bp.Instant
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.{PartialFunction => =/>}
 
 trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers with RobolectricTests with ShadowLogging with RobolectricUtils { suite: Suite with Alerting with Informing =>
-
+  import Threading.Implicits.Background
   override protected lazy val logfileBaseDir: File = new File("target/logcat/integration")
 
   val otrTempClient = false
@@ -105,6 +109,47 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   def password = "test_pass"
 
   def zmessaging = Await.result(api.zmessaging, 5.seconds).get
+
+  def lastMessage(conv: ConvId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.messagesStorage.getLastMessage(conv)
+    case None => Future.successful(Option.empty[MessageData])
+  }, 5.seconds)
+
+  def getUnreadCount(conv: ConvId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.convsStorage.get(conv).map(_.fold(0)(_.unreadCount))
+    case None => Future.successful(0)
+  }, 5.seconds)
+
+  def listMessages(conv: ConvId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.storage.db { db => MessageDataDao.list(MessageDataDao.findMessages(conv)(db)).sortBy(_.time) }
+    case None => Future.successful(Vector.empty[MessageData])
+  }, 5.seconds)
+
+  def lastRead(conv: ConvId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.convsStorage.get(conv).map(_.fold(Instant.EPOCH)(_.lastRead))
+    case None => Future.successful(Instant.EPOCH)
+  }, 5.seconds)
+
+  def getMessage(id: MessageId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.messagesStorage.get(id)
+    case None => Future.successful(Option.empty[MessageData])
+  }, 5.seconds)
+
+  def getLikes(id: MessageId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.reactionsStorage.getLikes(id)
+    case None => Future.successful(Likes(id, Map.empty))
+  }, 5.seconds)
+
+  def getAsset(id: AssetId) = Await.result(api.zmessaging.flatMap {
+    case Some(zms) => zms.assetsStorage.get(id)
+    case None => Future.successful(Option.empty[AssetData])
+  }, 5.seconds)
+
+  implicit class RichMessage(msg: MessageData) {
+    def like() = zmessaging.reactions.like(msg.convId, msg.id)
+    def unlike() = zmessaging.reactions.unlike(msg.convId, msg.id)
+    def update(text: Text) = zmessaging.convsUi.updateMessage(msg.convId, msg.id, text)
+  }
 
   def netClient = zmessaging.zNetClient
 

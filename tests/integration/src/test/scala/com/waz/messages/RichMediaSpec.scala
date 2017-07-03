@@ -47,7 +47,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
   }
   var lastKnock = None: Option[Message]
 
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val auto2 = registerDevice("auto2")
   lazy val auto2Id = provisionedUserId("auto2")
@@ -74,23 +74,12 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       withDelay {
         msgs should have size (count + 1)
-        val lastMsg = msgs.getLastMessage
-        lastMsg.getMessageStatus shouldEqual Message.Status.SENT
-        lastMsg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        lastMsg.getParts should have size 1
-        val part = lastMsg.getParts.head
-        part.getPartType shouldEqual Message.Part.Type.WEB_LINK
-        part.getTitle should not be empty
-        part.getDescription should not be empty
-        part.getImage should not be empty
-      }
-
-      val image = msgs.getLastMessage.getParts.head.getImage
-      val imageSpy = new BitmapSpy(image)
-
-      withDelay {
-        imageSpy.failed shouldEqual false
-        imageSpy.result shouldBe defined
+        val lastMsg = msgs.last
+        lastMsg.state shouldEqual Message.Status.SENT
+        lastMsg.msgType shouldEqual Message.Type.RICH_MEDIA
+        lastMsg.content should have size 1
+        val part = lastMsg.content.head
+        part.tpe shouldEqual Message.Part.Type.WEB_LINK
       }
     }
 
@@ -101,22 +90,12 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       withDelay {
         msgs should have size (count + 1)
-        val lastMsg = msgs.getLastMessage
-        lastMsg.getMessageStatus shouldEqual Message.Status.SENT
-        lastMsg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        lastMsg.getParts should have size 1
-        val part = lastMsg.getParts.head
-        part.getPartType shouldEqual Message.Part.Type.WEB_LINK
-        part.getTitle should not be empty
-        part.getImage should not be empty
-      }
-
-      val image = msgs.getLastMessage.getParts.head.getImage
-      val imageSpy = new BitmapSpy(image)
-
-      withDelay {
-        imageSpy.failed shouldEqual false
-        imageSpy.result shouldBe defined
+        val lastMsg = msgs.last
+        lastMsg.state shouldEqual Message.Status.SENT
+        lastMsg.msgType shouldEqual Message.Type.RICH_MEDIA
+        lastMsg.content should have size 1
+        val part = lastMsg.content.head
+        part.tpe shouldEqual Message.Part.Type.WEB_LINK
       }
     }
 
@@ -127,10 +106,10 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       withDelay {
         msgs should have size (count + 1)
-        val lastMsg = msgs.getLastMessage
-        lastMsg.getMessageStatus shouldEqual Message.Status.SENT
-        lastMsg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        lastMsg.getParts.map(_.getPartType).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
+        val lastMsg = msgs.last
+        lastMsg.state shouldEqual Message.Status.SENT
+        lastMsg.msgType shouldEqual Message.Type.RICH_MEDIA
+        lastMsg.content.map(_.tpe).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
       }
     }
 
@@ -140,30 +119,19 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       auto2 ? SendText(conv.data.remoteId, link) should eventually(be(Successful))
 
-      lazy val msg = returning(msgs.getLastMessage) { m =>
-        m.getBody shouldEqual link
-        m.getMessageType shouldEqual Message.Type.RICH_MEDIA
+      lazy val msg = returning(msgs.last) { m =>
+        m.contentString shouldEqual link
+        m.msgType shouldEqual Message.Type.RICH_MEDIA
       }
-      lazy val img = returning(msg.getParts.head.getImage) { _ should not be empty }
 
       withDelay {
-        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
+        withClue(msgs.map(m => (m.msgType, m.contentString)).mkString(", ")) {
           msgs should have size (count + 1)
         }
-        msg.getBody shouldEqual link
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts should not be empty
-        msg.getParts.head.getPartType shouldEqual Message.Part.Type.WEB_LINK
-        msg.getParts.head.getTitle should not be empty
-        msg.getParts.head.getDescription should not be empty
-
-        img should not be empty
-      }
-
-      val bitmap = new BitmapSpy(img)
-
-      withDelay {
-        bitmap.result shouldBe 'defined
+        msg.contentString shouldEqual link
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content should not be empty
+        msg.content.head.tpe shouldEqual Message.Part.Type.WEB_LINK
       }
     }
 
@@ -173,18 +141,18 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       auto2 ? SendText(conv.data.remoteId, text) should eventually(be(Successful))
 
-      lazy val msg = returning(msgs.getLastMessage) { m =>
-        m.getBody shouldEqual text
-        m.getMessageType shouldEqual Message.Type.RICH_MEDIA
+      lazy val msg = returning(msgs.last) { m =>
+        m.contentString shouldEqual text
+        m.msgType shouldEqual Message.Type.RICH_MEDIA
       }
 
       withDelay {
-        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
+        withClue(msgs.map(m => (m.msgType, m.contentString)).mkString(", ")) {
           msgs should have size (count + 1)
         }
-        msg.getBody shouldEqual text
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts.map(_.getPartType).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT, Part.Type.WEB_LINK)
+        msg.contentString shouldEqual text
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content.map(_.tpe).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.TEXT, Part.Type.WEB_LINK)
       }
     }
 
@@ -194,18 +162,18 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       auto2 ? SendText(conv.data.remoteId, text) should eventually(be(Successful))
 
-      lazy val msg = returning(msgs.getLastMessage) { m =>
-        m.getBody shouldEqual text
-        m.getMessageType shouldEqual Message.Type.RICH_MEDIA
+      lazy val msg = returning(msgs.last) { m =>
+        m.contentString shouldEqual text
+        m.msgType shouldEqual Message.Type.RICH_MEDIA
       }
 
       withDelay {
-        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
+        withClue(msgs.map(m => (m.msgType, m.contentString)).mkString(", ")) {
           msgs should have size (count + 1)
         }
-        msg.getBody shouldEqual text
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts.map(_.getPartType).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.YOUTUBE)
+        msg.contentString shouldEqual text
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content.map(_.tpe).toSeq shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK, Part.Type.YOUTUBE)
       }
     }
   }
@@ -216,24 +184,14 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
       val link = "https://www.youtube.com/watch?v=mTWfqi3-3qU"
       auto2 ? SendText(conv.data.remoteId, link) should eventually(be(Successful))
 
-      lazy val msg = returning(msgs.getLastMessage) { m => m.getBody shouldEqual link }
-      lazy val img = returning(msg.getParts.head.getMediaAsset.getArtwork) { _ should not be empty }
+      lazy val msg = returning(msgs.last) { m => m.contentString shouldEqual link }
 
       withDelay {
         msgs should not be empty
-        msg.getBody shouldEqual "https://www.youtube.com/watch?v=mTWfqi3-3qU"
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts should not be empty
-        msg.getParts.head.getPartType shouldEqual Message.Part.Type.YOUTUBE
-
-        img should not be empty
-      }
-
-      info(s"got image: ${img.data}")
-      val bitmap = new BitmapSpy(img)
-
-      withDelay {
-        bitmap.result shouldBe 'defined
+        msg.contentString shouldEqual "https://www.youtube.com/watch?v=mTWfqi3-3qU"
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content should not be empty
+        msg.content.head.tpe shouldEqual Message.Part.Type.YOUTUBE
       }
     }
   }
@@ -247,23 +205,15 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       withDelay {
         msgs should not be empty
-        val msg = msgs.getLastMessage
-        msg.getBody shouldEqual "https://soundcloud.com/lescourgettesgivrees/le-bois-du-casier"
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts should not be empty
+        val msg = msgs.last
+        msg.contentString shouldEqual "https://soundcloud.com/lescourgettesgivrees/le-bois-du-casier"
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content should not be empty
 
-        val part = msg.getParts.head
-        withClue(msg.getParts.map { p => (p.getPartType, p.getBody) }.mkString(", ")) {
-          part.getPartType shouldEqual Message.Part.Type.SOUNDCLOUD
+        val part = msg.content.head
+        withClue(msg.content.map { p => (p.tpe, p.content) }.mkString(", ")) {
+          part.tpe shouldEqual Message.Part.Type.SOUNDCLOUD
         }
-
-
-        media = part.getMediaAsset
-        media.isEmpty shouldEqual false
-
-        val img = media.getArtwork
-        img should not be null
-        img should not be empty
       }
 
       var uris = Option.empty[Seq[URI]]
@@ -292,22 +242,15 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       withDelay {
         msgs should not be empty
-        val msg = msgs.getLastMessage
-        msg.getBody shouldEqual "https://open.spotify.com/track/0sUyqewVzwv0e5tK3hS6vJ"
-        msg.getMessageType shouldEqual Message.Type.RICH_MEDIA
-        msg.getParts should not be empty
+        val msg = msgs.last
+        msg.contentString shouldEqual "https://open.spotify.com/track/0sUyqewVzwv0e5tK3hS6vJ"
+        msg.msgType shouldEqual Message.Type.RICH_MEDIA
+        msg.content should not be empty
 
-        val part = msg.getParts.head
-        withClue(msg.getParts.map { p => (p.getPartType, p.getBody) }.mkString(", ")) {
-          part.getPartType shouldEqual Message.Part.Type.SPOTIFY
+        val part = msg.content.head
+        withClue(msg.content.map { p => (p.tpe, p.content) }.mkString(", ")) {
+          part.tpe shouldEqual Message.Part.Type.SPOTIFY
         }
-
-        media = part.getMediaAsset
-        media.isEmpty shouldEqual false
-
-        val img = media.getArtwork
-        img should not be null
-        img should not be empty
       }
 
       var uris = Option.empty[Seq[URI]]

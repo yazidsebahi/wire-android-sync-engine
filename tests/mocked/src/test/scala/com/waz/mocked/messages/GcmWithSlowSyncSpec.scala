@@ -20,7 +20,7 @@ package com.waz.mocked.messages
 import java.util.Date
 
 import com.waz.RobolectricUtils
-import com.waz.api.{MessagesList, MockedClientApiSpec}
+import com.waz.api.MockedClientApiSpec
 import com.waz.mocked.{MockBackend, SystemTimeline}
 import com.waz.model._
 import com.waz.service.ZMessaging
@@ -52,19 +52,16 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
     scenario("init") {
       addMessageEvents(convId, count = 5)
 
-      lazy val msgs = conv.getMessages
-
       withDelay {
         convs should not be empty
-        msgs should have size 8
+        listMessages(conv.id) should have size 8
       }
     }
 
     scenario("Receive gcm notification about message that is unread, then resume with slow sync") {
-      val msgs = conv.getMessages
-      withDelay { msgs should have size 8 }
+      withDelay { listMessages(conv.id) should have size 8 }
 
-      markAllMessagesAsRead(msgs)
+      zmessaging.messages.markMessageRead(conv.id, lastMessage(conv.id).get.id)
       api.onPause()
       withDelay {
         zmessaging.websocket.connected.currentValue shouldEqual Some(false)
@@ -77,15 +74,14 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
       awaitUi(1.second)
 
       withDelay {
-        msgs.getUnreadCount shouldEqual 2 // + OTR_LOST_HISTORY
+        getUnreadCount(conv.id) shouldEqual 2 // + OTR_LOST_HISTORY
       }
     }
 
     scenario("Receive gcm notification about message that was already read on another device, then resume with slow sync") {
-      val msgs = conv.getMessages
-      withDelay { msgs should have size 10 }
+      withDelay { listMessages(conv.id) should have size 10 }
 
-      markAllMessagesAsRead(msgs)
+      zmessaging.messages.markMessageRead(conv.id, lastMessage(conv.id).get.id)
       awaitUi(1.second) // this is to make sure that we don't overwrite lastRead on backend with some older value
 
       api.onPause()
@@ -100,15 +96,13 @@ class GcmWithSlowSyncSpec extends FeatureSpec with Matchers with MockedClientApi
       awaitUi(1.second)
 
       withDelay {
-        msgs should have size 12
-        withClue((conv.data.lastRead, msgs.getLastMessage.data)) {
+        listMessages(conv.id) should have size 12
+        withClue((conv.data.lastRead, listMessages(conv.id).last)) {
           conv.getUnreadCount shouldEqual 0
-          msgs.getUnreadCount shouldEqual 0
+          getUnreadCount(conv.id) shouldEqual 0
         }
       }
     }
-
-    def markAllMessagesAsRead(msgs: MessagesList): Unit = msgs.get(msgs.size - 1)
 
     def readNewMessageOnOtherDevice() = {
       returning(textMessageEvent(Uid(), convId, SystemTimeline.next(), userId, "meep meep")) { msgAdd =>
