@@ -37,6 +37,13 @@ object TeamData {
     }
   }
 
+  lazy val TeamBindingDecoder: JsonDecoder[(TeamData, Boolean)] = new JsonDecoder[(TeamData, Boolean)] {
+    override def apply(implicit js: JSONObject): (TeamData, Boolean) = {
+      import JsonDecoder._
+      (TeamData('id, 'name, 'creator, 'icon, decodeOptString('icon_key).map(AESKey)), decodeOptBoolean('binding).getOrElse(false))
+    }
+  }
+
   import com.waz.db.Col._
   implicit object TeamDataDoa extends Dao[TeamData, TeamId] {
     val Id      = id[TeamId]      ('_id, "PRIMARY KEY").apply(_.id)
