@@ -29,7 +29,7 @@ import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.testutils.Matchers._
-import com.waz.{RobolectricUtils, testutils}
+import com.waz.RobolectricUtils
 import org.robolectric.Robolectric
 import org.scalatest.matchers.Matcher
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}

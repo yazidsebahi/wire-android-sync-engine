@@ -109,7 +109,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val newToken = PushToken("token")
 
       accountSignal ! accountData(oldToken)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
 
       currentToken := Some(newToken)
       pushEnabled := true
@@ -135,7 +135,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val newToken = PushToken("newToken")
 
       accountSignal ! accountData(oldToken)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(oldToken)
@@ -163,7 +163,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val token = PushToken("token")
 
       accountSignal ! accountData(token)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
@@ -175,7 +175,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       result(service.pushActive.filter(_ == true).head)
 
-      currentAccount := "" //user is logged out
+      currentAccount := None //user is logged out
       accountSignal ! accountData(None)
 
       result(service.pushActive.filter(_ == false).head)
@@ -185,7 +185,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
         * So lets make sure we only register the account assigned to our instance. Logging in then with another account
         * shouldn't change the state of this instance.
         */
-      currentAccount := AccountId().str
+      currentAccount := Some(AccountId())
 
       awaitAllTasks
       result(service.pushActive.filter(_ == false).head)
@@ -197,7 +197,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if push is enabled and inactive if not") {
       val token = PushToken("token")
       accountSignal ! accountData(token)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
       pushEnabled := true //set active
       googlePlayAvailable ! true
       currentToken := Some(token)
@@ -213,7 +213,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if app is in background and inactive if not") {
       val token = PushToken("token")
       accountSignal ! accountData(token)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
       pushEnabled := true
       googlePlayAvailable ! true
       lifecycleActive ! true //websocket should be open
@@ -230,7 +230,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be inactive if play services are unavailable") {
       val token = PushToken("token")
       accountSignal ! accountData(token)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
@@ -247,7 +247,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val token = PushToken("token")
       accountSignal ! accountData(None)
-      currentAccount := accountId.str
+      currentAccount := Some(accountId)
       pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)

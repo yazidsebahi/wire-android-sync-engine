@@ -78,7 +78,7 @@ class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts
   }
 }
 
-class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, None, "", None, handle = None), accounts.global, accounts) {
+class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountId(), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -87,7 +87,7 @@ class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec:
 
   def set(zms: MockZMessaging) = {
     _zmessaging ! Some(zms)
-    accounts.currentAccountPref := id.str
+    accounts.currentAccountPref := Some(id)
   }
 }
 
@@ -171,9 +171,9 @@ class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockU
   def setCurrent(zms: Option[ZMessaging]) = zms match {
     case Some(z: MockZMessaging) =>
       accounts.accountMap(z.accountId) = z.account
-      accounts.currentAccountPref := z.accountId.str
+      accounts.currentAccountPref := Some(z.accountId)
     case _ =>
-      accounts.currentAccountPref := ""
+      accounts.currentAccountPref := None
   }
 }
 

@@ -148,7 +148,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
       api.onDestroy()
     }
 
-    (ui.accounts.currentAccountPref := "").futureValue
+    (ui.accounts.currentAccountPref := None).futureValue
   }
 
   def zmessagingCreated(api: ZMessagingApi = test.api) = api.account.flatMap(_.zmessaging.currentValue).flatten.isDefined
@@ -254,9 +254,9 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
         zmessagingCreated() shouldEqual false
       }
 
-      withDelay(global.prefs.getFromPref(CurrentAccountPref) should not be "")
+      withDelay(global.prefs.getFromPref(CurrentAccountPref) should not be None)
 
-      val accountId = AccountId(api.ui.accounts.currentAccountPref().futureValue)
+      val accountId = api.ui.accounts.currentAccountPref().futureValue.get
 
       self = null
 

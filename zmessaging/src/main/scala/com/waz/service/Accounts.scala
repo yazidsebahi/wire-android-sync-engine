@@ -75,28 +75,28 @@ class Accounts(val global: GlobalModule) {
   val currentAccountPref = prefs.preference(CurrentAccountPref)
 
   lazy val currentAccountData = currentAccountPref.signal.flatMap[Option[AccountData]] {
-    case "" => Signal.const(Option.empty[AccountData])
-    case idStr => storage.optSignal(AccountId(idStr))
+    case None => Signal.const(Option.empty[AccountData])
+    case Some(id) => storage.optSignal(id)
   }
 
-  lazy val current = currentAccountData.flatMap[Option[AccountService]] {
+  lazy val currentAccountService = currentAccountPref.signal.flatMap[Option[AccountService]] {
     case None      => Signal const None
-    case Some(acc) => Signal.future(getInstance(acc) map (Some(_)))
+    case Some(id) => Signal.future(getOrCreateAccountService(id).map(Some(_)))
   }
 
   lazy val currentZms: Signal[Option[ZMessaging]] =
-    current.flatMap[Option[ZMessaging]] {
+    currentAccountService.flatMap[Option[ZMessaging]] {
       case Some(service) => service.zmessaging
       case None          => Signal const None
     }
 
   def getCurrentAccountInfo = currentAccountPref() flatMap {
-    case "" => Future successful None
-    case idStr => storage.get(AccountId(idStr))
+    case None => Future successful None
+    case Some(id) => storage.get(id)
   }
 
-  def getCurrent = getCurrentAccountInfo flatMap {
-    case Some(acc) => getInstance(acc) map (Some(_))
+  def getCurrent = currentAccountPref() flatMap {
+    case Some(id) => getOrCreateAccountService(id) map (Some(_))
     case _ => Future successful None
   }
 
@@ -105,28 +105,27 @@ class Accounts(val global: GlobalModule) {
     case None       => Future successful None
   }
 
-  private[service] def getInstance(account: AccountData) = Future {
-    accountMap.getOrElseUpdate(account.id, new AccountService(account, global, this))
+  private[service] def getOrCreateAccountService(accountId: AccountId) = Future {
+    accountMap.getOrElseUpdate(accountId, new AccountService(accountId, global, this))
   }
 
-  def getInstance(id: AccountId): Future[Option[AccountService]] = storage.get(id) flatMap {
+  def getAccountService(id: AccountId, orElse: Option[AccountService] = None): Future[Option[AccountService]] = storage.get(id) flatMap {
     case Some(acc) =>
       verbose(s"getInstance($acc)")
-      getInstance(acc) map (Some(_))
+      getOrCreateAccountService(id) map (Some(_))
     case _ =>
       Future successful None
   }
 
-  def logout(flushCredentials: Boolean) = current.head flatMap {
+  def logout(flushCredentials: Boolean) = currentAccountService.head flatMap {
     case Some(account) => account.logout(flushCredentials)
     case None => Future.successful(())
   }
 
   def logout(account: AccountId, flushCredentials: Boolean) = {
-    currentAccountPref() flatMap {
-      case id =>
+    currentAccountPref() flatMap { id =>
         for {
-          _ <- if (id == account.str) setAccount(None) else Future.successful(())
+          _ <- if (id.contains(account)) setAccount(None) else Future.successful(())
           _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else storage.update(account, _.copy(registeredPush = None))
         } yield {}
     }
@@ -134,7 +133,7 @@ class Accounts(val global: GlobalModule) {
 
   private def setAccount(acc: Option[AccountId]) = {
     verbose(s"setAccount($acc)")
-    currentAccountPref := acc.fold("")(_.str)
+    currentAccountPref := acc
   }
 
   /**
@@ -148,8 +147,8 @@ class Accounts(val global: GlobalModule) {
       if !cur.contains(accountId)
       _        <- logout(flushCredentials = false)
       account  <- storage.get(accountId).collect { case Some(a) if a.cookie.isDefined => a }
-      _        <- setAccount(Some(account.id))
-      _        <- getInstance(account)
+      _        <- setAccount(Some(accountId))
+      _        <- getOrCreateAccountService(accountId)
       _        <- loginClient.access(account.cookie.get, account.accessToken).future.flatMap {
         case Right((token, cookieOpt)) =>
           verbose(s"Account successfully switched. Got token: ${token.accessToken.take(5)} and cookie: ${cookieOpt.map(_.str.take(5))}")
@@ -170,9 +169,9 @@ class Accounts(val global: GlobalModule) {
       _          <- logout(flushCredentials = false)
       normalized <- normalizeCredentials(credentials)
       matching   <- storage.find(normalized)
-      account    =  matching.flatMap(_.authorized(normalized))
-      _          <- setAccount(account.map(_.id))
-      service    <- account.fold(Future successful Option.empty[AccountService]) { a => getInstance(a).map(Some(_)) }
+      accountId  =  matching.flatMap(_.authorized(normalized)).map(_.id)
+      _          <- setAccount(accountId)
+      service    <- accountId.fold(Future successful Option.empty[AccountService]) { id => getOrCreateAccountService(id).map(Some(_)) }
     } yield
       (normalized, matching, service)
   }
@@ -206,8 +205,8 @@ class Accounts(val global: GlobalModule) {
       case Right(a) =>
         for {
           acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, verified = true, accessToken = a.accessToken), a)
-          service <- getInstance(acc)
-          _       <- setAccount(Some(acc.id))
+          service <- getOrCreateAccountService(a.id)
+          _       <- setAccount(Some(a.id))
           res     <- service.login(normalized)
         } yield res
       case Left(err) =>
@@ -249,7 +248,7 @@ class Accounts(val global: GlobalModule) {
           for {
             acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), verified = normalized.autoLoginOnRegistration))
             _       = verbose(s"created account: $acc")
-            service <- getInstance(acc)
+            service <- getOrCreateAccountService(accountId)
             _       <- setAccount(Some(accountId))
             res     <- service.login(normalized)
           } yield res

@@ -40,12 +40,12 @@ import scala.collection.mutable
  * @param verified - true if user account has been activated
  * @param password - will not be stored in db
  */
-case class AccountData(id:             AccountId,
+case class AccountData(id:             AccountId               = AccountId(),
                        teamId:         Option[TeamId]          = None,
-                       email:          Option[EmailAddress],
-                       hash:           String,
-                       phone:          Option[PhoneNumber],
-                       handle:         Option[Handle],
+                       email:          Option[EmailAddress]    = None,
+                       hash:           String                  = "",
+                       phone:          Option[PhoneNumber]     = None,
+                       handle:         Option[Handle]          = None,
                        registeredPush: Option[PushToken]       = None,
                        verified:       Boolean                 = false,
                        cookie:         Option[Cookie]          = None,
@@ -128,8 +128,6 @@ case class ConfirmationCode(str: String) extends AnyVal {
 }
 
 object AccountData {
-  def apply(id: AccountId, email: String, hash: String): AccountData = AccountData(id, None, email = Some(EmailAddress(email)), hash, phone = None, handle = None)  // used only for testing
-
   def apply(id: AccountId, credentials: Credentials): AccountData =
     new AccountData(id, None, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
 
