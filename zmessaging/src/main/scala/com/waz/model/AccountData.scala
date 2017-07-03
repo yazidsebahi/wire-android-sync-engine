@@ -23,11 +23,12 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.db.Col._
-import com.waz.db.Dao
+import com.waz.db.{Col, Dao, DbTranslator}
+import com.waz.model.AccountData.TriTeamId
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
-import com.waz.utils.wrappers.{DB, DBCursor}
+import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor, DBProgram}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
@@ -41,7 +42,7 @@ import scala.collection.mutable
  * @param password - will not be stored in db
  */
 case class AccountData(id:             AccountId               = AccountId(),
-                       teamId:         Option[TeamId]          = None,
+                       teamId:         TriTeamId               = Left({}),
                        email:          Option[EmailAddress]    = None,
                        hash:           String                  = "",
                        phone:          Option[PhoneNumber]     = None,
@@ -111,7 +112,7 @@ case class AccountData(id:             AccountId               = AccountId(),
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
     copy(userId = userId orElse this.userId, verified = this.verified | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
 
-  def updated(teamId: TeamId): AccountData = copy(teamId = Some(teamId))
+  def updated(teamId: Option[TeamId]): AccountData = copy(teamId = Right(teamId))
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
@@ -128,12 +129,17 @@ case class ConfirmationCode(str: String) extends AnyVal {
 }
 
 object AccountData {
+
+  //TODO Might be nice to have a TriOption type...
+  //Left is undefined, Right(None) is no team, Right(Some()) is a team
+  type TriTeamId = Either[Unit, Option[TeamId]]
+
   def apply(id: AccountId, credentials: Credentials): AccountData =
-    new AccountData(id, None, credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
+    new AccountData(id, Left({}), credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, None, Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
+    AccountData(id, Left({}), Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
   }
 
   type Permission = Permission.Value
@@ -181,7 +187,28 @@ object AccountData {
 
   implicit object AccountDataDao extends Dao[AccountData, AccountId] {
     val Id = id[AccountId]('_id, "PRIMARY KEY").apply(_.id)
-    val TeamId = opt(id[TeamId]('teamId))(_.teamId)
+
+    val Team = Col[TriTeamId]("teamId", "TEXT")(new DbTranslator[TriTeamId] {
+      override def save(value: TriTeamId, name: String, values: DBContentValues) = value match {
+        case Left(_)        => values.putNull(name)
+        case Right(None)    => values.put(name, "")
+        case Right(Some(t)) => values.put(name, t.str)
+      }
+
+      override def bind(value: TriTeamId, index: Int, stmt: DBProgram) = value match {
+        case Left(_)        => stmt.bindNull(index)
+        case Right(None)    => stmt.bindString(index, "")
+        case Right(Some(t)) => stmt.bindString(index, t.str)
+      }
+
+      override def load(cursor: DBCursor, index: Int) =
+        if (cursor.isNull(index)) Left({})
+        else {
+          val v = cursor.getString(index)
+          if (v == "") Right(None) else Right(Some(TeamId(v)))
+        }
+    }).apply(_.teamId)
+
     val Email = opt(emailAddress('email))(_.email)
     val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
@@ -198,9 +225,9 @@ object AccountData {
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, TeamId, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, TeamId, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
@@ -211,7 +238,4 @@ object AccountData {
     def deleteForEmail(email: EmailAddress)(implicit db: DB) = delete(Email, Some(email))
 
   }
-
-
-
 }

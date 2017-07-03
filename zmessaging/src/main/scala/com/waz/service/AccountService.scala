@@ -105,7 +105,7 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   // listen to client changes, logout and delete cryptobox if current client is removed
   private val otrClient = accountData.map(a => (a.userId, a.clientId)).flatMap {
-    case (Some(userId), Some(cId)) => storage.otrClientsStorage.optSignal(userId).map(_.flatMap(_.clients.get(cId)))
+    case (Some(uId), Some(cId)) => storage.otrClientsStorage.optSignal(uId).map(_.flatMap(_.clients.get(cId)))
     case _                         => Signal const Option.empty[Client]
   }
 
@@ -119,7 +119,7 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
   private val selfUserData = accountData.map(_.userId).flatMap {
-    case Some(userId) => storage.usersStorage.optSignal(userId)
+    case Some(uId) => storage.usersStorage.optSignal(uId)
     case None         => Signal const Option.empty[UserData]
   }
 
@@ -175,24 +175,22 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   lazy val userId = accountData.map(_.userId)
 
-  // must start empty to block the creation of ZMessaging
-  private lazy val teamId = Signal[Option[TeamId]]()
-
   // logged in zmessaging instance
   @volatile private var _zmessaging = Option.empty[ZMessaging]
 
   val zmessaging = (for {
-    Some(cId) <- clientId
-    tId       <- teamId
-    um        <- userModule
-    Some(cb)  <- Signal.future { cryptoBox.cryptoBox }
+    Some(cId)  <- clientId
+    Right(tId) <- accountData.map(_.teamId)
+    um         <- userModule
+    Some(cb)   <- Signal.future { cryptoBox.cryptoBox }
   } yield {
     verbose(s"Creating new ZMessaging instance, for $um, $cId, $tId, service: $this")
     _zmessaging = _zmessaging orElse LoggedTry(global.factory.zmessaging(tId, cId, um)).toOption
     _zmessaging
   }).orElse(Signal const Option.empty[ZMessaging])
 
-  val isLoggedIn = accounts.currentAccountPref.signal.map(_ == id.str)
+  val isLoggedIn = accounts.currentAccountPref.signal.map(_.contains(id))
+  isLoggedIn.onUi { lifecycle.setLoggedIn }
 
   accountData { acc =>
     if (acc.cookie.isDefined) {
@@ -220,8 +218,6 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
       }
     }
   }
-
-  isLoggedIn.onUi { lifecycle.setLoggedIn }
 
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 
@@ -254,12 +250,12 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
     case None =>
       Serialized.future(this) {
         accountsStorage.get(id) flatMap {
-          case Some(ad) if ad.cookie == None =>
+          case Some(ad) if ad.cookie.isEmpty =>
             verbose(s"account data has no cookie, user not logged in: $ad")
             Future successful None
           case Some(acc) =>
             ensureFullyRegistered() flatMap {
-              case Right(a) if a.userId != None && a.clientId != None && a.verified =>
+              case Right(a) if a.userId.isDefined && a.clientId.isDefined && a.verified =>
                 zmessaging.filter(_.isDefined).head // wait until loaded
               case _ =>
                 zmessaging.head
@@ -331,24 +327,24 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
       }
 
     def loadSelfTeam(account: AccountData): Future[Either[ErrorResponse, AccountData]] =
-      if (account.teamId.isDefined) Future successful Right(account)
-      else {
-        teamsClient.getTeamId().future flatMap {
-          case Right(tIdOpt) =>
-            teamId ! tIdOpt
-            verbose(s"got self team: $tIdOpt")
+      account.teamId match {
+        case Right(_) =>
+          Future successful Right(account)
+        case Left(_) =>
+          teamsClient.getTeamId().future flatMap {
+            case Right(tIdOpt) =>
+              verbose(s"got self team: $tIdOpt")
+              for {
+                _ <- (tIdOpt, account.userId) match {
+                  case (Some(tId), Some(uId)) =>
+                    storage.usersStorage.update(uId, _.updated(Some(tId))).map(_ => {})
+                  case _ => Future.successful({})
+                }
+                res <- accountsStorage.updateOrCreate(id, _.updated(tIdOpt), account.updated(tIdOpt))
+              } yield Right(res)
 
-            tIdOpt match {
-              case Some(tId) =>
-                for {
-                  _ <- account.userId.fold(Future.successful({})){ id => storage.usersStorage.update(id, _.updated(Some(tId))).map(_ => {}) }
-                  res <- accountsStorage.updateOrCreate(id, _.updated(tId), account.updated(tId))
-                } yield Right(res)
-              case _ => Future successful Right(account)
-            }
-
-          case Left(err) => Future successful Left(err)
-        }
+            case Left(err) => Future successful Left(err)
+          }
       }
 
     def checkCryptoBox =
