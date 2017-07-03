@@ -78,7 +78,7 @@ class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts
   }
 }
 
-class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, None, "", None, handle = None), accounts.global, accounts) {
+class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountId(), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -87,7 +87,7 @@ class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec:
 
   def set(zms: MockZMessaging) = {
     _zmessaging ! Some(zms)
-    accounts.currentAccountPref := id.str
+    accounts.currentAccountPref := Some(id)
   }
 }
 
@@ -105,7 +105,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
   var timeout = 5.seconds
 
   storage.usersStorage.put(selfUserId, UserData(selfUserId, None, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
-  global.accountsStorage.put(accountId, AccountData(accountId, None, Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+  global.accountsStorage.put(accountId, AccountData(accountId, Right(None), Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 
@@ -171,9 +171,9 @@ class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockU
   def setCurrent(zms: Option[ZMessaging]) = zms match {
     case Some(z: MockZMessaging) =>
       accounts.accountMap(z.accountId) = z.account
-      accounts.currentAccountPref := z.accountId.str
+      accounts.currentAccountPref := Some(z.accountId)
     case _ =>
-      accounts.currentAccountPref := ""
+      accounts.currentAccountPref := None
   }
 }
 

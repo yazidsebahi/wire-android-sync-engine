@@ -219,7 +219,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
       zms.global.storage.close()
       api.ui.uiCache.clear()
     }
-    accounts.currentAccountPref := ""
+    accounts.currentAccountPref := None
     accounts.accountMap.clear()
     api = null
     ZMessaging.context = null

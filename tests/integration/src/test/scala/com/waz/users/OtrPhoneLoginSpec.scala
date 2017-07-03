@@ -136,7 +136,7 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
       }
       val clientId = zmessaging.clientId
       clientId should not be prevClientId
-      api.account.get.account.clientId shouldEqual Some(clientId)
+      api.account.get.clientId shouldEqual Some(clientId)
     }
 
     scenario("Remove device on backend again") {

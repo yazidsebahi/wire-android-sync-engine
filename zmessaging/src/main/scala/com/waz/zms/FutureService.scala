@@ -74,7 +74,7 @@ trait ZMessagingService extends Service {
   def onAccountIntent[Result](intent: Intent)(execute: AccountService => Future[Result]): Future[Result] = wakeLock.async {
     if (intent != null && intent.hasExtra(ZmsUserIdExtra)) {
       val userId = AccountId(intent.getStringExtra(ZmsUserIdExtra))
-      accounts.getInstance(userId) flatMap {
+      accounts.getAccountService(userId) flatMap {
         case Some(acc) => execute(acc)
         case None =>
           error(s"zmessaging not available")

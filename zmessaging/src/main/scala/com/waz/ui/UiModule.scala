@@ -118,7 +118,7 @@ class UiModule(val accounts: Accounts) extends UiEventContext with ZMessagingRes
   def imageCache = global.imageCache
   def bitmapDecoder = global.bitmapDecoder
 
-  val currentAccount = accounts.current
+  val currentAccount = accounts.currentAccountService
   val currentZms = accounts.currentZms
 
   currentZms.onChanged { _ => onReset ! true }

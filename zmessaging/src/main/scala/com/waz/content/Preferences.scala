@@ -246,7 +246,7 @@ object GlobalPreferences {
     returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
   }
 
-  lazy val CurrentAccountPref = PrefKey[String]("CurrentUserPref", "")
+  lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
 
   //TODO move some of these to UserPreferences
   //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct

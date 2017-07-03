@@ -144,9 +144,6 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
   })
   override def hasSetUsername: Boolean = user.fold(false)(_.getUsername.length > 0)
 
-  override def isInPrivateMode: Boolean = data.fold(false)(_.privateMode)
-  override def setPrivateMode(active: Boolean) = users.setSelfPrivateMode(active)
-
   private def handlingErrors[T](request: Future[Either[ErrorResponse, Unit]], listener: CredentialsUpdateListener): Unit = request.onComplete {
     case Success(Right(())) => listener.onUpdated()
     case Success(Left(ErrorResponse(code, message, label))) => listener.onUpdateFailed(code, message, label)

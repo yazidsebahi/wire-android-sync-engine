@@ -65,7 +65,7 @@ class PushTokenService(googleApi: GoogleApi,
   }
 
   //None if user is not logged in.
-  private val loggedInAccount = currentAccount.signal.map(v => if (v.isEmpty) None else Some(AccountId(v)))
+  private val loggedInAccount = currentAccount.signal
 
   private val userToken = accounts.signal(accountId).map(_.registeredPush)
 

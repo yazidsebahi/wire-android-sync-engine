@@ -30,7 +30,6 @@ import com.waz.threading.Threading
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest._
-import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 

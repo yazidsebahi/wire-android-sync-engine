@@ -56,6 +56,7 @@ class CryptoBoxService(context: Context, userId: AccountId, metadata: MetaDataSe
   }
 
   private def load = LoggedTry {
+    verbose("cryptobox directory created")
     cryptoBoxDir.mkdirs()
     CryptoBox.open(cryptoBoxDir.getAbsolutePath)
   } .toOption

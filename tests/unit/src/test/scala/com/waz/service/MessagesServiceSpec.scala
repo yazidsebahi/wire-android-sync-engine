@@ -31,7 +31,6 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
 import com.waz.model.GenericContent.{Asset, Knock}
 import com.waz.model.GenericMessage.TextMessage
-import com.waz.model.UserData.UserDataDao
 import com.waz.model.{Mime, _}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._

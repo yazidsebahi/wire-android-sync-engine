@@ -74,8 +74,6 @@ class Users(implicit ui: UiModule) {
 
   def setSelfHandle(handle: Handle, user: Option[User]) = ui.getAccount flatMap(_.updateHandle(handle))
 
-  def setSelfPrivateMode(privateMode: Boolean) = ui.getAccount flatMap(_.updatePrivateMode(privateMode))
-
   def setSelfPicture(image: com.waz.api.ImageAsset): Unit = {
     verbose(s"setSelfPicture()")
     zms(_.users.updateSelfPicture(image))
