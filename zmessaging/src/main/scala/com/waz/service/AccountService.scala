@@ -162,8 +162,8 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   lazy val credentialsHandler = new CredentialsHandler {
     override val userId: AccountId = id
-    override val cookie: Preference[Option[Cookie]] = Preference[Option[Cookie]](None, accountsStorage.get(id).map(_.flatMap(_.cookie)), { c => accountsStorage.update(id, _.copy(cookie = c)) })
-    override val accessToken: Preference[Option[Token]] = Preference[Option[Token]](None, accountsStorage.get(id).map(_.flatMap(_.accessToken)), { token => accountsStorage.update(id, _.copy(accessToken = token)) })
+    override val cookie: Preference[Option[Cookie]] = Preference[Option[Cookie]](None, accountsStorage.get(id).map(_.flatMap(_.cookie)), { c: Option[Cookie] => accountsStorage.update(id, _.copy(cookie = c)) })
+    override val accessToken: Preference[Option[Token]] = Preference[Option[Token]](None, accountsStorage.get(id).map(_.flatMap(_.accessToken)), { token: Option[Token] => accountsStorage.update(id, _.copy(accessToken = token)) })
     override def credentials: Credentials = self.credentials
 
     override def onInvalidCredentials(): Unit = logout(flushCredentials = true)

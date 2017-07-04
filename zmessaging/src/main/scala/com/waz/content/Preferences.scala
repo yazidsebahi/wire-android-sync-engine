@@ -42,7 +42,13 @@ trait Preferences {
 
   implicit protected val dispatcher: ExecutionContext
 
-  def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] = new Preference[A](this, key)
+  private var cache = Map.empty[PrefKey[_], Preference[_]]
+
+  final def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] =
+    cache.getOrElse(key, returning(buildPreference(key))(cache += key -> _)).asInstanceOf[Preference[A]]
+
+  protected def buildPreference[A: PrefCodec](key: PrefKey[A]): Preference[A] =
+    Preference[A](this, key)
 
   protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A]
   protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit]
@@ -50,35 +56,38 @@ trait Preferences {
 
 object Preferences {
 
-  class Preference[A: PrefCodec](prefs: Preferences, key: PrefKey[A])(implicit val dispatcher: ExecutionContext) {
+  case class Preference[A: PrefCodec](private val prefs: Preferences, key: PrefKey[A]) {
+
+    import Threading.Implicits.Background
 
     def apply():          Future[A]    = prefs.getValue(key).map { v => verbose(s"Getting $key: $v"); v }
     def update(value: A): Future[Unit] = {
       verbose(s"Setting $key: $value")
-      prefs.setValue(key, value).map { _ => signal ! value }
+      prefs.setValue(key, value).map { _ => signal.publish(value, Threading.Background)}
     }
 
     def :=(value: A):      Future[Unit] = update(value)
     def mutate(f: A => A): Future[Unit] = apply().flatMap(cur => update(f(cur)))
 
     lazy val signal: SourceSignal[A] = {
-      val s = Signal[A]()
-      apply().onSuccess { case v => s.publish(v, Threading.Background) }(Threading.Background)
-      s
+      returning(Signal[A]()) { s =>
+        apply().onSuccess { case v => s.publish(v, Threading.Background) }
+      }
     }
   }
 
   object Preference {
 
     //TODO should be able to eventually get rid of apply and inMemory...
-    def apply[A: PrefCodec](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]], Threading.Background) {
+    def apply[A: PrefCodec](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
+      import Threading.Implicits.Background
       override def apply()      = load
       override def update(v: A) = save(v) map { _ => signal ! v }
     }
 
-    def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]], Threading.Background) {
+    def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
+      import Threading.Implicits.Background
       private var value = defaultValue
-
       override def apply()      = Future { value }
       override def update(v: A) = Future { value = v; signal ! v }
     }
@@ -178,7 +187,7 @@ class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Pref
     }).asInstanceOf[A]
   }
 
-  override def preference[A: PrefCodec](key: PrefKey[A]) = {
+  override protected def buildPreference[A: PrefCodec](key: PrefKey[A]) =
     new Preference[A](this, key) {
 
       //No need to update the signal. The SharedPreferences Listener will do this for us.
@@ -208,7 +217,6 @@ class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Pref
           Threading.Ui { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
       }
     }
-  }
 
   override protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A] =
     dispatcher(getFromPref[A](key))
@@ -282,6 +290,7 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
       } yield {}
     }
   }
+
 }
 
 object GlobalPreferences {
