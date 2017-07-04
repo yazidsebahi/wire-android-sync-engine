@@ -242,7 +242,10 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   def logout(flushCredentials: Boolean): Future[Unit] = {
     verbose(s"logout($id)")
-    accounts.logout(id, flushCredentials)
+    for {
+      _ <- if (flushCredentials) Future(credentials = Credentials.Empty) else Future.successful({})
+      _ <- accounts.logout(id, flushCredentials)
+    } yield {}
   }
 
   def getZMessaging: Future[Option[ZMessaging]] = zmessaging.head flatMap {

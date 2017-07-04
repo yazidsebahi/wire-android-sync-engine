@@ -144,7 +144,8 @@ object AccountData {
 
   type Permission = Permission.Value
   object Permission extends Enumeration {
-    val CreateConversation,         // 0x001
+    val
+    CreateConversation,         // 0x001
     DeleteConversation,         // 0x002
     AddTeamMember,              // 0x004
     RemoveTeamMember,           // 0x008
