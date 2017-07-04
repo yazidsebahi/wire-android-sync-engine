@@ -351,6 +351,7 @@ object TeamEvent {
   }
   case class MemberJoin(teamId: TeamId, userId: UserId) extends MemberEvent
   case class MemberLeave(teamId: TeamId, userId: UserId) extends MemberEvent
+  case class MemberUpdate(teamId: TeamId, userId: UserId) extends MemberEvent
 
   sealed trait ConversationEvent extends TeamEvent {
     val convId: RConvId
@@ -371,6 +372,7 @@ object TeamEvent {
         case "team.update"              => Update('team, decodeOptString('name)('data), decodeOptString('icon)('data).map(RAssetId), decodeOptString('icon_key)('data).map(AESKey))
         case "team.member-join"         => MemberJoin ('team, UserId(decodeString('user)('data)))
         case "team.member-leave"        => MemberLeave('team, UserId(decodeString('user)('data)))
+        case "team.member-update"       => MemberUpdate('team, UserId(decodeString('user)('data)))
         case "team.conversation-create" => ConversationCreate('team, RConvId(decodeString('conv)('data)))
         case "team.conversation-delete" => ConversationDelete('team, RConvId(decodeString('conv)('data)))
         case _ =>
