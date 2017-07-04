@@ -24,7 +24,7 @@ import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
-import com.waz.model.AccountData.TriTeamId
+import com.waz.model.AccountData.{PermissionsMasks, TriTeamId}
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
@@ -112,7 +112,8 @@ case class AccountData(id:             AccountId               = AccountId(),
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
     copy(userId = userId orElse this.userId, verified = this.verified | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
 
-  def updated(teamId: Option[TeamId]): AccountData = copy(teamId = Right(teamId))
+  def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
+    copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
 }
 
 case class PhoneNumber(str: String) extends AnyVal {
@@ -133,6 +134,8 @@ object AccountData {
   //TODO Might be nice to have a TriOption type...
   //Left is undefined, Right(None) is no team, Right(Some()) is a team
   type TriTeamId = Either[Unit, Option[TeamId]]
+
+  type PermissionsMasks = (Long, Long) //self and copy permissions
 
   def apply(id: AccountId, credentials: Credentials): AccountData =
     new AccountData(id, Left({}), credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)

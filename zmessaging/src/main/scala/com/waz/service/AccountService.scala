@@ -337,13 +337,24 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
           teamsClient.getTeamId().future flatMap {
             case Right(tIdOpt) =>
               verbose(s"got self team: $tIdOpt")
+
+              val permissions = (tIdOpt, account.userId) match {
+                case (Some(t), Some(u)) =>
+                  teamsClient.getPermissions(t, u).map {
+                    case Right(p) => Some(p)
+                    case Left(_)  => None
+                  }.future
+                case _ => Future.successful(None)
+              }
+
               for {
+                p <- permissions
                 _ <- (tIdOpt, account.userId) match {
                   case (Some(tId), Some(uId)) =>
                     storage.usersStorage.update(uId, _.updated(Some(tId))).map(_ => {})
                   case _ => Future.successful({})
                 }
-                res <- accountsStorage.updateOrCreate(id, _.updated(tIdOpt), account.updated(tIdOpt))
+                res <- accountsStorage.updateOrCreate(id, _.withTeam(tIdOpt, p), account.withTeam(tIdOpt, p))
               } yield Right(res)
 
             case Left(err) => Future successful Left(err)

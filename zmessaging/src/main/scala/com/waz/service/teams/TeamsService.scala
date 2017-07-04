@@ -21,6 +21,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
+import com.waz.model.AccountData.PermissionsMasks
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -44,13 +45,17 @@ trait TeamsService {
 
   def isGuest(id: UserId): Signal[Boolean]
 
-  def onTeamSynced(team: TeamData, members: Set[UserId]): Future[Unit]
+  def onTeamSynced(team: TeamData, members: Map[UserId, PermissionsMasks]): Future[Unit]
+
+  def onMemberSynced(userId: UserId, permissions: PermissionsMasks): Future[Unit]
 
 }
 
 class TeamsServiceImpl(selfUser:          UserId,
+                       selfAccount:       AccountId,
                        teamId:            Option[TeamId],
                        teamStorage:       TeamsStorage,
+                       accStorage:        AccountsStorage,
                        userStorage:       UsersStorage,
                        convsStorage:      ConversationStorage,
                        convMemberStorage: MembersStorage,
@@ -74,8 +79,9 @@ class TeamsServiceImpl(selfUser:          UserId,
     verbose(s"Handling events: $events")
     import TeamEvent._
 
-    val membersJoined = events.collect { case MemberJoin(_, u)  => u}.toSet
-    val membersLeft   = events.collect { case MemberLeave(_, u)  => u}.toSet
+    val membersJoined  = events.collect { case MemberJoin(_, u) => u}.toSet
+    val membersLeft    = events.collect { case MemberLeave(_, u)  => u}.toSet
+    val membersUpdated = events.collect { case MemberUpdate(_, u)  => u}.toSet
 
     val convsCreated = events.collect { case ConversationCreate(_, id) => id }.toSet
     val convsDeleted = events.collect { case ConversationDelete(_, id) => id }.toSet
@@ -83,6 +89,7 @@ class TeamsServiceImpl(selfUser:          UserId,
       _ <- RichFuture.processSequential(events.collect { case e:Update => e}) { case Update(id, name, icon, iconKey) => onTeamUpdated(id, name, icon, iconKey) }
       _ <- onMembersJoined(membersJoined -- membersLeft)
       _ <- onMembersLeft(membersLeft -- membersJoined)
+      _ <- onMembersUpdated(membersUpdated)
       _ <- onConversationsCreated(convsCreated -- convsDeleted)
       _ <- onConversationsDeleted(convsDeleted -- convsCreated)
     } yield {}
@@ -116,22 +123,32 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   override def isGuest(userId: UserId): Signal[Boolean] = teamId match {
     case None => Signal.const(false)
-    case Some(teamId) => new RefreshingSignal[Boolean, Seq[UserId]](
-      CancellableFuture.lift(userStorage.get(userId).map(_.map(_.teamId) == teamId)),
+    case Some(tId) => new RefreshingSignal[Boolean, Seq[UserId]](
+      CancellableFuture.lift(userStorage.get(userId).map(_.map(_.teamId) == tId)),
       userStorage.onChanged.map(_.map(_.id))
     )
   }
 
-  override def onTeamSynced(team: TeamData, members: Set[UserId]) = {
+  override def onTeamSynced(team: TeamData, members: Map[UserId, PermissionsMasks]) = {
     verbose(s"onTeamSynced: team: $team \nmembers: $members")
+
+    val memberIds = members.keys.toSet
+    val selfPermissions = members.get(selfUser)
 
     for {
       _ <- teamStorage.insert(team)
+      _ <- selfPermissions.fold(Future.successful({}))(onMemberSynced(selfUser, _))
       oldMembers <- userStorage.getByTeam(Set(team.id))
-      _ <- userStorage.remove(oldMembers.map(_.id) -- members)
-      _ <- sync.syncUsers(members.toSeq: _* ).flatMap(syncRequestService.scheduler.await)
-      _ <- userStorage.updateAll2(members, _.updated(teamId))
+      _ <- userStorage.remove(oldMembers.map(_.id) -- memberIds)
+      _ <- sync.syncUsers(memberIds.toSeq: _* ).flatMap(syncRequestService.scheduler.await)
+      _ <- userStorage.updateAll2(memberIds, _.updated(teamId))
     } yield {}
+  }
+
+  override def onMemberSynced(userId: UserId, permissions: PermissionsMasks) = {
+    if (userId == selfUser)
+      accStorage.update(selfAccount, _.copy(_selfPermissions = permissions._1, _copyPermissions = permissions._2)).map(_ => {})
+    else Future.successful({})
   }
 
   private def onTeamUpdated(id: TeamId, name: Option[String], icon: Option[RAssetId], iconKey: Option[AESKey]) = {
@@ -163,6 +180,11 @@ class TeamsServiceImpl(selfUser:          UserId,
       } yield {}
     }
   }
+
+  //So far, a member update just means we need to check the permissions for that user, and we only care about permissions
+  //for the self user.
+  private def onMembersUpdated(userIds: Set[UserId]) =
+    if (userIds.contains(selfUser)) sync.syncTeamMember(selfUser) else Future.successful({})
 
   private def removeUsersFromTeamConversations(users: Set[UserId]) = {
     for {

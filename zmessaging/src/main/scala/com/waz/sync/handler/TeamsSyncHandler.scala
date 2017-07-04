@@ -29,6 +29,7 @@ import scala.util.control.NoStackTrace
 
 trait TeamsSyncHandler {
   def syncTeam(): Future[SyncResult]
+  def syncMember(id: UserId): Future[SyncResult]
 }
 
 class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service: TeamsService) extends TeamsSyncHandler {
@@ -45,6 +46,15 @@ class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service:
       case Left(error) => Future.successful(SyncResult(error))
     }
     case None => Future.successful(SyncResult.Success)
+  }
+
+  override def syncMember(uId: UserId) = teamId match {
+    case Some(tId) =>
+      client.getPermissions(tId, uId).future.flatMap {
+        case Right(p) => service.onMemberSynced(uId, p).map(_ => SyncResult.Success)
+        case Left(e)  => Future.successful(SyncResult(e))
+      }
+    case _ => Future.successful(SyncResult.Success)
   }
 
 }

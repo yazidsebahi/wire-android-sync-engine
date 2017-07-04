@@ -72,8 +72,11 @@ object SyncRequest {
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
   case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
-
   case object SyncTeam extends BaseRequest(Cmd.SyncTeam)
+
+  case class SyncTeamMember(userId: UserId) extends BaseRequest(Cmd.SyncTeam) {
+    override val mergeKey: Any = (cmd, userId)
+  }
 
   case class PostAddressBook(addressBook: AddressBook) extends BaseRequest(Cmd.PostAddressBook) {
     override def merge(req: SyncRequest) = mergeHelper[PostAddressBook](req)(Merged(_))
@@ -320,6 +323,7 @@ object SyncRequest {
           case Cmd.DeleteAccount         => DeleteAccount
           case Cmd.SyncConversations     => SyncConversations
           case Cmd.SyncTeam              => SyncTeam
+          case Cmd.SyncTeamMember        => SyncTeamMember(userId)
           case Cmd.SyncConnectedUsers    => SyncConnectedUsers
           case Cmd.SyncConnections       => SyncConnections
           case Cmd.RegisterPushToken     => RegisterPushToken(decodeId[PushToken]('token))
@@ -365,6 +369,7 @@ object SyncRequest {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
+        case SyncTeamMember(userId)           => o.put("user", userId.str)
         case DeletePushToken(token)           => putId("token", token)
         case RegisterPushToken(token)         => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)

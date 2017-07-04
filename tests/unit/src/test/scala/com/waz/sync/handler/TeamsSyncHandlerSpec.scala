@@ -40,7 +40,10 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
       val teamId = TeamId()
       val teams = Seq((teamId, true))
       val teamData = TeamData(teamId, "name", UserId())
-      val members = Set(UserId(), UserId())
+      val members = Map(
+        UserId() -> (0L, 0L),
+        UserId() -> (0L, 0L)
+      )
 
       (client.getTeamData(_: TeamId)).expects(teamId).once().returning(CancellableFuture.successful(Right(teamData)))
       (client.getTeamMembers _).expects(teamId).once().returning(CancellableFuture.successful(Right(members)))
