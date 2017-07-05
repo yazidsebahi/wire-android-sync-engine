@@ -35,7 +35,12 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class UserSearchService(queryCache: SearchQueryCacheStorage, userService: UserServiceImpl, usersStorage: UsersStorageImpl, timeouts: Timeouts, sync: SyncServiceHandle, messages: MessagesStorageImpl) {
+class UserSearchService(queryCache: SearchQueryCacheStorage,
+                        teamId: Option[TeamId],
+                        userService: UserService,
+                        usersStorage: UsersStorageImpl,
+                        timeouts: Timeouts, sync: SyncServiceHandle,
+                        messages: MessagesStorageImpl) {
 
   import Threading.Implicits.Background
   import com.waz.service.UserSearchService._
@@ -46,17 +51,7 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, userService: UserSe
   def searchUserData(query: SearchQuery, limit: Option[Int] = None): Signal[SeqMap[UserId, UserData]] =
     queryCache.optSignal(query).flatMap {
       case _ if query == TopPeople =>
-        verbose(s"$query local search")
-
-        def messageCount(u: UserData) = messages.countLaterThan(ConvId(u.id.str), Instant.now - topPeopleMessageInterval)
-
-        val loadTopUsers = (for {
-          conns         <- usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
-          messageCounts <- Future.sequence(conns.map(messageCount))
-        } yield conns.zip(messageCounts)).map { counts =>
-          counts.filter(_._2 > 0).sortBy(_._2)(Ordering[Long].reverse).take(MaxTopPeople).map(_._1)
-        }
-        Signal.future(loadTopUsers)
+        if (teamId.isEmpty) topPeople else Signal.empty[Vector[UserData]]
 
       case r if r.forall(cached => (cacheExpiryTime elapsedSince cached.timestamp) || cached.entries.isEmpty) =>
         verbose(s"no cached entries for query $query")
@@ -90,16 +85,25 @@ class UserSearchService(queryCache: SearchQueryCacheStorage, userService: UserSe
       case _ => Signal.const(Vector.empty[UserData])
     }.map { users =>
       query match {
-        case TopPeople =>
-          users filter topPeoplePredicate
-        case Recommended(prefix) =>
-          users filter recommendedPredicate(prefix, atAnyLevel)
-        case RecommendedHandle(prefix) =>
-          users filter recommendedHandlePredicate(prefix)
-        case _ =>
-          users
+        case TopPeople if teamId.isEmpty => users filter topPeoplePredicate
+        case Recommended(prefix) => users filter recommendedPredicate(prefix, atAnyLevel)
+        case RecommendedHandle(prefix) => users filter recommendedHandlePredicate(prefix)
+        case _ => users
       }
     }.map(users => SeqMap(limit.fold2(users, users.take))(_.id, identity))
+
+  private def topPeople = {
+    def messageCount(u: UserData) = messages.countLaterThan(ConvId(u.id.str), Instant.now - topPeopleMessageInterval)
+
+    val loadTopUsers = (for {
+      conns         <- usersStorage.find[UserData, Vector[UserData]](topPeoplePredicate, db => UserDataDao.topPeople(db), identity)
+      messageCounts <- Future.sequence(conns.map(messageCount))
+    } yield conns.zip(messageCounts)).map { counts =>
+      counts.filter(_._2 > 0).sortBy(_._2)(Ordering[Long].reverse).take(MaxTopPeople).map(_._1)
+    }
+
+    Signal.future(loadTopUsers)
+  }
 
   private val topPeoplePredicate: UserData => Boolean = u => ! u.deleted && u.connection == ConnectionStatus.Accepted
   private def recommendedPredicate(prefix: String, levels: Set[Relation]): UserData => Boolean = {

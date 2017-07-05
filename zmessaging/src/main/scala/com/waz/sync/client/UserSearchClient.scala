@@ -76,8 +76,7 @@ object UserSearchClient {
 
     implicit lazy val Decoder: JsonDecoder[Option[UserSearchEntry]] = new JsonDecoder[Option[UserSearchEntry]] {
       override def apply(implicit js: JSONObject): Option[UserSearchEntry] =
-        if (js.has('handle)) Some(UserSearchEntry('id, 'name, 'accent_id, 'handle))
-        else None
+        if (js.has('handle)) Some(UserSearchEntry('id, 'name, 'accent_id, 'handle)) else None
     }
   }
 
@@ -93,5 +92,7 @@ object UserSearchClient {
         }
       case _ => None
     }
+
   }
+
 }
