@@ -29,7 +29,7 @@ import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.RichFuture
-import com.waz.utils.events.{RefreshingSignal, Signal}
+import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
 
 import scala.collection.Seq
 import scala.concurrent.Future
@@ -49,6 +49,7 @@ trait TeamsService {
 
   def onMemberSynced(userId: UserId, permissions: PermissionsMasks): Future[Unit]
 
+  def guests: Signal[Set[UserId]]
 }
 
 class TeamsServiceImpl(selfUser:          UserId,
@@ -127,6 +128,25 @@ class TeamsServiceImpl(selfUser:          UserId,
       CancellableFuture.lift(userStorage.get(userId).map(_.map(_.teamId) == tId)),
       userStorage.onChanged.map(_.map(_.id))
     )
+  }
+
+  override lazy val guests = {
+    def load(id: TeamId): Future[Set[UserId]] = for {
+      convs       <- searchTeamConversations().map(_.map(_.id))
+      allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
+      teamMembers <- userStorage.getByTeam(Set(id)).map(_.map(_.id))
+    } yield allUsers -- teamMembers
+
+    val allChanges = {
+      val ev1 = convMemberStorage.onUpdated.map(_.map(_._2.userId))
+      val ev2 = convMemberStorage.onDeleted.map(_.map(_._1))
+      EventStream.union(ev1, ev2)
+    }
+
+    teamId match {
+      case None => Signal.const(Set.empty[UserId])
+      case Some(id) => new RefreshingSignal[Set[UserId], Seq[UserId]](CancellableFuture.lift(load(id)), allChanges)
+    }
   }
 
   override def onTeamSynced(team: TeamData, members: Map[UserId, PermissionsMasks]) = {
