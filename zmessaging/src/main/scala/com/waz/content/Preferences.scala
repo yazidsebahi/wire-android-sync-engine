@@ -302,6 +302,7 @@ object GlobalPreferences {
   }
 
   lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
+  lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
 
   //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct
   lazy val AutoAnswerCallPrefKey      = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")

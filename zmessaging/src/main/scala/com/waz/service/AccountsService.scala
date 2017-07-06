@@ -22,7 +22,8 @@ import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
-import com.waz.content.GlobalPreferences.CurrentAccountPref
+import com.waz.content.GlobalPreferences
+import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.service.AccountsService.SwapAccountCallback
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
@@ -104,9 +105,10 @@ class AccountsService(val global: GlobalModule) {
     case None      => Future successful None
   }
 
-  private[service] def getOrCreateAccountManager(accountId: AccountId) = Future {
+  private[service] def getOrCreateAccountManager(accountId: AccountId) = flushOtherCredientials.map { _ =>
     accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
   }
+
 
   def getAccountManager(id: AccountId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
     case Some(acc) =>
@@ -270,6 +272,24 @@ class AccountsService(val global: GlobalModule) {
         }
       case (normalized, None, None) =>
         register(AccountId(), normalized)
+    }
+  }
+
+  //TODO can be removed after a while
+  private lazy val flushOtherCredientials = {
+    val firstTimePref = prefs.preference(FirstTimeWithTeams)
+    firstTimePref().flatMap {
+      case false => Future.successful({})
+      case true =>
+        for {
+          cur   <- activeAccountPref()
+          accs  <- loggedInAccounts.head
+          _     <- {
+            val withoutCurrent = accs.filterNot(cur.contains)
+            storage.updateAll2(withoutCurrent.map(_.id), _.copy(cookie = None, accessToken = None, password = None))
+          }
+          _     <- firstTimePref.update(false)
+        } yield {}
     }
   }
 }
