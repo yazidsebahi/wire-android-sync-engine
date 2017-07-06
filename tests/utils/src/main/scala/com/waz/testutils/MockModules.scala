@@ -59,10 +59,6 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
     override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
-
-  override lazy val mediaManager = new DefaultMediaManagerService(context, prefs) {
-    override lazy val mediaManager = None
-  }
 }
 
 class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(global) {
@@ -124,6 +120,10 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), zNetClient.auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
+  }
+
+  override lazy val mediamanager = new DefaultMediaManagerService(context, userPrefs) {
+    override lazy val mediaManager = None
   }
 
   def insertConv(conv: ConversationData) = Await.result(convsStorage.insert(conv), timeout)

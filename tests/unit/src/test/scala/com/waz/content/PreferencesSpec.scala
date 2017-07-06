@@ -15,14 +15,28 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api
+package com.waz.content
 
-trait Avs {
-  def setLoggingEnabled(enable: Boolean): Unit
+import com.waz.content.Preferences.PrefKey
+import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.TestUserPreferences
+import com.waz.threading.Threading
 
-  def isLoggingEnabled: Boolean
-  def areMetricsEnabled: Boolean
+class PreferencesSpec extends AndroidFreeSpec {
 
-  def setLogLevel(logLevel: AvsLogLevel): Unit
-  def getLogLevel: AvsLogLevel
+  implicit val ec = Threading.Background
+
+  val prefs = new TestUserPreferences
+  val prefKey = PrefKey[Boolean]("test")
+
+  scenario("Preference caching and updating") {
+
+    val pref1 = prefs.preference(prefKey)
+    val pref2 = prefs.preference(prefKey)
+    pref2 := true
+
+    result(pref1.signal.filter(_ == true).head)
+
+  }
+
 }

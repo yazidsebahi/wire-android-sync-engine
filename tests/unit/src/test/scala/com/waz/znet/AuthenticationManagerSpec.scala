@@ -72,7 +72,7 @@ class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with Befor
 
     override def onInvalidCredentials(): Unit = callback()
 
-    override val accessToken = Preference[Option[Token]](None, Future.successful(currentAccessToken), token => Future.successful(currentAccessToken = token))
+    override val accessToken = Preference[Option[Token]](None, Future.successful(currentAccessToken), { token: Option[Token] => Future.successful(currentAccessToken = token) })
 
   })
 

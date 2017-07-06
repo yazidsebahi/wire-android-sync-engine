@@ -32,7 +32,6 @@ import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Permission.READ_CONTACTS
-import com.waz.content.GlobalPreferences.ShareContacts
 import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
@@ -55,7 +54,7 @@ import scala.util.Success
 import scala.util.control.NoStackTrace
 
 class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
-                      userPrefs: UserPreferences, globalPrefs: GlobalPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
+                      userPrefs: UserPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
                       convs: ConversationStorageImpl, permissions: PermissionsService) {
 
@@ -115,7 +114,7 @@ class ContactsService(context: Context, accountId: AccountId, teamId: Option[Tea
 
   private[waz] lazy val lastUploadTime                     = userPrefs.preference(AddressBookLastUpload)
   private[service] lazy val addressBookVersionOfLastUpload = userPrefs.preference(AddressBookVersion)
-  private[service] lazy val shareContactsPref              = globalPrefs.preference(ShareContacts)
+  private[service] lazy val shareContactsPref              = userPrefs.preference(ShareContacts)
 
   shareContactsPref.signal.map(teamId.isEmpty && _).onChanged {
     case true =>

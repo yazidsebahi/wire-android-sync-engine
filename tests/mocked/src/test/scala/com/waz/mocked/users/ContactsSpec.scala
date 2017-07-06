@@ -21,8 +21,8 @@ import com.waz.api.User.ConnectionStatus
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{Contacts, _}
 import com.waz.api._
-import com.waz.content.GlobalPreferences.ShareContacts
-import com.waz.content.{GlobalDatabase, GlobalPreferences, Preferences, ZmsDatabase}
+import com.waz.content.UserPreferences.ShareContacts
+import com.waz.content._
 import com.waz.mocked.PushBehaviour.NoPush
 import com.waz.mocked.{MockBackend, PushBehaviour, SystemTimeline}
 import com.waz.model.Contact

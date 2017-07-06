@@ -43,7 +43,7 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
 
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
 
-  lazy val storage = new StorageModule(context, AccountId(), "") {
+  lazy val storage = new StorageModule(context, AccountId(), "", null) {
     convsStorage.insert(conv)
   }
 

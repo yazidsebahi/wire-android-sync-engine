@@ -21,10 +21,9 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.{ClientRegistrationState, ZmsVersion}
+import com.waz.api.ClientRegistrationState
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.GlobalPreferences.CallingV3Key
-import com.waz.content.{GlobalPreferences, ZmsDatabase}
+import com.waz.content.ZmsDatabase
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
 import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
@@ -91,13 +90,12 @@ object ZGlobalDB {
       Migration(13, 14) {
         implicit db => AccountDataMigration.v78(db)
       },
-      Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
-        val prefs = GlobalPreferences(context)
-        prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
-      }},
-      Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
-          //setting prefs.sendWithAssetsV3Key no longer needed, if you haven't updated by now, it doesn't matter
-      }},
+      Migration(14, 15) { db =>
+//      no longer valid
+      },
+      Migration(15, 16) { db =>
+//      no longer valid
+      },
       Migration(16, 17) { db =>
         db.execSQL(s"ALTER TABLE Accounts ADD COLUMN registered_push TEXT")
       },

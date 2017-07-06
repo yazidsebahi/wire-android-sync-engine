@@ -33,7 +33,6 @@ object Uris {
   val UsersUri = Uri.parse(s"$Base/users")
   val ErrorsUri = Uri.parse(s"$Base/errors")
   val TrackingUri = Uri.parse(s"$Base/tracking")
-  val AvsUri = Uri.parse(s"$Base/avs")
   val LoggingUri = Uri.parse(s"$Base/logging")
   val ConvMembersRootUri = Uri.parse(s"$Base/members")
   val ConnectionsRootUri = Uri.parse(s"$Base/conn")

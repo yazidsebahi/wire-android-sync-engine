@@ -57,7 +57,7 @@ class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   var downloadResult = Map.empty[RAssetId, CacheEntry]
 
   lazy val zms = new MockZMessaging() {
-    override lazy val downloader = new DownloaderService(context, cache, prefs, network) {
+    override lazy val downloader = new DownloaderService(context, cache, network) {
       override def download[A <: DownloadRequest](req: A, force: Boolean, withRetries: Boolean)(implicit loader: downloads.Downloader[A]): CancellableFuture[Option[CacheEntry]] = {
         downloadRequest = downloadRequest :+ req
         req match {
