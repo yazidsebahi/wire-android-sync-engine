@@ -65,7 +65,7 @@ class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(
   override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(teamId, clientId, user)
 }
 
-class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts(global) {
+class MockAccountsService(global: GlobalModule = new MockGlobalModule) extends AccountsService(global) {
 
   if (ZMessaging.currentAccounts == null) ZMessaging.currentAccounts = this
 
@@ -74,7 +74,7 @@ class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts
   }
 }
 
-class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountId(), accounts.global, accounts) {
+class MockAccountManager(val accounts: AccountsService = new MockAccountsService)(implicit ec: EventContext = EventContext.Global) extends AccountManager(AccountId(), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -83,17 +83,17 @@ class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec:
 
   def set(zms: MockZMessaging) = {
     _zmessaging ! Some(zms)
-    accounts.currentAccountPref := Some(id)
+    accounts.activeAccountPref := Some(id)
   }
 }
 
-class MockUserModule(val mockAccount: MockAccountService = new MockAccountService(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
+class MockUserModule(val mockAccount: MockAccountManager = new MockAccountManager(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
 
 class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId: Option[TeamId] = None, clientId: ClientId = ClientId()) extends ZMessaging(teamId, clientId, mockUser) { zms =>
   def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), None, ClientId())
   def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), None, clientId)
   def this(selfUserId: UserId, teamId: TeamId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), Some(teamId), clientId)
-  def this(account: MockAccountService, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), None, ClientId())
+  def this(account: MockAccountManager, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), None, ClientId())
 
   override lazy val sync: SyncServiceHandle = new EmptySyncService
   import Threading.Implicits.Background
@@ -171,15 +171,15 @@ class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockU
   def setCurrent(zms: Option[ZMessaging]) = zms match {
     case Some(z: MockZMessaging) =>
       accounts.accountMap(z.accountId) = z.account
-      accounts.currentAccountPref := Some(z.accountId)
+      accounts.activeAccountPref := Some(z.accountId)
     case _ =>
-      accounts.currentAccountPref := None
+      accounts.activeAccountPref := None
   }
 }
 
 object MockUiModule {
 
-  def apply(accounts: Accounts): UiModule = returning(new UiModule(accounts)) { ui =>
+  def apply(accounts: AccountsService): UiModule = returning(new UiModule(accounts)) { ui =>
     ZMessaging.currentUi = ui
   }
 

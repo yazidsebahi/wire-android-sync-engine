@@ -44,7 +44,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Right
 
-class UserModule(val userId: UserId, val account: AccountService) {
+class UserModule(val userId: UserId, val account: AccountManager) {
   import Threading.Implicits.Background
 
   def context = account.global.context
@@ -89,8 +89,8 @@ class UserModule(val userId: UserId, val account: AccountService) {
     }
 }
 
-class AccountService(val id: AccountId, val global: GlobalModule, accounts: Accounts)(implicit ec: EventContext) { self =>
-  import AccountService._
+class AccountManager(val id: AccountId, val global: GlobalModule, accounts: AccountsService)(implicit ec: EventContext) { self =>
+  import AccountManager._
   private implicit val dispatcher = new SerialDispatchQueue()
 
   import global._
@@ -189,7 +189,7 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
     _zmessaging
   }).orElse(Signal const Option.empty[ZMessaging])
 
-  val isLoggedIn = accounts.currentAccountPref.signal.map(_.contains(id))
+  val isLoggedIn = accounts.activeAccountPref.signal.map(_.contains(id))
   isLoggedIn.onUi { lifecycle.setLoggedIn }
 
   accountData { acc =>
@@ -445,6 +445,6 @@ class AccountService(val id: AccountId, val global: GlobalModule, accounts: Acco
     } yield ()
 }
 
-object AccountService {
+object AccountManager {
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
 }

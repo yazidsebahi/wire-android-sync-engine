@@ -26,7 +26,7 @@ class CryptoBoxServiceSpec extends FeatureSpec with Matchers with OptionValues w
 
   feature("Generating new prekeys") {
 
-    lazy val zms = new MockAccountService()
+    lazy val zms = new MockAccountManager()
     lazy val service = zms.cryptoBox
 
     scenario("generate new prekeys when lastId pref is broken") {

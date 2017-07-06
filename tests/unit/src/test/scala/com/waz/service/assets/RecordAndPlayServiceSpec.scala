@@ -26,7 +26,7 @@ import com.waz.service.assets.GlobalRecordAndPlayService._
 import com.waz.service.assets.PCMRecorder.{Cancelled, CompletionCause, StoppedByUser}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{MockAccountService, MockAccounts, MockGlobalModule, MockUiModule, MockUserModule, MockZMessaging}
+import com.waz.testutils.{MockAccountManager, MockAccountsService, MockGlobalModule, MockUiModule, MockUserModule, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.threading.Threading.Background
 import com.waz.utils._
@@ -155,7 +155,7 @@ class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValu
     }
   }
 
-  lazy val ui = MockUiModule(new MockZMessaging(new MockUserModule(new MockAccountService(new MockAccounts(new MockGlobal)))))
+  lazy val ui = MockUiModule(new MockZMessaging(new MockUserModule(new MockAccountManager(new MockAccountsService(new MockGlobal)))))
   lazy val service = ui.global.recordingAndPlayback
 }
 

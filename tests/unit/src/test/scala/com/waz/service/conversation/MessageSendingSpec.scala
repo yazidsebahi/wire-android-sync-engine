@@ -62,7 +62,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     }
   }
 
-  lazy val service = new MockZMessaging(new MockAccountService(new MockAccounts(global)), selfUserId = selfUser.id) {
+  lazy val service = new MockZMessaging(new MockAccountManager(new MockAccountsService(global)), selfUserId = selfUser.id) {
 
     override lazy val sync = new EmptySyncService {
       override def postMessage(id: MessageId, conv: ConvId, time: Instant) = {

@@ -20,7 +20,7 @@ package com.waz.api.impl
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.{Subscriber, Subscription, UpdateListener}
-import com.waz.service.{AccountService, ZMessaging}
+import com.waz.service.{AccountManager, ZMessaging}
 import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
@@ -86,7 +86,7 @@ object UiSignal {
     addLoader(s) { v => set(f(v)) }
   }
 
-  def accountMapped[A, B](s: AccountService => Signal[B], f: B => A)(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
+  def accountMapped[A, B](s: AccountManager => Signal[B], f: B => A)(implicit ui: UiModule): UiSignal[A] = new UiSignal[A]() {
     accountLoader(s) { v => set(f(v)) }
   }
 }

@@ -100,5 +100,5 @@ trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Sui
     super.beforeAll()
   }
 
-  def createRemoteZms(dataTag: String = Random.nextInt().toHexString) = new RemoteZms(new UiModule(new Accounts(globalModule(dataTag))))
+  def createRemoteZms(dataTag: String = Random.nextInt().toHexString) = new RemoteZms(new UiModule(new AccountsService(globalModule(dataTag))))
 }

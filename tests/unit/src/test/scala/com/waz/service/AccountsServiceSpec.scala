@@ -36,7 +36,7 @@ import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
+class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
   var loginRequest: Option[Credentials] = _
   var loginResponse: LoginResult = _
@@ -54,7 +54,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
         override def loadSelf(): ErrorOrResponse[UserInfo] = CancellableFuture successful loadSelfResponse
       }
 
-      override def userModule(userId: UserId, account: AccountService): UserModule =
+      override def userModule(userId: UserId, account: AccountManager): UserModule =
         new UserModule(userId, account) {
           override def ensureClientRegistered(account: AccountData): Future[Either[ErrorResponse, AccountData]] = {
             Future successful Right(account.copy(clientId = account.clientId.orElse(Some(ClientId())), clientRegState = ClientRegistrationState.REGISTERED))
@@ -62,7 +62,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
         }
     }
   }
-  lazy val accounts = new MockAccounts(global)
+  lazy val accounts = new MockAccountsService(global)
 
   before {
     ShadowLog.stream = null
@@ -108,7 +108,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
       data.verified shouldEqual true
       data.email shouldEqual Some(email)
       accountId = data.id.str
-      accounts.currentAccountPref().await() shouldEqual data.id.str
+      accounts.activeAccountPref().await() shouldEqual data.id.str
       accounts.accountMap should have size (accountsSize + 1)
     }
 
@@ -127,7 +127,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
       data.email shouldEqual Some(email)
       data.verified shouldEqual true
       accounts.accountMap should have size accountsSize
-      accounts.currentAccountPref().await() shouldEqual data.id.str
+      accounts.activeAccountPref().await() shouldEqual data.id.str
     }
 
     scenario("log out again") {
@@ -145,7 +145,7 @@ class AccountsSpec extends FeatureSpec with Matchers with BeforeAndAfter with Ro
       data.email shouldEqual Some(email)
       data.verified shouldEqual true
       accounts.accountMap should have size accountsSize
-      accounts.currentAccountPref().await() shouldEqual data.id.str
+      accounts.activeAccountPref().await() shouldEqual data.id.str
     }
   }
 }

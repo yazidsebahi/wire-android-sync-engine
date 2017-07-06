@@ -29,7 +29,7 @@ import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.Uris
 import com.waz.media.manager.MediaManager
 import com.waz.model._
-import com.waz.service.AccountService
+import com.waz.service.AccountManager
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
@@ -41,7 +41,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   import Threading.Implicits.Ui
 
-  private[waz] var account: Option[AccountService] = None
+  private[waz] var account: Option[AccountManager] = None
   private[waz] def zmessaging = account match {
     case Some(acc) => acc.getZMessaging
     case None => Future successful None
@@ -57,7 +57,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   lazy val cache = new ZCache(ui.global.cache)
 
-  accounts.currentAccountService.onUi { setAccount } (EventContext.Global)
+  accounts.activeAccountManager.onUi { setAccount } (EventContext.Global)
 
   override def onCreate(context: Context): Unit = {
     verbose(s"onCreate $context, count: $createCount")
@@ -68,7 +68,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     ui.onCreate(context)
   }
 
-  private def setAccount(zms: Option[AccountService]): Unit = if (account != zms) {
+  private def setAccount(zms: Option[AccountManager]): Unit = if (account != zms) {
     if (resumeCount > 0) {
       account.foreach(_.global.lifecycle.releaseUi(s"replace api: $this"))
       zms.foreach(_.global.lifecycle.acquireUi(s"replace api: $this"))
@@ -100,7 +100,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     createCount -= 1
   }
 
-  override def onInit(listener: api.InitListener): Unit = accounts.getCurrentAccountInfo onComplete {
+  override def onInit(listener: api.InitListener): Unit = accounts.getActiveAccount onComplete {
     case Success(accountData) =>
       debug(s"initFuture completed, loggedUser: $accountData")
       // FIXME: this ensures that self is loaded, but it's pretty ugly
