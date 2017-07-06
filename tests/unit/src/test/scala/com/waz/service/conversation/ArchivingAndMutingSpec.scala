@@ -52,7 +52,7 @@ class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAft
   before {
     messageSync = None
 
-    val account = new MockAccountService() {
+    val account = new MockAccountManager() {
       override lazy val netClient = new EmptyClient {
         override def apply[A](r: Request[A]): CancellableFuture[Response] = {
           CancellableFuture.failed(new CancelException(""))

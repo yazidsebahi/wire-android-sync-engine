@@ -30,7 +30,7 @@ import com.waz.service._
 import com.waz.service.push.WebSocketClientService
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccounts, MockGlobalModule, MockUiModule, MockZMessagingFactory}
+import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccountsService, MockGlobalModule, MockUiModule, MockZMessagingFactory}
 import com.waz.threading.CancellableFuture
 import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
@@ -106,7 +106,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
   }
 
   lazy val global = new MockGlobal
-  lazy val instance = new MockAccounts(global)
+  lazy val instance = new MockAccountsService(global)
 
   implicit lazy val ui: UiModule = MockUiModule(instance)
 
@@ -148,7 +148,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
       api.onDestroy()
     }
 
-    (ui.accounts.currentAccountPref := None).futureValue
+    (ui.accounts.activeAccountPref := None).futureValue
   }
 
   def zmessagingCreated(api: ZMessagingApi = test.api) = api.account.flatMap(_.zmessaging.currentValue).flatten.isDefined
@@ -256,7 +256,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
       withDelay(global.prefs.getFromPref(CurrentAccountPref) should not be None)
 
-      val accountId = api.ui.accounts.currentAccountPref().futureValue.get
+      val accountId = api.ui.accounts.activeAccountPref().futureValue.get
 
       self = null
 
@@ -291,11 +291,11 @@ class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with 
 
       debug("##### starting new api")
 
-      val api2 = new ZMessagingApi()(MockUiModule(new MockAccounts(global)))
+      val api2 = new ZMessagingApi()(MockUiModule(new MockAccountsService(global)))
       api2.onCreate(context)
       api2.onResume()
 
-      ui.accounts.currentAccountPref().futureValue should not be ""
+      ui.accounts.activeAccountPref().futureValue should not be ""
 
       api2.onInit(new InitListener {
         override def onInitialized(s: com.waz.api.Self): Unit = {

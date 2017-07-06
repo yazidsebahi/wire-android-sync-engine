@@ -28,7 +28,7 @@ import com.waz.api.impl.{CoreList, ErrorResponse, UiObservable, UiSignal}
 import com.waz.api.{Location, OtrClientType, Verification, OtrClient => ApiClient}
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{AccountData, ConvId, UserId, otr}
-import com.waz.service.AccountService
+import com.waz.service.AccountManager
 import com.waz.service.otr.OtrService
 import com.waz.sync.SyncResult
 import com.waz.threading.Threading
@@ -41,7 +41,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class OtrClients(signal: AccountService => Signal[(UserId, Vector[Client])])(implicit ui: UiModule) extends CoreList[ApiClient] with SignalLoading {
+class OtrClients(signal: AccountManager => Signal[(UserId, Vector[Client])])(implicit ui: UiModule) extends CoreList[ApiClient] with SignalLoading {
   private var items = IndexedSeq.empty[OtrClient]
 
   accountLoader(signal) { case (user, clients) =>
@@ -144,12 +144,12 @@ class OtrClient(val userId: UserId, val clientId: ClientId, var data: Client)(im
   override def getType: OtrClientType = data.devType
 
   override def getFingerprint: api.UiSignal[Fingerprint] = {
-    def signal(acc: AccountService) = acc.accountData flatMap { account =>
+    def signal(acc: AccountManager) = acc.accountData flatMap { account =>
       if (account.userId.contains(userId) && account.clientId.contains(clientId)) Signal.future(acc.cryptoBox { cb => Future successful cb.getLocalFingerprint })
       else acc.cryptoBox.sessions.remoteFingerprint(OtrService.sessionId(userId, clientId))
     }
 
-    UiSignal.accountMapped(signal(_: AccountService).collect { case Some(bytes) => bytes }, new Fingerprint(_: Array[Byte]))
+    UiSignal.accountMapped(signal(_: AccountManager).collect { case Some(bytes) => bytes }, new Fingerprint(_: Array[Byte]))
   }
 
   // was this client fingerprint verified (manually or by sync from trusted device)

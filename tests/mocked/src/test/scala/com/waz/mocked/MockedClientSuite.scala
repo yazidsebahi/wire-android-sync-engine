@@ -64,7 +64,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val userPrefs: UserPreferences = new TestUserPreferences
   }
 
-  class MockedUserModule(userId: UserId, account: AccountService) extends UserModule(userId, account) {
+  class MockedUserModule(userId: UserId, account: AccountManager) extends UserModule(userId, account) {
     override lazy val otrClient: OtrClient = new MockedOtrClient(account.netClient)
   }
 
@@ -160,7 +160,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
     override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(global.context, accountId, Random.nextInt.toHexString, global.prefs)
 
-    override def userModule(userId: UserId, account: AccountService) = new MockedUserModule(userId, account)
+    override def userModule(userId: UserId, account: AccountManager) = new MockedUserModule(userId, account)
 
     override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): ZMessaging = new MockedZMessaging(teamId, clientId, userModule)
 
@@ -174,7 +174,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   }
   override def pushGcm(notification: PushNotification, userId: UserId) =
     Option(ZMessaging.currentAccounts) foreach { accounts =>
-      accounts.getCurrentZms.foreach {
+      accounts.getActiveZms.foreach {
         case Some(zms) if zms.selfUserId == userId => zms.push.cloudPushNotificationsToProcess.mutate(_ + notification.id)
         case _ =>
       }(Threading.Background)

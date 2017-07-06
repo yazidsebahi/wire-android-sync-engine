@@ -66,7 +66,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.userPrefs)
 
-  def userModule(userId: UserId, account: AccountService) = wire[UserModule]
+  def userModule(userId: UserId, account: AccountManager) = wire[UserModule]
 
   def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
 }
@@ -330,13 +330,13 @@ object ZMessaging { self =>
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
   private lazy val global: GlobalModule = new GlobalModule(context, backend)
-  private lazy val accounts: Accounts = new Accounts(global)
+  private lazy val accounts: AccountsService = new AccountsService(global)
   private lazy val ui: UiModule = new UiModule(accounts)
 
   // mutable for testing FIXME: get rid of that
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModule = _
-  var currentAccounts: Accounts = _
+  var currentAccounts: AccountsService = _
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()

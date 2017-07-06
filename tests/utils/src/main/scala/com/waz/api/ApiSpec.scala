@@ -99,7 +99,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     override lazy val factory: ZMessagingFactory = zmessagingFactory
   }
 
-  lazy val accounts = new Accounts(globalModule)
+  lazy val accounts = new AccountsService(globalModule)
 
   implicit lazy val ui = returning(new UiModule(accounts)) { ZMessaging.currentUi = _ }
 
@@ -219,7 +219,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
       zms.global.storage.close()
       api.ui.uiCache.clear()
     }
-    accounts.currentAccountPref := None
+    accounts.activeAccountPref := None
     accounts.accountMap.clear()
     api = null
     ZMessaging.context = null

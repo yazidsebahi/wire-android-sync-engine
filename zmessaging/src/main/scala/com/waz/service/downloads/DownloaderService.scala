@@ -63,7 +63,7 @@ class DownloaderService(context: Context, cache: CacheService, network: NetworkM
   private val downloadEnabled = {
     //Will be set by UserPreferences when available, defaults to always download (false) otherwise.
     val downloadOnWifiOnly = {
-      Option(ZMessaging.currentAccounts).map(_.currentZms).map {
+      Option(ZMessaging.currentAccounts).map(_.activeZms).map {
         _.flatMap {
           case None => Signal.const(false)
           case Some(z) => z.userPrefs.preference(DownloadImagesOnWifiOnly).signal
