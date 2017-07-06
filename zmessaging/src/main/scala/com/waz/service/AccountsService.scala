@@ -274,13 +274,13 @@ class AccountsService(val global: GlobalModule) {
       case false => Future.successful({})
       case true =>
         for {
-          cur   <- activeAccountPref()
-          accs  <- loggedInAccounts.head
-          _     <- {
-            val withoutCurrent = accs.filterNot(cur.contains)
-            storage.updateAll2(withoutCurrent.map(_.id), _.copy(cookie = None, accessToken = None, password = None))
+          cur <- activeAccountPref()
+          accs <- loggedInAccounts.head
+          _ <- {
+            val withoutCurrent = accs.map(_.id).filterNot(cur.contains)
+            storage.updateAll2(withoutCurrent, _.copy(cookie = None, accessToken = None, password = None))
           }
-          _     <- firstTimePref.update(false)
+          _ <- firstTimePref.update(false)
         } yield {}
     }
   }
