@@ -314,13 +314,13 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
       case Right(_) =>
         Future successful Right(account)
       case Left(_) =>
-        teamsClient.getTeamId().future flatMap {
-          case Right(tIdOpt) =>
-            verbose(s"got self team: $tIdOpt")
+        teamsClient.findSelfTeam().future flatMap {
+          case Right(teamOpt) =>
+            verbose(s"got self team: $teamOpt")
 
-            val permissions = (tIdOpt, account.userId) match {
+            val permissions = (teamOpt, account.userId) match {
               case (Some(t), Some(u)) =>
-                teamsClient.getPermissions(t, u).map {
+                teamsClient.getPermissions(t.id, u).map {
                   case Right(p) => Some(p)
                   case Left(_)  => None
                 }.future
@@ -328,13 +328,17 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
             }
 
             for {
-              p <- permissions
-              _ <- (tIdOpt, account.userId) match {
-                case (Some(tId), Some(uId)) =>
-                  storage.usersStorage.update(uId, _.updated(Some(tId))).map(_ => {})
+              _ <- (teamOpt, account.userId) match {
+                case (Some(t), Some(uId)) =>
+                  storage.usersStorage.update(uId, _.updated(Some(t.id))).map(_ => {})
                 case _ => Future.successful({})
               }
-              res <- accountsStorage.updateOrCreate(id, _.withTeam(tIdOpt, p), account.withTeam(tIdOpt, p))
+              _   <- teamOpt match {
+                case Some(t) => teamsStorage.updateOrCreate(t.id, _ => t, t)
+                case _       => Future.successful({})
+              }
+              p   <- permissions
+              res <- accountsStorage.updateOrCreate(id, _.withTeam(teamOpt.map(_.id), p), account.withTeam(teamOpt.map(_.id), p))
             } yield Right(res)
 
           case Left(err) => Future successful Left(err)

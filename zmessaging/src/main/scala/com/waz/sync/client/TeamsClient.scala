@@ -35,7 +35,7 @@ trait TeamsClient {
   def getTeamMembers(id: TeamId): ErrorOrResponse[Map[UserId, PermissionsMasks]]
   def getTeamData(id: TeamId): ErrorOrResponse[TeamData]
 
-  def getTeamId(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamId]]
+  def findSelfTeam(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamData]]
   def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamBindingResponse]
   def getPermissions(teamId: TeamId, userId: UserId): ErrorOrResponse[PermissionsMasks]
 }
@@ -54,12 +54,12 @@ class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
       case Response(SuccessHttpStatus(), TeamResponse(data), _) => data
     }
 
-  override def getTeamId(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamId]] = getTeams(start).flatMap {
+  override def findSelfTeam(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamData]] = getTeams(start).flatMap {
     case Left(err) => CancellableFuture.successful(Left(err))
     case Right(TeamBindingResponse(teams, hasMore)) =>
       teams.find(_._2).map(_._1) match {
         case Some(teamId) => CancellableFuture.successful(Right(Some(teamId)))
-        case None if hasMore => getTeamId(teams.lastOption.map(_._1))
+        case None if hasMore => findSelfTeam(teams.lastOption.map(_._1.id))
         case None => CancellableFuture.successful(Right(None))
       }
   }
@@ -96,13 +96,13 @@ object TeamsClient {
 
   import JsonDecoder._
 
-  case class TeamBindingResponse(teams: Seq[(TeamId, Boolean)], hasMore: Boolean)
+  case class TeamBindingResponse(teams: Seq[(TeamData, Boolean)], hasMore: Boolean)
 
   object TeamBindingResponse {
-    def unapply(response: ResponseContent): Option[(Seq[(TeamId, Boolean)], Boolean)] =
+    def unapply(response: ResponseContent): Option[(Seq[(TeamData, Boolean)], Boolean)] =
       response match {
         case JsonObjectResponse(js) if js.has("teams") =>
-          Try(decodeSeq('teams)(js, TeamData.TeamBindingDecoder).map( t => t._1.id -> t._2 ), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
+          Try(decodeSeq('teams)(js, TeamData.TeamBindingDecoder).map( t => t._1 -> t._2 ), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
         case _ =>
           warn(s"Unexpected response: $response")
           None

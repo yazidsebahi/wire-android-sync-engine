@@ -82,7 +82,6 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, gl
   lazy val reactionsStorage                     = wire[ReactionsStorage]
   lazy val notifStorage                         = wire[NotificationStorage]
   lazy val convsStorage                         = wire[ConversationStorageImpl]
-  lazy val teamsStorage:      TeamsStorage      = wire[TeamsStorageImpl]
   lazy val msgDeletions                         = wire[MsgDeletionStorage]
   lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
   lazy val msgEdits                             = wire[EditHistoryStorage]
@@ -132,6 +131,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def blacklist         = global.blacklist
   def backend           = global.backend
   def accountsStorage   = global.accountsStorage
+  def teamsStorage      = global.teamsStorage
   def streamLoader      = global.streamLoader
   def videoLoader       = global.videoLoader
   def pcmAudioLoader    = global.pcmAudioLoader
@@ -145,7 +145,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def reactionsStorage  = storage.reactionsStorage
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
-  def teamsStorage      = storage.teamsStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache

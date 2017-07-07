@@ -28,6 +28,7 @@ import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
 import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
+import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
 import com.waz.utils.wrappers.DB
@@ -53,7 +54,7 @@ object ZGlobalDB {
   val DbName = "ZGlobal.db"
   val DbVersion = 18
 
-  lazy val daos = Seq(AccountDataDao, CacheEntryDao)
+  lazy val daos = Seq(AccountDataDao, CacheEntryDao, TeamDataDoa)
 
   object Migrations {
 
