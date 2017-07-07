@@ -22,7 +22,6 @@ import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
-import com.waz.content.GlobalPreferences
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.service.AccountsService.SwapAccountCallback
@@ -49,19 +48,25 @@ class AccountsService(val global: GlobalModule) {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  val loggedInAccounts = {
-    val changes = EventStream.union(
-      storage.onChanged.map(_.map(_.id)),
-      storage.onDeleted
-    )
-    new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
-  }.map(_.filter(_.cookie.isDefined))
+  private val firstTimePref = prefs.preference(FirstTimeWithTeams)
 
+  val loggedInAccounts = firstTimePref.signal.flatMap {
+    case false =>
+      val changes = EventStream.union(
+        storage.onChanged.map(_.map(_.id)),
+        storage.onDeleted
+      )
+      new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
+    case true => Signal.const(Seq.empty[AccountData])
+  }.map(_.filter(_.cookie.isDefined))
 
   // XXX Temporary stuff to handle team account in signup/signin - start
   private var _loggedInAccounts = Seq.empty[AccountData]
 
-  loggedInAccounts(_loggedInAccounts = _)
+  loggedInAccounts { accs =>
+    verbose(s"Logged in accounts: ${accs.map(_.id)}")
+    _loggedInAccounts = accs
+  }
 
   def getLoggedInAccounts = _loggedInAccounts
 
@@ -74,6 +79,7 @@ class AccountsService(val global: GlobalModule) {
   // XXX Temporary stuff to handle team account in signup/signin - end
 
   val activeAccountPref = prefs.preference(CurrentAccountPref)
+  activeAccountPref.signal(ac => verbose(s"Active account: $ac"))
 
   lazy val activeAccount = activeAccountPref.signal.flatMap[Option[AccountData]] {
     case None     => Signal.const(None)
@@ -105,14 +111,14 @@ class AccountsService(val global: GlobalModule) {
     case None      => Future successful None
   }
 
-  private[service] def getOrCreateAccountManager(accountId: AccountId) = flushOtherCredientials.map { _ =>
+  private[service] def getOrCreateAccountManager(accountId: AccountId) = flushOtherCredentials.map { _ =>
+    verbose(s"getOrCreateAccountManager: $accountId")
     accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
   }
 
-
   def getAccountManager(id: AccountId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
     case Some(acc) =>
-      verbose(s"getInstance($acc)")
+      verbose(s"getAccountManager($acc)")
       getOrCreateAccountManager(id) map (Some(_))
     case _ =>
       Future successful None
@@ -268,17 +274,17 @@ class AccountsService(val global: GlobalModule) {
   }
 
   //TODO can be removed after a while
-  private lazy val flushOtherCredientials = {
-    val firstTimePref = prefs.preference(FirstTimeWithTeams)
+  private val flushOtherCredentials = {
     firstTimePref().flatMap {
       case false => Future.successful({})
-      case true =>
+      case true  =>
         for {
           cur <- activeAccountPref()
-          accs <- loggedInAccounts.head
+          accs <- storage.list()
           _ <- {
             val withoutCurrent = accs.map(_.id).filterNot(cur.contains)
-            storage.updateAll2(withoutCurrent, _.copy(cookie = None, accessToken = None, password = None))
+            verbose(s"Flushing accounts: curr: $cur, others: $withoutCurrent")
+            storage.updateAll2(withoutCurrent, _.copy(cookie = None, accessToken = None, password = None, registeredPush = None))
           }
           _ <- firstTimePref.update(false)
         } yield {}

@@ -101,6 +101,7 @@ object ZGlobalDB {
       },
       Migration(17, 18) { db =>
         db.execSQL("ALTER TABLE Accounts ADD COLUMN teamId TEXT")
+        db.execSQL("UPDATE Accounts SET teamId = ''")
         db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER DEFAULT 0")
         db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER DEFAULT 0")
       }

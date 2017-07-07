@@ -92,9 +92,9 @@ class UserModule(val userId: UserId, val account: AccountManager) {
 class AccountManager(val id: AccountId, val global: GlobalModule, accounts: AccountsService)(implicit ec: EventContext) { self =>
   import AccountManager._
   private implicit val dispatcher = new SerialDispatchQueue()
+  verbose(s"Creating for: $id")
 
   import global._
-
   val storage: StorageModule = global.factory.baseStorage(id)
 
   accountData.onChanged { acc =>
@@ -180,9 +180,9 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   val zmessaging = (for {
     Some(cId)  <- clientId
-    Right(tId) <- accountData.map(_.teamId)
+    Right(tId) <- accountData.flatMap(a => Signal.future(loadSelfTeam(a)).map(_ => a.teamId))
     um         <- userModule
-    Some(cb)   <- Signal.future { cryptoBox.cryptoBox }
+    Some(_)    <- Signal.future { cryptoBox.cryptoBox }
   } yield {
     verbose(s"Creating new ZMessaging instance, for $um, $cId, $tId, service: $this")
     _zmessaging = _zmessaging orElse LoggedTry(global.factory.zmessaging(tId, cId, um)).toOption
@@ -309,6 +309,38 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     } yield {}
   }
 
+  private def loadSelfTeam(account: AccountData): Future[Either[ErrorResponse, AccountData]] =
+    account.teamId match {
+      case Right(_) =>
+        Future successful Right(account)
+      case Left(_) =>
+        teamsClient.getTeamId().future flatMap {
+          case Right(tIdOpt) =>
+            verbose(s"got self team: $tIdOpt")
+
+            val permissions = (tIdOpt, account.userId) match {
+              case (Some(t), Some(u)) =>
+                teamsClient.getPermissions(t, u).map {
+                  case Right(p) => Some(p)
+                  case Left(_)  => None
+                }.future
+              case _ => Future.successful(None)
+            }
+
+            for {
+              p <- permissions
+              _ <- (tIdOpt, account.userId) match {
+                case (Some(tId), Some(uId)) =>
+                  storage.usersStorage.update(uId, _.updated(Some(tId))).map(_ => {})
+                case _ => Future.successful({})
+              }
+              res <- accountsStorage.updateOrCreate(id, _.withTeam(tIdOpt, p), account.withTeam(tIdOpt, p))
+            } yield Right(res)
+
+          case Left(err) => Future successful Left(err)
+        }
+    }
+
   private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
 
@@ -327,38 +359,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
             verbose(s"loadSelfUser failed: $err")
             Future successful Left(err)
         }
-      }
-
-    def loadSelfTeam(account: AccountData): Future[Either[ErrorResponse, AccountData]] =
-      account.teamId match {
-        case Right(_) =>
-          Future successful Right(account)
-        case Left(_) =>
-          teamsClient.getTeamId().future flatMap {
-            case Right(tIdOpt) =>
-              verbose(s"got self team: $tIdOpt")
-
-              val permissions = (tIdOpt, account.userId) match {
-                case (Some(t), Some(u)) =>
-                  teamsClient.getPermissions(t, u).map {
-                    case Right(p) => Some(p)
-                    case Left(_)  => None
-                  }.future
-                case _ => Future.successful(None)
-              }
-
-              for {
-                p <- permissions
-                _ <- (tIdOpt, account.userId) match {
-                  case (Some(tId), Some(uId)) =>
-                    storage.usersStorage.update(uId, _.updated(Some(tId))).map(_ => {})
-                  case _ => Future.successful({})
-                }
-                res <- accountsStorage.updateOrCreate(id, _.withTeam(tIdOpt, p), account.withTeam(tIdOpt, p))
-              } yield Right(res)
-
-            case Left(err) => Future successful Left(err)
-          }
       }
 
     def checkCryptoBox =
