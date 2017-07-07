@@ -92,7 +92,7 @@ object TeamsClient {
 
   def teamPath(id: TeamId): String = s"$TeamsPath/${id.str}"
 
-  def memberPath(teamId: TeamId, userId: UserId): String = s"${teamPath(teamId)}/${userId.str}"
+  def memberPath(teamId: TeamId, userId: UserId): String = s"${teamMembersPath(teamId)}/${userId.str}"
 
   import JsonDecoder._
 
