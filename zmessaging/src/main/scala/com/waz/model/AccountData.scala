@@ -115,9 +115,8 @@ case class AccountData(id:             AccountId               = AccountId(),
   def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
     copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
   
-  def isTeamAccount(): Boolean = {
+  def isTeamAccount: Boolean =
     teamId.fold(_ => false, _.isDefined)
-  }
 
 }
 
