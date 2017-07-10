@@ -88,7 +88,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
           case Right(cl) =>
             for {
               _ <- clientRegVersion := ZmsVersion.ZMS_MAJOR_VERSION
-              _ <- otrClients.updateUserClients(userId, Seq(c.copy(id = cl.id).updated(cl)), replace = false)
+              _ <- otrClients.updateUserClients(userId, Seq(c.copy(id = cl.id).updated(cl)))
             } yield Right((REGISTERED, Some(cl)))
           case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
             warn(s"client registration not allowed: $error, password missing")
