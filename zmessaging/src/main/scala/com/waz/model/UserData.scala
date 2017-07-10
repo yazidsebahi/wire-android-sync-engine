@@ -20,7 +20,6 @@ package com.waz.model
 import java.util.Date
 import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
 
-import com.waz.ZLog
 import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
 import com.waz.db.Col._
@@ -31,10 +30,6 @@ import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.utils._
 import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
-
-import scala.collection.mutable
 
 case class UserData(
                      id:                    UserId,
@@ -289,11 +284,7 @@ object UserData {
         }
       val teamCondition = teamId.map(tId => s"AND u.${TeamId.name} = '${tId}'")
 
-      val queryStr = select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse("")
-
-      ZLog.debug(s"UserData search query:\n${queryStr}\n")
-
-      list(db.rawQuery(queryStr, null)).toSet
+      list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null)).toSet
     }
 
     def findWireBots(implicit db: DB) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
