@@ -115,4 +115,7 @@ public interface Self extends UiObservable {
     void setUsername(String username, CredentialsUpdateListener listener);
 
     boolean hasSetUsername();
+
+    boolean isTeamAccount();
+
 }
