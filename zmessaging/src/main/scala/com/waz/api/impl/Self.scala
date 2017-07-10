@@ -167,4 +167,7 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
       listener.onUpdated()
     }
   })
+
+  override def isTeamAccount: Boolean = data.exists(_.isTeamAccount)
+
 }

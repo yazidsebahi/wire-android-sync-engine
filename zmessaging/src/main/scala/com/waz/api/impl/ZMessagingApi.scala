@@ -18,16 +18,14 @@
 package com.waz.api.impl
 
 import android.content.Context
-import android.net.Uri
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.PermissionProvider
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
 import com.waz.api.impl.search.Search
 import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.Uris
-import com.waz.media.manager.MediaManager
 import com.waz.model._
 import com.waz.service.AccountManager
 import com.waz.threading.Threading
@@ -121,7 +119,10 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def login(credentials: com.waz.api.Credentials, listener: api.LoginListener): Unit = credentials match {
     case credentials: Credentials =>
       verbose(s"login $credentials")
-      accounts.login(credentials) onComplete {
+      (for {
+        account <- accounts.login(credentials)
+        _ <- zmessaging
+      } yield account) onComplete {
         case Success(Left(err @ ErrorResponse(code, message, label))) =>
           error(s"Login for credentials: $credentials failed: $err")
           listener.onFailed(code, message, label)
