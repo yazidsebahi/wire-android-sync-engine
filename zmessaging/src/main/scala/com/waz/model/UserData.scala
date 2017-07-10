@@ -31,8 +31,6 @@ import com.waz.utils._
 import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
 
-import scala.collection.mutable
-
 case class UserData(
                      id:                    UserId,
                      teamId:                Option[TeamId]        = None,
@@ -274,17 +272,17 @@ object UserData {
         s"case when ${Conn.name} = '${Conn(ConnectionStatus.Accepted)}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
 
     def search(prefix: SearchKey, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB): Set[UserData] = {
-      val select = s"SELECT u.* ${if (teamId.isDefined) ", COUNT(*)" else ""} FROM ${table.name} u"
+      val select = s"SELECT u.* ${if (teamId.isDefined) ", COUNT(*)" else ""} FROM ${table.name} u WHERE "
       val handleCondition =
         if (handleOnly){
-          s"""AND u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
+          s"""u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
         } else {
-          s"""AND (
+          s"""(
              |     u.${SKey.name} LIKE '${SKey(prefix)}%'
              |     OR u.${SKey.name} LIKE '% ${SKey(prefix)}%'
              |     OR u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
         }
-      val teamCondition = teamId.map(_ => s"AND u.${TeamId.name} = ${teamId}")
+      val teamCondition = teamId.map(tId => s"AND u.${TeamId.name} = '${tId}'")
 
       list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null)).toSet
     }
