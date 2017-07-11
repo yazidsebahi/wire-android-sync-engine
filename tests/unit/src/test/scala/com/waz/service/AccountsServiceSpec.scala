@@ -56,7 +56,7 @@ class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter 
 
       override def userModule(userId: UserId, account: AccountManager): UserModule =
         new UserModule(userId, account) {
-          override def ensureClientRegistered(account: AccountData) = {
+          override def ensureClientRegistered(accountId: AccountId) = {
             Future successful Right({})
           }
         }
