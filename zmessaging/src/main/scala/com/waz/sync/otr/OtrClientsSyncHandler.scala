@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ClientRegistrationState._
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.{ClientRegistrationState, ZmsVersion}
+import com.waz.api.{ClientRegistrationState, Verification, ZmsVersion}
 import com.waz.content.UserPreferences.ClientRegVersion
 import com.waz.content.{OtrClientsStorage, UserPreferences}
 import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
@@ -48,32 +48,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
 
   def syncSelfClients(): Future[SyncResult] = Serialized.future("sync-self-clients", this) { // serialized to avoid races with registration
     verbose(s"syncSelfClients")
-
-    def updatePreKeys(id: ClientId) =
-      netClient.loadRemainingPreKeys(id).future flatMap {
-        case Right(ids) =>
-          verbose(s"remaining prekeys: $ids")
-          cryptoBox.generatePreKeysIfNeeded(ids) flatMap {
-            case keys if keys.isEmpty => Future.successful(SyncResult.Success)
-            case keys => netClient.updateKeys(id, Some(keys)).future map {
-              case Right(_) => SyncResult.Success
-              case Left(error) => SyncResult(error)
-            }
-          }
-        case Left(error) => Future.successful(SyncResult(error))
-      }
-
-    netClient.loadClients().future flatMap {
-      case Right(clients) =>
-        verbose(s"loaded clients: $clients")
-        otrClients.updateSelfClients(clients) flatMap { ucs =>
-          clientId.head flatMap {
-            case Some(id) if ucs.clients.contains(id) => updatePreKeys(id)
-            case _ => Future successful SyncResult.Success // FIXME: should we try to register in that case, our device was not registered or deleted from backend
-          }
-        }
-      case Left(error) => Future.successful(SyncResult(error))
-    }
+    syncClients(userId)
   }
 
   // keeps ZMS_MAJOR_VERSION number of client registration
@@ -122,11 +97,37 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
       } yield
         err.fold[SyncResult](SyncResult.Success)(SyncResult(_))
 
+    def updatePreKeys(id: ClientId) =
+      netClient.loadRemainingPreKeys(id).future flatMap {
+        case Right(ids) =>
+          verbose(s"remaining prekeys: $ids")
+          cryptoBox.generatePreKeysIfNeeded(ids) flatMap {
+            case keys if keys.isEmpty => Future.successful(SyncResult.Success)
+            case keys => netClient.updateKeys(id, Some(keys)).future map {
+              case Right(_) => SyncResult.Success
+              case Left(error) => SyncResult(error)
+            }
+          }
+        case Left(error) => Future.successful(SyncResult(error))
+      }
+
     loadClients flatMap {
       case Left(error) => Future successful SyncResult(error)
       case Right(clients) =>
-        otrClients.updateUserClients(user, clients, replace = true) flatMap { ucs =>
-          syncSessionsIfNeeded(ucs.clients.keys)
+
+        val userClients =
+          if (user == userId)
+            clients.map(c => if (current.contains(c.id)) c.copy(verified = Verification.VERIFIED) else c)
+          else
+            clients
+
+        otrClients.updateUserClients(user, userClients, replace = true) flatMap { ucs =>
+          syncSessionsIfNeeded(ucs.clients.keys).flatMap { _ =>
+            current match {
+              case Some(currentClient) => updatePreKeys(currentClient)
+              case _ => Future.successful(SyncResult.Success)
+            }
+          }
         }
     }
   }
