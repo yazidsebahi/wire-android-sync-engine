@@ -53,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 93
+  val DbVersion = 94
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -163,7 +163,9 @@ object ZMessagingDB {
     },
     Migration(92, 93) { db =>
       db.execSQL("DROP TABLE IF EXISTS Teams")
-      if (ZmsVersion.DEBUG) db.execSQL("UPDATE KeyValues SET value = 'true' WHERE key = 'should_sync_teams'")
+    },
+    Migration(93, 94) { db =>
+      db.execSQL("UPDATE KeyValues SET value = 'true' WHERE key = 'should_sync_teams'")
     }
   )
 }

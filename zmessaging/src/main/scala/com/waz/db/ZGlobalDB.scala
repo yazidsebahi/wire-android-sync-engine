@@ -52,7 +52,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 18
+  val DbVersion = 19
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao, TeamDataDoa)
 
@@ -105,6 +105,9 @@ object ZGlobalDB {
         db.execSQL("UPDATE Accounts SET teamId = ''")
         db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER DEFAULT 0")
         db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER DEFAULT 0")
+      },
+      Migration(18, 19) { db =>
+        db.execSQL("CREATE TABLE Teams (_id TEXT PRIMARY KEY, name TEXT, creator TEXT, icon TEXT, icon_key TEXT)")
       }
     )
 
