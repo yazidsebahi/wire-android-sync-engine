@@ -166,4 +166,14 @@ class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netC
         cs.clients.get(id)
       case _ => None
     }
+
+  def updateUnknownToUnverified(userId: UserId): Future[Unit] =
+    storage.update(userId, { uc =>
+      uc.copy(clients = uc.clients.map{ client =>
+        if (client._2.verified == Verification.UNKNOWN)
+          (client._1, client._2.copy(verified = Verification.UNVERIFIED))
+        else
+          client
+      })
+    }).map(_ => ())
 }
