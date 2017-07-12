@@ -120,10 +120,12 @@ class PushTokenService(googleApi: GoogleApi,
 
   def onTokenRegistered(token: PushToken): Future[Unit] = {
     verbose(s"onTokenRegistered: $accountId, $token")
-    for {
+    (for {
       Some(id) <- loggedInAccount.head if id == accountId
       _        <- accounts.update(id, _.copy(registeredPush = Some(token)))
-    } yield {}
+    } yield {}).recover {
+      case _ => //
+    }
   }
 }
 
