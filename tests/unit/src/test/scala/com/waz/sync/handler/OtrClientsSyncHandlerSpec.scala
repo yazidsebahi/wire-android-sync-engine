@@ -77,7 +77,7 @@ class OtrClientsSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAnd
     account.storage.usersStorage.addOrOverwrite(selfUser).futureValue
   }
 
-  lazy val service = new MockZMessaging(userModule, clientId)
+  lazy val service = new MockZMessaging(userModule, None, clientId)
 
   before {
     loadSelfClientsRequested = false

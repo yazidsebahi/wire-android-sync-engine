@@ -145,12 +145,12 @@ class EventSchedulerSpec extends FeatureSpec with Matchers with OptionValues wit
 
   feature("Defining event processing stages") {
     lazy val e1 = RenameConversationEvent(RConvId("R"), new Date, UserId("u1"), "meep 1")
-    lazy val e2 = TypingEvent(RConvId("R"), new Date, UserId("u1"), isTyping = true)
+    lazy val e2 = UserPropertiesSetEvent("e2", "u1")
     lazy val e3 = RenameConversationEvent(RConvId("R"), new Date, UserId("u2"), "meep 2")
-    lazy val e4 = TypingEvent(RConvId("R"), new Date, UserId("u2"), isTyping = true)
+    lazy val e4 = UserPropertiesSetEvent("e4", "u2")
 
     scenario("Eligibility check")(withFixture { env => import env._
-      lazy val stage = Stage[TypingEvent](append, _.from.str == "u1")
+      lazy val stage = Stage[UserPropertiesSetEvent](append, _.value == "u1")
 
       stage.isEligible(e1) shouldBe false
       stage.isEligible(e2) shouldBe true
@@ -159,7 +159,7 @@ class EventSchedulerSpec extends FeatureSpec with Matchers with OptionValues wit
     })
 
     scenario("Processing only eligible events")(withFixture { env => import env._
-      lazy val stage = Stage[TypingEvent](append, _.from.str == "u1")
+      lazy val stage = Stage[UserPropertiesSetEvent](append, _.value == "u1")
       stage(conv, Vector(e1,e2,e3,e4)).await()
 
       processed.get shouldEqual Seq(e2)
@@ -183,9 +183,10 @@ class EventSchedulerSpec extends FeatureSpec with Matchers with OptionValues wit
 
     class TestStage(name: Symbol) extends Stage.Atomic {
       def isEligible(e: Event) = e match {
-        case e: TypingEvent if e.from.str.contains(name.name.toLowerCase) => true
+        case e: UserPropertiesSetEvent if e.value.contains(name.name.toLowerCase) => true
         case x => false
       }
+
       def apply(conv: RConvId, es: Traversable[Event]) = Future[Unit] {
         if (randomDelay) Thread.sleep(0, nextInt(100))
         compareAndSet(executed)(_ :+ (this, es.to[Vector]))
@@ -200,7 +201,9 @@ class EventSchedulerSpec extends FeatureSpec with Matchers with OptionValues wit
     }
 
     def E(es: Symbol*): Vector[Event] = es.zipWithIndex.map {
-      case (user, uid) => TypingEvent(conv, new Date, UserId(user.name), isTyping = true)
+      case (user, uid) => new UserPropertiesSetEvent(uid.toString, user.name) {
+        override def toString = key
+      }
     }(breakOut)
 
     implicit class RichEvents(events: Vector[Event]) {

@@ -60,8 +60,6 @@ public interface IConversation extends UiObservable, Parcelable {
 
     Type getType();
 
-    MessagesList getMessages();
-
     MembersList getUsers();
 
     /*

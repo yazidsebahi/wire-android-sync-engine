@@ -58,11 +58,11 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
   lazy val global = new MockGlobalModule {
     override lazy val factory: MockZMessagingFactory = new MockZMessagingFactory(this) {
-      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, Random.nextInt().toHexString)
+      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, Random.nextInt().toHexString, prefs)
     }
   }
 
-  lazy val service = new MockZMessaging(new MockAccountService(new MockAccounts(global)), selfUserId = selfUser.id) {
+  lazy val service = new MockZMessaging(new MockAccountManager(new MockAccountsService(global)), selfUserId = selfUser.id) {
 
     override lazy val sync = new EmptySyncService {
       override def postMessage(id: MessageId, conv: ConvId, time: Instant) = {
@@ -241,7 +241,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       lastReadSync shouldEqual None
       val time = new Date()
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
+        service.convOrder.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
     }
@@ -256,7 +256,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
 
       val time = new Date
       withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.convEvents.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
+        service.convOrder.handlePostConversationEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, time, selfUser.id, "test"))
       }
       getMessage(msg.id).get.state shouldEqual Message.Status.SENT
       Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(time.instant)

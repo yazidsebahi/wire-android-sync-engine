@@ -21,7 +21,7 @@ import java.io.ByteArrayInputStream
 
 import akka.pattern.ask
 import com.waz.api._
-import com.waz.api.impl.DoNothingAndProceed
+import com.waz.api.impl.{DoNothingAndProceed}
 import com.waz.cache._
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model.otr.ClientId
@@ -62,9 +62,8 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
 
       within(1.second)(messages should have size (fromBefore + 1))
 
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
-      lazy val preview = message.getImage
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       within(10.seconds) {
         asset.isEmpty shouldBe false
@@ -99,7 +98,7 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
-  lazy val messages = conv.getMessages
+  lazy val messages = listMessages(conv.id)
   lazy val resolver = shadowOf(getShadowApplication.getContentResolver)
 
   lazy val auto2 = registerDevice("auto2")
@@ -115,8 +114,8 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   @volatile private var isAudioMessageFromTest = Set.empty[CacheKey]
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
-      new ApiZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): service.ZMessaging =
+      new ApiZMessaging(teamId, clientId, userModule) {
         override lazy val assetMetaData = new MetaDataService(context, cache, assetsStorage, assets, assetGenerator) {
           override def loadMetaData(asset: AssetData, data: LocalData): CancellableFuture[Option[AssetMetaData]] = (asset.mime, data) match {
             case (Mime.Audio(), entry: CacheEntry) if isAudioMessageFromTest(entry.data.key) =>

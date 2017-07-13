@@ -49,7 +49,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     withDelay { convs should not be empty }
     convs.get(0)
   }
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val process = Try(awaitRemote("SE worker 1", 5.seconds)).getOrElse(registerProcess("auto2_local_process"))
 
@@ -119,8 +119,8 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       withDelay {
         msgs should have size 2
-        msgs.getLastMessage.data.contentString shouldEqual "Test message"
-        msgs.getLastMessage.data.state shouldEqual Status.SENT
+        msgs.last.contentString shouldEqual "Test message"
+        msgs.last.state shouldEqual Status.SENT
       }
     }
 
@@ -135,8 +135,8 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       withDelay {
         msgs should have size 17
         msgs.drop(2).zipWithIndex foreach { case (msg, i) =>
-          msg.data.contentString shouldEqual s"ordered message $i"
-          msg.data.state shouldEqual Status.SENT
+          msg.contentString shouldEqual s"ordered message $i"
+          msg.state shouldEqual Status.SENT
         }
       }
     }
@@ -149,11 +149,11 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       withDelay {
         msgs should have size (count + 1)
-        withClue(msgs.map(_.data)) {
+        withClue(msgs) {
 
-          val last = msgs.getLastMessage
-          last.getBody shouldEqual "Test message 3"
-          last.asInstanceOf[Message].data.state shouldEqual Status.SENT
+          val last = msgs.last
+          last.contentString shouldEqual "Test message 3"
+          last.state shouldEqual Status.SENT
         }
       }
     }
@@ -184,12 +184,12 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       val count = msgs.size
       conv.knock()
 
-      lazy val last = msgs.getLastMessage
+      lazy val last = msgs.last
 
       withDelay {
         msgs should have size (count + 1)
-        last.data.msgType shouldEqual Message.Type.KNOCK
-        last.data.state shouldEqual Status.SENT
+        last.msgType shouldEqual Message.Type.KNOCK
+        last.state shouldEqual Status.SENT
       }
     }
 
@@ -197,13 +197,13 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       val count = msgs.size
       auto2 ? Knock(conv.data.remoteId) should eventually(be(Successful))
 
-      lazy val last = msgs.getLastMessage
+      lazy val last = msgs.last
 
       withDelay {
         msgs should have size (count + 1)
-        last.data.msgType shouldEqual Message.Type.KNOCK
-        last.data.state shouldEqual Status.SENT
-        last.getUser.getId shouldEqual auto2Id.str
+        last.msgType shouldEqual Message.Type.KNOCK
+        last.state shouldEqual Status.SENT
+        last.userId shouldEqual auto2Id
       }
     }
   }
@@ -216,11 +216,11 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       withDelay {
         msgs should have size (count + 1)
-        val last = msgs.getLastMessage.data
+        val last = msgs.last
         last.msgType shouldEqual Message.Type.ASSET
         last.state shouldEqual Status.SENT
       }
-      val asset = msgs.getLastMessage.getImage
+      val asset = new com.waz.api.impl.ImageAsset(msgs.last.assetId)
       withDelay {
         asset.data.remoteData shouldBe 'defined
       }
@@ -228,7 +228,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
     scenario("download just uploaded image") {
       awaitUi(1.second)
-      val asset = msgs.getLastMessage.getImage
+      val asset = new com.waz.api.impl.ImageAsset(msgs.last.assetId)
       val asset1 = asset.data.copy(id = AssetId()) // create asset copy to make sure it is not cached
       zmessaging.assets.updateAsset(asset1.id, _ => asset1)
 
@@ -256,12 +256,12 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       withDelay {
         msgs should have size (count + 1)
-        val last = msgs.getLastMessage
-        last.data.msgType shouldEqual Message.Type.ASSET
-        last.data.state shouldEqual Status.SENT
+        val last = msgs.last
+        last.msgType shouldEqual Message.Type.ASSET
+        last.state shouldEqual Status.SENT
       }
 
-      val img = msgs.getLastMessage.getImage
+      val img = new com.waz.api.impl.ImageAsset(msgs.last.assetId)
       withDelay {
         img.isEmpty shouldEqual false
       }
@@ -286,9 +286,9 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("Send message") {
       conv.sendMessage(new MessageContent.Text("Test message 4"))
       withDelay {
-        val last = msgs.getLastMessage
-        last.getBody shouldEqual "Test message 4"
-        last.asInstanceOf[Message].data.state shouldEqual Status.SENT
+        val last = msgs.last
+        last.contentString shouldEqual "Test message 4"
+        last.state shouldEqual Status.SENT
       }
     }
 
@@ -298,18 +298,18 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       auto2_1 ? SendText(conv.data.remoteId, "Test message 5") should eventually(be(Successful))
 
       withDelay {
-        val last = msgs.getLastMessage
-        last.getBody shouldEqual "Test message 5"
-        last.asInstanceOf[Message].data.state shouldEqual Status.SENT
+        val last = msgs.last
+        last.contentString shouldEqual "Test message 5"
+        last.state shouldEqual Status.SENT
         msgs should have size (count + 1)
       }
       auto2_1 ? SendText(conv.data.remoteId, "Test message 5_1") should eventually(be(Successful))
 
       withDelay {
-        val last = msgs.getLastMessage
-        last.getBody shouldEqual "Test message 5_1"
-        last.asInstanceOf[Message].data.state shouldEqual Status.SENT
-        withClue(msgs.map(_.getBody + "\n")) {
+        val last = msgs.last
+        last.contentString shouldEqual "Test message 5_1"
+        last.state shouldEqual Status.SENT
+        withClue(msgs.map(_.contentString + "\n")) {
           msgs should have size (count + 2)
         }
       }
@@ -342,10 +342,10 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       auto1_1 ? SendText(conv.data.remoteId, "Test message 6") should eventually(be(Successful))
 
       withDelay {
-        val last = msgs.getLastMessage
-        last.getBody shouldEqual "Test message 6"
-        last.asInstanceOf[Message].data.state shouldEqual Status.SENT
-        last.asInstanceOf[Message].data.userId shouldEqual provisionedUserId("auto1")
+        val last = msgs.last
+        last.contentString shouldEqual "Test message 6"
+        last.state shouldEqual Status.SENT
+        last.userId shouldEqual provisionedUserId("auto1")
         msgs should have size (count + 1)
       }
     }
@@ -363,13 +363,11 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     }
 
     scenario("Receive last read event from second device") {
-      val last = msgs.getLastMessage
-      info(s"last: ${last.data}")
-      info(s"lastRead: ${msgs.lastRead}")
+      val last = msgs.last
+      info(s"last: $last")
+      info(s"lastRead: ${lastRead(conv.id)}")
       withDelay {
-        withClue(s"msgs.lastRead: ${msgs.lastRead}") {
-          msgs.lastRead shouldEqual last.data.time
-        }
+        lastRead(conv.id) shouldEqual last.time
       } (10.seconds)
     }
 
@@ -420,8 +418,8 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       withDelay {
         msgs should have size (count + 1)
-        msgs.getLastMessage.data.msgType shouldEqual Message.Type.ASSET
-        msgs.getLastMessage.data.state shouldEqual Status.SENT
+        msgs.last.msgType shouldEqual Message.Type.ASSET
+        msgs.last.state shouldEqual Status.SENT
         // TODO: assert image data can be decoded
       }
     }
@@ -432,12 +430,12 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       withDelay {
         msgs should have size (count + 1)
-        val last = msgs.getLastMessage
-        last.data.msgType shouldEqual Message.Type.ASSET
-        last.data.state shouldEqual Status.SENT
+        val last = msgs.last
+        last.msgType shouldEqual Message.Type.ASSET
+        last.state shouldEqual Status.SENT
       }
 
-      val img = msgs.getLastMessage.getImage
+      val img = new com.waz.api.impl.ImageAsset(msgs.last.assetId)
       withDelay {
         img.isEmpty shouldEqual false
       }

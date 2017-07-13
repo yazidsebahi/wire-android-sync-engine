@@ -39,7 +39,7 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
     withDelay(convs should not be empty)
     convs.head
   }
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val tag = Random.nextLong().toHexString
   lazy val auto2 = createRemoteZms(tag)
@@ -66,9 +66,9 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.sendMessage(new Text("Test message 1"))))
 
       withDelay {
-        msgs.map(_.getBody) should contain allOf("Test message", "Test message 1")
-        msgs.filter(_.getBody.startsWith("Test message")) foreach { msg =>
-          msg.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.map(_.contentString) should contain allOf("Test message", "Test message 1")
+        msgs.filter(_.contentString.startsWith("Test message")) foreach { msg =>
+          msg.state shouldEqual Message.Status.SENT
         }
 
         auto2Clients should have size 1
@@ -132,13 +132,14 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
         auto2Self.getClientRegistrationState shouldEqual ClientRegistrationState.REGISTERED
       }
 
-      val msgs2 = awaitUiFuture(auto2_1.findConv(conv.data.remoteId).map(_.getMessages)).get
+      val conv2 = awaitUiFuture(auto2_1.findConv(conv.data.remoteId)).get
+      def msgs2 = listMessages(conv2.id)
 
       conv.sendMessage(new MessageContent.Text("Test message 2"))
 
       withDelay {
         auto2Clients should have size 2 // login with broken cryptobox created new device
-        msgs2.getLastMessage.getBody shouldEqual "Test message 2"
+        msgs2.last.contentString shouldEqual "Test message 2"
       }
     }
   }

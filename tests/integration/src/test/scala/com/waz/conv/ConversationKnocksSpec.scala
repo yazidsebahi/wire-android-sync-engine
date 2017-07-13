@@ -24,6 +24,7 @@ import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.RConvId
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Matchers._
+import com.waz.testutils.Implicits._
 import com.waz.utils.events.EventContext
 import org.scalatest.{FeatureSpec, Matchers}
 
@@ -40,7 +41,6 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
     conversations.getConversation(provisionedUserId("auto2").str)
   }
   lazy val self = api.getSelf
-  lazy val msgs = conv.getMessages
 
   lazy val inputState = conv.getInputStateIndicator
 
@@ -50,13 +50,13 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
     implicit val ev = EventContext.Global
 
     scenario("send single knock") {
-      withDelay { msgs should have size 1 }
+      withDelay { listMessages(conv.id) should have size 1 }
 
       conv.knock()
 
       withDelay {
-        msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
-        msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.SENT
+        lastMessage(conv.id).get.msgType shouldEqual ApiMessage.Type.KNOCK
+        lastMessage(conv.id).get.state shouldEqual ApiMessage.Status.SENT
       }
     }
   }
@@ -73,13 +73,13 @@ class ConversationKnocksSpec extends FeatureSpec with Matchers with ProvisionedA
     }
 
     scenario("Receive incoming knock message") {
-      val count = msgs.size()
+      val count = listMessages(conv.id).size
       auto2 ? Knock(RConvId(self.getUser.getId)) should eventually(be(Successful))
 
       withDelay {
-        msgs should have size (count + 1)
-        msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.KNOCK
-        msgs.getLastMessage.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 1000)
+        listMessages(conv.id) should have size (count + 1)
+        lastMessage(conv.id).get.msgType shouldEqual ApiMessage.Type.KNOCK
+        lastMessage(conv.id).get.localTime.toEpochMilli should be(currentTimeMillis() +- 1000)
         conv.getIncomingKnock should not be null
         conv.getIncomingKnock.getLocalTime.toEpochMilli should be(currentTimeMillis() +- 1000)
       }

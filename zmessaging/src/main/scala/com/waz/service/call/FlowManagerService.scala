@@ -24,8 +24,9 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api._
 import com.waz.call._
-import com.waz.content.GlobalPreferences
 import com.waz.content.GlobalPreferences._
+import com.waz.content.{GlobalPreferences, UserPreferences}
+import com.waz.content.UserPreferences.AnalyticsEnabled
 import com.waz.log.LogHandler
 import com.waz.model._
 import com.waz.service._
@@ -49,7 +50,7 @@ trait FlowManagerService {
   def flowManager: Option[FlowManager]
 }
 
-class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: GlobalPreferences, network: DefaultNetworkModeService) extends FlowManagerService {
+class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: UserPreferences, globalPrefs: GlobalPreferences, network: DefaultNetworkModeService) extends FlowManagerService {
   import FlowManagerService._
 
   val MetricsUrlRE = "/conversations/([a-z0-9-]*)/call/metrics/complete".r
@@ -59,8 +60,6 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
   private implicit val dispatcher = new SerialDispatchQueue(name = "FlowManagerService")
 
   private lazy val metricsEnabledPref = prefs.preference(AnalyticsEnabled)
-  private lazy val loggingEnabledPref = prefs.preference(LoggingEnabled)
-  private lazy val logLevelPref       = prefs.preference(GlobalPreferences.LogLevel)
 
   val onMediaEstablished = new Publisher[RConvId]
   val onFlowManagerError = new Publisher[(RConvId, Int)] // (conv, errorCode)
@@ -75,10 +74,6 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
 
   val stateOfReceivedVideo = Signal[StateOfReceivedVideo](UnknownState)
   val cameraFailedSig = Signal[Boolean]
-
-  val avsLogDataSignal = metricsEnabledPref.signal.zip(loggingEnabledPref.signal).zip(logLevelPref.signal) map { case ((metricsEnabled, loggingEnabled), logLevel) =>
-      AvsLogData(metricsEnabled = metricsEnabled, loggingEnabled = loggingEnabled, AvsLogLevel.fromPriority(logLevel))
-  }
 
   lazy val lastNetworkModeChange = Signal(Instant.MIN)
   lazy val lastWebsocketConnect = Signal(Instant.MIN)
@@ -134,7 +129,7 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
 
 
   lazy val flowManager: Option[FlowManager] = LoggedTry {
-    val fm = new FlowManager(context, requestHandler, if (prefs.getFromPref(AutoAnswerCallPrefKey)) avsAudioTestFlag else 0)
+    val fm = new FlowManager(context, requestHandler, if (globalPrefs.getFromPref(AutoAnswerCallPrefKey)) avsAudioTestFlag else 0)
     fm.addListener(flowListener)
     fm.setLogHandler(logHandler)
     metricsEnabledPref.signal { fm.setEnableMetrics }
@@ -237,12 +232,6 @@ class DefaultFlowManagerService(context: Context, netClient: ZNetClient, websock
     }
   }
 
-  def setLoggingEnabled(enable: Boolean): Unit = loggingEnabledPref := enable
-  def setLogLevel(logLevel: AvsLogLevel): Unit = {
-    verbose(s"setLogLevel($logLevel)")
-    logLevelPref := logLevel.priority
-  }
-
   def getSortedGroupCallParticipantIds(unsortedIds: Array[String]): Array[String] = try {
     returning(FlowManager.sortConferenceParticipants(unsortedIds)) { sorted => debug(s"sorted participants: ${sorted mkString ", "}") }
   } catch {
@@ -331,7 +320,6 @@ case class AvsMetrics(rConvId: RConvId, private val bytes: Array[Byte]) {
 
 object FlowManagerService {
 
-  case class AvsLogData(metricsEnabled: Boolean, loggingEnabled: Boolean, logLevel: AvsLogLevel)
   case class EstablishedFlows(convId: RConvId, users: Set[UserId])
 
   case class VideoCaptureDevice(id: String, name: String)
@@ -344,9 +332,5 @@ object FlowManagerService {
   case object UnknownState extends StateOfReceivedVideo {
     override def state = AvsVideoState.STOPPED
     override def reason = AvsVideoReason.NORMAL
-  }
-
-  object AvsLogData {
-    val Default = AvsLogData(metricsEnabled = false, loggingEnabled = false, AvsLogLevel.DEBUG)
   }
 }

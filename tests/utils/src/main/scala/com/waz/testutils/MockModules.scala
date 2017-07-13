@@ -59,17 +59,13 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
     override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
-
-  override lazy val mediaManager = new DefaultMediaManagerService(context, prefs) {
-    override lazy val mediaManager = None
-  }
 }
 
 class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(global) {
-  override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(clientId, user)
+  override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(teamId, clientId, user)
 }
 
-class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts(global) {
+class MockAccountsService(global: GlobalModule = new MockGlobalModule) extends AccountsService(global) {
 
   if (ZMessaging.currentAccounts == null) ZMessaging.currentAccounts = this
 
@@ -78,7 +74,7 @@ class MockAccounts(global: GlobalModule = new MockGlobalModule) extends Accounts
   }
 }
 
-class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec: EventContext = EventContext.Global) extends AccountService(AccountData(AccountId(), None, "", None, handle = None), accounts.global, accounts) {
+class MockAccountManager(val accounts: AccountsService = new MockAccountsService)(implicit ec: EventContext = EventContext.Global) extends AccountManager(AccountId(), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -87,24 +83,25 @@ class MockAccountService(val accounts: Accounts = new MockAccounts)(implicit ec:
 
   def set(zms: MockZMessaging) = {
     _zmessaging ! Some(zms)
-    accounts.currentAccountPref := id.str
+    accounts.activeAccountPref := Some(id)
   }
 }
 
-class MockUserModule(val mockAccount: MockAccountService = new MockAccountService(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
+class MockUserModule(val mockAccount: MockAccountManager = new MockAccountManager(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
 
-class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), clientId: ClientId = ClientId()) extends ZMessaging(clientId, mockUser) { zms =>
-  def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), ClientId())
-  def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), clientId)
-  def this(account: MockAccountService, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), ClientId())
+class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId: Option[TeamId] = None, clientId: ClientId = ClientId()) extends ZMessaging(teamId, clientId, mockUser) { zms =>
+  def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), None, ClientId())
+  def this(selfUserId: UserId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), None, clientId)
+  def this(selfUserId: UserId, teamId: TeamId, clientId: ClientId) = this(new MockUserModule(userId = selfUserId), Some(teamId), clientId)
+  def this(account: MockAccountManager, selfUserId: UserId) = this(new MockUserModule(account, userId = selfUserId), None, ClientId())
 
   override lazy val sync: SyncServiceHandle = new EmptySyncService
   import Threading.Implicits.Background
 
   var timeout = 5.seconds
 
-  storage.usersStorage.put(selfUserId, UserData(selfUserId, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
-  global.accountsStorage.put(accountId, AccountData(accountId, Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+  storage.usersStorage.put(selfUserId, UserData(selfUserId, None, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
+  global.accountsStorage.put(accountId, AccountData(accountId, Right(None), Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 
@@ -123,6 +120,10 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), client
     override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), zNetClient.auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
+  }
+
+  override lazy val mediamanager = new DefaultMediaManagerService(context, userPrefs) {
+    override lazy val mediaManager = None
   }
 
   def insertConv(conv: ConversationData) = Await.result(convsStorage.insert(conv), timeout)
@@ -170,15 +171,15 @@ class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockU
   def setCurrent(zms: Option[ZMessaging]) = zms match {
     case Some(z: MockZMessaging) =>
       accounts.accountMap(z.accountId) = z.account
-      accounts.currentAccountPref := z.accountId.str
+      accounts.activeAccountPref := Some(z.accountId)
     case _ =>
-      accounts.currentAccountPref := ""
+      accounts.activeAccountPref := None
   }
 }
 
 object MockUiModule {
 
-  def apply(accounts: Accounts): UiModule = returning(new UiModule(accounts)) { ui =>
+  def apply(accounts: AccountsService): UiModule = returning(new UiModule(accounts)) { ui =>
     ZMessaging.currentUi = ui
   }
 

@@ -136,7 +136,7 @@ class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAft
       Await.ready(service.dispatch(ContactJoinEvent(userId, "test name")), 1.second)
       syncRequestedUsers shouldEqual Set(userId)
       service.usersStorage.get(userId) should eventually(beMatching {
-        case Some(UserData(`userId`, "test name", _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)) => true
+        case Some(u: UserData) if u.id == userId && u.name == "test name" => true
       })
     }
   }

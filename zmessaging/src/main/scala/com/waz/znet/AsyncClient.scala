@@ -69,9 +69,10 @@ class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDeco
       @volatile var timeoutForPhase = requestTimeout
       val interval = 5.seconds min request.timeout
 
-      // switching off the AsyncHttpClient's timeout - we will use our own
-      val requestBuilt = requestWorker.processRequest(request.withTimeout(0.millis), AsyncClient.UserAgentHeader -> userAgent)
-
+      val ua = request.headers.getOrElse(AsyncClient.UserAgentHeader, userAgent)
+      val requestBuilt = requestWorker.processRequest(
+        request.withTimeout(0.millis).withHeaders(Map(AsyncClient.UserAgentHeader -> ua))
+      ) // switching off the AsyncHttpClient's timeout - we will use our own
       debug(s"request headers: ${requestBuilt.headers}")
 
       val httpFuture = client.execute(requestBuilt, new HttpConnectCallback {

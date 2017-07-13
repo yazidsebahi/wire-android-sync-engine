@@ -38,7 +38,7 @@ import com.waz.model.{GenericContent, Mime, AssetStatus => _, MessageContent => 
 import com.waz.provision.ActorMessage._
 import com.waz.service.conversation.ConversationsUiService.LargeAssetWarningThresholdInBytes
 import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
-import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
+import com.waz.sync.otr.OtrSyncHandlerImpl
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, FeigningAsyncClientImpl, TestResourceContentProvider}
@@ -94,13 +94,12 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       (messages should have size (fromBefore + 1)).soon
       reportedIssues shouldEqual 0
 
-      val message = messages.get(1)
       soon {
-        message.getMessageType shouldBe Message.Type.ANY_ASSET
-        message.getAsset should not be empty
+        messages(1).msgType shouldBe Message.Type.ANY_ASSET
+        getAsset(messages.last.assetId) shouldBe 'defined
       }
-
-      val asset = message.getAsset
+      val msg = messages(1)
+      val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       val spy = new AssetStatusSpy(asset)
       soon {
         asset.getId shouldEqual upload.getId
@@ -122,13 +121,13 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       (messages should have size (fromBefore + 1)).soon
 
-      val message = messages.getLastMessage
       soon {
-        message.getMessageType shouldBe Message.Type.AUDIO_ASSET
-        message.getAsset should not be empty
+        messages.last.msgType shouldBe Message.Type.AUDIO_ASSET
+        getAsset(messages.last.assetId) shouldBe 'defined
       }
 
-      val asset = message.getAsset
+      val msg = messages.last
+      val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       val spy = new AssetStatusSpy(asset)
       soon {
         asset.getId shouldEqual upload.getId
@@ -138,10 +137,10 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getStatus shouldEqual DOWNLOAD_DONE
         asset.getDuration.getSeconds shouldEqual 4
         spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
-        message.getMessageStatus shouldEqual Message.Status.SENT
+        getMessage(msg.id).get.state shouldEqual Message.Status.SENT
       }
 
-      message.data.protos should beMatching {
+      messages.last.protos should beMatching {
         case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, _, Some(Audio(d, _)), _, _, _, _, _, _), _))) if d.getSeconds == 4 => true
       }
 
@@ -157,13 +156,13 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       (messages should have size (fromBefore + 1)).soon
 
-      val message = messages.getLastMessage
       soon {
-        message.getMessageType shouldBe Message.Type.VIDEO_ASSET
-        message.getAsset should not be empty
+        messages.last.msgType shouldBe Message.Type.VIDEO_ASSET
+        getAsset(messages.last.assetId) shouldBe 'defined
       }
 
-      val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       val spy = new AssetStatusSpy(asset)
       soon {
         asset.getId shouldEqual upload.getId
@@ -175,10 +174,10 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         asset.getWidth shouldEqual 1080
         asset.getHeight shouldEqual 1920
         spy.states shouldEqual Seq(UPLOAD_NOT_STARTED, UPLOAD_IN_PROGRESS, UPLOAD_DONE, DOWNLOAD_DONE)
-        message.getMessageStatus shouldEqual Message.Status.SENT
+        messages.last.state shouldEqual Message.Status.SENT
       }
 
-      message.data.protos should beMatching {
+      messages.last.protos should beMatching {
         case Seq(GenericMessage(_, GenericContent.Asset(AssetData(_, Mime.Audio.MP4, _, UploadDone, _, _, _, _, _, _, _, Some(Video(Dim2(1080, 1920), d)), _, _, _, _, _, _), _))) if d.getSeconds == 3 => true
       }
 
@@ -194,10 +193,8 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       (messages should have size (fromBefore + 1)).soon
 
-      val message = messages.getLastMessage
       soon {
-        message.getMessageType shouldBe Message.Type.ASSET
-        message.getImage should not be empty
+        messages.last.msgType shouldBe Message.Type.ASSET
       }
     }
 
@@ -208,13 +205,13 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(env.upload, DoNothingAndProceed))
 
       (messages should have size (fromBefore + 1)).soon
-      val message = messages.getLastMessage
       soon {
-        message.getMessageType shouldBe Message.Type.ANY_ASSET
-        message.getAsset should not be empty
+        messages.last.msgType shouldBe Message.Type.ANY_ASSET
+        getAsset(messages.last.assetId) shouldBe 'defined
       }
 
-      val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       soon {
         asset.getId shouldEqual env.upload.getId
         asset.getName shouldEqual "name"
@@ -236,13 +233,13 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
 
       (messages should have size (fromBefore + 1)).soon
-      val message = messages.getLastMessage
       soon {
-        message.getMessageType shouldBe Message.Type.ANY_ASSET
-        message.getAsset should not be empty
+        messages.last.msgType shouldBe Message.Type.ANY_ASSET
+        getAsset(messages.last.assetId) shouldBe 'defined
       }
 
-      val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       soon {
         asset.getId shouldEqual upload.getId
         asset.getName shouldEqual "ScalaReference.pdf"
@@ -267,7 +264,11 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       (messages should have size (fromBefore + 1)).soon
 
       env.arrival.await(5, TimeUnit.SECONDS)
-      messages.getLastMessage.getAsset.getUploadProgress.cancel()
+
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
+      asset.getUploadProgress.cancel()
+
       env.latch.countDown()
 
       (messages should have size fromBefore).soon
@@ -281,7 +282,9 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val upload = uriAssetForUpload(pdf, Some(latch))
       conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
       (messages should have size (fromBefore + 1)).soon
-      val asset = messages.getLastMessage.getAsset
+
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       soon {
         asset.getStatus shouldEqual AssetStatus.UPLOAD_IN_PROGRESS
@@ -304,7 +307,9 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       (postStarted shouldBe true).soon
 
-      messages.getLastMessage.getAsset.getUploadProgress.cancel()
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
+      asset.getUploadProgress.cancel()
 
       soon {
         postCancelled shouldBe true
@@ -318,23 +323,23 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(assetForUpload(100000), DoNothingAndProceed))
       (messages should have size (fromBefore + 1)).soon
 
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       soon {
-        message.getMessageType shouldBe Message.Type.ANY_ASSET
+        messages.last.msgType shouldBe Message.Type.ANY_ASSET
         asset.getStatus shouldEqual AssetStatus.DOWNLOAD_DONE
       }
 
-      messages.getLastMessage.getAsset.getUploadProgress.cancel()
+      asset.getUploadProgress.cancel()
 
       idle(3.second)
 
       (messages should have size (fromBefore + 1)).soon
 
-      lazy val message2 = messages.getLastMessage
-      lazy val asset2 = message.getAsset
+      lazy val msg2 = messages.last
+      lazy val asset2 = new com.waz.api.impl.Asset(msg2.assetId, msg2.id)
       soon {
-        message2.getMessageType shouldBe Message.Type.ANY_ASSET
+        messages.last.msgType shouldBe Message.Type.ANY_ASSET
         asset2.getStatus shouldEqual AssetStatus.DOWNLOAD_DONE
       }
     }
@@ -351,10 +356,10 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(uploadedAsset, DoNothingAndProceed))
 
       (messages should have size (fromBefore + 1)).soon
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       soon {
-        message.getMessageType shouldBe Message.Type.ANY_ASSET
+        messages.last.msgType shouldBe Message.Type.ANY_ASSET
         asset.getStatus shouldEqual AssetStatus.UPLOAD_IN_PROGRESS
       }
       asset.getUploadProgress.cancel()
@@ -379,11 +384,11 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(uploadedAsset, DoNothingAndProceed))
 
       (messages should have size (fromBefore + 1)).soon
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       soon {
-        message.getMessageType shouldBe Message.Type.VIDEO_ASSET
+        messages.last.msgType shouldBe Message.Type.VIDEO_ASSET
       }
 
       val numberOfTextMessages = 10
@@ -398,8 +403,8 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val finalSize = fromBefore + 11
       forAsLongAs(3.seconds, after = 1.second) {
         messages should have size finalSize
-        forAll(1 to numberOfTextMessages map (finalSize - _))(n => messages.get(n).getMessageType shouldEqual Message.Type.TEXT)
-        messages.get(finalSize - numberOfTextMessages - 1).getMessageType shouldEqual Message.Type.VIDEO_ASSET
+        forAll(1 to numberOfTextMessages map (finalSize - _))(n => messages(n).msgType shouldEqual Message.Type.TEXT)
+        messages(finalSize - numberOfTextMessages - 1).msgType shouldEqual Message.Type.VIDEO_ASSET
       }
     }
   }
@@ -512,7 +517,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       handler2.promisedWarning.future.await("warning should be reported") shouldEqual (LargeAssetWarningThresholdInBytes + 1L, NetworkMode._2G)
       soon {
         messages should have size (fromBefore + 1)
-        messages.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        messages.last.state shouldEqual Message.Status.SENT
       }
       zmessaging.assetsStorage.get(asset2.id).await() shouldBe 'defined
 
@@ -533,12 +538,11 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       within(1.second)(messages should have size (fromBefore + 1))
 
-      lazy val message = messages.getLastMessage
-      lazy val asset = message.getAsset
+      lazy val msg = messages.last
+      lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
       within(20.seconds) {
-        message.getMessageStatus shouldBe Message.Status.SENT
-        message.getMessageType shouldBe Message.Type.ANY_ASSET
-        message.getAsset should not be empty
+        messages.last.state shouldBe Message.Status.SENT
+        messages.last.msgType shouldBe Message.Type.ANY_ASSET
         asset.getName shouldEqual "asset"
         asset.getMimeType shouldEqual "application/octet-stream"
         asset.getSizeInBytes shouldEqual MaxAllowedAssetSizeInBytes
@@ -558,8 +562,8 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       conv.sendMessage(new MessageContent.Asset(uploadedAsset, DoNothingAndProceed))
 
       (messages should have size (fromBefore + 1)).soon
-      lazy val message = messages.getLastMessage
-      (message.getMessageStatus shouldBe Message.Status.FAILED).soon
+      lazy val message = messages.last
+      (message.state shouldBe Message.Status.FAILED).soon
 
       idle(1.second)
 
@@ -574,7 +578,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val conv = conversations.head
-  lazy val messages = conv.getMessages
+  def messages = listMessages(conv.id)
   lazy val authority = s"${context.getPackageName}.testassets"
   lazy val resolver = shadowOf(getShadowApplication.getContentResolver)
 
@@ -663,8 +667,8 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
 
-    override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
-      new ApiZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): ZMessaging =
+      new ApiZMessaging(teamId, clientId, userModule) {
 
         override lazy val otrSync = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
           override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] =

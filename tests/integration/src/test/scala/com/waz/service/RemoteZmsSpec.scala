@@ -20,6 +20,7 @@ package com.waz.service
 import com.waz.api._
 import com.waz.api.impl.{EmailCredentials, ZMessagingApi}
 import com.waz.content.{Database, GlobalDatabase}
+import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.{MessageContent => _, _}
 import com.waz.testutils.Implicits._
 import com.waz.threading.Threading
@@ -27,7 +28,8 @@ import com.waz.ui.UiModule
 import com.waz.znet.{AsyncClientImpl, ClientWrapper, TestClientWrapper}
 import org.scalatest.{BeforeAndAfterAll, RobolectricTests, Suite}
 
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.duration._
 import scala.util.Random
 
 class RemoteZms(ui: UiModule) extends ZMessagingApi()(ui) {
@@ -68,6 +70,12 @@ class RemoteZms(ui: UiModule) extends ZMessagingApi()(ui) {
     p.future
   }
 
+  def listMessages(conv: ConvId) = Await.result(zmessaging.flatMap {
+    case Some(zms) => zms.storage.db { db => MessageDataDao.list(MessageDataDao.findMessages(conv)(db)).sortBy(_.time) }
+    case None => Future.successful(Vector.empty[MessageData])
+  }, 5.seconds)
+
+
   def postMessage(conv: RConvId, msg: MessageContent) = findConv(conv).map { _.sendMessage(msg) }
 }
 
@@ -83,7 +91,7 @@ trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Sui
       override val cryptoBoxDirName: String = "otr_" + dataTag
     }
     override lazy val factory: ZMessagingFactory = new ZMessagingFactory(global) {
-      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, dataTag)
+      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, dataTag, prefs)
     }
   }
 
@@ -92,5 +100,5 @@ trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Sui
     super.beforeAll()
   }
 
-  def createRemoteZms(dataTag: String = Random.nextInt().toHexString) = new RemoteZms(new UiModule(new Accounts(globalModule(dataTag))))
+  def createRemoteZms(dataTag: String = Random.nextInt().toHexString) = new RemoteZms(new UiModule(new AccountsService(globalModule(dataTag))))
 }

@@ -74,9 +74,9 @@ object UserSearchClient {
   object UserSearchEntry {
     import JsonDecoder._
 
-    implicit lazy val Decoder: JsonDecoder[UserSearchEntry] = new JsonDecoder[UserSearchEntry] {
-      override def apply(implicit js: JSONObject): UserSearchEntry =
-        UserSearchEntry('id, 'name, 'accent_id, 'handle)
+    implicit lazy val Decoder: JsonDecoder[Option[UserSearchEntry]] = new JsonDecoder[Option[UserSearchEntry]] {
+      override def apply(implicit js: JSONObject): Option[UserSearchEntry] =
+        if (js.has("handle")) Some(UserSearchEntry('id, 'name, 'accent_id, 'handle)) else None
     }
   }
 
@@ -85,12 +85,14 @@ object UserSearchClient {
     def unapply(resp: ResponseContent): Option[Seq[UserSearchEntry]] = resp match {
       case JsonObjectResponse(js) if js.has("documents") =>
         try {
-          Some(JsonDecoder.array[UserSearchEntry](js.getJSONArray("documents")))
+          Some(JsonDecoder.array[Option[UserSearchEntry]](js.getJSONArray("documents")).flatten)
         } catch {
           case NonFatal(ex) => warn(s"parsing failed", ex)
             None
         }
       case _ => None
     }
+
   }
+
 }

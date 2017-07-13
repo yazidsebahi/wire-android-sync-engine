@@ -19,9 +19,10 @@ package com.waz.sync.client
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
+import com.waz.model.AccountData.PermissionsMasks
 import com.waz.model._
-import com.waz.sync.client.TeamsClient.TeamsResponse
-import com.waz.threading.Threading
+import com.waz.sync.client.TeamsClient.TeamBindingResponse
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -31,33 +32,47 @@ import org.json.JSONObject
 import scala.util.Try
 
 trait TeamsClient {
-  def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamsResponse]
-  def getTeams(id: Set[TeamId]): ErrorOrResponse[TeamsResponse]
-  def getTeamMembers(id: TeamId): ErrorOrResponse[Set[TeamMemberData]]
+  def getTeamMembers(id: TeamId): ErrorOrResponse[Map[UserId, PermissionsMasks]]
+  def getTeamData(id: TeamId): ErrorOrResponse[TeamData]
+
+  def findSelfTeam(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamData]]
+  def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamBindingResponse]
+  def getPermissions(teamId: TeamId, userId: UserId): ErrorOrResponse[PermissionsMasks]
 }
 
 class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
   import TeamsClient._
   import Threading.Implicits.Background
 
-  override def getTeams(start: Option[TeamId]) = {
-    zNetClient.withErrorHandling("loadAllTeams", Request.Get(teamsPaginatedQuery(start))) {
-      case Response(SuccessHttpStatus(), TeamsResponse(teams, hasMore), _) => TeamsResponse(teams, hasMore)
-    }
-  }
-
-  override def getTeams(ids: Set[TeamId]) = {
-    zNetClient.withErrorHandling("loadBatchTeams", Request.Get(teamsBatchQuery(ids))) {
-      case Response(SuccessHttpStatus(), TeamsResponse(teams, _), _) => TeamsResponse(teams, hasMore = false)
-    }
-  }
-
-  override def getTeamMembers(id: TeamId) = {
+  override def getTeamMembers(id: TeamId) =
     zNetClient.withErrorHandling("loadTeamMembers", Request.Get(teamMembersPath(id))) {
-      case Response(SuccessHttpStatus(), TeamMembersResponse(members), _) =>
-        members.map { case (userId, selfPermissions, copyPermissions) => TeamMemberData(userId, id, selfPermissions, copyPermissions)}
+      case Response(SuccessHttpStatus(), TeamMembersResponse(members), _) => members
     }
+
+  override def getTeamData(id: TeamId) =
+    zNetClient.withErrorHandling("loadTeamData", Request.Get(teamPath(id))) {
+      case Response(SuccessHttpStatus(), TeamResponse(data), _) => data
+    }
+
+  override def findSelfTeam(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamData]] = getTeams(start).flatMap {
+    case Left(err) => CancellableFuture.successful(Left(err))
+    case Right(TeamBindingResponse(teams, hasMore)) =>
+      teams.find(_._2).map(_._1) match {
+        case Some(teamId) => CancellableFuture.successful(Right(Some(teamId)))
+        case None if hasMore => findSelfTeam(teams.lastOption.map(_._1.id))
+        case None => CancellableFuture.successful(Right(None))
+      }
   }
+
+  override def getTeams(start: Option[TeamId]) =
+    zNetClient.withErrorHandling("loadAllTeams", Request.Get(teamsPaginatedQuery(start))) {
+      case Response(SuccessHttpStatus(), TeamBindingResponse(teams, hasMore), _) => TeamBindingResponse(teams, hasMore)
+    }
+
+  override def getPermissions(teamId: TeamId, userId: UserId) =
+    zNetClient.withErrorHandling(s"getMember:$userId", Request.Get(memberPath(teamId, userId))) {
+      case Response(SuccessHttpStatus(), TeamMemberResponse(_, p), _) => p
+    }
 }
 
 object TeamsClient {
@@ -75,15 +90,33 @@ object TeamsClient {
   def teamsBatchQuery(ids: Set[TeamId]): String =
     Request.query(TeamsPath, ("ids", ids.mkString(",")))
 
+  def teamPath(id: TeamId): String = s"$TeamsPath/${id.str}"
+
+  def memberPath(teamId: TeamId, userId: UserId): String = s"${teamMembersPath(teamId)}/${userId.str}"
+
   import JsonDecoder._
 
-  case class TeamsResponse(teams: Seq[TeamData], hasMore: Boolean)
+  case class TeamBindingResponse(teams: Seq[(TeamData, Boolean)], hasMore: Boolean)
 
-  object TeamsResponse {
-    def unapply(response: ResponseContent): Option[(Seq[TeamData], Boolean)] =
+  object TeamBindingResponse {
+    def unapply(response: ResponseContent): Option[(Seq[(TeamData, Boolean)], Boolean)] =
       response match {
         case JsonObjectResponse(js) if js.has("teams") =>
-          Try(decodeSeq('teams)(js, TeamData.Decoder), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
+          Try(decodeSeq('teams)(js, TeamData.TeamBindingDecoder).map( t => t._1 -> t._2 ), decodeOptBoolean('has_more)(js).getOrElse(false)).toOption
+        case _ =>
+          warn(s"Unexpected response: $response")
+          None
+      }
+  }
+
+  object TeamMemberResponse {
+    lazy val MemberDecoder = new JsonDecoder[(UserId, PermissionsMasks)] {
+      override def apply(implicit js: JSONObject) = (decodeId[UserId]('user), (decodeInt('self)('permissions), decodeInt('copy)('permissions)))
+    }
+
+    def unapply(response: ResponseContent): Option[(UserId, PermissionsMasks)] =
+      response match {
+        case JsonObjectResponse(js) => Try(TeamMemberResponse.MemberDecoder(js)).toOption
         case _ =>
           warn(s"Unexpected response: $response")
           None
@@ -91,18 +124,21 @@ object TeamsClient {
   }
 
   object TeamMembersResponse {
-    lazy val MemberDecoder = new JsonDecoder[(UserId, Long, Long)] {
-      override def apply(implicit js: JSONObject) = (decodeId[UserId]('user), decodeInt('self)('permissions), decodeInt('copy)('permissions))
-    }
-
-    def unapply(response: ResponseContent): Option[Set[(UserId, Long, Long)]] = {
+    def unapply(response: ResponseContent): Option[Map[UserId, PermissionsMasks]] = {
       response match {
         case JsonObjectResponse(js) if js.has("members") =>
-          Try(decodeSet('members)(js, MemberDecoder)).toOption
+          Try(decodeSet('members)(js, TeamMemberResponse.MemberDecoder)).toOption.map(_.toMap)
         case _ =>
           warn(s"Unexpected response: $response")
           None
       }
+    }
+  }
+
+  object TeamResponse {
+    def unapply(response: ResponseContent): Option[TeamData] = response match {
+      case JsonObjectResponse(js) => Try(TeamData.TeamBindingDecoder(js)._1).toOption
+      case _ => None
     }
   }
 }

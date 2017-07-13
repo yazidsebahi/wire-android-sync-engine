@@ -37,8 +37,8 @@ class AddMemberToGroupConvSpec extends FeatureSpec with Matchers with OptionValu
   lazy val conversations = api.getConversations
   lazy val self = api.getSelf
   lazy val groupConv = conversations.find(_.getType == GROUP).value
-  lazy val messages = groupConv.getMessages
   lazy val participants = groupConv.getUsers
+  def messages = listMessages(groupConv.id)
 
   scenario("Setup: local sync") {
     (conversations should have size 3).soon
@@ -87,9 +87,8 @@ class AddMemberToGroupConvSpec extends FeatureSpec with Matchers with OptionValu
 
     soon {
       messages should have size 5
-      messages(4).getMembers should have size 1
-      messages(4).getMembers.head.getName shouldEqual "user D"
-      messages(4).getMembers.head.getPicture.getWidth shouldEqual 480
+      messages(4).members should have size 1
+      messages(4).members.head shouldEqual provisionedUserId("auto4")
 
       participants should have size 3
       participants(2).getName shouldEqual "user D"

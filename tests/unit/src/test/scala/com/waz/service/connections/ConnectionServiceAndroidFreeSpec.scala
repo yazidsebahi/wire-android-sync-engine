@@ -130,6 +130,6 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
     (users.withSelfUserFuture[Unit] _).expects(*).anyNumberOfTimes().onCall{ (f: UserId => Future[Unit]) =>
       f(selfUserId)
     }
-    new ConnectionService(push, convs, members, messagesService, messagesStorage, users, usersStorage, sync, null)
+    new ConnectionService(push, convs, members, messagesService, messagesStorage, users, usersStorage, sync)
   }
 }

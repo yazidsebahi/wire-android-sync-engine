@@ -21,7 +21,7 @@ import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, EmailCredentials, LocalImageAsset}
 import com.waz.client.RegistrationClient
-import com.waz.content.GlobalPreferences.ShareContacts
+import com.waz.content.UserPreferences.ShareContacts
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
 import com.waz.provision.EmailClientSuite

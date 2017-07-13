@@ -55,7 +55,7 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
 
     Option(remoteMessage.getData).map(_.asScala.toMap).foreach { data =>
       verbose(s"onMessageReceived with data: $data")
-      accounts.getCurrentZms.flatMap {
+      accounts.getActiveZms.flatMap {
         case Some(zms) if zms.backend.pushSenderId == remoteMessage.getFrom =>
           FCMHandler(zms, data)
         case Some(_) => warn(s"Received FCM notification from unknown sender: ${remoteMessage.getFrom}. Ignoring..."); Future.successful({})

@@ -36,7 +36,7 @@ class NotificationsAndroidService extends FutureService {
   override protected lazy val wakeLock = new TimedWakeLock(getApplicationContext, 2.seconds)
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
-    Option(ZMessaging.currentAccounts).fold2(Future successful None, _.getCurrentZms).flatMap {
+    Option(ZMessaging.currentAccounts).fold2(Future successful None, _.getActiveZms).flatMap {
       case None => Future successful None
       case Some(zms) if ActionClear == intent.getAction =>
         verbose("Clearing notifications")

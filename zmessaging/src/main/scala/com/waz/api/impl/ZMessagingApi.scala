@@ -18,18 +18,16 @@
 package com.waz.api.impl
 
 import android.content.Context
-import android.net.Uri
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.PermissionProvider
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
 import com.waz.api.impl.search.Search
 import com.waz.client.RegistrationClient.ActivateResult
 import com.waz.content.Uris
-import com.waz.media.manager.MediaManager
 import com.waz.model._
-import com.waz.service.AccountService
+import com.waz.service.AccountManager
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
@@ -41,7 +39,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   import Threading.Implicits.Ui
 
-  private[waz] var account: Option[AccountService] = None
+  private[waz] var account: Option[AccountManager] = None
   private[waz] def zmessaging = account match {
     case Some(acc) => acc.getZMessaging
     case None => Future successful None
@@ -57,7 +55,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   lazy val cache = new ZCache(ui.global.cache)
 
-  accounts.current.onUi { setAccount } (EventContext.Global)
+  accounts.activeAccountManager.onUi { setAccount } (EventContext.Global)
 
   override def onCreate(context: Context): Unit = {
     verbose(s"onCreate $context, count: $createCount")
@@ -68,7 +66,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     ui.onCreate(context)
   }
 
-  private def setAccount(zms: Option[AccountService]): Unit = if (account != zms) {
+  private def setAccount(zms: Option[AccountManager]): Unit = if (account != zms) {
     if (resumeCount > 0) {
       account.foreach(_.global.lifecycle.releaseUi(s"replace api: $this"))
       zms.foreach(_.global.lifecycle.acquireUi(s"replace api: $this"))
@@ -100,7 +98,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     createCount -= 1
   }
 
-  override def onInit(listener: api.InitListener): Unit = accounts.getCurrentAccountInfo onComplete {
+  override def onInit(listener: api.InitListener): Unit = accounts.getActiveAccount onComplete {
     case Success(accountData) =>
       debug(s"initFuture completed, loggedUser: $accountData")
       // FIXME: this ensures that self is loaded, but it's pretty ugly
@@ -121,7 +119,10 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def login(credentials: com.waz.api.Credentials, listener: api.LoginListener): Unit = credentials match {
     case credentials: Credentials =>
       verbose(s"login $credentials")
-      accounts.login(credentials) onComplete {
+      (for {
+        account <- accounts.login(credentials)
+        _ <- zmessaging
+      } yield account) onComplete {
         case Success(Left(err @ ErrorResponse(code, message, label))) =>
           error(s"Login for credentials: $credentials failed: $err")
           listener.onFailed(code, message, label)
@@ -182,7 +183,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def logout() = ui.currentAccount.head flatMap {
     case Some(acc) =>
       verbose(s"logout $acc")
-      acc.logout()
+      acc.logout(flushCredentials = true)
     case None => Future.successful(())
   }
 
@@ -191,20 +192,12 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def search() = new Search
 
   override def getCache: ZCache = cache
-
-  override def getIncomingMessages = ui.cached(Uris.IncomingMsgsUri, new IncomingMessages)
-
+  
   override def getUser(id: String): User = ui.users.getUser(UserId(id))
-
-  override def getMediaManager: MediaManager = ui.global.mediaManager.mediaManager.orNull
-
-  override def getMediaResourceUri(name: String): Uri = ui.global.mediaManager.getSoundUri(name).orNull
 
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
   override def getInvitations: Invitations = ui.invitations
-
-  override def getAvs: Avs = ui.cached(Uris.AvsUri, new Avs)
 
   override def getContacts: Contacts = ui.cached(Uris.ContactsUri, new Contacts(SearchKeyFiltering()))
 

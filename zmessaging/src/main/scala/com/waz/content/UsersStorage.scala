@@ -20,7 +20,7 @@ package com.waz.content
 import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
-import com.waz.model.{UserData, UserId}
+import com.waz.model.{TeamId, UserData, UserId}
 import com.waz.service.SearchKey
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -30,7 +30,11 @@ import com.waz.utils.events._
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 
-trait UsersStorage extends CachedStorage[UserId, UserData]
+trait UsersStorage extends CachedStorage[UserId, UserData] {
+  def getByTeam(team: Set[TeamId]): Future[Set[UserData]]
+  def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean): Future[Set[UserData]]
+  def removeByTeam(teams: Set[TeamId]): Future[Set[UserData]]
+}
 
 class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
   import EventContext.Implicits.global
@@ -139,4 +143,13 @@ class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedSto
       }
     }
   }
+
+  override def getByTeam(teams: Set[TeamId]) = find(data => data.teamId.map(id => teams.contains(id)).getOrElse(false), UserDataDao.findForTeams(teams)(_), identity)
+
+  override def removeByTeam(teams: Set[TeamId]) = for {
+    members <- getByTeam(teams)
+    _       <- remove(members.map(_.id))
+  } yield members
+
+  override def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean) = storage(UserDataDao.search(prefix, handleOnly, Some(team))(_)).future
 }

@@ -116,7 +116,6 @@ public interface Self extends UiObservable {
 
     boolean hasSetUsername();
 
-    boolean isInPrivateMode();
+    boolean isTeamAccount();
 
-    void setPrivateMode(boolean active);
 }

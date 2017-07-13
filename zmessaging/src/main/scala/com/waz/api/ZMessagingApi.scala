@@ -18,9 +18,7 @@
 package com.waz.api
 
 import android.content.Context
-import android.net.Uri
 import com.waz.api.ZMessagingApi.PhoneConfirmationCodeRequestListener
-import com.waz.media.manager.MediaManager
 
 object ZMessagingApi {
 
@@ -85,13 +83,7 @@ trait ZMessagingApi {
 
   def getCache: ZCache
 
-  def getIncomingMessages: IncomingMessagesList
-
   def getUser(id: String): User
-
-  def getMediaManager: MediaManager
-
-  def getMediaResourceUri(name: String): Uri
 
   /** Lists the contacts from this phone's contact providers (if they have an associated email or phone number) blended
     * with Wire users.
@@ -101,11 +93,6 @@ trait ZMessagingApi {
   def getInvitations: Invitations
 
   def getErrors: ErrorsList
-
-  /**
-   * Access point for methods that get passed through to AVS.
-   */
-  def getAvs: Avs
 
   def getGiphy: Giphy
 

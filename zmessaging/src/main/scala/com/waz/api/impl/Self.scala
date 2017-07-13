@@ -24,7 +24,7 @@ import com.waz.api._
 import com.waz.api.impl.otr.OtrClients
 import com.waz.model._
 import com.waz.model.otr.Client
-import com.waz.service.AccountService
+import com.waz.service.AccountManager
 import com.waz.threading.Threading
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.events.Signal
@@ -49,7 +49,7 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
     }
   }
 
-  def signal(acc: Option[AccountService]): Signal[(Option[AccountData], Boolean)] = acc match {
+  def signal(acc: Option[AccountManager]): Signal[(Option[AccountData], Boolean)] = acc match {
     case None    => ui.global.blacklist.upToDate map { (Option.empty[AccountData], _) }
     case Some(a) => a.accountData.map(Option(_)).zip(a.global.blacklist.upToDate)
   }
@@ -144,9 +144,6 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
   })
   override def hasSetUsername: Boolean = user.fold(false)(_.getUsername.length > 0)
 
-  override def isInPrivateMode: Boolean = data.fold(false)(_.privateMode)
-  override def setPrivateMode(active: Boolean) = users.setSelfPrivateMode(active)
-
   private def handlingErrors[T](request: Future[Either[ErrorResponse, Unit]], listener: CredentialsUpdateListener): Unit = request.onComplete {
     case Success(Right(())) => listener.onUpdated()
     case Success(Left(ErrorResponse(code, message, label))) => listener.onUpdateFailed(code, message, label)
@@ -170,4 +167,7 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
       listener.onUpdated()
     }
   })
+
+  override def isTeamAccount: Boolean = data.exists(_.isTeamAccount)
+
 }

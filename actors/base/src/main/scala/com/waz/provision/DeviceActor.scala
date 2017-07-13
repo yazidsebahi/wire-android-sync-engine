@@ -84,15 +84,15 @@ class DeviceActor(val deviceName: String,
     }
 
     override lazy val factory: ZMessagingFactory = new ZMessagingFactory(this) {
-      override def zmessaging(clientId: ClientId, user: UserModule): ZMessaging =
-        new ZMessaging(clientId, user) {
+      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging =
+        new ZMessaging(teamId, clientId, user) {
 
         }
     }
   }
 
-  lazy val instance = new Accounts(globalModule) {
-    override val currentAccountPref = global.prefs.preference(PrefKey[String]("current_user_" + Random.nextInt().toHexString, ""))
+  lazy val instance = new AccountsService(globalModule) {
+    override val activeAccountPref = global.prefs.preference(PrefKey[Option[AccountId]]("current_user_" + Random.nextInt().toHexString))
   }
   lazy val ui = new UiModule(instance)
   lazy val api = {
@@ -477,12 +477,13 @@ class DeviceActor(val deviceName: String,
       }
 
     case SetMessageReaction(remoteId, messageId, action) =>
-      waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
-        val messages = findConvById(remoteId).getMessages
-        waitUntil(messages)(_.exists(_.data.id == messageId)) map { messages =>
-          messages.find(_.data.id == messageId).foreach(msg => if (action == Liking.Action.Like) msg.like() else msg.unlike())
-          Successful
-        }
+      zmessaging.messagesStorage.getMessage(messageId) flatMap {
+        case Some(msg) if action == Liking.Action.Like =>
+          zmessaging.reactions.like(msg.convId, messageId) map { _ => Successful }
+        case Some(msg) =>
+          zmessaging.reactions.unlike(msg.convId, messageId) map { _ => Successful }
+        case None =>
+          Future successful Failed("No message found with given id")
       }
 
     case SetDeviceLabel(label) =>

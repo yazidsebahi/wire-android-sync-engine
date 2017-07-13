@@ -65,7 +65,7 @@ class PushTokenService(googleApi: GoogleApi,
   }
 
   //None if user is not logged in.
-  private val loggedInAccount = currentAccount.signal.map(v => if (v.isEmpty) None else Some(AccountId(v)))
+  private val loggedInAccount = currentAccount.signal
 
   private val userToken = accounts.signal(accountId).map(_.registeredPush)
 
@@ -120,10 +120,12 @@ class PushTokenService(googleApi: GoogleApi,
 
   def onTokenRegistered(token: PushToken): Future[Unit] = {
     verbose(s"onTokenRegistered: $accountId, $token")
-    for {
+    (for {
       Some(id) <- loggedInAccount.head if id == accountId
       _        <- accounts.update(id, _.copy(registeredPush = Some(token)))
-    } yield {}
+    } yield {}).recover {
+      case _ => //
+    }
   }
 }
 

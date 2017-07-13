@@ -24,7 +24,7 @@ import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AccountId
-import com.waz.service.{AccountService, ZMessaging}
+import com.waz.service.{AccountManager, ZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils.WakeLock
 
@@ -71,10 +71,10 @@ trait ZMessagingService extends Service {
   private lazy val wakeLock = new WakeLock(getApplicationContext)
   private def accounts = ZMessaging.currentAccounts
 
-  def onAccountIntent[Result](intent: Intent)(execute: AccountService => Future[Result]): Future[Result] = wakeLock.async {
+  def onAccountIntent[Result](intent: Intent)(execute: AccountManager => Future[Result]): Future[Result] = wakeLock.async {
     if (intent != null && intent.hasExtra(ZmsUserIdExtra)) {
       val userId = AccountId(intent.getStringExtra(ZmsUserIdExtra))
-      accounts.getInstance(userId) flatMap {
+      accounts.getAccountManager(userId) flatMap {
         case Some(acc) => execute(acc)
         case None =>
           error(s"zmessaging not available")

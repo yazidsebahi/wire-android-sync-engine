@@ -23,7 +23,6 @@ import android.graphics.Bitmap
 import com.waz.RobolectricUtils
 import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api._
-import com.waz.model.UserId
 import com.waz.utils.JsonDecoder.{apply => _, _}
 import com.waz.utils.JsonEncoder._
 import com.waz.utils._
@@ -98,10 +97,6 @@ object Matchers {
 
   import Implicits._
 
-  def beLiked = be('liked)
-  def beLikedByThisUser = be('likedByThisUser)
-  def haveLikesFrom(ids: UserId*): Matcher[Message] = contain.theSameElementsInOrderAs(ids).matcher[Seq[UserId]] compose ((_: Message).getLikes.map(_.data.id))
-  def notHaveLikes: Matcher[Message] = be(empty).matcher[Seq[User]] compose ((_: Message).getLikes)
   def beUnchangedByEncodingAndDecoding[A : JsonDecoder : JsonEncoder : Manifest] = Matcher[A] { orig =>
     val json = encode(orig)
     val decoded = decode[A](json.toString)

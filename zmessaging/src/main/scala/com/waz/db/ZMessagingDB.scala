@@ -19,6 +19,7 @@ package com.waz.db
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import com.waz.api.ZmsVersion
 import com.waz.db.ZMessagingDB.{DbVersion, daos, migrations}
 import com.waz.db.migrate._
 import com.waz.model.AddressBook.ContactHashesDao
@@ -37,8 +38,6 @@ import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.NotificationData.NotificationDataDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
-import com.waz.model.TeamData.TeamDataDoa
-import com.waz.model.TeamMemberData.TeamMemberDataDoa
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
@@ -54,10 +53,10 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 91
+  val DbVersion = 94
 
   lazy val daos = Seq (
-    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao, TeamDataDoa, TeamMemberDataDoa,
+    UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, NotificationDataDao, ErrorDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
@@ -156,6 +155,17 @@ object ZMessagingDB {
     },
     Migration(90, 91) { db =>
       db.execSQL("DROP TABLE IF EXISTS CommonConnections")
+    },
+    Migration(91, 92) { db =>
+      db.execSQL("ALTER TABLE Users ADD COLUMN teamId TEXT")
+      db.execSQL("DROP TABLE IF EXISTS TeamMembers")
+      db.execSQL("UPDATE KeyValues SET value = 'true' WHERE key = 'should_sync_teams'")
+    },
+    Migration(92, 93) { db =>
+      db.execSQL("DROP TABLE IF EXISTS Teams")
+    },
+    Migration(93, 94) { db =>
+      db.execSQL("UPDATE KeyValues SET value = 'true' WHERE key = 'should_sync_teams'")
     }
   )
 }

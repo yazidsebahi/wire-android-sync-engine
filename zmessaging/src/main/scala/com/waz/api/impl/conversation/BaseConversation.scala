@@ -82,8 +82,6 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 
   override def isSelected = selected
 
-  def getMessages: MessagesList = ui.cached(Uris.MessagesUri(id), new MessagesList(id))
-
   def getUsers = ui.cached(Uris.ConvMembersUri(id), new MembersList(id))
 
   override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE

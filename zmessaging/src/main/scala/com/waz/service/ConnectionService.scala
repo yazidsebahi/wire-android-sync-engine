@@ -39,7 +39,7 @@ import scala.concurrent.Future
 
 class ConnectionService(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
                         messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
-                        sync: SyncServiceHandle, scheduler: => EventScheduler) {
+                        sync: SyncServiceHandle) {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -68,7 +68,7 @@ class ConnectionService(push: PushService, convs: ConversationsContentUpdater, m
     verbose(s"handleUserConnectionEvents: $events")
     def updateOrCreate(event: UserConnectionEvent)(user: Option[UserData]): UserData =
       user.fold {
-        UserData(event.to, UserService.defaultUserName, None, None, connection = event.status, conversation = Some(event.convId), connectionMessage = event.message, searchKey = SearchKey(UserService.defaultUserName), connectionLastUpdated = event.lastUpdated,
+        UserData(event.to, None, UserService.defaultUserName, None, None, connection = event.status, conversation = Some(event.convId), connectionMessage = event.message, searchKey = SearchKey(UserService.defaultUserName), connectionLastUpdated = event.lastUpdated,
           handle = None)
       } {
         _.copy(conversation = Some(event.convId)).updateConnectionStatus(event.status, Some(event.lastUpdated), event.message)

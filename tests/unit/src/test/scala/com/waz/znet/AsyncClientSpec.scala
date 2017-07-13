@@ -141,7 +141,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     }
 
   private val requestWorker = new RequestWorker {
-    override def processRequest(req: HttpRequest, additionalHeaders: (String, String)*): HttpRequest = req
+    override def processRequest(req: HttpRequest): HttpRequest = req
   }
 
   class FakeClientWrapper(delay: Option[Long] = None) extends ClientWrapper {

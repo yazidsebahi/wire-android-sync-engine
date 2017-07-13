@@ -47,6 +47,8 @@ trait UserService {
   def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
   def getUsers(ids: Seq[UserId]): Future[Seq[UserData]]
+  def syncIfNeeded(users: UserData*): Future[Unit]
+  def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
 }
 
 class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, userPrefs: UserPreferences, push: PushServiceSignals,
@@ -93,7 +95,7 @@ class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, us
 
   def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
     sync.syncUsers(id)
-    UserData(id, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName), handle = None)
+    UserData(id, None, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName), handle = None)
   })
 
   def getSelfUserId: Future[Option[UserId]] = Future successful Some(selfUserId)
@@ -111,7 +113,7 @@ class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, us
 
   def updateUserData(id: UserId, updater: UserData => UserData) = usersStorage.update(id, updater)
 
-  def updateUsers(entries: Seq[UserSearchEntry]) = {
+  override def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]] = {
     def updateOrAdd(entry: UserSearchEntry) = (_: Option[UserData]).fold(UserData(entry))(_.updated(entry))
     usersStorage.updateOrCreateAll(entries.map(entry => entry.id -> updateOrAdd(entry)).toMap)
   }
@@ -207,7 +209,7 @@ class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, us
   /**
     * Schedules user data sync if stored user timestamp is older than last slow sync timestamp.
    */
-  def syncIfNeeded(users: UserData*): Future[Unit] =
+  override def syncIfNeeded(users: UserData*): Future[Unit] =
     lastSlowSyncTimestamp() flatMap {
       //TODO: Remove empty picture check when not needed anymore
       case Some(time) => sync.syncUsersIfNotEmpty(users.filter(user => user.syncTimestamp < time || user.picture.isEmpty).map(_.id))

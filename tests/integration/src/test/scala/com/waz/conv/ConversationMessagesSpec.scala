@@ -19,13 +19,11 @@ package com.waz.conv
 
 import akka.pattern.ask
 import android.content.Context
-import android.graphics.Bitmap
 import android.net.{ConnectivityManager, NetworkInfo}
-import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{AssetData, ConvId, RConvId}
+import com.waz.model.{ConvId, MessageData, RConvId}
 import com.waz.provision._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -36,6 +34,7 @@ import org.robolectric.Robolectric
 import org.scalatest.{FeatureSpec, Matchers}
 import org.threeten.bp.Instant
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class ConversationMessagesSpec extends FeatureSpec with Matchers with ProvisionedApiSpec with ThreadActorSpec {
@@ -57,7 +56,6 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     }
     conversations.asScala.find(_.getType == ConversationType.OneToOne).get
   }
-  lazy val msgs = conv.getMessages
 
   override lazy val testClient: UnreliableAsyncClientImpl = new UnreliableAsyncClientImpl
 
@@ -76,7 +74,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       withDelay {
         conversations should have size 1
       }
-      withDelay(msgs should not be empty)
+      withDelay(listMessages(conv.id) should not be empty)
     }
 
     scenario("Prepare other user") {
@@ -86,46 +84,46 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
   feature("Receive incoming text messages") {
     scenario("auto2: Send text message") {
-      val count = msgs.size
+      val count = listMessages(conv.id).size
       auto2 ! SendText(RConvId(self.getUser.getId), msg = "meep")
       withDelay {
-        msgs should have size (count + 1)
+        listMessages(conv.id) should have size (count + 1)
       }
     }
 
     scenario("Should receive incoming text message") {
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "meep"
+        lastMessage(conv.id).map(_.contentString) shouldEqual Some("meep")
       }
-      msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.SENT
+      lastMessage(conv.id).map(_.state) shouldEqual Some(ApiMessage.Status.SENT)
       conv.getFailedCount shouldEqual 0
     }
 
     scenario("Received message should be marked as first message") {
-      msgs.getLastMessage.isFirstMessage shouldEqual true
+      lastMessage(conv.id).map(_.firstMessage) shouldEqual Some(true)
     }
   }
 
   feature("Sending text messages") {
     @volatile var pushReceived = false
     scenario("Send a single message") {
-      val count = msgs.size
+      val count = listMessages(conv.id).size
 
       conv.sendMessage(new Text("test"))
 
       withDelay {
-        msgs should have size (count + 1)
+        listMessages(conv.id) should have size (count + 1)
       }
-      msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.TEXT
-      msgs.getLastMessage.getBody shouldEqual "test"
+      lastMessage(conv.id).get.msgType shouldEqual ApiMessage.Type.TEXT
+      lastMessage(conv.id).get.contentString shouldEqual "test"
     }
 
     scenario("Sent message should not be marked as first message") {
-      msgs.getLastMessage.isFirstMessage shouldEqual false
+      lastMessage(conv.id).get.firstMessage shouldEqual false
     }
 
     scenario("Message should be pending and not yet be pushed") {
-      msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.PENDING
+      lastMessage(conv.id).get.state shouldEqual ApiMessage.Status.PENDING
       withDelay {
         conv.getFailedCount shouldEqual 0
       }
@@ -133,7 +131,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
     scenario("After sync, message should be sent") {
       withDelay {
-        msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.SENT
+        lastMessage(conv.id).get.state shouldEqual ApiMessage.Status.SENT
       }
       withDelay {
         conv.getFailedCount shouldEqual 0
@@ -143,20 +141,20 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
   feature("Sending image messages") {
     scenario("Send a single image") {
-      val count = msgs.size
+      val count = listMessages(conv.id).size
 
       val im = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin.png")))
       conv.getFailedCount shouldEqual 0
       conv.sendMessage(new Image(im))
 
       withDelay {
-        msgs should have size (count + 1)
-        msgs.getLastMessage.getMessageType shouldEqual ApiMessage.Type.ASSET
+        listMessages(conv.id) should have size (count + 1)
+        lastMessage(conv.id).get.msgType shouldEqual ApiMessage.Type.ASSET
       }
     }
 
     scenario("Message should be pending") {
-      msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.PENDING
+      lastMessage(conv.id).get.state shouldEqual ApiMessage.Status.PENDING
       withDelay {
         conv.getFailedCount shouldEqual 0
       }
@@ -165,7 +163,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     scenario("After sync, message should be sent") {
       awaitUi(1.second)
       withDelay {
-        assets(msgs).last.getMessageStatus shouldEqual ApiMessage.Status.SENT
+        assets(listMessages(conv.id)).last.state shouldEqual ApiMessage.Status.SENT
       }
       withDelay {
         conv.getFailedCount shouldEqual 0
@@ -179,32 +177,23 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     }
 
     scenario("Should receive incoming image message") {
-      val pics = withDelay {
-        returning(assets(msgs)) {
-          _ should have size 2
-        }
-      }
-
-      val cb = new BitmapCallback() {
-        def onBitmapLoaded(b: Bitmap): Unit = ()
-      }
-
-      val asset = pics(1).getImage
       withDelay {
-        asset.asInstanceOf[com.waz.api.impl.ImageAsset].data should not be AssetData.Empty
+        assets(listMessages(conv.id)) should have size 2
+        val msg = assets(listMessages(conv.id)).last
+        Await.result(zmessaging.assetsStorage.get(msg.assetId), 5.seconds) shouldBe 'defined
       }(60.seconds)
 
       withDelay {
-        pics foreach {
-          _.getMessageStatus shouldEqual ApiMessage.Status.SENT
+        assets(listMessages(conv.id)) foreach {
+          _.state shouldEqual ApiMessage.Status.SENT
         }
       }
     }
   }
 
   feature("Failing requests") {
-    var failedTextMessage: Option[ApiMessage] = None
-    var failedImageMessage: Option[ApiMessage] = None
+    var failedTextMessage: Option[MessageData] = None
+    var failedImageMessage: Option[MessageData] = None
 
     scenario("Sending should not fail on first try if not offline") {
       withDelay {
@@ -212,12 +201,12 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       }
       testClient.failFor = Some(".*".r -> "POST")
       conv.sendMessage(new Text("test failed"))
-      failedTextMessage = Option(withDelay {
-        returning(msgs.getLastMessage)(_.getBody shouldEqual "test failed")
-      })
+      failedTextMessage = withDelay {
+        returning(lastMessage(conv.id))(_.get.contentString shouldEqual "test failed")
+      }
       awaitUi(3.seconds)
       conv.getFailedCount shouldEqual 0
-      msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.PENDING
+      lastMessage(conv.id).get.state shouldEqual ApiMessage.Status.PENDING
     }
 
     scenario("Sent message should fail when retried in offline mode") {
@@ -226,18 +215,18 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       withDelay {
         zmessaging.sync.postMessage(failedTextMessage.get.id, ConvId(conv.getId), Instant.EPOCH)
         conv.getFailedCount shouldEqual 1
-        msgs.getLastMessage.getMessageStatus shouldEqual ApiMessage.Status.FAILED
+        lastMessage(conv.id).get.state shouldEqual ApiMessage.Status.FAILED
       }(20.seconds)
     }
 
     scenario("Offline, sending an image as a second message.") {
       val im = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin_128.png")))
       conv.sendMessage(new Image(im))
-      failedImageMessage = Option(withDelay {
-        returning(msgs.getLastMessage)(_.getMessageType shouldEqual ApiMessage.Type.ASSET)
-      })
+      failedImageMessage = withDelay {
+        returning(lastMessage(conv.id))(_.get.msgType shouldEqual ApiMessage.Type.ASSET)
+      }
       withDelay {
-        msgs.asScala filter (_.getMessageStatus == ApiMessage.Status.FAILED) should have size 2
+        listMessages(conv.id) filter (_.state == ApiMessage.Status.FAILED) should have size 2
         conv.getFailedCount shouldEqual 2
       }
     }
@@ -246,7 +235,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       testClient.failFor = None
       zmessaging.network.updateNetworkMode()
       conv.getFailedCount shouldEqual 2
-      msgs.asScala.toList.size should be > 0
+      listMessages(conv.id).size should be > 0
       withDelay {
         conv.getFailedCount shouldEqual 0
       } // after being read, messages don't count here anymore
@@ -255,26 +244,26 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     scenario("Back online, sending a third message should leave the two previous messages failed.") {
       conv.sendMessage(new Text("back online"))
       withDelay {
-        msgs.asScala filter (_.getMessageStatus == ApiMessage.Status.FAILED) should have size 2
+        listMessages(conv.id) filter (_.state == ApiMessage.Status.FAILED) should have size 2
       }
     }
 
     scenario("Back online, retrying a text message should succeed.") {
       failedTextMessage should be('defined)
       failedTextMessage foreach { msg =>
-        msg.getMessageStatus shouldEqual ApiMessage.Status.FAILED
-        msg.retry()
+        msg.state shouldEqual ApiMessage.Status.FAILED
+        zmessaging.messages.retryMessageSending(msg.convId, msg.id)
         withDelay {
-          msg.getMessageStatus shouldEqual ApiMessage.Status.PENDING
+          getMessage(msg.id).get.state shouldEqual ApiMessage.Status.PENDING
         }
         withDelay {
-          msg.getMessageStatus shouldEqual ApiMessage.Status.SENT
+          getMessage(msg.id).get.state shouldEqual ApiMessage.Status.SENT
         }
         withDelay {
-          msg.getMessageType shouldEqual ApiMessage.Type.TEXT
+          getMessage(msg.id).get.msgType shouldEqual ApiMessage.Type.TEXT
         }
         withDelay {
-          msgs.asScala filter (_.getMessageStatus == ApiMessage.Status.FAILED) should have size 1
+          listMessages(conv.id) filter (_.state == ApiMessage.Status.FAILED) should have size 1
         }
         withDelay {
           conv.getFailedCount shouldEqual 0
@@ -285,19 +274,19 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     scenario("Back online, retrying an image message should succeed.") {
       failedImageMessage should be('defined)
       failedImageMessage foreach { msg =>
-        msg.getMessageStatus shouldEqual ApiMessage.Status.FAILED
-        msg.retry()
+        msg.state shouldEqual ApiMessage.Status.FAILED
+        zmessaging.messages.retryMessageSending(msg.convId, msg.id)
         withDelay {
-          msg.getMessageStatus shouldEqual ApiMessage.Status.PENDING
+          getMessage(msg.id).get.state shouldEqual ApiMessage.Status.PENDING
         }
         withDelay {
-          msg.getMessageStatus shouldEqual ApiMessage.Status.SENT
+          getMessage(msg.id).get.state shouldEqual ApiMessage.Status.SENT
         }
         withDelay {
-          msg.getMessageType shouldEqual ApiMessage.Type.ASSET
+          getMessage(msg.id).get.msgType shouldEqual ApiMessage.Type.ASSET
         }
         withDelay {
-          msgs.asScala filter (_.getMessageStatus == ApiMessage.Status.FAILED) should have size 0
+          listMessages(conv.id) filter (_.state == ApiMessage.Status.FAILED) should have size 0
         }
         withDelay {
           conv.getFailedCount shouldEqual 0
@@ -313,7 +302,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       conv.clear()
 
       withDelay {
-        conv.getMessages shouldBe empty
+        listMessages(conv.id) shouldBe empty
         conv shouldBe 'archived
         conv shouldBe 'active
         conversations.getConversationIndex(conv.getId) shouldEqual -1
@@ -323,8 +312,8 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
       auto2 ! SendText(RConvId(self.getUser.getId), msg = "meep")
 
       withDelay {
-        conv.getMessages should have size 1
-        conv.getMessages.getLastMessage.getBody shouldEqual "meep"
+        listMessages(conv.id) should have size 1
+        lastMessage(conv.id).get.contentString shouldEqual "meep"
         conv should not(be('archived))
         conv shouldBe 'active
         conversations.getConversationIndex(conv.getId) should be >= 0
@@ -333,5 +322,5 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     }
   }
 
-  def assets(msgs: MessagesList): Seq[ApiMessage] = msgs.asScala filter (_.getMessageType == ApiMessage.Type.ASSET)
+  def assets(msgs: Seq[MessageData]) = msgs filter (_.msgType == ApiMessage.Type.ASSET)
 }

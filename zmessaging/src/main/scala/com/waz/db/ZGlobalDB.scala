@@ -21,14 +21,14 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.{ClientRegistrationState, ZmsVersion}
+import com.waz.api.ClientRegistrationState
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.content.GlobalPreferences.CallingV3Key
-import com.waz.content.{GlobalPreferences, ZmsDatabase}
+import com.waz.content.ZmsDatabase
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
 import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
 import com.waz.model.AccountData.AccountDataDao
+import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
 import com.waz.utils.wrappers.DB
@@ -52,9 +52,9 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 17
+  val DbVersion = 19
 
-  lazy val daos = Seq(AccountDataDao, CacheEntryDao)
+  lazy val daos = Seq(AccountDataDao, CacheEntryDao, TeamDataDoa)
 
   object Migrations {
 
@@ -91,15 +91,23 @@ object ZGlobalDB {
       Migration(13, 14) {
         implicit db => AccountDataMigration.v78(db)
       },
-      Migration(14, 15) { db => if (ZmsVersion.DEBUG) {
-        val prefs = GlobalPreferences(context)
-        prefs.preference(CallingV3Key) := "2" //force update debug builds to calling v3
-      }},
-      Migration(15, 16) { db => if (ZmsVersion.DEBUG) {
-          //setting prefs.sendWithAssetsV3Key no longer needed, if you haven't updated by now, it doesn't matter
-      }},
+      Migration(14, 15) { db =>
+//      no longer valid
+      },
+      Migration(15, 16) { db =>
+//      no longer valid
+      },
       Migration(16, 17) { db =>
         db.execSQL(s"ALTER TABLE Accounts ADD COLUMN registered_push TEXT")
+      },
+      Migration(17, 18) { db =>
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN teamId TEXT")
+        db.execSQL("UPDATE Accounts SET teamId = ''")
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN self_permissions INTEGER DEFAULT 0")
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN copy_permissions INTEGER DEFAULT 0")
+      },
+      Migration(18, 19) { db =>
+        db.execSQL("CREATE TABLE IF NOT EXISTS Teams (_id TEXT PRIMARY KEY, name TEXT, creator TEXT, icon TEXT, icon_key TEXT)")
       }
     )
 

@@ -32,7 +32,6 @@ import com.waz.PermissionsService
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Permission.READ_CONTACTS
-import com.waz.content.GlobalPreferences.ShareContacts
 import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
@@ -54,8 +53,8 @@ import scala.concurrent.duration._
 import scala.util.Success
 import scala.util.control.NoStackTrace
 
-class ContactsService(context: Context, accountId: AccountId, accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
-                      userPrefs: UserPreferences, globalPrefs: GlobalPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
+class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
+                      userPrefs: UserPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
                       convs: ConversationStorageImpl, permissions: PermissionsService) {
 
@@ -64,19 +63,6 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
   import Threading.Implicits.Background
   import lifecycle._
   import timeouts.contacts._
-
-  shareContactsPref.signal.onChanged {
-    case true =>
-      verbose(s"contact sharing allowed")
-      markContactsDirty()
-      requestUploadIfNeeded()
-      updateContactsAndMatches()
-    case false =>
-      verbose(s"contact sharing not allowed")
-      markContactsDirty()
-      updateContactsAndMatches()
-      storage(AddressBook.save(AddressBook.Empty)(_))
-  }(lifecycle)
 
   lifecycleState.on(Background) {
     case LifecycleState.UiActive => requestUploadIfNeeded()
@@ -128,7 +114,23 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
   private[waz] lazy val lastUploadTime                     = userPrefs.preference(AddressBookLastUpload)
   private[service] lazy val addressBookVersionOfLastUpload = userPrefs.preference(AddressBookVersion)
-  private[service] lazy val shareContactsPref              = globalPrefs.preference(ShareContacts)
+  private[service] lazy val shareContactsPref              = userPrefs.preference(ShareContacts)
+
+  shareContactsPref.signal.map(teamId.isEmpty && _).onChanged {
+    case true =>
+      verbose(s"contact sharing allowed")
+      markContactsDirty()
+      requestUploadIfNeeded()
+      updateContactsAndMatches()
+    case false =>
+      verbose(s"contact sharing not allowed")
+      markContactsDirty()
+      updateContactsAndMatches()
+      storage(AddressBook.save(AddressBook.Empty)(_))
+  }(lifecycle)
+
+  private def shareContactsPreferred = shareContactsPref().map(teamId.isEmpty && _)
+  private def shareContactsPermissionGranted = teamId.isEmpty && permissions.isGranted(READ_CONTACTS)
 
   private lazy val contactsObserver = new ContentObserverSignal(Contacts)(context)
   private lazy val contactsNeedReloading = new AtomicBoolean(true)
@@ -253,7 +255,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
   def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit] = storage(ContactsOnWireDao.insertOrIgnore(rels)(_)).future.map(_ => contactsOnWire.mutate(_ ++ rels))
 
-  private[waz] def requestUploadIfNeeded() = if (permissions.isGranted(READ_CONTACTS)) {
+  private[waz] def requestUploadIfNeeded() = if (shareContactsPermissionGranted) {
     atMostOncePer(accountId, uploadCheckInterval) {
       verbose(s"requestUploadIfNeeded()")
 
@@ -270,7 +272,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
       for {
         priorityUpload <- atLeastOncePerUploadMaxDelayOrOnVersionUpgrade
-        sharingEnabled <- shareContactsPref() if sharingEnabled
+        sharingEnabled <- shareContactsPreferred if sharingEnabled
         hashes <- addressBook // will be empty & only contain self hashes if sharing is disabled
         _ <- if (priorityUpload) sync postAddressBook hashes
         else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
@@ -392,7 +394,7 @@ class ContactsService(context: Context, accountId: AccountId, accountStorage: Ac
 
   private lazy val emailAddressesCache = new FutureCache[GenMap[String, GenSet[EmailAddress]]]
 
-  private def load[A](uri: Uri, ordering: Option[String], selection: Option[String], projection: String*)(sink: Sink[A]): Future[A] = shareContactsPref().map {
+  private def load[A](uri: Uri, ordering: Option[String], selection: Option[String], projection: String*)(sink: Sink[A]): Future[A] = shareContactsPreferred.map {
     case false =>
       sink.done
     case true =>

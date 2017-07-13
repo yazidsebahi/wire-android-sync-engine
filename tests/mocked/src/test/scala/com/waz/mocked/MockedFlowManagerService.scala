@@ -19,7 +19,7 @@ package com.waz.mocked
 
 import android.content.Context
 import com.waz.api.VideoSendState
-import com.waz.content.GlobalPreferences
+import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model.{CallSessionId, RConvId, UserId}
 import com.waz.service.call.DefaultFlowManagerService
 import com.waz.service.push.WebSocketClientService
@@ -30,8 +30,8 @@ import com.waz.znet.ZNetClient
 
 import scala.concurrent.Future
 
-class MockedFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: GlobalPreferences, network: DefaultNetworkModeService)
-  extends DefaultFlowManagerService(context, netClient, websocket, prefs, network) { self =>
+class MockedFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: UserPreferences, globalPreferences: GlobalPreferences, network: DefaultNetworkModeService)
+  extends DefaultFlowManagerService(context, netClient, websocket, prefs, globalPreferences, network) { self =>
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MockedFlowManagerService")
 

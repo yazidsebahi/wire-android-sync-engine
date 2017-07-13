@@ -38,7 +38,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
   lazy val convs = api.getConversations
   lazy val conv = convs.find(_.getType == ConversationType.Group).get
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val auto2Id = provisionedUserId("auto2")
   lazy val auto3Id = provisionedUserId("auto3")
@@ -92,8 +92,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       conv.getVerified shouldEqual Verification.UNKNOWN
       conv.sendMessage(new Text("test msg"))
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "test msg"
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.contentString shouldEqual "test msg"
+        msgs.last.state shouldEqual Message.Status.SENT
       }
     }
 
@@ -104,15 +104,15 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
       withDelay {
         conv.getVerified shouldEqual Verification.VERIFIED
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_VERIFIED
+        msgs.last.msgType shouldEqual Message.Type.OTR_VERIFIED
       } (10.seconds)
     }
 
     scenario("Send message in verified conv") {
       conv.sendMessage(new Text("test msg 1"))
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "test msg 1"
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.contentString shouldEqual "test msg 1"
+        msgs.last.state shouldEqual Message.Status.SENT
       }
     }
 
@@ -122,17 +122,17 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
     scenario("Receive new message from new device in previously verified conv") {
       awaitUi(1.second)
-      val count = msgs.size()
+      val count = msgs.size
       auto2_1 ? SendText(conv.data.remoteId, "remote msg")
 
       withDelay {
         conv.getVerified shouldEqual Verification.UNVERIFIED
-        withClue(msgs.map(m => (m.getMessageType, m.getBody)).mkString(", ")) {
-          msgs.getLastMessage.getBody shouldEqual "remote msg"
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.TEXT
-          msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        withClue(msgs.map(m => (m.msgType, m.contentString)).mkString(", ")) {
+          msgs.last.contentString shouldEqual "remote msg"
+          msgs.last.msgType shouldEqual Message.Type.TEXT
+          msgs.last.state shouldEqual Message.Status.SENT
           msgs should have size (count + 2)
-          msgs.get(count).getMessageType shouldEqual Message.Type.OTR_DEVICE_ADDED
+          msgs(count).msgType shouldEqual Message.Type.OTR_DEVICE_ADDED
         }
       }
     }
@@ -144,8 +144,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       conv.getVerified shouldEqual Verification.UNVERIFIED
       conv.sendMessage(new Text("failing msg 1"))
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "failing msg 1"
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.FAILED
+        msgs.last.contentString shouldEqual "failing msg 1"
+        msgs.last.state shouldEqual Message.Status.FAILED
         conv.getVerified shouldEqual Verification.UNVERIFIED
       }
     }
@@ -171,8 +171,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
       withDelay {
         conv.getVerified shouldEqual Verification.VERIFIED
-        withClue(msgs.map(_.getMessageType).mkString(", ")) {
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_VERIFIED
+        withClue(msgs.map(_.msgType).mkString(", ")) {
+          msgs.last.msgType shouldEqual Message.Type.OTR_VERIFIED
         }
       }
     }
@@ -180,8 +180,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     scenario("Send message in verified conv") {
       conv.sendMessage(new Text("test msg 1"))
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "test msg 1"
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.contentString shouldEqual "test msg 1"
+        msgs.last.state shouldEqual Message.Status.SENT
       }
     }
 
@@ -196,10 +196,10 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       conv.sendMessage(new Text("failing msg 2"))
       withDelay {
         conv.getVerified shouldEqual Verification.UNVERIFIED
-        withClue(msgs.map(_.getMessageType).mkString(", ")) {
-          msgs.get(count).getMessageType shouldEqual Message.Type.OTR_DEVICE_ADDED
-          msgs.getLastMessage.getBody shouldEqual "failing msg 2"
-          msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.FAILED
+        withClue(msgs.map(_.msgType).mkString(", ")) {
+          msgs(count).msgType shouldEqual Message.Type.OTR_DEVICE_ADDED
+          msgs.last.contentString shouldEqual "failing msg 2"
+          msgs.last.state shouldEqual Message.Status.FAILED
         }
       }
     }
@@ -207,8 +207,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     scenario("Trying to send another message also fails") {
       conv.sendMessage(new Text("failing msg 3"))
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "failing msg 3"
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.FAILED
+        msgs.last.contentString shouldEqual "failing msg 3"
+        msgs.last.state shouldEqual Message.Status.FAILED
         conv.getVerified shouldEqual Verification.UNVERIFIED
       }
     }
@@ -231,11 +231,13 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
     scenario("Retry message sending") {
       val count = msgs.size
-      val failed = msgs.filter { m => m.getBody.startsWith("failing msg") }
-      failed foreach (_.retry())
+      val failed = msgs.filter { m => m.contentString.startsWith("failing msg") }
+      failed foreach { m =>
+        zmessaging.messages.retryMessageSending(m.convId, m.id)
+      }
       withDelay {
-        msgs.size() shouldEqual count
-        failed.map(_.getMessageStatus) shouldEqual failed.map(_ => Message.Status.SENT)
+        msgs.size shouldEqual count
+        failed.map(_.state) shouldEqual failed.map(_ => Message.Status.SENT)
       }
     }
 
@@ -244,8 +246,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
       withDelay {
         conv.getVerified shouldEqual Verification.VERIFIED
-        withClue(msgs.map(_.getMessageType).mkString(", ")) {
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_VERIFIED
+        withClue(msgs.map(_.msgType).mkString(", ")) {
+          msgs.last.msgType shouldEqual Message.Type.OTR_VERIFIED
         }
       }
     }
@@ -263,11 +265,11 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       conv.sendMessage(new Text("failing msg 4"))
       withDelay {
         conv.getVerified shouldEqual Verification.UNVERIFIED
-        withClue(msgs.map(_.getMessageType).mkString(", ")) {
-          msgs.get(count).getMessageType shouldEqual Message.Type.OTR_DEVICE_ADDED
-          msgs.get(count).getMembers.toSet.map((_: User).data.id) shouldEqual Set(auto2Id, auto3Id)
-          msgs.getLastMessage.getBody shouldEqual "failing msg 4"
-          msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.FAILED
+        withClue(msgs.map(_.msgType).mkString(", ")) {
+          msgs(count).msgType shouldEqual Message.Type.OTR_DEVICE_ADDED
+          msgs(count).members shouldEqual Set(auto2Id, auto3Id)
+          msgs.last.contentString shouldEqual "failing msg 4"
+          msgs.last.state shouldEqual Message.Status.FAILED
         }
         errors should not be empty
         errors.head.getType shouldEqual ErrorType.CANNOT_SEND_MESSAGE_TO_UNVERIFIED_CONVERSATION
@@ -283,8 +285,8 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
       withDelay {
         conv.getVerified shouldEqual Verification.VERIFIED
-        withClue(msgs.map(_.getMessageType).mkString(", ")) {
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_VERIFIED
+        withClue(msgs.map(_.msgType).mkString(", ")) {
+          msgs.last.msgType shouldEqual Message.Type.OTR_VERIFIED
         }
       }
     }
@@ -296,23 +298,23 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       withDelay {
         clients should have size 2
         conv.getVerified shouldEqual Verification.UNVERIFIED
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_DEVICE_ADDED
-        msgs.getLastMessage.getMembers should have size 1
-        msgs.getLastMessage.getMembers.head.isMe shouldEqual true
+        msgs.last.msgType shouldEqual Message.Type.OTR_DEVICE_ADDED
+        msgs.last.members should have size 1
+        msgs.last.members.head shouldEqual zmessaging.selfUserId
       }
     }
 
     scenario("Verify added device, conv gets verified") {
       val clients = api.getSelf.getOtherOtrClients
       withDelay { clients should have size 2 }
-      val count = msgs.size()
+      val count = msgs.size
 
       clients foreach { c => if (c.getVerified == Verification.UNKNOWN) c.setVerified(true) }
 
       withDelay {
         conv.getVerified shouldEqual Verification.VERIFIED
-        withClue(msgs.map(m => (m.getMessageType, m.getBody))) {
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.OTR_VERIFIED // OTR_DEVICE_ADDED msg gets removed
+        withClue(msgs.map(m => (m.msgType, m.contentString))) {
+          msgs.last.msgType shouldEqual Message.Type.OTR_VERIFIED // OTR_DEVICE_ADDED msg gets removed
           msgs should have size (count - 1)
         }
       }

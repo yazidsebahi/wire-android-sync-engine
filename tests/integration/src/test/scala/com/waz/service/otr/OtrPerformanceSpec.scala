@@ -48,7 +48,7 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     withDelay(convs.map(_.getType) should contain(IConversation.Type.GROUP))
     convs.find(_.getType == IConversation.Type.GROUP).get
   }
-  lazy val msgs = groupConv.getMessages
+  def msgs = listMessages(groupConv.id)
 
   lazy val remotes = Seq.tabulate(count) { user =>
     (1 to 2) map { dev =>
@@ -97,16 +97,18 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       groupConv.sendMessage(new Text("test message 1"))
 
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual "test message 1"
-        msgs.getLastMessage.data.state shouldEqual Message.Status.SENT
+        msgs.last.contentString shouldEqual "test message 1"
+        msgs.last.state shouldEqual Message.Status.SENT
       }
 
-      val remoteMsgs = awaitUiFuture(Future.traverse(allRemotes) { _.findConv(groupConv.data.remoteId).map(_.getMessages) }).get
+      def remoteMsgs = awaitUiFuture(Future.traverse(allRemotes) { remote =>
+        remote.findConv(groupConv.data.remoteId).map(c => remote.listMessages(c.id))
+      }).get
 
       withDelay {
         remoteMsgs foreach { msgs =>
-          msgs.getLastMessage.getMessageType shouldEqual Message.Type.TEXT
-          msgs.getLastMessage.getBody shouldEqual "test message 1"
+          msgs.last.msgType shouldEqual Message.Type.TEXT
+          msgs.last.contentString shouldEqual "test message 1"
         }
       }
     }
@@ -118,7 +120,7 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       }
 
       withDelay {
-        withClue(msgs.map(_.getBody + "\n").sorted) {
+        withClue(msgs.map(_.contentString + "\n").sorted) {
           msgs should have size (msgCount + count)
         }
       }
@@ -131,12 +133,12 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
         awaitUi(1.millis)
       }
       withDelay {
-        withClue(msgs.drop(msgCount).map(_.getBody + "\n")) {
+        withClue(msgs.drop(msgCount).map(_.contentString + "\n")) {
           msgs should have size (msgCount + 10)
           msgs.drop(msgCount).zipWithIndex foreach { case (msg, i) =>
-            withClue(s"$i ${msg.data}") {
-              msg.getBody shouldEqual s"ordered message $i"
-              msg.data.state shouldEqual Message.Status.SENT
+            withClue(s"$i $msg") {
+              msg.contentString shouldEqual s"ordered message $i"
+              msg.state shouldEqual Message.Status.SENT
             }
           }
         }
@@ -149,8 +151,8 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       getGroupConv(remotes.head.head.getConversations).sendMessage(new Text(text))
 
       withDelay {
-        msgs.getLastMessage.getBody shouldEqual text
-        msgs.getLastMessage.data.state shouldEqual Message.Status.SENT
+        msgs.last.contentString shouldEqual text
+        msgs.last.state shouldEqual Message.Status.SENT
       }
     }
   }

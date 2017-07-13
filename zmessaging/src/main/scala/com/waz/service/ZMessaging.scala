@@ -54,25 +54,27 @@ import scala.util.Try
 
 class ZMessagingFactory(global: GlobalModule) {
 
-  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "")
+  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 
   def client(credentials: CredentialsHandler) = new ZNetClient(credentials, global.client, global.backend, global.loginClient)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
+  def teamsClient(client: ZNetClient) = new TeamsClientImpl(client)
+
   def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
 
   def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.userPrefs)
 
-  def userModule(userId: UserId, account: AccountService) = wire[UserModule]
+  def userModule(userId: UserId, account: AccountManager) = wire[UserModule]
 
-  def zmessaging(clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
+  def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
 }
 
 
-class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
+class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
   lazy val db                                   = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val userPrefs                            = wire[UserPreferences]
+  lazy val userPrefs                            = UserPreferences.apply(context, db, globalPreferences)
   lazy val usersStorage                         = wire[UsersStorageImpl]
   lazy val otrClientsStorage                    = wire[OtrClientsStorage]
   lazy val membersStorage                       = wire[MembersStorageImpl]
@@ -80,15 +82,13 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String) {
   lazy val reactionsStorage                     = wire[ReactionsStorage]
   lazy val notifStorage                         = wire[NotificationStorage]
   lazy val convsStorage                         = wire[ConversationStorageImpl]
-  lazy val teamsStorage:      TeamsStorage      = wire[TeamsStorageImpl]
-  lazy val teamMemberStorage: TeamMemberStorage = wire[TeamMemberStorageImpl]
   lazy val msgDeletions                         = wire[MsgDeletionStorage]
   lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
   lazy val msgEdits                             = wire[EditHistoryStorage]
 }
 
 
-class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
+class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userModule: UserModule) {
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
@@ -98,6 +98,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   val global     = account.global
 
   val selfUserId = userModule.userId
+
   val accountId  = account.id
 
   val zNetClient = account.netClient
@@ -123,7 +124,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def bitmapDecoder     = global.bitmapDecoder
   def timeouts          = global.timeouts
   def cache             = global.cache
-  def mediamanager      = global.mediaManager
   def globalRecAndPlay  = global.recordingAndPlayback
   def tempFiles         = global.tempFiles
   def metadata          = global.metadata
@@ -131,6 +131,7 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def blacklist         = global.blacklist
   def backend           = global.backend
   def accountsStorage   = global.accountsStorage
+  def teamsStorage      = global.teamsStorage
   def streamLoader      = global.streamLoader
   def videoLoader       = global.videoLoader
   def pcmAudioLoader    = global.pcmAudioLoader
@@ -144,8 +145,6 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   def reactionsStorage  = storage.reactionsStorage
   def notifStorage      = storage.notifStorage
   def convsStorage      = storage.convsStorage
-  def teamsStorage      = storage.teamsStorage
-  def teamMemberStorage = storage.teamMemberStorage
   def msgDeletions      = storage.msgDeletions
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache
@@ -183,47 +182,48 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
   lazy val assetLoader     = wire[AssetLoader]
   lazy val imageLoader     = wire[ImageLoader]
 
-  lazy val push: PushServiceImpl                  = wire[PushServiceImpl]
-  lazy val pushToken: PushTokenService            = wire[PushTokenService]
-  lazy val pushSignals                            = wire[PushServiceSignals]
-  lazy val errors                                 = wire[ErrorsService]
-  lazy val reporting                              = new ZmsReportingService(accountId, global.reporting)
-  lazy val pingInterval: PingIntervalService      = wire[PingIntervalService]
-  lazy val websocket: WebSocketClientService      = wire[WebSocketClientService]
-  lazy val userSearch                             = wire[UserSearchService]
-  lazy val assetGenerator                         = wire[ImageAssetGenerator]
-  lazy val assetMetaData                          = wire[com.waz.service.assets.MetaDataService]
-  lazy val assets: AssetService                   = wire[AssetService]
-  lazy val users: UserServiceImpl                 = wire[UserServiceImpl]
-  lazy val conversations: ConversationsService    = wire[ConversationsService]
-  lazy val convsNotifier                          = wire[ConversationsNotifier]
-  lazy val convEvents: ConversationEventsService  = wire[ConversationEventsService]
-  lazy val convsUi                                = wire[ConversationsUiService]
-  lazy val convsStats                             = wire[ConversationsListStateService]
-  lazy val teams: TeamsServiceImpl                = wire[TeamsServiceImpl]
-  lazy val messages: MessagesServiceImpl          = wire[MessagesServiceImpl]
-  lazy val connection: ConnectionService          = wire[ConnectionService]
-  lazy val flowmanager: DefaultFlowManagerService = wire[DefaultFlowManagerService]
-  lazy val avs: AvsV3                             = wire[AvsV3Impl]
-  lazy val calling: CallingService                = wire[CallingService]
-  lazy val contacts: ContactsService              = wire[ContactsService]
-  lazy val typing: TypingService                  = wire[TypingService]
-  lazy val invitations                            = wire[InvitationService]
-  lazy val richmedia                              = wire[RichMediaService]
-  lazy val giphy                                  = wire[GiphyService]
-  lazy val youtubeMedia                           = wire[YouTubeMediaService]
-  lazy val soundCloudMedia                        = wire[SoundCloudMediaService]
-  lazy val spotifyMedia                           = wire[SpotifyMediaService]
-  lazy val otrService: OtrServiceImpl             = wire[OtrServiceImpl]
-  lazy val genericMsgs: GenericMessageService     = wire[GenericMessageService]
-  lazy val reactions: ReactionsService            = wire[ReactionsService]
-  lazy val notifications: NotificationService     = wire[NotificationService]
-  lazy val callLog                                = wire[DefaultCallLogService]
-  lazy val recordAndPlay                          = wire[RecordAndPlayService]
-  lazy val receipts                               = wire[ReceiptService]
-  lazy val ephemeral                              = wire[EphemeralMessagesService]
-  lazy val handlesService                         = wire[HandlesService]
-  lazy val gsmService                             = wire[GsmInterruptService]
+  lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
+  lazy val pushToken: PushTokenService                = wire[PushTokenService]
+  lazy val pushSignals                                = wire[PushServiceSignals]
+  lazy val errors                                     = wire[ErrorsService]
+  lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
+  lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
+  lazy val websocket: WebSocketClientService          = wire[WebSocketClientService]
+  lazy val userSearch                                 = wire[UserSearchService]
+  lazy val assetGenerator                             = wire[ImageAssetGenerator]
+  lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
+  lazy val assets: AssetService                       = wire[AssetService]
+  lazy val users: UserServiceImpl                     = wire[UserServiceImpl]
+  lazy val conversations: ConversationsService        = wire[ConversationsService]
+  lazy val convsNotifier                              = wire[ConversationsNotifier]
+  lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
+  lazy val convsUi                                    = wire[ConversationsUiService]
+  lazy val convsStats                                 = wire[ConversationsListStateService]
+  lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
+  lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
+  lazy val connection: ConnectionService              = wire[ConnectionService]
+  lazy val mediamanager                               = wire[DefaultMediaManagerService]
+  lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
+  lazy val avs: AvsV3                                 = wire[AvsV3Impl]
+  lazy val calling: CallingService                    = wire[CallingService]
+  lazy val contacts: ContactsService                  = wire[ContactsService]
+  lazy val typing: TypingService                      = wire[TypingService]
+  lazy val invitations                                = wire[InvitationService]
+  lazy val richmedia                                  = wire[RichMediaService]
+  lazy val giphy                                      = wire[GiphyService]
+  lazy val youtubeMedia                               = wire[YouTubeMediaService]
+  lazy val soundCloudMedia                            = wire[SoundCloudMediaService]
+  lazy val spotifyMedia                               = wire[SpotifyMediaService]
+  lazy val otrService: OtrServiceImpl                 = wire[OtrServiceImpl]
+  lazy val genericMsgs: GenericMessageService         = wire[GenericMessageService]
+  lazy val reactions: ReactionsService                = wire[ReactionsService]
+  lazy val notifications: NotificationService         = wire[NotificationService]
+  lazy val callLog                                    = wire[DefaultCallLogService]
+  lazy val recordAndPlay                              = wire[RecordAndPlayService]
+  lazy val receipts                                   = wire[ReceiptService]
+  lazy val ephemeral                                  = wire[EphemeralMessagesService]
+  lazy val handlesService                             = wire[HandlesService]
+  lazy val gsmService                                 = wire[GsmInterruptService]
 
   lazy val assetSync        = wire[AssetSyncHandler]
   lazy val usersearchSync   = wire[UserSearchSyncHandler]
@@ -257,17 +257,18 @@ class ZMessaging(val clientId: ClientId, val userModule: UserModule) {
           users.userDeleteEventsStage,
           flowmanager.callEventsStage,
           calling.callMessagesStage,
-          conversations.convStateEventProcessingStage,
           teams.eventsProcessingStage,
           typing.typingEventStage,
           otrClientsService.otrClientsProcessingStage,
           pushToken.eventProcessingStage,
-          Stage(Parallel)(
-            UnarchivingEventProcessingStage(users, convsStorage),
-            convEvents.conversationEventsStage,
-            Stage(Interleaved)(
-              messages.messageEventProcessingStage,
-              genericMsgs.eventProcessingStage
+          Stage(Sequential)(
+            convOrder.conversationOrderEventsStage,
+            Stage(Parallel)(
+              conversations.convStateEventProcessingStage,
+              Stage(Interleaved)(
+                messages.messageEventProcessingStage,
+                genericMsgs.eventProcessingStage
+              )
             )
           )
         ),
@@ -328,13 +329,13 @@ object ZMessaging { self =>
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
   private lazy val global: GlobalModule = new GlobalModule(context, backend)
-  private lazy val accounts: Accounts = new Accounts(global)
+  private lazy val accounts: AccountsService = new AccountsService(global)
   private lazy val ui: UiModule = new UiModule(accounts)
 
   // mutable for testing FIXME: get rid of that
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModule = _
-  private [waz] var currentAccounts: Accounts = _
+  var currentAccounts: AccountsService = _
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()
@@ -361,5 +362,7 @@ object ZMessaging { self =>
       }
     case _ => CancellableFuture.successful {}
   }
+
+
 
 }

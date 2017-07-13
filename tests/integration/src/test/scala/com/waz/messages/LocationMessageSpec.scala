@@ -20,7 +20,6 @@ package com.waz.messages
 import akka.pattern.ask
 import com.waz.api._
 import com.waz.provision.ActorMessage._
-import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
@@ -33,7 +32,7 @@ class LocationMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterA
   lazy val self = provisionedUserId("auto1")
   lazy val otherUser = provisionedUserId("auto2")
   lazy val conv = conversations.get(0)
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
 
   lazy val otherUserClient = registerDevice("other_user")
   lazy val secondClient = registerDevice("second_client")
@@ -57,78 +56,42 @@ class LocationMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       conv.sendMessage(loc)
       withDelay {
         msgs should have size 2
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.LOCATION
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.msgType shouldEqual Message.Type.LOCATION
+        msgs.last.state shouldEqual Message.Status.SENT
       }
-      val msg = msgs.getLastMessage
-      msg.getLocation shouldEqual loc
+      val msg = msgs.last
+      msg.location shouldEqual loc
     }
   }
 
   feature("Receive location") {
 
     scenario("Receive message from other user") {
-      val fromBefore = msgs.size()
+      val fromBefore = msgs.size
 
       otherUserClient ? SendLocation(conv.data.remoteId, 52.5270968f, 13.4020788f, "test location", 9) should eventually(beMatching { case Successful(_) => true })
 
       withDelay {
         msgs should have size (fromBefore + 1)
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.LOCATION
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.msgType shouldEqual Message.Type.LOCATION
+        msgs.last.state shouldEqual Message.Status.SENT
       }
-      val msg = msgs.getLastMessage
-      msg.getLocation shouldEqual new MessageContent.Location(52.5270968f, 13.4020788f, "test location", 9)
-    }
-
-    scenario("Load location map image") {
-      val msg = msgs.getLastMessage
-      val asset = msg.getImage
-      asset.isEmpty shouldEqual false
-      val spy = new BitmapSpy(asset)
-      withDelay {
-        spy.failed shouldEqual false
-        spy.result shouldBe defined
-      }
-      info("image size: " + spy.result.map(b => (b.getWidth, b.getHeight)))
-    }
-
-    scenario("Load map image with specified size") {
-      val msg = msgs.getLastMessage
-      val asset = msg.getImage(640, 240)
-      asset.isEmpty shouldEqual false
-      val spy = new BitmapSpy(asset)
-      withDelay {
-        spy.failed shouldEqual false
-        spy.result shouldBe defined
-        spy.result.map(b => (b.getWidth, b.getHeight)) shouldEqual Some((640, 240))
-      }
-    }
-    
-    scenario("Load map image with size bigger than 640") {
-      val msg = msgs.getLastMessage
-      val asset = msg.getImage(800, 600)
-      asset.isEmpty shouldEqual false
-      val spy = new BitmapSpy(asset)
-      withDelay {
-        spy.failed shouldEqual false
-        spy.result shouldBe defined
-        spy.result.map(b => (b.getWidth, b.getHeight)) shouldEqual Some((640, 480))
-      }
+      val msg = msgs.last
+      msg.location shouldEqual new MessageContent.Location(52.5270968f, 13.4020788f, "test location", 9)
     }
 
     scenario("Receive message sent from second client") {
-      val fromBefore = msgs.size()
+      val fromBefore = msgs.size
 
       secondClient ? SendLocation(conv.data.remoteId, 1f, 2f, "self location", 9) should eventually(beMatching { case Successful(_) => true })
 
       withDelay {
         msgs should have size (fromBefore + 1)
-        msgs.getLastMessage.getMessageType shouldEqual Message.Type.LOCATION
-        msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+        msgs.last.msgType shouldEqual Message.Type.LOCATION
+        msgs.last.state shouldEqual Message.Status.SENT
       }
-      val msg = msgs.getLastMessage
-      msg.getLocation shouldEqual new MessageContent.Location(1f, 2f, "self location", 9)
+      val msg = msgs.last
+      msg.location shouldEqual new MessageContent.Location(1f, 2f, "self location", 9)
     }
   }
 }

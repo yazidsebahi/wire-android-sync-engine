@@ -54,7 +54,7 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   lazy val global = new MockGlobalModule()
 
-  lazy val downloader = new service.downloads.DownloaderService(testContext, global.cache, global.prefs, global.network)
+  lazy val downloader = new service.downloads.DownloaderService(testContext, global.cache, global.network)
 
   implicit lazy val assetDownloader = new AssetDownloader(null, null) {
     override def load(req: AssetRequest, callback: Callback) = downloads(req.cacheKey).apply(callback)
@@ -210,11 +210,10 @@ class DownloaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
   private def createDownloader(ctx: Context = testContext,
                                cache: CacheService = global.cache,
-                               prefs: Preferences = global.prefs,
                                network: NetworkModeService = global.network
                               )
                               (downloadOnceBody: (Int) => CancellableFuture[Option[CacheEntry]]) =
-    new service.downloads.DownloaderService(ctx, cache, prefs, network){
+    new service.downloads.DownloaderService(ctx, cache, network){
       var retry = 0
       override protected def downloadOnce[A <: DownloadRequest](req: A, force: Boolean = false)
                                                                (implicit loader: Downloader[A],

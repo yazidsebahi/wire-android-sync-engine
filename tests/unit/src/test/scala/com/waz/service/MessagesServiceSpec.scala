@@ -31,7 +31,6 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.Event.EventDecoder
 import com.waz.model.GenericContent.{Asset, Knock}
 import com.waz.model.GenericMessage.TextMessage
-import com.waz.model.UserData.UserDataDao
 import com.waz.model.{Mime, _}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -553,32 +552,6 @@ class MessagesServiceSpec extends FeatureSpec with Matchers with OptionValues wi
         msgs should have size 1
         msgs.head.state shouldEqual Status.FAILED
         getConv(conv.id).value.failedCount shouldEqual 1
-      }
-    }
-  }
-
-  feature("Incoming messages list") {
-
-    scenario("receive single knock") {
-      val user1 = UserDataDao.insertOrReplace(UserData("test"))
-      val conv = insertConv(ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group))
-
-      @volatile var updateCount = 0
-      val incoming = messagesStorage.getIncomingMessages
-      incoming { _ => updateCount += 1}
-
-      withDelay(updateCount shouldEqual 1)
-      service.dispatch(GenericMessageEvent(conv.remoteId, new Date, user1.id, GenericMessage(Uid(), Knock())).withCurrentLocalTime())
-
-      withDelay {
-        updateCount shouldEqual 2
-        val last = incoming.currentValue.get.last
-        last.msgType shouldEqual Message.Type.KNOCK
-        last.convId shouldEqual conv.id
-
-        val msgs = listMessages(conv.id)
-        msgs should have size 1
-        msgs.head.msgType shouldEqual Message.Type.KNOCK
       }
     }
   }

@@ -31,6 +31,7 @@ import com.waz.service._
 import com.waz.sync.client.InvitationClient
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.testutils.Matchers._
+import com.waz.testutils.Implicits._
 import com.waz.testutils._
 import com.waz.threading.CancellableFuture.lift
 import com.waz.threading.Threading
@@ -108,13 +109,12 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
 
         lazy val self = api.getSelf
         lazy val convs = api.getConversations
-        lazy val messages = convs.get(0).getMessages
         soon {
           self.isLoggedIn shouldBe true
           self.getName shouldEqual "Android Test Invited"
           convs should have size 1
           convs.get(0).getOtherParticipant.getName shouldEqual "auto1 user"
-          messages should have size 1 // started using device
+          listMessages(convs.get(0).id) should have size 1 // started using device
         }
       }
 
@@ -149,8 +149,8 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
   lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, user: UserModule): service.ZMessaging =
-      new service.ZMessaging(clientId, user) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): service.ZMessaging =
+      new service.ZMessaging(teamId, clientId, user) {
         override lazy val invitationClient = new InvitationClient(zNetClient) {
           override def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] =
             lift(super.postInvitation(i).andThen { case Success(Right(Right(inv))) => invitation = Some(inv) })

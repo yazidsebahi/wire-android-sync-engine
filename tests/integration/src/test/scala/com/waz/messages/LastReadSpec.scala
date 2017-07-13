@@ -25,7 +25,7 @@ import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.GenericContent.LastRead
 import com.waz.model.otr.ClientId
-import com.waz.model.{ConvId, GenericMessage, RConvId, UserId}
+import com.waz.model._
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
 import com.waz.service._
 import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
@@ -45,7 +45,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   lazy val self = provisionedUserId("auto1")
   lazy val otherUser = provisionedUserId("auto2")
   lazy val conv = conversations.get(0)
-  lazy val msgs = conv.getMessages
+  def msgs = listMessages(conv.id)
   lazy val remoteConvId = conv.data.remoteId
 
   lazy val otherUserClient = registerDevice("other_user")
@@ -60,7 +60,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   }
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
-    override def zmessaging(clientId: ClientId, userModule: UserModule): ZMessaging = new ApiZMessaging(clientId, userModule) {
+    override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, userModule) {
 
 
       override lazy val otrSync: OtrSyncHandler = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache) {
@@ -94,7 +94,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
       msgs should not be empty
     }
 
-    msgs.get(0)
+    zmessaging.messages.markMessageRead(conv.id, msgs(0).id)
 
     for (i <- 0 until 5) {
       otherUserClient ? SendText(conv.data.remoteId, s"test message $i") should eventually(be(Successful))
@@ -102,7 +102,6 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
 
     withDelay {
       msgs should have size 6
-      msgs.getLastReadIndex shouldEqual 0
       conv.getUnreadCount shouldEqual 5
 
       postLastReadRequests shouldBe empty
@@ -110,7 +109,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   }
 
   scenario("Receive message sent from second client and update lastRead for it") {
-    val fromBefore = msgs.size()
+    val fromBefore = msgs.size
 
     secondClient ? SendText(conv.data.remoteId, s"message from self") should eventually(be(Successful))
 
@@ -122,7 +121,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   }
 
   scenario("send couple messages, don't send lastRead") {
-    val fromBefore = msgs.size()
+    val fromBefore = msgs.size
 
     for (i <- 0 until 5) {
       conv.sendMessage(new Text(s"own mesage: $i"))
@@ -130,7 +129,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
 
     withDelay {
       msgs should have size (fromBefore + 5)
-      msgs.getLastMessage.getMessageStatus shouldEqual Message.Status.SENT
+      msgs.last.state shouldEqual Message.Status.SENT
       conv.getUnreadCount shouldEqual 0
     }
 
@@ -139,14 +138,13 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   }
 
   scenario("receive couple messages from other user") {
-    val fromBefore = msgs.size()
+    val fromBefore = msgs.size
     for (i <- 0 until 5) {
       otherUserClient ? SendText(conv.data.remoteId, s"test message $i") should eventually(be(Successful))
     }
 
     withDelay {
       msgs should have size (fromBefore + 5)
-      msgs.getLastReadIndex shouldEqual fromBefore - 1
       conv.getUnreadCount shouldEqual 5
 
       postLastReadRequests shouldBe empty
@@ -154,9 +152,9 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
   }
 
   scenario("read all messages, send one LastRead msg") {
-    val fromBefore = msgs.size()
+    val fromBefore = msgs.size
     for (i <- fromBefore - 5 until fromBefore) {
-      msgs.get(i)
+      zmessaging.messages.markMessageRead(conv.id, msgs(i).id)
     }
 
     withDelay {
