@@ -26,7 +26,6 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.WsForegroundKey
 import com.waz.service.ZMessaging
-import com.waz.threading.Threading
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.{ServiceEventContext, Signal}
 

@@ -21,8 +21,8 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.support.v4.content.WakefulBroadcastReceiver
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.model.AccountId
 import com.waz.service.{AccountManager, ZMessaging}
 import com.waz.threading.Threading
@@ -60,18 +60,17 @@ abstract class FutureService extends Service {
 }
 
 trait ZMessagingService extends Service {
-  import ZMessagingService._
   import Threading.Implicits.Background
+  import ZMessagingService._
 
   final abstract override def onCreate(): Unit = {
     super.onCreate()
     ZMessaging.onCreate(getApplicationContext)
   }
 
-  private lazy val wakeLock = new WakeLock(getApplicationContext)
   private def accounts = ZMessaging.currentAccounts
 
-  def onAccountIntent[Result](intent: Intent)(execute: AccountManager => Future[Result]): Future[Result] = wakeLock.async {
+  def onAccountIntent[Result](intent: Intent)(execute: AccountManager => Future[Result]): Future[Result] =
     if (intent != null && intent.hasExtra(ZmsUserIdExtra)) {
       val userId = AccountId(intent.getStringExtra(ZmsUserIdExtra))
       accounts.getAccountManager(userId) flatMap {
@@ -84,7 +83,6 @@ trait ZMessagingService extends Service {
       error("intent has no ZUserId extra")
       Future.failed(InvalidIntentException)
     }
-  }
 
   def onZmsIntent[Result](intent: Intent)(execute: ZMessaging => Future[Result]): Future[Result] =
     onAccountIntent(intent) { acc =>

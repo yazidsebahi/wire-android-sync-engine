@@ -28,7 +28,7 @@ import com.waz.utils.events.EventContext
 import com.waz.utils.returning
 import com.waz.utils.wrappers.{Context, Intent}
 
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.Future
 
 /**
  * Background service keeping track of ongoing calls to make sure ZMessaging is running as long as a call is active.
@@ -70,34 +70,19 @@ class CallWakeService extends FutureService with ZMessagingService {
 
   /**
     * Sets up a cancellable future which will end the call after the `callConnectingTimeout`, unless
-    * the promise is completed (which can be triggered by a successfully established call), at which
-    * point the future will be cancelled, and the call allowed to continue indefinitely.
+    * the state changes to something else than SelfCalling and we don't end the call here
     */
   private def track(zms: ZMessaging, conv: ConvId): Future[Unit] = {
-    val promise = Promise[Unit]()
-
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
       CancellableFuture.lift(zms.calling.currentCall.head.collect{case Some(i) => i.state}.map(isConnectingStates.contains).map {
         case true => zms.calling.endCall(conv)
         case _ =>
       })
     }
-
-    def check() = zms.calling.currentCall.head map {
-      case Some(info) if info.state == SelfCalling =>
-        verbose(s"call in progress: $info")
-      case _ => promise.trySuccess({})
+    val state = zms.calling.currentCall.map(_.map(_.state))
+    state.filter(!_.contains(SelfCalling)).head.map(_ => {}).andThen {
+      case _ => timeoutFuture.cancel()
     }
-
-    val subscriber = zms.calling.currentCall.map(_.map(_.state)) { _ => check()}
-
-    check()
-
-    promise.future.onComplete { _ =>
-      timeoutFuture.cancel()
-      subscriber.destroy()
-    }
-    promise.future
   }
 }
 
