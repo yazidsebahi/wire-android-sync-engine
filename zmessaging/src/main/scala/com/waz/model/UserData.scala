@@ -19,7 +19,6 @@ package com.waz.model
 
 import java.util.Date
 import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
-
 import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
 import com.waz.db.Col._
@@ -272,7 +271,7 @@ object UserData {
         s"case when ${Conn.name} = '${Conn(ConnectionStatus.Accepted)}' then 0 when ${Rel.name} != '${Relation.Other.name}' then 1 else 2 end ASC, ${Name.name} ASC"))
 
     def search(prefix: SearchKey, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB): Set[UserData] = {
-      val select = s"SELECT u.* ${if (teamId.isDefined) ", COUNT(*)" else ""} FROM ${table.name} u WHERE "
+      val select = s"SELECT u.* FROM ${table.name} u WHERE "
       val handleCondition =
         if (handleOnly){
           s"""u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
@@ -282,7 +281,7 @@ object UserData {
              |     OR u.${SKey.name} LIKE '% ${SKey(prefix)}%'
              |     OR u.${Handle.name} LIKE '%${prefix.asciiRepresentation}%')""".stripMargin
         }
-      val teamCondition = teamId.map(tId => s"AND u.${TeamId.name} = '${tId}'")
+      val teamCondition = teamId.map(tId => s"AND u.${TeamId.name} = '$tId'")
 
       list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null)).toSet
     }

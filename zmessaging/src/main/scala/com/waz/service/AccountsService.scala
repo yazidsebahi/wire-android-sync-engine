@@ -132,8 +132,9 @@ class AccountsService(val global: GlobalModule) {
   def logout(account: AccountId, flushCredentials: Boolean) = {
     activeAccountPref() flatMap { id =>
         for {
-          _ <- if (id.contains(account)) setAccount(None) else Future.successful(())
+          otherAccounts <- loggedInAccounts.map(_.map(_.id).filter(!id.contains(_))).head
           _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else storage.update(account, _.copy(registeredPush = None))
+          _ <- if (id.contains(account)) setAccount(if (flushCredentials) otherAccounts.headOption else None) else Future.successful(())
         } yield {}
     }
   }

@@ -84,7 +84,7 @@ class CallingService(context:             Context,
 
   currentCall.onChanged { info =>
     verbose(s"Calling information changed: $info")
-    info.foreach(i => CallWakeService(context, account, i.convId)) // start tracking
+    info.foreach(i => if (i.state == SelfCalling) CallWakeService(context, account, i.convId)) // start tracking
   }
 
   def onReady(version: Int) = {
@@ -258,7 +258,7 @@ class CallingService(context:             Context,
   }
 
   /**
-   * @returns Future as this function is called from background service
+   * @return Future as this function is called from background service
    */
   def endCall(convId: ConvId): Future[Unit] = withConv(convId) { conv =>
     verbose(s"endCall: $convId")
