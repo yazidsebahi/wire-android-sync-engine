@@ -31,9 +31,9 @@ import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
-import com.waz.utils.events.{EventContext, EventStreamWithAuxSignal, Signal}
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.CredentialsHandler
 import com.waz.znet.Response.Status
@@ -199,7 +199,9 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   val zmessaging = (for {
     Some(cId)  <- clientId
-    Right(tId) <- accountData.flatMap(a => Signal.future(updateSelfTeam(a.id)).map(_ => a.teamId))
+    aId        <- accountData.map(_.id)
+    _          <- Signal.future(updateSelfTeam(aId))
+    Right(tId) <- accountData.map(_.teamId)
     um         <- userModule
     Some(_)    <- Signal.future { cryptoBox.cryptoBox }
   } yield {
@@ -342,49 +344,41 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     } yield {}
   }
 
-  private def updateSelfTeam(accountId: AccountId): ErrorOr[Unit] =
-    accountsStorage.get(accountId).flatMap {
-      case Some(account) =>
-        account.teamId match {
-          case Right(_) =>
-            Future.successful(Right({}))
-          case Left(_) =>
-            teamsClient.findSelfTeam().future flatMap {
-              case Right(teamOpt) =>
-                verbose(s"got self team: $teamOpt")
+  private def updateSelfTeam(accountId: AccountId): ErrorOr[Unit] = accountsStorage.get(accountId).flatMap {
+    case Some(account) => account.teamId match {
+      case Right(_) => Future.successful(Right({}))
+      case Left(_) => teamsClient.findSelfTeam().future flatMap {
+        case Right(teamOpt) =>
+          val updateUsers = (teamOpt, account.userId) match {
+            case (Some(t), Some(uId)) => storage.usersStorage.update(uId, _.updated(Some(t.id))).map(_ => {})
+            case _ => Future.successful({})
+          }
 
-                val updateUsers = (teamOpt, account.userId) match {
-                  case (Some(t), Some(uId)) =>
-                    storage.usersStorage.update(uId, _.updated(Some(t.id))).map(_ => {})
-                  case _ => Future.successful({})
-                }
+          val updateTeams = teamOpt match {
+            case Some(t) => teamsStorage.updateOrCreate(t.id, _ => t, t)
+            case _ => Future.successful({})
+          }
 
-                val updateTeams = teamOpt match {
-                  case Some(t) => teamsStorage.updateOrCreate(t.id, _ => t, t)
-                  case _       => Future.successful({})
-                }
+          val fetchPermissions = (teamOpt, account.userId) match {
+            case (Some(t), Some(u)) => teamsClient.getPermissions(t.id, u).map {
+              case Right(p) => Some(p)
+              case Left(_) => None
+            }.future
+            case _ => Future.successful(None)
+          }
 
-                val fetchPermissions = (teamOpt, account.userId) match {
-                  case (Some(t), Some(u)) =>
-                    teamsClient.getPermissions(t.id, u).map {
-                      case Right(p) => Some(p)
-                      case Left(_)  => None
-                    }.future
-                  case _ => Future.successful(None)
-                }
-
-                for {
-                  _ <- updateUsers
-                  _ <- updateTeams
-                  p <- fetchPermissions
-                  _ <- accountsStorage.update(id, _.withTeam(teamOpt.map(_.id), p))
-                } yield Right({})
-
-              case Left(err) => Future.successful(Left(err))
-            }
-        }
-      case _ => Future.successful(Left(ErrorResponse.InternalError))
+          for {
+            _ <- updateUsers
+            _ <- updateTeams
+            p <- fetchPermissions
+            _ <- accountsStorage.update(id, _.withTeam(teamOpt.map(_.id), p))
+          } yield Right({})
+        case Left(err) => Future.successful(Left(err))
+      }
     }
+    case _ => Future.successful(Left(ErrorResponse.InternalError))
+  }
+
 
   private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
@@ -455,7 +449,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
           case Left((_, err)) =>
             verbose(s"activate failed: $err")
             Future.successful(Left(err))
-      }
+        }
+      case None => Future.successful(Left(ErrorResponse.internalError(s"no account for $accountId")))
     }
 
   private def awaitActivation(retry: Int = 0): CancellableFuture[Option[AccountData]] =
