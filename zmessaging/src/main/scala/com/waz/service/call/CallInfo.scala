@@ -21,9 +21,9 @@ import com.sun.jna.Pointer
 import com.waz.api.VideoSendState
 import com.waz.api.VideoSendState._
 import com.waz.model.{ConvId, GenericMessage, UserId}
-import com.waz.service.call.AvsV3.ClosedReason.Normal
-import com.waz.service.call.AvsV3.VideoReceiveState.Stopped
-import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
+import com.waz.service.call.Avs.ClosedReason.Normal
+import com.waz.service.call.Avs.VideoReceiveState.Stopped
+import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState}
 import com.waz.service.call.CallInfo.CallState
 import org.threeten.bp.Instant
 

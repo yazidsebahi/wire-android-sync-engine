@@ -28,8 +28,8 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service._
-import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Interrupted, StillOngoing}
-import com.waz.service.call.AvsV3.{ClosedReason, VideoReceiveState}
+import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Interrupted, StillOngoing}
+import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState}
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
@@ -43,11 +43,13 @@ import com.waz.zms.CallWakeService
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
-class CallingService(context:             Context,
+class CallingService(val selfUserId:      UserId,
+                     val clientId:        ClientId,
                      account:             AccountId,
-                     selfUserId:          UserId,
-                     avs:                 AvsV3,
+                     context:             Context,
+                     avs:                 Avs,
                      convs:               ConversationsContentUpdater,
                      members:             MembersStorage,
                      otrSyncHandler:      OtrSyncHandler,
@@ -75,7 +77,19 @@ class CallingService(context:             Context,
 
   val requestedCallVersion = Signal(-1)
 
+  try {
+    avs.close()
+  } catch {
+    case NonFatal(e) => e.printStackTrace()
+  }
   avs.init(this)
+
+  Option(ZMessaging.currentAccounts).foreach(_.activeAccountPref.signal.onChanged.on(dispatcher) {
+    case Some(id) if id == account =>
+      avs.close()
+      avs.init(this)
+    case _ => //
+  })
 
   availableCalls.onChanged { cs =>
     val ids = cs.map{case (cId, _) => cId}
