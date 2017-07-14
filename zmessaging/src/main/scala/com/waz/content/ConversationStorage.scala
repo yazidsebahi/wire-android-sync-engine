@@ -44,9 +44,9 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
   import EventContext.Implicits.global
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationStorage")
 
-  private val remoteMap = new mutable.HashMap[RConvId, ConvId]()
+  private val remoteMap         = new mutable.HashMap[RConvId, ConvId]()
   private val conversationsById = new mutable.HashMap[ConvId, ConversationData]()
-  def conversations = conversationsById.values.toIndexedSeq
+  def conversations             = conversationsById.values.toIndexedSeq
 
   val convsSignal = Signal[ConversationsSet]()
 
@@ -71,8 +71,12 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
   def setUnknownVerification(convId: ConvId) = update(convId, { c => c.copy(verified = if (c.verified == Verification.UNVERIFIED) UNKNOWN else c.verified) })
 
   onDeleted.on(dispatcher) { cs =>
+    verbose(s"convs deleted: $cs")
     cs foreach { c =>
-      conversationsById.remove(c) foreach { convDeleted ! _ }
+      conversationsById.remove(c) foreach { cd =>
+        convDeleted ! cd
+        remoteMap.remove(cd.remoteId)
+      }
     }
 
     convsSignal mutate { _ -- cs.toSet }
@@ -96,38 +100,36 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
   }
 
   private val init = for {
-    convs <- find[ConversationData, Vector[ConversationData]](_ => true, db => ConversationDataDao.iterating(ConversationDataDao.listCursor(db)), identity)
+    convs   <- super.list()
     updater = (c: ConversationData) => c.copy(searchKey = c.savedOrFreshSearchKey)
-    convUpdates <- updateAll2(convs.map(_.id), updater)
+    _       <- updateAll2(convs.map(_.id), updater)
   } yield {
-    val updated = convs map updater
+    val updated = convs.map(updater)
+    verbose(s"Caching ${updated.size} conversations")
     updated foreach { c =>
       conversationsById(c.id) = c
       remoteMap(c.remoteId) = c.id
     }
-
     convsSignal ! ConversationsSet(updated.to[SortedSet])
-
-    conversationsById
   }
 
   private def updateSearchKey(cs: Seq[ConversationData]) =
     if (cs.isEmpty) Future successful Nil
     else updateAll2(cs.map(_.id), _.withFreshSearchKey)
 
-  def apply[A](f: (GenMap[ConvId, ConversationData], GenMap[RConvId, ConvId]) => A): Future[A] = init map { convById => f(convById, remoteMap) }
+  def apply[A](f: (GenMap[ConvId, ConversationData], GenMap[RConvId, ConvId]) => A): Future[A] = init map { _ => f(conversationsById, remoteMap) }
 
-  def getByRemoteId(remoteId: RConvId): Future[Option[ConversationData]] = init map { convById =>
-    remoteMap.get(remoteId).flatMap(convById.get)
+  def getByRemoteId(remoteId: RConvId): Future[Option[ConversationData]] = init.map { _ =>
+    remoteMap.get(remoteId).flatMap(conversationsById.get)
   }
 
-  override def getByRemoteIds(remoteId: Traversable[RConvId]): Future[Seq[ConvId]] = init map { convById =>
+  override def getByRemoteIds(remoteId: Traversable[RConvId]): Future[Seq[ConvId]] = init map { _ =>
     remoteId.flatMap(remoteMap.get).toVector
   }
 
   def getAll = init map { _ => conversations }
 
-  override def list: Future[Vector[ConversationData]] = init map { _.values.toVector }
+  override def list: Future[Vector[ConversationData]] = init map { _ => conversationsById.values.toVector }
 
   def updateLocalId(oldId: ConvId, newId: ConvId) =
     for {
