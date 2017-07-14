@@ -20,8 +20,9 @@ package com.waz.service.call
 import com.waz.api.NetworkMode
 import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.otr.ClientId
 import com.waz.model.{UserId, _}
-import com.waz.service.call.AvsV3.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
+import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
@@ -40,7 +41,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   implicit val executionContext = new SerialDispatchQueue(name = "CallingServiceSpec")
 
   val context        = mock[Context]
-  val avs            = mock[AvsV3]
+  val avs            = mock[Avs]
   val flows          = mock[FlowManagerService]
   val members        = mock[MembersStorage]
   val media          = mock[MediaManagerService]
@@ -50,6 +51,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   val messages       = mock[MessagesService]
 
   val self     = UserId("selfUserId")
+  val clientId = ClientId("selfClient")
   val account  = AccountId(self.str)
 
   feature("Basics") {
@@ -462,11 +464,12 @@ class CallingServiceSpec extends AndroidFreeSpec {
     (messages.addMissedCallMessage(_:ConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))
     (messages.addSuccessfulCallMessage _).expects(*, *, *, *).anyNumberOfTimes().returning(Future.successful(None))
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
+    (avs.close _).expects().once()
     (avs.init _).expects(*).once().onCall{ service: CallingService =>
       initPromise.success({})
       initPromise.future
     }
-    val service = new CallingService(context, account, self, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
+    val service = new CallingService(self, clientId, account, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
     result(initPromise.future)
     service
   }

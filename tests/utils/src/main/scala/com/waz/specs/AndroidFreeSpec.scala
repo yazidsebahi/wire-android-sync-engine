@@ -47,8 +47,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     isTest = true
 
-    InternalLog.reset()
-    InternalLog.add(new SystemLogOutput)
+//    InternalLog.reset()
+//    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 

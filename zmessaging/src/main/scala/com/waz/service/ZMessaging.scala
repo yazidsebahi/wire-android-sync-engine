@@ -135,6 +135,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def streamLoader      = global.streamLoader
   def videoLoader       = global.videoLoader
   def pcmAudioLoader    = global.pcmAudioLoader
+  def avs               = global.avs
 
   def db                = storage.db
   def userPrefs         = storage.userPrefs
@@ -204,7 +205,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val connection: ConnectionService              = wire[ConnectionService]
   lazy val mediamanager                               = wire[DefaultMediaManagerService]
   lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
-  lazy val avs: AvsV3                                 = wire[AvsV3Impl]
   lazy val calling: CallingService                    = wire[CallingService]
   lazy val contacts: ContactsService                  = wire[ContactsService]
   lazy val typing: TypingService                      = wire[TypingService]
