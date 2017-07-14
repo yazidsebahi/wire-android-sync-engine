@@ -31,7 +31,7 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.{Future, Promise}
 
-trait AvsV3 {
+trait Avs {
   def available: Future[Unit] //Fails if not available
   def onNetworkChanged(): Future[Unit]
   def init(callingService: CallingService): Future[Unit]
@@ -55,68 +55,75 @@ trait AvsV3 {
   * Facilitates synchronous communication with AVS and also provides a wrapper around the native code which can be easily
   * mocked for testing the CallingService
   */
-class AvsV3Impl(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
+class AvsImpl() extends Avs {
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "AvsWrapper")
 
-  import AvsV3._
+  import Avs._
 
-  private val callingReady = Promise[Unit]()
-  private val _init = callingReady.future
+  private var _init = Future.failed[Unit](new IllegalStateException("AVS is not yet initialised"))
 
   override lazy val available = Calling.v3Available
 
-  override def init(callingService: CallingService) = available.flatMap { _ =>
-    verbose(s"Initialising calling for self: $selfUserId and current client: $clientId")
+  override def init(cs: CallingService) = available.flatMap { _ =>
+    verbose(s"Initialising calling for self: ${cs.selfUserId} and current client: ${cs.clientId}")
+    val callingReady = Promise[Unit]()
+    _init = returning(callingReady.future) {
+      _.onFailure { case e =>
+        error("Error initialising calling v3", e)
+      }
+    }
+
     Calling.wcall_init(
-      selfUserId.str,
-      clientId.str,
+      cs.selfUserId.str,
+      cs.clientId.str,
       new ReadyHandler {
         override def onReady(version: Int, arg: Pointer) = {
-          callingService.onReady(version)
+          cs.onReady(version)
           callingReady.success(())
         }
       },
       new SendHandler {
         override def onSend(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer) = {
-          callingService.onSend(ctx, RConvId(convId), UserId(userId), ClientId(clientId), data.getString(0, "UTF-8"))
+          cs.onSend(ctx, RConvId(convId), UserId(userId), ClientId(clientId), data.getString(0, "UTF-8"))
           0
         }
       },
       new IncomingCallHandler {
         override def onIncomingCall(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, should_ring: Boolean, arg: Pointer) =
-          callingService.onIncomingCall(RConvId(convId), UserId(userId), video_call, should_ring)
+          cs.onIncomingCall(RConvId(convId), UserId(userId), video_call, should_ring)
       },
       new MissedCallHandler {
         override def onMissedCall(convId: String, msg_time: Uint32_t, userId: String, video_call: Boolean, arg: Pointer): Unit =
-          callingService.onMissedCall(RConvId(convId), instant(msg_time), UserId(userId), video_call)
+          cs.onMissedCall(RConvId(convId), instant(msg_time), UserId(userId), video_call)
       },
       new AnsweredCallHandler {
-        override def onAnsweredCall(convId: String, arg: Pointer) = callingService.onOtherSideAnsweredCall(RConvId(convId))
+        override def onAnsweredCall(convId: String, arg: Pointer) = cs.onOtherSideAnsweredCall(RConvId(convId))
       },
       new EstablishedCallHandler {
         override def onEstablishedCall(convId: String, userId: String, arg: Pointer) =
-          callingService.onEstablishedCall(RConvId(convId), UserId(userId))
+          cs.onEstablishedCall(RConvId(convId), UserId(userId))
       },
       new CloseCallHandler {
         override def onClosedCall(reasonCode: Int, convId: String, msg_time: Uint32_t, userId: String, arg: Pointer) =
-          callingService.onClosedCall(ClosedReason(reasonCode), RConvId(convId), instant(msg_time), UserId(userId))
+          cs.onClosedCall(ClosedReason(reasonCode), RConvId(convId), instant(msg_time), UserId(userId))
       },
       new MetricsHandler {
         override def onMetricsReady(convId: String, metricsJson: String, arg: Pointer) =
-          callingService.onMetricsReady(RConvId(convId), metricsJson)
+          cs.onMetricsReady(RConvId(convId), metricsJson)
       },
       null
     )
+
     _init
   }.map( _ => {
     //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
     Calling.wcall_set_video_state_handler(new VideoReceiveStateHandler {
-      override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = callingService.onVideoReceiveStateChanged(VideoReceiveState(state))
+      override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = cs.onVideoReceiveStateChanged(VideoReceiveState(state))
     })
 
     Calling.wcall_set_audio_cbr_enabled_handler(new BitRateStateHandler {
-      override def onBitRateStateChanged(arg: Pointer) = callingService.onBitRateStateChanged()
+      override def onBitRateStateChanged(arg: Pointer) = cs.onBitRateStateChanged()
     })
 
     Calling.wcall_set_group_changed_handler(new GroupChangedHandler {
@@ -125,14 +132,10 @@ class AvsV3Impl(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
         val mStruct = wcall_get_members(convId)
         val members = if (mStruct.membc.intValue() > 0) mStruct.toArray(mStruct.membc.intValue()).map(u => UserId(u.userid)).toSet else Set.empty[UserId]
         wcall_free_members(mStruct.getPointer)
-        callingService.onGroupChanged(RConvId(convId), members)
+        cs.onGroupChanged(RConvId(convId), members)
       }
     })
   })
-
-  _init.onFailure { case e =>
-    error("Error initialising calling v3", e)
-  }
 
   private def withAvsReturning[A](onSuccess: => A, onFailure: => A): Future[A] = _init.map(_ => onSuccess).recover {
     case err =>
@@ -174,7 +177,7 @@ class AvsV3Impl(selfUserId: UserId, clientId: ClientId) extends AvsV3 {
   override def setCallStateHandler(handler: CallStateChangeHandler) = withAvs(wcall_set_state_handler(handler))
 }
 
-object AvsV3 {
+object Avs {
   def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)
 
   def uint32_tTime(instant: Instant) =

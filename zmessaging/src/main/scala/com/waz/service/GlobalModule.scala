@@ -26,6 +26,7 @@ import com.waz.cache.CacheService
 import com.waz.client.RegistrationClient
 import com.waz.content._
 import com.waz.service.assets.{AssetLoader, GlobalRecordAndPlayService}
+import com.waz.service.call.{Avs, AvsImpl}
 import com.waz.service.downloads.DownloadRequest.{AssetFromInputStream, UnencodedAudioAsset, VideoAsset}
 import com.waz.service.downloads._
 import com.waz.service.images.ImageLoader
@@ -56,6 +57,7 @@ class GlobalModule(val context: Context, val backend: BackendConfig) { global =>
   lazy val phoneNumbers:        PhoneNumberService               = wire[PhoneNumberService]
   lazy val timeouts                                              = wire[Timeouts]
   lazy val permissions:         PermissionsService               = wire[PermissionsService]
+  lazy val avs:                 Avs                              = wire[AvsImpl]
 
   lazy val reporting                                             = wire[GlobalReportingService]
 
