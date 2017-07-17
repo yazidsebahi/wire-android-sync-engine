@@ -105,6 +105,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   val storage    = account.storage
   val lifecycle  = global.lifecycle
 
+  lazy val accounts             = ZMessaging.currentAccounts
   lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync
   lazy val syncHandler          = userModule.syncHandler
