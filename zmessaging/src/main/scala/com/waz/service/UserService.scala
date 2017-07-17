@@ -51,8 +51,16 @@ trait UserService {
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
 }
 
-class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, userPrefs: UserPreferences, push: PushServiceSignals,
-                      assets: AssetService, usersClient: UsersClient, sync: SyncServiceHandle, assetsStorage: AssetsStorage) extends UserService {
+class UserServiceImpl(val selfUserId: UserId,
+                      account:        AccountId,
+                      accounts:       AccountsService,
+                      usersStorage:   UsersStorageImpl,
+                      userPrefs:      UserPreferences,
+                      push:           PushServiceSignals,
+                      assets:         AssetService,
+                      usersClient:    UsersClient,
+                      sync:           SyncServiceHandle,
+                      assetsStorage:  AssetsStorage) extends UserService {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -72,6 +80,10 @@ class UserServiceImpl(val selfUserId: UserId, usersStorage: UsersStorageImpl, us
     } yield {}
   )
   val userDeleteEventsStage = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
+
+  //Update user data for other accounts
+  //TODO remove this and move the necessary user data up to the account storage
+  accounts.loggedInAccounts.map(_.flatMap(_.userId).filterNot(_ == selfUserId))(syncNotExistingOrExpired)
 
   push.onSlowSyncNeeded { case SlowSyncRequest(time, _) =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")
