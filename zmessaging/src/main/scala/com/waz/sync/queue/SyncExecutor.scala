@@ -25,7 +25,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.model.SyncId
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service.NetworkModeService
-import com.waz.sync.{SyncHandler, SyncRequestService, SyncResult}
+import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.{SerialDispatchQueue, CancellableFuture}
 import com.waz.utils._
 
@@ -114,7 +114,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
         drop()
       case SyncResult.Failure(error, true) =>
         warn(s"SyncRequest: $job, failed with error: $error")
-        if (job.attempts > SyncRequestService.MaxSyncAttempts) {
+        if (job.attempts > SyncRequestServiceImpl.MaxSyncAttempts) {
           HockeyApp.saveException(new RuntimeException(s"Request ${job.request.cmd} failed with error: ${error.map(_.code)}") with NoStackTrace, s"MaxSyncAttempts exceeded, dropping request: $job\n error: $error")
           drop()
         } else if (job.timeout > 0 && job.timeout < job.startTime) {
