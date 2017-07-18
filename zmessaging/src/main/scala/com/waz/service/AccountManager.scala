@@ -68,13 +68,12 @@ class UserModule(val userId: UserId, val account: AccountManager) {
 
   lazy val otrClient = new OtrClient(account.netClient)
 
-  lazy val verificationUpdater                = wire[VerificationStateUpdater]
-  lazy val clientsService: OtrClientsService  = wire[OtrClientsService]
-  lazy val clientsSync: OtrClientsSyncHandler = wire[OtrClientsSyncHandler]
-
-  lazy val sync: SyncServiceHandle            = wire[AndroidSyncServiceHandle]
-  lazy val syncRequests: SyncRequestService   = wire[SyncRequestService]
-  lazy val syncHandler: SyncHandler           = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
+  lazy val verificationUpdater                  = wire[VerificationStateUpdater]
+  lazy val clientsService: OtrClientsService    = wire[OtrClientsService]
+  lazy val clientsSync: OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
+  lazy val sync: SyncServiceHandle              = wire[AndroidSyncServiceHandle]
+  lazy val syncRequests: SyncRequestServiceImpl = wire[SyncRequestServiceImpl]
+  lazy val syncHandler: SyncHandler             = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
 
   def ensureClientRegistered(accountId: AccountId): ErrorOr[Unit] = {
     verbose(s"ensureClientRegistered: $account")

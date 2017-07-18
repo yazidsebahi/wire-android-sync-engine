@@ -28,7 +28,7 @@ import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.{LifecycleState, NetworkModeService, ZmsLifecycle}
-import com.waz.sync.{SyncHandler, SyncRequestService, SyncResult}
+import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
@@ -40,7 +40,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
-class SyncScheduler(context: Context, userId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestService, handler: => SyncHandler, lifecycle: ZmsLifecycle) {
+class SyncScheduler(context: Context, userId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, lifecycle: ZmsLifecycle) {
 
   import EventContext.Implicits.global
   import content._

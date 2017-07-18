@@ -41,4 +41,7 @@ object SearchKey extends (String => SearchKey) {
   def unapply(k: SearchKey): Option[String] = Some(k.asciiRepresentation)
 
   def transliterated(s: String): String = Locales.transliteration.transliterate(s).trim
+
+  //TODO for tests only - get libcore working in tests again
+  def simple(name: String): SearchKey = if (name.isEmpty) empty else new SearchKey(name)
 }

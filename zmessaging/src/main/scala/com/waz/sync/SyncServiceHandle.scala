@@ -85,7 +85,7 @@ trait SyncServiceHandle {
   def postValidateHandles(handles: Seq[Handle]): Future[SyncId]
 }
 
-class AndroidSyncServiceHandle(context: Context, service: => SyncRequestService, timeouts: Timeouts) extends SyncServiceHandle {
+class AndroidSyncServiceHandle(context: Context, service: => SyncRequestServiceImpl, timeouts: Timeouts) extends SyncServiceHandle {
 
   import com.waz.model.sync.SyncRequest._
 

@@ -84,7 +84,7 @@ trait AutoTrimming extends ComponentCallbacks2 { self: LruCache[_, _] =>
   override def onLowMemory(): Unit = ()
   override def onConfigurationChanged(newConfig: Configuration): Unit = ()
 
-  context.registerComponentCallbacks(this)
+  Option(context).foreach(_.registerComponentCallbacks(this))
 
   def destroy() = {
     context.unregisterComponentCallbacks(this)

@@ -26,20 +26,25 @@ import com.waz.content.ZmsDatabase
 import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.{NetworkModeService, ReportingService, ZmsLifecycle}
-import com.waz.sync.SyncRequestService.SyncMatcher
+import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
 
 import scala.concurrent.Future
 
-class SyncRequestService(context: Context, accountId: AccountId, storage: ZmsDatabase, network: NetworkModeService, sync: => SyncHandler, reporting: ReportingService, lifecycle: ZmsLifecycle) {
+trait SyncRequestService {
+  def scheduler: SyncScheduler
+}
 
-  private implicit val tag = logTagFor[SyncRequestService]
+
+class SyncRequestServiceImpl(context: Context, accountId: AccountId, storage: ZmsDatabase, network: NetworkModeService, sync: => SyncHandler, reporting: ReportingService, lifecycle: ZmsLifecycle) extends SyncRequestService {
+
+  private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
   val content = new SyncContentUpdater(storage)
-  val scheduler = new SyncScheduler(context, accountId, content, network, this, sync, lifecycle)
+  override val scheduler = new SyncScheduler(context, accountId, content, network, this, sync, lifecycle)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>
@@ -58,11 +63,11 @@ class SyncRequestService(context: Context, accountId: AccountId, storage: ZmsDat
   def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] =
     content.syncJobs map { _.values.filter(job => matchers.exists(_.apply(job))) } map { jobs =>
       val state = if (jobs.isEmpty) SyncState.COMPLETED else jobs.minBy(_.state.ordinal()).state
-      new SyncIndicator.Data(state, api.SyncIndicator.PROGRESS_UNKNOWN, jobs.flatMap(_.error).toSeq)
+      SyncIndicator.Data(state, api.SyncIndicator.PROGRESS_UNKNOWN, jobs.flatMap(_.error).toSeq)
     }
 }
 
-object SyncRequestService {
+object SyncRequestServiceImpl {
   val MaxSyncAttempts = 20
 
   case class SyncMatcher(cmd: SyncCommand, convId: Option[ConvId]) {
