@@ -203,6 +203,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val convsStats                                 = wire[ConversationsListStateService]
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
+  lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
   lazy val connection: ConnectionService              = wire[ConnectionService]
   lazy val mediamanager                               = wire[DefaultMediaManagerService]
   lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
@@ -267,7 +268,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
             Stage(Parallel)(
               conversations.convStateEventProcessingStage,
               Stage(Interleaved)(
-                messages.messageEventProcessingStage,
+                msgEvents.messageEventProcessingStage,
                 genericMsgs.eventProcessingStage
               )
             )
