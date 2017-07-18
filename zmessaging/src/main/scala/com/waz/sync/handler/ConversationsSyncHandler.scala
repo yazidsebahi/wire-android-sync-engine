@@ -52,7 +52,7 @@ class ConversationsSyncHandler(assetSync: AssetSyncHandler,
   private implicit val ec = EventContext.Global
 
   def syncConversations(ids: Seq[ConvId]): Future[SyncResult] = {
-    Future.sequence(ids.map(convs convById _)).flatMap { convs =>
+    Future.sequence(ids.map(convs.convById)).flatMap { convs =>
       val remoteIds = convs.collect { case Some(conv) => conv.remoteId }
       if (remoteIds.size != convs.size) {
         error(s"syncConversations($ids) - some conversations were not found in local db, skipping")

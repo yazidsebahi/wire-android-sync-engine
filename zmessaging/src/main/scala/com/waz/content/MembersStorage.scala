@@ -58,7 +58,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
   def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]] =
     updateOrCreateAll2(users.map((_, conv)), { (k, v) =>
       v match {
-        case Some(m) => m.copy()
+        case Some(m) => m
         case None    => ConversationMemberData(k._1, conv)
       }
     })

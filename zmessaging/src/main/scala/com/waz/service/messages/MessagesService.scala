@@ -104,7 +104,6 @@ class MessagesServiceImpl(selfUserId: UserId, val content: MessagesContentUpdate
     } yield res
   }
 
-
   private def updateAssets(events: Seq[MessageEvent]) = {
 
     def decryptAssetData(assetData: AssetData, data: Option[Array[Byte]]): Option[Array[Byte]] =
