@@ -19,6 +19,7 @@ package com.waz.service.teams
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.content.ContentChange.{Added, Removed, Updated}
 import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
 import com.waz.model.AccountData.PermissionsMasks
@@ -29,7 +30,7 @@ import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.RichFuture
-import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
+import com.waz.utils.events.{AggregatingSignal, EventStream, RefreshingSignal, Signal}
 
 import scala.collection.Seq
 import scala.concurrent.Future
@@ -37,9 +38,7 @@ import scala.concurrent.Future
 //TODO - return Signals of the search results for UI??
 trait TeamsService {
 
-  def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[UserData]]
-
-  def searchTeamConversations(query: Option[SearchKey] = None, handleOnly: Boolean = false): Future[Set[ConversationData]]
+  def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false): Signal[Set[UserData]]
 
   val selfTeam: Signal[Option[TeamData]]
 
@@ -52,18 +51,18 @@ trait TeamsService {
   def guests: Signal[Set[UserId]]
 }
 
-class TeamsServiceImpl(selfUser:          UserId,
-                       selfAccount:       AccountId,
-                       teamId:            Option[TeamId],
-                       teamStorage:       TeamsStorage,
-                       accStorage:        AccountsStorage,
-                       userStorage:       UsersStorage,
-                       convsStorage:      ConversationStorage,
-                       convMemberStorage: MembersStorage,
-                       convsContent:      ConversationsContentUpdater,
-                       sync:              SyncServiceHandle,
-                       syncRequestService:SyncRequestService,
-                       userPrefs:         UserPreferences) extends TeamsService {
+class TeamsServiceImpl(selfUser:           UserId,
+                       selfAccount:        AccountId,
+                       teamId:             Option[TeamId],
+                       teamStorage:        TeamsStorage,
+                       accStorage:         AccountsStorage,
+                       userStorage:        UsersStorage,
+                       convsStorage:       ConversationStorage,
+                       convMemberStorage:  MembersStorage,
+                       convsContent:       ConversationsContentUpdater,
+                       sync:               SyncServiceHandle,
+                       syncRequestService: SyncRequestService,
+                       userPrefs:          UserPreferences) extends TeamsService {
 
   private implicit val dispatcher = SerialDispatchQueue()
 
@@ -96,22 +95,44 @@ class TeamsServiceImpl(selfUser:          UserId,
     } yield {}
   }
 
-  override def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId match {
-    case None => Future.successful(Set.empty)
-    case Some(id) => query match {
-      case Some(q) => userStorage.searchByTeam(id, q, handleOnly)
-      case None => userStorage.getByTeam(Set(id))
-    }
-  }
+  override def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false) = {
 
-  override def searchTeamConversations(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId match {
-    case None => Future.successful(Set.empty)
-    case Some(id) => verbose(s"searchTeamConversations: team: $teamId, query: $query, handleOnly?: $handleOnly")
-                     import ConversationDataDao._
-                    (query match {
-                      case Some(q) => convsStorage.search(q, selfUser, handleOnly, Some(id))
-                      case None    => convsStorage.find(_.team.contains(id), db => iterating(find(Team, Some(id))(db)), identity)
-                    }).map(_.toSet)
+    val changesStream = EventStream.union[Seq[ContentChange[UserId, UserData]]](
+      userStorage.onAdded.map(_.map(d => Added(d.id, d))),
+      userStorage.onUpdated.map(_.map { case (prv, curr) => Updated(prv.id, prv, curr) }),
+      userStorage.onDeleted.map(_.map(Removed(_)))
+    )
+
+    def load = {
+      teamId match {
+        case None => Future.successful(Set.empty[UserData])
+        case Some(id) => query match {
+          case Some(q) => userStorage.searchByTeam(id, q, handleOnly)
+          case None => userStorage.getByTeam(Set(id))
+        }
+      }
+    }
+
+    def userMatches(data: UserData) = query match {
+      case Some(q) =>
+        if (handleOnly) data.handle.map(_.string).contains(q.asciiRepresentation)
+        else q.isAtTheStartOfAnyWordIn(data.searchKey)
+      case _ => true
+    }
+
+    new AggregatingSignal[Seq[ContentChange[UserId, UserData]], Set[UserData]](changesStream, load, { (current, changes) =>
+      val added = changes.collect {
+        case Added(_, data) if userMatches(data) => data
+        case Updated(_, _, data) if userMatches(data) => data
+      }.toSet
+
+      val removed = changes.collect {
+        case Removed(id) => id
+        case Updated(id, _, data) if !userMatches(data) => id
+      }.toSet
+
+      current.filterNot(d => removed.contains(d.id)) ++ added
+    })
   }
 
   override lazy val selfTeam: Signal[Option[TeamData]] = teamId match {
@@ -132,7 +153,7 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   override lazy val guests = {
     def load(id: TeamId): Future[Set[UserId]] = for {
-      convs       <- searchTeamConversations().map(_.map(_.id))
+      convs       <- getTeamConversations.map(_.map(_.id))
       allUsers    <- convMemberStorage.getByConvs(convs).map(_.map(_.userId).toSet)
       teamMembers <- userStorage.getByTeam(Set(id)).map(_.map(_.id))
     } yield allUsers -- teamMembers
@@ -208,7 +229,7 @@ class TeamsServiceImpl(selfUser:          UserId,
 
   private def removeUsersFromTeamConversations(users: Set[UserId]) = {
     for {
-      convs           <- searchTeamConversations().map(_.map(_.id))
+      convs           <- getTeamConversations.map(_.map(_.id))
       membersToRemove = for (u <- users; c <- convs) yield (u, c)
       _               <- convMemberStorage.remove(membersToRemove)
     } yield {}
@@ -228,6 +249,13 @@ class TeamsServiceImpl(selfUser:          UserId,
     verbose(s"onConversationsDeleted: convs: $convs")
     //TODO
     Future.successful({})
+  }
+
+  private def getTeamConversations = teamId match {
+    case None => Future.successful(Set.empty)
+    case Some(id) => verbose(s"searchTeamConversations: team: $teamId")
+      import ConversationDataDao._
+      convsStorage.find(_.team.contains(id), db => iterating(find(Team, Some(id))(db)), identity).map(_.toSet)
   }
 
 }

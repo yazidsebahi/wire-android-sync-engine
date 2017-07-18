@@ -41,7 +41,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
 
-class SyncRequestServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
+class SyncRequestServiceImplSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
   import com.waz.threading.Threading.Implicits.Background
   implicit val timeout: Timeout = 5.seconds
 

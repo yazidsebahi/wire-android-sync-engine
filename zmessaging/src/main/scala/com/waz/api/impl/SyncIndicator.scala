@@ -21,7 +21,7 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.SyncState
 import com.waz.model.sync.SyncCommand
-import com.waz.sync.SyncRequestService.SyncMatcher
+import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
 import com.waz.ui.{SignalLoading, UiModule}
 
 import scala.collection.JavaConverters._
