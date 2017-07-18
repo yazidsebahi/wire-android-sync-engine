@@ -24,21 +24,30 @@ import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.Signal
-import com.waz.utils.{CachedStorageImpl, TrimmingLruCache}
+import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
-class OtrClientsStorage(context: Context, storage: Database) extends CachedStorageImpl[UserId, UserClients](new TrimmingLruCache(context, Fixed(2000)), storage)(UserClientsDao, "OtrClientsStorage") {
+import scala.concurrent.Future
+
+trait OtrClientsStorage extends CachedStorage[UserId, UserClients] {
+  def incomingClientsSignal(userId: UserId, clientId: ClientId): Signal[Seq[Client]]
+  def getClients(user: UserId): Future[Seq[Client]]
+  def updateVerified(userId: UserId, clientId: ClientId, verified: Boolean): Future[Option[(UserClients, UserClients)]]
+
+}
+
+class OtrClientsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[UserId, UserClients](new TrimmingLruCache(context, Fixed(2000)), storage)(UserClientsDao, "OtrClientsStorage") with OtrClientsStorage {
   import com.waz.threading.Threading.Implicits.Background
 
-  def incomingClientsSignal(userId: UserId, clientId: ClientId): Signal[Seq[Client]] =
+  override def incomingClientsSignal(userId: UserId, clientId: ClientId) =
     signal(userId) map { ucs =>
       ucs.clients.get(clientId).flatMap(_.regTime).fold(Seq.empty[Client]) { current =>
         ucs.clients.values.filter(c => c.verified == Verification.UNKNOWN && c.regTime.exists(_.isAfter(current))).toVector
       }
     }
 
-  def getClients(user: UserId) = get(user).map(_.fold(Seq.empty[Client])(_.clients.values.toVector))
+  override def getClients(user: UserId) = get(user).map(_.fold(Seq.empty[Client])(_.clients.values.toVector))
 
-  def updateVerified(userId: UserId, clientId: ClientId, verified: Boolean) = update(userId, { uc =>
+  override def updateVerified(userId: UserId, clientId: ClientId, verified: Boolean) = update(userId, { uc =>
     uc.clients.get(clientId) .fold (uc) { client =>
       uc.copy(clients = uc.clients + (client.id -> client.copy(verified = if (verified) Verification.VERIFIED else Verification.UNVERIFIED)))
     }

@@ -73,18 +73,18 @@ class ZMessagingFactory(global: GlobalModule) {
 
 
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
-  lazy val db                                   = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val userPrefs                            = UserPreferences.apply(context, db, globalPreferences)
-  lazy val usersStorage                         = wire[UsersStorageImpl]
-  lazy val otrClientsStorage                    = wire[OtrClientsStorage]
-  lazy val membersStorage                       = wire[MembersStorageImpl]
-  lazy val assetsStorage                        = wire[AssetsStorage]
-  lazy val reactionsStorage                     = wire[ReactionsStorage]
-  lazy val notifStorage                         = wire[NotificationStorage]
-  lazy val convsStorage                         = wire[ConversationStorageImpl]
-  lazy val msgDeletions                         = wire[MsgDeletionStorage]
-  lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
-  lazy val msgEdits                             = wire[EditHistoryStorage]
+  lazy val db                                     = new ZmsDatabase(accountId, context, dbPrefix)
+  lazy val userPrefs                              = UserPreferences.apply(context, db, globalPreferences)
+  lazy val usersStorage                           = wire[UsersStorageImpl]
+  lazy val otrClientsStorage: OtrClientsStorage   = wire[OtrClientsStorageImpl]
+  lazy val membersStorage                         = wire[MembersStorageImpl]
+  lazy val assetsStorage                          = wire[AssetsStorage]
+  lazy val reactionsStorage                       = wire[ReactionsStorage]
+  lazy val notifStorage                           = wire[NotificationStorage]
+  lazy val convsStorage                           = wire[ConversationStorageImpl]
+  lazy val msgDeletions:      MsgDeletionStorage  = wire[MsgDeletionStorageImpl]
+  lazy val searchQueryCache                       = wire[SearchQueryCacheStorage]
+  lazy val msgEdits:          EditHistoryStorage  = wire[EditHistoryStorageImpl]
 }
 
 

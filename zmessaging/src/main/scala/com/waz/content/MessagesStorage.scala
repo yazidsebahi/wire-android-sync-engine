@@ -20,8 +20,8 @@ package com.waz.content
 import java.util.concurrent.ConcurrentHashMap
 
 import android.content.Context
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.{ErrorResponse, Message, MessageFilter}
 import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
@@ -30,7 +30,7 @@ import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
-import com.waz.utils.events.{EventStream, Signal, SourceSignal, SourceStream}
+import com.waz.utils.events.{EventStream, Signal, SourceStream}
 import org.threeten.bp.Instant
 
 import scala.collection._
@@ -60,6 +60,8 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def hasSystemMessage(conv: ConvId, serverTime: Instant, tpe: Message.Type, sender: UserId): Future[Boolean]
 
   def getLastMessage(conv: ConvId): Future[Option[MessageData]]
+  def getLastSentMessage(conv: ConvId): Future[Option[MessageData]]
+  def lastLocalMessage(conv: ConvId, tpe: Message.Type): Future[Option[MessageData]]
 }
 
 class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorageImpl, users: UsersStorageImpl, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
@@ -69,8 +71,8 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MessagesStorage")
 
-  val messageAdded = onAdded
-  val messageUpdated = onUpdated
+  override val messageAdded = onAdded
+  override val messageUpdated = onUpdated
 
   val messageChanged = EventStream.union(messageAdded, messageUpdated.map(_.map(_._2)))
 
@@ -131,7 +133,7 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
     case _ => // ignore
   }
 
-  def addMessage(msg: MessageData): Future[MessageData] = put(msg.id, msg)
+  override def addMessage(msg: MessageData) = put(msg.id, msg)
 
   def countUnread(conv: ConvId, lastReadTime: Instant): Future[Int] =
     storage { MessageDataDao.countNewer(conv, lastReadTime)(_) } .future.flatMap { count =>
@@ -150,9 +152,9 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   def countLaterThan(conv: ConvId, time: Instant): Future[Long] = storage(MessageDataDao.countLaterThan(conv, time)(_))
 
-  def getMessage(id: MessageId): Future[Option[MessageData]] = get(id)
+  override def getMessage(id: MessageId) = get(id)
 
-  def getMessages(ids: MessageId*): Future[Seq[Option[MessageData]]] = getAll(ids)
+  override def getMessages(ids: MessageId*) = getAll(ids)
 
   def getEntries(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.messagesCursor)
 
@@ -168,19 +170,19 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   def lastRead(conv: ConvId) = Signal.future(msgsIndex(conv)).flatMap(_.signals.lastReadTime)
 
-  def lastLocalMessage(conv: ConvId, tpe: Message.Type): Future[Option[MessageData]] =
+  override def lastLocalMessage(conv: ConvId, tpe: Message.Type) =
     msgsIndex(conv).flatMap(_.lastLocalMessage(tpe)).flatMap {
       case Some(id) => get(id)
       case _ => CancellableFuture.successful(None)
     }
 
-  def findLocalFrom(conv: ConvId, time: Instant) =
+  override def findLocalFrom(conv: ConvId, time: Instant) =
     find(m => m.convId == conv && m.isLocal && !m.time.isBefore(time), MessageDataDao.findLocalFrom(conv, time)(_), identity)
 
   def findMessagesFrom(conv: ConvId, time: Instant) =
     find(m => m.convId == conv && !m.time.isBefore(time), MessageDataDao.findMessagesFrom(conv, time)(_), identity)
 
-  def delete(msg: MessageData): Future[Unit] =
+  override def delete(msg: MessageData) =
     for {
       _ <- super.remove(msg.id)
       _ <- Future(msgsFilteredIndex(msg.convId).foreach(_.delete(msg)))
@@ -188,7 +190,7 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
       _ <- index.delete(msg)
     } yield ()
 
-  def delete(id: MessageId): Future[Unit] = remove(id)
+  override def delete(id: MessageId) = remove(id)
 
   override def remove(id: MessageId): Future[Unit] =
     getMessage(id) flatMap {
@@ -225,7 +227,7 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
     delete(convId, clearTime)
   }
 
-  def deleteAll(conv: ConvId) = {
+  override def deleteAll(conv: ConvId) = {
     verbose(s"deleteAll($conv)")
     for {
       _ <- storage { MessageDataDao.deleteForConv(conv)(_) } .future

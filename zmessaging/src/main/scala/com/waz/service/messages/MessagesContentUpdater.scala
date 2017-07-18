@@ -17,24 +17,25 @@
  */
 package com.waz.service.messages
 
-import android.content.Context
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.{EphemeralExpiration, Message}
+import com.waz.ZLog._
 import com.waz.api.Message.Status
+import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.content._
 import com.waz.model._
-import com.waz.service.UserServiceImpl
+import com.waz.service.ZMessaging.clock
 import com.waz.service.media.RichMediaContentParser
-import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils._
 import org.threeten.bp.Instant
+import org.threeten.bp.Instant.now
 
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStorageImpl, convs: ConversationStorageImpl, users: UserServiceImpl, sync: SyncServiceHandle, deletions: MsgDeletionStorage) {
+class MessagesContentUpdater(messagesStorage: MessagesStorage,
+                             convs:           ConversationStorage,
+                             deletions:       MsgDeletionStorage) {
 
   import Threading.Implicits.Background
 
@@ -57,7 +58,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
   // removes messages and records deletion
   // this is used when user deletes a message manually (on local or remote device)
   def deleteOnUserRequest(ids: Seq[MessageId]) =
-    deletions.insert(ids.map(id => MsgDeletion(id, Instant.now()))) flatMap { _ =>
+    deletions.insert(ids.map(id => MsgDeletion(id, now(clock)))) flatMap { _ =>
       messagesStorage.remove(ids)
     }
 
@@ -68,12 +69,13 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
         convs.get(msg.convId) map { _.fold(EphemeralExpiration.NONE)(_.ephemeral) }
       else Future successful EphemeralExpiration.NONE
 
-    verbose(s"addLocalMessage: $msg")
     for {
       time <- nextLocalTime(msg.convId)
-      _ = verbose(s"adding message to storage: $time")
-      exp <- expiration
-      res <- messagesStorage.addMessage(msg.copy(state = state, time = time, localTime = Instant.now, ephemeral = exp))
+      exp   <- expiration
+      m = returning(msg.copy(state = state, time = time, localTime = now(clock), ephemeral = exp)) { m =>
+        verbose(s"addLocalMessage: $m")
+      }
+      res <- messagesStorage.addMessage(m)
     } yield res
   }
 
@@ -81,7 +83,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
     verbose(s"addLocalSentMessage: $msg")
     lastSentEventTime(msg.convId) flatMap { t =>
       verbose(s"adding local sent message to storage, $t")
-      messagesStorage.addMessage(msg.copy(state = Status.SENT, time = t.plusMillis(1), localTime = Instant.now))
+      messagesStorage.addMessage(msg.copy(state = Status.SENT, time = t.plusMillis(1), localTime = now(clock)))
     }
   }
 
@@ -90,7 +92,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
       case Some(msg) => Future successful msg.time
       case _ => convs.get(convId).map(_.fold(MessageData.UnknownInstant)(_.lastEventTime))
     } map { time =>
-      Instant.now.max(time.plusMillis(1))
+      now(clock).max(time.plusMillis(1))
     }
 
   private def lastSentEventTime(convId: ConvId) =
@@ -124,7 +126,7 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
     }
 
   private[service] def addMessages(convId: ConvId, msgs: Seq[MessageData]): Future[Set[MessageData]] = {
-    verbose(s"addMessages($msgs)")
+    verbose(s"addMessages: ${msgs.map(_.id)}")
 
     for {
       toAdd <- skipPreviouslyDeleted(msgs)

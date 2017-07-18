@@ -34,6 +34,8 @@ trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberD
   def isActiveMember(conv: ConvId, user: UserId): Future[Boolean]
   def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]]
   def getByUsers(users: Set[UserId]): Future[IndexedSeq[ConversationMemberData]]
+  def getActiveUsers(conv: ConvId): Future[Seq[UserId]]
+  def getActiveConvs(user: UserId): Future[Seq[ConvId]]
 }
 
 class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {
@@ -51,9 +53,9 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
 
   private def onConvMemberChanged(conv: ConvId) = onAdded.map(_.filter(_.convId == conv).map(_.userId -> true)).union(onDeleted.map(_.filter(_._2 == conv).map(_._1 -> false)))
 
-  def getActiveUsers(conv: ConvId): Future[Seq[UserId]] = getByConv(conv) map { _.map(_.userId) }
+  override def getActiveUsers(conv: ConvId) = getByConv(conv) map { _.map(_.userId) }
 
-  def getActiveConvs(user: UserId): Future[Seq[ConvId]] = getByUser(user) map { _.map(_.convId) }
+  override def getActiveConvs(user: UserId) = getByUser(user) map { _.map(_.convId) }
 
   def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]] =
     updateOrCreateAll2(users.map((_, conv)), { (k, v) =>

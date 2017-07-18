@@ -34,7 +34,7 @@ class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfte
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(50, Millis))
 
   lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
-  lazy val clients = new OtrClientsStorage(Robolectric.application, storage)
+  lazy val clients = new OtrClientsStorageImpl(Robolectric.application, storage)
   lazy val user = UserId()
 
   feature("clients storage") {
@@ -52,7 +52,7 @@ class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
     scenario("load clients form second clients storage") {
       awaitUi(1.second)
-      new OtrClientsStorage(Robolectric.application, storage).get(user).futureValue shouldEqual Some(ucs)
+      new OtrClientsStorageImpl(Robolectric.application, storage).get(user).futureValue shouldEqual Some(ucs)
     }
   }
 }

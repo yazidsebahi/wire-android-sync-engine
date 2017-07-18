@@ -18,18 +18,19 @@
 package com.waz.service.messages
 
 
-import com.waz.ZLog.{error, verbose, warn}
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.{error, verbose, warn}
 import com.waz.api.{Message, Verification}
+import com.waz.content.MessagesStorage
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.AssetStatus.{UploadCancelled, UploadFailed}
 import com.waz.model.GenericContent.{Asset, Calling, Cleared, Ephemeral, ImageAsset, Knock, LastRead, LinkPreview, Location, MsgDeleted, MsgEdit, MsgRecall, Reaction, Receipt, Text}
 import com.waz.model._
 import com.waz.service.EventScheduler
 import com.waz.service.assets.AssetService
-import com.waz.service.conversation.ConversationsContentUpdaterImpl
+import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
-import com.waz.service.otr.{OtrServiceImpl, VerificationStateUpdater}
+import com.waz.service.otr.{OtrService, VerificationStateUpdater}
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 import com.waz.utils.{RichFuture, _}
@@ -38,12 +39,13 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 
 class MessageEventProcessor(selfUserId:          UserId,
+                            storage:             MessagesStorage,
                             content:             MessagesContentUpdater,
                             assets:              AssetService,
                             msgsService:         MessagesService,
-                            convs:               ConversationsContentUpdaterImpl,
+                            convs:               ConversationsContentUpdater,
                             verificationUpdater: VerificationStateUpdater,
-                            otr:                 OtrServiceImpl) {
+                            otr:                 OtrService) {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -70,7 +72,7 @@ class MessageEventProcessor(selfUserId:          UserId,
     for {
       as    <- updateAssets(afterCleared)
       msgs  = afterCleared map { createMessage(conv, _) } filter (_ != MessageData.Empty)
-      _     = verbose(s"messages from events: $msgs")
+      _     = verbose(s"messages from events: ${msgs.map(m => m.id -> m.msgType)}")
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
       _     <- deleteCancelled(as)
@@ -113,7 +115,7 @@ class MessageEventProcessor(selfUserId:          UserId,
           }
         case (Asset(a, p), Some(rId)) =>
           val forPreview = a.otrKey.isEmpty //For assets containing previews, the second GenericMessage contains remote information about the preview, not the asset
-        val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptAssetData(a, data))
+          val asset = a.copy(id = AssetId(id.str), remoteId = if (forPreview) None else Some(rId), convId = convId, data = if (forPreview) None else decryptAssetData(a, data))
           val preview = p.map(_.copy(remoteId = if (forPreview) Some(rId) else None, convId = convId, data = if (forPreview) decryptAssetData(a, data) else None))
           verbose(s"Received asset v2 non-image (forPreview?: $forPreview): $asset with preview: $preview")
           saveAssetAndPreview(asset, preview)
@@ -134,7 +136,6 @@ class MessageEventProcessor(selfUserId:          UserId,
         case (Ephemeral(_, content), _)=>
           update(id, convId, content, v2RId, data)
         case res =>
-          warn(s"Unexpected asset update: $res")
           Future successful None
       }
     }
@@ -239,7 +240,7 @@ class MessageEventProcessor(selfUserId:          UserId,
     }
     if (toRemove.isEmpty) Future.successful(())
     else for {
-      _ <- Future.traverse(toRemove)(id => content.messagesStorage.remove(MessageId(id.str)))
+      _ <- Future.traverse(toRemove)(id => storage.remove(MessageId(id.str)))
       _ <- assets.removeAssets(toRemove)
     } yield ()
   }
