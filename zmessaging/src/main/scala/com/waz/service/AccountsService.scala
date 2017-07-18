@@ -58,7 +58,7 @@ class AccountsService(val global: GlobalModule) {
       )
       new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
     case true => Signal.const(Seq.empty[AccountData])
-  }.map(_.filter(_.cookie.isDefined))
+  }.map(_.filter(acc => acc.cookie.isDefined && acc.clientId.isDefined))
 
   // XXX Temporary stuff to handle team account in signup/signin - start
   private var _loggedInAccounts = Seq.empty[AccountData]
