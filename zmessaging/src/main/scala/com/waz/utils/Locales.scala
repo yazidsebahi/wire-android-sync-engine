@@ -28,6 +28,7 @@ import android.os.Build.VERSION_CODES.{JELLY_BEAN_MR2, LOLLIPOP}
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.service.ZMessaging
+import com.waz.utils
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -113,7 +114,7 @@ trait Transliteration {
 object Transliteration {
   private val id = "Any-Latin; Latin-ASCII; Lower; [^\\ 0-9a-z] Remove"
   def chooseImplementation(id: String = id): Transliteration =
-    if (Try(Class.forName("libcore.icu.Transliterator")).isSuccess) LibcoreTransliteration.create(id)
+    if (!utils.isTest && Try(Class.forName("libcore.icu.Transliterator")).isSuccess) LibcoreTransliteration.create(id)
     else ICU4JTransliteration.create(id)
 }
 

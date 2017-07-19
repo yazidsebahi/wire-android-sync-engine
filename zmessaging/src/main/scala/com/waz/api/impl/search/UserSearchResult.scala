@@ -27,16 +27,16 @@ import com.waz.utils.SeqMap
 
 class UserSearchResult(query: SearchQuery, limit: Int, filter: Set[String])(implicit val ui: UiModule) extends api.UserSearchResult with CoreList[api.User] with SignalLoading {
   private var users = Option.empty[SeqMap[UserId, UserData]]
-
-  addLoader(_.userSearch.searchUserData(query, Some(limit + filter.size)), SeqMap.empty[UserId, UserData]) { us =>
+  
+  addLoader(_.userSearch.searchUserData(query), SeqMap.empty[UserId, UserData]) { us =>
     verbose(s"users[$query, $limit, $filter] loaded: ${us.size} user(s)")
     val changed = users.forall(_.keys != us.keys)
     users = Some(us)
     if (changed) notifyChanged()
   }
-
+  
   private[this] def currentUsers = users.getOrElse(SeqMap.empty)
-
+  
   override def get(position: Int): api.User = ui.users.getUser(currentUsers at position)
   override def size: Int = currentUsers.size
   override def getAll: Array[api.User] = currentUsers.valuesIterator.map(ui.users.getUser).toArray

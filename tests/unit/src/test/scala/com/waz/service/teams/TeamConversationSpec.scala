@@ -21,7 +21,7 @@ import com.waz.content.{ConversationStorage, MembersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ConversationData.ConversationType.{Group, OneToOne}
 import com.waz.model._
-import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService}
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService, ConversationsUiServiceImpl}
 import com.waz.service.messages.MessagesService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
@@ -113,8 +113,8 @@ class TeamConversationSpec extends AndroidFreeSpec {
     }
   }
 
-  def initService = {
-    new ConversationsUiService(self, null, null, null, messages, null, members, null, convsContent, convsStorage, null, null, sync, null, null)
+  def initService: ConversationsUiService = {
+    new ConversationsUiServiceImpl(self, null, null, null, messages, null, members, null, convsContent, convsStorage, null, null, sync, null, null)
   }
 
 

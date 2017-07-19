@@ -44,30 +44,55 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.higherKinds
 
-class ConversationsUiService(self:            UserId,
-                             assets:          AssetService,
-                             users:           UserService,
-                             usersStorage:    UsersStorage,
-                             messages:        MessagesService,
-                             messagesContent: MessagesContentUpdater,
-                             members:         MembersStorage,
-                             assetStorage:    AssetsStorage,
-                             convsContent:    ConversationsContentUpdater,
-                             convStorage:     ConversationStorage,
-                             network:         NetworkModeService,
-                             convs:           ConversationsService,
-                             sync:            SyncServiceHandle,
-                             lifecycle:       ZmsLifecycle,
-                             errors:          ErrorsService) {
+trait ConversationsUiService {
+  def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]]
+  def updateMessage(convId: ConvId, id: MessageId, content: Text): Future[Option[MessageData]]
+  def deleteMessage(convId: ConvId, id: MessageId): Future[Unit]
+  def recallMessage(convId: ConvId, id: MessageId): Future[Option[MessageData]]
+  def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
+  def setConversationMuted(id: ConvId, muted: Boolean): Future[Option[ConversationData]]
+  def setConversationName(id: ConvId, name: String): Future[Option[ConversationData]]
+  def addConversationMembers(conv: ConvId, users: Seq[UserId]): Future[Seq[ConversationMemberData]]
+  def removeConversationMember(conv: ConvId, user: UserId): Future[Option[SyncId]]
+  def leaveConversation(conv: ConvId): Future[Option[ConversationData]]
+  def ifAbleToModifyMembers[A, M[_]](conv: ConvId, user: UserId, zero: M[A])(f: => Future[M[A]]): Future[M[A]]
+  def clearConversation(id: ConvId): Future[Option[ConversationData]]
+  def getOrCreateOneToOneConversation(toUser: UserId): Future[ConversationData]
+  def createOneToOneConversation(toUser: UserId, selfUserId: UserId): Future[ConversationData]
+  def createGroupConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId] = None): Future[ConversationData]
+  def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]]
+  def knock(id: ConvId): Future[Option[MessageData]]
+  def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]]
+  def setEphemeral(id: ConvId, expiration: EphemeralExpiration): Future[Option[(ConversationData, ConversationData)]]
 
+  def assetUploadStarted   : EventStream[AssetData]
+  def assetUploadCancelled : EventStream[Mime]
+  def assetUploadFailed    : EventStream[ErrorResponse]
+}
+
+class ConversationsUiServiceImpl( self:            UserId,
+                                  assets:          AssetService,
+                                  users:           UserService,
+                                  usersStorage:    UsersStorage,
+                                  messages:        MessagesService,
+                                  messagesContent: MessagesContentUpdater,
+                                  members:         MembersStorage,
+                                  assetStorage:    AssetsStorage,
+                                  convsContent:    ConversationsContentUpdater,
+                                  convStorage:     ConversationStorage,
+                                  network:         NetworkModeService,
+                                  convs:           ConversationsService,
+                                  sync:            SyncServiceHandle,
+                                  lifecycle:       ZmsLifecycle,
+                                  errors:          ErrorsService) extends ConversationsUiService {
   import ConversationsUiService._
   import Threading.Implicits.Background
 
-  val assetUploadStarted   = EventStream[AssetData]()
-  val assetUploadCancelled = EventStream[Mime]() //size, mime
-  val assetUploadFailed    = EventStream[ErrorResponse]()
+  override val assetUploadStarted   = EventStream[AssetData]()
+  override val assetUploadCancelled = EventStream[Mime]() //size, mime
+  override val assetUploadFailed    = EventStream[ErrorResponse]()
 
-  def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = {
+  override def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = {
 
     def mentionsMap(us: Array[api.User]): Future[Map[UserId, String]] =
       users.getUsers(us.map { u => UserId(u.getId) }) map { uss =>
@@ -193,7 +218,7 @@ class ConversationsUiService(self:            UserId,
     }
   }
 
-  def updateMessage(convId: ConvId, id: MessageId, content: Text): Future[Option[MessageData]] = {
+  override def updateMessage(convId: ConvId, id: MessageId, content: Text): Future[Option[MessageData]] = {
     verbose(s"updateMessage($convId, $id, $content")
     messagesContent.updateMessage(id) {
       case m if m.convId == convId && m.userId == self =>
@@ -209,12 +234,12 @@ class ConversationsUiService(self:            UserId,
     }
   }
 
-  def deleteMessage(convId: ConvId, id: MessageId): Future[Unit] = for {
+  override def deleteMessage(convId: ConvId, id: MessageId): Future[Unit] = for {
     _ <- messagesContent.deleteOnUserRequest(Seq(id))
     _ <- sync.postDeleted(convId, id)
   } yield ()
 
-  def recallMessage(convId: ConvId, id: MessageId): Future[Option[MessageData]] =
+  override def recallMessage(convId: ConvId, id: MessageId): Future[Option[MessageData]] =
     messages.recallMessage(convId, id, self) flatMap {
       case Some(msg) =>
         sync.postRecalled(convId, msg.id, id) map { _ => Some(msg) }
@@ -225,15 +250,15 @@ class ConversationsUiService(self:            UserId,
 
   private def updateLastRead(msg: MessageData) = convsContent.updateConversationLastRead(msg.convId, msg.time)
 
-  def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]] = convs.setConversationArchived(id, archived)
+  override def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]] = convs.setConversationArchived(id, archived)
 
-  def setConversationMuted(id: ConvId, muted: Boolean): Future[Option[ConversationData]] =
+  override def setConversationMuted(id: ConvId, muted: Boolean): Future[Option[ConversationData]] =
     convsContent.updateConversationMuted(id, muted) map {
       case Some((_, conv)) => sync.postConversationState(id, ConversationState(muted = Some(conv.muted), muteTime = Some(conv.muteTime))); Some(conv)
       case None => None
     }
 
-  def setConversationName(id: ConvId, name: String): Future[Option[ConversationData]] = users.withSelfUserFuture { selfUserId =>
+  override def setConversationName(id: ConvId, name: String): Future[Option[ConversationData]] = users.withSelfUserFuture { selfUserId =>
     verbose(s"setConversationName($id, $name)")
     convsContent.updateConversationName(id, name) flatMap {
       case Some((_, conv)) if conv.name.contains(name) =>
@@ -245,33 +270,29 @@ class ConversationsUiService(self:            UserId,
     }
   }
 
-  def addConversationMembers(conv: ConvId, users: Seq[UserId]): Future[Seq[ConversationMemberData]] =
-    this.users.withSelfUserFuture { selfUserId =>
-      ifAbleToModifyMembers(conv, selfUserId, Seq.empty[ConversationMemberData]) {
-        members.add(conv, users: _*) flatMap { members =>
-          if (members.nonEmpty) {
-            messages.addMemberJoinMessage(conv, selfUserId, members.map(_.userId).toSet) map { _ =>
-              sync.postConversationMemberJoin(conv, members.map(_.userId).toSeq)
-              members.toSeq
-            }
-          } else Future.successful(members.toSeq)
-        }
-      }
-    }
-
-  def removeConversationMember(conv: ConvId, user: UserId): Future[Option[SyncId]] =
-    this.users.withSelfUserFuture { selfUserId =>
-      ifAbleToModifyMembers(conv, selfUserId, Option.empty[SyncId]) {
-        members.remove(conv, user) flatMap { members =>
-          if (members.isEmpty) Future.successful(None)
-          else messages.addMemberLeaveMessage(conv, selfUserId, user) flatMap { _ =>
-            sync.postConversationMemberLeave(conv, user).map(Some(_))
+  override def addConversationMembers(conv: ConvId, users: Seq[UserId]): Future[Seq[ConversationMemberData]] = this.users.withSelfUserFuture { selfUserId =>
+    ifAbleToModifyMembers(conv, selfUserId, Seq.empty[ConversationMemberData]) {
+      members.add(conv, users: _*) flatMap { members =>
+        if (members.nonEmpty) {
+          messages.addMemberJoinMessage(conv, selfUserId, members.map(_.userId).toSet) map { _ =>
+            sync.postConversationMemberJoin(conv, members.map(_.userId).toSeq)
+            members.toSeq
           }
-        }
+        } else Future.successful(members.toSeq)
       }
     }
+  }
 
-  def leaveConversation(conv: ConvId): Future[Option[ConversationData]] = {
+  override def removeConversationMember(conv: ConvId, user: UserId): Future[Option[SyncId]] = this.users.withSelfUserFuture { selfUserId =>
+    ifAbleToModifyMembers(conv, selfUserId, Option.empty[SyncId]) {
+      members.remove(conv, user) flatMap { members =>
+        if (members.isEmpty) Future.successful(None)
+        else messages.addMemberLeaveMessage(conv, selfUserId, user) flatMap { _ => sync.postConversationMemberLeave(conv, user).map(Some(_)) }
+      }
+    }
+  }
+
+  override def leaveConversation(conv: ConvId): Future[Option[ConversationData]] = {
     verbose(s"leaveConversation($conv)")
 
     for {
@@ -283,7 +304,7 @@ class ConversationsUiService(self:            UserId,
     } yield archived.map(_._2).orElse(updated.map(_._2))
   }
 
-  def ifAbleToModifyMembers[A, M[_]](conv: ConvId, user: UserId, zero: M[A])(f: => Future[M[A]]): Future[M[A]] = {
+  override def ifAbleToModifyMembers[A, M[_]](conv: ConvId, user: UserId, zero: M[A])(f: => Future[M[A]]): Future[M[A]] = {
     val isGroup = convsContent.convById(conv).map(_.exists(_.convType == ConversationType.Group))
     val isActiveMember = members.isActiveMember(conv, user)
     for {
@@ -293,7 +314,7 @@ class ConversationsUiService(self:            UserId,
     } yield res
   }
 
-  def clearConversation(id: ConvId): Future[Option[ConversationData]] = convsContent.convById(id) flatMap {
+  override def clearConversation(id: ConvId): Future[Option[ConversationData]] = convsContent.convById(id) flatMap {
     case Some(conv) if conv.convType == ConversationType.Group || conv.convType == ConversationType.OneToOne =>
       verbose(s"clearConversation($conv)")
 
@@ -316,17 +337,15 @@ class ConversationsUiService(self:            UserId,
       Future successful None
   }
 
-  def getOrCreateOneToOneConversation(toUser: UserId): Future[ConversationData] =
-    convsContent.convById(ConvId(toUser.str)) flatMap {
-      case Some(conv) => Future.successful(conv)
-      case _ => users.withSelfUserFuture { selfUserId => createOneToOneConversation(toUser, selfUserId) }
-    }
+  override def getOrCreateOneToOneConversation(toUser: UserId): Future[ConversationData] = convsContent.convById(ConvId(toUser.str)) flatMap {
+    case Some(conv) => Future.successful(conv)
+    case _ => users.withSelfUserFuture { selfUserId => createOneToOneConversation(toUser, selfUserId) }
+  }
 
   /**
     * Creates conversation with already connected user.
     */
-  def createOneToOneConversation(toUser: UserId, selfUserId: UserId) =
-  usersStorage.get(toUser).flatMap {
+  override def createOneToOneConversation(toUser: UserId, selfUserId: UserId): Future[ConversationData] = usersStorage.get(toUser).flatMap {
     case Some(u) if u.connection == ConnectionStatus.Ignored =>
       convsContent.createConversationWithMembers(ConvId(toUser.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, toUser, Seq(selfUserId), hidden = true) flatMap { conv =>
         messages.addMemberJoinMessage(conv.id, toUser, Set(selfUserId), firstMessage = true) flatMap { _ =>
@@ -344,7 +363,7 @@ class ConversationsUiService(self:            UserId,
       }
   }
 
-  def createGroupConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId] = None): Future[ConversationData] = {
+  override def createGroupConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId] = None): Future[ConversationData] = {
     debug(s"createGroupConversation, id: $id, members: $members, team: $teamId")
 
     def createAndPost = convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((self +: members).distinct: _*), ConversationType.Group, self, members, teamId = teamId) flatMap { conv =>
@@ -378,26 +397,23 @@ class ConversationsUiService(self:            UserId,
     }
   }
 
-  def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
+  override def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
     users.withSelfUserFuture(id => convStorage.search(prefix, id, handleOnly)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))
 
-  def knock(id: ConvId): Future[Option[MessageData]] =
-    for {
-      msg <- messages.addKnockMessage(id, self)
-      _ <- sync.postMessage(msg.id, id, msg.editTime)
-    } yield
-      Some(msg)
+  override def knock(id: ConvId): Future[Option[MessageData]] = for {
+    msg <- messages.addKnockMessage(id, self)
+    _   <- sync.postMessage(msg.id, id, msg.editTime)
+  } yield Some(msg)
 
-  def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]] = {
+  override def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]] =
     convsContent.updateConversationLastRead(convId, msg.time) map {
       case Some((_, conv)) =>
         sync.postLastRead(convId, conv.lastRead)
         Some(conv)
       case _ => None
     }
-  }
 
-  def setEphemeral(id: ConvId, expiration: EphemeralExpiration) =
+  override def setEphemeral(id: ConvId, expiration: EphemeralExpiration): Future[Option[(ConversationData, ConversationData)]] =
     convStorage.update(id, _.copy(ephemeral = expiration))
 }
 

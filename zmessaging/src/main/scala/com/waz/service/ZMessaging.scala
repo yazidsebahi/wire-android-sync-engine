@@ -83,7 +83,7 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, gl
   lazy val notifStorage                           = wire[NotificationStorage]
   lazy val convsStorage                           = wire[ConversationStorageImpl]
   lazy val msgDeletions:      MsgDeletionStorage  = wire[MsgDeletionStorageImpl]
-  lazy val searchQueryCache                       = wire[SearchQueryCacheStorage]
+  lazy val searchQueryCache: SearchQueryCacheStorage = wire[SearchQueryCacheStorageImpl]
   lazy val msgEdits:          EditHistoryStorage  = wire[EditHistoryStorageImpl]
 }
 
@@ -199,7 +199,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val conversations: ConversationsService        = wire[ConversationsService]
   lazy val convsNotifier                              = wire[ConversationsNotifier]
   lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
-  lazy val convsUi                                    = wire[ConversationsUiService]
+  lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
   lazy val convsStats                                 = wire[ConversationsListStateService]
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]

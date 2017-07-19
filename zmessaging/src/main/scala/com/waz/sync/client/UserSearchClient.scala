@@ -62,10 +62,27 @@ class UserSearchClient(netClient: ZNetClient) {
 
     netClient(req) map (handling404s orElse ZNetClient.errorHandling(name))
   }
+
+  def exactMatchHandle(handle: Handle): ErrorOrResponse[Option[UserId]] = {
+    val handling404s: PartialFunction[Response, Either[ErrorResponse, Option[UserId]]] = {
+      case Response(SuccessHttpStatus(), ExactMatchHandleResponseContent(userId), _) =>
+        debug(s"user id received: $userId, for the handle: $handle")
+        Right(Some(userId))
+      case Response(status, _, _) if status.status == NotFound =>
+        debug(s"exact handle match not found for $handle")
+        Right(None)
+      case other =>
+        warn(s"error while matching handle $handle : $other")
+        Left(ErrorResponse.InternalError)
+    }
+
+    netClient(Request.Get(UserSearchClient.handlesPath + "/" + Handle.stripSymbol(handle.string))) map (handling404s orElse ZNetClient.errorHandling("exactMatchHandle"))
+  }
 }
 
 object UserSearchClient {
   val ContactsPath = "/search/contacts"
+  val handlesPath = "/users/handles"
 
   val DefaultLimit = 10
 
@@ -93,6 +110,13 @@ object UserSearchClient {
       case _ => None
     }
 
+  }
+
+  object ExactMatchHandleResponseContent {
+    def unapply(response: ResponseContent): Option[UserId] = response match {
+      case JsonObjectResponse(js) if js.has("user") => Some(UserId(js.getString("user")))
+      case _ => None
+    }
   }
 
 }

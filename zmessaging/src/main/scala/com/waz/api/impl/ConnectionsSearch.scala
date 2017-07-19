@@ -33,9 +33,9 @@ class ConnectionsSearch(searchTerm: String, limit: Int, filter: Array[String], a
   private val query = SearchKey(searchTerm)
   private val predicate: UserData => Boolean = u =>
     ((query.isAtTheStartOfAnyWordIn(u.searchKey) && !searchByHandleOnly) || u.handle.exists(_.containsQuery(searchTerm)) || (alsoSearchByEmail && u.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) && ! filteredIds.contains(u.id.str) && (showBlockedUsers || (u.connection != BLOCKED))
-
+  
   private var users = Option.empty[Vector[UserData]]
-
+  
   addLoader { zms =>
     usersFrom(zms).map(_.sortBy(_.name)(currentLocaleOrdering).take(limit))
   } { conns =>

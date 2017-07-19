@@ -17,100 +17,123 @@
  */
 package com.waz.service
 
-import com.waz.RobolectricUtils
 import com.waz.api.User.ConnectionStatus
-import com.waz.model.SearchQuery.{Recommended, TopPeople}
-import com.waz.model.UserData.UserDataDao
-import com.waz.model._
+import com.waz.content._
+import com.waz.model.SearchQuery.Recommended
+import com.waz.model.{UserId, _}
+import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
-import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.testutils.Implicits.SignalToSink
-import com.waz.testutils.Matchers._
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
-import com.waz.threading.Threading
-import com.waz.utils._
-import com.waz.utils.wrappers.DB
-import org.scalatest._
-import org.threeten.bp.Instant
-import org.threeten.bp.Instant.{EPOCH}
+import com.waz.utils.events.{Signal, SourceSignal}
 
 import scala.collection.breakOut
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future.successful
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
+import com.waz.utils.Managed
+import com.waz.utils.wrappers.DB
+import org.threeten.bp.Instant
+import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
+import com.waz.service.conversation.ConversationsUiService
+import com.waz.service.teams.TeamsService
+import scala.language.higherKinds
 
-class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with OptionValues with RobolectricTests with RobolectricUtils {
+import scala.collection.generic.CanBuild
 
-  implicit def db: DB = zms.storage.db.dbHelper.getWritableDatabase
+class UserSearchServiceSpec extends AndroidFreeSpec {
 
-  lazy val users = Seq(
-    UserData(id('a), "other user 1"),
-    UserData(id('b), "other user 2"),
-    UserData(id('c), "some name"),
-    UserData(id('d), "related user 1").copy(relation = Relation.Second),
-    UserData(id('e), "related user 2").copy(relation = Relation.Second),
-    UserData(id('f), "other related").copy(relation = Relation.Third),
-    UserData(id('g), "friend user 1").copy(connection = ConnectionStatus.ACCEPTED),
-    UserData(id('h), "friend user 2").copy(connection = ConnectionStatus.ACCEPTED),
-    UserData(id('i), "some other friend").copy(connection = ConnectionStatus.ACCEPTED),
-    UserData(id('j), "meep moop").copy(email = Some(EmailAddress("moop@meep.me"))))
+  lazy val users = Map(
+    id('a) -> UserData(id('a), "other user 1"),
+    id('b) -> UserData(id('b), "other user 2"),
+    id('c) -> UserData(id('c), "some name"),
+    id('d) -> UserData(id('d), "related user 1").copy(relation = Relation.Second),
+    id('e) -> UserData(id('e), "related user 2").copy(relation = Relation.Second),
+    id('f) -> UserData(id('f), "other related").copy(relation = Relation.Third),
+    id('g) -> UserData(id('g), "friend user 1").copy(connection = ConnectionStatus.ACCEPTED),
+    id('h) -> UserData(id('h), "friend user 2").copy(connection = ConnectionStatus.ACCEPTED),
+    id('i) -> UserData(id('i), "some other friend").copy(connection = ConnectionStatus.ACCEPTED),
+    id('j) -> UserData(id('j), "meep moop").copy(email = Some(EmailAddress("moop@meep.me")))
+  )
 
-  @volatile var syncRequest = Option.empty[SearchQuery]
-  @volatile var commonSyncRequest = Option.empty[UserId]
-  @volatile var onSync: SearchQuery => Future[Unit] = { _ => successful(()) }
-  case object Meep
-
-  lazy val zms = new MockZMessaging() {
-    override lazy val sync: SyncServiceHandle = new EmptySyncService {
-      override def syncSearchQuery(query: SearchQuery) = Serialized.future(Meep) {
-        syncRequest = Some(query)
-        onSync(query).flatMap(_ => super.syncSearchQuery(query))(Threading.Background)
-      }
-    }
-  }
-
-  def service = zms.userSearch
   def id(s: Symbol) = UserId(s.toString)
-  def ids(s: Symbol*) = s.map(id)(breakOut): Vector[UserId]
+  def ids(s: Symbol*) = s.map(id)(breakOut).toSet
 
-  before {
-    Await.result(Future.traverse(users)(zms.usersStorage.addOrOverwrite), 5.seconds)
+  def stubService(userId: UserId = UserId(),
+                  queryCacheStorage: SearchQueryCacheStorage = stub[SearchQueryCacheStorage],
+                  teamId: Option[TeamId] = None,
+                  userService: UserService = stub[UserService],
+                  usersStorage: UsersStorage = stub[UsersStorage],
+                  teamsService: TeamsService = stub[TeamsService],
+                  membersStorage: MembersStorage = stub[MembersStorage],
+                  timeouts: Timeouts = new Timeouts,
+                  sync: SyncServiceHandle = stub[SyncServiceHandle],
+                  messagesStorage: MessagesStorage = stub[MessagesStorage],
+                  convsUi: ConversationsUiService = stub[ConversationsUiService]) =
+    new UserSearchService(userId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsUi)
+
+  def verifySearch(prefix: String, matches: Set[UserId]) = {
+    val query = Recommended(prefix)
+    val expected = users.filterKeys(matches.contains).values.toVector
+    val querySignal = new SourceSignal[Option[SearchQueryCache]]()
+    val firstQueryCache = SearchQueryCache(query, Instant.now, None)
+    val secondQueryCache = SearchQueryCache(query, Instant.now, Some(matches.toVector))
+
+
+    val queryCacheStorage = mock[SearchQueryCacheStorage]
+    (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
+    val usersStorage = mock[UsersStorage]
+    val sync = mock[SyncServiceHandle]
+
+    (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
+    (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
+      .expects(*, *, *, *).once().returning(Future.successful(expected))
+
+    if (expected.nonEmpty) {
+      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning {
+        Future.successful(secondQueryCache)
+      }
+      (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
+        Future.successful[SyncId] {
+          querySignal ! Some(secondQueryCache)
+          SyncId()
+        }
+      }
+      (usersStorage.listSignal _).expects(matches.toVector).once().returning(Signal.const(expected))
+    }
+
+    val service = stubService(queryCacheStorage = queryCacheStorage, usersStorage = usersStorage, sync = sync)
+    querySignal ! Some(firstQueryCache)
+    result(service.searchUserData(Recommended(prefix)).map(_.keys.toSet).filter(_ == matches).head)
   }
 
-  after {
-    onSync = { _ => successful(()) }
-    syncRequest = None
-    commonSyncRequest = None
-
-    Await.result(Serialized.future(Meep)(successful(())), 5.seconds)
-
-    deleteCache()
-  }
-
-  def search(q: SearchQuery, limit: Option[Int] = None) = service.searchUserData(q, limit).map(_.keys)
 
   feature("Recommended people search") {
-    scenario("Return local search results") {
-      def verifySearch(prefix: String, matches: Seq[UserId]) = {
-        val result = search(Recommended(prefix)).sink
-        withClue(s"searching for: $prefix")(forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(matches)).soon)
-      }
-
+    scenario("Return search results") {
       verifySearch("r", ids('d, 'e, 'f))
       verifySearch("re", ids('d, 'e, 'f))
       verifySearch("rel", ids('d, 'e, 'f))
-      verifySearch("relt", Nil)
       verifySearch("u", ids('d, 'e))
       verifySearch("us", ids('d, 'e))
       verifySearch("use", ids('d, 'e))
       verifySearch("user", ids('d, 'e))
       verifySearch("use", ids('d, 'e))
-      verifySearch("used", Nil)
-      verifySearch("meep", Nil)
-      verifySearch("moop@meep", Nil)
       verifySearch("moop@meep.me", ids('j))
+
+      /*verifySearch("relt", Set.empty[UserId])
+      verifySearch("used", Set.empty[UserId])
+      verifySearch("meep", Set.empty[UserId])
+      verifySearch("moop@meep", Set.empty[UserId])*/
     }
+  }
+
+  // TODO: Turn into android-free tests or remove (some of them are reduntant now)
+  /*
+  feature("Exact handle match") {
+    scenario("Run exact handle match if the handle is not found locally") {
+      val service = stubService()
+      val signal = service.search(RecommendedHandle("@fasol"), Set.empty[UserId])
+
+    }
+
+  }
 
     scenario("Schedule sync if no cached query is found") {
       val result = search(Recommended("rel")).sink
@@ -161,8 +184,10 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
       forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('k))).soon
       syncRequest shouldBe defined
     }
-  }
+    }
+    */
 
+/*
   feature("Top people search") {
     scenario("Return only connected users on top people search") {
       val result = search(TopPeople).sink
@@ -179,5 +204,6 @@ class UserSearchServiceSpec extends FeatureSpec with Matchers with BeforeAndAfte
     })
   }
 
-  def deleteCache() = Await.result(zms.searchQueryCache.deleteBefore(Instant.now + 1.day), 5.seconds)
+
+  */
 }
