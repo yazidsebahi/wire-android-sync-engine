@@ -337,7 +337,7 @@ object UserPreferences {
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
   lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
-  lazy val AnalyticsEnabled         = PrefKey[Boolean]       ("analytics_enabled")
+  lazy val AnalyticsEnabled         = PrefKey[Boolean]       ("analytics_enabled", customDefault = true)
   lazy val DownloadImagesOnWifiOnly = PrefKey[Boolean]       ("download_images_on_wifi_only")
 
   lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")
