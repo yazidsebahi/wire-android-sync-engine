@@ -43,9 +43,8 @@ class RichMediaService(assets:      AssetService,
                        spotify:     SpotifyMediaService) {
   import com.waz.api.Message.Part.Type._
   import Threading.Implicits.Background
-  private implicit val ec = EventContext.Global
 
-  val richMediaParser = new RichMediaContentParser
+  private implicit val ec = EventContext.Global
 
   private def isSyncableMsg(msg: MessageData) = msg.msgType == Message.Type.RICH_MEDIA && msg.content.exists(isSyncable)
 

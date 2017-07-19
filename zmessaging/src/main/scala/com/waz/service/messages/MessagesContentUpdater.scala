@@ -24,7 +24,6 @@ import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.content._
 import com.waz.model._
 import com.waz.service.ZMessaging.clock
-import com.waz.service.media.RichMediaContentParser
 import com.waz.threading.Threading
 import com.waz.utils._
 import org.threeten.bp.Instant
@@ -38,8 +37,6 @@ class MessagesContentUpdater(messagesStorage: MessagesStorage,
                              deletions:       MsgDeletionStorage) {
 
   import Threading.Implicits.Background
-
-  val contentParser = new RichMediaContentParser
 
   def getMessage(msgId: MessageId) = messagesStorage.getMessage(msgId)
 

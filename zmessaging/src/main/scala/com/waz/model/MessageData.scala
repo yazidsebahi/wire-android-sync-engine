@@ -450,12 +450,10 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
   case class MessageEntry(id: MessageId, user: UserId, tpe: Message.Type = Message.Type.TEXT, state: Message.Status = Message.Status.DEFAULT, contentSize: Int = 1)
 
-  val contentParser = new RichMediaContentParser
-
   def messageContent(message: String, mentions: Map[UserId, String] = Map.empty, links: Seq[LinkPreview] = Nil, weblinkEnabled: Boolean = false): (Message.Type, Seq[MessageContent]) =
     if (message.trim.isEmpty) (Message.Type.TEXT, textContent(message))
     else if (links.isEmpty) {
-      val ct = contentParser.splitContent(message, weblinkEnabled)
+      val ct = RichMediaContentParser.splitContent(message, weblinkEnabled)
 
       (ct.size, ct.head.tpe) match {
         case (1, Message.Part.Type.TEXT) => (Message.Type.TEXT, applyMentions(ct, mentions))
@@ -472,7 +470,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       val res = new MessageContentBuilder
 
       val end = links.sortBy(_.urlOffset).foldLeft(0) { case (prevEnd, link) =>
-        if (link.urlOffset > prevEnd) res ++= contentParser.splitContent(message.substring(prevEnd, link.urlOffset))
+        if (link.urlOffset > prevEnd) res ++= RichMediaContentParser.splitContent(message.substring(prevEnd, link.urlOffset))
 
         returning(linkEnd(link.urlOffset)) { end =>
           if (end > link.urlOffset) {
@@ -482,7 +480,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
         }
       }
 
-      if (end < message.length) res ++= contentParser.splitContent(message.substring(end))
+      if (end < message.length) res ++= RichMediaContentParser.splitContent(message.substring(end))
 
       (Message.Type.RICH_MEDIA, applyMentions(res.result(), mentions))
     }
