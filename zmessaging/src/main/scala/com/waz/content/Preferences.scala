@@ -321,10 +321,10 @@ object GlobalPreferences {
   lazy val GPSErrorDialogShowCount    = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 
   //DEPRECATED!!! Use the UserPreferences instead!!
-  lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS", customDefault = false)
-  lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme", customDefault = false)
+  lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
+  lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")
   lazy val _SoundsPrefKey              = PrefKey[String] ("PREF_KEY_SOUND")
-  lazy val _AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED")
+  lazy val _AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
   lazy val _DownloadImages             = PrefKey[String]("zms_pref_image_download") // hardcoded value used in tests
 
 }
