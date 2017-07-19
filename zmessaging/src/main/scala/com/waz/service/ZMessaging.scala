@@ -47,7 +47,7 @@ import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
 import com.waz.znet.{CredentialsHandler, _}
 import net.hockeyapp.android.{Constants, ExceptionHandler}
-import org.threeten.bp.Instant
+import org.threeten.bp.{Clock, Instant}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -319,6 +319,9 @@ object ZMessaging { self =>
   require(LogLevel.initialized)
 
   private[waz] var context: Context = _
+
+  //var for tests - and set here so that it is globally available without the need for DI
+  var clock = Clock.systemUTC()
 
   private var backend = BackendConfig.StagingBackend
 

@@ -29,7 +29,6 @@ import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.zms.FCMHandlerService.FCMHandler
 import org.json
-import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -46,7 +45,8 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   var lifecycleActive = Signal(false)
   var cloudNotsToHandle = Signal(Set.empty[Uid])
 
-  after {
+  override protected def afterEach() = {
+    super.afterEach()
     lifecycleActive = Signal(false)
     cloudNotsToHandle = Signal(Set.empty[Uid])
   }
