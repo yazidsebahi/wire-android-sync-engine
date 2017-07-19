@@ -19,7 +19,7 @@ package com.waz.service
 
 import android.content.Context
 import android.telephony.TelephonyManager
-import com.google.i18n.phonenumbers.PhoneNumberUtil
+import com.google.i18n.phonenumbers.{NumberParseException, PhoneNumberUtil}
 import com.google.i18n.phonenumbers.Phonenumber.{PhoneNumber => GooglePhoneNumber}
 import com.waz.PermissionsService
 import com.waz.ZLog._
@@ -38,6 +38,8 @@ class PhoneNumberService(context: Context, permissions: PermissionsService) {
 
   lazy val defaultRegion = Option(telephonyManager.getSimCountryIso).orElse(Option(context.getResources.getConfiguration.locale.getCountry).filter(_ != "")).getOrElse("US").toUpperCase
 
+  private val qaShortcutRegex = "^\\+0\\d+$".r
+
   def myPhoneNumber: Future[Option[PhoneNumber]] =
     Try(telephonyManager.getLine1Number).toOption.flatMap(Option(_)).filter(_.nonEmpty).map(PhoneNumber).map(normalize) match {
       case None => Future(None)
@@ -46,17 +48,20 @@ class PhoneNumberService(context: Context, permissions: PermissionsService) {
 
   def normalize(phone: PhoneNumber): Future[Option[PhoneNumber]] = Future(normalizeNotThreadSafe(phone, phoneNumberUtil))
 
-  def normalizeNotThreadSafe(phone: PhoneNumber, util: PhoneNumberUtil): Option[PhoneNumber] =
-    try {
-      if (phone.str == null || phone.str.length < 5) None
-      else {
+  def normalizeNotThreadSafe(phone: PhoneNumber, util: PhoneNumberUtil): Option[PhoneNumber] = phone.str match {
+    case null => None
+    case str if str.length < 5 => None
+    case qaShortcutRegex() => Some(phone)
+    case str =>
+      try {
         val number = new GooglePhoneNumber
-        util.parse(phone.str, defaultRegion, number)
+        util.parse(str, defaultRegion, number)
         Some(PhoneNumber(util.format(number, PhoneNumberUtil.PhoneNumberFormat.E164)))
+      } catch {
+        case ex: Throwable =>
+          debug(s"phone number normalization failed for $phone ($defaultRegion): ${ex.getMessage}")
+          None
       }
-    } catch {
-      case ex: Throwable =>
-        debug(s"phone number normalization failed for $phone ($defaultRegion): ${ex.getMessage}")
-        None
-    }
+  }
+
 }
