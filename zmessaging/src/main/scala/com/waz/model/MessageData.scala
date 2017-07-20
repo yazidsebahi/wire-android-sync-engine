@@ -399,6 +399,9 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def findEphemeral(conv: ConvId)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Ephemeral.name} IS NOT NULL and ${ExpiryTime.name} IS NULL", null, null, null, s"${Time.name} ASC"))
 
+    def findSystemMessage(conv: ConvId, serverTime: Instant, tpe: Message.Type, sender: UserId)(implicit db: DB) =
+      iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Time.name} = ${Time(serverTime)} and ${Type.name} = '${Type(tpe)}' and ${User.name} = '${User(sender)}'", null, null, null, s"${Time.name} DESC"))
+
     private val IndexColumns = Array(Id.name, Time.name)
     def msgIndexCursor(conv: ConvId)(implicit db: DB) = db.query(table.name, IndexColumns, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")
 

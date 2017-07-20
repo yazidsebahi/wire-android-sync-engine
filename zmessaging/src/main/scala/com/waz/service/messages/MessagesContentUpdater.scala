@@ -149,20 +149,25 @@ class MessagesContentUpdater(context: Context, val messagesStorage: MessagesStor
 
         RichFuture.traverseSequential(toAdd.groupBy(_.id).toSeq) { case (_, ms) =>
           val msg = ms.last
-          messagesStorage.lastLocalMessage(convId, msg.msgType) flatMap {
-            case Some(m) if m.userId == msg.userId =>
-              verbose(s"lastLocalMessage(${msg.msgType}) : $m")
+          messagesStorage.hasSystemMessage(convId, msg.time, msg.msgType, msg.userId).flatMap {
+            case false =>
+              messagesStorage.lastLocalMessage(convId, msg.msgType).flatMap {
+                case Some(m) if m.userId == msg.userId =>
+                  verbose(s"lastLocalMessage(${msg.msgType}) : $m")
 
-              if (m.msgType == Message.Type.MEMBER_JOIN || m.msgType == Message.Type.MEMBER_LEAVE) {
-                val remaining = m.members.diff(msg.members)
-                if (remaining.nonEmpty) addMessage(m.copy(id = MessageId(), members = remaining))
-              }
-              messagesStorage.delete(m.id).flatMap(_ => messagesStorage.addMessage(msg.copy(localTime = m.localTime)))
-            case res =>
-              verbose(s"lastLocalMessage(${msg.msgType}) returned: $res")
-              messagesStorage.addMessage(msg)
+                  if (m.msgType == Message.Type.MEMBER_JOIN || m.msgType == Message.Type.MEMBER_LEAVE) {
+                    val remaining = m.members.diff(msg.members)
+                    if (remaining.nonEmpty) addMessage(m.copy(id = MessageId(), members = remaining))
+                  }
+                  messagesStorage.delete(m.id).flatMap(_ => messagesStorage.addMessage(msg.copy(localTime = m.localTime)))
+                case res =>
+                  verbose(s"lastLocalMessage(${msg.msgType}) returned: $res")
+                  messagesStorage.addMessage(msg)
+              }.map(Some(_))
+            case true =>
+              Future.successful(None)
           }
-        }
+        }.map(_.flatten)
       }
     }
 

@@ -30,7 +30,7 @@ import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
-import com.waz.utils.events.{EventStream, Signal, SourceSignal}
+import com.waz.utils.events.{EventStream, Signal, SourceSignal, SourceStream}
 import org.threeten.bp.Instant
 
 import scala.collection._
@@ -38,6 +38,27 @@ import scala.concurrent.Future
 import scala.util.Failure
 
 trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
+
+  //def for tests
+  def messageAdded:    EventStream[Seq[MessageData]]
+  def messageUpdated:  EventStream[Seq[(MessageData, MessageData)]]
+  def onMessageSent:   SourceStream[MessageData]
+  def onMessageFailed: SourceStream[(MessageData, ErrorResponse)]
+
+  def delete(msg: MessageData): Future[Unit]
+  def delete(id: MessageId):    Future[Unit]
+  def deleteAll(conv: ConvId):  Future[Unit]
+
+  def addMessage(msg: MessageData): Future[MessageData]
+
+  def getMessage(id: MessageId):    Future[Option[MessageData]]
+  def getMessages(ids: MessageId*): Future[Seq[Option[MessageData]]]
+
+  def findLocalFrom(conv: ConvId, time: Instant): Future[IndexedSeq[MessageData]]
+
+  //System message events no longer have IDs, so we need to search by type, timestamp and sender
+  def hasSystemMessage(conv: ConvId, serverTime: Instant, tpe: Message.Type, sender: UserId): Future[Boolean]
+
   def getLastMessage(conv: ConvId): Future[Option[MessageData]]
 }
 
@@ -212,6 +233,17 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
       _ <- Future(msgsFilteredIndex(conv).foreach(_.delete()))
       _ <- msgsIndex(conv).flatMap(_.delete())
     } yield ()
+  }
+
+  override def hasSystemMessage(conv: ConvId, serverTime: Instant, tpe: Message.Type, sender: UserId) = {
+    def matches(msg: MessageData) = msg.convId == conv && msg.time == serverTime && msg.msgType == tpe && msg.userId == sender
+    find(matches, MessageDataDao.findSystemMessage(conv, serverTime, tpe, sender)(_), identity).map(_.size).map {
+      case 0 => false
+      case 1 => true
+      case _ =>
+        warn("Found multiple system messages with given timestamp")
+        true
+    }
   }
 }
 
