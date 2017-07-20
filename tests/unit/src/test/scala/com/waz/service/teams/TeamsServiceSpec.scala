@@ -29,7 +29,7 @@ import com.waz.utils.events.EventStream
 
 import scala.concurrent.Future
 
-class TeamServiceSpec extends AndroidFreeSpec {
+class TeamsServiceSpec extends AndroidFreeSpec {
 
   val selfUser =     UserId()
   val selfAccount =  AccountId()
@@ -110,6 +110,40 @@ class TeamServiceSpec extends AndroidFreeSpec {
 
     userStorageOnUpdated ! Seq(member2Updated -> member2)
     result(res.filter(_ == Set(member1)).head)
+  }
+
+  scenario("Search team members signal doesn't update on non member add") {
+    result(shouldSyncTeamsPref := false)
+
+    val userStorageOnAdded    = EventStream[Seq[UserData]]()
+    val userStorageOnUpdated  = EventStream[Seq[(UserData, UserData)]]()
+    val userStorageOnDeleted  = EventStream[Seq[UserId]]()
+
+
+    (userStorage.onAdded _).expects().once().returning(userStorageOnAdded)
+    (userStorage.onUpdated _).expects().once().returning(userStorageOnUpdated)
+    (userStorage.onDeleted _).expects().once().returning(userStorageOnDeleted)
+
+    val initialTeamMembers = Set(
+      UserData(UserId(), teamId, "user1", handle = Some(Handle()), searchKey = SearchKey.empty),
+      UserData(UserId(), teamId, "user2", handle = Some(Handle()), searchKey = SearchKey.empty)
+    )
+
+    val newTeamMember = UserData(UserId(), None, "user3", handle = Some(Handle()), searchKey = SearchKey.empty)
+
+    (userStorage.getByTeam _).expects(Set(teamId).flatten).once().returning(Future.successful(initialTeamMembers))
+
+    val service = createService
+
+    val res = service.searchTeamMembers().disableAutowiring() //disable autowiring to prevent multiple loads
+    result(res.filter(_ == initialTeamMembers).head)
+
+    userStorageOnAdded ! Seq(newTeamMember)
+    result(res.filter(_ == (initialTeamMembers)).head)
+
+
+    userStorageOnDeleted ! Seq(newTeamMember.id)
+    result(res.filter(_ == initialTeamMembers).head)
   }
 
   def createService = {

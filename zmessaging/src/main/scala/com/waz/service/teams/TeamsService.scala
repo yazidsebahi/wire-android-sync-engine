@@ -95,44 +95,42 @@ class TeamsServiceImpl(selfUser:           UserId,
     } yield {}
   }
 
-  override def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false) = {
+  override def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false) = teamId match {
+    case None => Signal.empty
+    case Some(tId) => {
 
-    val changesStream = EventStream.union[Seq[ContentChange[UserId, UserData]]](
-      userStorage.onAdded.map(_.map(d => Added(d.id, d))),
-      userStorage.onUpdated.map(_.map { case (prv, curr) => Updated(prv.id, prv, curr) }),
-      userStorage.onDeleted.map(_.map(Removed(_)))
-    )
+      val changesStream = EventStream.union[Seq[ContentChange[UserId, UserData]]](
+        userStorage.onAdded.map(_.map(d => Added(d.id, d))),
+        userStorage.onUpdated.map(_.map { case (prv, curr) => Updated(prv.id, prv, curr) }),
+        userStorage.onDeleted.map(_.map(Removed(_)))
+      )
 
-    def load = {
-      teamId match {
-        case None => Future.successful(Set.empty[UserData])
-        case Some(id) => query match {
-          case Some(q) => userStorage.searchByTeam(id, q, handleOnly)
-          case None => userStorage.getByTeam(Set(id))
-        }
+      def load = query match {
+        case Some(q) => userStorage.searchByTeam(tId, q, handleOnly)
+        case None    => userStorage.getByTeam(Set(tId))
       }
+
+      def userMatches(data: UserData) = data.teamId == teamId && (query match {
+        case Some(q) =>
+          if (handleOnly) data.handle.map(_.string).contains(q.asciiRepresentation)
+          else q.isAtTheStartOfAnyWordIn(data.searchKey)
+        case _ => true
+      })
+
+      new AggregatingSignal[Seq[ContentChange[UserId, UserData]], Set[UserData]](changesStream, load, { (current, changes) =>
+        val added = changes.collect {
+          case Added(_, data) if userMatches(data) => data
+          case Updated(_, _, data) if userMatches(data) => data
+        }.toSet
+
+        val removed = changes.collect {
+          case Removed(id) => id
+          case Updated(id, _, data) if !userMatches(data) => id
+        }.toSet
+
+        current.filterNot(d => removed.contains(d.id)) ++ added
+      })
     }
-
-    def userMatches(data: UserData) = query match {
-      case Some(q) =>
-        if (handleOnly) data.handle.map(_.string).contains(q.asciiRepresentation)
-        else q.isAtTheStartOfAnyWordIn(data.searchKey)
-      case _ => true
-    }
-
-    new AggregatingSignal[Seq[ContentChange[UserId, UserData]], Set[UserData]](changesStream, load, { (current, changes) =>
-      val added = changes.collect {
-        case Added(_, data) if userMatches(data) => data
-        case Updated(_, _, data) if userMatches(data) => data
-      }.toSet
-
-      val removed = changes.collect {
-        case Removed(id) => id
-        case Updated(id, _, data) if !userMatches(data) => id
-      }.toSet
-
-      current.filterNot(d => removed.contains(d.id)) ++ added
-    })
   }
 
   override lazy val selfTeam: Signal[Option[TeamData]] = teamId match {
