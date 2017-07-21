@@ -20,10 +20,9 @@ package com.waz.service.media
 import java.net.URLDecoder
 
 import android.util.Patterns
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.Message.Part
-import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
 import com.waz.sync.client.{SoundCloudClient, SpotifyClient, YouTubeClient}
 import com.waz.utils.wrappers.URI
@@ -31,16 +30,16 @@ import com.waz.utils.wrappers.URI
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-class RichMediaContentParser {
+object RichMediaContentParser {
+
   import Part.Type._
-  import com.waz.service.media.RichMediaContentParser._
 
   def findMatches(content: String, weblinkEnabled: Boolean = false) = {
 
     val knownDomains = (YouTubeClient.domainNames.map(_ -> YOUTUBE) ++
-                        SoundCloudClient.domainNames.map(_ -> SOUNDCLOUD) ++
-                        SpotifyClient.domainNames.map(_ -> SPOTIFY)
-                        ).toMap
+      SoundCloudClient.domainNames.map(_ -> SOUNDCLOUD) ++
+      SpotifyClient.domainNames.map(_ -> SPOTIFY)
+      ).toMap
 
     def validate(content: String, uri: URI, tpe: Part.Type): Boolean = tpe match {
       case YOUTUBE     => youtubeVideoId(uri).isDefined
@@ -76,7 +75,7 @@ class RichMediaContentParser {
     }.flatten
   }
 
-  def splitContent(content: String, weblinkEnabled: Boolean = false) = {
+  def splitContent(content: String, weblinkEnabled: Boolean = false): Seq[MessageContent] = {
     try {
       val res = new MessageContentBuilder
 
@@ -97,9 +96,7 @@ class RichMediaContentParser {
   }
 
   def javaSplitContent(content: String) = splitContent(content).asJava
-}
 
-object RichMediaContentParser {
   case class GoogleMapsLocation(x: String, y: String, zoom: String)
 
   // XXX: this is to block some messages from being treated as weblinks, one case where we need it is giphy,

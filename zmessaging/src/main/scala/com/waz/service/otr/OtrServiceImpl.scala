@@ -50,6 +50,7 @@ import scala.concurrent.duration._
 
 trait OtrService {
   def decryptGcm(data: Array[Byte], mac: Array[Byte]): Future[Option[JSONObject]]
+  def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]): Option[Array[Byte]]
 }
 
 class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
@@ -285,7 +286,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
   // TODO: AN-5167. Right now throws a NotImplementedError when called; to be implemented later
   def decryptAssetDataGCM(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]]): Option[Array[Byte]] = ???
 
-  def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]): Option[Array[Byte]] =
+  override def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]) =
     (prefs.v31AssetsEnabled, encryption) match {
       case (true, Some(EncryptionAlgorithm.AES_GCM)) => decryptAssetDataGCM(assetId, otrKey, sha, data)
       case _ => decryptAssetDataCBC(assetId, otrKey, sha, data)

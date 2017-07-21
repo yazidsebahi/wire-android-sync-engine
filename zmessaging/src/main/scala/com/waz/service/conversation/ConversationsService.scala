@@ -20,8 +20,8 @@ package com.waz.service.conversation
 import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences._
@@ -29,8 +29,7 @@ import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service._
-import com.waz.service.assets.AssetService
-import com.waz.service.messages.{MessagesServiceImpl, MessagesContentUpdater}
+import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushServiceSignals
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
@@ -44,43 +43,47 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 import scala.util.control.NoStackTrace
 
-class ConversationsService(context: Context, push: PushServiceSignals, users: UserServiceImpl, usersStorage: UsersStorageImpl,
-                           messagesStorage: MessagesStorageImpl, membersStorage: MembersStorageImpl,
-                           convsStorage: ConversationStorageImpl, val content: ConversationsContentUpdater, listState: ConversationsListStateService,
-                           sync: SyncServiceHandle, errors: ErrorsService,
-                           messages: MessagesServiceImpl, assets: AssetService, storage: ZmsDatabase,
-                           msgContent: MessagesContentUpdater, userPrefs: UserPreferences, eventScheduler: => EventScheduler) {
+class ConversationsService(context:         Context,
+                           selfUserId:      UserId,
+                           push:            PushServiceSignals,
+                           users:           UserServiceImpl,
+                           usersStorage:    UsersStorageImpl,
+                           membersStorage:  MembersStorageImpl,
+                           convsStorage:    ConversationStorageImpl,
+                           val content:     ConversationsContentUpdater,
+                           sync:            SyncServiceHandle,
+                           errors:          ErrorsService,
+                           messages:        MessagesServiceImpl,
+                           msgContent:      MessagesContentUpdater,
+                           userPrefs:       UserPreferences,
+                           eventScheduler:  => EventScheduler) {
 
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
-  import messages._
-  import users._
 
   private val nameUpdater = wire[NameUpdater]
   nameUpdater.registerForUpdates()
 
-  val convStateEventProcessingStage = EventScheduler.Stage[ConversationStateEvent] { (convId, events) =>
-    withSelfUserFuture { selfUserId =>
-      RichFuture.processSequential(events)(processConversationEvent(_, selfUserId))
-    }
+  val convStateEventProcessingStage = EventScheduler.Stage[ConversationStateEvent] { (_, events) =>
+    RichFuture.processSequential(events)(processConversationEvent(_, selfUserId))
   }
 
   push.onSlowSyncNeeded { req =>
     verbose(s"onSlowSyncNeeded($req)")
-
     for {
       _ <- if (req.lostHistory) onHistoryLost() else successful(())
-      _ <- scheduleSlowSync()
+      _ <- sync.syncConversations()
+      _ <- sync.syncTeam()
     } yield ()
   }
 
   val shouldSyncConversations = userPrefs.preference(ShouldSyncConversations)
 
   shouldSyncConversations.mutate {
-    case Some(true) =>
+    case true =>
       sync.syncConversations()
-      Some(false)
-    case v => v
+      false
+    case false => false
   }
 
   errors.onErrorDismissed {
@@ -92,29 +95,16 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
       convsStorage.setUnknownVerification(conv)
   }
 
-  private def scheduleSlowSync() =
-    getSelfUserId flatMap {
-      case Some(_) =>
-        sync.syncConversations()
-        sync.syncTeam()
-      case None     => sync.syncSelfUser().flatMap { dependency =>
-        sync.syncConversations(Set.empty, Some(dependency))
-        sync.syncTeam(Some(dependency))
-      }
-    }
-
   // TODO: this is just very basic implementation creating empty message
   // This should be updated to include information about possibly missed changes
   // this message will be shown rarely (when notifications stream skips data)
   private def onHistoryLost() =
-    users.withSelfUserFuture { selfUserId =>
-      convsStorage.list flatMap { messages.addHistoryLostMessages(_, selfUserId) }
-    }
+    convsStorage.list.flatMap(messages.addHistoryLostMessages(_, selfUserId))
 
   def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0): Future[Any] = ev match {
     case CreateConversationEvent(rConvId, time, from, data) =>
       updateConversations(selfUserId, Seq(data)) flatMap { case (_, created) => Future.traverse(created) (created =>
-        addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
+        messages.addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
       )}
 
     case ConversationEvent(rConvId, _, _) =>
@@ -143,18 +133,15 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
       def ensureConvActive() = content.setConvActive(conv.id, active = true).map(_.map(_._2).filter(joined))
 
       for {
-        _        <- users.syncNotExistingOrExpired(userIds)
-        _        <- membersStorage.add(conv.id, userIds: _*)
-        selfUser <- selfUserOrFail
-        _        <- if (userIds.contains(selfUser)) ensureConvActive() else successful(None)
+        _ <- users.syncNotExistingOrExpired(userIds)
+        _ <- membersStorage.add(conv.id, userIds: _*)
+        _ <- if (userIds.contains(selfUserId)) ensureConvActive() else successful(None)
       } yield ()
 
     case MemberLeaveEvent(_, _, _, userIds) =>
       membersStorage.remove(conv.id, userIds: _*) flatMap { _ =>
-        withSelfUserFuture { selfUserId =>
-          if (userIds.contains(selfUserId)) content.setConvActive(conv.id, active = false)
-          else successful(())
-        }
+        if (userIds.contains(selfUserId)) content.setConvActive(conv.id, active = false)
+        else successful(())
       }
 
     case MemberUpdateEvent(_, _, _, state) => content.updateConversationState(conv.id, state)
@@ -164,7 +151,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
       membersStorage.add(conv.id, from, recipient) flatMap { added =>
         val userIdsAdded = added map (_.userId)
         usersStorage.listAll(userIdsAdded) map { localUsers =>
-          syncIfNeeded(localUsers: _*)
+          users.syncIfNeeded(localUsers: _*)
           sync.syncUsersIfNotEmpty(userIdsAdded.filterNot(id => localUsers exists (_.id == id)).toSeq)
         }
       }
@@ -175,7 +162,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   private def createGroupConversationOnMemberJoin(remoteId: RConvId, time: Instant, from: UserId, members: Seq[UserId]) = {
     convsStorage.insert(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
       membersStorage.add(conv.id, from +: members: _*) flatMap { ms =>
-        addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
+        messages.addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
           sync.syncConversations(Set(conv.id))
           conv
         }
@@ -183,32 +170,28 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
     }
   }
 
-  def getSelfConversation: Future[Option[ConversationData]] = getSelfUserId flatMap {
-    case Some(selfId) =>
-      val selfConvId = ConvId(selfId.str)
-
-      def generateSelfConv(id: UserId) = usersStorage.get(id) map {
-        case Some(user) => ConversationData(ConvId(id.str), RConvId(id.str), None, id, ConversationType.Self, generatedName = user.name)
-        case _ => ConversationData(ConvId(id.str), RConvId(id.str), None, id, ConversationType.Self)
-      }
-
-      content.convById(selfConvId) flatMap {
-        case Some(c) => successful(Some(c))
-        case _ => generateSelfConv(selfId).flatMap(conv => convsStorage.getOrCreate(selfConvId, conv).map(Some(_)))
-      }
-    case _ => successful(None)
+  def getSelfConversation: Future[Option[ConversationData]] = {
+    val selfConvId = ConvId(selfUserId.str)
+    content.convById(selfConvId).flatMap {
+      case Some(c) => successful(Some(c))
+      case _ =>
+        for {
+          user  <- usersStorage.get(selfUserId)
+          conv  =  ConversationData(ConvId(selfUserId.str), RConvId(selfUserId.str), None, selfUserId, ConversationType.Self, generatedName = user.map(_.name).getOrElse(""))
+          saved <- convsStorage.getOrCreate(selfConvId, conv).map(Some(_))
+        } yield saved
+    }
   }
 
   def updateConversations(conversations: Seq[ConversationResponse]): Future[Seq[ConversationData]] =
-    withSelfUserFuture { selfUserId =>
-      Future.traverse(conversations) { conv =>
-        eventScheduler.post(conv.conversation.remoteId) {
-          updateConversations(selfUserId, Seq(conv)) flatMap { case (all, created) =>
-            messages.addDeviceStartMessages(created, selfUserId) map (_ => all)
-          }
+    Future.traverse(conversations) { conv =>
+      eventScheduler.post(conv.conversation.remoteId) {
+        updateConversations(selfUserId, Seq(conv)) flatMap { case (all, created) =>
+          messages.addDeviceStartMessages(created, selfUserId) map (_ => all)
         }
-      }.map(_.foldLeft(Vector.empty[ConversationData])(_ ++ _))
-    }
+      }
+    }.map(_.foldLeft(Vector.empty[ConversationData])(_ ++ _))
+
 
 
   private def updateConversations(selfUserId: UserId, convs: Seq[ConversationResponse]): Future[(Seq[ConversationData], Seq[ConversationData])] = {
@@ -262,7 +245,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
           }
       })
 
-    def syncUsers() = syncNotExistingOrExpired(convs.flatMap { case ConversationResponse(_, members) => members.map(_.userId) })
+    def syncUsers() = users.syncNotExistingOrExpired(convs.flatMap { case ConversationResponse(_, members) => members.map(_.userId) })
 
     for {
       (convs, created) <- updateConversationData()
@@ -294,7 +277,7 @@ class ConversationsService(context: Context, push: PushServiceSignals, users: Us
   def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse) = for {
     _ <- errors.addErrorWhenActive(ErrorData(error, resp, conv, users))
     _ <- membersStorage.remove(conv, users: _*)
-    _ <- removeLocalMemberJoinMessage(conv, users.toSet)
+    _ <- messages.removeLocalMemberJoinMessage(conv, users.toSet)
   } yield ()
 }
 

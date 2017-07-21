@@ -59,7 +59,8 @@ class InternalLogSpec extends AndroidFreeSpec {
     sb.toString
   }
 
-  before {
+  override protected def beforeEach() = {
+    super.beforeEach()
     InternalLog.reset()
 
     val file = new File(tempDir)
@@ -67,7 +68,7 @@ class InternalLogSpec extends AndroidFreeSpec {
     file.mkdir()
   }
 
-  after {
+  override protected def afterEach() = {
     InternalLog.reset()
     delete(new File(tempDir))
   }
@@ -445,5 +446,4 @@ class InternalLogSpec extends AndroidFreeSpec {
       newFirstFileStr shouldEqual(thisShouldBeNewFirst)
     }
   }
-
 }

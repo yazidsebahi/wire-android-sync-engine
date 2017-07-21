@@ -343,7 +343,7 @@ object UserPreferences {
   lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")
   lazy val SelectedConvId          = PrefKey[Option[ConvId]]      ("selected_conv_id")
   lazy val SpotifyRefreshToken     = PrefKey[Option[RefreshToken]]("spotify_refresh_token")
-  lazy val ShouldSyncConversations = PrefKey[Option[Boolean]]     ("should_sync_conversations")
+  lazy val ShouldSyncConversations = PrefKey[Boolean]             ("should_sync_conversations", customDefault = true)
   lazy val ShouldSyncTeams         = PrefKey[Boolean]             ("should_sync_teams", customDefault = true)
 
   lazy val LastUiVisibleTime      = PrefKey[Instant]    ("last_ui_visible_time")

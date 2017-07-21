@@ -21,6 +21,8 @@ import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.LogTag
 import com.waz.log.{InternalLog, SystemLogOutput}
+import com.waz.service.ZMessaging
+import com.waz.testutils.TestClock
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
@@ -33,9 +35,16 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 //TODO somehow check other threads for failures that might normally be swallowed up and fail tests accordingly
-abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfter with Matchers with MockFactory { this: Suite =>
+abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory { this: Suite =>
 
   val defaultTimeout = 5.seconds
+
+  val clock = TestClock()
+
+  override protected def beforeEach() = {
+    super.beforeEach()
+    clock.reset()
+  }
 
   //Ensures that Android wrappers are assigned with a non-Android implementation so that tests can run on the JVM
   override protected def beforeAll() = {
@@ -47,8 +56,10 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     isTest = true
 
-//    InternalLog.reset()
-//    InternalLog.add(new SystemLogOutput)
+    ZMessaging.clock = clock
+
+    InternalLog.reset()
+    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 

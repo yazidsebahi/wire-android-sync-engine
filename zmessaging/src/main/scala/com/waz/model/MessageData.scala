@@ -31,34 +31,36 @@ import com.waz.model.GenericContent.{Asset, ImageAsset, LinkPreview, Location}
 import com.waz.model.GenericMessage.{GenericMessageContent, TextMessage}
 import com.waz.model.MessageData.MessageState
 import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
+import com.waz.service.ZMessaging.clock
 import com.waz.service.media.{MessageContentBuilder, RichMediaContentParser}
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.utils.wrappers.{DB, DBCursor, URI}
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder, returning}
 import org.json.JSONObject
+import org.threeten.bp.Instant.now
 import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.breakOut
 
-case class MessageData(id: MessageId,
-                       convId: ConvId,
-                       msgType: Message.Type,
-                       userId: UserId,
-                       content: Seq[MessageContent] = Seq.empty,
-                       protos: Seq[GenericMessage] = Seq.empty,
-                       firstMessage: Boolean = false,
-                       members: Set[UserId] = Set.empty[UserId],
-                       recipient: Option[UserId] = None,
-                       email: Option[String] = None,
-                       name: Option[String] = None,
-                       state: MessageState = Message.Status.SENT,
-                       time: Instant = Instant.now,
-                       localTime: Instant = MessageData.UnknownInstant,
-                       editTime: Instant = MessageData.UnknownInstant,
-                       ephemeral: EphemeralExpiration = EphemeralExpiration.NONE,
-                       expiryTime: Option[Instant] = None, // local expiration time
-                       expired: Boolean = false,
-                       duration: Duration = Duration.ZERO //for successful calls
+case class MessageData(id:            MessageId,
+                       convId:        ConvId,
+                       msgType:       Message.Type,
+                       userId:        UserId,
+                       content:       Seq[MessageContent] = Seq.empty,
+                       protos:        Seq[GenericMessage] = Seq.empty,
+                       firstMessage:  Boolean             = false,
+                       members:       Set[UserId]         = Set.empty[UserId],
+                       recipient:     Option[UserId]      = None,
+                       email:         Option[String]      = None,
+                       name:          Option[String]      = None,
+                       state:         MessageState        = Message.Status.SENT,
+                       time:          Instant             = now(clock),
+                       localTime:     Instant             = MessageData.UnknownInstant,
+                       editTime:      Instant             = MessageData.UnknownInstant,
+                       ephemeral:     EphemeralExpiration = EphemeralExpiration.NONE,
+                       expiryTime:    Option[Instant]     = None, // local expiration time
+                       expired:       Boolean             = false,
+                       duration:      Duration            = Duration.ZERO //for successful calls
                       ) {
 
   override def toString: String =
@@ -69,8 +71,12 @@ case class MessageData(id: MessageId,
        | msgType:       $msgType
        | userId:        $userId
        | protos:        ${protos.toString().replace("\n", "")}
+       | state:         $state
+       | time:          $time
        | localTime:     $localTime
-       | other fields:  $content, $firstMessage, $members, $recipient, $email, $name, $state, $time, $editTime, $ephemeral, $expiryTime, $expired, $duration
+       | editTime:      $editTime
+       | members:       $members
+       | other fields:  $content, $firstMessage, , $recipient, $email, $name, $ephemeral, $expiryTime, $expired, $duration
     """.stripMargin
 
 
@@ -390,7 +396,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
     def findMessagesFrom(conv: ConvId, time: Instant)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$conv' and ${Time.name} >= ${time.toEpochMilli}", null, null, null, s"${Time.name} ASC"))
 
-    def findExpired(time: Instant = Instant.now)(implicit db: DB) =
+    def findExpired(time: Instant = now(clock))(implicit db: DB) =
       iterating(db.query(table.name, null, s"${ExpiryTime.name} IS NOT NULL and ${ExpiryTime.name} <= ${time.toEpochMilli}", null, null, null, s"${ExpiryTime.name} ASC"))
 
     def findExpiring()(implicit db: DB) =
@@ -398,6 +404,9 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
     def findEphemeral(conv: ConvId)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Ephemeral.name} IS NOT NULL and ${ExpiryTime.name} IS NULL", null, null, null, s"${Time.name} ASC"))
+
+    def findSystemMessage(conv: ConvId, serverTime: Instant, tpe: Message.Type, sender: UserId)(implicit db: DB) =
+      iterating(db.query(table.name, null, s"${Conv.name} = '${conv.str}' and ${Time.name} = ${Time(serverTime)} and ${Type.name} = '${Type(tpe)}' and ${User.name} = '${User(sender)}'", null, null, null, s"${Time.name} DESC"))
 
     private val IndexColumns = Array(Id.name, Time.name)
     def msgIndexCursor(conv: ConvId)(implicit db: DB) = db.query(table.name, IndexColumns, s"${Conv.name} = '$conv'", null, null, null, s"${Time.name} ASC")
@@ -409,6 +418,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       queryNumEntries(db, table.name, s"""${Conv.name} = '${Conv(conv)}' AND ${Time.name} > ${Time(time)}""")
 
     def countSentByType(selfUserId: UserId, tpe: Message.Type)(implicit db: DB) = queryNumEntries(db, table.name, s"${User.name} = '${User(selfUserId)}' AND ${Type.name} = '${Type(tpe)}'")
+
 
     def findByType(conv: ConvId, tpe: Message.Type)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Conv.name} = '$conv' AND ${Type.name} = '${Type(tpe)}'", null, null, null, s"${Time.name} ASC"))
@@ -440,12 +450,10 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
 
   case class MessageEntry(id: MessageId, user: UserId, tpe: Message.Type = Message.Type.TEXT, state: Message.Status = Message.Status.DEFAULT, contentSize: Int = 1)
 
-  val contentParser = new RichMediaContentParser
-
   def messageContent(message: String, mentions: Map[UserId, String] = Map.empty, links: Seq[LinkPreview] = Nil, weblinkEnabled: Boolean = false): (Message.Type, Seq[MessageContent]) =
     if (message.trim.isEmpty) (Message.Type.TEXT, textContent(message))
     else if (links.isEmpty) {
-      val ct = contentParser.splitContent(message, weblinkEnabled)
+      val ct = RichMediaContentParser.splitContent(message, weblinkEnabled)
 
       (ct.size, ct.head.tpe) match {
         case (1, Message.Part.Type.TEXT) => (Message.Type.TEXT, applyMentions(ct, mentions))
@@ -462,7 +470,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
       val res = new MessageContentBuilder
 
       val end = links.sortBy(_.urlOffset).foldLeft(0) { case (prevEnd, link) =>
-        if (link.urlOffset > prevEnd) res ++= contentParser.splitContent(message.substring(prevEnd, link.urlOffset))
+        if (link.urlOffset > prevEnd) res ++= RichMediaContentParser.splitContent(message.substring(prevEnd, link.urlOffset))
 
         returning(linkEnd(link.urlOffset)) { end =>
           if (end > link.urlOffset) {
@@ -472,7 +480,7 @@ object MessageData extends ((MessageId, ConvId, Message.Type, UserId, Seq[Messag
         }
       }
 
-      if (end < message.length) res ++= contentParser.splitContent(message.substring(end))
+      if (end < message.length) res ++= RichMediaContentParser.splitContent(message.substring(end))
 
       (Message.Type.RICH_MEDIA, applyMentions(res.result(), mentions))
     }

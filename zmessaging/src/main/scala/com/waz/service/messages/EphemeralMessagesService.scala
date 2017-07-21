@@ -38,8 +38,12 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 // TODO: obfuscate sent messages when they expire
-class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpdater, storage: MessagesStorageImpl,
-                               db: ZmsDatabase, sync: SyncServiceHandle, assets: AssetService) {
+class EphemeralMessagesService(selfUserId: UserId,
+                               messages:   MessagesContentUpdater,
+                               storage:    MessagesStorageImpl,
+                               db:         ZmsDatabase,
+                               sync:       SyncServiceHandle,
+                               assets:     AssetService) {
   import EphemeralMessagesService._
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
@@ -84,7 +88,7 @@ class EphemeralMessagesService(selfUserId: UserId, messages: MessagesContentUpda
         _ <- messages.deleteOnUserRequest(toRemove.map(_.id))
         // recalling message, this informs the sender that message is already expired
         _ <- Future.traverse(toRemove) { m => sync.postReceipt(m.convId, m.id, m.userId, ReceiptType.EphemeralExpired) }
-        _ <- messages.messagesStorage.updateAll2(toObfuscate.map(_.id), obfuscate)
+        _ <- storage.updateAll2(toObfuscate.map(_.id), obfuscate)
       } yield ()
     }
   }

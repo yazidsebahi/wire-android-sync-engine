@@ -21,6 +21,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.{MediaProvider, Message}
+import com.waz.content.MessagesStorage
 import com.waz.model._
 import com.waz.model.messages.media.MediaAssetData
 import com.waz.service.assets.AssetService
@@ -33,14 +34,17 @@ import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.concurrent.Future
 
-class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, sync: SyncServiceHandle, youTube: YouTubeMediaService, soundCloud: SoundCloudMediaService, spotify: SpotifyMediaService) {
+class RichMediaService(assets:      AssetService,
+                       msgsStorage: MessagesStorage,
+                       messages:    MessagesContentUpdater,
+                       sync:        SyncServiceHandle,
+                       youTube:     YouTubeMediaService,
+                       soundCloud:  SoundCloudMediaService,
+                       spotify:     SpotifyMediaService) {
   import com.waz.api.Message.Part.Type._
   import Threading.Implicits.Background
+
   private implicit val ec = EventContext.Global
-
-  import messages._
-
-  val richMediaParser = new RichMediaContentParser
 
   private def isSyncableMsg(msg: MessageData) = msg.msgType == Message.Type.RICH_MEDIA && msg.content.exists(isSyncable)
 
@@ -53,11 +57,11 @@ class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, s
     prev.content.size != updated.content.size || prev.content.zip(updated.content).exists { case (c1, c2) => c1.content != c2.content && isSyncable(c2) }
   }
 
-  messagesStorage.messageAdded { msgs =>
+  msgsStorage.messageAdded { msgs =>
     scheduleSyncFor(msgs filter isSyncableMsg)
   }
 
-  messagesStorage.messageUpdated { _ foreach {
+  msgsStorage.messageUpdated { _ foreach {
     case (prev, updated) =>
       if (isSyncableMsg(updated) && syncableContentChanged(prev, updated)) {
         verbose(s"Updated rich media message: $updated, scheduling sync")
@@ -68,13 +72,13 @@ class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, s
   private def scheduleSyncFor(ms: Seq[MessageData]) = if (ms.nonEmpty) {
     verbose(s"Scheduling sync for added rich media messages: $ms")
 
-    messagesStorage.updateAll2(ms.map(_.id), m => m.copy(content = m.content map (c => c.copy(syncNeeded = isSyncable(c))))) map { _ =>
+    msgsStorage.updateAll2(ms.map(_.id), m => m.copy(content = m.content map (c => c.copy(syncNeeded = isSyncable(c))))) map { _ =>
       Future.traverse(ms) { m => sync.syncRichMedia(m.id) }
     }
   }
 
   def updateRichMedia(id: MessageId): Future[Seq[ErrorResponse]] = {
-    messagesStorage.getMessage(id) flatMap {
+    msgsStorage.getMessage(id) flatMap {
       case Some(data) =>
         for {
           results <- Future.traverse(data.content) { updateRichMediaContent(data, _) }
@@ -82,7 +86,7 @@ class RichMediaService(assets: AssetService, messages: MessagesContentUpdater, s
             case (prev, Right(updated)) => updated.copy(syncNeeded = false)
             case (prev, Left(_)) => prev.copy(syncNeeded = false)
           }
-          _ <- updateMessage(id)(_.copy(content = newContent))
+          _ <- messages.updateMessage(id)(_.copy(content = newContent))
         } yield {
           results.collect { case Left(error) => error }
         }

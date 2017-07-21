@@ -28,12 +28,14 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.util.Random
 
+
+trait MsgDeletionStorage extends CachedStorage[MessageId, MsgDeletion]
 /**
   * Deletion history is only stored for short time to handle partial message updates (assets, link preview).
   * We need that to discard new versions of previously deleted messages.
   * We don't want to store it permanently, so will drop items older than 2 weeks.
   */
-class MsgDeletionStorage(context: Context, storage: Database) extends CachedStorageImpl[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached") {
+class MsgDeletionStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[MessageId, MsgDeletion](new TrimmingLruCache(context, Fixed(512)), storage)(MsgDeletionDao, "MsgDeletionStorage_Cached") with MsgDeletionStorage {
   import MsgDeletionStorage._
   import Threading.Implicits.Background
 
