@@ -128,7 +128,7 @@ class TeamsServiceImpl(selfUser:           UserId,
           case Updated(id, _, data) if !userMatches(data) => id
         }.toSet
 
-        current.filterNot(d => removed.contains(d.id)) ++ added
+        current.filterNot(d => removed.contains(d.id) || added.exists(_.id == d.id)) ++ added
       })
     }
   }

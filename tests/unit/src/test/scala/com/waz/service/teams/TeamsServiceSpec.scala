@@ -139,11 +139,41 @@ class TeamsServiceSpec extends AndroidFreeSpec {
     result(res.filter(_ == initialTeamMembers).head)
 
     userStorageOnAdded ! Seq(newTeamMember)
-    result(res.filter(_ == (initialTeamMembers)).head)
+    result(res.filter(_ == initialTeamMembers).head)
 
 
     userStorageOnDeleted ! Seq(newTeamMember.id)
     result(res.filter(_ == initialTeamMembers).head)
+  }
+
+  scenario("Search team members signal updates current values on member update") {
+    result(shouldSyncTeamsPref := false)
+
+    val userStorageOnAdded    = EventStream[Seq[UserData]]()
+    val userStorageOnUpdated  = EventStream[Seq[(UserData, UserData)]]()
+    val userStorageOnDeleted  = EventStream[Seq[UserId]]()
+
+
+    (userStorage.onAdded _).expects().once().returning(userStorageOnAdded)
+    (userStorage.onUpdated _).expects().once().returning(userStorageOnUpdated)
+    (userStorage.onDeleted _).expects().once().returning(userStorageOnDeleted)
+
+    val constUser = UserData(UserId(), teamId, "user1", handle = Some(Handle()), searchKey = SearchKey.empty)
+    val teamMemberToUpdate = UserData(UserId(), teamId, "user2", handle = Some(Handle()), searchKey = SearchKey.empty)
+    val updatedTeamMember = teamMemberToUpdate.copy(name = "user3")
+
+    val initialTeamMembers = Set(constUser, teamMemberToUpdate)
+    val updatedTeamMembers = Set(constUser, updatedTeamMember)
+
+    (userStorage.getByTeam _).expects(Set(teamId).flatten).once().returning(Future.successful(initialTeamMembers))
+
+    val service = createService
+
+    val res = service.searchTeamMembers().disableAutowiring() //disable autowiring to prevent multiple loads
+    result(res.filter(_ == initialTeamMembers).head)
+
+    userStorageOnUpdated ! Seq((teamMemberToUpdate, updatedTeamMember))
+    result(res.filter(_ == updatedTeamMembers).head)
   }
 
   def createService = {
