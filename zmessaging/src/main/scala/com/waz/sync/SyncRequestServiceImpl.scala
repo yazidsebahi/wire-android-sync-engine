@@ -17,12 +17,10 @@
  */
 package com.waz.sync
 
-import android.content.Context
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.SyncState
 import com.waz.api.impl.SyncIndicator
-import com.waz.content.ZmsDatabase
 import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.{NetworkModeService, ReportingService, ZmsLifecycle}
@@ -30,6 +28,7 @@ import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.Context
 
 import scala.concurrent.Future
 
@@ -38,17 +37,22 @@ trait SyncRequestService {
 }
 
 
-class SyncRequestServiceImpl(context: Context, accountId: AccountId, storage: ZmsDatabase, network: NetworkModeService, sync: => SyncHandler, reporting: ReportingService, lifecycle: ZmsLifecycle) extends SyncRequestService {
+class SyncRequestServiceImpl(context:   Context,
+                             accountId: AccountId,
+                             content:   SyncContentUpdater,
+                             network:   NetworkModeService,
+                             sync: =>   SyncHandler,
+                             reporting: ReportingService,
+                             lifecycle: ZmsLifecycle) extends SyncRequestService {
 
   private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
-  val content = new SyncContentUpdater(storage)
   override val scheduler = new SyncScheduler(context, accountId, content, network, this, sync, lifecycle)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>
-      pw.println("SyncJobs:")
+      pw.println(s"SyncJobs for account $accountId:")
       jobs.toSeq.sortBy(_.timestamp) foreach { job =>
         pw.println(job.toString)
       }

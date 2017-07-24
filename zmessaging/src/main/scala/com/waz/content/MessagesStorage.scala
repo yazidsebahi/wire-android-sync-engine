@@ -77,6 +77,7 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   val messageChanged = EventStream.union(messageAdded, messageUpdated.map(_.map(_._2)))
 
+  //For tracking on UI
   val onMessageSent = EventStream[MessageData]()
   val onMessageFailed = EventStream[(MessageData, ErrorResponse)]()
 

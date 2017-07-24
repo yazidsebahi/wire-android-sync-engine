@@ -37,14 +37,14 @@ import scala.concurrent.Future
  * Keeps actual SyncJobs in memory, and persists all changes to db.
  * Handles merging of new requests, only adds new jobs if actually needed.
  */
-class SyncContentUpdater(storage: ZmsDatabase) {
+class SyncContentUpdater(db: Database) {
   import EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncContentUpdaterQueue")
 
   private val mergers = new mutable.HashMap[Any, SyncJobMerger]
 
-  val syncStorageFuture = storage(SyncJobDao.list(_)).future map { jobs =>
+  val syncStorageFuture = db(SyncJobDao.list(_)).future map { jobs =>
     // make sure no job is loaded with Syncing state, this could happen if app is killed while syncing
     jobs map { job =>
       if (job.state == SyncState.SYNCING) {
@@ -53,7 +53,7 @@ class SyncContentUpdater(storage: ZmsDatabase) {
       } else job
     }
   } map { jobs =>
-    returningF(new SyncStorage(storage, jobs)) { storage =>
+    returningF(new SyncStorage(db, jobs)) { storage =>
 
       jobs foreach { updateMerger(_, storage) }
 

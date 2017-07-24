@@ -20,7 +20,7 @@ package com.waz.sync.queue
 import java.io.PrintWriter
 
 import android.app.{AlarmManager, PendingIntent}
-import android.content.Context
+import android.content.Context.ALARM_SERVICE
 import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
@@ -33,6 +33,7 @@ import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
+import com.waz.utils.wrappers.Context
 import com.waz.zms.SyncService
 
 import scala.collection.mutable
@@ -43,21 +44,20 @@ import scala.util.Try
 class SyncScheduler(context: Context, userId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, lifecycle: ZmsLifecycle) {
 
   import EventContext.Implicits.global
-  import content._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncSchedulerQueue")
 
-  private[sync] lazy val alarmSyncIntent = PendingIntent.getService(context, SyncScheduler.AlarmRequestCode, SyncService.intent(context, userId), PendingIntent.FLAG_UPDATE_CURRENT)
-  private[sync] lazy val alarmManager = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
-  private[sync] lazy val syncIntent = SyncService.intent(context, userId)
+  private[sync] lazy val alarmSyncIntent = Option(Context.unwrap(context)).map(PendingIntent.getService(_, SyncScheduler.AlarmRequestCode, SyncService.intent(context, userId), PendingIntent.FLAG_UPDATE_CURRENT))
+  private[sync] lazy val alarmManager    = Option(Context.unwrap(context)).map(_.getSystemService(ALARM_SERVICE).asInstanceOf[AlarmManager])
+  private[sync] lazy val syncIntent      = Option(Context.unwrap(context)).map(SyncService.intent(_, userId))
 
-  private[waz] val queue = new SyncSerializer
-  private[sync] val executor = new SyncExecutor(this, content, network, handler)
-  private[sync] val executions = new mutable.HashMap[SyncId, Future[SyncResult]]()
+  private[waz] val queue            = new SyncSerializer
+  private[sync] val executor        = new SyncExecutor(this, content, network, handler)
+  private[sync] val executions      = new mutable.HashMap[SyncId, Future[SyncResult]]()
   private[sync] val executionsCount = Signal(0)
 
-  private val waitEntries = new mutable.HashMap[SyncId, WaitEntry]
-  private val waiting = Signal(Map.empty[SyncId, Long])
+  private val waitEntries  = new mutable.HashMap[SyncId, WaitEntry]
+  private val waiting      = Signal(Map.empty[SyncId, Long])
   private val runningCount = Signal(executionsCount, waiting.map(_.size)) map { case (r, w) => r - w }
 
   private val alarmUpdate = Signal(0L)
@@ -73,7 +73,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
   // start sync service any time running executors count changes from 0 to positive number
   runningCount.map(_ > 0) { if (_) startSyncService() }
 
-  syncStorage { storage =>
+  content.syncStorage { storage =>
     storage.getJobs.toSeq.sortBy(_.timestamp) foreach execute
     storage.onAdded.on(dispatcher) { execute }
     storage.onUpdated
@@ -111,6 +111,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
       executions -= job.id
       executionsCount.mutate(_ - 1)
       verbose(s"job completed: $job, res: $res")
+      res.failed.foreach(t => t.printStackTrace())
     }
   }
 
@@ -145,12 +146,23 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
 
   private[sync] def startSyncService(): Unit = {
     debug("starting service")
-    val res = WakefulBroadcastReceiver.startWakefulService(context, syncIntent)
-    if (res == null) error("Couldn't start sync service. Make sure zeta sync service is included in the app manifest.")
+    syncIntent.foreach { sI =>
+      val res = WakefulBroadcastReceiver.startWakefulService(context, sI)
+      if (res == null) error("Couldn't start sync service. Make sure zeta sync service is included in the app manifest.")
+    }
   }
 
-  private[sync] def updateRetryAlarm(time: Option[Long]) =
-    time.fold(alarmManager.cancel(alarmSyncIntent)) { time => alarmManager.set(AlarmManager.RTC, time, alarmSyncIntent) }
+  private[sync] def updateRetryAlarm(time: Option[Long]) = {
+    debug(s"updateRetryAlarm: $time")
+    (time, alarmManager, alarmSyncIntent) match {
+      case (Some(t), Some(am), Some(aI)) =>
+        am.set(AlarmManager.RTC, t, aI)
+      case (None, Some(am), Some(aI)) =>
+        am.cancel(aI)
+      case _ =>
+    }
+  }
+
 
   private[sync] def getStartTime(job: SyncJob): Long =
     if (job.offline && network.isOnlineMode) 0  // start right away if request last failed due to possible network errors

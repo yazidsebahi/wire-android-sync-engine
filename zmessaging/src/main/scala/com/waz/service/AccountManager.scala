@@ -31,6 +31,7 @@ import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
+import com.waz.sync.queue.SyncContentUpdater
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.{EventContext, Signal}
@@ -40,6 +41,7 @@ import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 import org.threeten.bp.Instant
 import com.waz.utils.RichInstant
+import com.waz.utils.wrappers.Context
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -51,6 +53,7 @@ class UserModule(val userId: UserId, val account: AccountManager) {
   private implicit val dispatcher = account.dispatcher
 
   def context = account.global.context
+  def contextWrapper = Context.wrap(context)
   def db = account.storage.db
   def clientId = account.clientId
   def accountId = account.id
@@ -68,12 +71,13 @@ class UserModule(val userId: UserId, val account: AccountManager) {
 
   lazy val otrClient = new OtrClient(account.netClient)
 
-  lazy val verificationUpdater                  = wire[VerificationStateUpdater]
-  lazy val clientsService: OtrClientsService    = wire[OtrClientsService]
-  lazy val clientsSync: OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
-  lazy val sync: SyncServiceHandle              = wire[AndroidSyncServiceHandle]
-  lazy val syncRequests: SyncRequestServiceImpl = wire[SyncRequestServiceImpl]
-  lazy val syncHandler: SyncHandler             = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
+  lazy val verificationUpdater                          = wire[VerificationStateUpdater]
+  lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
+  lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
+  lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
+  lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdater]
+  lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
+  lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
 
   def ensureClientRegistered(accountId: AccountId): ErrorOr[Unit] = {
     verbose(s"ensureClientRegistered: $account")

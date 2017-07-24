@@ -133,7 +133,7 @@ class DeviceActor(val deviceName: String,
     api.onPause()
     api.onDestroy()
     Await.result(api.ui.getCurrent, 5.seconds) foreach { zms =>
-      zms.syncRequests.content.syncStorage { storage =>
+      zms.syncContent.syncStorage { storage =>
         storage.getJobs foreach { job => storage.remove(job.id) }
       }
     }
@@ -529,7 +529,7 @@ class DeviceActor(val deviceName: String,
     case AwaitSyncCompleted =>
       api.zmessaging flatMap {
         case None =>  successful(Failed("no zmessaging"))
-        case Some(zms) => zms.syncRequests.content.syncJobs.filter(_.isEmpty).head map { _ => Successful }
+        case Some(zms) => zms.syncContent.syncJobs.filter(_.isEmpty).head map { _ => Successful }
       }
 
     case ResetQueueStats =>
