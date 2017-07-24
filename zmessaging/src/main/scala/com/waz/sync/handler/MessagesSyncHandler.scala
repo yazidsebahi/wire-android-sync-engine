@@ -19,8 +19,8 @@ package com.waz.sync.handler
 
 import android.content.Context
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
@@ -33,7 +33,7 @@ import com.waz.model.GenericContent.{Ephemeral, Knock, Location, MsgEdit}
 import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
-import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdater, ConversationsContentUpdaterImpl}
+import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdater}
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.otr.OtrServiceImpl
 import com.waz.service.{MetaDataService, _}
@@ -51,11 +51,25 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgContent: MessagesContentUpdater, convEvents: ConversationOrderEventsService,
-                          client: MessagesClient, otr: OtrServiceImpl, otrSync: OtrSyncHandler, convs: ConversationsContentUpdater, storage: MessagesStorageImpl,
-                          assetSync: AssetSyncHandler, network: DefaultNetworkModeService, metadata: MetaDataService, prefs: GlobalPreferences,
-                          sync: SyncServiceHandle, assets: AssetService, users: UserServiceImpl, cache: CacheService,
-                          members: MembersStorageImpl, errors: ErrorsService, timeouts: Timeouts) {
+class MessagesSyncHandler(context:    Context,
+                          service:    MessagesServiceImpl,
+                          msgContent: MessagesContentUpdater,
+                          convEvents: ConversationOrderEventsService,
+                          client:     MessagesClient,
+                          otr:        OtrServiceImpl,
+                          otrSync:    OtrSyncHandler,
+                          convs:      ConversationsContentUpdater,
+                          storage:    MessagesStorageImpl,
+                          assetSync:  AssetSyncHandler,
+                          network:    DefaultNetworkModeService,
+                          metadata:   MetaDataService,
+                          prefs:      GlobalPreferences,
+                          sync:       SyncServiceHandle,
+                          assets:     AssetService,
+                          users:      UserServiceImpl,
+                          cache:      CacheService,
+                          members:    MembersStorageImpl,
+                          errors:     ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
 
@@ -217,7 +231,7 @@ class MessagesSyncHandler(context: Context, service: MessagesServiceImpl, msgCon
       CancellableFuture.lift(postMessage(conv, msg.ephemeral, proto) flatMap {
         case Right(time) =>
           verbose(s"posted asset message for: $asset")
-          service.content.updateMessage(msg.id)(_.copy(protos = Seq(proto), time = time.instant)) map { _ => Right(time.instant) }
+          msgContent.updateMessage(msg.id)(_.copy(protos = Seq(proto), time = time.instant)) map { _ => Right(time.instant) }
         case Left(err) =>
           warn(s"posting asset message failed: $err")
           Future successful Left(err)

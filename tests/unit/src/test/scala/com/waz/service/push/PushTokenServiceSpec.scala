@@ -54,8 +54,9 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   def accountData(token: PushToken): AccountData = AccountData(accountId, Left({}), None, "", None, None, Some(token))
   def accountData(token: Option[PushToken]): AccountData = AccountData(accountId, Left({}), None, "", None, None, token)
 
-  after {
 
+  override protected def afterEach() = {
+    super.afterEach()
     prefs.reset()
 
     pushEnabled         = prefs.preference(PushEnabledKey)

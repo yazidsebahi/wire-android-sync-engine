@@ -47,7 +47,7 @@ import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
 import com.waz.znet.{CredentialsHandler, _}
 import net.hockeyapp.android.{Constants, ExceptionHandler}
-import org.threeten.bp.Instant
+import org.threeten.bp.{Clock, Instant}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -73,18 +73,18 @@ class ZMessagingFactory(global: GlobalModule) {
 
 
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
-  lazy val db                                   = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val userPrefs                            = UserPreferences.apply(context, db, globalPreferences)
-  lazy val usersStorage                         = wire[UsersStorageImpl]
-  lazy val otrClientsStorage                    = wire[OtrClientsStorage]
-  lazy val membersStorage                       = wire[MembersStorageImpl]
-  lazy val assetsStorage                        = wire[AssetsStorage]
-  lazy val reactionsStorage                     = wire[ReactionsStorage]
-  lazy val notifStorage                         = wire[NotificationStorage]
-  lazy val convsStorage                         = wire[ConversationStorageImpl]
-  lazy val msgDeletions                         = wire[MsgDeletionStorage]
-  lazy val searchQueryCache                     = wire[SearchQueryCacheStorage]
-  lazy val msgEdits                             = wire[EditHistoryStorage]
+  lazy val db                                     = new ZmsDatabase(accountId, context, dbPrefix)
+  lazy val userPrefs                              = UserPreferences.apply(context, db, globalPreferences)
+  lazy val usersStorage                           = wire[UsersStorageImpl]
+  lazy val otrClientsStorage: OtrClientsStorage   = wire[OtrClientsStorageImpl]
+  lazy val membersStorage                         = wire[MembersStorageImpl]
+  lazy val assetsStorage                          = wire[AssetsStorage]
+  lazy val reactionsStorage                       = wire[ReactionsStorage]
+  lazy val notifStorage                           = wire[NotificationStorage]
+  lazy val convsStorage                           = wire[ConversationStorageImpl]
+  lazy val msgDeletions:      MsgDeletionStorage  = wire[MsgDeletionStorageImpl]
+  lazy val searchQueryCache                       = wire[SearchQueryCacheStorage]
+  lazy val msgEdits:          EditHistoryStorage  = wire[EditHistoryStorageImpl]
 }
 
 
@@ -203,6 +203,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val convsStats                                 = wire[ConversationsListStateService]
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
+  lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
   lazy val connection: ConnectionService              = wire[ConnectionService]
   lazy val mediamanager                               = wire[DefaultMediaManagerService]
   lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
@@ -267,7 +268,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
             Stage(Parallel)(
               conversations.convStateEventProcessingStage,
               Stage(Interleaved)(
-                messages.messageEventProcessingStage,
+                msgEvents.messageEventProcessingStage,
                 genericMsgs.eventProcessingStage
               )
             )
@@ -319,6 +320,9 @@ object ZMessaging { self =>
   require(LogLevel.initialized)
 
   private[waz] var context: Context = _
+
+  //var for tests - and set here so that it is globally available without the need for DI
+  var clock = Clock.systemUTC()
 
   private var backend = BackendConfig.StagingBackend
 
