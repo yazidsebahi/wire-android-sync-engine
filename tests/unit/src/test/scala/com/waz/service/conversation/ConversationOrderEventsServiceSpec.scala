@@ -19,30 +19,31 @@ package com.waz.service.conversation
 
 import java.util.Date
 
-import com.waz.model._
-import com.waz.service.{EventPipeline, EventScheduler}
+import com.waz.ZLog
+import com.waz.content.ConversationStorage
+import com.waz.model.ConversationData.ConversationType
+import com.waz.model.{ConversationData, MemberJoinEvent, _}
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
+import com.waz.service.messages.MessagesService
+import com.waz.service.{EventPipeline, EventScheduler, UserService}
 import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import org.threeten.bp.Instant
+import com.waz.utils.RichDate
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class ConversationOrderEventsServiceSpec extends AndroidFreeSpec {
 
-  //  scenario("Ignore like events") {
-  //    service.filterConvOrderEvents(Seq(GenericMessageEvent(RConvId(), new Date, UserId(), GenericMessage(Uid(), Reaction(MessageId(), Liking.Action.Like))))) shouldBe empty
-  //  }
-
+  implicit val outputDispatcher = new SerialDispatchQueue(name = "OutputWriter")
 
   scenario("All batched conversation events go to the order event service before any other conv-related service") {
-
-    implicit val outputDispatcher = new SerialDispatchQueue(name = "OutputWriter")
 
     val output = new StringBuffer()
 
     var convOrderProcessedCount = 0
-    val convOrderStage = EventScheduler.Stage[ConversationOrderEvent] { (convId, es) =>
+    val convOrderStage = EventScheduler.Stage[ConversationEvent] { (convId, es) =>
       Future {
         output.append(s"A$convOrderProcessedCount")
         convOrderProcessedCount += 1
@@ -83,6 +84,48 @@ class ConversationOrderEventsServiceSpec extends AndroidFreeSpec {
     }
 
     result(pipeline.apply(events).map(_ => println(output.toString)))
+  }
+
+  lazy val convs     = mock[ConversationsContentUpdater]
+  lazy val storage   = mock[ConversationStorage]
+  lazy val messages  = mock[MessagesService]
+  lazy val users     = mock[UserService]
+  lazy val sync      = mock[SyncServiceHandle]
+
+  scenario("System messages shouldn't change order except it contains self") {
+
+    val selfUserId = UserId("user1")
+    val convId = ConvId()
+    val rConvId = RConvId()
+    val conv = ConversationData(ConvId(), rConvId, Some("name"), UserId(), ConversationType.Group, lastEventTime = Instant.MIN)
+    var updatedConv = conv.copy()
+
+    (users.selfUserId _).expects().anyNumberOfTimes().returning(selfUserId)
+    (users.withSelfUserFuture[Unit] _).expects(*).anyNumberOfTimes().onCall{ (f: UserId => Future[Unit]) => f(selfUserId) }
+    (storage.getByRemoteIds _).expects(*).anyNumberOfTimes().returning(Future.successful(Seq(convId)))
+
+    (convs.processConvWithRemoteId[Unit] (_: RConvId, _: Boolean, _: Int)(_: ConversationData => Future[Unit])(_:ZLog.LogTag, _:ExecutionContext)).expects(*, *, *, *, *, *).onCall {
+      p: Product =>
+        p.productElement(3).asInstanceOf[ConversationData => Future[Unit]].apply(conv)
+    }
+
+    (convs.updateLastEvent _).expects(*, *).once().onCall { (_: ConvId, i: Instant) =>
+      updatedConv = conv.copy(lastEventTime = i)
+      Future.successful(Some(conv, updatedConv))
+    }
+
+    lazy val scheduler: EventScheduler = new EventScheduler(Stage(Sequential)(service.conversationOrderEventsStage))
+    lazy val pipeline  = new EventPipeline(Vector.empty, scheduler.enqueue)
+    lazy val service = new ConversationOrderEventsService(convs, storage, messages, users, sync, pipeline)
+
+    val events = Seq(
+      MemberJoinEvent(rConvId, new Date(1), UserId(), Seq(selfUserId)),
+      RenameConversationEvent(rConvId, new Date(2), UserId(), "blah"),
+      MemberJoinEvent(rConvId, new Date(3), UserId(), Seq(UserId("user2"))),
+      MemberLeaveEvent(rConvId, new Date(4), UserId(), Seq(UserId("user3"))))
+
+    result(pipeline.apply(events))
+    updatedConv.lastEventTime shouldBe new Date(1).instant
   }
 
 }

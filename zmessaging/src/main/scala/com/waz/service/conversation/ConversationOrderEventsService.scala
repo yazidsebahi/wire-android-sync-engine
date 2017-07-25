@@ -20,10 +20,11 @@ package com.waz.service.conversation
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.ConversationStorage
-import com.waz.model.GenericContent.{Asset, Ephemeral, ImageAsset, Knock, Location, MsgDeleted, MsgEdit, MsgRecall, Reaction, Receipt, Text}
+import com.waz.model.GenericContent._
 import com.waz.model._
-import com.waz.service.messages.MessagesServiceImpl
-import com.waz.service.{EventPipeline, EventScheduler, UserServiceImpl}
+import com.waz.service.EventScheduler.Stage
+import com.waz.service.messages.MessagesService
+import com.waz.service.{EventPipeline, EventScheduler, UserService}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
@@ -32,18 +33,61 @@ import scala.concurrent.Future
 
 class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
                                      storage:  ConversationStorage,
-                                     messages: MessagesServiceImpl,
-                                     users:    UserServiceImpl,
+                                     messages: MessagesService,
+                                     users:    UserService,
                                      sync:     SyncServiceHandle,
                                      pipeline: EventPipeline) {
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
 
-  val selfUserId = users.selfUserId
-  val conversationOrderEventsStage = EventScheduler.Stage[ConversationOrderEvent] { (convId, es) =>
+  implicit val selfUserId: UserId = users.selfUserId
 
-    val orderChanges    = processConversationOrderEvents(convId, filterConvOrderEvents(es))
-    val unarchiveConvs  = processConversationUnarchiveEvents(convId, es.collect { case e: UnarchivingEvent => e })
+  private[service] def shouldChangeOrder(event: ConversationEvent)(implicit selfUserId: UserId): Boolean = {
+    event match {
+      case _: CreateConversationEvent => true
+      case _: CallMessageEvent        => true
+      case _: OtrErrorEvent           => true
+      case _: GenericAssetEvent       => true
+      case _: ConnectRequestEvent     => true
+      case _: OtrMessageEvent         => true
+      case _: OtrAssetEvent           => true
+      case MemberJoinEvent(_, _, _, added, _) if added.contains(selfUserId)   => true
+      case MemberLeaveEvent(_, _, _, leaving) if leaving.contains(selfUserId) => true
+      case GenericMessageEvent(_, _, _, GenericMessage(_, content)) =>
+        content match {
+          case _: Asset        => true
+          case _: Calling      => true
+          case _: Cleared      => false
+          case _: ClientAction => false
+          case _: Receipt      => false
+          case _: Ephemeral    => true
+          case _: External     => true
+          case _: ImageAsset   => true
+          case _: Knock        => true
+          case _: LastRead     => false
+          case _: Location     => true
+          case _: MsgRecall    => false
+          case _: MsgEdit      => false
+          case _: MsgDeleted   => false
+          case _: Reaction     => false
+          case _: Text         => true
+          case _               => false
+        }
+      case _ => false
+    }
+  }
+
+  private[service] def shouldUnarchive(event: ConversationEvent)(implicit selfUserId: UserId): Boolean = {
+    event match {
+      case MemberLeaveEvent(_, _, _, leaving) if leaving contains selfUserId => false
+      case _ => shouldChangeOrder(event)
+    }
+  }
+
+  val conversationOrderEventsStage: Stage.Atomic = EventScheduler.Stage[ConversationEvent] { (convId, es) =>
+
+    val orderChanges    = processConversationOrderEvents(convId, es.filter(shouldChangeOrder))
+    val unarchiveConvs  = processConversationUnarchiveEvents(convId, es.filter(shouldUnarchive))
 
     for {
       _ <- orderChanges
@@ -51,7 +95,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
     } yield {}
   }
 
-  def handlePostConversationEvent(event: ConversationEvent) = {
+  def handlePostConversationEvent(event: ConversationEvent): Future[Unit] = {
     debug(s"handlePostConversationEvent($event)")
     Future.sequence(Seq(
       event match {
@@ -67,16 +111,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
     )) map { _ => () }
   }
 
-  // some generic message events should not update conversation order, will filter them out here
-  // TODO: we should reconsider this implementation completely, in future there are going to be more content types that should not affect ordering
-  // we may want to decouple lastEventTime and conv ordering, order should be based on last visible change / last message, events are no longer relevant
-  private[service] def filterConvOrderEvents(events: Seq[ConversationOrderEvent]) =
-    events filter {
-      case GenericMessageEvent(_, _, _, GenericMessage(_, _ : MsgEdit | _ : MsgDeleted | _: MsgRecall | _: Receipt | _: Reaction)) => false
-      case _ => true
-    }
-
-  private def processConversationOrderEvents(convId: RConvId, es: Seq[ConversationOrderEvent]) =
+  private def processConversationOrderEvents(convId: RConvId, es: Seq[ConversationEvent]) =
     if (es.isEmpty) Future.successful(())
     else convs.processConvWithRemoteId(convId, retryAsync = true) { conv =>
       verbose(s"updateLastEvent($conv, $es)")
@@ -93,11 +128,11 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
       } yield ()
     }
 
-  private def processConversationUnarchiveEvents(convId: RConvId, events: Seq[UnarchivingEvent]) = {
-    users.withSelfUserFuture { selfUserId =>
+  private def processConversationUnarchiveEvents(convId: RConvId, events: Seq[ConversationEvent]) = {
+    users.withSelfUserFuture { implicit selfUserId =>
 
-      def unarchiveTime(es: Traversable[UnarchivingEvent]) = {
-        val all = es.filter(shouldUnarchive(selfUserId, _))
+      def unarchiveTime(es: Traversable[ConversationEvent]) = {
+        val all = es.filter(shouldUnarchive)
         if (all.isEmpty) None
         else Some((all.maxBy(_.time).time.instant, all exists unarchiveMuted))
       }
@@ -115,22 +150,6 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
         })
       }
     }
-  }
-
-  private def shouldUnarchive(selfUserId: UserId, event: Event): Boolean = event match {
-    case MemberLeaveEvent(_, _, _, leaving) if leaving contains selfUserId => false
-    case GenericMessageEvent(_, _, _, GenericMessage(_, content)) =>
-      content match {
-        case _: Text        => true
-        case _: ImageAsset  => true
-        case _: Knock       => true
-        case _: Ephemeral   => true
-        case _: Asset       => true
-        case _: Location    => true
-        case _              => false
-      }
-    case _: UnarchivingEvent => true
-    case _ => false
   }
 
   private def unarchiveMuted(event: Event): Boolean = event match {

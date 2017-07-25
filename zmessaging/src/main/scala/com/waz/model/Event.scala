@@ -87,17 +87,11 @@ sealed trait ConversationEvent extends RConvEvent {
   val from: UserId
 }
 
-// events that may change conversation list ordering (update lastEvent property)
-sealed trait ConversationOrderEvent extends ConversationEvent
-
 // events that affect conversation state
 sealed trait ConversationStateEvent extends ConversationEvent
 
 // events that add or modify some message
-sealed trait MessageEvent extends ConversationOrderEvent
-
-// events that can lead to automatic unarchiving
-sealed trait UnarchivingEvent extends ConversationOrderEvent
+sealed trait MessageEvent extends ConversationEvent
 
 case class IgnoredEvent(json: JSONObject) extends Event
 
@@ -108,30 +102,30 @@ case class UnknownConvEvent(json: JSONObject) extends ConversationEvent {
   override val time: Date = new Date
 }
 
-case class CreateConversationEvent(convId: RConvId, time: Date, from: UserId, data: ConversationResponse) extends ConversationStateEvent with ConversationOrderEvent
+case class CreateConversationEvent(convId: RConvId, time: Date, from: UserId, data: ConversationResponse) extends ConversationStateEvent
 
-case class RenameConversationEvent(convId: RConvId, time: Date, from: UserId, name: String) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
+case class RenameConversationEvent(convId: RConvId, time: Date, from: UserId, name: String) extends MessageEvent with ConversationStateEvent
 
-case class GenericMessageEvent(convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent with UnarchivingEvent
+case class GenericMessageEvent(convId: RConvId, time: Date, from: UserId, content: GenericMessage) extends MessageEvent
 
-case class CallMessageEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, content: String) extends MessageEvent with UnarchivingEvent
+case class CallMessageEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, content: String) extends MessageEvent
 
 sealed trait OtrError
 case object Duplicate extends OtrError
 case class DecryptionError(msg: String, from: UserId, sender: ClientId) extends OtrError
 case class IdentityChangedError(from: UserId, sender: ClientId) extends OtrError
 
-case class OtrErrorEvent(convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent with UnarchivingEvent
+case class OtrErrorEvent(convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent
 
-case class GenericAssetEvent(convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetId, data: Option[Array[Byte]]) extends MessageEvent with UnarchivingEvent
+case class GenericAssetEvent(convId: RConvId, time: Date, from: UserId, content: GenericMessage, dataId: RAssetId, data: Option[Array[Byte]]) extends MessageEvent
 
 case class TypingEvent(convId: RConvId, time: Date, from: UserId, isTyping: Boolean) extends ConversationEvent
 
-case class MemberJoinEvent(convId: RConvId, time: Date, from: UserId, userIds: Seq[UserId], firstEvent: Boolean = false) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
-case class MemberLeaveEvent(convId: RConvId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent with UnarchivingEvent
+case class MemberJoinEvent(convId: RConvId, time: Date, from: UserId, userIds: Seq[UserId], firstEvent: Boolean = false) extends MessageEvent with ConversationStateEvent with ConversationEvent
+case class MemberLeaveEvent(convId: RConvId, time: Date, from: UserId, userIds: Seq[UserId]) extends MessageEvent with ConversationStateEvent
 case class MemberUpdateEvent(convId: RConvId, time: Date, from: UserId, state: ConversationState) extends ConversationStateEvent
 
-case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent with ConversationOrderEvent
+case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent
 
 sealed trait CallEvent extends Event {
   val convId: RConvId
@@ -164,9 +158,9 @@ sealed trait OtrEvent extends ConversationEvent {
   val recipient: ClientId
   val ciphertext: Array[Byte]
 }
-case class OtrMessageEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent with ConversationEvent
+case class OtrMessageEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent
 
-case class OtrAssetEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent with ConversationOrderEvent
+case class OtrAssetEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent
 
 case class ConversationState(archived: Option[Boolean] = None, archiveTime: Option[Instant] = None, muted: Option[Boolean] = None, muteTime: Option[Instant] = None)
 
