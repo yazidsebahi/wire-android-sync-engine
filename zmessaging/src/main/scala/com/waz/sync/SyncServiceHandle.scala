@@ -40,6 +40,7 @@ trait SyncServiceHandle {
   def syncUsersIfNotEmpty(ids: Seq[UserId]): Future[Unit] = if (ids.nonEmpty) syncUsers(ids: _*).map(_ => ())(Threading.Background) else Future.successful(())
 
   def syncSearchQuery(query: SearchQuery): Future[SyncId]
+  def exactMatchHandle(handle: Handle): Future[SyncId]
   def syncUsers(ids: UserId*): Future[SyncId]
   def syncSelfUser(): Future[SyncId]
   def deleteAccount(): Future[SyncId]
@@ -90,13 +91,13 @@ class AndroidSyncServiceHandle(context: Context, service: => SyncRequestServiceI
   import com.waz.model.sync.SyncRequest._
 
   private def addRequest(req: SyncRequest, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, optional: Boolean = false, timeout: Long = 0, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] = {
-    debug(s"addRequest: $req, prio: $priority, timeout: $timeout")
     val timestamp = SyncJob.timestamp
     val startTime = if (delay == Duration.Zero) 0 else timestamp + delay.toMillis
     service.addRequest(SyncJob(SyncId(), req, dependsOn.toSet, priority = priority, optional = optional, timeout = timeout, timestamp = timestamp, startTime = startTime), forceRetry)
   }
 
   def syncSearchQuery(query: SearchQuery) = addRequest(SyncSearchQuery(query), priority = Priority.High)
+  def exactMatchHandle(handle: Handle) = addRequest(ExactMatchHandle(handle), priority = Priority.High)
   def syncUsers(ids: UserId*) = addRequest(SyncUser(ids.toSet))
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
@@ -170,6 +171,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case SyncConversation(convs)               => zms.conversationSync.syncConversations(convs.toSeq)
     case SyncUser(u)                           => zms.usersSync.syncUsers(u.toSeq: _*)
     case SyncSearchQuery(query)                => zms.usersearchSync.syncSearchQuery(query)
+    case ExactMatchHandle(query)               => zms.usersearchSync.exactMatchHandle(query)
     case SyncRichMedia(messageId)              => zms.richmediaSync.syncRichMedia(messageId)
     case DeletePushToken(token)                => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)

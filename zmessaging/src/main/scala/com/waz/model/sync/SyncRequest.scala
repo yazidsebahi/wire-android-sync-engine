@@ -103,6 +103,10 @@ object SyncRequest {
     override val mergeKey: Any = (cmd, query)
   }
 
+  case class ExactMatchHandle(handle: Handle) extends BaseRequest(Cmd.ExactMatchHandle) {
+    override val mergeKey: Any = (cmd, handle)
+  }
+
   case class SyncRichMedia(messageId: MessageId) extends BaseRequest(Cmd.SyncRichMedia) {
     override val mergeKey: Any = (cmd, messageId)
   }
@@ -302,6 +306,7 @@ object SyncRequest {
           case Cmd.SyncUser              => SyncUser(users)
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
+          case Cmd.ExactMatchHandle      => ExactMatchHandle(Handle(decodeString('handle)))
           case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team)
           case Cmd.PostConvName          => PostConvName(convId, 'name)
           case Cmd.PostConvState         => PostConvState(convId, JsonDecoder[ConversationState]('state))
@@ -369,6 +374,7 @@ object SyncRequest {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
+        case ExactMatchHandle(handle)         => o.put("handle", handle.string)
         case SyncTeamMember(userId)           => o.put("user", userId.str)
         case DeletePushToken(token)           => putId("token", token)
         case RegisterPushToken(token)         => putId("token", token)

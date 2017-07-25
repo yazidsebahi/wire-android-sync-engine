@@ -27,7 +27,13 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class SearchQueryCacheStorage(context: Context, storage: Database) extends CachedStorageImpl[SearchQuery, SearchQueryCache](new TrimmingLruCache(context, Fixed(20)), storage)(SearchQueryCacheDao, "SearchQueryCacheStorage") {
+trait SearchQueryCacheStorage extends CachedStorage[SearchQuery, SearchQueryCache] {
+  def deleteBefore(i: Instant): Future[Unit]
+}
+
+class SearchQueryCacheStorageImpl(context: Context, storage: Database)
+  extends CachedStorageImpl[SearchQuery, SearchQueryCache](new TrimmingLruCache(context, Fixed(20)), storage)(SearchQueryCacheDao, "SearchQueryCacheStorage")
+  with SearchQueryCacheStorage {
   import Threading.Implicits.Background
   def deleteBefore(i: Instant): Future[Unit] = storage(SearchQueryCacheDao.deleteBefore(i)(_)).future.flatMap(_ => deleteCached(_.timestamp.isBefore(i)))
 }

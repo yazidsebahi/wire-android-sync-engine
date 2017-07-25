@@ -46,7 +46,6 @@ class InitialConnectionStatusSpec extends FeatureSpec with Matchers with BeforeA
       users.getAll should have size 30
       all (users.getAll) shouldBe 'connected
     } (30.seconds)
-
     withDelay { convs should have size 200 } (10.seconds)
   }
 }

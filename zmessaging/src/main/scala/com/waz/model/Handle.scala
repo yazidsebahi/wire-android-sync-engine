@@ -23,8 +23,18 @@ import com.waz.utils.Locales
 
 case class Handle(string: String) extends AnyVal{
   override def toString : String = string
+
   def containsQuery(query: String): Boolean = {
     string.contains(Handle.transliterated(Handle.stripSymbol(query)).toLowerCase)
+  }
+
+  def exactMatchQuery(query: String): Boolean = {
+    string == Handle.transliterated(Handle.stripSymbol(query)).toLowerCase
+  }
+
+  def withSymbol: String = string match {
+    case Handle.handlePattern(_) => string
+    case _ => "@" + string
   }
 }
 
@@ -33,12 +43,15 @@ object Handle extends (String => Handle){
   def random: Handle = Handle(UUID.randomUUID().toString)
   val handlePattern = """@(.+)""".r
   def transliterated(s: String): String = Locales.transliteration.transliterate(s).trim
+
   def containsSymbol(input: String): Boolean = input match {
     case Handle.handlePattern(handle) => true
     case _ => false
   }
+
   def stripSymbol(input: String): String = input match {
     case Handle.handlePattern(handle) => handle
     case _ => input
   }
+
 }

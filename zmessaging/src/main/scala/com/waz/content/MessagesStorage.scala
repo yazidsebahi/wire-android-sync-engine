@@ -62,6 +62,7 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def getLastMessage(conv: ConvId): Future[Option[MessageData]]
   def getLastSentMessage(conv: ConvId): Future[Option[MessageData]]
   def lastLocalMessage(conv: ConvId, tpe: Message.Type): Future[Option[MessageData]]
+  def countLaterThan(conv: ConvId, time: Instant): Future[Long]
 }
 
 class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorageImpl, users: UsersStorageImpl, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends

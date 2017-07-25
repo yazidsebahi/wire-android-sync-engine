@@ -47,8 +47,10 @@ trait UserService {
   def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
   def getUsers(ids: Seq[UserId]): Future[Seq[UserData]]
+  def getUser(id: UserId): Future[Option[UserData]]
   def syncIfNeeded(users: UserData*): Future[Unit]
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
+  val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
 }
 
 class UserServiceImpl(val selfUserId: UserId,
@@ -73,7 +75,7 @@ class UserServiceImpl(val selfUserId: UserId,
       Signal.empty
   }
 
-  val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
+  lazy val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
   val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
       _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
       _ <- removeIdentityFromSyncedUsers(e.filter(_.removeIdentity).map(_.user)(breakOut))
@@ -92,10 +94,14 @@ class UserServiceImpl(val selfUserId: UserId,
     sync.syncSelfUser().map(dependency => sync.syncConnections(Some(dependency)))
   }
 
-  lazy val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]] = new AggregatingSignal[Seq[UserData], Map[UserId, UserData]](usersStorage.onChanged, usersStorage.listUsersByConnectionStatus(acceptedOrBlocked), { (accu, us) =>
-    val (toAdd, toRemove) = us.partition(u => acceptedOrBlocked(u.connection))
-    accu -- toRemove.map(_.id) ++ toAdd.map(u => u.id -> u)
-  })
+  override lazy val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]] =
+    new AggregatingSignal[Seq[UserData], Map[UserId, UserData]](
+      usersStorage.onChanged, usersStorage.listUsersByConnectionStatus(acceptedOrBlocked),
+      { (accu, us) =>
+        val (toAdd, toRemove) = us.partition(u => acceptedOrBlocked(u.connection))
+        accu -- toRemove.map(_.id) ++ toAdd.map(u => u.id -> u)
+      }
+    )
 
   private lazy val acceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
 
@@ -130,7 +136,7 @@ class UserServiceImpl(val selfUserId: UserId,
     usersStorage.updateOrCreateAll(entries.map(entry => entry.id -> updateOrAdd(entry)).toMap)
   }
 
-  def getUser(id: UserId): Future[Option[UserData]] = {
+  override def getUser(id: UserId): Future[Option[UserData]] = {
     debug(s"getUser($id)")
 
     usersStorage.get(id) map {
@@ -143,7 +149,7 @@ class UserServiceImpl(val selfUserId: UserId,
     }
   }
 
-  def userSignal(id: UserId) =
+  def userSignal(id: UserId): Signal[UserData] =
     usersStorage.optSignal(id) flatMap {
       case None =>
         sync.syncUsers(id)
