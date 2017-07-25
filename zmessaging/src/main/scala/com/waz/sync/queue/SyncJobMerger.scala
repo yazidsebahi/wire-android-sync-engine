@@ -17,7 +17,6 @@
  */
 package com.waz.sync.queue
 
-import com.waz.api.SyncState
 import com.waz.content.SyncStorage
 import com.waz.model.SyncId
 import com.waz.model.sync._
@@ -65,7 +64,7 @@ class SyncJobMerger(mergeKey: Any, storage: SyncStorage) {
     assert(prev.id == updated.id)
     jobs(updated.id) = updated
 
-    if (prev.state == SyncState.SYNCING && updated.state == SyncState.FAILED) {
+    if (prev.state == SyncJob.State.Syncing && updated.state == SyncJob.State.Failed) {
       val merged = mergeDependent(updated, listJobs.dropWhile(_.timestamp <= updated.timestamp))
       if (merged != updated) {
         jobs(updated.id) = merged

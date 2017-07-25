@@ -24,14 +24,15 @@ import com.waz.ZLog.LogTag
 import com.waz.api.NetworkMode
 import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.content.Database
-import com.waz.model.AccountId
-import com.waz.model.sync.SyncJob
+import com.waz.model.{AccountId, ConvId, MessageId, SyncId}
+import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service.{NetworkModeService, ReportingService, Timeouts, ZmsLifecycle}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.queue.SyncContentUpdater
+import com.waz.sync.queue.{ConvLock, SyncContentUpdater}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Context, DB}
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
@@ -56,17 +57,19 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     networkMode ! UNKNOWN
   }
 
-
   scenario("Let's do it!") {
+    (sync.apply (_:SyncRequest)).expects(*).returning(Future.successful(SyncResult(true)))
+    (sync.apply (_:SerialExecutionWithinConversation, _:ConvLock)).expects(*, *).returning(Future.successful(SyncResult(true)))
+
     val (handle, service) = getSyncServiceHandle
 
-
-    result(for {
-      id  <- handle.syncSelfUser()
-      res <- service.scheduler.await(id)
-    } yield res)
+    println(result(for {
+      id   <- handle.syncSelfUser()
+      id2  <- handle.postMessage(MessageId(), ConvId(), clock.instant())
+      res  <- service.scheduler.await(id)
+      res2 <- service.scheduler.await(id2)
+    } yield (res, res2)))
   }
-
 
   def getSyncServiceHandle = {
 

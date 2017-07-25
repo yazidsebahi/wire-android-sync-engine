@@ -19,7 +19,6 @@ package com.waz.sync
 
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.SyncState
 import com.waz.api.impl.SyncIndicator
 import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
@@ -64,11 +63,22 @@ class SyncRequestServiceImpl(context:   Context,
 
   def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId] = content.addSyncJob(job, forceRetry).map(_.id)
 
-  def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] =
-    content.syncJobs map { _.values.filter(job => matchers.exists(_.apply(job))) } map { jobs =>
-      val state = if (jobs.isEmpty) SyncState.COMPLETED else jobs.minBy(_.state.ordinal()).state
+  def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] = {
+    import SyncJob.State._
+    import com.waz.api.SyncState._
+    content.syncJobs.map {
+      _.values.filter(job => matchers.exists(_.apply(job)))
+    }.map { jobs =>
+      //TODO remove this and do something different on the UI
+      val state = (if (jobs.isEmpty) SyncJob.State.Completed else jobs.minBy(_.state.id).state) match {
+        case Syncing   => SYNCING
+        case Waiting   => WAITING
+        case Failed    => FAILED
+        case Completed => COMPLETED
+      }
       SyncIndicator.Data(state, api.SyncIndicator.PROGRESS_UNKNOWN, jobs.flatMap(_.error).toSeq)
     }
+  }
 }
 
 object SyncRequestServiceImpl {
