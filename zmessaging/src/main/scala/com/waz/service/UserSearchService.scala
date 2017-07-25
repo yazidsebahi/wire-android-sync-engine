@@ -17,6 +17,8 @@
  */
 package com.waz.service
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.{MembersStorage, MessagesStorage, SearchQueryCacheStorage, UsersStorage}
@@ -102,16 +104,24 @@ class UserSearchService(selfUserId: UserId,
       if (searchState.shouldShowDirectorySearch) searchUserData(searchState.query).map(_.values.filter(u => !excludedUsers.contains(u.id)))
       else Signal.const(IndexedSeq.empty[UserData])
 
-    (for {
+
+    val allSignal = for {
       topUsers              <- topUsersSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[UserData]]))
       localResults          <- localSearchSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[UserData]]))
       conversations         <- conversationsSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[ConversationData]]))
       directoryResults      <- searchSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[UserData]]))
-    } yield SearchResults(topUsers, localResults, conversations, directoryResults)).map { res =>
-      if (searchState.isHandle && searchState.stripSymbol.length > 1 && !res.allHandles.exists(_.exactMatchQuery(searchState.filter)))
-        sync.exactMatchHandle(Handle(searchState.stripSymbol))
-      res
-    }
+    } yield SearchResults(topUsers, localResults, conversations, directoryResults)
+
+    if (searchState.isHandle && searchState.stripSymbol.length > 1) {
+      val exactMatchRequested = new AtomicBoolean(false)
+      allSignal.map { res =>
+        if (!exactMatchRequested.get() && !res.allHandles.exists(_.exactMatchQuery(searchState.filter))) {
+          sync.exactMatchHandle(Handle(searchState.stripSymbol))
+          exactMatchRequested.set(true)
+        }
+        res
+      }
+    } else allSignal
 
   }
 
