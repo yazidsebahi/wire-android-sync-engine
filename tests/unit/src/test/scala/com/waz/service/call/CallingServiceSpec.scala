@@ -31,6 +31,7 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
+import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.concurrent.{Future, Promise}
@@ -436,6 +437,20 @@ class CallingServiceSpec extends AndroidFreeSpec {
       service.startCall(groupConv.id)
 
       result(checkpoint3.head)
+    }
+  }
+
+  feature("tracking") {
+    scenario("AVS metrics parsing") {
+      val metrics = "{\"version\":\"avs 3.5.37 (arm\\/linux)\",\"protocol-version\":\"3.0\",\"group\":false,\"direction\":\"Outgoing\",\"answered\":false,\"estab_time(ms)\":0,\"audio_setup_time(ms)\":0,\"dtls\":false,\"ice\":false,\"video\":true,\"media_time(s)\":0,\"mic_vol(dB)\":0,\"spk_vol(dB)\":0,\"avg_rtt\":0,\"max_rtt\":0,\"avg_jb_loss\":0,\"max_jb_loss\":0,\"avg_jb_size\":0,\"max_jb_size\":0,\"avg_loss_u\":0,\"max_loss_u\":0,\"avg_loss_d\":0,\"max_loss_d\":0,\"avg_rate_d\":0,\"min_rate_d\":0,\"avg_pkt_rate_d\":0,\"min_pkt_rate_d\":0,\"a_dropouts\":0,\"avg_rate_u\":0,\"min_rate_u\":0,\"avg_pkt_rate_u\":0,\"min_pkt_rate_u\":0,\"audio_route\":\"\",\"v_avg_rate_d\":0,\"v_min_rate_d\":0,\"v_max_rate_d\":0,\"v_avg_frame_rate_d\":0,\"v_min_frame_rate_d\":0,\"v_max_frame_rate_d\":0,\"v_dropouts\":0,\"v_avg_rate_u\":0,\"v_min_rate_u\":0,\"v_max_rate_u\":0,\"v_avg_frame_rate_u\":0,\"v_min_frame_rate_u\":0,\"v_max_frame_rate_u\":0,\"turn_alloc\":40,\"nat_estab\":0,\"dtls_estab\":0,\"ecall_error\":0,\"local_cand\":\"???\",\"remote_cand\":\"???\",\"crypto\":\"None\"}"
+      import com.waz.utils.RichJSON
+      val map = new JSONObject(metrics).topLevelStringMap
+
+      map.size         shouldEqual 53
+      map("version")   shouldEqual "avs 3.5.37 (arm/linux)"
+      map("direction") shouldEqual "Outgoing"
+
+      println(map)
     }
   }
 

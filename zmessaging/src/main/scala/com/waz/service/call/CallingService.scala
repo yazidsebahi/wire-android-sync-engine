@@ -36,7 +36,7 @@ import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushServiceImpl
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichDate, RichInstant}
 import com.waz.zms.CallWakeService
@@ -68,12 +68,14 @@ class CallingService(val selfUserId:      UserId,
   private val fm = flowManagerService.flowManager
   private val mm = mediaManagerService.mediaManager
 
-  val v3Available = Signal.future(avs.available.map(_ => true).recover { case _ => false })
+  val v3Available    = Signal.future(avs.available.map(_ => true).recover { case _ => false })
   val availableCalls = Signal(Map.empty[ConvId, CallInfo]) //any call a user can potentially join
-  val currentCall = Signal(Option.empty[CallInfo])
-  val previousCall = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
+  val currentCall    = Signal(Option.empty[CallInfo])
+  val previousCall   = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
   //state about any call for which we should show the CallingActivity
-  val otherSideCBR = Signal(false) // by default we assume the call is VBR
+  val otherSideCBR   = Signal(false) // by default we assume the call is VBR
+
+  val onMetricsAvailable = EventStream[String]()
 
   val requestedCallVersion = Signal(-1)
 
@@ -177,6 +179,7 @@ class CallingService(val selfUserId:      UserId,
   //TODO pass call metrics to tracking when AVS are ready for it.
   def onMetricsReady(convId: RConvId, metricsJson: String) = {
     verbose(s"Call metrics for $convId, metrics: $metricsJson")
+    onMetricsAvailable ! metricsJson
   }
 
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
