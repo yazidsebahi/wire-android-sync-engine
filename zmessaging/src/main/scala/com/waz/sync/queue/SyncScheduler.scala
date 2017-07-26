@@ -98,9 +98,11 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
 
   nextAlarm { updateRetryAlarm }
 
-  def report(pw: PrintWriter) = Future {
-    pw.println(s"SyncScheduler: executors: ${executions.size}, count: ${executionsCount.currentValue}, running: ${runningCount.currentValue}, waiting: ${waiting.currentValue}")
+  def reportString = Future {
+    s"SyncScheduler: executors: ${executions.size}, count: ${executionsCount.currentValue}, running: ${runningCount.currentValue}, waiting: ${waiting.currentValue}"
   }
+
+  def report(pw: PrintWriter) = reportString.map(pw.println)
 
   private def execute(job: SyncJob): Unit = {
     verbose(s"execute($job)")

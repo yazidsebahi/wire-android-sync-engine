@@ -17,8 +17,10 @@
  */
 package com.waz.sync
 
+import android.util.Log
 import com.waz.ZLog._
 import com.waz.api
+import com.waz.api.ZmsVersion
 import com.waz.api.impl.SyncIndicator
 import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
@@ -33,6 +35,7 @@ import scala.concurrent.Future
 
 trait SyncRequestService {
   def scheduler: SyncScheduler
+  def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId]
 }
 
 
@@ -61,7 +64,22 @@ class SyncRequestServiceImpl(context:   Context,
     }
   }
 
-  def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId] = content.addSyncJob(job, forceRetry).map(_.id)
+  override def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId] = content.addSyncJob(job, forceRetry).map(_.id)
+
+  def listJobs = content.syncJobs.map(_.values.toSeq.sortBy(j => (j.timestamp, j.priority)))
+
+  //only print to AndroidLog directly - don't want to flood our internal log
+  def logJobs() = if (ZmsVersion.DEBUG) {
+    for {
+      rep  <- scheduler.reportString
+      jobs <- listJobs.head
+    } yield {
+      Log.d("SyncJobs", rep)
+      jobs.foreach { j =>
+        Log.d("SyncJobs", j.toString)
+      }
+    }
+  }
 
   def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] = {
     import SyncJob.State._

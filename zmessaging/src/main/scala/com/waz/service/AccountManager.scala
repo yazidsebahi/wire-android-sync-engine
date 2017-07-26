@@ -74,9 +74,9 @@ class UserModule(val userId: UserId, val account: AccountManager) {
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
-  lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
   lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdater]
   lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
+  lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
   lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
 
   def ensureClientRegistered(accountId: AccountId): ErrorOr[Unit] = {

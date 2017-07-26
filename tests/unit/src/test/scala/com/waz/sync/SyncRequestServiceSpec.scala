@@ -19,20 +19,20 @@ package com.waz.sync
 
 import java.io.PrintWriter
 
-import android.app.AlarmManager
 import com.waz.ZLog.LogTag
 import com.waz.api.NetworkMode
-import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
+import com.waz.api.NetworkMode.UNKNOWN
 import com.waz.content.Database
-import com.waz.model.{AccountId, ConvId, MessageId, SyncId}
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
+import com.waz.model._
+import com.waz.model.sync.SyncJob.Priority
+import com.waz.model.sync.SyncRequest.{RegisterPushToken, SyncRichMedia}
 import com.waz.service.{NetworkModeService, ReportingService, Timeouts, ZmsLifecycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.queue.{ConvLock, SyncContentUpdater}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Context, DB}
-import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
@@ -69,6 +69,8 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
       res  <- service.scheduler.await(id)
       res2 <- service.scheduler.await(id2)
     } yield (res, res2)))
+
+    println(result(service.listJobs.head))
   }
 
   def getSyncServiceHandle = {
