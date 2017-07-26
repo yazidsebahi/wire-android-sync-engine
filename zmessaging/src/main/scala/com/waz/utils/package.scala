@@ -27,6 +27,7 @@ import com.waz.ZLog.LogTag
 import com.waz.api.UpdateListener
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.wrappers.{URI, URIBuilder}
+import org.json.{JSONArray, JSONObject}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
@@ -40,6 +41,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
 import scala.math.{Ordering, abs}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import scala.{PartialFunction => =/>}
 
@@ -280,6 +282,20 @@ package object utils {
         else LoggedTry(recoverWithLog(f(remaining.head), reportHockey = true)).getOrElse(Future.successful(())) flatMap { _ => processNext(remaining.tail) }
 
       processNext(as)
+    }
+  }
+
+  implicit class RichJSON(val json: JSONObject) extends AnyVal {
+    //returns a map of the top-level names to the string representation of their objects - used for calling metrics
+    def topLevelStringMap = try {
+      val names = json.names()
+      (0 until names.length()).map(names.getString).map { name =>
+        name -> json.get(name).toString
+      }.toMap
+    } catch {
+      case NonFatal(e) =>
+        e.printStackTrace()
+        Map.empty[String, String]
     }
   }
 

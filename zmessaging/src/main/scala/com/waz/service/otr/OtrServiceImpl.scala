@@ -138,8 +138,12 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
           case e: CryptoException =>
             import CryptoException.Code._
             e.code match {
-              case DUPLICATE_MESSAGE | OUTDATED_MESSAGE =>
+              case DUPLICATE_MESSAGE =>
                 verbose(s"detected duplicate message for event: $ev")
+                Future successful Left(Duplicate)
+              case OUTDATED_MESSAGE =>
+                error(s"detected outdated message for event: $ev")
+                reportOtrError(e, ev)
                 Future successful Left(Duplicate)
               case REMOTE_IDENTITY_CHANGED =>
                 reportOtrError(e, ev)

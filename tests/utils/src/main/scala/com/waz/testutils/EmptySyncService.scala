@@ -34,6 +34,7 @@ object EmptySyncService extends EmptySyncService
 
 trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncSearchQuery(query: SearchQuery) = sid
+  override def exactMatchHandle(handle: Handle) = sid
   override def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId] = None) = sid
   override def syncTeam(dependsOn: Option[SyncId] = None) = sid
   override def syncTeamMember(id: UserId) = sid

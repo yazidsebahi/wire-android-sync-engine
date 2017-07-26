@@ -106,7 +106,6 @@ class DeviceActor(val deviceName: String,
   lazy val prefs = zmessaging.prefs
   lazy val convs = api.getConversations
   lazy val archived = convs.getArchivedConversations
-  lazy val search = api.search()
 
   //Using a large value so that the test processes will always timeout first, and not the remotes
   implicit val defaultTimeout = 5.minutes

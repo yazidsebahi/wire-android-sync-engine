@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.api.UsernameValidation
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.Handle
-import com.waz.service.HandlesService
+import com.waz.service.{HandlesService, UserSearchService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.HandlesClient
 import com.waz.threading.Threading
@@ -29,7 +29,7 @@ import com.waz.znet.Response.Status
 
 import scala.concurrent.Future
 
-class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesService) {
+class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesService, userSearch: UserSearchService) {
   import Threading.Implicits.Background
 
   val responseSignal = Signal[Option[Seq[UsernameValidation]]](None)
@@ -47,4 +47,5 @@ class HandlesSyncHandler(handlesClient: HandlesClient, handlesService: HandlesSe
       case Left(error) => SyncResult.Failure(Some(error), shouldRetry = true)
     }
   }
+
 }

@@ -29,9 +29,9 @@ import com.waz.utils.events.Signal
 
 class ConversationSearchResult(prefix: String, limit: Int, handleOnly: Boolean)(implicit ui: UiModule) extends api.ConversationSearchResult with CoreList[IConversation] with SignalLoading {
   import com.waz.threading.Threading.Implicits.Background
-
+  
   @volatile private var convs = Option.empty[Vector[ConvId]]
-
+  
   addLoader { zms =>
     Signal.future(zms.convsUi.findGroupConversations(SearchKey(prefix), limit, handleOnly).map(_.map(_.id).toVector))
   } { cs =>

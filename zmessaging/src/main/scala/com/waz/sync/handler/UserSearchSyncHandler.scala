@@ -20,7 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.SearchQueryCacheStorage
-import com.waz.model.SearchQuery
+import com.waz.model.{Handle, SearchQuery}
 import com.waz.service.UserSearchService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.UserSearchClient
@@ -29,7 +29,7 @@ import com.waz.threading.Threading
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient) {
+class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSearchService, client: UserSearchClient, usersSyncHandler: UsersSyncHandler) {
   import Threading.Implicits.Background
 
   def syncSearchQuery(query: SearchQuery): Future[SyncResult] = {
@@ -42,5 +42,11 @@ class UserSearchSyncHandler(storage: SearchQueryCacheStorage, userSearch: UserSe
         warn("graphSearch request failed")
         successful(SyncResult(error))
     }
+  }
+
+  def exactMatchHandle(handle: Handle): Future[SyncResult] = client.exactMatchHandle(handle).future.flatMap {
+    case Right(Some(userId)) => userSearch.updateExactMatch(handle, userId).map(_ => SyncResult.Success)
+    case Right(None)         => successful(SyncResult.Success)
+    case Left(error)         => successful(SyncResult(error))
   }
 }

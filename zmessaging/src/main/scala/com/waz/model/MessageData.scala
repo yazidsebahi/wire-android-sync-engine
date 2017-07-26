@@ -95,6 +95,8 @@ case class MessageData(id:            MessageId,
 
   def isLocal = state == Message.Status.DEFAULT || state == Message.Status.PENDING || state == Message.Status.FAILED || state == Message.Status.FAILED_READ
 
+  def isDeleted = msgType == Message.Type.RECALLED
+
   def mentions = protos.lastOption match {
     case Some(TextMessage(_, ms, _)) => ms
     case _ => Map.empty

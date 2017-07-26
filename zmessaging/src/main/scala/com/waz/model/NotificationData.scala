@@ -35,7 +35,9 @@ case class NotificationData(id: NotId,
                             ephemeral: Boolean = false,
                             mentions: Seq[UserId] = Seq.empty,
                             referencedMessage: Option[MessageId] = None,
-                            hasBeenDisplayed: Boolean = false)
+                            hasBeenDisplayed: Boolean = false) {
+  override def toString: String = s"NotificationData($id, ${msg.take(4)}..., $conv, $user, $msgType, $time, $userName, $ephemeral, $mentions, $referencedMessage, $hasBeenDisplayed)"
+}
 
 object NotificationData {
 

@@ -62,9 +62,10 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def getLastMessage(conv: ConvId): Future[Option[MessageData]]
   def getLastSentMessage(conv: ConvId): Future[Option[MessageData]]
   def lastLocalMessage(conv: ConvId, tpe: Message.Type): Future[Option[MessageData]]
+  def countLaterThan(conv: ConvId, time: Instant): Future[Long]
 }
 
-class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorageImpl, users: UsersStorageImpl, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
+class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorage, users: UsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
     CachedStorageImpl[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(MessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") with MessagesStorage {
 
   import com.waz.utils.events.EventContext.Implicits.global
@@ -135,16 +136,13 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   override def addMessage(msg: MessageData) = put(msg.id, msg)
 
-  def countUnread(conv: ConvId, lastReadTime: Instant): Future[Int] =
-    storage { MessageDataDao.countNewer(conv, lastReadTime)(_) } .future.flatMap { count =>
-      var cachedCount = 0
-      foreachCached { m =>
-        if (! m.isLocal && m.convId == conv && m.time.isAfter(lastReadTime)) cachedCount += 1
-      } map { _ =>
-        verbose(s"countUnread($conv, $lastReadTime), count: $count, cached: $cachedCount")
-        math.max(count.toInt, cachedCount)
+  def countUnread(conv: ConvId, lastReadTime: Instant): Future[Int] = {
+    storage { MessageDataDao.findMessagesFrom(conv, lastReadTime)(_) }.future.map { msgs =>
+      msgs.acquire { _.count { m =>
+        !m.isLocal && m.convId == conv && m.time.isAfter(lastReadTime) && !m.isDeleted && !m.isSystemMessage }
       }
     }
+  }
 
   def countSentByType(selfUserId: UserId, tpe: Message.Type): Future[Int] = storage(MessageDataDao.countSentByType(selfUserId, tpe)(_).toInt)
 
@@ -258,7 +256,17 @@ object MessagesStorage {
   }
 }
 
-class MessageAndLikesStorage(selfUserId: UserId, messages: MessagesStorageImpl, likings: ReactionsStorage) {
+trait MessageAndLikesStorage {
+  val onUpdate: EventStream[MessageId]
+  def apply(ids: Seq[MessageId]): Future[Seq[MessageAndLikes]]
+  def getMessageAndLikes(id: MessageId): Future[Option[MessageAndLikes]]
+  def combineWithLikes(msg: MessageData): Future[MessageAndLikes]
+  def withLikes(msgs: Seq[MessageData]): Future[Seq[MessageAndLikes]]
+  def combine(msg: MessageData, likes: Likes, selfUserId: UserId): MessageAndLikes
+  def sortedLikes(likes: Likes, selfUserId: UserId): (IndexedSeq[UserId], Boolean)
+}
+
+class MessageAndLikesStorageImpl(selfUserId: UserId, messages: MessagesStorageImpl, likings: ReactionsStorage) extends MessageAndLikesStorage {
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
