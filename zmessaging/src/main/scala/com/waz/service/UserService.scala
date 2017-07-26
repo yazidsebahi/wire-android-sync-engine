@@ -41,6 +41,7 @@ import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
 trait UserService {
+  def selfUserId: UserId
   def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
   def getOrCreateUser(id: UserId): Future[UserData]
   def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
@@ -53,7 +54,7 @@ trait UserService {
   val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
 }
 
-class UserServiceImpl(val selfUserId: UserId,
+class UserServiceImpl(override val selfUserId: UserId,
                       account:        AccountId,
                       accounts:       AccountsService,
                       usersStorage:   UsersStorageImpl,

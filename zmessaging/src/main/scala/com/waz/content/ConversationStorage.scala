@@ -34,6 +34,10 @@ import scala.collection.{GenMap, GenSet, GenTraversableOnce, mutable}
 import scala.concurrent.Future
 
 trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
+  val convAdded: EventStream[ConversationData]
+  val convDeleted: EventStream[ConversationData]
+  val convUpdated: EventStream[(ConversationData, ConversationData)]
+
   def setUnknownVerification(convId: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None): Future[Vector[ConversationData]]
   def findByTeams(teams: Set[TeamId]): Future[Set[ConversationData]]
