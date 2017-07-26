@@ -235,16 +235,16 @@ object ConversationData {
     def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId])(implicit db: DB) = {
       val select =
         s"""SELECT c.* ${if (teamId.isDefined) ", COUNT(*)" else ""}
-            |  FROM ${table.name} c, ${CM.table.name} cm, ${U.table.name} u
-            | WHERE cm.${CM.ConvId.name} = c.${Id.name}
-            |   AND cm.${CM.UserId.name} = u.${U.Id.name}
-            |   AND c.${ConvType.name} = ${ConvType(ConversationType.Group)}
+            |  FROM ${table.name} c
+            |  JOIN ${CM.table.name} cm ON cm.${CM.ConvId.name} = c.${Id.name}
+            |  JOIN ${U.table.name} u ON cm.${CM.UserId.name} = u.${U.Id.name}
+            | WHERE c.${ConvType.name} = ${ConvType(ConversationType.Group)}
             |   AND c.${Hidden.name} = ${Hidden(false)}
             |   AND u.${U.Id.name} != '${U.Id(self)}'
             |   AND (c.${Cleared.name} < c.${LastEventTime.name} OR c.${IsActive.name} = ${IsActive(true)})""".stripMargin
       val handleCondition =
         if (handleOnly){
-          s"""AND u.${U.Handle.name} LIKE '%${prefix.asciiRepresentation}%'""".stripMargin
+          s"""AND u.${U.Handle.name} LIKE '${prefix.asciiRepresentation}%'""".stripMargin
         } else {
           s"""AND (    c.${SKey.name}   LIKE '${SKey(Some(prefix))}%'
               |     OR c.${SKey.name}   LIKE '% ${SKey(Some(prefix))}%'
