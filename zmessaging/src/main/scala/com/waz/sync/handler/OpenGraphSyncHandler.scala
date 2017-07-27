@@ -40,7 +40,16 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class OpenGraphSyncHandler(convs: ConversationStorageImpl, messages: MessagesStorageImpl, otrService: OtrServiceImpl, assetSync: AssetSyncHandler, assetsStorage: AssetsStorage, otrSync: OtrSyncHandler, client: OpenGraphClient, imageGenerator: ImageAssetGenerator, imageLoader: ImageLoader, assetClient: AssetClient) {
+class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
+                           messages:       MessagesStorageImpl,
+                           otrService:     OtrServiceImpl,
+                           assetSync:      AssetSyncHandler,
+                           assetsStorage:  AssetsStorage,
+                           otrSync:        OtrSyncHandler,
+                           client:         OpenGraphClient,
+                           imageGenerator: ImageAssetGenerator,
+                           imageLoader:    ImageLoader,
+                           assetClient:    AssetClient) {
   import com.waz.threading.Threading.Implicits.Background
 
   def postMessageMeta(convId: ConvId, msgId: MessageId, editTime: Instant): Future[SyncResult] = messages.getMessage(msgId) flatMap {

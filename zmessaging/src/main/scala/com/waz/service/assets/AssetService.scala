@@ -38,11 +38,10 @@ import com.waz.model.AssetStatus.Order._
 import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ErrorData.AssetError
 import com.waz.model._
+import com.waz.service.ErrorsService
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
-import com.waz.service.downloads.DownloadRequest._
 import com.waz.service.downloads._
 import com.waz.service.images.ImageAssetGenerator
-import com.waz.service.ErrorsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
@@ -77,23 +76,26 @@ trait AssetService {
   def removeSource(id: AssetId): Future[Unit]
 }
 
-class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-                       loader: AssetLoader, messages: MessagesStorageImpl, downloader: DownloaderService, errors: ErrorsService,
-                       permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-                       metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-                       prefs: GlobalPreferences) extends AssetService {
+class AssetServiceImpl(storage:         AssetsStorage,
+                       generator:       ImageAssetGenerator,
+                       cache:           CacheService,
+                       context:         Context,
+                       messages:        MessagesStorageImpl,
+                       loaderService:   AssetLoaderService,
+                       loader:          AssetLoader,
+                       errors:          ErrorsService,
+                       permissions:     PermissionsService,
+                       metaService:     MetaDataService,
+                       sync:            SyncServiceHandle,
+                       media:           GlobalRecordAndPlayService,
+                       prefs:           GlobalPreferences) extends AssetService {
 
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
-  assetDownloader.onDownloadDone {
-    case WireAssetRequest(_, id, _, _, _, _) => markDownloadDone(id)
-    case _ =>
-  }
-
-  assetDownloader.onDownloadFailed {
-    case (WireAssetRequest(_, id, _, _, _, _), _) => markDownloadFailed(id)
-    case _ =>
+  loader.onDownloadDone(markDownloadDone)
+  loader.onDownloadFailed { case (id, _) =>
+    markDownloadFailed(id)
   }
 
   messages.onMessageFailed { case (m, _) =>
@@ -108,40 +110,35 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
     case AssetError(ms) => Future.traverse(ms) { messages.delete }
   }
 
-  def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
-    case asset @ AssetData.WithStatus(status) => assetStatusSignal(status, asset.cacheKey).map(st => (asset, st))
+  override def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
+    case asset @ AssetData.WithStatus(status) => (asset.status match {
+      case UploadDone => //only if the asset is uploaded, check for a cache entry. Upload state takes precedence over download state
+        cache.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
+          case true =>
+            verbose(s"uploaded asset also has cache entry, must be downloaded. For key: ${asset.cacheKey}")
+            Signal.const(api.AssetStatus.DOWNLOAD_DONE)
+          case false =>
+            loaderService.getLoadProgress(id).map(_.state) map {
+              case State.RUNNING => api.AssetStatus.DOWNLOAD_IN_PROGRESS
+              case State.COMPLETED => api.AssetStatus.DOWNLOAD_IN_PROGRESS // reporting asset in progress since it should be added to cache before we change the state
+              case _ => status.status
+            }
+        }
+      case _ => Signal.const(status.status)
+    }).map(st => (asset, st))
+
     case _ => Signal.empty[(AssetData, api.AssetStatus)]
   }
 
-  private def assetStatusSignal(status: AssetStatus, cacheKey: CacheKey) = status match {
-    case UploadDone => //only if the asset is uploaded, check for a cache entry. Upload state takes precedence over download state
-      cache.optSignal(cacheKey).map(_.isDefined) flatMap {
-        case true =>
-          verbose(s"uploaded asset also has cache entry, must be downloaded. For key: $cacheKey")
-          Signal const api.AssetStatus.DOWNLOAD_DONE
-        case false =>
-          downloader.getDownloadState(cacheKey).map(_.state) map {
-            case State.RUNNING    => api.AssetStatus.DOWNLOAD_IN_PROGRESS
-            case State.COMPLETED  => api.AssetStatus.DOWNLOAD_IN_PROGRESS // reporting asset in progress since it should be added to cache before we change the state
-            case _                => status.status
-          }
-      }
-    case _ => Signal const status.status
-  }
+  def downloadProgress(id: AssetId) = loaderService.getLoadProgress(id)
 
-  def downloadProgress(id: AssetId) = storage.signal(id) flatMap ( asset => downloader.getDownloadState(asset.cacheKey) )
-
-  def cancelDownload(id: AssetId) = storage.get(id) flatMap {
-    case Some(asset) => downloader.cancel(asset.cacheKey)
-    case _ => Future successful (())
-  }
+  def cancelDownload(id: AssetId) = loaderService.cancel(id)
 
   def uploadProgress(id: AssetId) = Signal const ProgressData.Indefinite // TODO
 
   def cancelUpload(id: AssetId, msg: MessageId): Future[Unit] =
     for {
-      Some(asset) <- storage.get(id)
-      _ <- downloader.cancel(asset.cacheKey)
+      _ <- loaderService.cancel(id)
       _ <- AssetProcessing.cancel(ProcessingTaskKey(id))
       _ <- Cancellable.cancel(UploadTaskKey(id))
       _ <- markUploadFailed(id, UploadCancelled)
@@ -182,7 +179,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
   def getLocalData(id: AssetId): CancellableFuture[Option[LocalData]] =
     CancellableFuture lift storage.get(id) flatMap {
       case None => CancellableFuture successful None
-      case Some(asset) => loader.getAssetData(asset.loadRequest) map { res =>
+      case Some(asset) => loaderService.load(asset)(loader) map { res =>
         if (res.isEmpty) errors.addAssetFileNotFoundError(id)
         res
       }
@@ -207,7 +204,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
 
     def loadData(asset: AssetData) = (a match {
       case TranscodedVideoAsset(_, data) => CancellableFuture lift cache.move(a.cacheKey, data, Mime.Video.MP4, if (asset.mime == Mime.Video.MP4) asset.name else asset.name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)) map { Some(_) }
-      case _                             => loader.getAssetData(asset.loadRequest) //will ensure that PCM audio files get encoded
+      case _                             => loaderService.load(asset, force = true)(loader) //will ensure that PCM audio files get encoded
     }).flatMap {
       case Some(entry) => CancellableFuture.successful(entry)
       case None        =>
@@ -266,14 +263,14 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
   private def markDownloadDone(id: AssetId) = storage.updateAsset(id, _.copy(status = UploadDone))
 
   def getContentUri(id: AssetId): CancellableFuture[Option[URI]] =
-    CancellableFuture.lift(storage.get(id)) .flatMap {
+    CancellableFuture.lift(storage.get(id)).flatMap {
       case Some(a: AssetData) =>
-        verbose(s"getContentUri for: $a")
-        loader.getAssetData(a.loadRequest) flatMap {
+        verbose(s"getContentUri for: $id")
+        loaderService.load(a, force = true)(loader) flatMap {
           case Some(entry: CacheEntry) =>
             CancellableFuture successful {
               val uri = Some(CacheUri(entry.data, context))
-              verbose(s"Created cache entry uri: $uri for asset: ${a.id}")
+              verbose(s"Created cache entry uri: $uri for asset: $id")
               uri
             }
           case Some(data) =>
@@ -307,7 +304,7 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
     }
 
     def saveAssetData(file: File) =
-      loader.getAssetData(asset.loadRequest).future.map {
+      loaderService.load(asset, force = true)(loader).future.map {
         case Some(data) =>
           //TODO Dean: remove after v2 transition period
           //Trigger updating of meta data for assets generated (and downloaded) from old AnyAssetData type.
@@ -339,13 +336,6 @@ class AssetServiceImpl(storage: AssetsStorage, generator: ImageAssetGenerator, c
 }
 
 object AssetService {
-
-  def apply(storage: AssetsStorage, generator: ImageAssetGenerator, cache: CacheService, context: Context,
-            loader: AssetLoader, messages: MessagesStorageImpl, downloader: DownloaderService, errors: ErrorsService,
-            permissions: PermissionsService, streamLoader: Downloader[AssetFromInputStream], assetDownloader: AssetDownloader,
-            metaService: MetaDataService, sync: SyncServiceHandle, media: GlobalRecordAndPlayService,
-            prefs: GlobalPreferences): AssetService =
-    new AssetServiceImpl(storage, generator, cache, context, loader, messages, downloader, errors, permissions, streamLoader, assetDownloader, metaService, sync, media, prefs)
 
   val SaveImageDirName = "Wire"
 

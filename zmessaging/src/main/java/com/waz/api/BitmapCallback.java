@@ -22,12 +22,7 @@ import android.graphics.Bitmap;
 public abstract class BitmapCallback {
 
     public abstract void onBitmapLoaded(Bitmap bitmap);
-    public void onBitmapLoadingFailed(BitmapLoadingFailed reason) { }
-
-    public enum BitmapLoadingFailed {
-        DOWNLOAD_ON_WIFI_ONLY,
-        DOWNLOAD_FAILED
-    }
+    public void onBitmapLoadingFailed() { }
 }
 
 
