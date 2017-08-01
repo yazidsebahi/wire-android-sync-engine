@@ -204,10 +204,17 @@ class AccountsService(val global: GlobalModule) {
     def loginOnBackend() =
       loginClient.login(account).future map {
         case Right((token, c)) =>
-          Right(account.updated(normalized).copy(cookie = c, verified = true, accessToken = Some(token)))
+          Right(account.updated(normalized).copy(cookie = c, accessToken = Some(token)))
         case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
           verbose(s"account pending activation: $normalized, $error")
-          Right(account.updated(normalized).copy(verified = false, cookie = None, accessToken = None))
+          normalized match {
+            case EmailCredentials(_, _, _) => Right(account.updatedPending(normalized).copy(cookie = None, accessToken = None))
+            case PhoneCredentials(_, _, _) => Right(account.updatedPending(normalized).copy(cookie = None, accessToken = None))
+            case _ =>
+              verbose(s"login failed: $error")
+              Left(error)
+          }
+
         case Left((_, error)) =>
           verbose(s"login failed: $error")
           Left(error)
@@ -216,7 +223,7 @@ class AccountsService(val global: GlobalModule) {
     loginOnBackend() flatMap {
       case Right(a) =>
         for {
-          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, verified = true, accessToken = a.accessToken), a)
+          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, accessToken = a.accessToken), a)
           manager <- getOrCreateAccountManager(a.id)
           _       <- setAccount(Some(a.id))
           res     <- manager.ensureFullyRegistered()
@@ -258,7 +265,7 @@ class AccountsService(val global: GlobalModule) {
         case Right((userInfo, cookie)) =>
           verbose(s"register($credentials) done, id: ${account.id}, user: $userInfo, cookie: $cookie")
           for {
-            acc     <- storage.insert(account.copy(cookie = cookie, userId = Some(userInfo.id), verified = account.autoLoginOnRegistration))
+            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id)))
             _       = verbose(s"created account: $acc")
             manager <- getOrCreateAccountManager(account.id)
             _       <- setAccount(Some(account.id))

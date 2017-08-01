@@ -91,13 +91,13 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
 
   override def isLoggedIn = data.isDefined
 
-  override def accountActivated: Boolean = data.forall(_.verified)
+  override def accountActivated: Boolean = data.exists(d => d.phone.isDefined || d.email.isDefined)
 
   @deprecated("use accountActivated instead", "73")
-  override def isEmailVerified: Boolean = data.forall(_.verified)
+  override def isEmailVerified: Boolean = data.exists(d => d.email.isDefined)
 
   @deprecated("this method always returns true", "68")
-  override def isPhoneVerified: Boolean = true
+  override def isPhoneVerified: Boolean = data.exists(d => d.phone.isDefined)
 
   override def isUpToDate: Boolean = upToDate
 

@@ -91,7 +91,8 @@ class UserModule(val userId: UserId, val account: AccountManager) {
                   sync.syncSelfClients() // request clients sync, UI will need that
                   accountData.verified
               }
-              accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state, verified = verified(acc))).map(_ => Right({}))
+              //TODO: need to check pending?
+              accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state)).map(_ => Right({}))
             case Left(err) =>
               error(s"client registration failed: $err")
               Future.successful(Left(err))
@@ -232,7 +233,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 
   private val shouldAwaitActivation = lifecycle.uiActive.zip(accountsStorage.optSignal(id)) map {
-    case (true, Some(acc)) => !acc.verified && acc.password.isDefined
+    case (true, Some(acc)) => !acc.verified && acc.password.isDefined && (acc.pendingPhone.isDefined || acc.pendingEmail.isDefined)
     case _ => false
   }
 
@@ -416,10 +417,10 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
         else loginClient.login(account).future flatMap {
           case Right((token, cookie)) =>
             for {
-              Some((_, acc)) <- accountsStorage.update(accountId, _.copy(verified = true, accessToken = Some(token), cookie = cookie))
+              Some((_, acc)) <- accountsStorage.update(id, _.updated(credentials).copy(cookie = cookie, accessToken = Some(token)))
             } yield Right(acc)
           case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-            accountsStorage.update(accountId, _.copy(verified = false)).collect { case Some((_, acc)) => Right(acc)}
+            accountsStorage.update(accountId, _.updatedPending(credentials)).collect { case Some((_, acc)) => Left(ErrorResponse(Status.Forbidden, "", "pending-activation"))}
           case Left((_, err)) =>
             verbose(s"activate failed: $err")
             Future.successful(Left(err))
