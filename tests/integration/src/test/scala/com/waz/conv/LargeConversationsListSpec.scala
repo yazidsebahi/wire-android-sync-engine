@@ -31,7 +31,6 @@ import com.waz.testutils.Implicits._
 import com.waz.threading.Threading
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
@@ -212,7 +211,7 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
       }) :+ api.getSelf.getUser
 
       val before = convs.size()
-      convs.createGroupConversation(usersToAdd.toSet.asJava, new ConversationCallback {
+      convs.createGroupConversation(usersToAdd.toSet.toSeq, new ConversationCallback {
         override def onConversationsFound(conversations: Iterable[IConversation]): Unit = ()
       })
       withDelay { convs should have size (before + 1) } (30.seconds)

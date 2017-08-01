@@ -67,7 +67,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
       val users = allUserIds.slice(1, 3).map(id => api.getUser(id.str))
 
       var convResult = Seq.empty[IConversation]
-      conversations.createGroupConversation(users.asJava, new ConversationCallback {
+      conversations.createGroupConversation(users, new ConversationCallback {
         override def onConversationsFound(conversations: Iterable[IConversation]): Unit = convResult = conversations.asScala.toSeq
       })
 
