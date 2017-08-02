@@ -21,7 +21,6 @@ import java.util.concurrent.TimeoutException
 
 import android.graphics.Bitmap
 import com.waz.RobolectricUtils
-import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api._
 import com.waz.utils.JsonDecoder.{apply => _, _}
 import com.waz.utils.JsonEncoder._
@@ -115,7 +114,7 @@ object Matchers {
 
       @volatile var count = 0
       val handle = im.getBitmap(500, new BitmapCallback {
-        override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = promisedMoreThanTwoUpdates.tryFailure(new AssertionError(s"GIF loading failed: reason: $reason"))
+        override def onBitmapLoadingFailed(): Unit = promisedMoreThanTwoUpdates.tryFailure(new AssertionError(s"GIF loading failed"))
         override def onBitmapLoaded(b: Bitmap): Unit = {
           count += 1
           if (count > 2) promisedMoreThanTwoUpdates.trySuccess(b)

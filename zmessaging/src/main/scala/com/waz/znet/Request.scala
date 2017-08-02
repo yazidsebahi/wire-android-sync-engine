@@ -36,19 +36,18 @@ import org.json.JSONObject
 
 import scala.concurrent.duration._
 
-case class Request[A: ContentEncoder](
-      httpMethod: String = Request.GetMethod,
-      resourcePath: Option[String] = None,
-      baseUri: Option[URI] = None,
-      data: Option[A] = None,
-      decoder: Option[ResponseBodyDecoder] = None,
-      uploadCallback: Option[ProgressCallback] = None,
-      downloadCallback: Option[ProgressCallback] = None,
-      requiresAuthentication: Boolean = true,
-      headers: Map[String, String] = Request.EmptyHeaders,
-      retryPolicy: RetryPolicy = RetryPolicy.NeverRetry,
-      followRedirect: Boolean = true,
-      timeout: FiniteDuration = AsyncClient.DefaultTimeout
+case class Request[A: ContentEncoder](httpMethod:             String                      = Request.GetMethod,
+                                      resourcePath:           Option[String]              = None,
+                                      baseUri:                Option[URI]                 = None,
+                                      data:                   Option[A]                   = None,
+                                      decoder:                Option[ResponseBodyDecoder] = None,
+                                      uploadCallback:         Option[ProgressCallback]    = None,
+                                      downloadCallback:       Option[ProgressCallback]    = None,
+                                      requiresAuthentication: Boolean                     = true,
+                                      headers:                Map[String, String]         = Request.EmptyHeaders,
+                                      retryPolicy:            RetryPolicy                 = RetryPolicy.NeverRetry,
+                                      followRedirect:         Boolean                     = true,
+                                      timeout:                FiniteDuration              = AsyncClient.DefaultTimeout
 ) extends HttpRequest {
 
   assert(uploadCallback.isEmpty, "uploadCallback is not supported yet") //TODO
@@ -107,14 +106,14 @@ object Request {
                                 headers: Map[String, String] = EmptyHeaders) =
     Request[A](DeleteMethod, resourcePath = Some(path), baseUri = baseUri, data = data, requiresAuthentication = requiresAuthentication, headers = headers)
 
-  def Get(path: String,
-          baseUri: Option[URI] = None,
-          downloadCallback: Option[ProgressCallback] = None,
-          requiresAuthentication: Boolean = true,
-          headers: Map[String, String] = EmptyHeaders,
-          timeout: FiniteDuration = AsyncClient.DefaultTimeout) =
-    Request[Unit](GetMethod, resourcePath = Some(path), baseUri = baseUri, downloadCallback = downloadCallback,
-                  requiresAuthentication = requiresAuthentication, headers = headers, timeout = timeout)(EmptyContentEncoder)
+  def Get(path:                   String,
+          baseUri:                Option[URI]                 = None,
+          downloadCallback:       Option[ProgressCallback]    = None,
+          requiresAuthentication: Boolean                     = true,
+          headers:                Map[String, String]         = EmptyHeaders,
+          timeout:                FiniteDuration              = AsyncClient.DefaultTimeout,
+          decoder:                Option[ResponseBodyDecoder] = None) =
+    Request[Unit](GetMethod, resourcePath = Some(path), baseUri = baseUri, downloadCallback = downloadCallback, requiresAuthentication = requiresAuthentication, headers = headers, timeout = timeout, decoder = decoder)(EmptyContentEncoder)
 
   def Head(path: String,
            baseUri: Option[URI] = None,

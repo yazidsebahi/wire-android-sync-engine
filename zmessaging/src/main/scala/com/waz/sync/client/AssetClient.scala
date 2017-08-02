@@ -21,8 +21,8 @@ import java.io.InputStream
 
 import android.util.Base64
 import com.koushikdutta.async.http.body.{Part, StreamPart, StringPart}
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.cache.{CacheEntry, Expiration, LocalData}
 import com.waz.model.otr.ClientId
@@ -54,7 +54,6 @@ class AssetClientImpl(netClient: ZNetClient) extends AssetClient {
   import com.waz.sync.client.AssetClient._
 
   override def loadAsset(req: Request[Unit]): ErrorOrResponse[CacheEntry] = {
-    debug(s"AC loadAsset($req)")
     netClient.withErrorHandling("loadAsset", req) {
       case Response(SuccessHttpStatus(), resp: BinaryResponse, _) => resp
       case Response(SuccessHttpStatus(), resp: FileResponse, _) => resp
@@ -111,6 +110,15 @@ object AssetClient {
   }
 
   def postAssetPath(conv: RConvId) = s"/conversations/$conv/assets"
+
+
+  def getAssetPath(rId: RAssetId, otrKey: Option[AESKey], conv: Option[RConvId]): String = {
+    (conv, otrKey) match {
+      case (None, _)          => s"/assets/v3/${rId.str}"
+      case (Some(c), None)    => s"/conversations/${c.str}/assets/${rId.str}"
+      case (Some(c), Some(_)) => s"/conversations/${c.str}/otr/assets/${rId.str}"
+    }
+  }
 
   //TODO remove asset v2 when transition period is over
   def getAssetPath(remoteId: Option[RAssetId], otrKey: Option[AESKey], conv: Option[RConvId]): Option[String] = remoteId.map { rId =>

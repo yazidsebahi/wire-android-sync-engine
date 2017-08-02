@@ -27,16 +27,16 @@ import com.waz.model._
 import com.waz.utils.returning
 import com.waz.utils.wrappers.{DB, DBCursor}
 
-case class CacheEntryData(key: CacheKey,
-                          data: Option[Array[Byte]] = None,
-                          lastUsed: Long = currentTimeMillis(),
-                          timeout: Long = CacheService.DefaultExpiryTime.toMillis,
-                          path: Option[File] = None,
-                          encKey: Option[AESKey] = None,
-                          fileName: Option[String] = None,
-                          mimeType: Mime = Mime.Unknown,
-                          fileId: Uid = Uid(),
-                          length: Option[Long] = None)
+case class CacheEntryData(key:      CacheKey,
+                          data:     Option[Array[Byte]] = None,
+                          lastUsed: Long                = currentTimeMillis(),
+                          timeout:  Long                = CacheService.DefaultExpiryTime.toMillis,
+                          path:     Option[File]        = None,
+                          encKey:   Option[AESKey]      = None,
+                          fileName: Option[String]      = None,
+                          mimeType: Mime                = Mime.Unknown,
+                          fileId:   Uid                 = Uid(),
+                          length:   Option[Long]        = None)
 
 object CacheEntryData {
 

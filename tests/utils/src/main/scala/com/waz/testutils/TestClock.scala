@@ -22,6 +22,8 @@ import org.threeten.bp.{Clock, Instant, ZoneId}
 import scala.concurrent.duration.FiniteDuration
 import com.waz.utils._
 
+import scala.concurrent.duration._
+
 case class TestClock(start: Instant = Instant.EPOCH) extends Clock {
 
   private var _instant = start
@@ -35,4 +37,8 @@ case class TestClock(start: Instant = Instant.EPOCH) extends Clock {
 
   def advance(d: FiniteDuration): Unit = _instant += d
   def +(d: FiniteDuration) = advance(d)
+}
+
+case class TestBackoff(override val maxRetries: Int = 2, testDelay: FiniteDuration = Duration.Zero) extends Backoff {
+  override def delay(retry: Int, minDelay: FiniteDuration) = testDelay
 }

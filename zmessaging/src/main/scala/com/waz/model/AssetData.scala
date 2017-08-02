@@ -29,7 +29,6 @@ import com.waz.model.AssetStatus.UploadDone
 import com.waz.model.GenericContent.EncryptionAlgorithm
 import com.waz.model.otr.SignalingKey
 import com.waz.service.ZMessaging
-import com.waz.service.downloads.DownloadRequest._
 import com.waz.utils.JsonDecoder.{apply => _, opt => _}
 import com.waz.utils._
 import com.waz.utils.wrappers.URI
@@ -96,25 +95,19 @@ case class AssetData(id:          AssetId               = AssetId(),
 
   lazy val cacheKey = {
     val key = (proxyPath, source) match {
-      case (Some(proxy), _) => CacheKey(proxy)
+      case (Some(proxy), _)                            => CacheKey(proxy)
       case (_, Some(uri)) if !NonKeyURIs.contains(uri) => CacheKey.fromUri(uri)
-      case _ => CacheKey.fromAssetId(id)
+      case _                                           => CacheKey.fromAssetId(id)
     }
     //verbose(s"created cache key: $key for asset: $id")
     key
   }
 
-  def loadRequest = {
-    val req = (remoteData, v2ProfileId, source, proxyPath) match {
-      case (Some(rData), _, _, _)                      => WireAssetRequest(cacheKey, id, rData, convId, mime, name)
-      case (_, Some(v2Id), _, _)                       => WireAssetRequest(cacheKey, id, RemoteData(Some(v2Id)), convId, mime, name)
-      case (_, _, Some(uri), _) if isExternalUri(uri)  => External(cacheKey, uri)
-      case (_, _, Some(uri), _)                        => LocalAssetRequest(cacheKey, uri, mime, name)
-      case (_, _, None, Some(path))                    => Proxied(cacheKey, path)
-      case _                                           => CachedAssetRequest(cacheKey, mime, name)
-    }
-    //verbose(s"loadRequest returning: $req")
-    req
+  lazy val isDownloadable = this match {
+    case WithRemoteData(_)  => true
+    case WithExternalUri(_) => true
+    case WithProxy(_)       => true
+    case _                  => false
   }
 
   val (isImage, isVideo, isAudio) = this match {
@@ -177,6 +170,22 @@ object AssetData {
   def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag, uri: URI) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
 
   val Empty = AssetData()
+
+  object WithRemoteData {
+    def unapply(asset: AssetData): Option[RemoteData] = (asset.remoteData, asset.v2ProfileId) match {
+      case (Some(remoteData), _)  => Some(remoteData)
+      case (_, Some(v2ProfileId)) => Some(RemoteData(Some(v2ProfileId)))
+      case _ => None
+    }
+  }
+
+  object WithExternalUri {
+    def unapply(asset: AssetData): Option[URI] = asset.source.filter(isExternalUri)
+  }
+
+  object WithProxy {
+    def unapply(asset: AssetData): Option[String] = asset.proxyPath
+  }
 
   object WithMetaData {
     def unapply(asset: AssetData): Option[AssetMetaData] = asset.metaData
