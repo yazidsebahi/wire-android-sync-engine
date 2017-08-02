@@ -13,7 +13,7 @@ android:
 
 jdk:
   - oraclejdk8
-
+dist: precise
 sudo: false
 
 cache:
