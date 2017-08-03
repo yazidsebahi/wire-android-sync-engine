@@ -38,7 +38,7 @@ import scala.util.control.NonFatal
 
 /**
   * Keeps track of all load requests in priority queue, executes more important loads first.
-  * Priority is based on request start times.
+  * Priority is based on request start times, newer requests are considered more important.
   *
   * Note, the AssetLoaderService is globally defined, and different instances of AssetLoader can be used to perform load
   * operations. This is to have a single global asset loading queue for all zms instances (and also for no instances), but
@@ -58,8 +58,10 @@ class AssetLoaderService {
   private def getLoadEntry(id: AssetId): Signal[Option[LoadEntry]] =
     new AggregatingSignal[LoadEntry, Option[LoadEntry]](onAdded.filter(_.asset == id), Future(requests.get(id)), { (_, added) => Some(added) })
 
-  def getLoadProgress(id: AssetId): Signal[ProgressData] = getLoadEntry(id) flatMap {
-    case Some(entry) => entry.state
+  def getLoadProgress(id: AssetId): Signal[ProgressData] = getLoadEntry(id).flatMap {
+    case Some(entry) =>
+      verbose(s"getLoadProgress: $id")
+      entry.state
     case None => Signal(ProgressData.Unknown)
   }
 
@@ -69,6 +71,7 @@ class AssetLoaderService {
   //This also helps prevent race conditions caused by Cancellable futures exposing the work done by the LoadEntry
   private def removeTaskIfIdle(id: AssetId) = {
     if (!active.contains(id)) {
+      verbose(s"Cancelling idle task: $id")
       requests.remove(id) foreach { _.cancel() }
       checkQueue()
       true
@@ -80,12 +83,12 @@ class AssetLoaderService {
 
   //reveals attempted load count - useful for testing retry logic
   def loadRevealAttempts(asset: AssetData, force: Boolean = false)(implicit loader: AssetLoader): CancellableFuture[(Option[CacheEntry], Int)] = {
-
-    val p = loadEntry(asset, force).promise
-    returning(new CancellableFuture(p)) { l =>
-      l.recoverWith {
-        case ex: CancelException =>
-          if (removeTaskIfIdle(asset.id)) CancellableFuture.failed(ex) else new CancellableFuture(p)
+    verbose(s"loadRevealAttempts: ${asset.id}")
+    new CancellableFuture(loadEntry(asset, force).promise) {
+      override def cancel()(implicit tag: LogTag) = {
+        returning(removeTaskIfIdle(asset.id)) { removed =>
+          verbose(s"Tried to cancel loadEntry: ${asset.id}: removed?: $removed")(tag)
+        }
       }
     }.map {
       case (entry, attempts) => (Some(entry), attempts)
@@ -94,45 +97,47 @@ class AssetLoaderService {
 
   private def loadEntry(asset: AssetData, force: Boolean = false)(implicit loader: AssetLoader) = {
     verbose(s"loadEntry(${asset.id}, $force)")
+    verbose(s"load requests: ${requests.keys.map(_.toString).toSeq.sorted}")
+    verbose(s"active:        ${active.map(_.toString).toSeq.sorted}")
 
-    verbose(s"load requests: ${requests.keys}")
-    verbose(s"active:        $active")
-    verbose(s"in queue:      $queue")
+    if (!active(asset.id)) {
+      def createOrUpdate(cur: Option[LoadEntry]) = {
+        cur.map { e =>
+          verbose(s"Found existing for id: ${asset.id}, updating.")
+          e.copy(asset = asset, force = e.force || force)
+        }.getOrElse(returning(LoadEntry(asset, loader, force))(onAdded ! _))
+      }
 
-    def createOrUpdate(cur: Option[LoadEntry]) = {
-      cur.map(e => e.copy(asset = asset, force = e.force || force))
-        .getOrElse(returning(LoadEntry(asset, loader, force))(onAdded ! _))
-    }
-
-    returning(createOrUpdate(requests.get(asset.id))) { entry =>
-      requests.update(asset.id, entry)
-      if (!active(asset.id)) {
+      returning(createOrUpdate(requests.get(asset.id))) { entry =>
+        requests.update(asset.id, entry)
         verbose(s"adding entry to the queue: ${asset.id}")
         queue.enqueue(entry.queuePlaceHolder)
         checkQueue()
       }
+
+    } else {
+      verbose(s"Load entry: ${asset.id} was already active, not updating")
+      requests.getOrElse(asset.id, throw new Exception("Active load operation was missing from request map"))
     }
   }
 
-  private def checkQueue(): Unit = {
-    verbose(s"checkQueue(), active: $active")
+  private def checkQueue(): Unit = Future {
+    verbose(s"checkQueue()")
+    verbose(s"queue: $queue")
 
-    def shouldStartNext = queue.headOption.flatMap(e => requests.get(e.id)).fold(false)(_ => active.size < MaxConcurrentLoadRequests)
-
-    while(shouldStartNext) {
-      if (queue.nonEmpty) {
-        val id = queue.dequeue().id
-        requests.get(id).fold(debug(s"load entry has been removed for: $id")) { entry =>
-          verbose(s"starting load for $entry")
-          if (active(id)) error(s"entry was already active: $entry")
-          active += id
-          load(entry).onComplete { res =>
-            requests -= id
-            active -= id
-            checkQueue()
-          }
+    if (queue.nonEmpty && active.size < MaxConcurrentLoadRequests) {
+      val id = queue.dequeue().id //dequeue the entry. If it's not in requests, then we discard it - can happen after cancelling
+      requests.get(id).foreach { entry =>
+        verbose(s"starting load for $entry")
+        if (active(id)) error(s"entry was already active: $entry")
+        active += id
+        load(entry).onComplete { res =>
+          requests -= id
+          active -= id
+          checkQueue() //check queue again in case we're blocked and waiting (in which case we won't reach the next checkQueue call)
         }
       }
+      checkQueue() //effectively causes a while(queue.nonEmpty && active.size < MaxConcurrentLoadRequests)
     }
   }
 
@@ -153,7 +158,6 @@ class AssetLoaderService {
     }
 
     def recursive(retries: Int = 0): Future[(CacheEntry, Int)] = {
-      debug(s"recursive: retries: $retries")
       val delay =
         if (retries == 0) CancellableFuture.successful({})
         else if (retries > AssetLoaderService.backoff.maxRetries) throw new Exception(MaxRetriesErrorMsg)
@@ -194,7 +198,10 @@ object AssetLoaderService {
     def cancel(): Unit =
       promise.tryFailure(new CancelException("Cancelled by user"))
 
-    def load() = loader.loadAsset(asset, state ! _, force)
+    def load() = {
+      verbose(s"performing load: ${asset.id}")
+      loader.loadAsset(asset, state ! _, force)
+    }
 
     override def toString: LogTag = s"LoadEntry(${asset.id}) { force: $force, state: $state, time: $time }"
 

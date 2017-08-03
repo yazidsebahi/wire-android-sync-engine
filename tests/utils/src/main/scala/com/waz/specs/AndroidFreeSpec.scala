@@ -20,7 +20,6 @@ package com.waz.specs
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.LogTag
-import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.service.ZMessaging
 import com.waz.testutils.TestClock
 import com.waz.threading.{SerialDispatchQueue, Threading}
@@ -58,8 +57,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     ZMessaging.clock = clock
 
-    InternalLog.reset()
-    InternalLog.add(new SystemLogOutput)
+//    InternalLog.reset()
+//    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 
