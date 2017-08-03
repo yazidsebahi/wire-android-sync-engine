@@ -20,7 +20,7 @@ package com.waz.service
 import com.waz.api.User.ConnectionStatus
 import com.waz.content._
 import com.waz.model.SearchQuery.Recommended
-import com.waz.model.{UserId, _}
+import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.utils.events.{Signal, SourceSignal}
@@ -30,12 +30,10 @@ import scala.concurrent.Future
 import com.waz.utils.Managed
 import com.waz.utils.wrappers.DB
 import org.threeten.bp.Instant
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.service.conversation.ConversationsUiService
 import com.waz.service.teams.TeamsService
-import scala.language.higherKinds
 
+import scala.language.higherKinds
 import scala.collection.generic.CanBuild
 
 class UserSearchServiceSpec extends AndroidFreeSpec {
@@ -76,7 +74,6 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     val firstQueryCache = SearchQueryCache(query, Instant.now, None)
     val secondQueryCache = SearchQueryCache(query, Instant.now, Some(matches.toVector))
 
-
     val queryCacheStorage = mock[SearchQueryCacheStorage]
     (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
     val usersStorage = mock[UsersStorage]
@@ -86,124 +83,148 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
       .expects(*, *, *, *).once().returning(Future.successful(expected))
 
-    if (expected.nonEmpty) {
-      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning {
-        Future.successful(secondQueryCache)
-      }
-      (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
-        Future.successful[SyncId] {
-          querySignal ! Some(secondQueryCache)
-          SyncId()
-        }
-      }
-      (usersStorage.listSignal _).expects(matches.toVector).once().returning(Signal.const(expected))
+    (queryCacheStorage.updateOrCreate _).expects(query, *, *).once().returning {
+      Future.successful(secondQueryCache)
     }
+
+    (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
+      Future.successful[SyncId] {
+        querySignal ! Some(secondQueryCache)
+        SyncId()
+      }
+    }
+    (usersStorage.listSignal _).expects(*).once().returning(Signal.const(expected))
 
     val service = stubService(queryCacheStorage = queryCacheStorage, usersStorage = usersStorage, sync = sync)
     querySignal ! Some(firstQueryCache)
+
     result(service.searchUserData(Recommended(prefix)).map(_.keys.toSet).filter(_ == matches).head)
   }
 
-
   feature("Recommended people search") {
-    scenario("Return search results") {
-      verifySearch("r", ids('d, 'e, 'f))
-      verifySearch("re", ids('d, 'e, 'f))
-      verifySearch("rel", ids('d, 'e, 'f))
-      verifySearch("u", ids('d, 'e))
-      verifySearch("us", ids('d, 'e))
-      verifySearch("use", ids('d, 'e))
-      verifySearch("user", ids('d, 'e))
-      verifySearch("use", ids('d, 'e))
-      verifySearch("moop@meep.me", ids('j))
-
-      /*verifySearch("relt", Set.empty[UserId])
-      verifySearch("used", Set.empty[UserId])
-      verifySearch("meep", Set.empty[UserId])
-      verifySearch("moop@meep", Set.empty[UserId])*/
+    scenario("Return search results for name") {
+      verifySearch("rel", ids('d, 'e))
     }
-  }
 
-  // TODO: Turn into android-free tests or remove (some of them are reduntant now)
-  /*
-  feature("Exact handle match") {
-    scenario("Run exact handle match if the handle is not found locally") {
-      val service = stubService()
-      val signal = service.search(RecommendedHandle("@fasol"), Set.empty[UserId])
+    scenario("Return no search results for name") {
+      verifySearch("relt", Set.empty[UserId])
+    }
 
+    scenario("Return search results for handle") {
+      verifySearch("@rel", ids('d, 'e))
+    }
+
+    scenario("Return no search results for handle") {
+      verifySearch("@relt", Set.empty[UserId])
     }
 
   }
 
-    scenario("Schedule sync if no cached query is found") {
-      val result = search(Recommended("rel")).sink
-      forAsLongAs(250.millis)(result.current.value should have size 3).soon
-      syncRequest.value shouldEqual Recommended("rel")
+  feature("Search by searchState") {
+    scenario("search for top people"){
+      val expected = ids('g, 'h, 'i)
+      val queryCacheStorage = mock[SearchQueryCacheStorage]
+      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
+
+      val usersStorage = mock[UsersStorage]
+      (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
+        .expects(*, *, *, *).once().returning(Future.successful(expected.map(users).toVector))
+
+      val userService = stub[UserService]
+      (userService.acceptedOrBlockedUsers _).when().returns(Signal.const(Map.empty[UserId, UserData]))
+
+      val messagesStorage = mock[MessagesStorage]
+      (messagesStorage.countLaterThan _).expects(*, *).anyNumberOfTimes().returning(Future.successful(1L))
+
+      val service = stubService(queryCacheStorage = queryCacheStorage, userService = userService, usersStorage = usersStorage, messagesStorage = messagesStorage)
+      val res = service.search(SearchState("", false, None), Set.empty[UserId]).map(_.topPeople.map(_.map(_.id).toSet))
+
+      result(res.filter(_.exists(_ == expected)).head)
     }
 
-    scenario("Do not schedule another sync if cache is found") {
-      val result = search(Recommended("rel"), Some(2)).sink
-      forAsLongAs(250.millis)(result.current.value should have size 2).soon
-      syncRequest.value shouldEqual Recommended("rel")
-      syncRequest = None
+    scenario("search for local results"){
+      val expected = ids('g, 'h)
+      val query = Recommended("fr")
+      val queryCacheStorage = mock[SearchQueryCacheStorage]
+      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
+      val querySignal = new SourceSignal[Option[SearchQueryCache]]()
+      (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
 
-      val result2 = search(Recommended("rel"), Some(3)).sink
-      forAsLongAs(250.millis)(result2.current.value should have size 3).soon
-      syncRequest shouldBe None
-    }
+      val queryCache = SearchQueryCache(query, Instant.now, Some(Vector.empty[UserId]))
 
-    scenario("Return backend result if it isn't empty") {
-      onSync = backendResults(users.filter(_.name contains "user").filterNot(_.id == id('e)))
+      val usersStorage = mock[UsersStorage]
+      (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
+        .expects(*, *, *, *).once().returning(Future.successful(Vector.empty[UserData]))
 
-      val result = search(Recommended("user")).sink
-      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('a, 'b, 'd))).soon
-      syncRequest shouldBe defined
-    }
+      val userService = mock[UserService]
+      (userService.acceptedOrBlockedUsers _).expects().once().returning(Signal.const(expected.map(key => (key -> users(key))).toMap))
 
-    scenario("Return local result if backend result is empty") {
-      onSync = backendResults(Nil)
+      val convsUi = stub[ConversationsUiService]
+      (convsUi.findGroupConversations _).when(*, *, *).returns(Future.successful(IndexedSeq.empty[ConversationData]))
 
-      val result = search(Recommended("user")).sink
-      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e))).soon
-      syncRequest shouldBe defined
-    }
-
-    scenario("Refresh when cached results are expired") {
-      zms.searchQueryCache.insert(SearchQueryCache(SearchQuery.Recommended("user"), EPOCH, Some(ids('a, 'b, 'd, 'e))))
-
-      val result = search(Recommended("user")).sink
-      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('d, 'e))).soon
-      syncRequest shouldBe defined
-    }
-
-    scenario("DB search for email") {
-      val user = UserData(id('k), "quiet mouse").copy(email = Some(EmailAddress("sneaky@stealth.org")))
-      zms.db.withTransaction(UserDataDao.insertOrReplace(user)(_))
-
-      val result = search(Recommended("sneaky@stealth.org")).sink
-      forAsLongAs(250.millis)(result.current.value should contain theSameElementsAs(ids('k))).soon
-      syncRequest shouldBe defined
-    }
-    }
-    */
-
-/*
-  feature("Top people search") {
-    scenario("Return only connected users on top people search") {
-      val result = search(TopPeople).sink
-
-      within(1.second) {
-        result.current.value should contain theSameElementsAs(ids('g, 'h, 'i))
+      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning {
+        Future.successful(queryCache)
       }
+
+      val sync = mock[SyncServiceHandle]
+      (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
+        Future.successful[SyncId] {
+          querySignal ! Some(queryCache)
+          SyncId()
+        }
+      }
+
+      (usersStorage.listSignal _).expects(*).once().returning(Signal.const(Vector.empty[UserData]))
+
+      val service = stubService(queryCacheStorage = queryCacheStorage, userService = userService, usersStorage = usersStorage, convsUi = convsUi, sync = sync)
+      val res = service.search(SearchState("fr", false, None), Set.empty[UserId]).map(_.localResults.map(_.map(_.id).toSet))
+      querySignal ! None
+
+      result(res.filter(_.exists(_ == expected)).head)
+    }
+
+    scenario("search for remote results") {
+      val expected = ids('a, 'b)
+      val query = Recommended("ot")
+      val queryCacheStorage = mock[SearchQueryCacheStorage]
+      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
+      val querySignal = new SourceSignal[Option[SearchQueryCache]]()
+      (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
+
+      val queryCache = SearchQueryCache(query, Instant.now, Some(expected.toVector))
+
+      val usersStorage = mock[UsersStorage]
+      (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
+        .expects(*, *, *, *).once().returning(Future.successful(Vector.empty[UserData]))
+
+      val userService = mock[UserService]
+      (userService.acceptedOrBlockedUsers _).expects().once().returning(Signal.const(Map.empty[UserId, UserData]))
+
+      val convsUi = stub[ConversationsUiService]
+      (convsUi.findGroupConversations _).when(*, *, *).returns(Future.successful(IndexedSeq.empty[ConversationData]))
+
+      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning {
+        Future.successful(queryCache)
+      }
+
+      val sync = mock[SyncServiceHandle]
+      (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
+        Future.successful[SyncId] {
+          querySignal ! Some(queryCache)
+          SyncId()
+        }
+      }
+
+      (usersStorage.listSignal _).expects(expected.toVector).once().returning(Signal.const(expected.map(users).toVector))
+
+      val service = stubService(queryCacheStorage = queryCacheStorage, userService = userService, usersStorage = usersStorage, convsUi = convsUi, sync = sync)
+
+      val res = service.search(SearchState("ot", false, None), Set.empty[UserId]).map(_.directoryResults.map(_.map(_.id).toSet))
+
+      querySignal ! None
+
+      result(res.filter(_.exists(_ == expected)).head)
     }
   }
 
-  def backendResults(results: Seq[UserData]): SearchQuery => Future[Unit] = { query =>
-    service.updateSearchResults(query, results.map { r =>
-      UserSearchEntry(r.id, r.name, Some(r.accent), handle = r.handle.get)
-    })
-  }
-
-
-  */
 }

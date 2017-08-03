@@ -51,7 +51,7 @@ trait UserService {
   def getUser(id: UserId): Future[Option[UserData]]
   def syncIfNeeded(users: UserData*): Future[Unit]
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
-  val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
+  def acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
 }
 
 class UserServiceImpl(override val selfUserId: UserId,
