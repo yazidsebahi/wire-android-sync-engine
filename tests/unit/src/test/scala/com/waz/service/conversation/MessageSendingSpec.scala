@@ -19,105 +19,114 @@ package com.waz.service.conversation
 
 import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
 import android.graphics.BitmapFactory
 import com.waz._
 import com.waz.api.Message.Status
 import com.waz.api.MessageContent.Image
 import com.waz.api.{Message, MessageContent}
+import com.waz.content.{AssetsStorage, ConversationStorage, MembersStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.Text
 import com.waz.model._
-import com.waz.service.StorageModule
+import com.waz.service._
+import com.waz.service.assets.AssetService
+import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.SyncServiceHandle
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.threading.Threading
 import com.waz.utils.IoUtils.{toByteArray, withResource}
 import com.waz.utils._
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.DB
 import org.robolectric.shadows.ShadowLog
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.BeforeAndAfter
 import org.threeten.bp.Instant
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.Random
+import scala.collection.mutable
 
-class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+class MessageSendingSpec extends AndroidFreeSpec with BeforeAndAfter { test =>
   implicit lazy val dispatcher = Threading.Background
 
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("user 1")
 
-  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
-
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
-
   var messageSync = None: Option[MessageId]
   var assetSync = None: Option[AssetId]
   var lastReadSync = None: Option[(ConvId, Instant)]
-
-  lazy val global = new MockGlobalModule {
-    override lazy val factory: MockZMessagingFactory = new MockZMessagingFactory(this) {
-      override def baseStorage(accountId: AccountId): StorageModule = new StorageModule(context, accountId, Random.nextInt().toHexString, prefs)
-    }
-  }
-
-  lazy val service = new MockZMessaging(new MockAccountManager(new MockAccountsService(global)), selfUserId = selfUser.id) {
-
-    override lazy val sync = new EmptySyncService {
-      override def postMessage(id: MessageId, conv: ConvId, time: Instant) = {
-        messageSync = Some(id)
-        super.postMessage(id, conv, time)
-      }
-
-      override def postLastRead(id: ConvId, time: Instant) = {
-        test.lastReadSync = Some((id, time))
-        super.postLastRead(id, time)
-      }
-    }
-
-    insertUsers(Seq(selfUser, user1))
-  }
-
-  lazy val ui = new MockUiModule(service)
 
   before {
     messageSync = None
     assetSync = None
     lastReadSync = None
-    service.insertConv(conv)
   }
 
   after {
     ShadowLog.stream = null
-    service.deleteAllConvs()
   }
-  
-  def listMessages = service.listMessages(conv.id)
 
-  def getMessage(id: MessageId) = Await.result(service.messagesStorage.getMessage(id), 1.second)
-  
-  def sendMessage(content: MessageContent): MessageData = {
+
+  private def stubService(
+    assets:          AssetService                 = stub[AssetService],
+    users:           UserService                  = stub[UserService],
+    usersStorage:    UsersStorage                 = stub[UsersStorage],
+    messages:        MessagesService              = stub[MessagesService],
+    messagesContent: MessagesContentUpdater       = null, //stub[MessagesContentUpdater],
+    members:         MembersStorage               = stub[MembersStorage],
+    assetStorage:    AssetsStorage                = null, //stub[AssetsStorage],
+    convsContent:    ConversationsContentUpdater  = stub[ConversationsContentUpdater],
+    convStorage:     ConversationStorage          = stub[ConversationStorage],
+    network:         NetworkModeService           = stub[NetworkModeService],
+    convs:           ConversationsService         = null, //stub[ConversationsService],
+    sync:            SyncServiceHandle            = stub[SyncServiceHandle],
+    lifecycle:       ZmsLifecycle                 = stub[ZmsLifecycle],
+    errors:          ErrorsService                = null //stub[ErrorsService]
+  ) = new ConversationsUiServiceImpl(
+    UserId(), assets, users, usersStorage, messages, messagesContent, members,
+    assetStorage, convsContent, convStorage, network, convs, sync, lifecycle, errors
+  )
+
+  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
+  private val messagesList = mutable.ListBuffer[MessageData]()
+  def listMessages = messagesList.filter(_.convId == conv.id)
+
+  def getMessage(id: MessageId) = messagesList.find(_.id == id)
+/*
+  def sendMessage(convsUi: ConversationsUiService, content: MessageContent): MessageData = {
     val count = listMessages.size
-    val msg = Await.result(service.convsUi.sendMessage(conv.id, content), 1.second)
+    val msg = Await.result(convsUi.sendMessage(conv.id, content), 1.second)
     listMessages should have size (count + 1)
     msg.get
-  }
+  }*/
 
   feature("Text messages") {
     scenario("Add text message") {
-      val msg = sendMessage(new MessageContent.Text("test"))
+      val messages = mock[MessagesService]
+      val mId = MessageId()
+      (messages.addTextMessage _).expects(conv.id, "test", Map.empty[UserId, String]).once().returning(
+        Future { MessageData(mId, conv.id, Message.Type.TEXT, UserId(), MessageData.textContent("test"), protos = Seq(GenericMessage(mId.uid, Text("test", Map.empty, Nil)))) }
+      )
+
+      val convsUi = stubService(messages = messages)
+
+      val count = listMessages.size
+      val msg = Await.result(convsUi.sendMessage(conv.id, "test"), 1.second).get
+      listMessages should have size (count + 1)
       msg.contentString shouldEqual "test"
       messageSync shouldEqual Some(msg.id)
       msg.state shouldEqual Message.Status.PENDING
 
-      withEvent(service.messagesStorage.messageChanged) { case _ => true } {
+      /*withEvent(service.messagesStorage.messageChanged) { case _ => true } {
         service.dispatchEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, new Date(), selfUser.id, "test"))
-      }
-      getMessage(msg.id).map(_.state) shouldEqual Some(Status.SENT)
+      }*/
+      //getMessage(msg.id).map(_.state) shouldEqual Some(Status.SENT)
     }
   }
-
+/*
   feature("Image messages") {
     def imageStream = getClass.getResourceAsStream("/images/penguin.png")
 
@@ -154,7 +163,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       updateCount = 0
 
       service.dispatchEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, msg.time.javaDate, selfUser.id, "test"))
-      awaitUi(200.millis)
+      Thread.sleep(200L)
       val e = getMessage(msg.id).get
       e.state shouldEqual Message.Status.SENT
 
@@ -221,7 +230,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     scenario("Sent message should be marked as read") {
       service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 1"))
       service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 2"))
-      awaitUi(100.millis)
+      Thread.sleep(100L)
 
       val msg = sendMessage(new MessageContent.Text("test"))
       msg.contentString shouldEqual "test"
@@ -233,7 +242,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     scenario("Mark posted message read once it's synced with same id sequence") {
       service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 1"))
       service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 2"))
-      awaitUi(100.millis)
+      Thread.sleep(100L)
 
       val msg = sendMessage(new MessageContent.Text("test"))
       Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(msg.time)
@@ -249,7 +258,7 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
     scenario("Change last read even when unreadCount > 0") {
       service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 1"))
       service.dispatchEvent(textMessageEvent(Uid(), conv.remoteId, new Date(), selfUser.id, "test 2"))
-      awaitUi(100.millis)
+      Thread.sleep(100L)
 
       val msg = sendMessage(new MessageContent.Text("test"))
       Await.result(service.convsStorage.update(conv.id, _.copy(unreadCount = 1)), 1.second)
@@ -262,5 +271,5 @@ class MessageSendingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
       Await.result(service.convsStorage.get(conv.id), 1.second).map(_.lastRead) shouldEqual Some(time.instant)
       lastReadSync shouldEqual None
     }
-  }
+  }*/
 }

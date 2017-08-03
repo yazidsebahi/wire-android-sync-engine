@@ -116,13 +116,13 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 
   override def getVerified: Verification = data.verified
 
-  def setConversationName(name: String) = conversations.setName(id, name.trim)
+  def setConversationName(name: String) = ??? //conversations.setName(id, name.trim)
 
   override def addMembers(users: java.lang.Iterable[_ <: api.User]): Unit = conversations.addMembers(id, users.asScala.toList)
 
   override def removeMember(user: api.User): Unit = conversations.removeMember(id, user)
 
-  override def leave(): Unit = conversations.leave(id)
+  override def leave(): Unit = ??? //conversations.leave(id)
 
   override def getOtherParticipant: api.User = {
     if ((data ne ConversationData.Empty) && data.convType != ONE_TO_ONE && data.convType != WAIT_FOR_CONNECTION && data.convType != INCOMING_CONNECTION)
@@ -137,7 +137,7 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 
   override def getInputStateIndicator: InputStateIndicator = ui.cached(Uris.InputStateIndicatorUri(id), new InputStateIndicator(id))
 
-  override def clear(): Unit = conversations.clear(id)
+  override def clear(): Unit = ??? //conversations.clear(id)
 
   override def toString: String = s"Conversation($id, $name, $data)"
 

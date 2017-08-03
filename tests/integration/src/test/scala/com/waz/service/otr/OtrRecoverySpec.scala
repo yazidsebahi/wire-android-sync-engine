@@ -19,7 +19,6 @@ package com.waz.service.otr
 
 import java.io.{ByteArrayInputStream, File}
 
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.service.RemoteZmsSpec
 import com.waz.testutils.Implicits._
@@ -60,10 +59,12 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
         zmessaging.otrClientsService.getSelfClient should eventually(be('defined))
       }
 
-      conv.sendMessage(new MessageContent.Text("Test message"))
+      zmessaging.convsUi.sendMessage(conv.id, "Test message")
 
       conv.getId shouldEqual provisionedUserId("auto2").str
-      awaitUiFuture(auto2.findConv(conv.data.remoteId).map(_.sendMessage(new Text("Test message 1"))))
+      awaitUiFuture(auto2.findConv(conv.data.remoteId).map { c =>
+        zmessaging.convsUi.sendMessage(c.id, "Test message 1")
+      })
 
       withDelay {
         msgs.map(_.contentString) should contain allOf("Test message", "Test message 1")
@@ -135,7 +136,7 @@ class OtrRecoverySpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       val conv2 = awaitUiFuture(auto2_1.findConv(conv.data.remoteId)).get
       def msgs2 = listMessages(conv2.id)
 
-      conv.sendMessage(new MessageContent.Text("Test message 2"))
+      zmessaging.convsUi.sendMessage(conv.id, "Test message 2")
 
       withDelay {
         auto2Clients should have size 2 // login with broken cryptobox created new device

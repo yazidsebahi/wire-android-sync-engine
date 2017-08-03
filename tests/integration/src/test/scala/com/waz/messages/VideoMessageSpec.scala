@@ -49,7 +49,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
     auto2 ? AwaitSyncCompleted should eventually(be(Successful))
     (messages should have size 1).soon
-    conv.sendMessage(new MessageContent.Text("meep"))
+    zmessaging.convsUi.sendMessage(conv.id, "meep")
     (messages should have size 2).soon
   }
 
@@ -58,8 +58,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       val fromBefore = messages.size
       val video = videoForUpload
       isDownloadingFromProvider += video.cacheKey
-
-      conv.sendMessage(new MessageContent.Asset(video, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, video, DoNothingAndProceed)
 
       within(1.second)(messages should have size (fromBefore + 1))
 
@@ -102,7 +101,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       reusableLatch.ofSize(1) { latch =>
-        conv.sendMessage(new MessageContent.Asset(video, DoNothingAndProceed))
+        zmessaging.convsUi.sendMessage(conv.id, video, DoNothingAndProceed)
         within(1.second)(messages should have size (fromBefore + 1))
 
         soon {
@@ -129,7 +128,7 @@ class VideoMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       lazy val asset = new com.waz.api.impl.Asset(msg.assetId, msg.id)
 
       reusableLatch.ofSize(1) { latch =>
-        conv.sendMessage(new MessageContent.Asset(video, DoNothingAndProceed))
+        zmessaging.convsUi.sendMessage(conv.id, video, DoNothingAndProceed)
         within(1.second)(messages should have size (fromBefore + 1))
 
         soon {

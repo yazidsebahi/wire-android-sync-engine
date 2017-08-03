@@ -22,10 +22,8 @@ import java.util
 import akka.pattern.ask
 import com.waz.api.MediaAsset.StreamingCallback
 import com.waz.api.Message.Part
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.provision.ActorMessage.{AwaitSyncCompleted, Login, SendText, Successful}
-import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils.returning
@@ -69,8 +67,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
     scenario("Send message with single web link") {
       val count = msgs.size
-
-      conv.sendMessage(new Text("http://www.wire.com"))
+      zmessaging.convsUi.sendMessage(conv.id, "http://www.wire.com")
 
       withDelay {
         msgs should have size (count + 1)
@@ -86,7 +83,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
     scenario("Send message with facebook link") {
       val count = msgs.size
 
-      conv.sendMessage(new Text("Http://Facebook.com"))
+      zmessaging.convsUi.sendMessage(conv.id, "Http://Facebook.com")
 
       withDelay {
         msgs should have size (count + 1)
@@ -101,8 +98,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
     scenario("Send message with text and link") {
       val count = msgs.size
-
-      conv.sendMessage(new Text("test http://www.github.com"))
+      zmessaging.convsUi.sendMessage(conv.id, "test http://www.github.com")
 
       withDelay {
         msgs should have size (count + 1)

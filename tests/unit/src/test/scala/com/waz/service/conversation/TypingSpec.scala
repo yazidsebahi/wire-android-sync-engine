@@ -22,7 +22,7 @@ import java.util.Date
 import com.waz._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.service.{StorageModule, Timeouts, ZmsLifecycle}
+import com.waz.service.{StorageModule, Timeouts, ZmsLifecycle, ZmsLifecycleImpl}
 import com.waz.testutils.EmptySyncService
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventContext
@@ -47,7 +47,7 @@ class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with Robo
     convsStorage.insert(conv)
   }
 
-  lazy val lifecycle = new ZmsLifecycle {
+  lazy val lifecycle: ZmsLifecycle = new ZmsLifecycleImpl {
     setLoggedIn(true)
     acquireUi()
   }

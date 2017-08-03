@@ -18,7 +18,6 @@
 package com.waz.messages
 
 import akka.pattern.ask
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.model.MessageData
 import com.waz.provision.ActorMessage._
@@ -92,7 +91,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     }
 
     scenario("Send new text message") {
-      conv.sendMessage(new Text("test msg to recall"))
+      zmessaging.convsUi.sendMessage(conv.id, "test msg to recall")
       withDelay {
         msgs should have size 2
         msgs.last.state shouldEqual Message.Status.SENT
@@ -107,7 +106,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     }
 
     scenario("Send another message") {
-      conv.sendMessage(new Text("second recall"))
+      zmessaging.convsUi.sendMessage(conv.id, "second recall")
       withDelay {
         msgs should have size 2
         msgs.last.state shouldEqual Message.Status.SENT
@@ -133,7 +132,7 @@ class DeleteMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll
     }
 
     scenario("Send and recall link message") {
-      conv.sendMessage(new Text("http://wire.com"))
+      zmessaging.convsUi.sendMessage(conv.id, "http://wire.com")
       withDelay { msgs should have size 3 }
       val msg = msgs.last
       zmessaging.convsUi.recallMessage(conv.id, msgs.last.id)

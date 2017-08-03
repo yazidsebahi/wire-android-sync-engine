@@ -75,8 +75,6 @@ class RemoteZms(ui: UiModule) extends ZMessagingApi()(ui) {
     case None => Future.successful(Vector.empty[MessageData])
   }, 5.seconds)
 
-
-  def postMessage(conv: RConvId, msg: MessageContent) = findConv(conv).map { _.sendMessage(msg) }
 }
 
 trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Suite with ApiSpec =>

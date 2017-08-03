@@ -43,7 +43,7 @@ class WebSocketClientServiceSpec extends FeatureSpec with Matchers with Robolect
     }
   }
 
-  lazy val lifecycle = new ZmsLifecycle
+  lazy val lifecycle: ZmsLifecycle = new ZmsLifecycleImpl
   lazy val network = new DefaultNetworkModeService(context, lifecycle)
   lazy val prefs = GlobalPreferences(context)
   lazy val meta = new MetaDataService(context)

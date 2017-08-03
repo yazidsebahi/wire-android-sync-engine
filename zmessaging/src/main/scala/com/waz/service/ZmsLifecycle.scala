@@ -20,11 +20,33 @@ package com.waz.service
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.Threading
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, Signal, SourceSignal}
 
 import scala.concurrent.Future
 
-class ZmsLifecycle extends EventContext {
+trait ZmsLifecycle extends EventContext {
+  def active: Signal[Boolean]
+  def uiActive: Signal[Boolean]
+  def lifecycleState: SourceSignal[LifecycleState]
+
+  def isUiActive: Boolean
+
+  def acquireSync(source: String = ""): Unit
+  def acquirePush(source: String = ""): Unit
+  def acquireUi(source: String = ""): Unit
+
+  def setLoggedIn(loggedIn: Boolean): Unit
+
+  def releaseSync(source: String = ""): Unit
+  def releasePush(source: String = ""): Unit
+  def releaseUi(source: String = ""): Unit
+
+  def withSync[Result](body: => Future[Result])(implicit source: LogTag): Future[Result]
+  def withPush[Result](body: => Future[Result])(implicit source: LogTag): Future[Result]
+  def withUi[Result](body: => Future[Result])(implicit source: LogTag): Future[Result]
+}
+
+class ZmsLifecycleImpl extends ZmsLifecycle {
   val lifecycleState = Signal(LifecycleState.Stopped)
   val uiActive = lifecycleState.map(_ == LifecycleState.UiActive)
   def active = lifecycleState.map(st => st == LifecycleState.UiActive || st == LifecycleState.Active)

@@ -18,7 +18,6 @@
 package com.waz.mocked.messages
 
 import com.waz.RobolectricUtils
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.mocked.{MockBackend, SystemTimeline}
@@ -77,7 +76,7 @@ class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeA
 
     scenario("Retry when post fails with server error") {
       postMessageResponse = serverError
-      conv.sendMessage(new Text("test"))
+      zmessaging.convsUi.sendMessage(conv.id, "test")
 
       withDelay { listMessages(conv.id) should have size 9 }
 
@@ -100,7 +99,7 @@ class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeA
     scenario("Mark message failed after sending timeout") {
       sendingTimeout = 5.seconds
       postMessageResponse = serverError
-      conv.sendMessage(new Text("test 1"))
+      zmessaging.convsUi.sendMessage(conv.id, "test 1")
 
       withDelay { listMessages(conv.id) should have size 10 }
 
@@ -120,7 +119,7 @@ class PostMessageSpec extends FeatureSpec with Matchers with Inside with BeforeA
       val inputState = conv.getInputStateIndicator
       inputState.textChanged()
       awaitUi(1.second)
-      conv.sendMessage(new Text("test 2"))
+      zmessaging.convsUi.sendMessage(conv.id, "test 2")
       inputState.textCleared()
 
       withDelay { listMessages(conv.id) should have size 11 }
