@@ -26,7 +26,7 @@ import com.waz.api
 import com.waz.api.ConversationsList.{ConversationCallback, VerificationStateCallback}
 import com.waz.api.impl.ConversationsListState.Data
 import com.waz.api.impl.conversation.{BaseConversationsList, SelfConversation}
-import com.waz.api.{IConversation, LoadHandle}
+import com.waz.api.{IConversation, LoadHandle, User}
 import com.waz.content.Uris
 import com.waz.content.Uris.{SelfConversationUri, SyncIndicatorUri}
 import com.waz.model.ConversationData.ConversationType
@@ -73,8 +73,8 @@ class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList
 
   override protected val conversations: Conversations = ui.convs
 
-  override def createGroupConversation(users: Iterable[_ <: api.User], callback: ConversationCallback): Unit =
-    conversations.createGroupConversation(users.asScala.toSeq) .map { conv =>
+  override def createGroupConversation(users: Seq[api.User], callback: ConversationCallback): Unit =
+    conversations.createGroupConversation(users) .map { conv =>
       callback.onConversationsFound(Seq(conversations.getConversation(conv).asInstanceOf[IConversation]).asJava)
     } (Threading.Ui) .recoverWithLog()
 
@@ -98,6 +98,7 @@ class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList
   override def getState = ui.cached(Uris.ConversationsStateUri, new ConversationsListState)
 
   override def onVerificationStateChange(callback: VerificationStateCallback): Unit = conversations.onVerificationStateChange(callback)
+
 }
 
 object ConversationsList {

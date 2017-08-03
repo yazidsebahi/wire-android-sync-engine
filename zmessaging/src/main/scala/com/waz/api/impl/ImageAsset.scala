@@ -24,17 +24,15 @@ import android.media.ExifInterface
 import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.BitmapCallback.BitmapLoadingFailed.{DOWNLOAD_FAILED, DOWNLOAD_ON_WIFI_ONLY}
 import com.waz.api.ImageAsset.SaveCallback
-import com.waz.api.{BitmapCallback, LoadHandle}
 import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
+import com.waz.api.{BitmapCallback, LoadHandle}
 import com.waz.bitmap.BitmapUtils
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import com.waz.service.downloads.DownloaderService.DownloadOnWifiOnlyException
 import com.waz.service.images.{BitmapSignal, ImageLoader}
 import com.waz.threading.Threading
 import com.waz.ui.MemoryImageCache.BitmapRequest
@@ -71,7 +69,6 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
 
   protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
     BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.assetsStorage.get) }, callback)
-
 
   override def isEmpty: Boolean = false
 
@@ -239,10 +236,7 @@ object ImageAsset {
         }
       case LoadingFailed(ex) =>
         warn(s"bitmap loading failed", ex)
-        callback.onBitmapLoadingFailed(ex match {
-          case DownloadOnWifiOnlyException => DOWNLOAD_ON_WIFI_ONLY
-          case _ => DOWNLOAD_FAILED
-        })
+        callback.onBitmapLoadingFailed()
       case BitmapResult.Empty =>
         verbose(s"ignoring empty bitmap")
     })

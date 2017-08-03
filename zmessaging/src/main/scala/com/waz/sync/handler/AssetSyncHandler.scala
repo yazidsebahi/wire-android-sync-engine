@@ -17,8 +17,8 @@
  */
 package com.waz.sync.handler
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse._
 import com.waz.cache.CacheService
 import com.waz.model.AssetStatus.UploadInProgress
@@ -29,7 +29,11 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.ZNetClient._
 
-class AssetSyncHandler(cache: CacheService, client: AssetClient, assets: AssetService, otrSync: OtrSyncHandler) {
+class AssetSyncHandler(cache:   CacheService,
+                       client:  AssetClient,
+                       assets:  AssetService,
+                       otrSync: OtrSyncHandler) {
+
   import Threading.Implicits.Background
 
   def uploadAssetData(assetId: AssetId, public: Boolean = false): ErrorOrResponse[Option[AssetData]] =
@@ -42,7 +46,9 @@ class AssetSyncHandler(cache: CacheService, client: AssetClient, assets: AssetSe
         CancellableFuture.successful(Right(None))
       case (Some(asset), Some(data)) =>
         otrSync.uploadAssetDataV3(data, if (public) None else Some(AESKey()), asset.mime).flatMap {
-          case Right(remoteData) => CancellableFuture.lift(assets.updateAsset(asset.id, _.copyWithRemoteData(remoteData)).map { Right(_) })
+          case Right(remoteData) => CancellableFuture.lift(assets.updateAsset(asset.id, _.copyWithRemoteData(remoteData)).map {
+            Right(_)
+          })
           case Left(err) => CancellableFuture successful Left(err)
         }
       case (Some(asset), None) =>

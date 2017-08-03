@@ -272,12 +272,12 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
         }
         else Future.successful({})
       val wifiDownload =
-        if (!currentPrefs.contains(DownloadImagesOnWifiOnly.str)) {
+        if (!currentPrefs.contains(DownloadImagesAlways.str)) {
           val enabled = gPrefs.getFromPref(GlobalPreferences._DownloadImages) match {
             case "always" => false
             case "wifi" => true
           }
-          setValue(DownloadImagesOnWifiOnly, enabled)
+          setValue(DownloadImagesAlways, enabled)
         }
         else Future.successful({})
 
@@ -325,7 +325,7 @@ object GlobalPreferences {
   lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")
   lazy val _SoundsPrefKey              = PrefKey[String] ("PREF_KEY_SOUND")
   lazy val _AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
-  lazy val _DownloadImages             = PrefKey[String]("zms_pref_image_download") // hardcoded value used in tests
+  lazy val _DownloadImages             = PrefKey[String]("zms_pref_image_download")
 
 }
 
@@ -338,7 +338,9 @@ object UserPreferences {
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
   lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
   lazy val AnalyticsEnabled         = PrefKey[Boolean]       ("analytics_enabled", customDefault = true)
-  lazy val DownloadImagesOnWifiOnly = PrefKey[Boolean]       ("download_images_on_wifi_only")
+
+  //Note - at some point this variable got out of sync, so the name of the preference-string itself is off - not worth migrating by itself.
+  lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_on_wifi_only", customDefault = true)
 
   lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")
   lazy val SelectedConvId          = PrefKey[Option[ConvId]]      ("selected_conv_id")

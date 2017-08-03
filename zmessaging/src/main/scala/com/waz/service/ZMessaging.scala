@@ -26,10 +26,10 @@ import com.waz.content.{MembersStorageImpl, UsersStorageImpl, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
-import com.waz.service.assets.{AssetLoader, AssetService, RecordAndPlayService}
+import com.waz.service.assets._
 import com.waz.service.call._
 import com.waz.service.conversation._
-import com.waz.service.downloads.AssetDownloader
+import com.waz.service.downloads.{AssetLoader, AssetLoaderImpl, AssetLoaderService}
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
 import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
@@ -121,7 +121,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def permissions       = global.permissions
   def phoneNumbers      = global.phoneNumbers
   def prefs             = global.prefs
-  def downloader        = global.downloader
   def bitmapDecoder     = global.bitmapDecoder
   def timeouts          = global.timeouts
   def cache             = global.cache
@@ -133,10 +132,10 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def backend           = global.backend
   def accountsStorage   = global.accountsStorage
   def teamsStorage      = global.teamsStorage
-  def streamLoader      = global.streamLoader
-  def videoLoader       = global.videoLoader
-  def pcmAudioLoader    = global.pcmAudioLoader
+  def videoTranscoder   = global.videoTranscoder
+  def audioTranscader   = global.audioTranscoder
   def avs               = global.avs
+  def loadService       = global.loaderService
 
   def db                = storage.db
   def userPrefs         = storage.userPrefs
@@ -180,9 +179,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val convsContent: ConversationsContentUpdaterImpl = wire[ConversationsContentUpdaterImpl]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
 
-  lazy val assetDownloader = wire[AssetDownloader]
-  lazy val assetLoader     = wire[AssetLoader]
-  lazy val imageLoader     = wire[ImageLoader]
+  lazy val assetLoader:     AssetLoader           = wire[AssetLoaderImpl]
+  lazy val imageLoader                            = wire[ImageLoader]
 
   lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
   lazy val pushToken: PushTokenService                = wire[PushTokenService]
@@ -194,7 +192,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val userSearch                                 = wire[UserSearchService]
   lazy val assetGenerator                             = wire[ImageAssetGenerator]
   lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
-  lazy val assets: AssetService                       = wire[AssetService]
+  lazy val assets: AssetService                       = wire[AssetServiceImpl]
   lazy val users: UserServiceImpl                     = wire[UserServiceImpl]
   lazy val conversations: ConversationsService        = wire[ConversationsService]
   lazy val convsNotifier                              = wire[ConversationsNotifier]
