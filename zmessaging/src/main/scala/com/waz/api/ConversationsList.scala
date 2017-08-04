@@ -52,7 +52,7 @@ trait ConversationsList extends CoreList[IConversation] with EventualReadiness {
   def getConversation(id: String, callback: ConversationsList.ConversationCallback): LoadHandle
   def getConversationIndex(id: String): Int
 
-  def createGroupConversation(users: java.lang.Iterable[_ <: User], callback: ConversationsList.ConversationCallback): Unit
+  def createGroupConversation(users: Seq[User], callback: ConversationsList.ConversationCallback): Unit
 
   def getSyncIndicator: SyncIndicator
   def getState: ConversationsList.ConversationsListState

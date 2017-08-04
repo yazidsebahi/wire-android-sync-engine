@@ -17,38 +17,44 @@
  */
 package com.waz.sync
 
-import android.content.Context
+import android.util.Log
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.SyncState
+import com.waz.api.ZmsVersion
 import com.waz.api.impl.SyncIndicator
-import com.waz.content.ZmsDatabase
 import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.{NetworkModeService, ReportingService, ZmsLifecycle}
 import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
-import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler}
+import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler, SyncSchedulerImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
+import com.waz.utils.wrappers.Context
 
 import scala.concurrent.Future
 
 trait SyncRequestService {
   def scheduler: SyncScheduler
+  def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId]
 }
 
 
-class SyncRequestServiceImpl(context: Context, accountId: AccountId, storage: ZmsDatabase, network: NetworkModeService, sync: => SyncHandler, reporting: ReportingService, lifecycle: ZmsLifecycle) extends SyncRequestService {
+class SyncRequestServiceImpl(context:   Context,
+                             accountId: AccountId,
+                             content:   SyncContentUpdater,
+                             network:   NetworkModeService,
+                             sync: =>   SyncHandler,
+                             reporting: ReportingService,
+                             lifecycle: ZmsLifecycle) extends SyncRequestService {
 
   private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
-  val content = new SyncContentUpdater(storage)
-  override val scheduler = new SyncScheduler(context, accountId, content, network, this, sync, lifecycle)
+  override val scheduler: SyncScheduler = new SyncSchedulerImpl(context, accountId, content, network, this, sync, lifecycle)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>
-      pw.println("SyncJobs:")
+      pw.println(s"SyncJobs for account $accountId:")
       jobs.toSeq.sortBy(_.timestamp) foreach { job =>
         pw.println(job.toString)
       }
@@ -58,13 +64,39 @@ class SyncRequestServiceImpl(context: Context, accountId: AccountId, storage: Zm
     }
   }
 
-  def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId] = content.addSyncJob(job, forceRetry).map(_.id)
+  override def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId] = content.addSyncJob(job, forceRetry).map(_.id)
 
-  def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] =
-    content.syncJobs map { _.values.filter(job => matchers.exists(_.apply(job))) } map { jobs =>
-      val state = if (jobs.isEmpty) SyncState.COMPLETED else jobs.minBy(_.state.ordinal()).state
+  def listJobs = content.syncJobs.map(_.values.toSeq.sortBy(j => (j.timestamp, j.priority)))
+
+  //only print to AndroidLog directly - don't want to flood our internal log
+  def logJobs() = if (ZmsVersion.DEBUG) {
+    for {
+      rep  <- scheduler.reportString
+      jobs <- listJobs.head
+    } yield {
+      Log.d("SyncJobs", rep)
+      jobs.foreach { j =>
+        Log.d("SyncJobs", j.toString)
+      }
+    }
+  }
+
+  def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] = {
+    import SyncJob.State._
+    import com.waz.api.SyncState._
+    content.syncJobs.map {
+      _.values.filter(job => matchers.exists(_.apply(job)))
+    }.map { jobs =>
+      //TODO remove this and do something different on the UI
+      val state = (if (jobs.isEmpty) SyncJob.State.Completed else jobs.minBy(_.state.id).state) match {
+        case Syncing   => SYNCING
+        case Waiting   => WAITING
+        case Failed    => FAILED
+        case Completed => COMPLETED
+      }
       SyncIndicator.Data(state, api.SyncIndicator.PROGRESS_UNKNOWN, jobs.flatMap(_.error).toSeq)
     }
+  }
 }
 
 object SyncRequestServiceImpl {

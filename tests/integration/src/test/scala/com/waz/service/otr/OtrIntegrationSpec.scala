@@ -19,15 +19,13 @@ package com.waz.service.otr
 
 import akka.pattern.ask
 import android.graphics.{Bitmap, BitmapFactory}
-import com.waz.api.BitmapCallback.BitmapLoadingFailed
 import com.waz.api.Message.Status
 import com.waz.api.MessageContent.Image
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
-import com.waz.api.impl.Message
-import com.waz.testutils.BitmapSpy
 import com.waz.model.AssetId
 import com.waz.provision.ActorMessage._
+import com.waz.testutils.BitmapSpy
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.utils.IoUtils
@@ -239,7 +237,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
       a.getBitmap(500, new BitmapCallback() {
         override def onBitmapLoaded(b: Bitmap): Unit = full = Some(b)
-        override def onBitmapLoadingFailed(reason: BitmapLoadingFailed): Unit = failed = true
+        override def onBitmapLoadingFailed(): Unit = failed = true
       })
 
       withDelay {

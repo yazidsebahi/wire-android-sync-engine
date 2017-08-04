@@ -32,10 +32,7 @@ case class Handle(string: String) extends AnyVal{
     string == Handle.transliterated(Handle.stripSymbol(query)).toLowerCase
   }
 
-  def withSymbol: String = string match {
-    case Handle.handlePattern(_) => string
-    case _ => "@" + string
-  }
+  def withSymbol: String = if (string.startsWith("@")) string else s"@$string"
 }
 
 object Handle extends (String => Handle){
@@ -44,10 +41,7 @@ object Handle extends (String => Handle){
   val handlePattern = """@(.+)""".r
   def transliterated(s: String): String = Locales.transliteration.transliterate(s).trim
 
-  def containsSymbol(input: String): Boolean = input match {
-    case Handle.handlePattern(handle) => true
-    case _ => false
-  }
+  def isHandle(input: String): Boolean = input.startsWith("@")
 
   def stripSymbol(input: String): String = input match {
     case Handle.handlePattern(handle) => handle

@@ -36,16 +36,16 @@ class Search(implicit ui: UiModule) extends api.Search {
   }
   
   override def getGroupConversations(query: String, limit: Int): api.ConversationSearchResult = {
-    new ConversationSearchResult(query, limit, Handle.containsSymbol(query))
+    new ConversationSearchResult(query, limit, Handle.isHandle(query))
   }
   
   override def getContacts(query: String): api.Contacts =
     new Contacts(OnlyContactsBySearchKeyFiltering(SearchKey(query)))
   
   override def getConnectionsByName(query: String, limit: Int, filter: Array[String]): api.UserSearchResult =
-    new ConnectionsSearch(query, limit, filter, false, false, Handle.containsSymbol(query))
+    new ConnectionsSearch(query, limit, filter, false, false, Handle.isHandle(query))
   
     
   override def getConnectionsByNameOrEmailIncludingBlocked(query: String, limit: Int, filter: Array[String]): api.UserSearchResult =
-    new ConnectionsSearch(query, limit, filter, true, true, Handle.containsSymbol(query))
+    new ConnectionsSearch(query, limit, filter, true, true, Handle.isHandle(query))
 }

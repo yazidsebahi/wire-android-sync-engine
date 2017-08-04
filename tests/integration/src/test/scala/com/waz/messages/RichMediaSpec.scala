@@ -56,7 +56,7 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
     withDelay {
       conversations should not be empty
       msgs should not be empty
-      zmessaging.syncRequests.content.syncJobs.currentValue.map(_.isEmpty) shouldEqual Some(true)
+      zmessaging.syncContent.syncJobs.currentValue.map(_.isEmpty) shouldEqual Some(true)
     }
   }
 

@@ -82,14 +82,16 @@ object BitmapSignal {
 
   private[images] val signalCache = new WeakMemCache[Any, Signal[BitmapResult]]
 
-  def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, assets: AssetStore = EmptyAssetStore): Signal[BitmapResult] = {
+  /**
+    * @param forceDownload true for images that should be downloaded even when "DownloadImagesAlways" is set to false and the user is not on WIFI (true by default)
+    */
+  def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, assets: AssetStore = EmptyAssetStore, forceDownload: Boolean = true): Signal[BitmapResult] = {
     if (!asset.isImage) {
       warn(s"asset is not an image: $asset ")
       Signal(BitmapResult.Empty)
     }
     else {
-      warn(s"image asset taken through the cache")
-      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, assets))
+      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, assets, forceDownload))
     }
   }
 
@@ -107,11 +109,11 @@ object BitmapSignal {
     override def process(result: ABitmap, signal: BitmapSignal) = CancellableFuture.successful(())
   }
 
-  class MimeCheckLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore) extends Loader {
+  class MimeCheckLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore, forceDownload: Boolean) extends Loader {
     override type Data = Either[ABitmap, Gif]
 
-    lazy val gifLoader    = new GifLoader(asset, req, imageLoader, assets)
-    lazy val bitmapLoader = new AssetBitmapLoader(asset, req, imageLoader, assets)
+    lazy val gifLoader    = new GifLoader(asset, req, imageLoader, assets, forceDownload)
+    lazy val bitmapLoader = new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
 
     def detectMime(data: LocalData) = Threading.IO {IoUtils.withResource(data.inputStream)(in => Mime(BitmapUtils.detectImageType(in)))}
 
@@ -125,7 +127,7 @@ object BitmapSignal {
       case e: Throwable => None
     }
 
-    override def load(): CancellableFuture[Data] = imageLoader.loadRawImageData(asset) flatMap {
+    override def load(): CancellableFuture[Data] = imageLoader.loadRawImageData(asset, forceDownload) flatMap {
       case Some(data) => detectMime(data) flatMap {
         case Mime.Image.Gif => gifLoader.load() map (Right(_))
         case _ => bitmapLoader.load() map (Left(_))
@@ -171,7 +173,7 @@ object BitmapSignal {
     }
   }
 
-  class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore) extends BitmapLoader(req, imageLoader) {
+  class AssetBitmapLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore, forceDownload: Boolean) extends BitmapLoader(req, imageLoader) {
     override def id = asset.id
 
     def data = asset.previewId match {
@@ -199,10 +201,10 @@ object BitmapSignal {
       }
     }
 
-    override def load() = data flatMap { imageLoader.loadBitmap(_, initialReq) } map Bitmap.toAndroid
+    override def load() = data flatMap { imageLoader.loadBitmap(_, initialReq, forceDownload) } map Bitmap.toAndroid
   }
 
-  class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore) extends Loader {
+  class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore, forceDownload: Boolean) extends Loader {
     override type Data = Gif
 
     override def loadCached() = CancellableFuture.lift(imageLoader.hasCachedData(asset)).flatMap {
@@ -212,11 +214,11 @@ object BitmapSignal {
       case e: Throwable => None
     }
 
-    override def load() = imageLoader.loadGif(asset)
+    override def load() = imageLoader.loadGif(asset, forceDownload)
 
     override def process(gif: Gif, signal: BitmapSignal) = {
       if (gif.frames.length <= 1) {
-        val loader = new AssetBitmapLoader(asset, req, imageLoader, assets)
+        val loader = new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
         loader.load() flatMap {loader.process(_, signal)}
       } else {
         var etag = 0 // to make sure signal does not cache dispatched result
@@ -232,7 +234,7 @@ object BitmapSignal {
 // TODO: we could listen for AssetData changes and restart this signal,
 // this isn't really needed currently since ImageAsset will be updated and UI will restart this loading
 // but this could be useful in future, if UI forgets to reload or we could stop requiring them to do so
-class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: BitmapSignal.AssetStore) extends BitmapSignal(req) {
+class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: BitmapSignal.AssetStore, forceDownload: Boolean) extends BitmapSignal(req) {
   signal =>
 
   import BitmapSignal._
@@ -241,12 +243,12 @@ class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: Image
 
   override protected def loader(req: BitmapRequest): Loader =
     req match {
-      case Single(_, _) | Round(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, assets)
+      case Single(_, _) | Round(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
       case _ =>
         asset.mime match {
-          case Mime.Image.Unknown => new MimeCheckLoader(asset, req, imageLoader, assets)
-          case Mime.Image.Gif => new GifLoader(asset, req, imageLoader, assets)
-          case _ => new AssetBitmapLoader(asset, req, imageLoader, assets)
+          case Mime.Image.Unknown => new MimeCheckLoader(asset, req, imageLoader, assets, forceDownload)
+          case Mime.Image.Gif => new GifLoader(asset, req, imageLoader, assets, forceDownload)
+          case _ => new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
         }
     }
 }

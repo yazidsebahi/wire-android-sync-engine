@@ -38,16 +38,16 @@ object Intent {
   def apply(context: Context, clazz: Class[_]): Intent = util.apply(context, clazz)
 
   def scanFileIntent(uri: URI): Intent = util.scanFileIntent(uri: URI)
-}
-
-trait IntentUtil {
-  def apply(context: Context, clazz: Class[_]): Intent
 
   implicit def wrap(aIntent: AIntent): Intent = new AndroidIntent(aIntent)
   implicit def unwrap(intent: Intent): AIntent = intent match {
     case i:AndroidIntent => i.intent
     case _ => null
   }
+}
+
+trait IntentUtil {
+  def apply(context: Context, clazz: Class[_]): Intent
 
   def scanFileIntent(uri: URI): Intent
 }

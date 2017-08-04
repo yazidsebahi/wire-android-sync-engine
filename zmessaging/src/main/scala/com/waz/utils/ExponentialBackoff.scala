@@ -21,14 +21,20 @@ import scala.concurrent.duration._
 import scala.math.abs
 import scala.util.Random
 
+
+trait Backoff {
+  val maxRetries:  Int
+  def delay(retry: Int, minDelay: FiniteDuration = Duration.Zero): FiniteDuration
+}
+
 /**
  * Calculates retry delay using randomized exponential backoff strategy.
   */
-class ExponentialBackoff(initialDelay: FiniteDuration, maxDelay: FiniteDuration) {
+class ExponentialBackoff(initialDelay: FiniteDuration, maxDelay: FiniteDuration) extends Backoff {
 
-  val maxRetries = ExponentialBackoff.bitsCount(maxDelay.toMillis / math.max(initialDelay.toMillis, 1L))
+  override val maxRetries = ExponentialBackoff.bitsCount(maxDelay.toMillis / math.max(initialDelay.toMillis, 1L))
 
-  def delay(retry: Int, minDelay: FiniteDuration = Duration.Zero): FiniteDuration = {
+  override def delay(retry: Int, minDelay: FiniteDuration = Duration.Zero): FiniteDuration = {
     if (retry <= 0) initialDelay
     else if (retry >= maxRetries) randomized(maxDelay)
     else {
@@ -37,7 +43,7 @@ class ExponentialBackoff(initialDelay: FiniteDuration, maxDelay: FiniteDuration)
     }
   }
 
-  def randomized(delay: Duration) = {
+  private def randomized(delay: Duration) = {
     val ms = delay.toMillis / 2d
     (ms + abs(Random.nextDouble()) * ms).millis
   }

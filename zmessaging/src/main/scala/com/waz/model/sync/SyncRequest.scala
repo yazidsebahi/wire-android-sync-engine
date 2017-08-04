@@ -37,16 +37,20 @@ import scala.util.control.NonFatal
 sealed abstract class SyncRequest {
   val cmd: SyncCommand
 
+  /**
+    * Note, having a the same mergeKey does not guarantee a merge. It only guarantees that merge will be called if the mergeKeys
+    * match: merge may also need to be overridden.
+    */
   def mergeKey: Any = cmd
 
   /**
-   * Try merging, assuming that merge key is the same.
-   */
+    * Try merging, assuming that merge key is the same.
+    */
   def merge(req: SyncRequest): MergeResult[SyncRequest] = if (this == req) Merged(this) else Unchanged
 
   /**
-   * Checks if this requests is same or a part of given req.
-   */
+    * Checks if this requests is same or a part of given req.
+    */
   def isDuplicateOf(req: SyncRequest): Boolean = this == req
 }
 
@@ -93,7 +97,11 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(Merged(_))
   }
 
-  case class RegisterPushToken(token: PushToken) extends BaseRequest(Cmd.RegisterPushToken)
+  case class RegisterPushToken(token: PushToken) extends BaseRequest(Cmd.RegisterPushToken) {
+    override def merge(req: SyncRequest) = mergeHelper[RegisterPushToken](req) { r =>
+      Merged(this.copy(token = r.token))
+    }
+  }
 
   case class DeletePushToken(token: PushToken) extends BaseRequest(Cmd.DeletePushToken) {
     override val mergeKey: Any = (cmd, token)

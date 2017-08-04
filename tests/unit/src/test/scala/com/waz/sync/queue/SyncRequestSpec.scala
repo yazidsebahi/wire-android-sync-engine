@@ -15,27 +15,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.testutils
+package com.waz.sync.queue
 
-import android.graphics.Bitmap
-import com.waz.api.{BitmapCallback, ImageAsset, LoadHandle, UpdateListener}
+import com.waz.model.sync.SyncJob
+import com.waz.model.sync.SyncJob.Priority
+import com.waz.model.sync.SyncRequest.RegisterPushToken
+import com.waz.model.{PushToken, SyncId}
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.queue.SyncJobMerger.Merged
 
-class BitmapSpy(img: ImageAsset, size: Int = 600) {
-  var failed = false
-  var result = Option.empty[Bitmap]
+class SyncRequestSpec extends AndroidFreeSpec {
 
-  private var handle: LoadHandle = _
+  scenario("RegisterPushToken") {
 
-  load()
+    val job1 = SyncJob(SyncId(), RegisterPushToken(PushToken("token")), priority = Priority.High)
+    val job2 = SyncJob(SyncId(), RegisterPushToken(PushToken("token2")), priority = Priority.High)
 
-  img.addUpdateListener(new UpdateListener {
-    override def updated(): Unit = load()
-  })
-
-  private def load() = {
-    handle = img.getBitmap(size, new BitmapCallback {
-      override def onBitmapLoadingFailed(): Unit = failed = true
-      override def onBitmapLoaded(b: Bitmap): Unit = result = Option(b)
-    })
+    job1.merge(job2) shouldEqual Merged(job1.copy(request = job2.request))
   }
+
+
 }

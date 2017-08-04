@@ -92,7 +92,7 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
   }
 
   after {
-    awaitUi(zmessaging.syncRequests.content.listSyncJobs.await().isEmpty)
+    awaitUi(zmessaging.syncContent.listSyncJobs.await().isEmpty)
   }
 
   lazy val conversations = api.getConversations

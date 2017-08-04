@@ -84,7 +84,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
       val users = List("auto2", "auto3").map(k => api.getUser(provisionedUserId(k).str))
       val count = conversations.size()
       var conv = Option.empty[IConversation]
-      conversations.createGroupConversation(users.asJava, new ConversationCallback {
+      conversations.createGroupConversation(users, new ConversationCallback {
         override def onConversationsFound(conversations: Iterable[IConversation]): Unit = conv = conversations.asScala.headOption
       })
 
@@ -141,7 +141,7 @@ class ConversationsSpec extends FeatureSpec with Matchers with OptionValues with
       })
       val count = conversations.size()
       var msgs = Seq.empty[MessageData]
-      conversations.createGroupConversation(users.asJava, new ConversationCallback {
+      conversations.createGroupConversation(users, new ConversationCallback {
         override def onConversationsFound(conversations: Iterable[IConversation]): Unit =
           conversations.asScala.headOption foreach { c => msgs = listMessages(c.id) }
       })

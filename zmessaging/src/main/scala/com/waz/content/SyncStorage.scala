@@ -33,12 +33,12 @@ import scala.concurrent.duration._
  *
  * Warning - this is not thread safe
  */
-class SyncStorage(storage: ZmsDatabase, jobs: Seq[SyncJob]) {
+class SyncStorage(db: Database, jobs: Seq[SyncJob]) {
   import SyncStorage._
 
   private val jobsMap = new mutable.HashMap[SyncId, SyncJob]
 
-  val onAdded = new Publisher[SyncJob]
+  val onAdded   = new Publisher[SyncJob]
   val onUpdated = new Publisher[(SyncJob, SyncJob)] // (prev, updated)
   val onRemoved = new Publisher[SyncJob]
 
@@ -55,7 +55,7 @@ class SyncStorage(storage: ZmsDatabase, jobs: Seq[SyncJob]) {
           toAdd -= id
       }
     }
-    storage.withTransaction { implicit db =>
+    db.withTransaction { implicit db =>
       SyncJobDao.deleteEvery(toDelete)
       SyncJobDao.insertOrReplace(toAdd.values)
     }
