@@ -36,6 +36,8 @@ import scala.concurrent.Future
 
 class SyncRequestServiceSpec extends AndroidFreeSpec {
 
+  import com.waz.threading.Threading.Implicits.Background
+
   val accountId = AccountId()
   val context   = mock[Context]
   val db        = mock[Database]
