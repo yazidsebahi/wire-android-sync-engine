@@ -28,7 +28,7 @@ import com.waz.service.downloads.AssetLoader.DownloadException
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
-import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream, Signal}
+import com.waz.utils.events._
 import org.threeten.bp.Instant
 
 import scala.collection.mutable
@@ -105,7 +105,10 @@ class AssetLoaderService {
         cur.map { e =>
           verbose(s"Found existing for id: ${asset.id}, updating.")
           e.copy(asset = asset, force = e.force || force)
-        }.getOrElse(returning(LoadEntry(asset, loader, force))(onAdded ! _))
+        }.getOrElse {
+          verbose(s"No existing entry for: ${asset.id}, creating.")
+          returning(LoadEntry(asset, loader, force))(onAdded ! _)
+        }
       }
 
       returning(createOrUpdate(requests.get(asset.id))) { entry =>
@@ -126,16 +129,17 @@ class AssetLoaderService {
     verbose(s"queue: $queue")
 
     if (queue.nonEmpty && active.size < MaxConcurrentLoadRequests) {
-      val id = queue.dequeue().id //dequeue the entry. If it's not in requests, then we discard it - can happen after cancelling
-      requests.get(id).foreach { entry =>
-        verbose(s"starting load for $entry")
-        if (active(id)) error(s"entry was already active: $entry")
-        active += id
-        load(entry).onComplete { res =>
-          requests -= id
-          active -= id
-          checkQueue() //check queue again in case we're blocked and waiting (in which case we won't reach the next checkQueue call)
-        }
+      val id = queue.dequeue().id
+      requests.get(id).fold(verbose(s"De-queued load entry: $id has been cancelled - discarding")) { entry =>
+        if (active.add(id)) {
+          verbose(s"starting load for $entry")
+          load(entry).onComplete { res =>
+            requests -= id
+            active -= id
+            checkQueue() //check queue again in case we're blocked and waiting (in which case we won't reach the next checkQueue call)
+          }
+        } else
+          verbose(s"entry: $id was already active, doing nothing")
       }
       checkQueue() //effectively causes a while(queue.nonEmpty && active.size < MaxConcurrentLoadRequests)
     }
@@ -190,11 +194,13 @@ object AssetLoaderService {
   //var for tests
   var backoff: Backoff = new ExponentialBackoff(250.millis, 7.days)
 
-  private[downloads] case class LoadEntry(asset: AssetData, loader: AssetLoader, force: Boolean) {
-    val promise = Promise[(CacheEntry, Int)]()
-    val state = Signal(ProgressData.Unknown)
-    val time = clock.instant()
-
+  private[downloads] case class LoadEntry(asset:    AssetData,
+                                          loader:   AssetLoader,
+                                          force:    Boolean,
+                                          promise:  Promise[(CacheEntry, Int)] = Promise[(CacheEntry, Int)](),
+                                          state:    SourceSignal[ProgressData] = Signal(ProgressData.Unknown),
+                                          time:     Instant                    = clock.instant()
+                                         ) {
     def cancel(): Unit =
       promise.tryFailure(new CancelException("Cancelled by user"))
 

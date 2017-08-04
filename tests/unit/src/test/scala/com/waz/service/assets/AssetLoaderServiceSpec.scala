@@ -59,6 +59,49 @@ class AssetLoaderServiceSpec extends AndroidFreeSpec {
     awaitAllTasks
   }
 
+  feature("Simultaneous requests") {
+
+    scenario("Simultaneous load requests for same asset should only perform load once") {
+
+      val asset = getWireAsset()
+      val savedEntry = cacheEntry(asset.cacheKey, Uid())
+
+      val finished = Signal[CacheEntry]()
+      val loadActive = Signal(false)
+      (loader.loadAsset _).expects(asset, *, *).returning {
+        loadActive ! true
+        CancellableFuture.lift(finished.head)
+      }
+      val service = getService
+
+      val f1 = service.load(asset)
+      val f2 = service.load(asset)
+
+      finished.publish(savedEntry, Threading.Background)
+      result(f1) shouldEqual Some(savedEntry)
+      result(f2) shouldEqual Some(savedEntry)
+    }
+
+
+    scenario("Same load request a second time while the first is already active should not perform load again") {
+      val asset = getWireAsset()
+      val savedEntry = cacheEntry(asset.cacheKey, Uid())
+
+      val finished = Signal[CacheEntry]()
+      (loader.loadAsset _).expects(asset, *, *).returning(CancellableFuture.lift(finished.head))
+      val service = getService
+
+      val f1 = service.load(asset)
+      clock + 100.millis
+      awaitAllTasks // wait for first load to be active
+      val f2 = service.load(asset)
+
+      finished.publish(savedEntry, Threading.Background)
+      result(f1) shouldEqual Some(savedEntry)
+      result(f2) shouldEqual Some(savedEntry)
+    }
+  }
+
   feature("Download retries") {
     scenario("download successful on first attempt") {
       val asset = getWireAsset()
