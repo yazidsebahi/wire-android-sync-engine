@@ -86,7 +86,6 @@ object Preferences {
     }
 
     def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
-      import Threading.Implicits.Background
       private var value = defaultValue
       override def apply()      = Future { value }
       override def update(v: A) = Future { value = v; signal ! v }
@@ -339,8 +338,7 @@ object UserPreferences {
   lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
   lazy val AnalyticsEnabled         = PrefKey[Boolean]       ("analytics_enabled", customDefault = true)
 
-  //Note - at some point this variable got out of sync, so the name of the preference-string itself is off - not worth migrating by itself.
-  lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_on_wifi_only", customDefault = true)
+  lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_always", customDefault = true)
 
   lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")
   lazy val SelectedConvId          = PrefKey[Option[ConvId]]      ("selected_conv_id")
