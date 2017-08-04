@@ -86,6 +86,7 @@ object Preferences {
     }
 
     def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
+      import Threading.Implicits.Background
       private var value = defaultValue
       override def apply()      = Future { value }
       override def update(v: A) = Future { value = v; signal ! v }
