@@ -110,6 +110,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val sync                 = userModule.sync
   lazy val syncHandler          = userModule.syncHandler
   lazy val otrClientsService    = userModule.clientsService
+  lazy val syncContent          = userModule.syncContent
   lazy val syncRequests         = userModule.syncRequests
   lazy val otrClientsSync       = userModule.clientsSync
   lazy val verificationUpdater  = userModule.verificationUpdater

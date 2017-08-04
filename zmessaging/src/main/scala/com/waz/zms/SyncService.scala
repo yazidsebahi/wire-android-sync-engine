@@ -21,6 +21,7 @@ import android.content.{Context, Intent}
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model.AccountId
+import com.waz.utils.returning
 
 import scala.concurrent.Future
 
@@ -42,8 +43,8 @@ class SyncService extends FutureService with ZMessagingService {
 object SyncService {
 
   def intent(context: Context, user: AccountId) = {
-    val intent = new Intent(context, classOf[SyncService])
-    intent.putExtra(ZMessagingService.ZmsUserIdExtra, user.str)
-    intent
+    returning(new Intent(context, classOf[SyncService])) {
+      _.putExtra(ZMessagingService.ZmsUserIdExtra, user.str)
+    }
   }
 }

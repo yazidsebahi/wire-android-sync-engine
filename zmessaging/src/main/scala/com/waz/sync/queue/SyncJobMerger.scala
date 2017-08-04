@@ -17,7 +17,6 @@
  */
 package com.waz.sync.queue
 
-import com.waz.api.SyncState
 import com.waz.content.SyncStorage
 import com.waz.model.SyncId
 import com.waz.model.sync._
@@ -65,7 +64,7 @@ class SyncJobMerger(mergeKey: Any, storage: SyncStorage) {
     assert(prev.id == updated.id)
     jobs(updated.id) = updated
 
-    if (prev.state == SyncState.SYNCING && updated.state == SyncState.FAILED) {
+    if (prev.state == SyncJob.State.Syncing && updated.state == SyncJob.State.Failed) {
       val merged = mergeDependent(updated, listJobs.dropWhile(_.timestamp <= updated.timestamp))
       if (merged != updated) {
         jobs(updated.id) = merged
@@ -125,6 +124,20 @@ object SyncJobMerger {
 
   sealed trait MergeResult[+A]
   case object Unchanged extends MergeResult[Nothing]
+
+  /**
+    * Updated leaves the second job in the queue, but with a modified request, because the first job contains a request
+    * that overlaps part of the second request (where the first request can't handle all information). See the SyncUsers
+    * for a good example
+    */
   case class Updated[+A](req: A) extends MergeResult[A]
+
+  /**
+    * Merged removed the second job from the queue, that is, it gets "merged" into the first job. This merging may also
+    * have an effect on the first job's request.
+    */
   case class Merged[+A](result: A) extends MergeResult[A]
 }
+
+
+
