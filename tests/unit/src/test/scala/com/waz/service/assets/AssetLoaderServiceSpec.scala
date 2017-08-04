@@ -17,222 +17,283 @@
  */
 package com.waz.service.assets
 
-import android.content.Context
-import android.net.Uri
+import com.waz.api.NetworkMode
 import com.waz.api.ProgressIndicator.State
-import com.waz.api.impl.ProgressIndicator.{Callback, ProgressData}
-import com.waz.cache._
-import com.waz.content.{Database, Preferences}
-import com.waz.model.AssetData.RemoteData
-import com.waz.model.{Mime, _}
+import com.waz.api.ProgressIndicator.State._
+import com.waz.api.impl.ProgressIndicator.ProgressData
+import com.waz.api.impl.{ErrorResponse, ProgressIndicator}
+import com.waz.cache.{CacheEntry, CacheEntryData, CacheService}
+import com.waz.model.AssetMetaData.Image
+import com.waz.model._
 import com.waz.service.NetworkModeService
-import com.waz.testutils.Matchers._
-import com.waz.testutils.MockGlobalModule
-import com.waz.threading.CancellableFuture
+import com.waz.service.downloads.AssetLoader.DownloadFailedException
+import com.waz.service.downloads.AssetLoaderService.{MaxConcurrentLoadRequests, MaxRetriesErrorMsg}
+import com.waz.service.downloads.{AssetLoader, AssetLoaderService}
+import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.TestBackoff
 import com.waz.threading.CancellableFuture.CancelException
-import com.waz.utils.ExponentialBackoff
-import com.waz.utils.events.EventContext
-import com.waz.utils.returning
-import com.waz.znet.Request.ProgressCallback
-import com.waz.{RobolectricUtils, service}
-import org.robolectric.shadows.ShadowLog
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
-import org.scalamock.scalatest.MockFactory
+import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.events.Signal
+import com.waz.znet.Response
 
-import scala.collection.mutable
-import scala.concurrent.ExecutionContext.Implicits.{global => executionContext}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
-import scala.util.Failure
-import scala.language.reflectiveCalls
 
-class AssetLoaderServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with MockFactory {
+class AssetLoaderServiceSpec extends AndroidFreeSpec {
 
-//  lazy val downloads = new mutable.HashMap[CacheKey, ProgressCallback => CancellableFuture[Option[CacheEntry]]]
-//
-//  lazy val global = new MockGlobalModule()
-//
-//  lazy val downloader = new service.downloads.DownloaderService(global.network)
-//
-//  implicit lazy val assetDownloader = new AssetDownloader(null, null) {
-//    override def load(req: AssetRequest, callback: Callback) = downloads(req.cacheKey).apply(callback)
-//  }
-//
-//  after {
-//    ShadowLog.stream = null
-//  }
-//
-//  def uri(id: RAssetId = RAssetId()): Uri =  Uri.parse(s"content://$id")
-//  def fakeDownload(id: RAssetId = RAssetId(), conv: RConvId = RConvId()) = new Download(WireAssetRequest(CacheKey(), AssetId(), RemoteData(Some(id), None, None, None), Some(conv), Mime.Unknown), 100)
-//
-//  feature("Throttling") {
-//
-//    scenario("Execute limited number of downloads concurrently") {
-//      val ds = Seq.fill(10)(fakeDownload())
-//
-//      val futures = ds.map(d => downloader.download(d.req, withRetries = false))
-//      val max = service.downloads.DownloaderService.MaxConcurrentDownloads
-//      withDelay { ds.filter(_.started) should have size max } (10.seconds)
-//
-//      ds.filter(_.started).head.setResult(None)
-//      withDelay { ds.filter(_.started) should have size max + 1 }
-//
-//      ds.filter(d => d.started && !d.done).head.setResult(None)
-//      withDelay { ds.filter(_.started) should have size max + 2 }
-//
-//      ds.foreach(d => if (!d.done) d.setResult(None))
-//      Await.result(CancellableFuture.sequence(futures), 5.seconds)
-//    }
-//
-//    scenario("Limit concurrent requests even further if they are cancelled by UI") {
-//      import service.downloads.DownloaderService._
-//
-//      val ds = Seq.fill(10)(fakeDownload())
-//      ds foreach { d => downloader.download(d.req).cancel()("test") }
-//
-//      withDelay { ds.filter(_.started) should have size MaxConcurrentDownloads}
-//
-//      for (i <- MaxBackgroundDownloads until MaxConcurrentDownloads) {
-//        ds.filter(d => d.started && !d.done).head.setResult(None)
-//        withDelay { ds.filter(_.started) should have size MaxConcurrentDownloads } // no new downloads are started
-//      }
-//
-//      ds.filter(d => d.started && !d.done).head.setResult(None)
-//      withDelay { ds.filter(_.started) should have size MaxConcurrentDownloads + 1 }
-//
-//      ds.foreach(d => if (!d.done) d.setResult(None))
-//      awaitUi(1.second)
-//    }
-//  }
-//
-//  feature("Batching") {
-//
-//    scenario("Perform download only once for duplicate requests") {
-//      val d = fakeDownload()
-//
-//      val futures = Seq.fill(1)(downloader.download(d.req, withRetries = false))
-//
-//      withDelay(d.started shouldEqual true)
-//      d.setResult(None)
-//      Await.result(CancellableFuture.sequence(futures), 5.seconds) shouldEqual Seq.fill(1)(None)
-//    }
-//
-//  }
-//
-//  feature("Download ordering") {
-//
-//    scenario("Cancelled request should be moved to end of queue") {
-//      val ds = Seq.fill(10)(fakeDownload())
-//      ds foreach { d => downloader.download(d.req).cancel()("test") }
-//
-//      withDelay { ds.filter(_.started) should have size service.downloads.DownloaderService.MaxConcurrentDownloads}
-//
-//      val d = fakeDownload()
-//      val f = downloader.download(d.req)
-//
-//      ds.filter(_.started).head.setResult(None)
-//      withDelay { d.started shouldEqual true } // last added download will be executed next, since it wasn't cancelled
-//      d.setResult(None)
-//
-//      ds.foreach(d => if (!d.done) d.setResult(None))
-//      withDelay(ds foreach (_.started shouldEqual true))
-//      awaitUi(100.millis)
-//    }
-//  }
-//
-//  feature("Download progress") {
-//
-//    scenario("Report progress for ongoing download") {
-//      val d = fakeDownload()
-//      downloader.download(d.req)
-//
-//      var ps = Seq.empty[ProgressData]
-//
-//      downloader.getDownloadState(d.req.cacheKey) { progress =>
-//        ps = ps :+ progress
-//      } (EventContext.Global)
-//
-//      withDelay {
-//        d.started shouldEqual true
-//        ps should not be empty
-//        ps.last shouldEqual ProgressData(0, 100, State.RUNNING)
-//      }
-//
-//      d.setProgress(10)
-//      withDelay { ps.last shouldEqual ProgressData(10, 100, State.RUNNING) }
-//
-//      d.setProgress(20)
-//      withDelay { ps.last shouldEqual ProgressData(20, 100, State.RUNNING) }
-//
-//      d.setResult(None)
-//      withDelay { ps.last shouldEqual ProgressData(0, 0, State.FAILED) }
-//    }
-//
-//  }
-//
-//  feature("Cancelling") {
-//
-//    scenario("Cancel ongoing download") {
-//      val d = fakeDownload()
-//      val f = downloader.download(d.req)
-//      downloader.cancel(d.req.cacheKey)
-//
-//      intercept[CancelException] {
-//        f.await()
-//      }
-//
-//      d.cancelled shouldEqual true
-//    }
-//
-//    scenario("Cancel multiple downloads in reverse order") {
-//      val ds = Seq.fill(10)(fakeDownload())
-//      val fs = ds map { d => downloader.download(d.req) }
-//
-//      ds.reverse.foreach { d => downloader.cancel(d.req.cacheKey) }
-//
-//      fs foreach { f =>
-//        intercept[CancelException] {
-//          f.await()
-//        }
-//      }
-//    }
-//  }
-//
-//  val TIMEOUT = 5.seconds
-//  private def waitForResult[T](f: => Future[T]): T = Await.result(f, TIMEOUT)
-//
-//  val database = stub[Database]
-//  val cacheStorage = stub[CacheStorage]
-//  val cacheService = CacheService(context, database, cacheStorage)
-//  val result = new CacheEntry(CacheEntryData(CacheKey("...")), cacheService)
-//
-//  class Download(val req: AssetRequest, val size: Int = 0) extends (ProgressCallback => CancellableFuture[Option[CacheEntry]]) {
-//    @volatile var started = false
-//    @volatile var cb: ProgressCallback = _
-//
-//    private val promise = Promise[Option[CacheEntry]]
-//
-//    def done = promise.isCompleted
-//    def cancelled = promise.isCompleted && (promise.future.value match {
-//      case Some(Failure(_: CancelException)) => true
-//      case _ => false
-//    })
-//
-//    downloads(req.cacheKey) = this
-//
-//    override def apply(cb: ProgressCallback): CancellableFuture[Option[CacheEntry]] = {
-//      assert(!started, "Download should be started only once")
-//      this.cb = cb
-//      started = true
-//      cb.apply(ProgressData(0, size, State.RUNNING))
-//
-//      new CancellableFuture(promise)
-//    }
-//
-//    def setProgress(p: Int): Unit = {
-//      cb.apply(ProgressData(p, size, State.RUNNING))
-//    }
-//
-//    def setResult(result: Option[CacheEntry]): Unit = promise.success(result)
-//  }
+  val network      = mock[NetworkModeService]
+  val cacheService = mock[CacheService]
+  implicit val loader = mock[AssetLoader]
+
+  val networkMode  = Signal[NetworkMode]()
+
+  AssetLoaderService.backoff = TestBackoff()
+
+  override protected def beforeEach() = {
+    super.beforeEach()
+    networkMode ! NetworkMode.WIFI
+  }
+
+  override protected def afterEach() = {
+    super.afterEach()
+    awaitAllTasks
+  }
+
+  feature("Simultaneous requests") {
+
+    scenario("Simultaneous load requests for same asset should only perform load once") {
+
+      val asset = getWireAsset()
+      val savedEntry = cacheEntry(asset.cacheKey, Uid())
+
+      val finished = Signal[CacheEntry]()
+      val loadActive = Signal(false)
+      (loader.loadAsset _).expects(asset, *, *).returning {
+        loadActive ! true
+        CancellableFuture.lift(finished.head)
+      }
+      val service = getService
+
+      val f1 = service.load(asset)
+      val f2 = service.load(asset)
+
+      finished.publish(savedEntry, Threading.Background)
+      result(f1) shouldEqual Some(savedEntry)
+      result(f2) shouldEqual Some(savedEntry)
+    }
+
+
+    scenario("Same load request a second time while the first is already active should not perform load again") {
+      val asset = getWireAsset()
+      val savedEntry = cacheEntry(asset.cacheKey, Uid())
+
+      val finished = Signal[CacheEntry]()
+      (loader.loadAsset _).expects(asset, *, *).returning(CancellableFuture.lift(finished.head))
+      val service = getService
+
+      val f1 = service.load(asset)
+      clock + 100.millis
+      awaitAllTasks // wait for first load to be active
+      val f2 = service.load(asset)
+
+      finished.publish(savedEntry, Threading.Background)
+      result(f1) shouldEqual Some(savedEntry)
+      result(f2) shouldEqual Some(savedEntry)
+    }
+  }
+
+  feature("Download retries") {
+    scenario("download successful on first attempt") {
+      val asset = getWireAsset()
+      val savedEntry = cacheEntry(asset.cacheKey, Uid())
+      (loader.loadAsset _).expects(asset, *, *).returning(CancellableFuture.successful(savedEntry))
+      result(getService.loadRevealAttempts(asset)) shouldEqual (Some(savedEntry), 1)
+    }
+
+    scenario("download after multiple retries") {
+      val asset = getWireAsset()
+      val savedEntry = cacheEntry(asset.cacheKey, Uid())
+
+      var attempts = 0
+
+      (loader.loadAsset _).expects(asset, *, *).anyNumberOfTimes().onCall { (data, callback, force) =>
+        attempts += 1
+        attempts match {
+          case 1 | 2 => CancellableFuture.failed(DownloadFailedException(ErrorResponse(ErrorResponse.TimeoutCode, "", "")))
+          case 3 => CancellableFuture.successful(savedEntry)
+          case _ => fail("Unexpected number of call attempts")
+        }
+      }
+
+      result(getService.loadRevealAttempts(asset)(loader)) shouldEqual (Some(savedEntry), 3)
+    }
+
+    scenario("give up after max retries") {
+      val asset = getWireAsset()
+      (loader.loadAsset _).expects(asset, *, *).anyNumberOfTimes.returning(CancellableFuture.failed(DownloadFailedException(ErrorResponse(ErrorResponse.TimeoutCode, "", ""))))
+      assert(intercept[Exception](result(getService.loadRevealAttempts(asset)(loader))).getMessage == MaxRetriesErrorMsg)
+    }
+  }
+
+  feature("Failures") {
+    scenario("Unrecoverable failure should abort download") {
+      val asset = getWireAsset()
+      (loader.loadAsset _).expects(asset, *, *).anyNumberOfTimes.returning(CancellableFuture.failed(DownloadFailedException(ErrorResponse(Response.Status.Forbidden, "", ""))))
+      assert(!intercept[DownloadFailedException](result(getService.loadRevealAttempts(asset)(loader))).isRecoverable)
+    }
+  }
+
+  feature("Cancelling") {
+    scenario("Cancelling active download does not discard work") {
+      val service = getService
+      val asset = getWireAsset()
+      val entry = Signal[CacheEntry]()
+      (loader.loadAsset _).expects(asset, *, *).once().onCall { (_, _, _) => CancellableFuture.lift(entry.head)}
+
+      val cf1 = service.load(asset)
+      val cf2 = service.load(asset)
+
+      cf1.cancel()("test")
+
+      val res = cacheEntry(asset.cacheKey, Uid())
+      entry.publish(res, Threading.Background)
+
+      intercept[CancelException](result(cf1))
+      result(cf2) shouldEqual Some(res)
+    }
+
+    scenario("Cancelling non-active download does not start work") {
+
+      val service = getService
+      //stuff the queue with the max number of concurrent downloads
+      val calls = Signal[Int](0)
+      val finishedDownload = Signal[AssetId]()
+      (loader.loadAsset _).expects(*, *, *).repeat(MaxConcurrentLoadRequests to MaxConcurrentLoadRequests + 1).onCall { (asset, _, _) =>
+        calls.mutate(_ + 1)
+        val future = finishedDownload.filter(_ == asset.id).map(_ => cacheEntry(asset.cacheKey, Uid())).head
+        CancellableFuture.lift(future)
+      }
+      (1 to MaxConcurrentLoadRequests).map(getWireAsset).map(a => service.load(a))
+
+      //wait for queue to start executing all jobs
+      result(calls.filter(_ == MaxConcurrentLoadRequests).head)
+
+      //add another asset and cancel it
+      val asset = getWireAsset(MaxConcurrentLoadRequests + 1)
+      val cf1 = service.load(asset)
+      cf1.cancel()("test")
+      intercept[CancelException](result(cf1))
+
+      //finish all active jobs
+      (1 to MaxConcurrentLoadRequests).map(_.toString).map(AssetId).foreach(finishedDownload ! _)
+
+      awaitAllTasks
+
+      val asset2 = getWireAsset(MaxConcurrentLoadRequests + 2)
+      val cf2 = service.load(asset2)
+      finishedDownload ! asset2.id
+      result(cf2)
+    }
+
+    scenario("Cancelling non-active task through chain of cancellable futures") {
+      val service = getService
+      //stuff the queue with the max number of concurrent downloads
+      val calls = Signal[Int](0)
+      val finishedDownload = Signal[AssetId]()
+      (loader.loadAsset _).expects(*, *, *).repeat(MaxConcurrentLoadRequests to MaxConcurrentLoadRequests).onCall { (asset, _, _) =>
+        calls.mutate(_ + 1)
+        val future = finishedDownload.filter(_ == asset.id).map(_ => cacheEntry(asset.cacheKey, Uid())).head
+        CancellableFuture.lift(future)
+      }
+      (1 to MaxConcurrentLoadRequests).map(getWireAsset).map(a => service.load(a))
+
+      //wait for queue to start executing all jobs
+      result(calls.filter(_ == MaxConcurrentLoadRequests).head)
+
+      //add another asset and cancel it
+      val asset = getWireAsset(MaxConcurrentLoadRequests + 1)
+
+
+      val cf1 = CancellableFuture({})(Threading.Background).flatMap(_ => service.load(asset))(Threading.Background)
+      cf1.cancel()("test")
+
+      intercept[CancelException](result(cf1))
+
+      //finish all active jobs
+      (1 to MaxConcurrentLoadRequests).map(_.toString).map(AssetId).foreach(finishedDownload ! _)
+
+      awaitAllTasks
+    }
+  }
+
+  feature("Throttling") {
+
+    scenario("Execute only MaxConcurrentLoadRequests number of downloads concurrently") {
+      val service = getService
+      val assets = (1 to MaxConcurrentLoadRequests + 1).map(getWireAsset)
+
+      val calls = Signal[Int](0)
+      (loader.loadAsset _).expects(*, *, *).anyNumberOfTimes.onCall { (asset, _, _) =>
+        calls.mutate(_ + 1)
+        new CancellableFuture(Promise[CacheEntry]())
+      }
+
+      assets.map { a =>
+        clock + 50.millis
+        service.load(a)
+      }
+
+      awaitAllTasks
+      result(calls.filter(_ == 4).head)
+    }
+  }
+
+  feature("Download progress") {
+
+    scenario("Report progress for ongoing download") {
+
+      val service = getService
+      val asset = getWireAsset()
+      val entry = cacheEntry(asset.cacheKey, Uid())
+
+      val finished = Signal[Boolean]()
+      var callback = Option.empty[ProgressIndicator.Callback]
+      (loader.loadAsset _).expects(asset, *, *).once().onCall { (_, cb, _) =>
+        callback = Some(cb)
+        CancellableFuture.lift(finished.filter(_ == true).map(_ => entry).head)
+      }
+
+      val f = service.load(asset)
+      val reportedProgress = service.getLoadProgress(asset.id)
+
+      //wait for job to be started
+      result(reportedProgress.filter(_ == ProgressData(0, 0, RUNNING)).head)
+
+      val progress1 = ProgressData(33, 100, RUNNING)
+      callback.foreach(_.apply(progress1))
+      result(reportedProgress.filter(_ == progress1).head)
+
+      val progress2 = ProgressData(67, 100, RUNNING)
+      callback.foreach(_.apply(progress2))
+      result(reportedProgress.filter(_ == progress2).head)
+
+      finished ! true
+      result(reportedProgress.filter(_ == ProgressData(0, 0, State.COMPLETED)).head)
+    }
+  }
+
+  def getService   = new AssetLoaderService()
+
+  def getWireAsset(id: Int = 1) =  AssetData(
+    id        = AssetId(id.toString),
+    mime      = Mime.Image.Jpg,
+    remoteId  = Some(RAssetId("rAssetId")),
+    token     = Some(AssetToken("token")),
+    otrKey    = Some(AESKey("aeskey")),
+    sha       = Some(Sha256("sha256")),
+    metaData  = Some(Image(Dim2(1080,720), Image.Tag.Empty))
+  )
+
+  def cacheEntry(key: CacheKey, fileId: Uid) = new CacheEntry(new CacheEntryData(key), cacheService)
+
 }
