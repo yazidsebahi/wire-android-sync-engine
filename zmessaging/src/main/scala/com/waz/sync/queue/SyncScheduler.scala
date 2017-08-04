@@ -41,7 +41,22 @@ import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
-class SyncScheduler(context: Context, userId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, lifecycle: ZmsLifecycle) {
+
+trait SyncScheduler {
+
+  val queue: SyncSerializer
+
+  def await(id: SyncId): Future[SyncResult]
+  def awaitRunning: Future[Int]
+
+  def withConv[A](job: SyncJob, conv: ConvId)(f: ConvLock => Future[A]): Future[A]
+  def awaitPreconditions[A](job: SyncJob)(f: => Future[A]): Future[A]
+
+  def report(pw: PrintWriter): Future[Unit]
+  def reportString: Future[String]
+}
+
+class SyncSchedulerImpl(context: Context, userId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, lifecycle: ZmsLifecycle) extends SyncScheduler {
 
   import EventContext.Implicits.global
 
@@ -51,7 +66,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
   private[sync] lazy val alarmManager    = Option(Context.unwrap(context)).map(_.getSystemService(ALARM_SERVICE).asInstanceOf[AlarmManager])
   private[sync] lazy val syncIntent      = Option(Context.unwrap(context)).map(SyncService.intent(_, userId))
 
-  private[waz] val queue            = new SyncSerializer
+  override val queue                = new SyncSerializer
   private[sync] val executor        = new SyncExecutor(this, content, network, handler)
   private[sync] val executions      = new mutable.HashMap[SyncId, Future[SyncResult]]()
   private[sync] val executionsCount = Signal(0)
@@ -98,11 +113,11 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
 
   nextAlarm { updateRetryAlarm }
 
-  def reportString = Future {
+  override def reportString = Future {
     s"SyncScheduler: executors: ${executions.size}, count: ${executionsCount.currentValue}, running: ${runningCount.currentValue}, waiting: ${waiting.currentValue}"
   }
 
-  def report(pw: PrintWriter) = reportString.map(pw.println)
+  override def report(pw: PrintWriter) = reportString.map(pw.println)
 
   private def execute(job: SyncJob): Unit = {
     verbose(s"execute($job)")
@@ -117,9 +132,9 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
     }
   }
 
-  def await(id: SyncId) = Future { executions.getOrElse(id, Future.successful(SyncResult.Success)) } flatMap identity
+  override def await(id: SyncId) = Future { executions.getOrElse(id, Future.successful(SyncResult.Success)) } flatMap identity
 
-  def awaitRunning = CancellableFuture.delay(1.second).future flatMap { _ => runningCount.filter(_ == 0).head }
+  override def awaitRunning = CancellableFuture.delay(1.second).future flatMap { _ => runningCount.filter(_ == 0).head }
 
   private def countWaiting[A](id: SyncId, startTime: Long)(future: Future[A]) = {
     waiting.mutate(_ + (id -> startTime))
@@ -127,14 +142,14 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
     future
   }
 
-  private[sync] def withConv[A](job: SyncJob, conv: ConvId)(f: ConvLock => Future[A]): Future[A] = {
+  override def withConv[A](job: SyncJob, conv: ConvId)(f: ConvLock => Future[A]) = {
     verbose(s"withConv($job, $conv)")
     countWaiting(job.id, getStartTime(job)) { queue.acquire(conv) } flatMap { lock =>
       Try(f(lock)).recover { case t => Future.failed[A](t) }.get.andThen { case _ => lock.release() }
     }
   }
 
-  private[sync] def awaitPreconditions[A](job: SyncJob)(f: => Future[A]): Future[A] = {
+  override def awaitPreconditions[A](job: SyncJob)(f: => Future[A]) = {
     verbose(s"awaitPreconditions($job)")
 
     val entry = new WaitEntry(job)
@@ -146,7 +161,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
     }
   }
 
-  private[sync] def startSyncService(): Unit = {
+  private def startSyncService(): Unit = {
     debug("starting service")
     syncIntent.foreach { sI =>
       val res = WakefulBroadcastReceiver.startWakefulService(context, sI)
@@ -154,7 +169,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
     }
   }
 
-  private[sync] def updateRetryAlarm(time: Option[Long]) = {
+  private def updateRetryAlarm(time: Option[Long]) = {
     debug(s"updateRetryAlarm: $time")
     (time, alarmManager, alarmSyncIntent) match {
       case (Some(t), Some(am), Some(aI)) =>
@@ -166,7 +181,7 @@ class SyncScheduler(context: Context, userId: AccountId, val content: SyncConten
   }
 
 
-  private[sync] def getStartTime(job: SyncJob): Long =
+  private def getStartTime(job: SyncJob): Long =
     if (job.offline && network.isOnlineMode) 0  // start right away if request last failed due to possible network errors
     else if (job.timeout > 0) math.min(job.startTime, job.timeout)
     else job.startTime

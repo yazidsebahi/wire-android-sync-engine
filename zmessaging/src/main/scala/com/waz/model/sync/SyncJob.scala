@@ -126,11 +126,11 @@ object SyncJob {
   }
 
   object Priority {
-    val Critical = 0
-    val High = 1
-    val Normal = 10
-    val Low = 50
-    val Optional = 100
+    val Critical    = 0
+    val High        = 1
+    val Normal      = 10
+    val Low         = 50
+    val Optional    = 100
     val MinPriority = Int.MaxValue
   }
 

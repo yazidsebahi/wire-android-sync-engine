@@ -31,13 +31,28 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream, Signa
 
 import scala.collection.mutable
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 /**
  * Keeps actual SyncJobs in memory, and persists all changes to db.
  * Handles merging of new requests, only adds new jobs if actually needed.
  */
-class SyncContentUpdater(db: Database) {
+
+trait SyncContentUpdater {
+  def syncJobs: Signal[Map[SyncId, SyncJob]]
+
+  def addSyncJob(job: SyncJob, forceRetry: Boolean = false): Future[SyncJob]
+  def removeSyncJob(id: SyncId): Future[Any]
+  def updateSyncJob(id: SyncId)(updater: SyncJob => SyncJob): Future[Option[SyncJob]]
+  def getSyncJob(id: SyncId): Future[Option[SyncJob]]
+  def listSyncJobs: Future[Iterable[SyncJob]]
+
+  def syncStorage[A](body: SyncStorage => A): Future[A]
+}
+
+class SyncContentUpdaterImpl(db: Database) extends SyncContentUpdater {
   import EventContext.Implicits.global
+  import SyncContentUpdater._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncContentUpdaterQueue")
 
@@ -79,7 +94,7 @@ class SyncContentUpdater(db: Database) {
     }
   }
 
-  lazy val syncJobs: Signal[Map[SyncId, SyncJob]] = {
+  override lazy val syncJobs = {
     val onChange = EventStream[Cmd]()
     syncStorageFuture.map { syncStorage =>
       syncStorage.onUpdated { case (prev, updated) => onChange ! Update(updated) }
@@ -98,13 +113,13 @@ class SyncContentUpdater(db: Database) {
 
   // XXX: this exposes internal SyncStorage instance which should never be used outside of our dispatch queue (as it is not thread safe)
   // We should use some kind of delegate here, which gets closed once body completes
-  def syncStorage[A](body: SyncStorage => A): Future[A] = syncStorageFuture map body
+  override def syncStorage[A](body: SyncStorage => A) = syncStorageFuture map body
 
   /**
    * Adds new request, merges it to existing request or skips it if duplicate.
    * @return affected (new or updated) SyncJob
    */
-  def addSyncJob(job: SyncJob, forceRetry: Boolean = false): Future[SyncJob] = syncStorageFuture map { syncStorage =>
+  override def addSyncJob(job: SyncJob, forceRetry: Boolean = false) = syncStorageFuture map { syncStorage =>
 
     def onAdded(added: SyncJob) = {
       assert(added.id == job.id)
@@ -126,13 +141,21 @@ class SyncContentUpdater(db: Database) {
     syncStorage.add(toSave)
   }
 
-  def removeSyncJob(id: SyncId) = syncStorageFuture.map(_.remove(id))
+  override def removeSyncJob(id: SyncId) = syncStorageFuture.map(_.remove(id))
 
-  def getSyncJob(id: SyncId) = syncStorageFuture.map(_.get(id))
+  override def getSyncJob(id: SyncId) = {
+    for {
+      job     <- syncStorageFuture.map(_.get(id))
+      updated <- job.fold(Future.successful(Option.empty[SyncJob])) { j =>
+        if (System.currentTimeMillis() - j.timestamp > StaleJobTimeout.toMillis)
+          removeSyncJob(j.id).map(_ => None) else Future.successful(Some(j))
+      }
+    } yield updated
+  }
 
-  def listSyncJobs = syncStorageFuture.map(_.getJobs)
+  override def listSyncJobs = syncStorageFuture.map(_.getJobs)
 
-  def updateSyncJob(id: SyncId)(updater: SyncJob => SyncJob) = syncStorageFuture.map(_.update(id)(updater))
+  override def updateSyncJob(id: SyncId)(updater: SyncJob => SyncJob) = syncStorageFuture.map(_.update(id)(updater))
 
   private def updateMerger(job: SyncJob, storage: SyncStorage) =
     mergers.getOrElseUpdate(job.mergeKey, new SyncJobMerger(job.mergeKey, storage)).insert(job)
@@ -152,6 +175,8 @@ class SyncContentUpdater(db: Database) {
 }
 
 object SyncContentUpdater {
+
+  val StaleJobTimeout = 1.day
 
   sealed trait Cmd {
     val job: SyncJob

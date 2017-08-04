@@ -26,7 +26,7 @@ import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.{NetworkModeService, ReportingService, ZmsLifecycle}
 import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
-import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler}
+import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler, SyncSchedulerImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
@@ -50,7 +50,7 @@ class SyncRequestServiceImpl(context:   Context,
   private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
-  override val scheduler = new SyncScheduler(context, accountId, content, network, this, sync, lifecycle)
+  override val scheduler: SyncScheduler = new SyncSchedulerImpl(context, accountId, content, network, this, sync, lifecycle)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>

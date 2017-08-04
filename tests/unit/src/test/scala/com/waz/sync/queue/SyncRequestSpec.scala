@@ -22,12 +22,9 @@ import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync.SyncRequest.RegisterPushToken
 import com.waz.model.{PushToken, SyncId}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.SyncRequestService
 import com.waz.sync.queue.SyncJobMerger.Merged
 
 class SyncRequestSpec extends AndroidFreeSpec {
-
-  val syncService = mock[SyncRequestService]
 
   scenario("RegisterPushToken") {
 

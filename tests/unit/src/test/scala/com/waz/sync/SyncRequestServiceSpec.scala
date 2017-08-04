@@ -23,13 +23,11 @@ import com.waz.ZLog.LogTag
 import com.waz.api.NetworkMode
 import com.waz.api.NetworkMode.UNKNOWN
 import com.waz.content.Database
-import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.model._
-import com.waz.model.sync.SyncJob.Priority
-import com.waz.model.sync.SyncRequest.{RegisterPushToken, SyncRichMedia}
+import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service.{NetworkModeService, ReportingService, Timeouts, ZmsLifecycle}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.queue.{ConvLock, SyncContentUpdater}
+import com.waz.sync.queue.{ConvLock, SyncContentUpdaterImpl}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Context, DB}
@@ -37,8 +35,6 @@ import com.waz.utils.wrappers.{Context, DB}
 import scala.concurrent.Future
 
 class SyncRequestServiceSpec extends AndroidFreeSpec {
-
-  import com.waz.threading.Threading.Implicits.Background
 
   val accountId = AccountId()
   val context   = mock[Context]
@@ -80,7 +76,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     (network.isOnlineMode _).expects().anyNumberOfTimes().returning(false)
     (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
 
-    val content = new SyncContentUpdater(db)
+    val content = new SyncContentUpdaterImpl(db)
     val service = new SyncRequestServiceImpl(context, accountId, content, network, sync, reporting, lifecycle)
     (new AndroidSyncServiceHandle(service, timeouts), service)
   }

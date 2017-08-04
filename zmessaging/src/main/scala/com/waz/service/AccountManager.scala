@@ -31,7 +31,7 @@ import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
-import com.waz.sync.queue.SyncContentUpdater
+import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.{EventContext, Signal}
@@ -74,7 +74,7 @@ class UserModule(val userId: UserId, val account: AccountManager) {
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
-  lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdater]
+  lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdaterImpl]
   lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
   lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
   lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(account.zmessaging.collect { case Some(zms) => zms }, clientsSync)
