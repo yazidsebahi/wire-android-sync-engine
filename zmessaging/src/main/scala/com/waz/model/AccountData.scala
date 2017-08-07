@@ -57,8 +57,8 @@ case class AccountData(id:             AccountId               = AccountId(),
                        clientId:       Option[ClientId]        = None,
                        clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
                        privateMode:    Boolean                 = false,
-                       name:           String                  = "",
-                       picture:        Option[AssetId]         = None,
+                       regWaiting:     Boolean                 = false,
+                       code:           Option[String]          = None,
                        private val _selfPermissions: Long      = 0,
                        private val _copyPermissions: Long      = 0
                       ) {
@@ -101,8 +101,8 @@ case class AccountData(id:             AccountId               = AccountId(),
       copy(email = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd), pendingEmail = if (pendingEmail.contains(e)) None else pendingEmail)
     case EmailCredentials(e, None, _) =>
       copy(email = Some(e), pendingEmail = if (pendingEmail.contains(e)) None else pendingEmail)
-    case PhoneCredentials(number, _, _) =>
-      copy(phone = Some(number), pendingPhone = if (pendingPhone.contains(number)) None else pendingPhone)
+    case PhoneCredentials(number, code, _) =>
+      copy(phone = Some(number), pendingPhone = if (pendingPhone.contains(number)) None else pendingPhone, code = code.map(_.str))
     case _ => this
   }
 
@@ -111,8 +111,8 @@ case class AccountData(id:             AccountId               = AccountId(),
       copy(pendingEmail = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd), email = if (email.contains(e)) None else email)
     case EmailCredentials(e, None, _) =>
       copy(pendingEmail = Some(e), email = if (email.contains(e)) None else email)
-    case PhoneCredentials(number, _, _) =>
-      copy(pendingPhone = Some(number), phone = if (phone.contains(number)) None else phone)
+    case PhoneCredentials(number, code, _) =>
+      copy(pendingPhone = Some(number), phone = if (phone.contains(number)) None else phone, code = code.map(_.str))
     case _ => this
   }
 
@@ -278,15 +278,15 @@ object AccountData {
     val ClientId = opt(id[ClientId]('client_id))(_.clientId)
     val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
     val PrivateMode = bool('private_mode)(_.privateMode)
-    val Name = text('name)(_.name)
-    val Picture = opt(id[AssetId]('picture))(_.picture)
+    val RegWaiting = bool('reg_waiting)(_.regWaiting)
+    val Code = opt(text('code))(_.code)
     val SelfPermissions = long('self_permissions)(_._selfPermissions)
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Team, Email, Hash, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, Name, Picture, RegisteredPush, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, Hash, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, Name, Picture, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))

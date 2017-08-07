@@ -413,7 +413,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   private def activate(accountId: AccountId): ErrorOr[AccountData] =
     accountsStorage.get(accountId).flatMap {
       case Some(account) =>
-        if (account.verified) Future successful Right(account)
+        if (account.verified && !account.regWaiting) Future successful Right(account)
         else loginClient.login(account).future flatMap {
           case Right((token, cookie)) =>
             for {

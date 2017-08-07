@@ -22,6 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.client.RegistrationClient.ActivateResult.{Failure, PasswordExists, Success}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.service.AccountsService.SwapAccountCallback
@@ -145,7 +146,7 @@ class AccountsService(val global: GlobalModule) {
     activeAccountPref() flatMap { id =>
         for {
           otherAccounts <- loggedInAccounts.map(_.map(_.id).filter(!id.contains(_))).head
-          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else Future.successful({})
+          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None)) else Future.successful({})
           _ <- if (id.contains(account)) setAccount(if (flushCredentials) otherAccounts.headOption else None) else Future.successful(())
         } yield {}
     }
@@ -233,6 +234,38 @@ class AccountsService(val global: GlobalModule) {
     }
   }
 
+  def activatePhone(code: ConfirmationCode): Future[Either[ErrorResponse, AccountData]] = {
+    activeAccount.head.flatMap {
+      case Some(accountData) if accountData.regWaiting && accountData.pendingPhone.isDefined =>
+        val credentials = PhoneCredentials(accountData.pendingPhone.get, Some(code))
+        verifyPhoneNumber(credentials, KindOfVerification.PREVERIFY_ON_REGISTRATION).future.flatMap {
+          case Right(()) =>
+            storage.update(accountData.id, _.updated(PhoneCredentials(accountData.pendingPhone.get, Some(code)))).map{
+              case Some((_, updated)) => Right(updated)
+              case _ => Left(ErrorResponse.InternalError)
+            }
+          case Left(error) => Future.successful(Left(error))
+        }
+      case Some(accountData) if !accountData.regWaiting && accountData.pendingPhone.isDefined =>
+        login(PhoneCredentials(accountData.pendingPhone.get, Some(code)))
+      case _ =>
+        Future.successful(Left(ErrorResponse.InternalError))
+    }
+  }
+
+  def finishRegisterPhone(name: String): Future[Either[ErrorResponse, AccountData]] = {
+    activeAccount.head.flatMap {
+      case Some(accountData) if accountData.regWaiting && accountData.phone.isDefined && accountData.code.isDefined=>
+        register(PhoneCredentials(accountData.phone.get, accountData.code.map(ConfirmationCode)), Some(name), AccentColor()).flatMap {
+          case Right(regAccount) =>
+            storage.updateOrCreate(regAccount.id, _.copy(regWaiting = false, code = None), regAccount.copy(regWaiting = false, code = None)).map(Right(_))
+          case _ =>
+            Future.successful(Left(ErrorResponse.InternalError))
+        }
+      case _ => Future.successful(Left(ErrorResponse.InternalError))
+    }
+  }
+
   def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
 
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
@@ -257,7 +290,7 @@ class AccountsService(val global: GlobalModule) {
       Future successful other
   }
 
-  def register(credentials: Credentials, name: String, accent: AccentColor): Future[Either[ErrorResponse, AccountData]] = {
+  def register(credentials: Credentials, name: Option[String], accent: AccentColor): Future[Either[ErrorResponse, AccountData]] = {
     debug(s"register($credentials, $name, $accent")
 
     def register(account: AccountData, normalized: Credentials) =

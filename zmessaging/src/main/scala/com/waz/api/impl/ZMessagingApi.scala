@@ -146,7 +146,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     case credentials: Credentials =>
       verbose(s"register($credentials, $name, $accent)")
       require(accent.isInstanceOf[AccentColor])
-      accounts.register(credentials, name, accent.asInstanceOf[AccentColor]) onComplete {
+      accounts.register(credentials, Some(name), accent.asInstanceOf[AccentColor]) onComplete {
         case Success(Right(acc)) =>
           verbose(s"registration complete: $acc")
           listener.onRegistered(updateSelfUser(acc))
