@@ -19,11 +19,11 @@ package com.waz.model.sync
 
 import java.util.concurrent.atomic.AtomicLong
 
+import com.waz.api.SyncState
 import com.waz.api.impl.ErrorResponse
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.SyncId
-import com.waz.model.sync.SyncJob.State
 import com.waz.sync.queue.SyncJobMerger.{MergeResult, Merged, Unchanged, Updated}
 import com.waz.utils.wrappers.DBCursor
 import com.waz.utils.{JsonDecoder, JsonEncoder}
@@ -31,27 +31,25 @@ import org.json.JSONObject
 
 import scala.collection.breakOut
 
-case class SyncJob(id:        SyncId,
-                   request:   SyncRequest,
-                   dependsOn: Set[SyncId]           = Set(),
-                   priority:  Int                   = SyncJob.Priority.Normal,
-                   optional:  Boolean               = false,
-                   timeout:   Long                  = 0,
-                   timestamp: Long                  = SyncJob.timestamp,
-                   startTime: Long                  = 0, // next scheduled execution time
-                   attempts:  Int                   = 0,
-                   offline:   Boolean               = false,
-                   state:     State                 = State.Waiting,
-                   error:     Option[ErrorResponse] = None) {
-
-  import State._
+case class SyncJob(id: SyncId,
+                    request: SyncRequest,
+                    dependsOn: Set[SyncId] = Set(),
+                    priority: Int = SyncJob.Priority.Normal,
+                    optional: Boolean = false,
+                    timeout: Long = 0,
+                    timestamp: Long = SyncJob.timestamp,
+                    startTime: Long = 0, // next scheduled execution time
+                    attempts: Int = 0,
+                    offline: Boolean = false,
+                    state: SyncState = SyncState.WAITING,
+                    error: Option[ErrorResponse] = None) {
 
   def mergeKey = request.mergeKey
 
   // `job` is the newer one
   def merge(job: SyncJob): MergeResult[SyncJob] = {
     if (mergeKey != job.mergeKey) Unchanged
-    else if (state == Syncing) {
+    else if (state == SyncState.SYNCING) {
       // ongoing job can only be merged if is duplicate
       if (job.request.isDuplicateOf(request)) Merged(merged(request, job, forceRetry = false)) else Unchanged
     } else {
@@ -68,7 +66,7 @@ case class SyncJob(id:        SyncId,
       priority = priority min job.priority,
       optional = optional && job.optional,
       attempts = if (forceRetry) 0 else attempts,
-      startTime = if (forceRetry || state != Failed) math.min(startTime, job.startTime) else math.max(startTime, job.startTime),
+      startTime = if (forceRetry || state != SyncState.FAILED) math.min(startTime, job.startTime) else math.max(startTime, job.startTime),
       dependsOn = dependsOn ++ job.dependsOn)
 }
 
@@ -76,11 +74,6 @@ case class SyncJob(id:        SyncId,
 object SyncJob {
 
   private val lastTimestamp = new AtomicLong(0)
-
-  type State = State.Value
-  object State extends Enumeration {
-    val Syncing, Waiting, Failed, Completed = Value
-  }
 
   implicit lazy val Encoder: JsonEncoder[SyncJob] = new JsonEncoder[SyncJob] {
     override def apply(job: SyncJob): JSONObject = JsonEncoder { o =>
@@ -94,18 +87,15 @@ object SyncJob {
       o.put("startTime", job.startTime)
       if (job.attempts != 0) o.put("attempts", job.attempts)
       if (job.offline) o.put("offline", true)
-      o.put("state", job.state.toString)
+      o.put("state", job.state.name())
       job.error.foreach(e => o.put("error", JsonEncoder.encode(e)))
     }
   }
 
   implicit lazy val Decoder: JsonDecoder[SyncJob] = new JsonDecoder[SyncJob] {
     import JsonDecoder._
-    override def apply(implicit js: JSONObject): SyncJob = {
-      val stateStr: String = 'state
-      val state = State.withName(s"${stateStr.take(1)}${stateStr.drop(1).toLowerCase}")
-      SyncJob(SyncId('id), JsonDecoder[SyncRequest]('request), decodeStringSeq('dependsOn).map(SyncId(_))(breakOut), 'priority, 'optional, 'timeout, 'timestamp, 'startTime, 'attempts, 'offline, state, opt('error, ErrorResponse.Decoder.apply(_)))
-    }
+    override def apply(implicit js: JSONObject): SyncJob =
+      SyncJob(SyncId('id), JsonDecoder[SyncRequest]('request), decodeStringSeq('dependsOn).map(SyncId(_))(breakOut), 'priority, 'optional, 'timeout, 'timestamp, 'startTime, 'attempts, 'offline, SyncState.valueOf('state), opt('error, ErrorResponse.Decoder.apply(_)))
   }
 
   /**

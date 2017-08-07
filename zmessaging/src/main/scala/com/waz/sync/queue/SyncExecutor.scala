@@ -18,14 +18,15 @@
 package com.waz.sync.queue
 
 import com.waz.HockeyApp
-import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
+import com.waz.api.SyncState
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.SyncId
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service.NetworkModeService
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.threading.{SerialDispatchQueue, CancellableFuture}
 import com.waz.utils._
 
 import scala.concurrent.duration._
@@ -73,7 +74,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
       info(s"Optional request timeout elapsed, dropping: $job")
       content.removeSyncJob(job.id) map { _ => SyncResult.Success}
     } else {
-      val future = content.updateSyncJob(job.id)(job => job.copy(attempts = job.attempts + 1, state = SyncJob.State.Syncing, error = None, offline = !network.isOnlineMode))
+      val future = content.updateSyncJob(job.id)(job => job.copy(attempts = job.attempts + 1, state = SyncState.SYNCING, error = None, offline = !network.isOnlineMode))
         .flatMap {
           case None => Future.successful(SyncResult(ErrorResponse.internalError(s"Could not update job: $job")))
           case Some(updated) =>
@@ -122,7 +123,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
         } else {
           verbose(s"will schedule retry for: $job, $job")
           val nextTryTime = System.currentTimeMillis() + SyncExecutor.failureDelay(job)
-          content.updateSyncJob(job.id)(job => job.copy(state = SyncJob.State.Failed, startTime = nextTryTime, error = error, offline = job.offline || !network.isOnlineMode)) map { _ =>
+          content.updateSyncJob(job.id)(job => job.copy(state = SyncState.FAILED, startTime = nextTryTime, error = error, offline = job.offline || !network.isOnlineMode)) map { _ =>
             result
           }
         }
