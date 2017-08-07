@@ -27,6 +27,7 @@ import com.waz.model._
 import com.waz.service.AccountsService.SwapAccountCallback
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
+import com.waz.utils.returning
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
@@ -50,6 +51,7 @@ class AccountsService(val global: GlobalModule) {
 
   private val firstTimePref = prefs.preference(FirstTimeWithTeams)
 
+  //TODO should probably be Set
   val loggedInAccounts = firstTimePref.signal.flatMap {
     case false =>
       val changes = EventStream.union(
@@ -59,6 +61,15 @@ class AccountsService(val global: GlobalModule) {
       new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
     case true => Signal.const(Seq.empty[AccountData])
   }.map(_.filter(acc => acc.cookie.isDefined && acc.clientId.isDefined))
+
+  val zmsInstances = (for {
+    ids <- loggedInAccounts.map(_.map(_.id))
+    ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
+    zs  <- Signal.sequence(ams.map(_.zmessaging): _*)
+  } yield
+    returning(zs.flatten.toSet) { v =>
+      verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
+    }).disableAutowiring()
 
   // XXX Temporary stuff to handle team account in signup/signin - start
   private var _loggedInAccounts = Seq.empty[AccountData]
@@ -116,6 +127,7 @@ class AccountsService(val global: GlobalModule) {
     accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
   }
 
+  //TODO - why would we ever NOT want to create the account manager if there is a AccountId available for it?
   def getAccountManager(id: AccountId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
     case Some(acc) =>
       verbose(s"getAccountManager($acc)")
@@ -133,7 +145,7 @@ class AccountsService(val global: GlobalModule) {
     activeAccountPref() flatMap { id =>
         for {
           otherAccounts <- loggedInAccounts.map(_.map(_.id).filter(!id.contains(_))).head
-          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else storage.update(account, _.copy(registeredPush = None))
+          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else Future.successful({})
           _ <- if (id.contains(account)) setAccount(if (flushCredentials) otherAccounts.headOption else None) else Future.successful(())
         } yield {}
     }
