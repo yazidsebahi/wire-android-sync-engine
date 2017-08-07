@@ -30,6 +30,7 @@ import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
 import scala.collection.breakOut
+import scala.util.Try
 
 case class SyncJob(id: SyncId,
                     request: SyncRequest,
@@ -94,8 +95,10 @@ object SyncJob {
 
   implicit lazy val Decoder: JsonDecoder[SyncJob] = new JsonDecoder[SyncJob] {
     import JsonDecoder._
-    override def apply(implicit js: JSONObject): SyncJob =
-      SyncJob(SyncId('id), JsonDecoder[SyncRequest]('request), decodeStringSeq('dependsOn).map(SyncId(_))(breakOut), 'priority, 'optional, 'timeout, 'timestamp, 'startTime, 'attempts, 'offline, SyncState.valueOf('state), opt('error, ErrorResponse.Decoder.apply(_)))
+    override def apply(implicit js: JSONObject): SyncJob = {
+      val state = Try(SyncState.valueOf('state)).toOption.getOrElse(SyncState.WAITING)
+      SyncJob(SyncId('id), JsonDecoder[SyncRequest]('request), decodeStringSeq('dependsOn).map(SyncId(_))(breakOut), 'priority, 'optional, 'timeout, 'timestamp, 'startTime, 'attempts, 'offline, state, opt('error, ErrorResponse.Decoder.apply(_)))
+    }
   }
 
   /**
