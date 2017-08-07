@@ -17,8 +17,9 @@
  */
 package com.waz.sync.queue
 
-import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
+import com.waz.api.SyncState
 import com.waz.content._
 import com.waz.model.SyncId
 import com.waz.model.sync.SyncJob.SyncJobDao
@@ -61,9 +62,9 @@ class SyncContentUpdaterImpl(db: Database) extends SyncContentUpdater {
   val syncStorageFuture = db(SyncJobDao.list(_)).future map { jobs =>
     // make sure no job is loaded with Syncing state, this could happen if app is killed while syncing
     jobs map { job =>
-      if (job.state == SyncJob.State.Syncing) {
+      if (job.state == SyncState.SYNCING) {
         verbose(s"found job in state: SYNCING on initial load: $job")
-        job.copy(state = SyncJob.State.Waiting)
+        job.copy(state = SyncState.WAITING)
       } else job
     }
   } map { jobs =>

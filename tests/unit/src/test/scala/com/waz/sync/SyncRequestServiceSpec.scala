@@ -23,7 +23,7 @@ import com.waz.ZLog.LogTag
 import com.waz.api.NetworkMode
 import com.waz.api.NetworkMode.UNKNOWN
 import com.waz.content.Database
-import com.waz.model._
+import com.waz.model.{AccountId, _}
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service.{NetworkModeService, ReportingService, Timeouts, ZmsLifecycle}
 import com.waz.specs.AndroidFreeSpec
@@ -55,7 +55,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     networkMode ! UNKNOWN
   }
 
-  scenario("Let's do it!") {
+  scenario("Execute a few basic tasks") {
     (sync.apply (_:SyncRequest)).expects(*).returning(Future.successful(SyncResult(true)))
     (sync.apply (_:SerialExecutionWithinConversation, _:ConvLock)).expects(*, *).returning(Future.successful(SyncResult(true)))
 
@@ -68,7 +68,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
       res2 <- service.scheduler.await(id2)
     } yield (res, res2)))
 
-    println(result(service.listJobs.head))
+    result(service.listJobs.head) should have size 0
   }
 
   def getSyncServiceHandle = {
