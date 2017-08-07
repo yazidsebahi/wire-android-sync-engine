@@ -19,13 +19,13 @@ package com.waz.service
 
 import com.softwaremill.macwire._
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
 import com.waz.content.Preferences.Preference
-import com.waz.model.{UserData, _}
 import com.waz.model.otr.{Client, ClientId}
+import com.waz.model.{UserData, _}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
@@ -33,15 +33,14 @@ import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils._
+import com.waz.utils.{RichInstant, _}
 import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.wrappers.Context
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.CredentialsHandler
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 import org.threeten.bp.Instant
-import com.waz.utils.RichInstant
-import com.waz.utils.wrappers.Context
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -213,7 +212,11 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     _zmessaging
   }).orElse(Signal const Option.empty[ZMessaging])
 
-  val isLoggedIn = accounts.activeAccountPref.signal.map(_.contains(id))
+  val isLoggedIn = for {
+    active   <- accounts.activeAccountPref.signal.map(_.contains(id))
+    loggedIn <- accounts.loggedInAccounts.map(_.map(_.id).contains(id))
+  } yield active || loggedIn
+
   isLoggedIn.onUi { lifecycle.setLoggedIn }
 
   accountData { acc =>
@@ -223,25 +226,23 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   } (EventContext.Global)
 
   for {
-    acc      <- accountData
-    loggedIn <- isLoggedIn
+    acc      <- accountData if acc.verified
+    loggedIn <- isLoggedIn  if loggedIn
     client   <- otrCurrentClient
     _        <- otrClients
   } {
-    if (loggedIn && acc.verified) {
-      if (acc.userId.isEmpty || acc.clientId.isEmpty) {
-        verbose(s"account data needs registration: $acc")
-        Serialized.future(self)(ensureFullyRegistered())
-      }
+    if (acc.userId.isEmpty || acc.clientId.isEmpty) {
+      verbose(s"account data needs registration: $acc")
+      Serialized.future(self)(ensureFullyRegistered())
+    }
 
-      client.foreach{ client =>
-        if (client.signalingKey.isEmpty) {
-          returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
-            warn(msg)
-            HockeyApp.saveException(new IllegalStateException(msg), msg)
-          }
-          Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
+    client.foreach { client =>
+      if (client.signalingKey.isEmpty) {
+        returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
+          warn(msg)
+          HockeyApp.saveException(new IllegalStateException(msg), msg)
         }
+        Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
       }
     }
   }
