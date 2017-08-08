@@ -18,7 +18,7 @@
 package com.waz.znet
 
 import com.waz.provision.ProvisionedSuite
-import com.waz.service.{BackendConfig, GlobalModule}
+import com.waz.service.{BackendConfig, GlobalModuleImpl}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.Json
 import com.waz.znet.Response.{HttpStatus, SuccessHttpStatus}
@@ -38,7 +38,7 @@ class ZNetClientBackendSpec extends FeatureSpec with Matchers with ProvisionedSu
 //    new ZNetClient(provisionedEmail(s"auto$i"), s"auto${i}_pass", new AsyncClientImpl(wrapper = TestClientWrapper()))
 //  }
 
-  lazy val globalModule = new GlobalModule(Robolectric.application, BackendConfig.StagingBackend) {
+  lazy val globalModule = new GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   }
 

@@ -44,7 +44,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModule(Robolectric.application, BackendConfig.StagingBackend) { global =>
+class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) { global =>
   override lazy val client: AsyncClientImpl = new EmptyAsyncClientImpl(TestClientWrapper())
   override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   override lazy val storage: Database = new GlobalDatabase(context, dbSuffix)
@@ -64,7 +64,7 @@ class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(
   override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(teamId, clientId, user)
 }
 
-class MockAccountsService(global: GlobalModule = new MockGlobalModule) extends AccountsService(global) {
+class MockAccountsService(global: GlobalModuleImpl = new MockGlobalModule) extends AccountsService(global) {
 
   if (ZMessaging.currentAccounts == null) ZMessaging.currentAccounts = this
 

@@ -24,7 +24,7 @@ import com.waz.api
 import com.waz.api.PermissionProvider
 import com.waz.api.impl.search.Search
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
-import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.Uris
 import com.waz.model._
 import com.waz.service.AccountManager

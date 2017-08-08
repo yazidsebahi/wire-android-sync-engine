@@ -71,7 +71,7 @@ class DeviceActor(val deviceName: String,
     }
   lazy val delayNextAssetPosting = new AtomicBoolean(false)
 
-  lazy val globalModule = new GlobalModule(application, backend) { global =>
+  lazy val globalModule = new GlobalModuleImpl(application, backend) { global =>
     ZMessaging.currentGlobal = this
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
     override lazy val clientWrapper: Future[ClientWrapper] = wrapper

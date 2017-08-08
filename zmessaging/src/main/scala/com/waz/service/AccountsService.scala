@@ -21,8 +21,8 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
-import com.waz.client.RegistrationClient.ActivateResult
-import com.waz.client.RegistrationClient.ActivateResult.{Failure, PasswordExists, Success}
+import com.waz.client.RegistrationClientImpl.ActivateResult
+import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists, Success}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.service.AccountsService.SwapAccountCallback
@@ -43,7 +43,7 @@ class AccountsService(val global: GlobalModule) {
 
   private[waz] val accountMap = new mutable.HashMap[AccountId, AccountManager]()
 
-  val context       = global.context
+  lazy val context       = global.context
   val prefs         = global.prefs
   val storage       = global.accountsStorage
   val phoneNumbers  = global.phoneNumbers
@@ -352,9 +352,9 @@ class AccountsService(val global: GlobalModule) {
 
     def requestCode(shouldCall: Boolean): Future[Either[ErrorResponse, Unit]] = {
       (if (shouldCall)
-        requestPhoneConfirmationCall(number, KindOfAccess.LOGIN)
+        requestPhoneConfirmationCall(number, KindOfAccess.LOGIN_IF_NO_PASSWD)
       else
-        requestPhoneConfirmationCode(number, KindOfAccess.LOGIN))
+        requestPhoneConfirmationCode(number, KindOfAccess.LOGIN_IF_NO_PASSWD))
         .future.map {
         case Failure(error) => Left(error)
         case PasswordExists => Left(ErrorResponse.PasswordExists)
@@ -383,7 +383,7 @@ class AccountsService(val global: GlobalModule) {
     for {
       acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
       updatedAcc = acc.copy(pendingPhone = Some(number), phone = None, code = None, regWaiting = true)
-      _ <- storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc)
+      _ <- storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc)
       req <- requestCode(shouldCall)
     } yield req match {
       case Failure(error) => Left(error)
@@ -414,52 +414,36 @@ class AccountsService(val global: GlobalModule) {
 
   def registerNameOnPhone(number: PhoneNumber, code: ConfirmationCode, name: String): Future[Either[ErrorResponse, Unit]] = {
 
-    def switchOnSuccess(accountId: AccountId, errorResponse: Either[ErrorResponse, Unit]): Future[Either[ErrorResponse, Unit]] = {
-      errorResponse match {
-        case Left(error) => Future.successful(Left(error))
-        case Right(()) => switchAccount(accountId).map(Right(_))
-      }
-    }
-
     for {
       acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
       updatedAcc = acc.copy(pendingPhone = None, phone = Some(number), code = None, regWaiting = true)
       req <- registerOnBackend(updatedAcc.id, PhoneCredentials(number, Some(code)), name)
-      result <- switchOnSuccess(updatedAcc.id, req)
-    } yield result
+    } yield req
 
   }
 
   def loginPhone(number: PhoneNumber, code: ConfirmationCode): Future[Either[ErrorResponse, Unit]] = {
-
-    def switchOnSuccess(accountId: AccountId, errorResponse: Either[ErrorResponse, Unit]): Future[Either[ErrorResponse, Unit]] = {
-      errorResponse match {
-        case Left(error) => Future.successful(Left(error))
-        case Right(()) => switchAccount(accountId).map(Right(_))
-      }
-    }
-
     for {
       acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
       updatedAcc = acc.copy(pendingPhone = None, phone = Some(number), code = None, regWaiting = false)
       req <- loginOnBackend(updatedAcc.id, PhoneCredentials(number, Some(code)))
-      result <- switchOnSuccess(updatedAcc.id, req)
-    } yield result
+    } yield req
   }
 
-  //TODO: Email
   def loginEmail(emailAddress: EmailAddress, password: String): Future[Either[ErrorResponse, Unit]] = {
-    login(EmailCredentials(emailAddress, Some(password))).map {
-      case Left(error) => Left(error)
-      case Right(_) => Right(())
-    }
+    for {
+      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
+      updatedAcc = acc.copy(pendingEmail = None, email = Some(emailAddress), code = None, regWaiting = false)
+      req <- loginOnBackend(updatedAcc.id, EmailCredentials(emailAddress, Some(password)))
+    } yield req
   }
 
   def registerEmail(emailAddress: EmailAddress, password: String, name: String): Future[Either[ErrorResponse, Unit]] = {
-    register(EmailCredentials(emailAddress, Some(password)), Some(name), AccentColor()).map {
-      case Left(error) => Left(error)
-      case Right(_) => Right(())
-    }
+    for {
+      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
+      updatedAcc = acc.copy(pendingEmail = Some(emailAddress), email = None, code = None, regWaiting = true)
+      req <- registerOnBackend(updatedAcc.id, EmailCredentials(emailAddress, Some(password)), name)
+    } yield req
   }
 
   // Generic

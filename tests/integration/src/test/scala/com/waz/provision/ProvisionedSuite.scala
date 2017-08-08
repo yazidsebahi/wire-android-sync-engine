@@ -21,7 +21,7 @@ import java.io.InputStream
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.service.GlobalModule
+import com.waz.service.GlobalModuleImpl
 import com.waz.utils.JsonDecoder
 import org.json.JSONObject
 import org.scalatest.Suite
@@ -35,7 +35,7 @@ trait ProvisionedSuite extends EmailClientSuite { suite: Suite =>
   import com.waz.provision.ProvisionedSuite._
 
   val provisionFile: String
-  def globalModule: GlobalModule
+  def globalModule: GlobalModuleImpl
 
   override def backendHostname: String = globalModule.backend.baseUrl.toString.stripPrefix("https://")
 

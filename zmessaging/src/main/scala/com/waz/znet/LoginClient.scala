@@ -26,6 +26,7 @@ import com.waz.model.{AccountData, AccountId, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{ExponentialBackoff, JsonEncoder}
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
@@ -37,7 +38,6 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 trait LoginClient {
-
   def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult]
   def login(account: AccountData): CancellableFuture[LoginResult]
   def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]

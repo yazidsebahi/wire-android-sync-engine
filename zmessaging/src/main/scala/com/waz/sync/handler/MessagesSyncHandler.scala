@@ -25,7 +25,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
-import com.waz.content.{GlobalPreferences, MembersStorageImpl, MessagesStorageImpl}
+import com.waz.content.{GlobalPreferences, MembersStorage, MessagesStorageImpl}
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -68,7 +68,7 @@ class MessagesSyncHandler(context:    Context,
                           assets:     AssetService,
                           users:      UserServiceImpl,
                           cache:      CacheService,
-                          members:    MembersStorageImpl,
+                          members:    MembersStorage,
                           errors:     ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background

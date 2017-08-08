@@ -23,7 +23,7 @@ import com.waz.ShadowLogging
 import com.waz.content.{UserPreferences, ZmsDatabase}
 import com.waz.model.{AccountId, EmailAddress}
 import com.waz.provision.ProvisionedSuite
-import com.waz.service.{GlobalModule, _}
+import com.waz.service.{GlobalModuleImpl, _}
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Matchers._
 import com.waz.znet.AuthenticationManager.Token
@@ -39,7 +39,7 @@ class AuthenticationManagerBackendSpec extends FeatureSpec with Matchers with Be
   override val provisionFile = "/one_user.json"
   override protected lazy val logfileBaseDir: File = new File("target/logcat/integration")
 
-  lazy val globalModule: GlobalModule = new GlobalModule(Robolectric.application, BackendConfig.StagingBackend) {
+  lazy val globalModule: GlobalModuleImpl = new GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   }
 

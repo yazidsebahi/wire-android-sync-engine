@@ -22,7 +22,7 @@ import com.waz.api.KindOfVerification
 import com.waz.api.impl.{EmailCredentials, ErrorResponse, PhoneCredentials}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.GlobalModule
+import com.waz.service.GlobalModuleImpl
 import com.waz.sync.client.{ConnectionsClient, ConversationsClient, CredentialsUpdateClient, UsersClient}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
@@ -33,7 +33,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class UserProvisioner(val email: String, val pass: String, val name: String, val shouldConnect: Boolean, global: GlobalModule) {
+class UserProvisioner(val email: String, val pass: String, val name: String, val shouldConnect: Boolean, global: GlobalModuleImpl) {
   private implicit val logTag: LogTag = logTagFor[UserProvisioner]
 
   val regClient = global.regClient

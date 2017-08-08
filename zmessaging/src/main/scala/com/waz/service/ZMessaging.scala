@@ -52,7 +52,7 @@ import org.threeten.bp.{Clock, Instant}
 import scala.concurrent.Future
 import scala.util.Try
 
-class ZMessagingFactory(global: GlobalModule) {
+class ZMessagingFactory(global: GlobalModuleImpl) {
 
   def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 
@@ -335,13 +335,13 @@ object ZMessaging { self =>
   def useStagingBackend(): Unit = useBackend(BackendConfig.StagingBackend)
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
-  private lazy val global: GlobalModule = new GlobalModule(context, backend)
+  private lazy val global: GlobalModuleImpl = new GlobalModuleImpl(context, backend)
   private lazy val accounts: AccountsService = new AccountsService(global)
   private lazy val ui: UiModule = new UiModule(accounts)
 
   // mutable for testing FIXME: get rid of that
   private [waz] var currentUi: UiModule = _
-  private [waz] var currentGlobal: GlobalModule = _
+  private [waz] var currentGlobal: GlobalModuleImpl = _
   var currentAccounts: AccountsService = _
 
   def onCreate(context: Context) = {

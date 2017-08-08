@@ -86,9 +86,9 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   def testBackend: BackendConfig = BackendConfig.StagingBackend
   lazy val testClient = new AsyncClientImpl(wrapper = TestClientWrapper())
 
-  lazy val globalModule: GlobalModule = new ApiSpecGlobal
+  lazy val globalModule: GlobalModuleImpl = new ApiSpecGlobal
 
-  class ApiSpecGlobal extends GlobalModule(context, testBackend) {
+  class ApiSpecGlobal extends GlobalModuleImpl(context, testBackend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
     override lazy val client: AsyncClientImpl = testClient
     override lazy val timeouts: Timeouts = suite.timeouts

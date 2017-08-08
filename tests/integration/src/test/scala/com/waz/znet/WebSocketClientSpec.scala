@@ -25,7 +25,7 @@ import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket}
 import com.waz.model.EmailAddress
 import com.waz.provision.ProvisionedSuite
-import com.waz.service.{BackendConfig, GlobalModule}
+import com.waz.service.{BackendConfig, GlobalModuleImpl}
 import com.waz.utils.Json
 import com.waz.utils.events.EventContext
 import com.waz.znet.ClientWrapper.unwrap
@@ -45,7 +45,7 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
 
   val backend = BackendConfig.StagingBackend
 
-  lazy val globalModule: GlobalModule = new GlobalModule(Robolectric.application, backend) {
+  lazy val globalModule: GlobalModuleImpl = new GlobalModuleImpl(Robolectric.application, backend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   }
   lazy val asyncClient = globalModule.client

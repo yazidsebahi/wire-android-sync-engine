@@ -17,129 +17,225 @@
  */
 package com.waz.service
 
-import com.waz.api.impl.{EmailCredentials, ErrorResponse, PhoneCredentials}
+import com.waz.api.impl.PhoneCredentials
+import com.waz.api.{KindOfAccess, KindOfVerification}
+import com.waz.client.RegistrationClient
+import com.waz.client.RegistrationClientImpl.ActivateResult
+import com.waz.content.Preferences.{PrefKey, Preference}
+import com.waz.content.Preferences.Preference.PrefCodec
+import com.waz.content.{AccountsStorage, GlobalPreferences, Preferences}
 import com.waz.model._
-import com.waz.sync.client.UsersClient
-import com.waz.testutils.Matchers._
-import com.waz.testutils._
+import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.CancellableFuture
+import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
-import com.waz.znet.LoginClient.LoginResult
-import com.waz.znet.ZNetClient.ErrorOrResponse
-import com.waz.znet.{LoginClient, LoginClientImpl, ZNetClient}
-import org.robolectric.shadows.ShadowLog
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{Ignore, BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import com.waz.znet.LoginClient
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
-@Ignore class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
+class AccountsServiceSpec extends AndroidFreeSpec {
 
-  var loginResponse: LoginResult = _
-  var loadSelfResponse: Either[ErrorResponse, UserInfo] = _
+  private val globalModule = mock[GlobalModule]
+  private val storage = mock[AccountsStorage]
+  private val phoneNumbers = mock[PhoneNumberService]
+  private val regClient = mock[RegistrationClient]
+  private val loginClient = mock[LoginClient]
+  private val prefs = mock[GlobalPreferences]
 
-  lazy val global = new MockGlobalModule {
-    override lazy val loginClient: LoginClient = new LoginClientImpl(client, BackendConfig.StagingBackend) {
-      override def login(account: AccountData) = {
-        CancellableFuture successful loginResponse
+  feature("Phone registration") {
+
+    val phoneNumber = PhoneNumber("+0918273465")
+    val confirmationCode = ConfirmationCode("123")
+
+    scenario("Request for a new phone registration should create a pending account and request a code from backend") {
+      val service = getAccountService
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountData]))
+      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.REGISTRATION).once().returning(CancellableFuture.successful[ActivateResult](ActivateResult.Success))
+      (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, _, creator) =>
+
+          creator.phone.shouldBe(None)
+          creator.pendingPhone.shouldBe(Some(phoneNumber))
+          creator.regWaiting.shouldBe(true)
+          creator.code.shouldBe(None)
+          creator.cookie.shouldBe(None)
+
+          Future.successful(creator)
       }
+
+      result(service.registerPhone(phoneNumber)).shouldBe(Right(()))
     }
-    override lazy val factory: MockZMessagingFactory = new MockZMessagingFactory(this) {
-      override def usersClient(client: ZNetClient): UsersClient = new UsersClient(client) {
-        override def loadSelf(): ErrorOrResponse[UserInfo] = CancellableFuture successful loadSelfResponse
+
+    scenario("Request for a phone registration that exists in the db should update the account to pending and request a code from backend") {
+      val service = getAccountService
+      val prevAccount = AccountData()
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(prevAccount)))
+      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.REGISTRATION).once().returning(CancellableFuture.successful[ActivateResult](ActivateResult.Success))
+      (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, updater, _) =>
+        val updated = updater(prevAccount)
+
+        updated.phone.shouldBe(None)
+        updated.pendingPhone.shouldBe(Some(phoneNumber))
+        updated.regWaiting.shouldBe(true)
+        updated.code.shouldBe(None)
+        updated.cookie.shouldBe(None)
+
+        Future.successful(updated)
       }
 
-      override def userModule(userId: UserId, account: AccountManager): UserModule =
-        new UserModule(userId, account) {
-          override def ensureClientRegistered(accountId: AccountId) = {
-            Future successful Right({})
-          }
-        }
+      result(service.registerPhone(phoneNumber)).shouldBe(Right(()))
+    }
+
+    scenario("Validating a code for registration should update the pending phone to normal and save the confirmation code") {
+      val service = getAccountService
+      var account = AccountData(pendingPhone = Some(phoneNumber))
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
+      (regClient.verifyPhoneNumber _).expects(*, KindOfVerification.PREVERIFY_ON_REGISTRATION).once().returning(CancellableFuture.successful(Right(())))
+      (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, updater, _) => returning(Future.successful(updater(account))){_ => account = updater(account)} }
+      (storage.update _).expects(*, *).once().onCall{ (_, updater) =>
+        account = updater(account)
+
+        account.phone.shouldBe(Some(phoneNumber))
+        account.pendingPhone.shouldBe(None)
+        account.regWaiting.shouldBe(true)
+        account.code.shouldBe(Some(confirmationCode.str))
+        account.cookie.shouldBe(None)
+
+        Future.successful(Some(account, account))
+      }
+
+      result(service.activatePhoneOnRegister(phoneNumber, confirmationCode)).shouldBe(Right(()))
+    }
+
+    scenario("Registering a name to a phone account should finish the registration") {
+      val service = getAccountService
+      var account = AccountData(phone = Some(phoneNumber))
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
+      (regClient.register _).expects(account.id, *, *, *).once().returning(CancellableFuture.successful(Right(UserInfo(UserId()), Some(Cookie("")))))
+      (storage.update _).expects(*, *).once().onCall{ (_, updater) =>
+        account = updater(account)
+
+        account.phone.shouldBe(Some(phoneNumber))
+        account.pendingPhone.shouldBe(None)
+        account.regWaiting.shouldBe(false)
+        account.code.shouldBe(None)
+        account.cookie.shouldBe(Some(Cookie("")))
+
+        Future.successful(Some(account, account))
+      }
+      (storage.get _).expects(account.id).anyNumberOfTimes().returning(Future.successful(Some(account)))
+
+      result(service.registerNameOnPhone(phoneNumber, confirmationCode, "Whisker Pants")).shouldBe(Right(()))
+    }
+
+  }
+
+  feature("Phone login") {
+
+    val phoneNumber = PhoneNumber("+0918273465")
+    val confirmationCode = ConfirmationCode("123")
+
+    scenario("Request a login with a new phone number should create an account and set the phone to pending"){
+      val service = getAccountService
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountData]))
+      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN_IF_NO_PASSWD).once().returning(CancellableFuture.successful(ActivateResult.Success))
+      (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, _, creator) =>
+
+        creator.phone.shouldBe(None)
+        creator.pendingPhone.shouldBe(Some(phoneNumber))
+        creator.regWaiting.shouldBe(false)
+        creator.code.shouldBe(None)
+        creator.cookie.shouldBe(None)
+
+        Future.successful(creator)
+      }
+
+      result(service.loginPhone(phoneNumber)).shouldBe(Right(()))
+    }
+
+    scenario("Request a login with an existing phone number in db should update the account and set the phone to pending"){
+      val service = getAccountService
+      var account = AccountData().copy(phone = Some(phoneNumber))
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
+      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN_IF_NO_PASSWD).once().returning(CancellableFuture.successful(ActivateResult.Success))
+      (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, updater, _) =>
+        account = updater(account)
+
+        account.phone.shouldBe(None)
+        account.pendingPhone.shouldBe(Some(phoneNumber))
+        account.regWaiting.shouldBe(false)
+        account.code.shouldBe(None)
+        account.cookie.shouldBe(None)
+
+        Future.successful(account)
+      }
+
+      result(service.loginPhone(phoneNumber)).shouldBe(Right(()))
+    }
+
+    scenario("Activate the phone on login should set the pending phone to normal and set the cookie and token"){
+      val service = getAccountService
+      var account = AccountData().copy(phone = Some(phoneNumber))
+
+      val cookie = Cookie("123")
+      val token = Token("1", "2", 3)
+
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
+      (loginClient.login _).expects(*, PhoneCredentials(phoneNumber, Some(confirmationCode))).once().returning(CancellableFuture.successful(Right(token, Some(cookie))))
+      (storage.update _).expects(*, *).once().onCall{ (_, updater) =>
+        account = updater(account)
+
+        account.phone.shouldBe(Some(phoneNumber))
+        account.pendingPhone.shouldBe(None)
+        account.regWaiting.shouldBe(false)
+        account.code.shouldBe(None)
+        account.cookie.shouldBe(Some(cookie))
+        account.accessToken.shouldBe(Some(token))
+
+        Future.successful(Some((account, account)))
+      }
+      (storage.get _).expects(account.id).anyNumberOfTimes().returning(Future.successful(Some(account)))
+
+      result(service.loginPhone(phoneNumber, confirmationCode)).shouldBe(Right(()))
     }
   }
-  lazy val accounts = new MockAccountsService(global)
 
-  before {
-    ShadowLog.stream = null
-    loginResponse = Left((Some("123"), ErrorResponse(0, "", "")))
-    loadSelfResponse = Left(ErrorResponse(0, "", ""))
-  }
+  def getAccountService: AccountsService = {
 
-  feature("login") {
+    val mockPrefs = new Preferences {
 
-    scenario("login with unverified user") {
-      loginResponse = Left((Some("123"), ErrorResponse(403, "message", "pending-activation")))
+      private var map = Map[AnyRef, AnyRef]()
 
-      val creds = EmailCredentials(EmailAddress("email"), Some("pass"))
-      Await.result(accounts.login(creds), 2.seconds) match {
-        case Right(data) =>
-          data.email shouldEqual Some(EmailAddress("email"))
-          data.verified shouldEqual false
-          data.userId shouldBe empty
-        case res =>
-          fail(s"login returned: $res")
+      override protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A] = {
+        Future.successful(map.getOrElse(key, key.default).asInstanceOf[A])
       }
-    }
-  }
 
-  feature("re-login using different credentials") {
+      override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] ={
+        map = map ++ Map(key -> value.asInstanceOf[AnyRef])
+        Future.successful(())
+      }
 
-    lazy val phone = PhoneNumber("+12345678901")
-    lazy val email = EmailAddress("test@email.com")
-    lazy val userInfo = UserInfo(UserId(), Some("user name"), Some(1), Some(email), Some(phone))
-
-    var accountId = ""
-
-    scenario("log in with phone number") {
-      val accountsSize = accounts.accountMap.size
-
-      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some(Cookie("cookie"))))
-      loadSelfResponse = Right(userInfo)
-
-      val Right(data) = accounts.login(PhoneCredentials(phone, Some(ConfirmationCode("code")))).await()
-      data.phone shouldEqual Some(phone)
-      data.verified shouldEqual true
-      data.email shouldEqual Some(email)
-      accountId = data.id.str
-      accounts.activeAccountPref().await() shouldEqual data.id.str
-      accounts.accountMap should have size (accountsSize + 1)
+      override implicit protected val dispatcher: ExecutionContext = ExecutionContext.global
     }
 
-    scenario("log out") {
-      accounts.logout(flushCredentials = false).await()
+    (globalModule.accountsStorage _).expects().anyNumberOfTimes.returning(storage)
+    (globalModule.phoneNumbers _).expects().anyNumberOfTimes.returning(phoneNumbers)
+    (globalModule.regClient _).expects().anyNumberOfTimes.returning(regClient)
+    (globalModule.loginClient _).expects().anyNumberOfTimes.returning(loginClient)
+    (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
+/*
+    (prefs.preference[Boolean] (_: PrefKey[Boolean])(_: PrefCodec[Boolean])).expects(*, *).anyNumberOfTimes().onCall {
+      (key: PrefKey[Boolean], _ : PrefCodec[Boolean]) =>
+        new Preference[Boolean](mockPrefs, key)
     }
+*/
+    (phoneNumbers.normalize _).expects(*).anyNumberOfTimes().onCall { p: PhoneNumber => Future.successful(Some(p)) }
 
-    scenario("log in with email") {
-      val accountsSize = accounts.accountMap.size
-      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some(Cookie("cookie"))))
-      loadSelfResponse = Right(userInfo)
-
-      val Right(data) = accounts.login(EmailCredentials(email, Some("passwd"))).await()
-      data.id.str shouldEqual accountId
-      data.phone shouldEqual Some(phone)
-      data.email shouldEqual Some(email)
-      data.verified shouldEqual true
-      accounts.accountMap should have size accountsSize
-      accounts.activeAccountPref().await() shouldEqual data.id.str
-    }
-
-    scenario("log out again") {
-      accounts.logout(flushCredentials = false).await()
-    }
-
-    scenario("log in with new password (after changing it on backend)") {
-      val accountsSize = accounts.accountMap.size
-      loginResponse = Right((Token("token", "Bearer", System.currentTimeMillis() + 15.minutes.toMillis), Some(Cookie("cookie"))))
-      loadSelfResponse = Right(userInfo)
-
-      val Right(data) = accounts.login(EmailCredentials(email, Some("new_password"))).await()
-      data.id.str shouldEqual accountId
-      data.phone shouldEqual Some(phone)
-      data.email shouldEqual Some(email)
-      data.verified shouldEqual true
-      accounts.accountMap should have size accountsSize
-      accounts.activeAccountPref().await() shouldEqual data.id.str
-    }
+    new AccountsService(globalModule)
   }
 }
