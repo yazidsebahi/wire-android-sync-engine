@@ -49,27 +49,12 @@ import scala.concurrent.duration._
 import scala.util.Random
 import scala.collection.mutable
 
-class MessageSendingSpec extends AndroidFreeSpec with BeforeAndAfter { test =>
+class MessageSendingSpec extends AndroidFreeSpec { test =>
   implicit lazy val dispatcher = Threading.Background
 
   lazy val selfUser = UserData("self user")
-  lazy val user1 = UserData("user 1")
-
-  var messageSync = None: Option[MessageId]
-  var assetSync = None: Option[AssetId]
-  var lastReadSync = None: Option[(ConvId, Instant)]
-
-  before {
-    messageSync = None
-    assetSync = None
-    lastReadSync = None
-  }
-
-  after {
-    ShadowLog.stream = null
-  }
-
-
+  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
+  
   private def stubService(
     assets:          AssetService                 = stub[AssetService],
     users:           UserService                  = stub[UserService],
@@ -90,40 +75,25 @@ class MessageSendingSpec extends AndroidFreeSpec with BeforeAndAfter { test =>
     assetStorage, convsContent, convStorage, network, convs, sync, lifecycle, errors
   )
 
-  lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
-  private val messagesList = mutable.ListBuffer[MessageData]()
-  def listMessages = messagesList.filter(_.convId == conv.id)
-
-  def getMessage(id: MessageId) = messagesList.find(_.id == id)
-/*
-  def sendMessage(convsUi: ConversationsUiService, content: MessageContent): MessageData = {
-    val count = listMessages.size
-    val msg = Await.result(convsUi.sendMessage(conv.id, content), 1.second)
-    listMessages should have size (count + 1)
-    msg.get
-  }*/
-
   feature("Text messages") {
     scenario("Add text message") {
       val messages = mock[MessagesService]
       val mId = MessageId()
-      (messages.addTextMessage _).expects(conv.id, "test", Map.empty[UserId, String]).once().returning(
-        Future { MessageData(mId, conv.id, Message.Type.TEXT, UserId(), MessageData.textContent("test"), protos = Seq(GenericMessage(mId.uid, Text("test", Map.empty, Nil)))) }
-      )
+      val msgData = MessageData(mId, conv.id, Message.Type.TEXT, UserId(), MessageData.textContent("test"), protos = Seq(GenericMessage(mId.uid, Text("test", Map.empty, Nil))))
+      val syncId = SyncId()
 
-      val convsUi = stubService(messages = messages)
+      (messages.addTextMessage _).expects(conv.id, "test", Map.empty[UserId, String]).once().returning(Future.successful(msgData))
 
-      val count = listMessages.size
+      val convsContent = mock[ConversationsContentUpdater]
+      (convsContent.convById _).expects(conv.id).once().returning(Future.successful(Some(conv)))
+      (convsContent.updateConversationLastRead _).expects(conv.id, msgData.time).once().returning(Future.successful(Some((conv, conv))))
+
+      val sync = mock[SyncServiceHandle]
+      (sync.postMessage _).expects(msgData.id, conv.id, msgData.editTime).once().returning(Future.successful(syncId))
+      val convsUi = stubService(messages = messages, convsContent = convsContent, sync = sync)
+
       val msg = Await.result(convsUi.sendMessage(conv.id, "test"), 1.second).get
-      listMessages should have size (count + 1)
       msg.contentString shouldEqual "test"
-      messageSync shouldEqual Some(msg.id)
-      msg.state shouldEqual Message.Status.PENDING
-
-      /*withEvent(service.messagesStorage.messageChanged) { case _ => true } {
-        service.dispatchEvent(textMessageEvent(Uid(msg.id.str), conv.remoteId, new Date(), selfUser.id, "test"))
-      }*/
-      //getMessage(msg.id).map(_.state) shouldEqual Some(Status.SENT)
     }
   }
 /*

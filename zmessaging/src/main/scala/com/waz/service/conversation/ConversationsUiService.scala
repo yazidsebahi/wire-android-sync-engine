@@ -21,6 +21,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.MessageContent.Asset.ErrorHandler
+import com.waz.api.MessageContent.Text
 import com.waz.api.impl._
 import com.waz.api.{EphemeralExpiration, ImageAssetFactory, Message, NetworkMode}
 import com.waz.content._
@@ -57,7 +58,11 @@ trait ConversationsUiService {
   def sendMessage(convId: ConvId, imageAsset: ImageAsset): Future[Option[MessageData]]
   def sendMessage(convId: ConvId, location: api.MessageContent.Location): Future[Option[MessageData]]
 
+  @Deprecated
+  def updateMessage(convId: ConvId, id: MessageId, text: Text): Future[Option[MessageData]]
+
   def updateMessage(convId: ConvId, id: MessageId, text: String): Future[Option[MessageData]]
+
   def deleteMessage(convId: ConvId, id: MessageId): Future[Unit]
   def recallMessage(convId: ConvId, id: MessageId): Future[Option[MessageData]]
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
@@ -177,6 +182,9 @@ class ConversationsUiServiceImpl( self:            UserId,
   }
 
   implicit private def toLocation(l: api.MessageContent.Location): GenericContent.Location = Location(l.getLongitude, l.getLatitude, l.getName, l.getZoom)
+
+  @Deprecated
+  override def updateMessage(convId: ConvId, id: MessageId, text: Text): Future[Option[MessageData]] = updateMessage(convId, id, text.getContent)
 
   override def updateMessage(convId: ConvId, id: MessageId, text: String): Future[Option[MessageData]] = {
     verbose(s"updateMessage($convId, $id, $text")
