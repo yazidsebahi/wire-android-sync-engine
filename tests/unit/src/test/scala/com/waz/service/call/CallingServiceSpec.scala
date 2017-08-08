@@ -449,8 +449,6 @@ class CallingServiceSpec extends AndroidFreeSpec {
       map.size         shouldEqual 53
       map("version")   shouldEqual "avs 3.5.37 (arm/linux)"
       map("direction") shouldEqual "Outgoing"
-
-      println(map)
     }
   }
 
