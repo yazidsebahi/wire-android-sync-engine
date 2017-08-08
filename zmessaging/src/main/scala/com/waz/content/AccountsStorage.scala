@@ -35,9 +35,9 @@ trait AccountsStorage extends CachedStorage[AccountId, AccountData] {
 class AccountsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[AccountId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) with AccountsStorage {
   import com.waz.threading.Threading.Implicits.Background
 
-  def findByEmail(email: EmailAddress) = find(_.email.contains(email), AccountDataDao.findByEmail(email)(_), identity).map(_.headOption)
+  def findByEmail(email: EmailAddress) = find(ac => ac.email.contains(email) || ac.pendingEmail.contains(email), AccountDataDao.findByEmail(email)(_), identity).map(_.headOption)
 
-  def findByPhone(phone: PhoneNumber) = find(_.phone.contains(phone), AccountDataDao.findByPhone(phone)(_), identity).map(_.headOption)
+  def findByPhone(phone: PhoneNumber) = find(ac => ac.phone.contains(phone) || ac.pendingPhone.contains(phone), AccountDataDao.findByPhone(phone)(_), identity).map(_.headOption)
 
   def find(credentials: Credentials): Future[Option[AccountData]] = credentials match {
     case EmailCredentials(email, _, _) => findByEmail(email)

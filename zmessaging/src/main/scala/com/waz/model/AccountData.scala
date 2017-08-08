@@ -101,8 +101,8 @@ case class AccountData(id:             AccountId               = AccountId(),
       copy(email = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd), pendingEmail = if (pendingEmail.contains(e)) None else pendingEmail)
     case EmailCredentials(e, None, _) =>
       copy(email = Some(e), pendingEmail = if (pendingEmail.contains(e)) None else pendingEmail)
-    case PhoneCredentials(number, code, _) =>
-      copy(phone = Some(number), pendingPhone = if (pendingPhone.contains(number)) None else pendingPhone, code = code.map(_.str))
+    case PhoneCredentials(number, _, _) =>
+      copy(phone = Some(number), pendingPhone = if (pendingPhone.contains(number)) None else pendingPhone)
     case _ => this
   }
 
@@ -111,8 +111,8 @@ case class AccountData(id:             AccountId               = AccountId(),
       copy(pendingEmail = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd), email = if (email.contains(e)) None else email)
     case EmailCredentials(e, None, _) =>
       copy(pendingEmail = Some(e), email = if (email.contains(e)) None else email)
-    case PhoneCredentials(number, code, _) =>
-      copy(pendingPhone = Some(number), phone = if (phone.contains(number)) None else phone, code = code.map(_.str))
+    case PhoneCredentials(number, _, _) =>
+      copy(pendingPhone = Some(number), phone = if (phone.contains(number)) None else phone)
     case _ => this
   }
 
