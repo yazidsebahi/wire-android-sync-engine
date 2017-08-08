@@ -111,7 +111,7 @@ class UiModule(val accounts: AccountsService) extends UiEventContext with ZMessa
   val zms = new ZMessagingResolver(this)
   val uiCache = new UiCache[Uri, AnyRef](0)(this)
 
-  val global: GlobalModule = accounts.global
+  val global = accounts.global
   def context = global.context
   def cache = global.cache
   def prefs = global.prefs

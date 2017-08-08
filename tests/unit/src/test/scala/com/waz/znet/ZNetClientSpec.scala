@@ -55,6 +55,7 @@ class ZNetClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter w
     startMock()
     reset()
     client = new ZNetClient(None, new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl) {
+    new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort))) {
 
       override def MaxConcurrentRequests = maxConcurrentRequests
       override def LongRunning = longRunningTime

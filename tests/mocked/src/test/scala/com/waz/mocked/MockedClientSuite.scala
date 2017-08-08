@@ -24,8 +24,8 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
-import com.waz.client.RegistrationClient
-import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.client.RegistrationClientImpl
+import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model.UserData._
 import com.waz.model._
@@ -150,7 +150,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
   }
 
-  class MockedZMessagingFactory(global: GlobalModule) extends ZMessagingFactory(global) {
+  class MockedZMessagingFactory(global: GlobalModuleImpl) extends ZMessagingFactory(global) {
 
     override def client(credentials: CredentialsHandler): ZNetClient = new EmptyClient
 
@@ -180,15 +180,15 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       }(Threading.Background)
     }
 
-  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModule(context, testBackend) {
+  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModuleImpl(context, testBackend) {
     override lazy val client: AsyncClientImpl = testClient
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
-    override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
+    override lazy val loginClient: LoginClientImpl = new LoginClientImpl(client, backend) {
       override def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
       override def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
 
     }
-    override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
+    override lazy val regClient: RegistrationClientImpl = new RegistrationClientImpl(client, backend) {
       override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = suite.register(user, credentials, name, accentId)
       override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
       override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCall(phone, kindOfAccess)

@@ -22,7 +22,7 @@ import java.util.UUID.randomUUID
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.impl.{AccentColor, ErrorResponse}
 import com.waz.api.{ApiSpec, CredentialsFactory, Self}
-import com.waz.client.RegistrationClient
+import com.waz.client.RegistrationClientImpl
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -146,7 +146,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   val uuids = (1 to 8) map (_ => randomUUID())
   val emails = uuids map (id => EmailAddress(s"android.test+$id@wire.com"))
 
-  def newClient = new RegistrationClient(new AsyncClientImpl(wrapper = TestClientWrapper()), testBackend)
+  def newClient = new RegistrationClientImpl(new AsyncClientImpl(wrapper = TestClientWrapper()), testBackend)
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
     override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, user) {

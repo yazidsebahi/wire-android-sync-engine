@@ -53,7 +53,7 @@ import scala.concurrent.duration._
 import scala.util.Success
 import scala.util.control.NoStackTrace
 
-class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
+class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorage, lifecycle: ZmsLifecycle,
                       userPrefs: UserPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
                       convs: ConversationStorageImpl, permissions: PermissionsService) {

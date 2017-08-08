@@ -121,6 +121,7 @@ object Preferences {
   }
 }
 
+
 /**
   * Global preference based on Android SharedPreferences. Note, here we need to save preferences to the correct primitive
   * type in SharedPreferences, as the Android system uses these types by default (e.g., a CheckBoxPreference defined in XML

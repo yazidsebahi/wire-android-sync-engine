@@ -21,8 +21,10 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
+import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.model._
 import com.waz.service.BackendConfig
+import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.sync.client.UsersClient.UserResponseExtractor
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonEncoder
@@ -38,9 +40,17 @@ import org.json.JSONObject
 
 import scala.concurrent.duration._
 
-class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
+trait RegistrationClient {
+  def register(account: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
+  def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit]
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
+  def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation]
+}
+
+class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extends RegistrationClient {
   import Threading.Implicits.Background
-  import com.waz.client.RegistrationClient._
+  import com.waz.client.RegistrationClientImpl._
 
   def register(account: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
     val json = JsonEncoder { o =>
@@ -139,7 +149,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   private def infoPath(token: PersonalInvitationToken): URI = URI.parse(InvitationPath).buildUpon.appendPath("info").appendQueryParameter("code", token.code).build
 }
 
-object RegistrationClient {
+object RegistrationClientImpl {
   val RegisterPath = "/register"
   val ActivatePath = "/activate"
   val ActivateSendPath = "/activate/send"

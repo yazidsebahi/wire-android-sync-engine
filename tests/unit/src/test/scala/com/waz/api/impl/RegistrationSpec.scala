@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.{ClientRegistrationState, CredentialsFactory, InitListener, LoginListener}
-import com.waz.client.RegistrationClient
+import com.waz.client.RegistrationClientImpl
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._

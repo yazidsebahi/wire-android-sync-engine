@@ -20,7 +20,7 @@ package com.waz.users
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
 import com.waz.api.impl.{AccentColor, EmailCredentials, LocalImageAsset}
-import com.waz.client.RegistrationClient
+import com.waz.client.RegistrationClientImpl
 import com.waz.content.UserPreferences.ShareContacts
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model._
@@ -52,7 +52,7 @@ class RegistrationSpec extends FeatureSpec with Matchers with GivenWhenThen with
 
   lazy val userId = AccountId()
 
-  lazy val client = new RegistrationClient(new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
+  lazy val client = new RegistrationClientImpl(new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
 
   lazy val assetGenerator = zmessaging.assetGenerator
 
