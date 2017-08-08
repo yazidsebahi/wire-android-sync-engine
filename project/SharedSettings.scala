@@ -16,7 +16,7 @@ object SharedSettings {
   case class EmailTestUser(email: String, password: String)
   case class InternalBackendPasswords(staging: String)
 
-  val avsVersion = "2.8.61"
+  val avsVersion = "3.4.100"
   val audioVersion = "1.195.0"
   val RobolectricVersion = "5.0.0_r2-robolectric-1"
   val supportLibVersion = "25.4.0"
