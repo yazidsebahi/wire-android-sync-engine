@@ -168,9 +168,7 @@ class AccountsService(val global: GlobalModule) {
       if !cur.contains(accountId)
       _        <- logout(flushCredentials = false)
       account  <- storage.get(accountId)
-      if account.exists { acc =>
-        acc.cookie.exists(_.isValid) || (acc.email.isDefined && acc.password.isDefined)
-      }
+      if account.isDefined
       _        <- setAccount(Some(accountId))
       _        <- getOrCreateAccountManager(accountId)
     } yield {}
@@ -385,6 +383,7 @@ class AccountsService(val global: GlobalModule) {
       updatedAcc = acc.copy(pendingPhone = Some(number), phone = None, code = None, regWaiting = true)
       _ <- storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc)
       req <- requestCode(shouldCall)
+      _ <- if (req == Success) CancellableFuture.lift(setAccount(Some(updatedAcc.id))) else CancellableFuture.successful(())
     } yield req match {
       case Failure(error) => Left(error)
       case PasswordExists => Left(ErrorResponse.PasswordExists)
@@ -413,7 +412,6 @@ class AccountsService(val global: GlobalModule) {
   }
 
   def registerNameOnPhone(number: PhoneNumber, code: ConfirmationCode, name: String): Future[Either[ErrorResponse, Unit]] = {
-
     for {
       acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
       updatedAcc = acc.copy(pendingPhone = None, phone = Some(number), code = None, regWaiting = true)
@@ -434,7 +432,9 @@ class AccountsService(val global: GlobalModule) {
     for {
       acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
       updatedAcc = acc.copy(pendingEmail = None, email = Some(emailAddress), code = None, regWaiting = false)
+      _ <- storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc)
       req <- loginOnBackend(updatedAcc.id, EmailCredentials(emailAddress, Some(password)))
+      _ <- if (req.isRight) switchAccount(updatedAcc.id) else Future.successful(())
     } yield req
   }
 
@@ -442,7 +442,9 @@ class AccountsService(val global: GlobalModule) {
     for {
       acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
       updatedAcc = acc.copy(pendingEmail = Some(emailAddress), email = None, code = None, regWaiting = true)
+      _ <- storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc)
       req <- registerOnBackend(updatedAcc.id, EmailCredentials(emailAddress, Some(password)), name)
+      _ <- if (req.isRight) switchAccount(updatedAcc.id) else Future.successful(())
     } yield req
   }
 
@@ -462,9 +464,12 @@ class AccountsService(val global: GlobalModule) {
 
   private def registerOnBackend(accountId: AccountId, credentials: Credentials, name: String): Future[Either[ErrorResponse, Unit]] = {
     regClient.register(accountId, credentials, name, None).future.flatMap {
-      case Right((userInfo, cookie)) =>
+      case Right((userInfo, Some(cookie))) =>
         verbose(s"register($credentials) done, id: $accountId, user: $userInfo, cookie: $cookie")
-        storage.update(accountId, _.updated(credentials).copy(cookie = cookie, userId = Some(userInfo.id), regWaiting = false)).map(_ => Right(()))
+        storage.update(accountId, _.updated(credentials).copy(cookie = Some(cookie), userId = Some(userInfo.id), regWaiting = false)).map(_ => Right(()))
+      case Right((userInfo, None)) =>
+        verbose(s"register($credentials) done, id: $accountId, user: $userInfo")
+        storage.update(accountId, _.updatedPending(credentials).copy(cookie = None, userId = Some(userInfo.id), regWaiting = false)).map(_ => Right(()))
       case Left(error) =>
         info(s"register($credentials, $name) failed: $error")
         Future successful Left(error)
