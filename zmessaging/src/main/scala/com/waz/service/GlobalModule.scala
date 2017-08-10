@@ -41,7 +41,7 @@ import com.waz.znet._
 import scala.concurrent.Future
 
 trait GlobalModule {
-  def context: Context
+  def context: AContext
   def backend: BackendConfig
 
   def prefs: GlobalPreferences
