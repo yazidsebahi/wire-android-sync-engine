@@ -534,7 +534,7 @@ class ContactsSpec extends FeatureSpec with OptionValues with MockedClientApiSpe
   }
 
   def givenAPreviousInvitationAt(i: Instant): Unit = {
-    val zuser = AccountData(EmailAddress(email), password).copy(verified = true)
+    val zuser = AccountData(EmailAddress(email), password)
     val globalDB = new GlobalDatabase(context)
     try Await.result(globalDB(AccountDataDao.insertOrReplace(zuser)(_)), 10.seconds) finally globalDB.close
     val userDB = new ZmsDatabase(zuser.id, context)

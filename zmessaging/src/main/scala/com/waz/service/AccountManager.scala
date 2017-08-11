@@ -118,7 +118,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
   private val otrClients = accountData.map(_.userId).flatMap {
-    case Some(uid) => storage.otrClientsStorage.signal(uid).map(_.clients.values.toSet)
+    case Some(uid) => storage.otrClientsStorage.signal(uid).map(_.clients.values.toSet).orElse(Signal.const(Set.empty[Client]))
     case _ => Signal.const(Set.empty[Client])
   }
 
@@ -212,7 +212,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     acc      <- accountData if acc.verified
     loggedIn <- isLoggedIn  if loggedIn
     client   <- otrCurrentClient
-    _        <- otrClients
+    _        <- otrClients.map(_.size)
   } {
     if (acc.userId.isEmpty || acc.clientId.isEmpty) {
       verbose(s"account data needs registration: $acc")

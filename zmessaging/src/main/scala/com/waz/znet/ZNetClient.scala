@@ -21,8 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.AccountId
-import com.waz.service.{BackendConfig, GlobalModule}
+import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
