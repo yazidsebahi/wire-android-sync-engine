@@ -110,7 +110,7 @@ object ZGlobalDB {
         db.execSQL("CREATE TABLE IF NOT EXISTS Teams (_id TEXT PRIMARY KEY, name TEXT, creator TEXT, icon TEXT, icon_key TEXT)")
       },
       Migration(19, 20) { db =>
-        AccountDataMigration.v14(db)
+        AccountDataMigration.v20(db)
       }
     )
 
