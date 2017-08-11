@@ -52,7 +52,7 @@ import org.threeten.bp.{Clock, Instant}
 import scala.concurrent.Future
 import scala.util.Try
 
-class ZMessagingFactory(global: GlobalModuleImpl) {
+class ZMessagingFactory(global: GlobalModule) {
 
   def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 

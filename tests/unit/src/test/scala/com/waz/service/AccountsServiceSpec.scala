@@ -17,21 +17,21 @@
  */
 package com.waz.service
 
-import com.waz.api.impl.PhoneCredentials
+import com.waz.api.impl.{EmailCredentials, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient
 import com.waz.client.RegistrationClientImpl.ActivateResult
-import com.waz.content.Preferences.{PrefKey, Preference}
-import com.waz.content.Preferences.Preference.PrefCodec
-import com.waz.content.{AccountsStorage, GlobalPreferences, Preferences}
+import com.waz.content.AccountsStorage
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.TestGlobalPreferences
 import com.waz.threading.CancellableFuture
+import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 class AccountsServiceSpec extends AndroidFreeSpec {
 
@@ -40,7 +40,6 @@ class AccountsServiceSpec extends AndroidFreeSpec {
   private val phoneNumbers = mock[PhoneNumberService]
   private val regClient = mock[RegistrationClient]
   private val loginClient = mock[LoginClient]
-  private val prefs = mock[GlobalPreferences]
 
   feature("Phone registration") {
 
@@ -205,36 +204,128 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     }
   }
 
-  def getAccountService: AccountsService = {
+  feature("Email registration") {
 
-    val mockPrefs = new Preferences {
+    val name = "Whisker Pants"
+    val email = EmailAddress("whisker.pants@wire.com")
+    val password = "12345678"
 
-      private var map = Map[AnyRef, AnyRef]()
+    scenario("Attempting registration should send a request with the data and create the appropriate account data") {
+      val service = getAccountService
 
-      override protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A] = {
-        Future.successful(map.getOrElse(key, key.default).asInstanceOf[A])
+      val cookie = Cookie("cookie")
+      var account = AccountData()
+
+      (storage.findByEmail _).expects(email).once().returning(Future.successful(None))
+      (regClient.register _).expects(*, EmailCredentials(email, Some(password)), name, *).once().returning(CancellableFuture.successful(Right(UserInfo(UserId()), Some(cookie))))
+      (storage.updateOrCreate _).expects(*, *, *).once.onCall{ (id, updater, creator) =>
+
+        updater(AccountData(id)).shouldBe(creator)
+
+        creator.pendingEmail.shouldBe(Some(email))
+        creator.email.shouldBe(None)
+        creator.hash.nonEmpty.shouldBe(true)
+        creator.regWaiting.shouldBe(true)
+
+        account = creator
+        Future.successful(creator)
       }
 
-      override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] ={
-        map = map ++ Map(key -> value.asInstanceOf[AnyRef])
-        Future.successful(())
+      (storage.update _).expects(*, *).once.onCall{ (_, updater) =>
+        account = updater(account)
+
+        account.email.shouldBe(Some(email))
+        account.pendingEmail.shouldBe(None)
+        account.hash.nonEmpty.shouldBe(true)
+        account.regWaiting.shouldBe(false)
+        account.cookie.shouldBe(Some(cookie))
+
+        Future.successful(Some((account, account)))
+      }
+      (storage.get _).expects(*).anyNumberOfTimes().onCall{ (id: AccountId) =>
+        if (id == account.id)
+          Future.successful(Some(account))
+        else
+          Future.successful(Some(AccountData(id)))
       }
 
-      override implicit protected val dispatcher: ExecutionContext = ExecutionContext.global
+      result(service.registerEmail(email, password, name)).shouldBe(Right(()))
     }
+  }
+
+  feature("Email login") {
+
+    val email = EmailAddress("whisker.pants@wire.com")
+    val password = "12345678"
+
+    scenario("Login with a new email should create a the appropriate account data"){
+      val service = getAccountService
+
+      val cookie = Cookie("cookie")
+      val token = Token("1", "2", 3)
+      var account = AccountData()
+
+      (storage.findByEmail _).expects(email).once().returning(Future.successful(None))
+      (loginClient.login _).expects(*, EmailCredentials(email, Some(password))).returning(CancellableFuture.successful(Right((token, Some(cookie)))))
+      (storage.updateOrCreate _).expects(*, *, *).once.onCall{ (id, updater, creator) =>
+
+        updater(AccountData(id)).shouldBe(creator)
+
+        creator.email.shouldBe(Some(email))
+        creator.pendingEmail.shouldBe(None)
+        creator.hash.nonEmpty.shouldBe(true)
+        creator.regWaiting.shouldBe(false)
+        account.cookie.shouldBe(None)
+        account.accessToken.shouldBe(None)
+
+        account = creator
+        Future.successful(creator)
+      }
+
+      (storage.update _).expects(*, *).once.onCall{ (_, updater) =>
+        account = updater(account)
+
+        account.email.shouldBe(Some(email))
+        account.pendingEmail.shouldBe(None)
+        account.hash.nonEmpty.shouldBe(true)
+        account.regWaiting.shouldBe(false)
+        account.cookie.shouldBe(Some(cookie))
+        account.accessToken.shouldBe(Some(token))
+
+        Future.successful(Some((account, account)))
+      }
+      (storage.get _).expects(*).anyNumberOfTimes().onCall{ (id: AccountId) =>
+        if (id == account.id)
+          Future.successful(Some(account))
+        else
+          Future.successful(Some(AccountData(id)))
+      }
+
+      result(service.loginEmail(email, password)).shouldBe(Right(()))
+    }
+
+  }
+
+  def getAccountService: AccountsService = {
+    val prefs = new TestGlobalPreferences()
 
     (globalModule.accountsStorage _).expects().anyNumberOfTimes.returning(storage)
     (globalModule.phoneNumbers _).expects().anyNumberOfTimes.returning(phoneNumbers)
     (globalModule.regClient _).expects().anyNumberOfTimes.returning(regClient)
     (globalModule.loginClient _).expects().anyNumberOfTimes.returning(loginClient)
     (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
-/*
-    (prefs.preference[Boolean] (_: PrefKey[Boolean])(_: PrefCodec[Boolean])).expects(*, *).anyNumberOfTimes().onCall {
-      (key: PrefKey[Boolean], _ : PrefCodec[Boolean]) =>
-        new Preference[Boolean](mockPrefs, key)
-    }
-*/
+    (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule))
+    (globalModule.context _).expects().anyNumberOfTimes().returning(null)
+    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new ZmsLifecycle)
+
     (phoneNumbers.normalize _).expects(*).anyNumberOfTimes().onCall { p: PhoneNumber => Future.successful(Some(p)) }
+
+    (storage.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty[AccountData]))
+    (storage.updateAll2 _).expects(*, *).anyNumberOfTimes().returning(Future.successful(Seq()))
+    (storage.onChanged _).expects().anyNumberOfTimes().returning(new EventStream[Seq[AccountData]]())
+    (storage.onDeleted _).expects().anyNumberOfTimes().returning(new EventStream[Seq[AccountId]]())
+    (storage.signal _).expects(*).anyNumberOfTimes().returning(Signal.empty[AccountData])
+    (storage.optSignal _).expects(*).anyNumberOfTimes().returning(Signal.empty[Option[AccountData]])
 
     new AccountsService(globalModule)
   }
