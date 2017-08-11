@@ -89,9 +89,11 @@ class MessageEventProcessor(selfUserId:          UserId,
     //ensure we always save the preview to the same id (GenericContent.Asset.unapply always creates new assets and previews))
     def saveAssetAndPreview(asset: AssetData, preview: Option[AssetData]) =
       assets.mergeOrCreateAsset(asset).flatMap {
-        case Some(asset) => preview.fold(Future.successful(Option.empty[AssetData]))(p => assets.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))))
-        case _ => Future.successful(Option.empty[AssetData])
-      }.map( _.map( Seq(_) ).getOrElse(Seq.empty[AssetData]) )
+        case Some(asset) => preview.fold(Future.successful(Seq.empty[AssetData]))(p =>
+          assets.mergeOrCreateAsset(p.copy(id = asset.previewId.getOrElse(p.id))).map(_.fold(Seq.empty[AssetData])(Seq(_)))
+        )
+        case _ => Future.successful(Seq.empty[AssetData])
+      }
 
     //For assets v3, the RAssetId will be contained in the proto content. For v2, it will be passed along with in the GenericAssetEvent
     //A defined convId marks that the asset is a v2 asset.
@@ -104,9 +106,9 @@ class MessageEventProcessor(selfUserId:          UserId,
           verbose(s"Received asset v3: $asset with preview: $preview")
           saveAssetAndPreview(asset, preview)
         case (Text(_, _, linkPreviews), _) =>
-          Future.sequence(linkPreviews.map {
-            case LinkPreview.WithAsset(a@AssetData.WithRemoteId(_)) =>
-              val asset = a.copy(id = AssetId(id.str))
+          Future.sequence(linkPreviews.zipWithIndex.map {
+            case (LinkPreview.WithAsset(a@AssetData.WithRemoteId(_)), index) =>
+              val asset = a.copy(id = if (index == 0) AssetId(id.str) else AssetId())
               verbose(s"Received link preview asset: $asset")
               saveAssetAndPreview(asset, None)
             case _ => Future successful Seq.empty[AssetData]
@@ -123,7 +125,7 @@ class MessageEventProcessor(selfUserId:          UserId,
         case (ImageAsset(a@AssetData.IsImageWithTag(Medium)), Some(rId)) =>
           val asset = a.copy(id = AssetId(id.str), remoteId = Some(rId), convId = convId, data = decryptAssetData(a, data))
           verbose(s"Received asset v2 image: $asset")
-          assets.mergeOrCreateAsset(asset).map( _.map( Seq(_) ).getOrElse(Seq.empty[AssetData]) )
+          assets.mergeOrCreateAsset(asset).map( _.fold(Seq.empty[AssetData])( Seq(_) ))
         case (Asset(a, _), _) if a.status == UploadFailed && a.isImage =>
           verbose(s"Received a message about a failed image upload: $id. Dropping")
           Future successful Seq.empty[AssetData]
