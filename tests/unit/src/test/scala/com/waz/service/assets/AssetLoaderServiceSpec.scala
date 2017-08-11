@@ -36,6 +36,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.Signal
 import com.waz.znet.Response
 
+import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
@@ -221,6 +222,71 @@ class AssetLoaderServiceSpec extends AndroidFreeSpec {
 
       //finish all active jobs
       (1 to MaxConcurrentLoadRequests).map(_.toString).map(AssetId).foreach(finishedDownload ! _)
+
+      awaitAllTasks
+    }
+
+    scenario("Repeating cancelling and loading") {
+      val service = getService
+
+      var firstFreeId = 1
+      val assets = mutable.ListBuffer[AssetData]()
+      def nextAsset(): AssetData = {
+        val asset = getWireAsset(firstFreeId)
+        firstFreeId += 1
+        assets += asset
+        asset
+      }
+
+      //stuff the queue with the max number of concurrent downloads
+      val calls = Signal[Int](0)
+      val finishedDownload = Signal[AssetId]()
+      (loader.loadAsset _).expects(*, *, *).repeat(MaxConcurrentLoadRequests to MaxConcurrentLoadRequests).onCall { (asset, _, _) =>
+        calls.mutate(_ + 1)
+        val future = finishedDownload.filter(_ == asset.id).map(_ => cacheEntry(asset.cacheKey, Uid())).head
+        CancellableFuture.lift(future)
+      }
+
+      def removeFirst() = assets.remove(0)
+      def remove(assetId: AssetId) = assets --= assets.filter(_.id == assetId)
+      def load(number: Int) = (1 to number).foreach(_ => service.load(nextAsset()))
+      def finish(number: Int) = (1 to MaxConcurrentLoadRequests).map(_.toString).map(AssetId).foreach { id =>
+        finishedDownload ! _
+        remove(id)
+      }
+      def addAndCancel() = {
+        val asset = nextAsset()
+        val cf1 = CancellableFuture({})(Threading.Background).flatMap(_ => service.load(asset))(Threading.Background)
+        cf1.cancel()("test")
+        intercept[CancelException](result(cf1))
+        remove(asset.id)
+      }
+
+      load(MaxConcurrentLoadRequests - 1)
+
+      //wait for queue to start executing all jobs
+      result(calls.filter(_ == MaxConcurrentLoadRequests - 1).head)
+
+      //add another asset and cancel it
+      addAndCancel()
+
+      //add another asset and cancel it
+      addAndCancel()
+
+      load(1)
+
+      //add another asset and cancel it
+      addAndCancel()
+
+      load(1)
+
+      //finish all active jobs
+      finish(1)
+
+      load(1)
+      addAndCancel()
+
+      finish(assets.size)
 
       awaitAllTasks
     }
