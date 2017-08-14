@@ -93,6 +93,6 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
 
   lazy val factory = new ZMessagingFactory(this)
 
-  val lifecycle = new ZmsLifecycle()
+  val lifecycle: ZmsLifecycle = new ZmsLifecycleImpl()
 }
 

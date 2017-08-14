@@ -19,8 +19,8 @@ package com.waz.conv
 
 import akka.pattern.ask
 import com.waz.api.IConversation.Type._
-import com.waz.api.MessageContent.Text
 import com.waz.api._
+import com.waz.model.UserId
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
@@ -62,7 +62,7 @@ class AddMemberToGroupConvSpec extends FeatureSpec with Matchers with OptionValu
     }
 
     auto2 ? SendText(groupConv.data.remoteId, "Hey evrywun!")
-    groupConv.sendMessage(new Text("Wassup?!", Array.empty[User]))
+    zmessaging.convsUi.sendMessage(groupConv.id, "first msg", Set.empty[UserId])
     auto3 ? SendText(groupConv.data.remoteId, "Sky.")
 
     soon {

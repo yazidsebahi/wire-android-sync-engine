@@ -17,7 +17,6 @@
  */
 package com.waz.service.otr
 
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.service.RemoteZmsSpec
 import com.waz.testutils.Implicits._
@@ -70,7 +69,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
         msgs should have size 1
       }
 
-      auto1_1.findConv(conv.data.remoteId) map { _.sendMessage(new Text("self message 1")) }
+      auto1_1.findConv(conv.data.remoteId) map { conv => zmessaging.convsUi.sendMessage(conv.id, "self message 1") }
 
       withDelay {
         msgs should have size 2
@@ -103,7 +102,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
     scenario("send message to remote client") {
       val count = msgs.size
 
-      conv.sendMessage(new Text("test message 1"))
+      zmessaging.convsUi.sendMessage(conv.id, "test message 1")
 
       withDelay {
         msgs should have size (count + 1)
@@ -114,7 +113,7 @@ class OtrMultipleClientsSpec extends FeatureSpec with Matchers with OptionValues
     scenario("receive message from remote client") {
       val count = msgs.size
 
-      auto2.findConv(conv.data.remoteId) map { _.sendMessage(new Text("remote message 1")) }
+      auto1_1.findConv(conv.data.remoteId) map { conv => zmessaging.convsUi.sendMessage(conv.id, "remote message 1") }
 
       withDelay {
         msgs should have size (count + 1)

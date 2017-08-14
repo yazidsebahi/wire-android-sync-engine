@@ -18,7 +18,6 @@
 package com.waz.connections
 
 import akka.pattern.ask
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
@@ -102,7 +101,7 @@ class ConnectionSpec extends FeatureSpec with Matchers with ProvisionedApiSpec w
         conv.getName shouldEqual "auto2 user"
       }
 
-      conv.sendMessage(new Text("first msg"))
+      zmessaging.convsUi.sendMessage(conv.id,"first msg")
       withDelay {
         lastMessage(conv.id).map(_.contentString) shouldEqual Some("first msg")
       }

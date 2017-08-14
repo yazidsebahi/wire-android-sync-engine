@@ -45,7 +45,6 @@ import net.hockeyapp.android.Constants
 import org.scalatest._
 import org.scalatest.enablers.{Containing, Emptiness, Length}
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.MessageContent.Text
 import com.waz.content.Likes
 import com.waz.model.MessageData.MessageDataDao
 import org.threeten.bp.Instant
@@ -148,7 +147,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   implicit class RichMessage(msg: MessageData) {
     def like() = zmessaging.reactions.like(msg.convId, msg.id)
     def unlike() = zmessaging.reactions.unlike(msg.convId, msg.id)
-    def update(text: Text) = zmessaging.convsUi.updateMessage(msg.convId, msg.id, text)
+    def update(text: String) = zmessaging.convsUi.updateMessage(msg.convId, msg.id, text)
   }
 
   def netClient = zmessaging.zNetClient

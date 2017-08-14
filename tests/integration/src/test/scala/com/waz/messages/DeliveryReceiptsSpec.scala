@@ -21,7 +21,6 @@ import akka.pattern.ask
 import com.waz.ZLog._
 import com.waz.api.IConversation.Type.{GROUP, ONE_TO_ONE}
 import com.waz.api.Message.Status.{DELIVERED, SENT}
-import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.model.UserId
 import com.waz.provision.ActorMessage._
@@ -64,14 +63,14 @@ class DeliveryReceiptsSpec extends FeatureSpec with Matchers with BeforeAndAfter
 
   feature("Delivery receipts") {
     scenario("Receipt in 1-on-1 conv") {
-      friend1Conv.sendMessage(new Text("meep"))
+      zmessaging.convsUi.sendMessage(friend1Conv.id, "meep")
       (listMessages(friend1Conv.id) should have size 2).soon
       (lastMessage(friend1Conv.id).get.state shouldEqual SENT).soon
       (lastMessage(friend1Conv.id).get.state shouldEqual DELIVERED).soon
     }
 
     scenario("No receipt in group conv") {
-      groupConv.sendMessage(new Text("moop"))
+      zmessaging.convsUi.sendMessage(groupConv.id, "moop")
       (listMessages(groupConv.id) should have size 2).soon
       (lastMessage(groupConv.id).get.state shouldEqual SENT).soon
       forAsLongAs(3.seconds)(lastMessage(groupConv.id).get.state shouldEqual SENT)

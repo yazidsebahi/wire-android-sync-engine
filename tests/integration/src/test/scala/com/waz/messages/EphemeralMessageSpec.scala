@@ -106,16 +106,19 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
     var messageId = MessageId()
 
-    def sendMessage(content: MessageContent)(assert: MessageData => Unit)(implicit p: PatienceConfig) = {
+    /*def sendMessage(content: MessageContent)(assert: MessageData => Unit)(implicit p: PatienceConfig) = {
       val msg = withNewMessage(conv.sendMessage(content))
       soon {
         assertEphemeralSent(getMessage(msg.id).get)
         assert(getMessage(msg.id).get)
       }
-    }
+    }*/
 
     scenario("Send text message") {
-      sendMessage(new MessageContent.Text("test msg 1")) { msg =>
+      var msg = withNewMessage(zmessaging.convsUi.sendMessage(conv.id, "test msg 1"))
+      soon {
+        assertEphemeralSent(getMessage(msg.id).get)
+        msg = getMessage(msg.id).get
         msg.msgType shouldEqual Message.Type.TEXT
         msg.contentString shouldEqual "test msg 1"
       }
@@ -152,7 +155,10 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
     }
 
     scenario("Send link") {
-      sendMessage(new MessageContent.Text("test link: www.wire.com")) { msg =>
+      var msg = withNewMessage(zmessaging.convsUi.sendMessage(conv.id, "test link: www.wire.com"))
+      soon {
+        assertEphemeralSent(getMessage(msg.id).get)
+        msg = getMessage(msg.id).get
         msg.msgType shouldEqual Message.Type.RICH_MEDIA
         msg.contentString shouldEqual "test link: www.wire.com"
         msg.content.map(_.tpe) shouldEqual Seq(Part.Type.TEXT, Part.Type.WEB_LINK)
@@ -185,9 +191,12 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
 
     scenario("Send image") {
       val asset = ImageAssetFactory.getImageAsset(IoUtils.toByteArray(getClass.getResourceAsStream("/images/penguin_128.png")))
-      sendMessage(new MessageContent.Image(asset)) { msg =>
+      var msg = withNewMessage(zmessaging.convsUi.sendMessage(conv.id, asset))
+      soon {
+        assertEphemeralSent(getMessage(msg.id).get)
+        msg = getMessage(msg.id).get
         msg.msgType shouldEqual Message.Type.ASSET
-      } (PatienceConfig(15.seconds))
+      }
     }
 
     scenario("Send file asset") {
@@ -197,13 +206,19 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
         _ => new ByteArrayInputStream(data)
       }
 
-      sendMessage(new MessageContent.Asset(asset, DoNothingAndProceed)) { msg =>
+      var msg = withNewMessage(zmessaging.convsUi.sendMessage(conv.id, asset, DoNothingAndProceed))
+      soon {
+        assertEphemeralSent(getMessage(msg.id).get)
+        msg = getMessage(msg.id).get
         msg.msgType shouldEqual Message.Type.ANY_ASSET
       }
     }
 
     scenario("Send location") {
-      sendMessage(new MessageContent.Location(50f, 20f, "location", 13)) { msg =>
+      var msg = withNewMessage(zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Location(50f, 20f, "location", 13)))
+      soon {
+        assertEphemeralSent(getMessage(msg.id).get)
+        msg = getMessage(msg.id).get
         msg.msgType shouldEqual Message.Type.LOCATION
       }
     }
@@ -396,16 +411,11 @@ class EphemeralMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers
       group.setEphemeralExpiration(EphemeralExpiration.FIVE_SECONDS)
     }
 
-    def sendMessage(content: MessageContent)(assert: MessageData => Unit)(implicit p: PatienceConfig) = {
-      val msg = withNewMessage(group.sendMessage(content))(grpMsgs)
+    scenario("Send text message") {
+      var msg = withNewMessage(zmessaging.convsUi.sendMessage(group.id, "test msg 1"))
       soon {
         assertEphemeralSent(getMessage(msg.id).get)
-        assert(getMessage(msg.id).get)
-      }
-    }
-
-    scenario("Send text message") {
-      sendMessage(new MessageContent.Text("test msg 1")) { msg =>
+        msg = getMessage(msg.id).get
         msg.msgType shouldEqual Message.Type.TEXT
         msg.contentString shouldEqual "test msg 1"
       }

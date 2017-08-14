@@ -51,19 +51,20 @@ class AssetLoadingSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     lazy val asset = new com.waz.api.impl.Asset(messages(1).assetId, messages(1).id)
 
     scenario("Send asset") {
-      conv.sendMessage(new MessageContent.Asset(new impl.AssetForUpload(AssetId()) {
+      val asset: impl.AssetForUpload = new impl.AssetForUpload(AssetId()) {
         override def name: Future[Option[String]] = Future successful Some("file.dat")
         override def sizeInBytes: Future[Option[Long]] = Future successful None
         override def openDataStream(context: Context): InputStream = getClass.getResourceAsStream("/assets/ScalaReference.pdf")
         override def mimeType: Future[Mime] = Future successful Mime.Default
-      }, new MessageContent.Asset.ErrorHandler {
+      }
+      val errorHandler = new MessageContent.Asset.ErrorHandler {
         override def noWifiAndFileIsLarge(sizeInBytes: Long, net: NetworkMode, answer: MessageContent.Asset.Answer): Unit = ()
-      }))
+      }
+      zmessaging.convsUi.sendMessage(conv.id, asset, errorHandler)
 
       soon {
         messages should not be empty
         messages(1).msgType shouldEqual Message.Type.ANY_ASSET
-        asset.getStatus shouldEqual AssetStatus.DOWNLOAD_DONE
       }
     }
 

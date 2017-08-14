@@ -20,7 +20,6 @@ package com.waz.messages
 import akka.pattern.ask
 import android.net.Uri
 import com.waz.api.Message.Part
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.provision.ActorMessage._
 import com.waz.testutils.Implicits._
@@ -55,7 +54,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
   feature("Edit text messages") {
 
     scenario("Send text message and edit it") {
-      conv.sendMessage(new Text("test msg to edit"))
+      zmessaging.convsUi.sendMessage(conv.id, "test msg to edit")
       withDelay {
         msgs should have size 2
         msgs.last.state shouldEqual Message.Status.SENT
@@ -63,7 +62,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       val msg = msgs.last
 
-      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("edited message"))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, "edited message")
 
       withDelay {
         msgs should have size 2
@@ -80,8 +79,8 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       val service = zmessaging.convsUi
       val lock = zmessaging.syncRequests.scheduler.queue.acquire(conv.id).await() // block sync service
 
-      val m = service.sendMessage(conv.id, new Text("test msg to edit")).await().get
-      val m1 = service.updateMessage(conv.id, m.id, new Text("updated")).await()
+      val m = service.sendMessage(conv.id, "test msg to edit").await().get
+      val m1 = service.updateMessage(conv.id, m.id, "updated").await()
 
       withDelay { msgs should have size 3 }
 
@@ -107,7 +106,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
     scenario("Send emoji only message and edit it") {
       val count = msgs.size
-      conv.sendMessage(new Text("\u263A"))
+      zmessaging.convsUi.sendMessage(conv.id, "\u263A")
       withDelay {
         msgs should have size (count + 1)
         msgs.last.msgType shouldEqual Message.Type.TEXT_EMOJI_ONLY
@@ -116,7 +115,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       val msg = msgs.last
 
-      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("\u263B"))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, "\u263B")
 
       withDelay {
         msgs should have size (count + 1)
@@ -140,7 +139,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       val msg = msgs.last
 
-      conv.sendMessage(new Text("test"))
+      zmessaging.convsUi.sendMessage(conv.id, "test")
 
       withDelay(msgs should have size (count + 2))
 
@@ -166,7 +165,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       val msg = msgs.last
       secondClient ? UpdateText(msg.id, "updated on remote") //should eventually(be(Successful))
-      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("updated locally"))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, "updated locally")
 
       withDelay {
         getMessage(msg.id) shouldBe 'empty
@@ -186,7 +185,8 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
   feature("Edit link message") {
     scenario("Send link with text and edit it") {
       val count = msgs.size
-      conv.sendMessage(new Text("test wire.com edit"))
+      zmessaging.convsUi.sendMessage(conv.id, "test wire.com edit")
+
       withDelay {
         msgs should have size (count + 1)
         msgs.last.state shouldEqual Message.Status.SENT
@@ -195,7 +195,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       }
 
       val msg = msgs.last
-      zmessaging.convsUi.updateMessage(conv.id, msg.id, new Text("edited message facebook.com"))
+      zmessaging.convsUi.updateMessage(conv.id, msg.id, "edited message facebook.com")
 
       withDelay {
         msgs should have size (count + 1)
@@ -221,7 +221,7 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
 
       val msg = msgs.last
 
-      conv.sendMessage(new Text("test"))
+      zmessaging.convsUi.sendMessage(conv.id, "test")
 
       withDelay(msgs should have size (count + 2))
 
@@ -251,9 +251,9 @@ class EditMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterAll w
       otherUserClient ? SendText(conv.data.remoteId, "other 3") should eventually(be(Successful))
       otherUserClient ? SendText(conv.data.remoteId, "other 4") should eventually(be(Successful))
 
-      conv.sendMessage(new Text("self 1"))
-      conv.sendMessage(new Text("self 2"))
-      conv.sendMessage(new Text("self 3"))
+      zmessaging.convsUi.sendMessage(conv.id, "self 1")
+      zmessaging.convsUi.sendMessage(conv.id, "self 2")
+      zmessaging.convsUi.sendMessage(conv.id, "self 3")
 
       withDelay {
         msgs should have size (count + 7)

@@ -20,7 +20,6 @@ package com.waz.messages
 import java.util.concurrent.atomic.AtomicLong
 
 import akka.pattern.ask
-import com.waz.api.MessageContent.Image
 import com.waz.api._
 import com.waz.api.impl.LocalImageAsset
 import com.waz.cache.CacheEntry
@@ -58,7 +57,7 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
   }
 
   scenario("Post text in new conv") {
-    conv.sendMessage(new MessageContent.Text("first msg"))
+    zmessaging.convsUi.sendMessage(conv.id, "first msg")
     withDelay {
       messages.last.msgType shouldEqual Message.Type.TEXT
       messages.last.state shouldEqual Message.Status.SENT
@@ -67,7 +66,7 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
 
   scenario("Post image asset followed by text") {
     val asset = ImageAssetFactory.getImageAsset(IoUtils.toByteArray(getClass.getResourceAsStream("/images/big.png")))
-    conv.sendMessage(new MessageContent.Image(asset))
+    zmessaging.convsUi.sendMessage(conv.id, asset)
 
     withDelay {
       messages.last.msgType shouldEqual Message.Type.ASSET
@@ -75,7 +74,7 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
     }
     val assetMsg = messages.last
 
-    conv.sendMessage(new MessageContent.Text("test message"))
+    zmessaging.convsUi.sendMessage(conv.id, "test message")
 
     withDelay {
       assetMsg.state shouldEqual Message.Status.SENT
@@ -91,7 +90,8 @@ class ImageAssetMessageSpec extends FeatureSpec with Matchers with ProvisionedAp
 
     (messages should have size 1).soon
     downloads.set(0)
-    conv.sendMessage(new Image(imageFromGiphy))
+
+    zmessaging.convsUi.sendMessage(conv.id, imageFromGiphy)
     (messages should have size 2).soon
 
     val postedImage = new com.waz.api.impl.ImageAsset(messages(1).assetId)

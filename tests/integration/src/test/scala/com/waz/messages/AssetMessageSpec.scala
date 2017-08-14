@@ -26,7 +26,6 @@ import akka.pattern.ask
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.AssetStatus._
 import com.waz.api.MessageContent.Asset.{Answer, ErrorHandler}
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
 import com.waz.model
@@ -87,9 +86,9 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       upload.sizeInBytes.await().value shouldEqual pdf.size
 
       var reportedIssues = 0
-      conv.sendMessage(new MessageContent.Asset(upload, new ErrorHandler {
+      zmessaging.convsUi.sendMessage(conv.id, upload, new ErrorHandler {
         override def noWifiAndFileIsLarge(sizeInBytes: Long, net: NetworkMode, answer: Answer): Unit = reportedIssues += 1
-      }))
+      })
 
       (messages should have size (fromBefore + 1)).soon
       reportedIssues shouldEqual 0
@@ -117,7 +116,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       val upload = uriAssetForUpload(audio)
 
-      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, upload, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
 
@@ -152,7 +151,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       val upload = uriAssetForUpload(video)
 
-      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, upload, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
 
@@ -189,7 +188,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       val upload = uriAssetForUpload(image)
 
-      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, upload, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
 
@@ -202,7 +201,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val env = LatchedUpload()
 
       val fromBefore = messages.size
-      conv.sendMessage(new MessageContent.Asset(env.upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, env.upload, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
       soon {
@@ -230,7 +229,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val fromBefore = messages.size
       val latch = new util.concurrent.CountDownLatch(1)
       val upload = uriAssetForUpload(pdf, Some(latch))
-      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, upload, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
       soon {
@@ -260,7 +259,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val env = LatchedUpload(delay = 50.millis)
       val fromBefore = messages.size
 
-      conv.sendMessage(new MessageContent.Asset(env.upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, env.upload, DoNothingAndProceed)
       (messages should have size (fromBefore + 1)).soon
 
       env.arrival.await(5, TimeUnit.SECONDS)
@@ -280,7 +279,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val fromBefore = messages.size
       val latch = new util.concurrent.CountDownLatch(1)
       val upload = uriAssetForUpload(pdf, Some(latch))
-      conv.sendMessage(new MessageContent.Asset(upload, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, upload, DoNothingAndProceed)
       (messages should have size (fromBefore + 1)).soon
 
       lazy val msg = messages.last
@@ -302,7 +301,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val fromBefore = messages.size
 
       postStarted = false
-      conv.sendMessage(new MessageContent.Asset(assetForUpload(5 * (1 << 20)), DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, assetForUpload(5 * (1 << 20)), DoNothingAndProceed)
       (messages should have size (fromBefore + 1)).soon
 
       (postStarted shouldBe true).soon
@@ -320,7 +319,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
     scenario("Cancel is attempted after upload has completed") {
       val fromBefore = messages.size
 
-      conv.sendMessage(new MessageContent.Asset(assetForUpload(100000), DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, assetForUpload(100000), DoNothingAndProceed)
       (messages should have size (fromBefore + 1)).soon
 
       lazy val msg = messages.last
@@ -353,7 +352,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       }
 
       val uploadedAsset = assetForUpload(1L << 20)
-      conv.sendMessage(new MessageContent.Asset(uploadedAsset, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, uploadedAsset, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
       lazy val msg = messages.last
@@ -381,7 +380,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val fromBefore = messages.size
 
       val uploadedAsset = videoForUpload(10L << 20)
-      conv.sendMessage(new MessageContent.Asset(uploadedAsset, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, uploadedAsset, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
       lazy val msg = messages.last
@@ -394,7 +393,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       val numberOfTextMessages = 10
       (1 to (numberOfTextMessages / 2)).foreach { n =>
         idle(250.millis)
-        conv.sendMessage(new Text(s"test message $n"))
+        zmessaging.convsUi.sendMessage(conv.id, s"test message $n")
         auto2 ? SendText(conv.data.remoteId, s"test message ${n + 1}") should eventually(be(Successful))
       }
 
@@ -418,7 +417,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         override def noWifiAndFileIsLarge(sizeInBytes: Long, net: NetworkMode, answer: Answer): Unit = fail()
       }
 
-      conv.sendMessage(new MessageContent.Asset(asset, handler))
+      zmessaging.convsUi.sendMessage(conv.id, asset, handler)
 
       soon {
         errors should not be empty
@@ -442,7 +441,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         override def noWifiAndFileIsLarge(sizeInBytes: Long, net: NetworkMode, answer: Answer): Unit = fail()
       }
 
-      conv.sendMessage(new MessageContent.Asset(asset, handler))
+      zmessaging.convsUi.sendMessage(conv.id, asset, handler)
 
       soon {
         errors should not be empty
@@ -466,7 +465,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
         override def noWifiAndFileIsLarge(sizeInBytes: Long, net: NetworkMode, answer: Answer): Unit = fail()
       }
 
-      conv.sendMessage(new MessageContent.Asset(asset, handler))
+      zmessaging.convsUi.sendMessage(conv.id, asset, handler)
 
       soon {
         errors should not be empty
@@ -503,7 +502,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       val asset1 = newAsset("asset 1")
       val handler1 = new TestErrorHandler(_.cancel())
-      conv.sendMessage(new MessageContent.Asset(asset1, handler1))
+      zmessaging.convsUi.sendMessage(conv.id, asset1, handler1)
 
       handler1.promisedWarning.future.await("warning should be reported") shouldEqual (LargeAssetWarningThresholdInBytes + 1L, NetworkMode._2G)
       idle(1.second)
@@ -512,7 +511,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       val asset2 = newAsset("asset 2")
       val handler2 = new TestErrorHandler(_.ok())
-      conv.sendMessage(new MessageContent.Asset(asset2, handler2))
+      zmessaging.convsUi.sendMessage(conv.id, asset2, handler2)
 
       handler2.promisedWarning.future.await("warning should be reported") shouldEqual (LargeAssetWarningThresholdInBytes + 1L, NetworkMode._2G)
       soon {
@@ -523,7 +522,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
 
       val asset3 = newAsset("asset 3", 1000L)
       val handler3 = new TestErrorHandler(_.cancel())
-      conv.sendMessage(new MessageContent.Asset(asset3, handler3))
+      zmessaging.convsUi.sendMessage(conv.id, asset3, handler3)
 
       (messages should have size (fromBefore + 2)).soon
       handler3.promisedWarning.isCompleted shouldBe false
@@ -534,7 +533,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
     scenario("Sending an asset of exactly the maximum allowed size") {
       val fromBefore = messages.size
 
-      conv.sendMessage(new MessageContent.Asset(assetForUpload(MaxAllowedAssetSizeInBytes), DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, assetForUpload(MaxAllowedAssetSizeInBytes), DoNothingAndProceed)
 
       within(1.second)(messages should have size (fromBefore + 1))
 
@@ -559,7 +558,7 @@ class AssetMessageSpec extends FeatureSpec with BeforeAndAfter with Matchers wit
       }
 
       val uploadedAsset = assetForUpload(1L << 20)
-      conv.sendMessage(new MessageContent.Asset(uploadedAsset, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, uploadedAsset, DoNothingAndProceed)
 
       (messages should have size (fromBefore + 1)).soon
       lazy val message = messages.last

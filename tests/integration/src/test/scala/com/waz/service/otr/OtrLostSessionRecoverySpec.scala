@@ -20,7 +20,7 @@ package com.waz.service.otr
 import java.io.File
 
 import akka.pattern.ask
-import com.waz.api.{Message, MessageContent, ProvisionedApiSpec, ThreadActorSpec}
+import com.waz.api.{Message, ProvisionedApiSpec, ThreadActorSpec}
 import com.waz.model.RConvId
 import com.waz.provision.ActorMessage.{Login, SendText, Successful}
 import com.waz.testutils.Implicits._
@@ -60,7 +60,7 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
       zmessaging.otrClientsService.getSelfClient should eventually(be('defined))
     }
 
-    conv.sendMessage(new MessageContent.Text("Test message"))
+    zmessaging.convsUi.sendMessage(conv.id,"Test message")
 
     conv.getId shouldEqual provisionedUserId("auto2").str
     auto2 ? SendText(RConvId(provisionedUserId("auto1").str), "Test message 1") should eventually(be(Successful))
@@ -72,7 +72,7 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
       }
     }
 
-    conv.sendMessage(new MessageContent.Text("Test message 2"))
+    zmessaging.convsUi.sendMessage(conv.id, "Test message 2")
     auto2 ? SendText(RConvId(provisionedUserId("auto1").str), "Test message 3") should eventually(be(Successful))
 
     withDelay {
@@ -89,7 +89,7 @@ class OtrLostSessionRecoverySpec extends FeatureSpec with Matchers with BeforeAn
     zmessaging.otrService.sessions.deleteSession(session.getName).futureValue
     session.exists() shouldEqual false
 
-    conv.sendMessage(new MessageContent.Text("Test message 4"))
+    zmessaging.convsUi.sendMessage(conv.id, "Test message 4")
 
     withDelay {
       session.exists() shouldEqual true // session should be recreated

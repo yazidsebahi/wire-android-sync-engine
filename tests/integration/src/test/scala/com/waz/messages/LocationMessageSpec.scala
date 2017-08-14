@@ -53,7 +53,7 @@ class LocationMessageSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
     scenario("Send location message") {
       val loc = new MessageContent.Location(-10.45f, 23.43f, "location name", 10)
-      conv.sendMessage(loc)
+      zmessaging.convsUi.sendMessage(conv.id, loc)
       withDelay {
         msgs should have size 2
         msgs.last.msgType shouldEqual Message.Type.LOCATION

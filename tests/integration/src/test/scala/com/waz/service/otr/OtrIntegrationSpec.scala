@@ -20,7 +20,6 @@ package com.waz.service.otr
 import akka.pattern.ask
 import android.graphics.{Bitmap, BitmapFactory}
 import com.waz.api.Message.Status
-import com.waz.api.MessageContent.Image
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api._
 import com.waz.model.AssetId
@@ -113,7 +112,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("Send otr message") {
       withDelay(msgs should have size 1)
 
-      conv.sendMessage(new MessageContent.Text("Test message"))
+      zmessaging.convsUi.sendMessage(conv.id, "Test message")
 
       withDelay {
         msgs should have size 2
@@ -126,7 +125,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
       withDelay(msgs should have size 2)
 
       for (i <- 0 until 15) {
-        conv.sendMessage(new MessageContent.Text(s"ordered message $i"))
+        zmessaging.convsUi.sendMessage(conv.id, s"ordered message $i")
         awaitUi(1.millis)
       }
 
@@ -210,7 +209,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("Send image asset") {
       val count = msgs.size
       val bmp = BitmapFactory.decodeStream(getClass.getResourceAsStream("/images/penguin.png"))
-      conv.sendMessage(new Image(ImageAssetFactory.getImageAsset(bmp)))
+      zmessaging.convsUi.sendMessage(conv.id, ImageAssetFactory.getImageAsset(bmp))
 
       withDelay {
         msgs should have size (count + 1)
@@ -282,7 +281,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     }
 
     scenario("Send message") {
-      conv.sendMessage(new MessageContent.Text("Test message 4"))
+      zmessaging.convsUi.sendMessage(conv.id, "Test message 4")
       withDelay {
         val last = msgs.last
         last.contentString shouldEqual "Test message 4"
@@ -412,7 +411,7 @@ class OtrIntegrationSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("Send image asset2") {
       val count = msgs.size
       val bmp = BitmapFactory.decodeStream(getClass.getResourceAsStream("/images/penguin.png"))
-      conv.sendMessage(new Image(ImageAssetFactory.getImageAsset(bmp)))
+      zmessaging.convsUi.sendMessage(conv.id, ImageAssetFactory.getImageAsset(bmp))
 
       withDelay {
         msgs should have size (count + 1)

@@ -20,7 +20,6 @@ package com.waz.messages
 import java.util.Date
 
 import akka.pattern.ask
-import com.waz.api.MessageContent._
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.GenericContent.LastRead
@@ -124,7 +123,7 @@ class LastReadSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with
     val fromBefore = msgs.size
 
     for (i <- 0 until 5) {
-      conv.sendMessage(new Text(s"own mesage: $i"))
+      zmessaging.convsUi.sendMessage(conv.id, s"own mesage: $i")
     }
 
     withDelay {

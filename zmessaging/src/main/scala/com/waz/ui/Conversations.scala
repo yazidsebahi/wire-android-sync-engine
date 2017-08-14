@@ -54,7 +54,7 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
   def sendMessage(id: ConvId, content: MessageContent): Unit = zms(_.convsUi.sendMessage(id, content))
 
   def setName(id: ConvId, name: String): Unit = zms(_.convsUi.setConversationName(id, name))
-  
+
   def addMembers(id: ConvId, users: Seq[User]): Unit = zms(_.convsUi.addConversationMembers(id, users.map(u => UserId(u.getId))))
 
   def removeMember(id: ConvId, user: User): Unit = zms(_.convsUi.removeConversationMember(id, UserId(user.getId)))

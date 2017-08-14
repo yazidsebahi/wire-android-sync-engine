@@ -18,7 +18,7 @@
 package com.waz.users
 
 import akka.pattern.ask
-import com.waz.api.{UpdateListener, _}
+import com.waz.api._
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.UserData.ConnectionStatus

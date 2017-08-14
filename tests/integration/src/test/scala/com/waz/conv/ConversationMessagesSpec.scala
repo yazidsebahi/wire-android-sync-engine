@@ -20,7 +20,6 @@ package com.waz.conv
 import akka.pattern.ask
 import android.content.Context
 import android.net.{ConnectivityManager, NetworkInfo}
-import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.{Message => ApiMessage, _}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, MessageData, RConvId}
@@ -109,7 +108,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     scenario("Send a single message") {
       val count = listMessages(conv.id).size
 
-      conv.sendMessage(new Text("test"))
+      zmessaging.convsUi.sendMessage(conv.id, "test")
 
       withDelay {
         listMessages(conv.id) should have size (count + 1)
@@ -145,7 +144,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
       val im = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin.png")))
       conv.getFailedCount shouldEqual 0
-      conv.sendMessage(new Image(im))
+      zmessaging.convsUi.sendMessage(conv.id, im)
 
       withDelay {
         listMessages(conv.id) should have size (count + 1)
@@ -200,7 +199,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
         conv.getFailedCount shouldEqual 0
       }
       testClient.failFor = Some(".*".r -> "POST")
-      conv.sendMessage(new Text("test failed"))
+      zmessaging.convsUi.sendMessage(conv.id, "test failed")
       failedTextMessage = withDelay {
         returning(lastMessage(conv.id))(_.get.contentString shouldEqual "test failed")
       }
@@ -221,7 +220,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
 
     scenario("Offline, sending an image as a second message.") {
       val im = api.ui.images.createImageAssetFrom(IoUtils.toByteArray(resourceStream("/images/penguin_128.png")))
-      conv.sendMessage(new Image(im))
+      zmessaging.convsUi.sendMessage(conv.id, im)
       failedImageMessage = withDelay {
         returning(lastMessage(conv.id))(_.get.msgType shouldEqual ApiMessage.Type.ASSET)
       }
@@ -242,7 +241,7 @@ class ConversationMessagesSpec extends FeatureSpec with Matchers with Provisione
     }
 
     scenario("Back online, sending a third message should leave the two previous messages failed.") {
-      conv.sendMessage(new Text("back online"))
+      zmessaging.convsUi.sendMessage(conv.id, "back online")
       withDelay {
         listMessages(conv.id) filter (_.state == ApiMessage.Status.FAILED) should have size 2
       }
