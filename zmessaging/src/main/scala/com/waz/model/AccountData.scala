@@ -41,24 +41,26 @@ import scala.collection.mutable
  *
  * @param password - will not be stored in db
  */
-case class AccountData(id:             AccountId               = AccountId(),
-                       teamId:         TriTeamId               = Left({}),
-                       email:          Option[EmailAddress]    = None,
-                       hash:           String                  = "",
-                       phone:          Option[PhoneNumber]     = None,
-                       handle:         Option[Handle]          = None,
-                       registeredPush: Option[PushToken]       = None,
-                       pendingEmail:   Option[EmailAddress]    = None,
-                       pendingPhone:   Option[PhoneNumber]     = None,
-                       cookie:         Option[Cookie]          = None,
-                       password:       Option[String]          = None,
-                       accessToken:    Option[Token]           = None,
-                       userId:         Option[UserId]          = None,
-                       clientId:       Option[ClientId]        = None,
-                       clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
-                       privateMode:    Boolean                 = false,
-                       regWaiting:     Boolean                 = false,
-                       code:           Option[String]          = None,
+case class AccountData(id:              AccountId                       = AccountId(),
+                       teamId:          TriTeamId                       = Left({}),
+                       email:           Option[EmailAddress]            = None,
+                       hash:            String                          = "",
+                       phone:           Option[PhoneNumber]             = None,
+                       handle:          Option[Handle]                  = None,
+                       registeredPush:  Option[PushToken]               = None,
+                       pendingEmail:    Option[EmailAddress]            = None,
+                       pendingPhone:    Option[PhoneNumber]             = None,
+                       cookie:          Option[Cookie]                  = None,
+                       password:        Option[String]                  = None,
+                       accessToken:     Option[Token]                   = None,
+                       userId:          Option[UserId]                  = None,
+                       clientId:        Option[ClientId]                = None,
+                       clientRegState:  ClientRegistrationState         = ClientRegistrationState.UNKNOWN,
+                       privateMode:     Boolean                         = false,
+                       regWaiting:      Boolean                         = false,
+                       code:            Option[String]                  = None,
+                       name:            Option[String]                  = None,
+                       invitationToken: Option[PersonalInvitationToken] = None,
                        private val _selfPermissions: Long      = 0,
                        private val _copyPermissions: Long      = 0
                       ) {
@@ -280,13 +282,15 @@ object AccountData {
     val PrivateMode = bool('private_mode)(_.privateMode)
     val RegWaiting = bool('reg_waiting)(_.regWaiting)
     val Code = opt(text('code))(_.code)
+    val InvitationToken = opt(text[PersonalInvitationToken]('invitation_token, JsonEncoder.encodeString[PersonalInvitationToken], JsonDecoder.decode[PersonalInvitationToken]))(_.invitationToken)
+    val Name = opt(text('name))(_.name)
     val SelfPermissions = long('self_permissions)(_._selfPermissions)
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Team, Email, Hash, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, Hash, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))

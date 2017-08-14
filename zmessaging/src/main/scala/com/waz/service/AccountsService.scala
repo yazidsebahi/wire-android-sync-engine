@@ -19,6 +19,7 @@ package com.waz.service
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.Invitations._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
@@ -26,6 +27,7 @@ import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordEx
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.service.AccountsService.SwapAccountCallback
+import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.returning
@@ -187,83 +189,6 @@ class AccountsService(val global: GlobalModule) {
       (normalized, matching, manager)
   }
 
-
-  def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] =
-    switchAccount(credentials) flatMap {
-      case (normalized, _, Some(manager)) => manager.ensureFullyRegistered()
-      case (normalized, Some(account), None) => // found matching account, but is not authorized (wrong password)
-        verbose(s"found matching account: $account, trying to authorize with backend")
-        login(account, normalized)
-      case (normalized, None, None) =>
-        verbose(s"matching account not found, creating new account")
-        login(AccountData(), normalized)
-    }
-
-  private def login(account: AccountData, normalized: Credentials) = {
-    def loginOnBackend() =
-      loginClient.login(account).future map {
-        case Right((token, c)) =>
-          Right(account.updated(normalized).copy(cookie = c, accessToken = Some(token)))
-        case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-          verbose(s"account pending activation: $normalized, $error")
-          normalized match {
-            case EmailCredentials(_, _, _) => Right(account.updatedPending(normalized).copy(cookie = None, accessToken = None))
-            case PhoneCredentials(_, _, _) => Right(account.updatedPending(normalized).copy(cookie = None, accessToken = None))
-            case _ =>
-              verbose(s"login failed: $error")
-              Left(error)
-          }
-
-        case Left((_, error)) =>
-          verbose(s"login failed: $error")
-          Left(error)
-      }
-
-    loginOnBackend() flatMap {
-      case Right(a) =>
-        for {
-          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, accessToken = a.accessToken), a)
-          manager <- getOrCreateAccountManager(a.id)
-          _       <- setAccount(Some(a.id))
-          res     <- manager.ensureFullyRegistered()
-        } yield res
-      case Left(err) =>
-        Future successful Left(err)
-    }
-  }
-
-  def activatePhone(code: ConfirmationCode): Future[Either[ErrorResponse, AccountData]] = {
-    activeAccount.head.flatMap {
-      case Some(accountData) if accountData.regWaiting && accountData.pendingPhone.isDefined =>
-        val credentials = PhoneCredentials(accountData.pendingPhone.get, Some(code))
-        verifyPhoneNumber(credentials, KindOfVerification.PREVERIFY_ON_REGISTRATION).future.flatMap {
-          case Right(()) =>
-            storage.update(accountData.id, _.updated(PhoneCredentials(accountData.pendingPhone.get, Some(code)))).map{
-              case Some((_, updated)) => Right(updated)
-              case _ => Left(ErrorResponse.InternalError)
-            }
-          case Left(error) => Future.successful(Left(error))
-        }
-      case Some(accountData) if !accountData.regWaiting && accountData.pendingPhone.isDefined =>
-        login(PhoneCredentials(accountData.pendingPhone.get, Some(code)))
-      case _ =>
-        Future.successful(Left(ErrorResponse.InternalError))
-    }
-  }
-
-  def finishRegisterPhone(name: String): Future[Either[ErrorResponse, AccountData]] = {
-    activeAccount.head.flatMap {
-      case Some(accountData) if accountData.regWaiting && accountData.phone.isDefined && accountData.code.isDefined=>
-        register(PhoneCredentials(accountData.phone.get, accountData.code.map(ConfirmationCode)), Some(name), AccentColor()).flatMap {
-          case Right(regAccount) =>
-            storage.updateOrCreate(regAccount.id, _.copy(regWaiting = false, code = None), regAccount.copy(regWaiting = false, code = None)).map(Right(_))
-          case _ =>
-            Future.successful(Left(ErrorResponse.InternalError))
-        }
-      case _ => Future.successful(Left(ErrorResponse.InternalError))
-    }
-  }
-
   def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
 
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
@@ -286,42 +211,6 @@ class AccountsService(val global: GlobalModule) {
       phoneNumbers.normalize(p) map { normalized => cs.copy(phone = normalized.getOrElse(p)) }
     case other =>
       Future successful other
-  }
-
-  def register(credentials: Credentials, name: Option[String], accent: AccentColor): Future[Either[ErrorResponse, AccountData]] = {
-    debug(s"register($credentials, $name, $accent")
-
-    def register(account: AccountData, normalized: Credentials) =
-      regClient.register(account, name, Some(accent.id)).future flatMap {
-        case Right((userInfo, cookie)) =>
-          verbose(s"register($credentials) done, id: ${account.id}, user: $userInfo, cookie: $cookie")
-          for {
-            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id)))
-            _       = verbose(s"created account: $acc")
-            manager <- getOrCreateAccountManager(account.id)
-            _       <- setAccount(Some(account.id))
-            res     <- manager.ensureFullyRegistered()
-          } yield res
-        case Left(error) =>
-          info(s"register($credentials, $name) failed: $error")
-          Future successful Left(error)
-      }
-
-    switchAccount(credentials) flatMap {
-      case (_, _, Some(manager)) =>
-        verbose(s"register($credentials), found matching account: $manager, will just sign in")
-        manager.ensureFullyRegistered()
-      case (normalized, Some(account), None) =>
-        verbose(s"register($credentials), found matching account: $account, will try signing in")
-        login(account, normalized) flatMap {
-          case Right(acc) => Future successful Right(acc)
-          case Left(_) =>
-            // login failed, maybe this account has been removed on backend, let's try registering
-            register(account, normalized)
-        }
-      case (normalized, None, None) =>
-        register(AccountData(normalized), normalized)
-    }
   }
 
   //TODO can be removed after a while
@@ -412,11 +301,11 @@ class AccountsService(val global: GlobalModule) {
 
   }
 
-  def registerNameOnPhone(number: PhoneNumber, code: ConfirmationCode, name: String): Future[Either[ErrorResponse, Unit]] = {
+  def registerNameOnPhone(number: PhoneNumber, code: ConfirmationCode, name: String, invitationToken: Option[PersonalInvitationToken] = None): Future[Either[ErrorResponse, Unit]] = {
     for {
       acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
-      updatedAcc = acc.copy(pendingPhone = None, phone = Some(number), code = None, regWaiting = true)
-      normalized <- normalizeCredentials(PhoneCredentials(number, Some(code)))
+      updatedAcc = acc.copy(pendingPhone = None, phone = Some(number), code = None, regWaiting = true, invitationToken = invitationToken.orElse(acc.invitationToken))
+      normalized <- normalizeCredentials(PhoneCredentials(number, Some(code), invitationToken))
       req <- registerOnBackend(updatedAcc.id, normalized, name)
     } yield req
 
@@ -441,11 +330,11 @@ class AccountsService(val global: GlobalModule) {
     } yield req
   }
 
-  def registerEmail(emailAddress: EmailAddress, password: String, name: String): Future[Either[ErrorResponse, Unit]] = {
-    val credentials = EmailCredentials(emailAddress, Some(password))
+  def registerEmail(emailAddress: EmailAddress, password: String, name: String, invitationToken: Option[PersonalInvitationToken] = None): Future[Either[ErrorResponse, Unit]] = {
+    val credentials = EmailCredentials(emailAddress, Some(password), invitationToken)
     for {
       acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
-      updatedAcc = acc.updatedPending(credentials).copy(code = None, regWaiting = true)
+      updatedAcc = acc.updatedPending(credentials).copy(code = None, regWaiting = true, invitationToken = invitationToken.orElse(acc.invitationToken))
       _ <- storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc)
       req <- registerOnBackend(updatedAcc.id, credentials, name)
       _ <- if (req.isRight) switchAccount(updatedAcc.id) else Future.successful(())
@@ -478,6 +367,20 @@ class AccountsService(val global: GlobalModule) {
         info(s"register($credentials, $name) failed: $error")
         Future successful Left(error)
     }
+  }
+
+  // Invitations
+  def retrieveInvitationDetails(invitation: PersonalToken): Future[InvitationDetailsResponse] = invitation match {
+    case token: PersonalInvitationToken =>
+      regClient.getInvitationDetails(token).future.map {
+        case Right(ConfirmedInvitation(_, name, Left(email), _)) => EmailAddressResponse(name, email.str)
+        case Right(ConfirmedInvitation(_, name, Right(phone), _)) => PhoneNumberResponse(name, phone.str)
+        case Left(r) => RetrievalFailed(r)
+      }
+  }
+
+  def clearInvitation(accountId: AccountId): Future[Unit] = {
+    storage.update(accountId, _.copy(invitationToken = None)).map(_ => ())
   }
 
 }

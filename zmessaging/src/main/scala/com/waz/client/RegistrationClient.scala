@@ -132,13 +132,13 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
   import com.waz.sync.client.InvitationClient._
 
   def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation] = {
-    val uri = infoPath(token)
-    val request = Request.Get(uri.getPath, baseUri = Some(backend.baseUrl))
+    val path = infoPath(token)
+    val request = Request.Get(path.toString, baseUri = Some(URI.parse(backend.baseUrl)))
     client(request) map {
       case Response(HttpStatus(Success, _), ConfirmedInvitation(inv), _) =>
         debug(s"received invitation details for $token: $inv")
         Right(inv)
-      case Response(HttpStatus(BadRequest, "invalid-invitation-code"), EmptyResponse, headers) =>
+      case Response(HttpStatus(BadRequest, "invalid-invitation-code"), EmptyResponse, _) =>
         warn(s"invitation token not found: $token")
         Left(ErrorResponse(NotFound, "no such invitation code", "invalid-invitation-code"))
       case other =>
