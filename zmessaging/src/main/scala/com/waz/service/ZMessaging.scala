@@ -45,7 +45,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.Locales
 import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
-import com.waz.znet.{CredentialsHandler, _}
+import com.waz.znet._
 import net.hockeyapp.android.{Constants, ExceptionHandler}
 import org.threeten.bp.{Clock, Instant}
 
@@ -56,7 +56,9 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 
-  def client(credentials: CredentialsHandler) = new ZNetClient(credentials, global.client, global.backend, global.loginClient)
+  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
+
+  def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -101,6 +103,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
   val accountId  = account.id
 
+  val auth       = account.auth
   val zNetClient = account.netClient
   val storage    = account.storage
   val lifecycle  = global.lifecycle

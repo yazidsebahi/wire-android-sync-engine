@@ -17,13 +17,11 @@
  */
 package com.waz.service
 
-import com.waz.api.ClientRegistrationState
-import com.waz.api.impl.{Credentials, EmailCredentials, ErrorResponse, PhoneCredentials}
+import com.waz.api.impl.{EmailCredentials, ErrorResponse, PhoneCredentials}
 import com.waz.model._
-import com.waz.model.otr.ClientId
 import com.waz.sync.client.UsersClient
-import com.waz.testutils._
 import com.waz.testutils.Matchers._
+import com.waz.testutils._
 import com.waz.threading.CancellableFuture
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient.LoginResult
@@ -33,19 +31,17 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
 class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
-  var loginRequest: Option[Credentials] = _
   var loginResponse: LoginResult = _
   var loadSelfResponse: Either[ErrorResponse, UserInfo] = _
 
   lazy val global = new MockGlobalModule {
     override lazy val loginClient: LoginClient = new LoginClientImpl(client, BackendConfig.StagingBackend) {
-      override def login(userId: AccountId, credentials: Credentials) = {
-        loginRequest = Some(credentials)
+      override def login(account: AccountData) = {
         CancellableFuture successful loginResponse
       }
     }
@@ -66,7 +62,6 @@ class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter 
 
   before {
     ShadowLog.stream = null
-    loginRequest = None
     loginResponse = Left((Some("123"), ErrorResponse(0, "", "")))
     loadSelfResponse = Left(ErrorResponse(0, "", ""))
   }
@@ -80,7 +75,6 @@ class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter 
       Await.result(accounts.login(creds), 2.seconds) match {
         case Right(data) =>
           data.email shouldEqual Some(EmailAddress("email"))
-          data.credentials shouldEqual creds
           data.verified shouldEqual false
           data.userId shouldBe empty
         case res =>

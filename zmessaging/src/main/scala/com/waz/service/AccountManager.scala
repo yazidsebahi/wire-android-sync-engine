@@ -23,7 +23,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
-import com.waz.content.Preferences.Preference
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{UserData, _}
 import com.waz.service.otr.OtrService.sessionId
@@ -33,11 +32,9 @@ import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.{RichInstant, _}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
-import com.waz.znet.AuthenticationManager._
-import com.waz.znet.CredentialsHandler
+import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 import org.threeten.bp.Instant
@@ -165,10 +162,13 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
   lazy val cryptoBox          = global.factory.cryptobox(id, storage)
-  lazy val netClient          = global.factory.client(credentialsHandler)
+  lazy val auth               = global.factory.auth(id)
+  lazy val netClient          = global.factory.client(id, auth)
   lazy val usersClient        = global.factory.usersClient(netClient)
   lazy val teamsClient        = global.factory.teamsClient(netClient)
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
+
+  auth.onInvalidCredentials.on(dispatcher)(_ => logout(flushCredentials = true))
 
   @volatile private var _userModule = Option.empty[UserModule]
 
@@ -176,18 +176,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     case Some(user) =>
       _userModule = Some(_userModule.getOrElse(global.factory.userModule(user, this)))
       _userModule.get
-  }
-
-  @volatile
-  private[waz] var credentials = Credentials.Empty
-
-  lazy val credentialsHandler = new CredentialsHandler {
-    override val userId: AccountId = id
-    override val cookie: Preference[Option[Cookie]] = Preference[Option[Cookie]](None, accountsStorage.get(id).map(_.flatMap(_.cookie)), { c: Option[Cookie] => accountsStorage.update(id, _.copy(cookie = c)) })
-    override val accessToken: Preference[Option[Token]] = Preference[Option[Token]](None, accountsStorage.get(id).map(_.flatMap(_.accessToken)), { token: Option[Token] => accountsStorage.update(id, _.copy(accessToken = token)) })
-    override def credentials: Credentials = self.credentials
-
-    override def onInvalidCredentials(): Unit = logout(flushCredentials = true)
   }
 
   lazy val accountData = accountsStorage.signal(id)
@@ -218,12 +206,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   } yield active || loggedIn
 
   isLoggedIn.onUi { lifecycle.setLoggedIn }
-
-  accountData { acc =>
-    if (acc.cookie.isDefined) {
-      if (credentials == Credentials.Empty) credentials = acc.credentials
-    }
-  } (EventContext.Global)
 
   for {
     acc      <- accountData if acc.verified
@@ -261,19 +243,9 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   lifecycle.lifecycleState { state => verbose(s"lifecycle state: $state") }
 
-  def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] =
-    Serialized.future(this) {
-      verbose(s"login($credentials)")
-      self.credentials = credentials
-      accountsStorage.updateOrCreate(id, _.updated(credentials), AccountData().updated(credentials)) flatMap { _ => ensureFullyRegistered() }
-    }
-
   def logout(flushCredentials: Boolean): Future[Unit] = {
     verbose(s"logout($id, flushCredentials: $flushCredentials)")
-    for {
-      _ <- if (flushCredentials) Future(credentials = Credentials.Empty) else Future.successful({})
-      _ <- accounts.logout(id, flushCredentials)
-    } yield {}
+    accounts.logout(id, flushCredentials)
   }
 
   def getZMessaging: Future[Option[ZMessaging]] = zmessaging.head flatMap {
@@ -384,7 +356,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
 
-  private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
+  def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
 
     def updateSelfUser(accountId: AccountId): ErrorOr[Unit] =
@@ -423,7 +395,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     // we should merge those accounts, delete current one, and switch to the previous one
     (for {
       Some(_)      <- checkCryptoBox
-      Right(_)     <- activate(id, credentials)
+      Right(_)     <- activate(id)
       Right(_)     <- updateSelfUser(id)
       Right(_)     <- userModule.head.flatMap(_.ensureClientRegistered(id))
       Right(_)     <- updateSelfTeam(id)
@@ -437,16 +409,14 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
       }
   }
 
-  private def activate(accountId: AccountId, credentials: Credentials): ErrorOr[AccountData] =
+  private def activate(accountId: AccountId): ErrorOr[AccountData] =
     accountsStorage.get(accountId).flatMap {
       case Some(account) =>
         if (account.verified) Future successful Right(account)
-        else loginClient.login(account.id, credentials).future flatMap {
+        else loginClient.login(account).future flatMap {
           case Right((token, cookie)) =>
             for {
-              _ <- credentialsHandler.cookie := cookie
-              _ <- credentialsHandler.accessToken := Some(token)
-              Some((_, acc)) <- accountsStorage.update(id, _.copy(verified = true, cookie = cookie, accessToken = Some(token)))
+              Some((_, acc)) <- accountsStorage.update(accountId, _.copy(verified = true, accessToken = Some(token), cookie = cookie))
             } yield Right(acc)
           case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
             accountsStorage.update(accountId, _.copy(verified = false)).collect { case Some((_, acc)) => Right(acc)}
@@ -463,7 +433,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
       case Some(data) if data.verified => CancellableFuture successful Some(data)
       case Some(_) if !lifecycle.isUiActive => CancellableFuture successful None
       case Some(data) =>
-        CancellableFuture.lift(activate(data.id, credentials)) flatMap {
+        CancellableFuture.lift(activate(data.id)) flatMap {
           case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
           case _ =>
             CancellableFuture.delay(ActivationThrottling.delay(retry)) flatMap { _ => awaitActivation(retry + 1) }

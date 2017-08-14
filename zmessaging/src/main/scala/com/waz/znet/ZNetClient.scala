@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.EmailAddress
+import com.waz.model.AccountId
 import com.waz.service.{BackendConfig, GlobalModule}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
@@ -41,14 +41,9 @@ import scala.util.{Failure, Success}
  * there is no point in retrying if know that there is no usable network,
  * and it would be good to retry connections as soon as we are back online
  */
-class ZNetClient(credentials: CredentialsHandler,
+class ZNetClient(auth:       Option[AuthenticationManager] = None,
                  val client: AsyncClient,
-                 backend: BackendConfig,
-                 loginClient: LoginClient) {
-
-  def this(global: GlobalModule, email: String, passwd: String) = this(new BasicCredentials(EmailAddress(email), Some(passwd)), global.client, global.backend, global.loginClient)
-  def this(email: String, passwd: String, client: AsyncClientImpl) =
-    this(new BasicCredentials(EmailAddress(email), Some(passwd)), client, BackendConfig.StagingBackend, new LoginClientImpl(client, BackendConfig.StagingBackend)) // only used in tests!
+                 baseUri:    URI) {
 
   import ZNetClient._
   private implicit val logTag: LogTag = logTagFor[ZNetClient]
@@ -71,8 +66,6 @@ class ZNetClient(credentials: CredentialsHandler,
    */
   def MaxConcurrentRequests = 4
   def LongRunning = 45.seconds
-  val baseUri = URI.parse(backend.baseUrl)
-  val auth = new AuthenticationManager(loginClient, credentials)
 
   def apply[A](r: Request[A]): CancellableFuture[Response] = {
     val handle = new RequestHandle(r)
@@ -108,7 +101,7 @@ class ZNetClient(credentials: CredentialsHandler,
     closed = true
     queue.foreach(_.promise.success(Response(Response.Cancelled)))
     queue.clear()
-    auth.close()
+    auth.foreach(_.close())
 
     ongoing.values.toList foreach cancel
   }
@@ -125,9 +118,12 @@ class ZNetClient(credentials: CredentialsHandler,
 
         val future =
           if (request.requiresAuthentication) {
-            CancellableFuture.lift(auth.currentToken()) flatMap {
-              case Right(token) => client(request.withHeaders(token.headers))
-              case Left(status) => CancellableFuture.successful(Response(status))
+            auth match {
+              case Some(am) => CancellableFuture.lift(am.currentToken()) flatMap {
+                case Right(token) => client(request.withHeaders(token.headers))
+                case Left(status) => CancellableFuture.successful(Response(status))
+              }
+              case _ => CancellableFuture.failed(throw new Exception("Attempted to perform request that requires authentication using a non-authenticated global ZNetClient"))
             }
           } else client(request)
 
@@ -167,10 +163,10 @@ class ZNetClient(credentials: CredentialsHandler,
       done(handle, response)
     } else {
       info(s"Received AuthorizationError: $response for $request, will invalidate token and try again")
-      auth.invalidateToken() map { _ =>
+      auth.foreach(_.invalidateToken() map { _ =>
         handle.authRetry = true
         enqueue(handle)
-      }
+      })
     }
   }
 
@@ -221,6 +217,7 @@ class ZNetClient(credentials: CredentialsHandler,
 }
 
 object ZNetClient {
+
   private val handleId = new AtomicInteger(0)
   def nextId = handleId.incrementAndGet()
 
@@ -229,7 +226,7 @@ object ZNetClient {
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
-  class EmptyClient extends ZNetClient(new BasicCredentials(EmailAddress("email"), Some("passwd")), new EmptyAsyncClientImpl, BackendConfig.StagingBackend, new LoginClientImpl(new EmptyAsyncClientImpl, BackendConfig.StagingBackend)) {
+  class EmptyClient extends ZNetClient(None, new EmptyAsyncClientImpl(), BackendConfig.StagingBackend.baseUrl) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
     override def close(): Future[Unit] = Future.successful({})
   }

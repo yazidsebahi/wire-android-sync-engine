@@ -20,7 +20,6 @@ package com.waz.testutils
 import android.net.Uri
 import com.koushikdutta.async.http.WebSocket
 import com.waz.api.Message
-import com.waz.api.impl.Credentials
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.UserData.ConnectionStatus
@@ -56,7 +55,7 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
   override lazy val factory = new MockZMessagingFactory(this)
 
   override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
-    override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
+    override def login(account: AccountData) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
 }
@@ -116,8 +115,8 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     }
   }
 
-  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
-    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), zNetClient.auth) {
+  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
   }
