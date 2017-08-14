@@ -58,7 +58,7 @@ import scala.util.Random.nextInt
         new BasicCredentials(EmailAddress(email), Some(password)),
         new AsyncClientImpl,
         BackendConfig("http://localhost:" + wireMockPort),
-        new LoginClient(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort))) {
+        new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort))) {
 
       override def MaxConcurrentRequests = maxConcurrentRequests
       override def LongRunning = longRunningTime

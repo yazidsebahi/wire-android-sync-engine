@@ -80,7 +80,7 @@ import scala.util.control.NoStackTrace
       }
     }
 
-    override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
+    override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
       override def login(user: AccountId, credentials: Credentials) = CancellableFuture.successful(loginResponse)
       override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }

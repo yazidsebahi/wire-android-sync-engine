@@ -63,7 +63,7 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val reporting                                             = wire[GlobalReportingService]
 
   lazy val decoder                                               = Response.CacheResponseBodyDecoder(cache)
-  lazy val loginClient                                           = wire[LoginClient]
+  lazy val loginClient:         LoginClient                      = wire[LoginClientImpl]
   lazy val regClient:           RegistrationClient               = wire[RegistrationClient]
 
   //Not to be used in zms instances

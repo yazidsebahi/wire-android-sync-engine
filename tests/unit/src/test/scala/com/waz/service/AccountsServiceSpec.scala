@@ -28,7 +28,7 @@ import com.waz.threading.CancellableFuture
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import com.waz.znet.{LoginClient, ZNetClient}
+import com.waz.znet.{LoginClient, LoginClientImpl, ZNetClient}
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{Ignore, BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
@@ -43,7 +43,7 @@ import scala.concurrent.duration._
   var loadSelfResponse: Either[ErrorResponse, UserInfo] = _
 
   lazy val global = new MockGlobalModule {
-    override lazy val loginClient: LoginClient = new LoginClient(client, BackendConfig.StagingBackend) {
+    override lazy val loginClient: LoginClient = new LoginClientImpl(client, BackendConfig.StagingBackend) {
       override def login(userId: AccountId, credentials: Credentials) = {
         loginRequest = Some(credentials)
         CancellableFuture successful loginResponse

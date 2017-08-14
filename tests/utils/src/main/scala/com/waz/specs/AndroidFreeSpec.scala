@@ -27,7 +27,7 @@ import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil}
+import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant

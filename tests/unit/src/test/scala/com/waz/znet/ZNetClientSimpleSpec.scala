@@ -54,7 +54,7 @@ import scala.util.Random
       new BasicCredentials(EmailAddress(email), Some(password)),
       new AsyncClientImpl,
       BackendConfig("http://localhost:" + wireMockPort),
-      new LoginClient(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort)))
+      new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort)))
   }
 
   after {
