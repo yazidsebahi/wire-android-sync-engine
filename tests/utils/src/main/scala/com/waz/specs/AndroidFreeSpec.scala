@@ -19,14 +19,14 @@ package com.waz.specs
 
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
-import com.waz.ZLog.LogTag
+import com.waz.ZLog.{LogTag, error, verbose}
 import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.service.ZMessaging
 import com.waz.testutils.TestClock
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil}
+import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -75,10 +75,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     HockeyApp.setUtil(Some(new HockeyAppUtil {
       override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
-        //TODO it might be nice to catch any swallowed-up exceptions and use them to fail the tests somehow
-        println("Exception sent to HockeyApp:")
-        println(description)
-        t.printStackTrace()
+        error(s"Logged to HockeyApp: $description", t)
       }
     }))
   }

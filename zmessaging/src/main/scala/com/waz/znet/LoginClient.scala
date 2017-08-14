@@ -31,12 +31,21 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
 import com.waz.utils.wrappers.URI
+import com.waz.znet.LoginClient.LoginResult
 import org.json.JSONObject
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-class LoginClient(client: AsyncClient, backend: BackendConfig) {
+trait LoginClient {
+
+  def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult]
+  def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult]
+  def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]
+}
+
+class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends LoginClient {
   import com.waz.znet.LoginClient._
   private implicit val dispatcher = new SerialDispatchQueue(name = "LoginClient")
 
@@ -53,9 +62,9 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
       math.max(nextRunTime - System.currentTimeMillis(), 0).millis
     }
 
-  def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = throttled(loginNow(accountId, credentials))
+  override def login(accountId: AccountId, credentials: Credentials) = throttled(loginNow(accountId, credentials))
 
-  def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = throttled(accessNow(cookie, token))
+  override def access(cookie: Cookie, token: Option[Token]) = throttled(accessNow(cookie, token))
 
   def throttled(request: => CancellableFuture[LoginResult]): CancellableFuture[LoginResult] = dispatcher {
     loginFuture = loginFuture.recover {
@@ -88,13 +97,14 @@ class LoginClient(client: AsyncClient, backend: BackendConfig) {
     val request = Request.Post(loginUriStr, loginRequestBody(userId, credentials), baseUri = Some(URI.parse(backend.baseUrl)), timeout = RegistrationClient.timeout)
     client(request) map responseHandler
   }
+
   def accessNow(cookie: Cookie, token: Option[Token]) = {
     val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
     val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(URI.parse(backend.baseUrl)), headers = headers, timeout = RegistrationClient.timeout)
     client(request) map responseHandler
   }
 
-  def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]] = {
+  override def requestVerificationEmail(email: EmailAddress) = {
     val request = Request.Post(ActivateSendPath, JsonContentEncoder(JsonEncoder(_.put("email", email.str))), baseUri = Some(URI.parse(backend.baseUrl)))
     client(request) map {
       case Response(SuccessHttpStatus(), resp, _) => Right(())

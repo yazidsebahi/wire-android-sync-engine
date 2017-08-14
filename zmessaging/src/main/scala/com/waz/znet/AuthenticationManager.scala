@@ -18,6 +18,7 @@
 package com.waz.znet
 
 import com.koushikdutta.async.http.AsyncHttpRequest
+import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, EmailCredentials, ErrorResponse}
@@ -28,7 +29,6 @@ import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response._
-import net.hockeyapp.android.ExceptionHandler
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
@@ -39,9 +39,9 @@ trait AccessTokenProvider {
 }
 
 trait CredentialsHandler {
-  val userId: AccountId
-  val cookie: Preference[Option[Cookie]]
-  val accessToken: Preference[Option[Token]]
+  def userId: AccountId
+  def cookie: Preference[Option[Cookie]]
+  def accessToken: Preference[Option[Token]]
 
   def credentials: Credentials
   def onInvalidCredentials(): Unit = {}
@@ -78,7 +78,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
 
   def invalidateToken() = tokenPref() .map (_.foreach { token => tokenPref := Some(token.copy(expiresAt = 0)) })(dispatcher)
 
-  def isExpired(token: Token) = token.expiresAt - expireThreshold < System.currentTimeMillis()
+  def isExpired(token: Token) = token.expiresAt - ExpireThreshold < System.currentTimeMillis()
 
   def close() = dispatcher {
     closed = true
@@ -107,7 +107,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
                   case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
                     verbose(s"access request failed (label: $label, message: $message), will try login request. token: $token, cookie: $cookie, access resp: $resp")
 
-                    ExceptionHandler.saveException(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
+                    HockeyApp.saveException(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
                     for {
                       _ <- CancellableFuture.lift(user.cookie := None)
                       _ <- CancellableFuture.lift(user.accessToken := None)
@@ -170,7 +170,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
 
 object AuthenticationManager {
   val MaxRetryCount = 3
-  val expireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
+  val ExpireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
 
   type ResponseHandler = PartialFunction[LoginResult, CancellableFuture[Either[Status, Token]]]
 
