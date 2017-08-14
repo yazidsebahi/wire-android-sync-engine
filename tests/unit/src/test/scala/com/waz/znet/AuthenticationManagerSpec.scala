@@ -17,11 +17,12 @@
  */
 package com.waz.znet
 
-import com.waz.api.impl.{EmailCredentials, ErrorResponse}
-import com.waz.content.Preferences.Preference
-import com.waz.model.EmailAddress
+import com.waz.api.impl.ErrorResponse
+import com.waz.content.AccountsStorage
+import com.waz.model.{AccountData, AccountId, EmailAddress}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.utils.events.EventContext
 import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.Response.{HttpStatus, Status}
@@ -31,7 +32,8 @@ import scala.concurrent.Future
 class AuthenticationManagerSpec extends AndroidFreeSpec {
 
   val loginClient = mock[LoginClient]
-  val credentials = mock[CredentialsHandler]
+  val accId       = AccountId()
+  val accStorage  = mock[AccountsStorage]
 
 
   feature("Successful logins") {
@@ -39,8 +41,13 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
       val token = Token("token", "token", System.currentTimeMillis() + AuthenticationManager.ExpireThreshold + 1000)
 
-      (credentials.credentials _).expects().returning(EmailCredentials(EmailAddress("blah@blah.com"), Some("password")))
-      (credentials.accessToken _).expects().returning(Preference.inMemory(Option(token)))
+      val account = AccountData(accId,
+        email       = Some(EmailAddress("blah@blah.com")),
+        password    = Some("password"),
+        accessToken = Some(token)
+      )
+
+      (accStorage.get _).expects(accId).anyNumberOfTimes().returning(Future.successful(Some(account)))
       val manager = getManager
 
       result(manager.currentToken()) shouldEqual Right(token)
@@ -53,9 +60,20 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       val oldToken = Token("token", "token", System.currentTimeMillis())
       val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
-      (credentials.credentials _).expects().returning(EmailCredentials(EmailAddress("blah@blah.com"), Some("password")))
-      (credentials.accessToken _).expects().returning(Preference.inMemory(Option(oldToken)))
-      (credentials.cookie _).expects().returning(Preference.inMemory(Option(cookie)))
+      val oldAccount = AccountData(accId,
+        email       = Some(EmailAddress("blah@blah.com")),
+        password    = Some("password"),
+        accessToken = Some(oldToken),
+        cookie      = Some(cookie)
+      )
+
+      val newAccount = oldAccount.copy(accessToken = Some(newToken))
+
+      (accStorage.get _).expects(accId).anyNumberOfTimes().returning(Future.successful(Some(oldAccount)))
+      (accStorage.update _).expects(*, *).onCall { (id, updater) =>
+        updater(oldAccount) shouldEqual newAccount
+        Future.successful(Some((oldAccount, newAccount)))
+      }
 
       (loginClient.access _).expects(cookie, Some(oldToken)).returning(CancellableFuture.successful(Right(newToken, None)))
 
@@ -72,18 +90,31 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       val oldToken = Token("token", "token", System.currentTimeMillis())
       val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
-      val cookiePref = Preference.inMemory(Option(oldCookie))
+      val updateDispatcher = new SerialDispatchQueue()
 
-      (credentials.credentials _).expects().returning(EmailCredentials(EmailAddress("blah@blah.com"), Some("password")))
-      (credentials.accessToken _).expects().returning(Preference.inMemory(Option(oldToken)))
-      (credentials.cookie _).expects().twice().returning(cookiePref)
+      var account = AccountData(accId,
+        email       = Some(EmailAddress("blah@blah.com")),
+        password    = Some("password"),
+        accessToken = Some(oldToken),
+        cookie      = Some(oldCookie)
+      )
+
+      (accStorage.get _).expects(accId).anyNumberOfTimes().onCall((_: AccountId) => updateDispatcher(Some(account)).future)
+      (accStorage.update _).expects(*, *).onCall { (_, updater) =>
+        updateDispatcher {
+          val old = account
+          account = updater(account)
+          Some((old, account))
+        }
+      }
 
       (loginClient.access _).expects(oldCookie, Some(oldToken)).returning(CancellableFuture.successful(Right(newToken, Some(newCookie))))
-
       val manager = getManager
 
       result(manager.currentToken()) shouldEqual Right(newToken)
-      result(cookiePref.apply()) shouldEqual Some(newCookie)
+
+      account.accessToken shouldEqual Some(newToken)
+      account.cookie      shouldEqual Some(newCookie)
     }
 
     scenario("Multiple calls to access should only trigger at most one request") {
@@ -92,15 +123,25 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       val oldToken = Token("token", "token", System.currentTimeMillis())
       val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
-      val accessTokenPref = Preference.inMemory(Option(oldToken))
-      val cookiePref      = Preference.inMemory(Option(cookie))
+      val updateDispatcher = new SerialDispatchQueue()
 
-      (credentials.credentials _).expects().anyNumberOfTimes().returning(EmailCredentials(EmailAddress("blah@blah.com"), None))
+      var account = AccountData(accId,
+        email       = Some(EmailAddress("blah@blah.com")),
+        password    = Some("password"),
+        accessToken = Some(oldToken),
+        cookie      = Some(cookie)
+      )
 
-      (credentials.accessToken _).expects().anyNumberOfTimes().returning(accessTokenPref)
-      (credentials.cookie _).expects().anyNumberOfTimes().returning(cookiePref)
+      (accStorage.get _).expects(accId).anyNumberOfTimes().onCall((_: AccountId) => updateDispatcher(Some(account)).future)
+      (accStorage.update _).expects(*, *).onCall { (id, updater) =>
+        updateDispatcher {
+          val oldAccount = account
+          account = updater(account)
+          Some((oldAccount, account))
+        }
+      }
 
-      (loginClient.access _).expects(cookie, Some(oldToken)).returning(CancellableFuture.successful(Right(newToken, None)))
+      (loginClient.access _).expects(cookie, Some(oldToken)).once().returning(CancellableFuture.successful(Right(newToken, None)))
 
       val manager = getManager
 
@@ -118,16 +159,33 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
       val oldToken = Token("token", "token", System.currentTimeMillis())
 
-      (credentials.credentials _).expects().twice().returning(EmailCredentials(EmailAddress("blah@blah.com"), None))
-      (credentials.accessToken _).expects().twice().returning(Preference.inMemory(Option(oldToken)))
-      (credentials.cookie _).expects().twice().returning(Preference.inMemory(Option(cookie)))
-      (credentials.onInvalidCredentials _).expects()
+      val updateDispatcher = new SerialDispatchQueue()
+
+      var account = AccountData(accId,
+        email       = Some(EmailAddress("blah@blah.com")),
+        password    = None,
+        accessToken = Some(oldToken),
+        cookie      = Some(cookie)
+      )
+
+      (accStorage.get _).expects(accId).anyNumberOfTimes().onCall((_: AccountId) => updateDispatcher(Some(account)).future)
+      (accStorage.update _).expects(*, *).onCall { (id, updater) =>
+        updateDispatcher {
+          val oldAccount = account
+          account = updater(account)
+          Some((oldAccount, account))
+        }
+      }
 
       (loginClient.access _).expects(cookie, Some(oldToken)).returning(CancellableFuture.successful(Left((Option(""), ErrorResponse(Status.Forbidden, "", "")))))
 
       val manager = getManager
 
+      var logoutCalled = false
+      manager.onInvalidCredentials(_ => logoutCalled = true)(EventContext.Global)
+
       result(manager.currentToken()) shouldEqual Left(HttpStatus(401, "Password missing in dispatchLoginRequest"))
+      logoutCalled shouldEqual true
     }
   }
 
@@ -139,12 +197,25 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       val oldToken = Token("token", "token", System.currentTimeMillis())
       val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
-      (credentials.credentials _).expects().once().returning(EmailCredentials(EmailAddress("blah@blah.com"), None))
-      (credentials.accessToken _).expects().once().returning(Preference.inMemory(Option(oldToken)))
-      (credentials.cookie _).expects().once().returning(Preference.inMemory(Option(cookie)))
+      val updateDispatcher = new SerialDispatchQueue()
+
+      var account = AccountData(accId,
+        email       = Some(EmailAddress("blah@blah.com")),
+        password    = None,
+        accessToken = Some(oldToken),
+        cookie      = Some(cookie)
+      )
+
+      (accStorage.get _).expects(accId).anyNumberOfTimes().onCall((_: AccountId) => updateDispatcher(Some(account)).future)
+      (accStorage.update _).expects(*, *).onCall { (id, updater) =>
+        updateDispatcher {
+          val oldAccount = account
+          account = updater(account)
+          Some((oldAccount, account))
+        }
+      }
 
       var attempts = 0
-
       (loginClient.access _).expects(cookie, Some(oldToken)).anyNumberOfTimes().onCall { (cookie, token) =>
         returning(CancellableFuture.successful(attempts match {
           case 0|1|2 => Left((Option(""), ErrorResponse(500, "Some server error", "Some server error")))
@@ -159,5 +230,5 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
     }
   }
 
-  def getManager = new AuthenticationManager(loginClient, credentials)
+  def getManager = new AuthenticationManager(accId, accStorage, loginClient)
 }

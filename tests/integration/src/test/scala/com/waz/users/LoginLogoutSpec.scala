@@ -106,7 +106,6 @@ class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with 
       invalidateCookies.await() shouldEqual true
 
       accounts.storage.update(zmessaging.accountId, _.copy(password = None)).await()
-      zmessaging.account.credentials = EmailCredentials(EmailAddress(email), None)
       zmessaging.zNetClient.auth.invalidateToken()
 
       api.search().getRecommendedPeople("test", 10, Array.empty)

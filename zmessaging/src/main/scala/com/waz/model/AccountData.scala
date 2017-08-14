@@ -32,6 +32,7 @@ import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor, DBProgram}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import org.json.JSONObject
 
 import scala.collection.mutable
 
@@ -41,23 +42,23 @@ import scala.collection.mutable
  * @param verified - true if user account has been activated
  * @param password - will not be stored in db
  */
-case class AccountData(id:             AccountId               = AccountId(),
-                       teamId:         TriTeamId               = Left({}),
-                       email:          Option[EmailAddress]    = None,
-                       hash:           String                  = "",
-                       phone:          Option[PhoneNumber]     = None,
-                       handle:         Option[Handle]          = None,
-                       registeredPush: Option[PushToken]       = None,
-                       verified:       Boolean                 = false,
-                       cookie:         Option[Cookie]          = None,
-                       password:       Option[String]          = None,
-                       accessToken:    Option[Token]           = None,
-                       userId:         Option[UserId]          = None,
-                       clientId:       Option[ClientId]        = None,
-                       clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
-                       privateMode:    Boolean                 = false,
-                       private val _selfPermissions: Long      = 0,
-                       private val _copyPermissions: Long      = 0
+case class AccountData(id:             AccountId                       = AccountId(),
+                       teamId:         TriTeamId                       = Left({}),
+                       email:          Option[EmailAddress]            = None,
+                       hash:           String                          = "",
+                       phone:          Option[PhoneNumber]             = None,
+                       handle:         Option[Handle]                  = None,
+                       registeredPush: Option[PushToken]               = None,
+                       verified:       Boolean                         = false,
+                       cookie:         Option[Cookie]                  = None,
+                       password:       Option[String]                  = None,
+                       accessToken:    Option[Token]                   = None,
+                       userId:         Option[UserId]                  = None,
+                       clientId:       Option[ClientId]                = None,
+                       clientRegState: ClientRegistrationState         = ClientRegistrationState.UNKNOWN,
+                       privateMode:    Boolean                         = false,
+                       private val _selfPermissions: Long              = 0,
+                       private val _copyPermissions: Long              = 0
                       ) {
 
   override def toString: String =
@@ -100,11 +101,40 @@ case class AccountData(id:             AccountId               = AccountId(),
     case _ => this
   }
 
-  def credentials: Credentials = (email, phone, password) match {
-    case (None, Some(p), _)   => PhoneCredentials(p, None)
-    case (Some(e), _, passwd) => EmailCredentials(e, passwd)
-    case _ => Credentials.Empty
+  def canLogin: Boolean = {
+    email.isDefined && password.isDefined ||
+    handle.isDefined && password.isDefined
   }
+
+  def addToLoginJson(o: JSONObject) =
+    addCredentialsToJson(o)
+
+  def addToRegistrationJson(o: JSONObject) =
+    addCredentialsToJson(o, isLogin = false)
+
+  private def addCredentialsToJson(o: JSONObject, isLogin: Boolean = true) = {
+    o.put("label", id.str)  // this label can be later used for cookie revocation
+    //TODO invitations
+//    invitation foreach (i => o.put("invitation_code", i.code))
+
+    (email, handle, phone) match {
+      case (Some(e), _, _) =>
+        o.put("email", e.str)
+        password foreach (o.put("password", _))
+
+      case (_, Some(h), _) =>
+        //TODO - should this not be "handle"?!
+        o.put("email", h.string)
+        password foreach (o.put("password", _))
+
+      case (_, _, Some(p)) =>
+        o.put("phone", p.str)
+      //TODO phone code registration
+      // code foreach { code => o.put(if (isLogin) "code" else "phone_code" , code.str) }
+    }
+  }
+
+  def autoLoginOnRegistration = phone.isDefined // TODO || invitation.isDefined
 
   def updated(user: UserInfo): AccountData =
     copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), verified = true, handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
@@ -114,7 +144,7 @@ case class AccountData(id:             AccountId               = AccountId(),
 
   def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
     copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
-  
+
   def isTeamAccount: Boolean =
     teamId.fold(_ => false, _.isDefined)
 
@@ -141,8 +171,11 @@ object AccountData {
 
   type PermissionsMasks = (Long, Long) //self and copy permissions
 
-  def apply(id: AccountId, credentials: Credentials): AccountData =
-    new AccountData(id, Left({}), credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
+  def apply(credentials: Credentials): AccountData = {
+    val id = AccountId()
+    val hash = credentials.maybePassword.map(computeHash(id, _)).getOrElse("")
+    new AccountData(id, Left({}), credentials.maybeEmail, hash, phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
+  }
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()

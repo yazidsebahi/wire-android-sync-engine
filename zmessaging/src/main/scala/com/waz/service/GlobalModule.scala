@@ -34,7 +34,7 @@ import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
 import com.waz.utils.Cache
-import com.waz.utils.wrappers.{Context, GoogleApi, GoogleApiImpl}
+import com.waz.utils.wrappers.{Context, GoogleApi, GoogleApiImpl, URI}
 import com.waz.znet._
 
 import scala.concurrent.Future
@@ -67,7 +67,7 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val regClient:           RegistrationClient               = wire[RegistrationClient]
 
   //Not to be used in zms instances
-  lazy val globalAssetClient:   AssetClient                      = AssetClient(new ZNetClient(this, "", ""))
+  lazy val globalAssetClient:   AssetClient                      = AssetClient(globalClient)
   lazy val globalLoader:        AssetLoader                      = wire[AssetLoaderImpl]
   //end of warning...
 
@@ -85,7 +85,7 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
   lazy val client:              AsyncClientImpl                  = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
 
-  lazy val globalClient                                          = new ZNetClient(global, "", "")
+  lazy val globalClient                                          = new ZNetClient(None, client, URI.parse(""))
   lazy val imageLoader:         ImageLoader                      = new ImageLoaderImpl(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
 
   lazy val blacklistClient                                       = new VersionBlacklistClient(globalClient, backend)

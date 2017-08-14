@@ -81,11 +81,11 @@ import scala.util.control.NoStackTrace
     }
 
     override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
-      override def login(user: AccountId, credentials: Credentials) = CancellableFuture.successful(loginResponse)
+      override def login(account: AccountData) = CancellableFuture.successful(loginResponse)
       override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
-      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
+      override def register(account: AccountData, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
     }
     override lazy val factory = new MockZMessagingFactory(this) {
       override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): service.ZMessaging =
@@ -96,8 +96,8 @@ import scala.util.control.NoStackTrace
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), zNetClient.auth) {
+          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }

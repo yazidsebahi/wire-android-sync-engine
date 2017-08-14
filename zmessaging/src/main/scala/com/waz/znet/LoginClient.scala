@@ -22,26 +22,24 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.{Credentials, ErrorResponse}
 import com.waz.client.RegistrationClient
-import com.waz.model.{AccountId, EmailAddress}
+import com.waz.model.{AccountData, AccountId, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.{ExponentialBackoff, JsonEncoder}
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
-import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.utils.wrappers.URI
 import com.waz.znet.LoginClient.LoginResult
+import com.waz.znet.Response.{Status, SuccessHttpStatus}
 import org.json.JSONObject
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 trait LoginClient {
 
   def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult]
-  def login(accountId: AccountId, credentials: Credentials): CancellableFuture[LoginResult]
+  def login(account: AccountData): CancellableFuture[LoginResult]
   def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]
 }
 
@@ -62,7 +60,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
       math.max(nextRunTime - System.currentTimeMillis(), 0).millis
     }
 
-  override def login(accountId: AccountId, credentials: Credentials) = throttled(loginNow(accountId, credentials))
+  override def login(account: AccountData) = throttled(loginNow(account))
 
   override def access(cookie: Cookie, token: Option[Token]) = throttled(accessNow(cookie, token))
 
@@ -92,20 +90,20 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
     loginFuture
   }.flatten
 
-  def loginNow(userId: AccountId, credentials: Credentials) = {
-    debug(s"trying to login. Credentials: $credentials, uriStr: $loginUriStr")
-    val request = Request.Post(loginUriStr, loginRequestBody(userId, credentials), baseUri = Some(URI.parse(backend.baseUrl)), timeout = RegistrationClient.timeout)
+  def loginNow(account: AccountData) = {
+    debug(s"trying to login to account: ${account.id}")
+    val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClient.timeout)
     client(request) map responseHandler
   }
 
   def accessNow(cookie: Cookie, token: Option[Token]) = {
     val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
-    val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(URI.parse(backend.baseUrl)), headers = headers, timeout = RegistrationClient.timeout)
+    val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(backend.baseUrl), headers = headers, timeout = RegistrationClient.timeout)
     client(request) map responseHandler
   }
 
   override def requestVerificationEmail(email: EmailAddress) = {
-    val request = Request.Post(ActivateSendPath, JsonContentEncoder(JsonEncoder(_.put("email", email.str))), baseUri = Some(URI.parse(backend.baseUrl)))
+    val request = Request.Post(ActivateSendPath, JsonContentEncoder(JsonEncoder(_.put("email", email.str))), baseUri = Some(backend.baseUrl))
     client(request) map {
       case Response(SuccessHttpStatus(), resp, _) => Right(())
       case Response(_, ErrorResponse(code, msg, label), _) =>
@@ -139,17 +137,14 @@ object LoginClient {
   val LoginPath = "/login"
   val AccessPath = "/access"
   val ActivateSendPath = "/activate/send"
-  val loginUriStr = Request.query(LoginPath, ("persist", true))
+  val LoginUriStr = Request.query(LoginPath, ("persist", true))
 
   //TODO remove once logout issue is fixed: https://wearezeta.atlassian.net/browse/AN-4816
   val RequestId = "Request-Id"
 
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
 
-  def loginRequestBody(user: AccountId, credentials: Credentials) = JsonContentEncoder(JsonEncoder { o =>
-    o.put("label", user.str)  // this label can be later used for cookie revocation
-    credentials.addToLoginJson(o)
-  })
+  def loginRequestBody(account: AccountData) = JsonContentEncoder(JsonEncoder(account.addToLoginJson))
 
   def getCookieFromHeaders(headers: Response.Headers): Option[Cookie] = headers(SetCookie) flatMap {
     case header @ CookieHeader(cookie) =>

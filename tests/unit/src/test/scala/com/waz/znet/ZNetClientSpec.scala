@@ -54,11 +54,7 @@ import scala.util.Random.nextInt
   before {
     startMock()
     reset()
-    client = new ZNetClient(
-        new BasicCredentials(EmailAddress(email), Some(password)),
-        new AsyncClientImpl,
-        BackendConfig("http://localhost:" + wireMockPort),
-        new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort))) {
+    client = new ZNetClient(None, new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl) {
 
       override def MaxConcurrentRequests = maxConcurrentRequests
       override def LongRunning = longRunningTime

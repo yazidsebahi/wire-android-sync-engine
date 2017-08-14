@@ -191,7 +191,7 @@ class AccountsService(val global: GlobalModule) {
 
   def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] =
     switchAccount(credentials) flatMap {
-      case (normalized, _, Some(manager)) => manager.login(normalized)
+      case (normalized, _, Some(manager)) => manager.ensureFullyRegistered()
       case (normalized, Some(account), None) => // found matching account, but is not authorized (wrong password)
         verbose(s"found matching account: $account, trying to authorize with backend")
         login(account, normalized)
@@ -202,7 +202,7 @@ class AccountsService(val global: GlobalModule) {
 
   private def login(account: AccountData, normalized: Credentials) = {
     def loginOnBackend() =
-      loginClient.login(account.id, normalized).future map {
+      loginClient.login(account).future map {
         case Right((token, c)) =>
           Right(account.updated(normalized).copy(cookie = c, verified = true, accessToken = Some(token)))
         case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
@@ -219,7 +219,7 @@ class AccountsService(val global: GlobalModule) {
           acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, verified = true, accessToken = a.accessToken), a)
           manager <- getOrCreateAccountManager(a.id)
           _       <- setAccount(Some(a.id))
-          res     <- manager.login(normalized)
+          res     <- manager.ensureFullyRegistered()
         } yield res
       case Left(err) =>
         Future successful Left(err)
@@ -253,16 +253,16 @@ class AccountsService(val global: GlobalModule) {
   def register(credentials: Credentials, name: String, accent: AccentColor): Future[Either[ErrorResponse, AccountData]] = {
     debug(s"register($credentials, $name, $accent")
 
-    def register(accountId: AccountId, normalized: Credentials) =
-      regClient.register(accountId, normalized, name, Some(accent.id)).future flatMap {
+    def register(account: AccountData, normalized: Credentials) =
+      regClient.register(account, name, Some(accent.id)).future flatMap {
         case Right((userInfo, cookie)) =>
-          verbose(s"register($credentials) done, id: $accountId, user: $userInfo, cookie: $cookie")
+          verbose(s"register($credentials) done, id: ${account.id}, user: $userInfo, cookie: $cookie")
           for {
-            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), verified = normalized.autoLoginOnRegistration))
+            acc     <- storage.insert(account.copy(cookie = cookie, userId = Some(userInfo.id), verified = account.autoLoginOnRegistration))
             _       = verbose(s"created account: $acc")
-            manager <- getOrCreateAccountManager(accountId)
-            _       <- setAccount(Some(accountId))
-            res     <- manager.login(normalized)
+            manager <- getOrCreateAccountManager(account.id)
+            _       <- setAccount(Some(account.id))
+            res     <- manager.ensureFullyRegistered()
           } yield res
         case Left(error) =>
           info(s"register($credentials, $name) failed: $error")
@@ -270,19 +270,19 @@ class AccountsService(val global: GlobalModule) {
       }
 
     switchAccount(credentials) flatMap {
-      case (normalized, _, Some(manager)) =>
+      case (_, _, Some(manager)) =>
         verbose(s"register($credentials), found matching account: $manager, will just sign in")
-        manager.login(normalized)
+        manager.ensureFullyRegistered()
       case (normalized, Some(account), None) =>
         verbose(s"register($credentials), found matching account: $account, will try signing in")
         login(account, normalized) flatMap {
           case Right(acc) => Future successful Right(acc)
           case Left(_) =>
             // login failed, maybe this account has been removed on backend, let's try registering
-            register(account.id, normalized)
+            register(account, normalized)
         }
       case (normalized, None, None) =>
-        register(AccountId(), normalized)
+        register(AccountData(normalized), normalized)
     }
   }
 

@@ -152,7 +152,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   def netClient = zmessaging.zNetClient
 
-  def znetClientFor(email: String, password: String) = new ZNetClient(email, password, new AsyncClientImpl(wrapper = TestClientWrapper()))
+  def znetClientFor(email: String, password: String) = new ZNetClient(None, new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend.baseUrl)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
