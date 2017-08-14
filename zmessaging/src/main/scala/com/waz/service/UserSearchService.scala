@@ -105,12 +105,22 @@ class UserSearchService(selfUserId: UserId,
         searchUserData(searchState.query).map(_.values.filter(u => !excludedUsers.contains(u.id)))
       else Signal.const(IndexedSeq.empty[UserData])
 
+    exactMatchUser ! None // reset the exact match to None on any query change
+
     for {
       topUsers              <- topUsersSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[UserData]]))
       localResults          <- localSearchSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[UserData]]))
       conversations         <- conversationsSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[ConversationData]]))
       directoryResults      <- searchSignal.map(Option(_)).orElse(Signal.const(Option.empty[IndexedSeq[UserData]]))
-    } yield SearchResults(topUsers, localResults, conversations, directoryResults)
+      exactMatchResults     <- exactMatchUser
+    } yield {
+      val dir = (directoryResults, exactMatchResults) match {
+        case (_, None) => directoryResults
+        case (None, Some(exact)) => Some(IndexedSeq(exact))
+        case (Some(results), Some(exact)) => Some((results.toSet ++ Set(exact)).toIndexedSeq)
+      }
+      SearchResults(topUsers, localResults, conversations, dir)
+    }
   }
 
   def updateSearchResults(query: SearchQuery, results: Seq[UserSearchEntry]) = {
@@ -135,16 +145,17 @@ class UserSearchService(selfUserId: UserId,
     Future.successful({})
   }
 
-  def updateExactMatch(handle: Handle, userId: UserId) = {
-    val query = RecommendedHandle(handle.withSymbol)
-    val cache = SearchQueryCache(query, Instant.now, Some(Vector(userId)))
-    def updating(id: UserId)(cached: SearchQueryCache) = cached.copy(query, Instant.now, Some(cached.entries.map(_.toSet ++ Set(userId)).getOrElse(Set(userId)).toVector))
+  private val exactMatchUser = new SourceSignal[Option[UserData]]()
 
-    for {
-      _ <- userService.getUser(userId)
-      _ = verbose(s"user synced($query, $userId)")
-      _ <- queryCache.updateOrCreate(query, updating(userId), cache)
-    } yield ()
+  def updateExactMatch(handle: Handle, userId: UserId) = {
+    debug(s"update exact match: ${handle}, $userId")
+    userService.getUser(userId).collect {
+      case Some(user) =>
+        debug(s"received exact match: ${user.handle}")
+        exactMatchUser ! Some(user)
+    }(Threading.Background)
+
+    Future.successful({})
   }
 
   private val currentQuery = new AtomicReference[SearchQuery]()
