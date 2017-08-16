@@ -19,14 +19,15 @@ package com.waz.service.push
 
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.verbose
+import com.waz.ZLog.{verbose, warn}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
 import com.waz.service.{EventScheduler, ZmsLifecycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.events.{EventContext, EventStream, Signal}
+import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.returning
 import com.waz.utils.wrappers.{GoogleApi, Localytics}
 
 import scala.concurrent.Future
@@ -35,39 +36,26 @@ import scala.util.control.NonFatal
 /**
   * Responsible for deciding when to generate and register push tokens and whether they should be active at all.
   */
-class PushTokenService(googleApi: GoogleApi,
-                       prefs:     GlobalPreferences,
-                       lifeCycle: ZmsLifecycle,
-                       accountId: AccountId,
-                       accounts:  AccountsStorage,
-                       sync:      SyncServiceHandle) {
-  implicit val dispatcher = new SerialDispatchQueue(name = "PushTokenDispatchQueue")
+class PushTokenService(googleApi:    GoogleApi,
+                       globalToken:  GlobalTokenService,
+                       prefs:        GlobalPreferences,
+                       lifeCycle:    ZmsLifecycle,
+                       accountId:    AccountId,
+                       loggedInAccs: Signal[Set[AccountId]],
+                       accStorage:   AccountsStorage,
+                       sync:         SyncServiceHandle) {
 
-  private implicit val ev = EventContext.Global
-
+  implicit val dispatcher = globalToken.dispatcher
+  implicit val ev = globalToken.ev
 
   val pushEnabled    = prefs.preference(PushEnabledKey)
   val currentAccount = prefs.preference(CurrentAccountPref)
-  val currentToken   = prefs.preference(GlobalPreferences.PushToken)
-
-  val onTokenRefresh = EventStream[Option[PushToken]]()
-
-  onTokenRefresh(setNewToken(_))
-
-  private val shouldGenerateNewToken = for {
-    play    <- googleApi.isGooglePlayServicesAvailable
-    current <- currentToken.signal
-  } yield play && current.isEmpty
-
-  shouldGenerateNewToken.on(dispatcher) {
-    case true => setNewToken()
-    case _ =>
-  }
+  val currentToken   = globalToken.currentToken
 
   //None if user is not logged in.
-  private val loggedInAccount = currentAccount.signal
+  private val isLoggedIn = loggedInAccs.map(_.contains(accountId))
 
-  private val userToken = accounts.signal(accountId).map(_.registeredPush)
+  private val userToken = accStorage.signal(accountId).map(_.registeredPush)
 
   val pushActive = (for {
     push           <- pushEnabled.signal                      if push
@@ -79,32 +67,12 @@ class PushTokenService(googleApi: GoogleApi,
     .orElse(Signal.const(false))
 
   val eventProcessingStage = EventScheduler.Stage[PushTokenRemoveEvent] { (_, events) =>
-    currentToken().flatMap {
-      case Some(t) if events.exists(_.token == t) =>
-        verbose("Clearing all push tokens in response to backend event")
-        googleApi.deleteAllPushTokens()
-        currentToken := None
-      case _ => Future.successful({})
-    }
-  }
-
-  private def setNewToken(token: Option[PushToken] = None): Future[Unit] = try {
-    val t = token.orElse(googleApi.getPushToken)
-    t.foreach { t =>
-      Localytics.setPushDisabled(false)
-      Localytics.setPushRegistrationId(t.str)
-    }
-    verbose(s"Setting new push token: $t")
-    currentToken := t
-  } catch {
-    case NonFatal(ex) => Future.successful {
-      HockeyApp.saveException(ex, s"unable to set push token")
-    }
+    globalToken.resetGlobalToken(events.map(_.token))
   }
 
   //on dispatcher prevents infinite register loop
   (for {
-    Some(id)    <- loggedInAccount if id == accountId
+    true        <- isLoggedIn
     userToken   <- userToken
     globalToken <- currentToken.signal
   } yield (globalToken, userToken)).on(dispatcher) {
@@ -121,11 +89,65 @@ class PushTokenService(googleApi: GoogleApi,
   def onTokenRegistered(token: PushToken): Future[Unit] = {
     verbose(s"onTokenRegistered: $accountId, $token")
     (for {
-      Some(id) <- loggedInAccount.head if id == accountId
-      _        <- accounts.update(id, _.copy(registeredPush = Some(token)))
+      true <- isLoggedIn.head
+      _    <- accStorage.update(accountId, _.copy(registeredPush = Some(token)))
     } yield {}).recover {
-      case _ => //
+      case _ => warn("account was not logged in after token sync completed")
     }
+  }
+}
+
+class GlobalTokenService(googleApi: GoogleApi, prefs: GlobalPreferences) {
+
+  implicit val dispatcher = new SerialDispatchQueue(name = "PushTokenDispatchQueue")
+  implicit val ev = EventContext.Global
+
+  val currentToken = prefs.preference(GlobalPreferences.PushToken)
+  private var settingToken = Future.successful({})
+
+  private val shouldGenerateNewToken = for {
+    play    <- googleApi.isGooglePlayServicesAvailable
+    current <- currentToken.signal
+  } yield play && current.isEmpty
+
+  shouldGenerateNewToken {
+    case true => setNewToken()
+    case _ =>
+  }
+
+  //Specify empty to force remove all tokens, or else only remove if `toRemove` contains the current token.
+  def resetGlobalToken(toRemove: Vector[PushToken] = Vector.empty) =
+    currentToken().flatMap {
+      case Some(t) if toRemove.contains(t) || toRemove.isEmpty =>
+        verbose("Resetting push token")
+        googleApi.deleteAllPushTokens()
+        for {
+          _ <- currentToken := None
+          _ <- setNewToken()
+        } yield {}
+      case _ => Future.successful({})
+    }
+
+  def setNewToken(token: Option[PushToken] = None): Future[Unit] = {
+    if (settingToken.isCompleted) {
+      settingToken = for {
+        t <- dispatcher {
+          returning(token.orElse(googleApi.getPushToken)) { t =>
+            verbose(s"Setting new push token: $t")
+            t.foreach { t =>
+              Localytics.setPushDisabled(false)
+              Localytics.setPushRegistrationId(t.str)
+            }
+          }
+        }.recover {
+          case NonFatal(ex) =>
+            HockeyApp.saveException(ex, s"unable to set push token")
+            Option.empty[PushToken]
+        }.future
+        _ <- currentToken := t
+      } yield {}
+    }
+    settingToken
   }
 }
 

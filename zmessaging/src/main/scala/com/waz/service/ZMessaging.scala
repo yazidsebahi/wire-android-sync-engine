@@ -99,6 +99,9 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   val account    = userModule.account
   val global     = account.global
 
+  //TODO - eventually remove and use the AccountsService directly where needed - currently hard to mock.
+  val loggedInAccoutns = ZMessaging.accounts.loggedInAccounts.map(_.map(_.id).toSet)
+
   val selfUserId = userModule.userId
 
   val accountId  = account.id
@@ -121,6 +124,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)
   def googleApi         = global.googleApi
+  def globalToken       = global.tokenService
   def imageCache        = global.imageCache
   def permissions       = global.permissions
   def phoneNumbers      = global.phoneNumbers
