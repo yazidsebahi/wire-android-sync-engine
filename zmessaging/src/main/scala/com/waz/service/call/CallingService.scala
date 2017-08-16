@@ -77,9 +77,13 @@ class CallingService(val selfUserId:      UserId,
   val onMetricsAvailable = EventStream[String]()
 
   //exposed for tests only
-  val wCall = avs.registerAccount(this)
-  wCall.onFailure {
-    case NonFatal(e) => error(s"Failed to initialise WCall for user: $selfUserId", e)
+  lazy val wCall = {
+    val call = avs.registerAccount(this) // unable to use `returning` because of scala.reflect.internal.FatalError:
+                                         // unexpected UnApply scala.util.control.NonFatal.unapply(<unapply-selector>) <unapply> ((e @ _))
+    call.onFailure {
+      case NonFatal(e) => error(s"Failed to initialise WCall for user: $selfUserId", e)
+    }
+    call
   }
 
   Option(ZMessaging.currentAccounts).foreach( _.loggedInAccounts.map(_.map(_.id)).map(_.contains(account)) {
