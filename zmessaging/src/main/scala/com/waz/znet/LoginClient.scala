@@ -20,13 +20,12 @@ package com.waz.znet
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.impl.{Credentials, ErrorResponse}
-import com.waz.client.RegistrationClient
-import com.waz.model.{AccountData, AccountId, EmailAddress}
+import com.waz.api.impl.ErrorResponse
+import com.waz.client.RegistrationClientImpl
+import com.waz.model.{AccountData, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.wrappers.URI
 import com.waz.utils.{ExponentialBackoff, JsonEncoder}
 import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
@@ -92,13 +91,13 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
 
   def loginNow(account: AccountData) = {
     debug(s"trying to login to account: ${account.id}")
-    val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClient.timeout)
+    val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
     client(request) map responseHandler
   }
 
   def accessNow(cookie: Cookie, token: Option[Token]) = {
     val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
-    val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(backend.baseUrl), headers = headers, timeout = RegistrationClient.timeout)
+    val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(backend.baseUrl), headers = headers, timeout = RegistrationClientImpl.timeout)
     client(request) map responseHandler
   }
 

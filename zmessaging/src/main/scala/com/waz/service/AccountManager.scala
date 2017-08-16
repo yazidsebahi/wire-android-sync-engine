@@ -417,10 +417,10 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
         else loginClient.login(account).future flatMap {
           case Right((token, cookie)) =>
             for {
-              Some((_, acc)) <- accountsStorage.update(id, _.updated(credentials).copy(cookie = cookie, accessToken = Some(token)))
+              Some((_, acc)) <- accountsStorage.update(id, _.updatedNonPending.copy(cookie = cookie, accessToken = Some(token)))
             } yield Right(acc)
           case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-            accountsStorage.update(accountId, _.updatedPending(credentials)).collect { case Some((_, acc)) => Left(ErrorResponse(Status.Forbidden, "", "pending-activation"))}
+            accountsStorage.update(accountId, _.updatedPending).collect { case Some((_, acc)) => Left(ErrorResponse(Status.Forbidden, "", "pending-activation"))}
           case Left((_, err)) =>
             verbose(s"activate failed: $err")
             Future.successful(Left(err))

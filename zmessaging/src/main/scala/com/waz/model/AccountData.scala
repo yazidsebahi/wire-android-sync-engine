@@ -58,7 +58,7 @@ case class AccountData(id:              AccountId                       = Accoun
                        clientRegState:  ClientRegistrationState         = ClientRegistrationState.UNKNOWN,
                        privateMode:     Boolean                         = false,
                        regWaiting:      Boolean                         = false,
-                       code:            Option[String]                  = None,
+                       code:            Option[ConfirmationCode]        = None,
                        name:            Option[String]                  = None,
                        invitationToken: Option[PersonalInvitationToken] = None,
                        private val _selfPermissions: Long      = 0,
@@ -83,6 +83,9 @@ case class AccountData(id:              AccountId                       = Accoun
        | clientId:        $clientId
        | clientRegState:  $clientRegState
        | privateMode:     $privateMode
+       | regWaiting:      $regWaiting
+       | code:            $code
+       | name:            $name
     """.stripMargin
 
 
@@ -98,23 +101,15 @@ case class AccountData(id:              AccountId                       = Accoun
       None
   }
 
-  def updated(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd), _) =>
-      copy(email = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd), pendingEmail = if (pendingEmail.contains(e)) None else pendingEmail)
-    case EmailCredentials(e, None, _) =>
-      copy(email = Some(e), pendingEmail = if (pendingEmail.contains(e)) None else pendingEmail)
-    case PhoneCredentials(number, _, _) =>
-      copy(phone = Some(number), pendingPhone = if (pendingPhone.contains(number)) None else pendingPhone)
+  def updatedNonPending = (pendingEmail, pendingPhone) match {
+    case (Some(e), _) => copy(email = Some(e), pendingEmail = None)
+    case (_, Some(p)) => copy(phone = Some(p), pendingPhone = None)
     case _ => this
   }
 
-  def updatedPending(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd), _) =>
-      copy(pendingEmail = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd), email = if (email.contains(e)) None else email)
-    case EmailCredentials(e, None, _) =>
-      copy(pendingEmail = Some(e), email = if (email.contains(e)) None else email)
-    case PhoneCredentials(number, _, _) =>
-      copy(pendingPhone = Some(number), phone = if (phone.contains(number)) None else phone)
+  def updatedPending = (email, phone) match {
+    case (Some(e), _) => copy(pendingEmail = Some(e), email = None)
+    case (None, Some(p)) => copy(pendingPhone = Some(p), phone = None)
     case _ => this
   }
 
@@ -127,34 +122,38 @@ case class AccountData(id:              AccountId                       = Accoun
     addCredentialsToJson(o)
 
   def addToRegistrationJson(o: JSONObject) =
-    addCredentialsToJson(o, isLogin = false)
+    addCredentialsToJson(o, isLogin = !regWaiting)
 
   private def addCredentialsToJson(o: JSONObject, isLogin: Boolean = true) = {
     o.put("label", id.str)  // this label can be later used for cookie revocation
-    //TODO invitations
-//    invitation foreach (i => o.put("invitation_code", i.code))
+    invitationToken foreach (i => o.put("invitation_code", i.code))
 
-    (email, handle, phone) match {
-      case (Some(e), _, _) =>
+    (email, handle, phone, pendingEmail) match {
+      case (Some(e), _, _, _) =>
         o.put("email", e.str)
         password foreach (o.put("password", _))
 
-      case (_, Some(h), _) =>
+      case (_, Some(h), _,  _) =>
         //TODO - should this not be "handle"?!
         o.put("email", h.string)
         password foreach (o.put("password", _))
 
-      case (_, _, Some(p)) =>
+      case (_, _, Some(p), _) =>
         o.put("phone", p.str)
-      //TODO phone code registration
-      // code foreach { code => o.put(if (isLogin) "code" else "phone_code" , code.str) }
+       code foreach { code => o.put(if (isLogin) "code" else "phone_code" , code.str) }
+
+      case (_, _, _, Some(pe)) =>
+        o.put("email", pe.str)
+        password foreach (o.put("password", _))
+
+      case _ =>
     }
   }
 
-  def autoLoginOnRegistration = phone.isDefined // TODO || invitation.isDefined
+  def autoLoginOnRegistration = phone.isDefined || invitationToken.isDefined
 
   def updated(user: UserInfo): AccountData =
-    copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
+    copy(userId = Some(user.id), email = user.email.orElse(email), pendingEmail = email.fold(pendingEmail)(_ => Option.empty[EmailAddress]), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
 
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
     copy(userId = userId orElse this.userId, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
@@ -281,8 +280,8 @@ object AccountData {
     val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
     val PrivateMode = bool('private_mode)(_.privateMode)
     val RegWaiting = bool('reg_waiting)(_.regWaiting)
-    val Code = opt(text('code))(_.code)
-    val InvitationToken = opt(text[PersonalInvitationToken]('invitation_token, JsonEncoder.encodeString[PersonalInvitationToken], JsonDecoder.decode[PersonalInvitationToken]))(_.invitationToken)
+    val Code = opt(text[ConfirmationCode]('code, _.str, ConfirmationCode))(_.code)
+    val InvitationToken = opt(text[PersonalInvitationToken]('invitation_token, _.code, PersonalInvitationToken))(_.invitationToken)
     val Name = opt(text('name))(_.name)
     val SelfPermissions = long('self_permissions)(_._selfPermissions)
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)

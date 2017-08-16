@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.{ClientRegistrationState, CredentialsFactory, InitListener, LoginListener}
-import com.waz.client.RegistrationClientImpl
+import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
@@ -37,7 +37,7 @@ import com.waz.utils.events.EventContext
 import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
-import com.waz.znet.Response.{HttpStatus}
+import com.waz.znet.Response.HttpStatus
 import com.waz.znet._
 import com.waz.{RobolectricUtils, service}
 import org.json.JSONObject
@@ -84,7 +84,7 @@ import scala.util.control.NoStackTrace
       override def login(account: AccountData) = CancellableFuture.successful(loginResponse)
       override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }
-    override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
+    override lazy val regClient: RegistrationClient = new RegistrationClientImpl(client, backend) {
       override def register(account: AccountData, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
     }
     override lazy val factory = new MockZMessagingFactory(this) {

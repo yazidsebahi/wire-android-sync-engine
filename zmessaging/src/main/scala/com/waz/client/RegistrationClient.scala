@@ -133,7 +133,7 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
 
   def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation] = {
     val path = infoPath(token)
-    val request = Request.Get(path.toString, baseUri = Some(URI.parse(backend.baseUrl)))
+    val request = Request.Get(path.toString, baseUri = Some(backend.baseUrl))
     client(request) map {
       case Response(HttpStatus(Success, _), ConfirmedInvitation(inv), _) =>
         debug(s"received invitation details for $token: $inv")
