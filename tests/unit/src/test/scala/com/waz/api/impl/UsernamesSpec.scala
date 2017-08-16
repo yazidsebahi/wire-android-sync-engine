@@ -71,6 +71,11 @@ class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with B
     genName should be("wire")
   }
 
+  scenario ("Username generation with underscores") {
+    val genName = usernames.generateUsernameFromName("maciek_wire", null)
+    genName should be("maciek_wire")
+  }
+
   scenario ("Username generation with latin characters and space") {
     val genName = usernames.generateUsernameFromName("Wire Wireson", null)
     genName should be("wirewireson")
@@ -103,11 +108,11 @@ class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with B
 
   scenario("Querying for usernames with @") {
     val handle = Handle("abcd")
-    handle.containsQuery("@AbC") should be(true)
+    handle.startsWithQuery("@AbC") should be(true)
   }
 
   scenario("Querying for usernames without @") {
     val handle = Handle("abcd")
-    handle.containsQuery("AbC") should be(true)
+    handle.startsWithQuery("AbC") should be(true)
   }
 }

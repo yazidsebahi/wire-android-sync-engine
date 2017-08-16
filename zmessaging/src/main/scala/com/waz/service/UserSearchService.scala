@@ -219,11 +219,11 @@ class UserSearchService(selfUserId: UserId,
 
   private def recommendedPredicate(prefix: String): UserData => Boolean = {
     val key = SearchKey(prefix)
-    u => ! u.deleted && ! u.isConnected && (key.isAtTheStartOfAnyWordIn(u.searchKey) || u.email.exists(_.str == prefix) || u.handle.exists(_.containsQuery(prefix)))
+    u => ! u.deleted && ! u.isConnected && (key.isAtTheStartOfAnyWordIn(u.searchKey) || u.email.exists(_.str == prefix) || u.handle.exists(_.startsWithQuery(prefix)))
   }
 
   private def recommendedHandlePredicate(prefix: String): UserData => Boolean = {
-    u => ! u.deleted && ! u.isConnected && u.handle.exists(_.containsQuery(prefix))
+    u => ! u.deleted && ! u.isConnected && u.handle.exists(_.startsWithQuery(prefix))
   }
 
   private def searchTeamMembersForState(searchState: SearchState) = teamId match {
@@ -258,7 +258,7 @@ class UserSearchService(selfUserId: UserId,
     val query = SearchKey(searchTerm)
     user =>
       ((query.isAtTheStartOfAnyWordIn(user.searchKey) && !searchByHandleOnly) ||
-        user.handle.exists(_.containsQuery(searchTerm)) ||
+        user.handle.exists(_.startsWithQuery(searchTerm)) ||
         (alsoSearchByEmail && user.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) &&
         !filteredIds.contains(user.id.str) &&
         (showBlockedUsers || (user.connection != ConnectionStatus.Blocked))
