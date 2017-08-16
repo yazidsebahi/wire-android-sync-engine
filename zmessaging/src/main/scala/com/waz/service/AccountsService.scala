@@ -139,6 +139,8 @@ class AccountsService(val global: GlobalModule) {
       Future successful None
   }
 
+  def getZMessaging(id: AccountId): Future[Option[ZMessaging]] = getOrCreateAccountManager(id).flatMap(_.getZMessaging)
+
   def logout(flushCredentials: Boolean) = activeAccountManager.head flatMap {
     case Some(account) => account.logout(flushCredentials)
     case None          => Future.successful(())

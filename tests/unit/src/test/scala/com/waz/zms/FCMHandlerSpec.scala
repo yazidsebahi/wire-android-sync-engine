@@ -24,7 +24,6 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.PushService
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.SyncServiceHandle
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.zms.FCMHandlerService.FCMHandler
@@ -40,7 +39,6 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   val push = mock[PushService]
   val self = UserId()
   val convsContent = mock[ConversationsContentUpdater]
-  val sync = mock[SyncServiceHandle]
 
   var lifecycleActive = Signal(false)
   var cloudNotsToHandle = Signal(Set.empty[Uid])
@@ -62,17 +60,6 @@ class FCMHandlerSpec extends AndroidFreeSpec {
       result(cloudNotsToHandle.filter(_.contains(notId)).head)
     }
 
-    scenario("Ignore notifications with different intended user id") {
-      val fcm = plainPayload(intended = UserId())
-
-      val handler = initHandler
-      handler.handleMessage(fcm)
-
-      awaitAllTasks
-      result(cloudNotsToHandle.filter(_.isEmpty).head)
-    }
-
-
     scenario("Decrypt cipher notification") {
 
       val notId = Uid()
@@ -80,7 +67,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
 
       val decryptedValue = returning(new json.JSONObject())(o => o.put("data", new json.JSONObject(payload(id = notId))))
 
-      (otrService.decryptGcm _).expects(*, *).once().returning(Future.successful(Some(decryptedValue)))
+      (otrService.decryptCloudMessage _).expects(*, *).once().returning(Future.successful(Some(decryptedValue)))
 
       val handler = initHandler
       handler.handleMessage(fcm)
@@ -135,6 +122,6 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   def initHandler = {
     (lifecycle.active _).expects().anyNumberOfTimes().returning(lifecycleActive)
     (push.cloudPushNotificationsToProcess _).expects().anyNumberOfTimes().returning(cloudNotsToHandle)
-    new FCMHandler(otrService, lifecycle, push, self, convsContent, sync)
+    new FCMHandler(otrService, lifecycle, push, self, convsContent)
   }
 }
