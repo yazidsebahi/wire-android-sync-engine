@@ -112,7 +112,7 @@ trait Transliteration {
 }
 
 object Transliteration {
-  private val id = "Any-Latin; Latin-ASCII; Lower; [^\\ 0-9a-z_] Remove"
+  private val id = "Any-Latin; Latin-ASCII; Lower; [^\\ 0-9a-z] Remove"
   def chooseImplementation(id: String = id): Transliteration =
     if (!utils.isTest && Try(Class.forName("libcore.icu.Transliterator")).isSuccess) LibcoreTransliteration.create(id)
     else ICU4JTransliteration.create(id)
