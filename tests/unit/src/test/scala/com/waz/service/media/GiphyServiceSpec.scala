@@ -27,9 +27,9 @@ import com.waz.sync.client.GiphyClient
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture
 import com.waz.znet.ZNetClient.EmptyClient
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
-class GiphyServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class GiphyServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   var loadRandomResult: (Option[AssetData], AssetData) = (None, AssetData.Empty)
   val biggestRandomResult = AssetData(metaData = Some(Image(Dim2(500, 256), Medium)), mime = Mime.Image.Gif, source =  Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/giphy.gif")))
   val smallestRandomResult = AssetData(metaData = Some(Image(Dim2(100, 51), Preview)), mime = Mime.Image.Gif, source =  Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/100w_s.gif")))

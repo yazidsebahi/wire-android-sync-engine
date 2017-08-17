@@ -35,13 +35,13 @@ import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.Matcher
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
 
-class SyncRequestServiceImplSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
+@Ignore class SyncRequestServiceImplSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
 //  import com.waz.threading.Threading.Implicits.Background
 //  implicit val timeout: Timeout = 5.seconds
 //

@@ -18,9 +18,9 @@
 package com.waz.utils
 
 import com.waz.utils.EnumCodec.injective
-import org.scalatest.{Inspectors, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Inspectors, Matchers}
 
-class EnumCodecSpec extends FeatureSpec with Matchers with Inspectors {
+@Ignore class EnumCodecSpec extends FeatureSpec with Matchers with Inspectors {
   import Food._
 
   scenario("Decode is the inverse of encode") {

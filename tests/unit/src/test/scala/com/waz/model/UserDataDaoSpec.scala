@@ -22,9 +22,9 @@ import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
-class UserDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class UserDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   var dbHelper: ZMessagingDB = _
 

@@ -26,13 +26,13 @@ import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.GlobalPreferences
 
 import scala.concurrent.duration._
 
-class WebSocketClientServiceSpec extends FeatureSpec with Matchers with RobolectricTests with BeforeAndAfter with RobolectricUtils with ScalaFutures with DefaultPatienceConfig with MockFactory {
+@Ignore class WebSocketClientServiceSpec extends FeatureSpec with Matchers with RobolectricTests with BeforeAndAfter with RobolectricUtils with ScalaFutures with DefaultPatienceConfig with MockFactory {
 
   val timeout = 250.millis
   val timeouts = new Timeouts {

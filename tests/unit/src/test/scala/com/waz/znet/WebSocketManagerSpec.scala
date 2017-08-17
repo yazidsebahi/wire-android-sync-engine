@@ -32,14 +32,14 @@ import org.java_websocket.framing.Framedata
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
 import org.robolectric.shadows.ShadowLog
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 
-class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class WebSocketManagerSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global

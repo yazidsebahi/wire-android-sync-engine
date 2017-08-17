@@ -30,12 +30,12 @@ import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.EmptyClient
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 
-class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
+@Ignore class LastNotificationIdServiceSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
 
   val wsConnected = Signal(false)
 

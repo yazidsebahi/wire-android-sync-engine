@@ -23,11 +23,11 @@ import com.waz.model.sync.SyncJob.Priority
 import com.waz.testutils.DefaultPatienceConfig
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.duration._
 
-class SyncSerializerSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
+@Ignore class SyncSerializerSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
 
   lazy val convId = ConvId()
   lazy val serializer = new SyncSerializer

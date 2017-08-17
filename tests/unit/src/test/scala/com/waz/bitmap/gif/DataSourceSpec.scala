@@ -18,12 +18,12 @@
 package com.waz.bitmap.gif
 
 import java.io.{ByteArrayInputStream, File}
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
 import com.waz.utils.IoUtils
-import org.scalatest.{BeforeAndAfterAll, RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest._
 
-class DataSourceSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with RobolectricTests {
+@Ignore class DataSourceSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with RobolectricTests {
 
   val testData = {
     val data = new Array[Byte](1024)

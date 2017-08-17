@@ -17,13 +17,13 @@
  */
 package com.waz.db
 
-import org.scalatest.{RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 import android.database.MatrixCursor
 import com.waz.model.Uid
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import com.waz.db.TestItem.TestItemDao
 
-class CursorIteratorSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class CursorIteratorSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   def newCursor = new MatrixCursor(Array(TestItemDao.Id.name, TestItemDao.Str.name, TestItemDao.Int.name))
   

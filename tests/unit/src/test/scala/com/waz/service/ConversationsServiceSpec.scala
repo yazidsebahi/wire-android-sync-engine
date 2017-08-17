@@ -39,7 +39,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
   implicit lazy val dispatcher = Threading.Background
 
   implicit val timeout: Timeout = 10.seconds

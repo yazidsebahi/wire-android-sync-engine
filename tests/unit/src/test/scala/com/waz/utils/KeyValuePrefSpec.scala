@@ -21,13 +21,12 @@ import com.waz.Generators._
 import com.waz.model.Uid
 import com.waz.content.Preferences.Preference.PrefCodec._
 import com.waz.znet.AuthenticationManager.Token
-
-import org.scalatest.{Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
 
 
-class KeyValuePrefSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
+@Ignore class KeyValuePrefSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
 
   feature("key value serialization") {
     scenario("boolean serialization") {

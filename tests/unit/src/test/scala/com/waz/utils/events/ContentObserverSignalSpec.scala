@@ -24,7 +24,7 @@ import com.waz.utils.returning
 import org.scalatest._
 import org.threeten.bp.Instant
 
-class ContentObserverSignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
+@Ignore class ContentObserverSignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
   import EventContext.Implicits.global
 
   scenario("Subscribe on signal") {

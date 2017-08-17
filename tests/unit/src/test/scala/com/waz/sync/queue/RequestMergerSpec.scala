@@ -30,12 +30,12 @@ import org.robolectric.Robolectric
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class RequestMergerSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class RequestMergerSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
 

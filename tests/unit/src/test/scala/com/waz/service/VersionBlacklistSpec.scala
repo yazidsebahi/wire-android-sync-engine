@@ -25,12 +25,12 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, MockGlobalModule}
 import com.waz.threading.CancellableFuture
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class VersionBlacklistSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class VersionBlacklistSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
   implicit val timeout: FiniteDuration = 2.seconds
 
   var blacklist = VersionBlacklist()

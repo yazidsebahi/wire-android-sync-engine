@@ -17,12 +17,12 @@
  */
 package com.waz.model
 
-import com.waz.model.messages.media.{MediaAssetDataProtocol, MediaAssetData}
+import com.waz.model.messages.media.{MediaAssetData, MediaAssetDataProtocol}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
 import com.waz.Generators.MediaAssets._
 
-class MediaAssetSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
+@Ignore class MediaAssetSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
   feature("json de-/serialisation of media asset data") {
     scenario("serialise and deserialise") {
       forAll { asset: MediaAssetData =>

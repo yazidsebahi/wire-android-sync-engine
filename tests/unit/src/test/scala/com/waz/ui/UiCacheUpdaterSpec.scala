@@ -25,7 +25,7 @@ import org.robolectric.Robolectric
 import org.scalatest._
 import com.waz.ZLog.ImplicitTag._
 
-class UiCacheUpdaterSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class UiCacheUpdaterSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   case class Item(key: String, value: String)
 

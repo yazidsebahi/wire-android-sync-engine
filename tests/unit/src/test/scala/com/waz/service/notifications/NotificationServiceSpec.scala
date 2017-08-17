@@ -44,7 +44,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
+@Ignore class NotificationServiceSpec extends FeatureSpec with Matchers with PropertyChecks with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
   ShadowLog.stream = System.out
 

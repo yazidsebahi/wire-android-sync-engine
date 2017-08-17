@@ -17,8 +17,6 @@
  */
 package com.waz.sync.handler
 
-import java.io.{File, InputStream}
-
 import com.waz.cache._
 import com.waz.model.AssetData.RemoteData
 import com.waz.model.AssetStatus.{UploadDone, UploadInProgress, UploadNotStarted}
@@ -35,16 +33,13 @@ import org.scalacheck.Gen.resultOf
 import org.scalacheck.{Arbitrary, Gen}
 
 import scala.annotation.tailrec
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
+import scala.concurrent.Future
 
 class AssetSyncHandlerSpec extends AndroidFreeSpec {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  val TIMEOUT = 5.seconds
   val ARB_DATA_SIZE = 10
-  private def waitForResult[T](f: => Future[T]): T = Await.result(f, TIMEOUT)
 
   val assetClient = stub[AssetClient]
 
@@ -98,14 +93,10 @@ class AssetSyncHandlerSpec extends AndroidFreeSpec {
           (assets.getLocalData _).expects(asset.id).returns(CancellableFuture(Some(LocalData.Empty)))
           (otrSync.uploadAssetDataV3 _).expects(LocalData.Empty, *, asset.mime).returns(CancellableFuture(Right(remoteData)))
           (assets.updateAsset _).expects(asset.id, *).returns(Future(Some(assetWithRemoteData)))
-
-          // an ugly way to mock a method with implicit parameters
-          (cacheService.addStream(_: CacheKey, _: InputStream, _: Mime, _: Option[String], _: Option[File], _: Int, _: ExecutionContext)(_: Expiration))
-            .expects(assetWithRemoteData.cacheKey, *, assetWithRemoteData.mime, assetWithRemoteData.name, *, *, *, *).returns(Future(cacheEntry))
         }
 
         val handler = new AssetSyncHandler(cacheService, assetClient, assets, otrSync)
-        waitForResult {handler.uploadAssetData(asset.id)}.right.get shouldEqual Some(assetUploadDone)
+        result(handler.uploadAssetData(asset.id)).right.get shouldEqual Some(assetUploadDone)
       }
     }
   }

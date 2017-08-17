@@ -23,16 +23,16 @@ import com.waz.model.otr.ClientId
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient._
 import com.waz.utils._
-import com.waz.znet.ContentEncoder.{GzippedRequestContent, BinaryRequestContent, JsonContentEncoder}
+import com.waz.znet.ContentEncoder.{BinaryRequestContent, GzippedRequestContent, JsonContentEncoder}
 import com.waz.znet.JsonObjectResponse
 import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.duration._
 import scala.util.Random
 
-class OtrClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class OtrClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
   implicit val timeout = 10.seconds
 
   feature("Response parsing") {
