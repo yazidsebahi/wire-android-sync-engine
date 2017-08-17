@@ -409,6 +409,10 @@ class AccountsService(val global: GlobalModule) {
     storage.update(accountId, _.copy(invitationToken = None)).map(_ => ())
   }
 
+  def setLoggedIn(accountId: AccountId): Future[Unit] = {
+    storage.update(accountId, _.copy(firstLogin = false)).map(_ => ())
+  }
+
 }
 
 object AccountsService {

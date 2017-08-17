@@ -291,7 +291,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     credentialsClient.updatePassword(newPassword, currentPassword).future flatMap {
       case Left(err) => Future successful Left(err)
       case Right(_) =>
-        accountsStorage.update(id, _.copy(hash = AccountData.computeHash(id, newPassword), password = Some(newPassword))) flatMap { _ =>
+        accountsStorage.update(id, _.copy(password = Some(newPassword))) flatMap { _ =>
           getZMessaging map { _ => Right(()) }
         }
     }
