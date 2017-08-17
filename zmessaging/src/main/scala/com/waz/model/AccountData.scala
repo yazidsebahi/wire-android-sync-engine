@@ -44,7 +44,6 @@ import scala.collection.mutable
 case class AccountData(id:              AccountId                       = AccountId(),
                        teamId:          TriTeamId                       = Left({}),
                        email:           Option[EmailAddress]            = None,
-                       hash:            String                          = "",
                        phone:           Option[PhoneNumber]             = None,
                        handle:          Option[Handle]                  = None,
                        registeredPush:  Option[PushToken]               = None,
@@ -61,6 +60,7 @@ case class AccountData(id:              AccountId                       = Accoun
                        code:            Option[ConfirmationCode]        = None,
                        name:            Option[String]                  = None,
                        invitationToken: Option[PersonalInvitationToken] = None,
+                       firstLogin:      Boolean                         = true,
                        private val _selfPermissions: Long      = 0,
                        private val _copyPermissions: Long      = 0
                       ) {
@@ -70,7 +70,6 @@ case class AccountData(id:              AccountId                       = Accoun
        | id:              $id
        | teamId:          $teamId
        | email:           $email
-       | hash:            $hash
        | phone:           $phone
        | handle:          $handle
        | registeredPush:  $registeredPush
@@ -95,7 +94,7 @@ case class AccountData(id:              AccountId                       = Accoun
   def verified = phone.isDefined || email.isDefined
 
   def authorized(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd), _) if (pendingEmail.contains(e) || email.contains(e)) && AccountData.computeHash(id, passwd) == hash =>
+    case EmailCredentials(e, Some(passwd), _) if pendingEmail.contains(e) || email.contains(e) =>
       Some(copy(password = Some(passwd)))
     case _ =>
       None
@@ -134,8 +133,7 @@ case class AccountData(id:              AccountId                       = Accoun
         password foreach (o.put("password", _))
 
       case (_, Some(h), _,  _) =>
-        //TODO - should this not be "handle"?!
-        o.put("email", h.string)
+        o.put("handle", h.string)
         password foreach (o.put("password", _))
 
       case (_, _, Some(p), _) =>
@@ -190,12 +188,12 @@ object AccountData {
   def apply(credentials: Credentials): AccountData = {
     val id = AccountId()
     val hash = credentials.maybePassword.map(computeHash(id, _)).getOrElse("")
-    new AccountData(id, Left({}), hash = hash, password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
+    new AccountData(id, Left({}), password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
   }
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, Left({}), Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
+    AccountData(id, Left({}), Some(email), password = Some(password), phone = None, handle = None)
   }
 
   type Permission = Permission.Value
@@ -267,7 +265,6 @@ object AccountData {
     }).apply(_.teamId)
 
     val Email = opt(emailAddress('email))(_.email)
-    val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
     val Handle = opt(handle('handle))(_.handle)
     val RegisteredPush = opt(id[PushToken]('registered_push))(_.registeredPush)
@@ -283,13 +280,14 @@ object AccountData {
     val Code = opt(text[ConfirmationCode]('code, _.str, ConfirmationCode))(_.code)
     val InvitationToken = opt(text[PersonalInvitationToken]('invitation_token, _.code, PersonalInvitationToken))(_.invitationToken)
     val Name = opt(text('name))(_.name)
+    val FirstLogin = bool('first_login)(_.firstLogin)
     val SelfPermissions = long('self_permissions)(_._selfPermissions)
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Team, Email, Hash, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))

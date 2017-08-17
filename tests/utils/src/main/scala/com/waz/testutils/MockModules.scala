@@ -100,7 +100,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
   var timeout = 5.seconds
 
   storage.usersStorage.put(selfUserId, UserData(selfUserId, None, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
-  global.accountsStorage.put(accountId, AccountData(accountId, Right(None), Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, None, None, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+  global.accountsStorage.put(accountId, AccountData(accountId, Right(None), Some(EmailAddress("test@test.com")), None, handle = Some(Handle("test_username")), None, None, None, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 
