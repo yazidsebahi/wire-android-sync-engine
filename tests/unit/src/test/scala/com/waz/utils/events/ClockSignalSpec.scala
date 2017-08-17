@@ -25,7 +25,7 @@ import org.threeten.bp.Instant, Instant.now
 
 import scala.concurrent.duration._
 
-class ClockSignalSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests with RobolectricUtils {
+@Ignore class ClockSignalSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests with RobolectricUtils {
 
   implicit val tolerance = 100.millis.tolerance
 

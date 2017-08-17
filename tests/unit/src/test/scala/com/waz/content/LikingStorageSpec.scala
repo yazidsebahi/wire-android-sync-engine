@@ -32,7 +32,7 @@ import org.threeten.bp.Instant
 import scala.collection.{SortedSet, breakOut}
 import scala.util.Random.{nextInt, shuffle}
 
-class LikingStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
+@Ignore class LikingStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
   lazy val msgIds = (1 to 1000) map (_ => MessageId())
   lazy val userIds = (1 to 50) map (_ => UserId())

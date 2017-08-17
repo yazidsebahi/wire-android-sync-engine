@@ -49,7 +49,7 @@ import org.threeten.bp.Instant.now
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
+@Ignore class PostMessageHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
 
   private lazy implicit val dispatcher = Threading.Background
   private lazy implicit val ev = EventContext.Global

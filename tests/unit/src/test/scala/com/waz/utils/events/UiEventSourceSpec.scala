@@ -17,9 +17,9 @@
  */
 package com.waz.utils.events
 
-import org.scalatest.{RobolectricTests, FeatureSpec, Matchers}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class UiEventSourceSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class UiEventSourceSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   scenario("with UiEventSource should replace executionContext") {
     val signal = new Signal[Boolean](Some(false)) with UiEventSource

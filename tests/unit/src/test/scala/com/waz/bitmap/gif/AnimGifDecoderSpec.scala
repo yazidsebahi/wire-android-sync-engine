@@ -18,11 +18,11 @@
 package com.waz.bitmap.gif
 
 import com.waz.utils.IoUtils
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.concurrent.duration.Duration
 
-class AnimGifDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class AnimGifDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   def load(resName: String) = GifReader(IoUtils.toByteArray(getClass.getResourceAsStream(resName)))
 

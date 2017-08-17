@@ -31,9 +31,9 @@ import com.waz.znet.Response.HttpStatus
 import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.JSONObject
-import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import org.scalatest._
 
-class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromResources with OptionValues with RobolectricTests {
+@Ignore class YouTubeClientSpec extends FeatureSpec with Matchers with JsonResponseFromResources with OptionValues with RobolectricTests {
 
   import YouTubeClient._
 

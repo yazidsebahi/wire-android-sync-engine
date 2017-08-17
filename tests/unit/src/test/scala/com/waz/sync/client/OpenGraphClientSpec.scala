@@ -20,9 +20,9 @@ package com.waz.sync.client
 import com.waz.sync.client.OpenGraphClient.{OpenGraphData, OpenGraphDataResponse}
 import com.waz.utils.wrappers.URI
 import com.waz.znet.StringResponse
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class OpenGraphClientSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   feature("Response parsing") {
 

@@ -19,17 +19,16 @@ package com.waz.threading
 
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 
-import com.waz.RobolectricUtils
 import com.waz.ZLog.LogTag
+import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture.CancelException
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
 import scala.util.{Failure, Random, Success, Try}
-import concurrent.duration._
 
-class CancellableFutureSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+class CancellableFutureSpec extends AndroidFreeSpec {
   implicit val tag: LogTag = "CancellableFutureSpec"
   private implicit lazy val dispatcher = Threading.Background
 
@@ -413,7 +412,7 @@ class CancellableFutureSpec extends FeatureSpec with Matchers with BeforeAndAfte
     scenario("Cancel delayed task") {
       @volatile var done = false
       val future = CancellableFuture.delayed(500.millis)(done = true)
-      awaitUi(100.millis)
+      Thread.sleep(100)
       future.cancel()
       intercept[CancelException] {
         Await.result(future, 1.second)
@@ -430,9 +429,9 @@ class CancellableFutureSpec extends FeatureSpec with Matchers with BeforeAndAfte
       }
 
       val future = doSomething()
-      awaitUi(300.millis)
+      Thread.sleep(100)
       future.cancel()
-      awaitUi(1.second)
+      Thread.sleep(1.second.toMillis)
       count should be < 5
       intercept[CancelException] {
         Await.result(future, 2.seconds)
@@ -443,7 +442,7 @@ class CancellableFutureSpec extends FeatureSpec with Matchers with BeforeAndAfte
       @volatile var done = false
       val queue = new LimitedDispatchQueue(4)
       val future = CancellableFuture.delayed(500.millis)(done = true)(queue)
-      awaitUi(100.millis)
+      Thread.sleep(100)
       future.cancel()
 
       intercept[CancelException] {

@@ -33,12 +33,12 @@ import com.waz.testutils.{MockZMessaging, RoboPermissionProvider}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.IoUtils
 import com.waz.znet.Request
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class AssetServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   val mediumFile = new File(getClass.getResource("/images/penguin_240.png").getFile).getAbsoluteFile
   val imData = {

@@ -21,13 +21,13 @@ import java.lang.System.nanoTime
 import java.util.Random
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.scalatest._
+import com.waz.specs.AndroidFreeSpec
 
 import scala.concurrent.duration.Duration.Zero
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class SerialDispatchQueueSpec extends FeatureSpec with Matchers with RobolectricTests {
+class SerialDispatchQueueSpec extends AndroidFreeSpec {
 
   scenario("Execute multiple tasks with no delay") {
     Await.result(executeMultiple(100, Zero, 100.millis), 10.seconds)

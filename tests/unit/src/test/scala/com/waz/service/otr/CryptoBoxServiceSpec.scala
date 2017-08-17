@@ -22,7 +22,7 @@ import com.waz.testutils._
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 
-class CryptoBoxServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class CryptoBoxServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 
   feature("Generating new prekeys") {
 

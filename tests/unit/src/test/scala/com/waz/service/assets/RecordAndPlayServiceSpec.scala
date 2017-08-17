@@ -39,7 +39,7 @@ import com.waz.ZLog.ImplicitTag._
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
 
-class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests {
+@Ignore class RecordAndPlayServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfterAll with BeforeAndAfter with RobolectricTests {
 
   feature("Recording an audio message") {
 

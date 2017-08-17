@@ -23,7 +23,7 @@ import org.scalatest._
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
-class AggregatingSignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class AggregatingSignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils {
   implicit val ec: EventContext = EventContext.Global
 
   feature("Aggregating incremental updates to an initial value") {

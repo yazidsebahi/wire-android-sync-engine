@@ -20,9 +20,9 @@ package com.waz.utils
 import java.io.Closeable
 
 import com.waz.testutils.Matchers._
-import org.scalatest.{Inspectors, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Inspectors, Matchers}
 
-class ManagedSpec extends FeatureSpec with Matchers with Inspectors {
+@Ignore class ManagedSpec extends FeatureSpec with Matchers with Inspectors {
 
   feature("Lazy evaluation") {
     scenario("Creation")(new Fixture {

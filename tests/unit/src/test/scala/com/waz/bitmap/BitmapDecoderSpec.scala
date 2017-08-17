@@ -18,10 +18,10 @@
 package com.waz.bitmap
 
 import android.graphics.{Bitmap => ABitmap}
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 import com.waz.utils.wrappers.Bitmap
 
-class BitmapDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class BitmapDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   lazy val bitmap: Bitmap = ABitmap.createBitmap(10, 10, ABitmap.Config.ARGB_8888)
 

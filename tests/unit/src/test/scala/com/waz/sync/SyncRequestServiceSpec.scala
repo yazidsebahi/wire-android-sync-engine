@@ -25,7 +25,7 @@ import com.waz.api.NetworkMode.UNKNOWN
 import com.waz.content.Database
 import com.waz.model.{AccountId, _}
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
-import com.waz.service.{NetworkModeService, ReportingService, Timeouts, ZmsLifecycle}
+import com.waz.service._
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.queue.{ConvLock, SyncContentUpdaterImpl}
 import com.waz.threading.CancellableFuture
@@ -46,6 +46,8 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
   val reporting = mock[ReportingService]
   val lifecycle = mock[ZmsLifecycle]
 
+  val lifeCycleState = Signal(LifecycleState.Active)
+
   val timeouts = new Timeouts
 
   val networkMode = Signal[NetworkMode]().disableAutowiring()
@@ -61,12 +63,12 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
 
     val (handle, service) = getSyncServiceHandle
 
-    println(result(for {
+    result(for {
       id   <- handle.syncSelfUser()
       id2  <- handle.postMessage(MessageId(), ConvId(), clock.instant())
       res  <- service.scheduler.await(id)
       res2 <- service.scheduler.await(id2)
-    } yield (res, res2)))
+    } yield (res, res2))
 
     result(service.listJobs.head) should have size 0
   }
@@ -77,6 +79,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().anyNumberOfTimes().returning(networkMode)
     (network.isOnlineMode _).expects().anyNumberOfTimes().returning(false)
     (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
+    (lifecycle.lifecycleState _).expects().once().returning(lifeCycleState)
 
     val content = new SyncContentUpdaterImpl(db)
     val service = new SyncRequestServiceImpl(context, accountId, content, network, sync, reporting, lifecycle)

@@ -20,7 +20,7 @@ package com.waz.service.teams
 import com.waz.content.{ConversationStorage, MembersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ConversationData.ConversationType.{Group, OneToOne}
-import com.waz.model._
+import com.waz.model.{ConversationMemberData, _}
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService, ConversationsUiServiceImpl}
 import com.waz.service.messages.MessagesService
 import com.waz.specs.AndroidFreeSpec
@@ -44,8 +44,13 @@ class TeamConversationSpec extends AndroidFreeSpec {
       val otherUser = UserId()
       val team = TeamId()
 
-      (members.getByUsers _).expects(Set(self, otherUser)).once().returning(Future.successful(IndexedSeq.empty[ConversationMemberData]))
+      println(s"$self, other: $otherUser")
+
+      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq.empty[ConversationMemberData]))
+      (members.getByConvs _).expects(Set.empty[ConvId]).returning(Future.successful(IndexedSeq.empty[ConversationMemberData]))
+
       (convsStorage.getAll _).expects(Seq.empty[ConvId]).once().returning(Future.successful(Seq.empty[Option[ConversationData]]))
+
       (convsContent.createConversationWithMembers _).expects(newConv, *, Group, self, Seq(otherUser), false, Some(team)).once().returning(Future.successful(ConversationData.Empty))
       (sync.postConversation _).expects(newConv, Seq(otherUser), *, Some(team)).once().returning(Future.successful(SyncId()))
       (messages.addMemberJoinMessage _).expects(*, *, *, *).once().returning(Future.successful(None))
@@ -60,7 +65,11 @@ class TeamConversationSpec extends AndroidFreeSpec {
 
       val groupConvId = ConvId()
 
-      (members.getByUsers _).expects(Set(self, otherUser)).once().returning(Future.successful(IndexedSeq(
+      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq(
+        ConversationMemberData(otherUser, groupConvId)
+      )))
+
+      (members.getByConvs _).expects(Set(groupConvId)).once().returning(Future.successful(IndexedSeq(
         ConversationMemberData(self,      groupConvId),
         ConversationMemberData(otherUser, groupConvId),
         ConversationMemberData(UserId(), groupConvId) //some other user, else not a group conv in team context
@@ -81,7 +90,11 @@ class TeamConversationSpec extends AndroidFreeSpec {
 
       val existingConv = ConversationData(ConvId(), RConvId(), Some(""), self, Group, Some(team))
 
-      (members.getByUsers _).expects(Set(self, otherUser)).once().returning(Future.successful(IndexedSeq(
+      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq(
+        ConversationMemberData(otherUser, existingConv.id)
+      )))
+
+      (members.getByConvs _).expects(Set(existingConv.id)).once().returning(Future.successful(IndexedSeq(
         ConversationMemberData(self,      existingConv.id),
         ConversationMemberData(otherUser, existingConv.id)
       )))
@@ -89,27 +102,6 @@ class TeamConversationSpec extends AndroidFreeSpec {
       (convsStorage.getAll _).expects(Seq(existingConv.id)).once().returning(Future.successful(Seq(Some(existingConv))))
 
       result(initService.createGroupConversation(ConvId(), Seq(otherUser), Some(team))) shouldEqual existingConv
-    }
-
-    scenario("Create 1:1 conversation within a team with existing 1:1 conversation in the personal space should create a new conversation") {
-      val newConv = ConvId()
-      val otherUser = UserId()
-      val team = TeamId()
-
-      val existingConv = ConversationData(ConvId(), RConvId(), Some(""), self, OneToOne, None)
-
-      (members.getByUsers _).expects(Set(self, otherUser)).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(self,      existingConv.id),
-        ConversationMemberData(otherUser, existingConv.id)
-      )))
-
-      (convsStorage.getAll _).expects(Seq(existingConv.id)).once().returning(Future.successful(Seq(Some(existingConv))))
-
-      (convsContent.createConversationWithMembers _).expects(newConv, *, Group, self, Seq(otherUser), false, Some(team)).once().returning(Future.successful(ConversationData.Empty))
-      (sync.postConversation _).expects(newConv, Seq(otherUser), *, Some(team)).once().returning(Future.successful(SyncId()))
-      (messages.addMemberJoinMessage _).expects(*, *, *, *).once().returning(Future.successful(None))
-
-      result(initService.createGroupConversation(newConv, Seq(otherUser), Some(team)))
     }
   }
 

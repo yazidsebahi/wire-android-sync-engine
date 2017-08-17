@@ -22,9 +22,9 @@ import com.waz.api.CauseForCallStateEvent
 import com.waz.model.Event.EventDecoder
 import org.json.JSONObject
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
 
-class CallStateEventSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
+@Ignore class CallStateEventSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
   feature("json de-/serialisation of call device state") {
     scenario("serialise and deserialise") {
       forAll { e: CallDeviceState =>

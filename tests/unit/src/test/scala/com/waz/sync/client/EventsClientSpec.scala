@@ -23,11 +23,11 @@ import com.waz.utils.JsonDecoder
 import com.waz.znet.JsonObjectResponse
 import org.json
 import org.json.JSONObject
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.io.Source
 
-class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class EventsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
   scenario("parse event time") {
     val time = JsonDecoder.parseDate("2015-07-13T13:32:04.584Z").getTime

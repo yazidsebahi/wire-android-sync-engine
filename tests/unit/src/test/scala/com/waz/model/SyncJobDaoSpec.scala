@@ -31,10 +31,10 @@ import com.waz.utils.JsonEncoder._
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Instant
 
-class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyChecks with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class SyncJobDaoSpec extends FeatureSpec with Matchers with TableDrivenPropertyChecks with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   import com.waz.Generators.SyncRequests._
 
