@@ -34,7 +34,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time._
 import org.threeten.bp.Instant
 
-class InvitationClientSpec extends FeatureSpec with Matchers with Inside with ScalaFutures with RobolectricTests {
+@Ignore class InvitationClientSpec extends FeatureSpec with Matchers with Inside with ScalaFutures with RobolectricTests {
 
   feature("Invitation request encoding") {
     scenario("Invite contact by email") {

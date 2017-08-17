@@ -30,7 +30,7 @@ import org.scalatest._
 
 import scala.concurrent.duration._
 
-class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class FlowManagerServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit val timeout: FiniteDuration = 2.seconds
   implicit val ev = EventContext.Global
 

@@ -19,9 +19,9 @@ package com.waz.sync.client
 
 import com.waz.service.media.RichMediaContentParser.GoogleMapsLocation
 import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class GoogleMapsClientSpec extends FeatureSpec with Matchers with TableDrivenPropertyChecks with RobolectricTests {
+@Ignore class GoogleMapsClientSpec extends FeatureSpec with Matchers with TableDrivenPropertyChecks with RobolectricTests {
 
   feature("generating the static URI") {
     scenario("to do ") {

@@ -21,12 +21,12 @@ import com.waz.api.ProgressIndicator.State
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.{RobolectricUtils, api}
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.concurrent.Promise
 import scala.util.{Failure, Success}
 
-class FutureLoadHandleSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils {
+@Ignore class FutureLoadHandleSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils {
 
   implicit lazy val dispatcher = Threading.Background
 

@@ -22,9 +22,9 @@ import com.waz.utils.JsonDecoder
 import com.waz.znet.ContentEncoder.ByteArrayRequestContent
 import org.json.JSONObject
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
-class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class UserInfoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   val json = """{"email":"zbigniew@wearezeta.com","phone":null,"tracking_id":"15e38d10-b0cf-4877-9906-0923a74da3b0","accent_id":2,"picture":[{"content_length":7286,"data":null,"content_type":"image\/jpeg","id":"e56d823d-6c33-5ea5-9965-21230d4dc985","info":{"height":280,"tag":"smallProfile","original_width":512,"width":280,"name":"","correlation_id":"308133e9-6fd8-4652-baf4-3db41904e912","original_height":512,"nonce":"308133e9-6fd8-4652-baf4-3db41904e912","public":true}},{"content_length":28940,"data":null,"content_type":"image\/jpeg","id":"f0718f9b-8f92-5a2f-815a-8f85fca52690","info":{"height":512,"tag":"medium","original_width":512,"width":512,"name":"","correlation_id":"308133e9-6fd8-4652-baf4-3db41904e913","original_height":512,"nonce":"308133e9-6fd8-4652-baf4-3db41904e912","public":true}}],"name":"Zbigniew Szymanski","id":"5604c40a-4fec-454f-a388-e3bbe1bb6e5b"}"""
 

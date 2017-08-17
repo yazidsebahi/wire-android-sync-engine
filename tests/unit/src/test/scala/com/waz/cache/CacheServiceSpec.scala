@@ -29,12 +29,12 @@ import com.waz.utils.IoUtils
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class CacheServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig { test =>
 
   implicit def db: DB = storage.dbHelper.getWritableDatabase
 

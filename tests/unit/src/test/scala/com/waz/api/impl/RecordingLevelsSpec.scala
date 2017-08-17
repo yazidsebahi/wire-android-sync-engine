@@ -20,10 +20,10 @@ package com.waz.api.impl
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventStream
 import com.waz.utils.returning
-import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import org.scalatest._
 import com.waz.ZLog.ImplicitTag._
 
-class RecordingLevelsSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
+@Ignore class RecordingLevelsSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
   scenario("Aggregating recording levels") {
     val stream = EventStream[Float]()
     val levels = returning(new RecordingLevels(stream).windowed(5))(_.disableAutowiring())

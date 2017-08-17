@@ -40,10 +40,9 @@ class RandomBytes {
 
     Try(randomBytes(buffer, count)).toOption match {
       case Some(true) => // woop woop, all good
-      case _ => {
+      case _ =>
         warn(s"Libsodium failed to generate $count random bytes. Falling back to SecureRandom")
         random.nextBytes(buffer)
-      }
     }
     buffer
   }

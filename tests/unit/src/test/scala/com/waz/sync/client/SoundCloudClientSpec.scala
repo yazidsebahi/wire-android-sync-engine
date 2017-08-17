@@ -25,10 +25,10 @@ import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
 import com.waz.znet._
-import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Duration
 
-class SoundCloudClientSpec extends FeatureSpec with Matchers with OptionValues with JsonResponseFromResources with RobolectricTests {
+@Ignore class SoundCloudClientSpec extends FeatureSpec with Matchers with OptionValues with JsonResponseFromResources with RobolectricTests {
   import SoundCloudClient._
 
   feature("response parsing") {

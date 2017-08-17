@@ -20,9 +20,9 @@ package com.waz.bitmap.gif
 import com.waz.bitmap.gif.Gif.Frame
 import com.waz.bitmap.gif.ImageDecoderHelper.{LineProducer, PixelConsumer}
 import com.waz.utils.IoUtils
-import org.scalatest.{RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class ImageDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class ImageDecoderSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   def load(resName: String) = GifReader(IoUtils.toByteArray(getClass.getResourceAsStream(resName)))
 

@@ -36,7 +36,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class AuthenticationManagerSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
 
   val wireMockPort = 9000 + Random.nextInt(3000)
   val wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig().port(wireMockPort))

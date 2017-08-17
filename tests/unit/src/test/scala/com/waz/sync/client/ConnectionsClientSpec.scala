@@ -34,7 +34,7 @@ import org.scalatest._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class ConnectionsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests {
+@Ignore class ConnectionsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests {
 
   before {
     ZMessaging.context = Robolectric.application

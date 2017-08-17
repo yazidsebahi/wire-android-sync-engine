@@ -22,11 +22,11 @@ import java.nio.ByteOrder.nativeOrder
 
 import com.waz.utils.returning
 import libcore.io.SizeOf
-import org.scalatest.{FeatureSpec, Matchers}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
 
 import scala.math._
 
-class AudioLevelsSpec extends FeatureSpec with Matchers {
+@Ignore class AudioLevelsSpec extends FeatureSpec with Matchers {
   import AudioLevels._
 
   feature("dBFS conversion") {
