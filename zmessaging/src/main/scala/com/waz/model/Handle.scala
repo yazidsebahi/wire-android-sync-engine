@@ -21,15 +21,15 @@ import java.util.UUID
 
 import com.waz.utils.Locales
 
-case class Handle(string: String) extends AnyVal{
+case class Handle(string: String) extends AnyVal {
   override def toString : String = string
 
-  def containsQuery(query: String): Boolean = {
-    string.contains(Handle.transliterated(Handle.stripSymbol(query)).toLowerCase)
+  def startsWithQuery(query: String): Boolean = {
+     string.startsWith(Handle.stripSymbol(query).toLowerCase)
   }
 
   def exactMatchQuery(query: String): Boolean = {
-    string == Handle.transliterated(Handle.stripSymbol(query)).toLowerCase
+    string == Handle.stripSymbol(query).toLowerCase
   }
 
   def withSymbol: String = if (string.startsWith("@")) string else s"@$string"
