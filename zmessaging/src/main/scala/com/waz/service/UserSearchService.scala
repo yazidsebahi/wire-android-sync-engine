@@ -17,8 +17,6 @@
  */
 package com.waz.service
 
-import java.util.concurrent.atomic.AtomicReference
-
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.{MembersStorage, MessagesStorage, SearchQueryCacheStorage, UsersStorage}
@@ -29,16 +27,16 @@ import com.waz.service.conversation.ConversationsUiService
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.threading.Threading
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events._
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.collection.immutable.Set
+import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
-
 
 case class SearchState(filter: String, hasSelectedUsers: Boolean, addingToConversation: Option[ConvId]){
   def shouldShowTopUsers(isTeam: Boolean) = empty && !isTeam && addingToConversation.isEmpty
@@ -100,9 +98,9 @@ class UserSearchService(selfUserId: UserId,
           .map(_.filter(conv => teamId.forall(conv.team.contains)).distinct.toIndexedSeq)
       else Signal.const(IndexedSeq.empty[ConversationData])
 
-    val searchSignal =
+    val searchSignal: Signal[IndexedSeq[UserData]] =
       if (searchState.shouldShowDirectorySearch)
-        searchUserData(searchState.query).map(_.values.filter(u => !excludedUsers.contains(u.id)))
+        searchUserData(searchState.query).map(_.filter(u => !excludedUsers.contains(u.id)))
       else Signal.const(IndexedSeq.empty[UserData])
 
     exactMatchUser ! None // reset the exact match to None on any query change
@@ -126,80 +124,73 @@ class UserSearchService(selfUserId: UserId,
   def updateSearchResults(query: SearchQuery, results: Seq[UserSearchEntry]) = {
     def updating(ids: Vector[UserId])(cached: SearchQueryCache) = cached.copy(query, Instant.now, if (ids.nonEmpty || cached.entries.isEmpty) Some(ids) else cached.entries)
 
-    if (currentQuery.get().cacheKey == query.cacheKey) {
-      for {
-        updated <- userService.updateUsers(results)
-        _ <- userService.syncIfNeeded(updated.toSeq: _*)
-        ids = results.map(_.id)(breakOut): Vector[UserId]
-        _ = verbose(s"updateSearchResults($query, ${results.map(_.handle)})")
-        _ <- queryCache.updateOrCreate(query, updating(ids), SearchQueryCache(query, Instant.now, Some(ids)))
-      } yield ()
+    for {
+      updated <- userService.updateUsers(results)
+      _ <- userService.syncIfNeeded(updated.toSeq: _*)
+      ids = results.map(_.id)(breakOut): Vector[UserId]
+      _ = verbose(s"updateSearchResults($query, ${results.map(_.handle)})")
+      _ <- queryCache.updateOrCreate(query, updating(ids), SearchQueryCache(query, Instant.now, Some(ids)))
+    } yield ()
 
-      query match {
-        case RecommendedHandle(handle) if !results.map(_.handle).exists(_.exactMatchQuery(handle)) =>
-          debug(s"exact match requested: ${handle}")
-          sync.exactMatchHandle(Handle(Handle.stripSymbol(handle)))
-        case _ =>
-      }
+    query match {
+      case RecommendedHandle(handle) if !results.map(_.handle).exists(_.exactMatchQuery(handle)) =>
+        debug(s"exact match requested: ${handle}")
+        sync.exactMatchHandle(Handle(Handle.stripSymbol(handle)))
+      case _ =>
     }
+
     Future.successful({})
   }
 
   private val exactMatchUser = new SourceSignal[Option[UserData]]()
 
   def updateExactMatch(handle: Handle, userId: UserId) = {
+    val query = RecommendedHandle(handle.withSymbol)
+    def updating(id: UserId)(cached: SearchQueryCache) = cached.copy(query, Instant.now, Some(cached.entries.map(_.toSet ++ Set(userId)).getOrElse(Set(userId)).toVector))
+
     debug(s"update exact match: ${handle}, $userId")
     userService.getUser(userId).collect {
       case Some(user) =>
         debug(s"received exact match: ${user.handle}")
         exactMatchUser ! Some(user)
+        queryCache.updateOrCreate(query, updating(userId), SearchQueryCache(query, Instant.now, Some(Vector(userId))))
     }(Threading.Background)
 
     Future.successful({})
   }
 
-  private val currentQuery = new AtomicReference[SearchQuery]()
+  private val signalMap = mutable.HashMap[SearchQuery, Signal[IndexedSeq[UserData]]]()
 
-  def searchUserData(query: SearchQuery): Signal[SeqMap[UserId, UserData]] = {
-    currentQuery.set(query)
+  def searchUserData(query: SearchQuery): Signal[IndexedSeq[UserData]] = signalMap.getOrElseUpdate(query, returning( startNewSearch(query) ) { _ =>
+    CancellableFuture.delay(cacheExpiryTime).map { _ =>
+      signalMap.remove(query)
+      queryCache.remove(query)
+    }
+  })
 
-    queryCache.optSignal(query).flatMap {
-      case r if r.forall(cached => (cacheExpiryTime elapsedSince cached.timestamp) || cached.entries.isEmpty) =>
-        def fallbackToLocal = query match {
-          case Recommended(prefix) =>
-            usersStorage.find[UserData, Vector[UserData]](recommendedPredicate(prefix), db => UserDataDao.recommendedPeople(prefix)(db), identity)
-          case RecommendedHandle(prefix) =>
-            usersStorage.find[UserData, Vector[UserData]](recommendedHandlePredicate(prefix), db => UserDataDao.recommendedPeople(prefix)(db), identity)
-          case _ => Future.successful(Vector.empty[UserData])
-        }
+  private def startNewSearch(query: SearchQuery): Signal[IndexedSeq[UserData]] = returning( queryCache.optSignal(query) ){ _ =>
+    localSearch(query).flatMap(_ => sync.syncSearchQuery(query))
+  }.flatMap {
+    case None => Signal.const(IndexedSeq.empty[UserData])
+    case Some(cached) => cached.entries match {
+      case None => Signal.const(IndexedSeq.empty[UserData])
+      case Some(ids) if ids.isEmpty => Signal.const(IndexedSeq.empty[UserData])
+      case Some(ids) => usersStorage.listSignal(ids).map(_.toIndexedSeq)
+    }
+  }
 
-        fallbackToLocal.flatMap { users =>
-          lazy val fresh = SearchQueryCache(query, Instant.now, Some(users.map(_.id)))
+  private def localSearch(query: SearchQuery) = (query match {
+    case Recommended(prefix) =>
+      usersStorage.find[UserData, Vector[UserData]](recommendedPredicate(prefix), db => UserDataDao.recommendedPeople(prefix)(db), identity)
+    case RecommendedHandle(prefix) =>
+      usersStorage.find[UserData, Vector[UserData]](recommendedHandlePredicate(prefix), db => UserDataDao.recommendedPeople(prefix)(db), identity)
+    case _ => Future.successful(Vector.empty[UserData])
+  }).flatMap { users =>
+    lazy val fresh = SearchQueryCache(query, Instant.now, Some(users.map(_.id)))
 
-          def update(q: SearchQueryCache): SearchQueryCache = if ((cacheExpiryTime elapsedSince q.timestamp) || q.entries.isEmpty) fresh else q
+    def update(q: SearchQueryCache): SearchQueryCache = if ((cacheExpiryTime elapsedSince q.timestamp) || q.entries.isEmpty) fresh else q
 
-          queryCache.updateOrCreate(query, update, fresh)
-        }.flatMap(_ => sync.syncSearchQuery(query)).logFailure()
-
-        Signal.const(Vector.empty[UserData])
-
-      case Some(cached) =>
-        if (cacheRefreshInterval elapsedSince cached.timestamp)
-          queryCache.getOrCreate(query, SearchQueryCache(query, Instant.now, None)).flatMap(_ => sync.syncSearchQuery(query)).logFailure()
-
-        cached.entries match {
-          case Some(ids) => usersStorage.listSignal(ids)
-          case _ => Signal.const(Vector.empty[UserData])
-        }
-
-      case _ => Signal.const(Vector.empty[UserData])
-    }.map { users =>
-      query match {
-        case Recommended(prefix) => users filter recommendedPredicate(prefix)
-        case RecommendedHandle(prefix) => users filter recommendedHandlePredicate(prefix)
-        case _ => users
-      }
-    }.map { SeqMap(_)(_.id, identity) }
+    queryCache.updateOrCreate(query, update, fresh)
   }
 
   private def topPeople = {

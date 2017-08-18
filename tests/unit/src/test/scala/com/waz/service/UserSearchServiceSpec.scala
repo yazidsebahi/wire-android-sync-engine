@@ -98,7 +98,7 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     val service = stubService(queryCacheStorage = queryCacheStorage, usersStorage = usersStorage, sync = sync)
     querySignal ! Some(firstQueryCache)
 
-    result(service.searchUserData(Recommended(prefix)).map(_.keys.toSet).filter(_ == matches).head)
+    result(service.searchUserData(Recommended(prefix)).map(_.toSet).filter(_ == matches).head)
   }
 
   feature("Recommended people search") {
