@@ -100,7 +100,7 @@ class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     new BitmapLoadHandle({
-      case None => BitmapSignal(data, req, ui.globalImageLoader, ui.globalNetwork)
+      case None => BitmapSignal(data, req, ui.globalImageLoader, ui.network)
       case Some(zms) => BitmapSignal(zms, data, req)
     }, callback)
   }
@@ -130,7 +130,7 @@ class LocalImageAssetWithPreview(preview: Option[AssetData], medium: AssetData)(
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = req match {
       case Single(_, _) => new BitmapLoadHandle ({
         case Some(zms) => BitmapSignal(zms, preview.getOrElse(medium), req)
-        case _ => BitmapSignal(preview.getOrElse(medium), req, ui.globalImageLoader, ui.globalNetwork)
+        case _ => BitmapSignal(preview.getOrElse(medium), req, ui.globalImageLoader, ui.network)
       }, callback)
       case _ => super.getBitmap(req, callback)
     }
@@ -180,7 +180,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     verbose(s"get bitmap")
-    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.globalImageLoader, ui.globalNetwork) }, callback)
+    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.globalImageLoader, ui.network) }, callback)
   }
 
   override def saveImageToGallery(callback: SaveCallback): Unit =

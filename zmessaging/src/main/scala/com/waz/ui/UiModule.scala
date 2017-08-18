@@ -138,7 +138,7 @@ class UiModule(val accounts: AccountsService) extends UiEventContext with ZMessa
   lazy val assets = new UiCache[AssetId, Asset](10)(this)
 
   lazy val globalImageLoader = global.imageLoader
-  lazy val globalNetwork = global.network
+  lazy val network = global.network
 
   def getOtherParticipantForOneToOneConv(id: ConvId): User = users.getUser(UserId(id.str)) // one-to-one conversation has the same id as the other user, so we can access it directly
 
