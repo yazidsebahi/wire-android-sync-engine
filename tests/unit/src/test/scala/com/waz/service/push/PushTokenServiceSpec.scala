@@ -41,32 +41,18 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   val prefs     = new TestGlobalPreferences()
   val accountId = AccountId()
 
-  var pushEnabled         = prefs.preference(PushEnabledKey)
-  var currentAccount      = prefs.preference(CurrentAccountPref)
-  var currentToken        = prefs.preference(GlobalPreferences.PushToken)
+  val pushEnabled         = prefs.preference(PushEnabledKey)
+  val currentAccount      = prefs.preference(CurrentAccountPref)
+  val currentToken        = prefs.preference(GlobalPreferences.PushToken)
 
-  var googlePlayAvailable = Signal(false)
-  var lifecycleActive     = Signal(false)
-  var accountSignal       = Signal[AccountData]()
+  val googlePlayAvailable = Signal(false)
+  val lifecycleActive     = Signal(false)
+  val accountSignal       = Signal[AccountData]()
 
   val defaultDuration = 5.seconds
 
   def accountData(token: PushToken): AccountData = AccountData(accountId, Left({}), None, "", None, None, Some(token))
   def accountData(token: Option[PushToken]): AccountData = AccountData(accountId, Left({}), None, "", None, None, token)
-
-
-  override protected def afterEach() = {
-    super.afterEach()
-    prefs.reset()
-
-    pushEnabled         = prefs.preference(PushEnabledKey)
-    currentAccount      = prefs.preference(CurrentAccountPref)
-    currentToken        = prefs.preference(GlobalPreferences.PushToken)
-
-    googlePlayAvailable = Signal(false)
-    lifecycleActive     = Signal(false)
-    accountSignal       = Signal[AccountData]()
-  }
 
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
@@ -259,12 +245,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     }
   }
 
-  def initTokenService(google:    GoogleApi         = google,
-                       lifecycle: ZmsLifecycle      = lifecycle,
-                       accountId: AccountId         = accountId,
-                       accounts:  AccountsStorage   = accounts,
-                       sync:      SyncServiceHandle = sync) = {
-
+  def initTokenService() = {
     (google.isGooglePlayServicesAvailable _).expects().anyNumberOfTimes().returning(googlePlayAvailable)
     (accounts.signal _).expects(*).anyNumberOfTimes().returning(accountSignal)
     (lifecycle.active _).expects().anyNumberOfTimes().returning(lifecycleActive)

@@ -18,11 +18,11 @@
 package com.waz.api.impl
 
 import android.graphics.Color
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 /**
   */
-class AccentColorSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class AccentColorSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   val colors = Array(
     new AccentColor(1, 0, 0.784, 0, 1),

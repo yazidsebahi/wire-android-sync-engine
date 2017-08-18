@@ -33,7 +33,7 @@ import org.scalatest._
 
 import scala.concurrent.duration._
 
-class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
+@Ignore class GroupConversationNameSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
   lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 

@@ -33,7 +33,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import scala.util.Random
 
-class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests with RobolectricUtils { outer =>
+@Ignore class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests with RobolectricUtils { outer =>
 
   lazy val dbHelper: DBHelper = new DaoDB(Robolectric.application, "testdb", null, 1, Seq(TestItemDao, CompositeKeyTestItemDao), Seq.empty[Migration])
 

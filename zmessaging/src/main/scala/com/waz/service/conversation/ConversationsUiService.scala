@@ -346,10 +346,10 @@ class ConversationsUiServiceImpl( self:            UserId,
         case Seq(other) =>
           verbose(s"Checking for 1:1 conversation with user: $other")
           (for {
-            allConvs <- this.members.getByUsers(Set(other)).map(_.map(_.convId))
+            allConvs   <- this.members.getByUsers(Set(other)).map(_.map(_.convId))
             allMembers <- this.members.getByConvs(allConvs.toSet).map(_.map(m => m.convId -> m.userId))
-            onlyUs = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, self) => c}
-            data <- convStorage.getAll(onlyUs).map(_.flatten)
+            onlyUs     = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, self) => c}
+            data       <- convStorage.getAll(onlyUs).map(_.flatten)
           } yield data.filter(_.team.contains(teamId))).flatMap { convs =>
             if (convs.isEmpty) {
               verbose(s"No conversation with user $other found, creating new group conversation")

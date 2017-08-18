@@ -21,12 +21,12 @@ import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
-import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import org.scalatest._
 import RichMediaContentParser._
 
 import scala.io.Source
 
-class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
 
   feature("match links") {
 

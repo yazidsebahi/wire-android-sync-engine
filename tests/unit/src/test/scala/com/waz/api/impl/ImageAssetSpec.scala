@@ -28,7 +28,7 @@ import com.waz.utils.IoUtils
 import org.robolectric.Robolectric
 import org.scalatest._
 
-class ImageAssetSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
+@Ignore class ImageAssetSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
 
   lazy val ui = new MockUiModule(new MockZMessaging())
 

@@ -42,7 +42,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaFutures with ScaledTimeSpans with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
+@Ignore class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaFutures with ScaledTimeSpans with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 
   type EventsGenerator = (RConvId, Option[Long], Option[Long], Option[Int]) => Option[Seq[ConversationEvent]]
   type ConvsGenerator = (Option[RConvId]) => Either[ErrorResponse, ConversationsResult]

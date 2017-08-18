@@ -19,10 +19,11 @@ package com.waz.specs
 
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
-import com.waz.ZLog.LogTag
+import com.waz.ZLog.{LogTag, error}
 import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.service.ZMessaging
 import com.waz.testutils.TestClock
+import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
@@ -34,10 +35,9 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-//TODO somehow check other threads for failures that might normally be swallowed up and fail tests accordingly
-abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory { this: Suite =>
+abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory with OneInstancePerTest { this: Suite =>
 
-  val defaultTimeout = 5.seconds
+  import AndroidFreeSpec._
 
   val clock = TestClock()
 
@@ -58,8 +58,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     ZMessaging.clock = clock
 
-//    InternalLog.reset()
-//    InternalLog.add(new SystemLogOutput)
+    InternalLog.reset()
+    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 
@@ -75,10 +75,10 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     HockeyApp.setUtil(Some(new HockeyAppUtil {
       override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
-        //TODO it might be nice to catch any swallowed-up exceptions and use them to fail the tests somehow
-        println("Exception sent to HockeyApp:")
-        println(description)
-        t.printStackTrace()
+        t match {
+          case e: exceptions.TestFailedException => swallowedFailure = Some(e)
+          case _ => error(s"Exception sent to HockeyApp: $description", t)(tag)
+        }
       }
     }))
   }
@@ -87,13 +87,24 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
     * Here we wait for all threads to finish their current tasks as to allow each test to run with a clean threading profile.
     * If there are still tasks pending, we fail, as it likely means an error somewhere.
     */
-  override def withFixture(test: NoArgTest) = super.withFixture(test) match {
-    case Succeeded =>
-      if (!tasksCompletedAfterWait) {
-        Failed(new TimeoutException(s"Background tasks continued running after test for ${defaultTimeout.toSeconds} seconds: Potential threading issue!"))
-      } else Succeeded
-    case outcome => outcome
+  override def withFixture(test: NoArgTest) = {
+    val res = super.withFixture(test)
+    res match {
+      case Succeeded =>
+        if (!tasksCompletedAfterWait)
+          Failed(new TimeoutException(s"Background tasks continued running after test for ${DefaultTimeout.toSeconds} seconds: Potential threading issue!"))
+        else if (swallowedFailure.isDefined) {
+          returning(Failed(swallowedFailure.get)) { _ =>
+            swallowedFailure = None
+          }
+        }
+        else
+          Succeeded
+      case outcome => outcome
+    }
   }
+
+  def await[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = result(future)(defaultDuration)
 
   def result[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = Await.result(future, defaultDuration)
 
@@ -101,15 +112,20 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
     * performing a series of actions)
     */
-  def awaitAllTasks(implicit timeout: FiniteDuration = defaultTimeout) = {
+  def awaitAllTasks(implicit timeout: FiniteDuration = DefaultTimeout) = {
     if (!tasksCompletedAfterWait) fail(new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds"))
   }
 
-  private def tasksCompletedAfterWait(implicit timeout: FiniteDuration = defaultTimeout) = {
+  def tasksRemaining = Seq(IO, ImageDispatcher, Ui, Background).exists(_.hasRemainingTasks)
+
+  private def tasksCompletedAfterWait(implicit timeout: FiniteDuration = DefaultTimeout) = {
     val start = Instant.now
-    import Threading._
-    def tasksRemaining = Seq(IO, ImageDispatcher, Ui, Background).exists(_.hasRemainingTasks)
     while(tasksRemaining && Instant.now().isBefore(start + timeout)) Thread.sleep(10)
     !tasksRemaining
   }
+}
+
+object AndroidFreeSpec {
+  val DefaultTimeout = 5.seconds
+  @volatile private var swallowedFailure = Option.empty[exceptions.TestFailedException]
 }

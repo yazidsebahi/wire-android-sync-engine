@@ -27,11 +27,11 @@ import com.waz.testutils.EmptySyncService
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventContext
 import org.scalatest.matchers.Matcher
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.duration._
 
-class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
 
   implicit val timeout: FiniteDuration = 1.seconds
 

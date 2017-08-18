@@ -27,9 +27,9 @@ import com.waz.utils.wrappers.URI
 import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet.{JsonObjectResponse, Request, Response, StringResponse}
 import org.json.JSONObject
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class GiphyClientSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class GiphyClientSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   val randomSeqResponse = {
     val fullResp = Seq(

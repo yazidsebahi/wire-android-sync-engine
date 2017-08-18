@@ -28,13 +28,13 @@ import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks { test =>
+@Ignore class IncomingConnectionsSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks { test =>
   implicit lazy val dispatcher = Threading.Background
 
   val timeout = 5.seconds

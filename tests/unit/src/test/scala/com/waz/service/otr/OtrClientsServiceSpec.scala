@@ -37,7 +37,7 @@ import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.duration._
 
-class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
+@Ignore class OtrClientsServiceSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
 
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(100, Millis))
 

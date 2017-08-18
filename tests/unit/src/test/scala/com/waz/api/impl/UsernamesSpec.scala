@@ -24,7 +24,7 @@ import org.scalatest.{OptionValues, _}
 
 import scala.util.Random
 
-class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils {
+@Ignore class UsernamesSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils {
 
   lazy val selfId = UserId()
   lazy val zmessaging = new MockZMessaging(selfUserId = selfId)

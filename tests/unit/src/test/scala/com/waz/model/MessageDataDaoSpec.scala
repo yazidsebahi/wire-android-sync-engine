@@ -26,11 +26,11 @@ import com.waz.utils.wrappers.{DB, URI}
 import com.waz.utils._
 import org.json.JSONArray
 import org.robolectric.Robolectric
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp
 import org.threeten.bp.Instant
 
-class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class MessageDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
   lazy val dbHelper = new ZMessagingDB(Robolectric.application, "dbName")
 

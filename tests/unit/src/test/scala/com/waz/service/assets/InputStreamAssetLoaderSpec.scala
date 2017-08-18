@@ -25,11 +25,11 @@ import com.waz.model.{AssetId, Mime}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockGlobalModule
 import com.waz.utils.returning
-import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import org.scalatest._
 
 import scala.util.Random
 
-class InputStreamAssetLoaderSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
+@Ignore class InputStreamAssetLoaderSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
 
 //  scenario("Load completes successfully") {
 //    val asset: impl.AssetForUpload = impl.AssetForUpload(AssetId(), Some("name"), Mime.Default, Some(10000L)) {

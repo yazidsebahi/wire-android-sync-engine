@@ -31,7 +31,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-class ThrottlingSignalSpec extends FeatureSpec with Matchers with Inspectors with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class ThrottlingSignalSpec extends FeatureSpec with Matchers with Inspectors with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   feature("Forwarding") {
 

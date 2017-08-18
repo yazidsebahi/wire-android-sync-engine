@@ -39,7 +39,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 
-class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
+@Ignore class ArchivingAndMutingSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
 
   lazy val selfUser = UserData("self user")
   lazy val user1 = UserData("user 1")

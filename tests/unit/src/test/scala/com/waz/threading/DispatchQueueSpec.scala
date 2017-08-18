@@ -20,12 +20,12 @@ package com.waz.threading
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import com.waz.specs.AndroidFreeSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class DispatchQueueSpec extends FeatureSpec with Matchers with RobolectricTests {
+class DispatchQueueSpec extends AndroidFreeSpec {
 
   feature("Serial execution dispatch queue - concurrentTasks = 1") {
 

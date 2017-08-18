@@ -18,9 +18,9 @@
 package com.waz.model
 
 import com.waz.api.ContentSearchQuery
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class ContentSearchQuerySpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class ContentSearchQuerySpec extends FeatureSpec with Matchers with RobolectricTests {
   scenario("Århus should be transliterated to arhus"){
     ContentSearchQuery("Århus").toString shouldBe "arhus"
   }
