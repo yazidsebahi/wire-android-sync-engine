@@ -80,13 +80,6 @@ class SourceSignal[A](v: Option[A] = None) extends Signal(v) {
   override def publish(value: A, currentContext: ExecutionContext): Unit = super.publish(value, currentContext)
   def mutate(f: A => A): Boolean = update(_.map(f))
   def mutateOrDefault(f: A => A, default: A): Boolean = update(_.map(f).orElse(Some(default)))
-
-  //useful for tests
-  def reset(default: A): Unit = reset(Some(default))
-  def reset(default: Option[A] = None): Unit = {
-    unsubscribeAll()
-    set(default)
-  }
 }
 
 trait SignalListener {

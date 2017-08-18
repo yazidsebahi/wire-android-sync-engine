@@ -54,16 +54,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   def accountData(token: PushToken): AccountData = AccountData(accountId, Left({}), None, "", None, None, Some(token))
   def accountData(token: Option[PushToken]): AccountData = AccountData(accountId, Left({}), None, "", None, None, token)
 
-
-  override protected def afterEach() = {
-    super.afterEach()
-    prefs.reset()
-
-    googlePlayAvailable.reset(false)
-    lifecycleActive.reset(false)
-    accountSignal.reset()
-  }
-
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
       val token = PushToken("token")
