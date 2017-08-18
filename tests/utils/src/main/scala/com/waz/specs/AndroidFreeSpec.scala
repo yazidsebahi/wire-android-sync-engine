@@ -35,14 +35,11 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory { this: Suite =>
+abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory with OneInstancePerTest { this: Suite =>
 
-  val defaultTimeout = 5.seconds
+  import AndroidFreeSpec._
 
   val clock = TestClock()
-
-  //Sometimes logged tries will not fail tests, this is here to capture them.
-  @volatile private var swallowedFailure = Option.empty[exceptions.TestFailedException]
 
   override protected def beforeEach() = {
     super.beforeEach()
@@ -95,9 +92,11 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
     res match {
       case Succeeded =>
         if (!tasksCompletedAfterWait)
-          Failed(new TimeoutException(s"Background tasks continued running after test for ${defaultTimeout.toSeconds} seconds: Potential threading issue!"))
+          Failed(new TimeoutException(s"Background tasks continued running after test for ${DefaultTimeout.toSeconds} seconds: Potential threading issue!"))
         else if (swallowedFailure.isDefined) {
-          Failed(swallowedFailure.get)
+          returning(Failed(swallowedFailure.get)) { _ =>
+            swallowedFailure = None
+          }
         }
         else
           Succeeded
@@ -105,21 +104,28 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
     }
   }
 
+  def await[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = result(future)(defaultDuration)
+
   def result[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = Await.result(future, defaultDuration)
 
   /**
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
     * performing a series of actions)
     */
-  def awaitAllTasks(implicit timeout: FiniteDuration = defaultTimeout) = {
+  def awaitAllTasks(implicit timeout: FiniteDuration = DefaultTimeout) = {
     if (!tasksCompletedAfterWait) fail(new TimeoutException(s"Background tasks didn't complete in ${timeout.toSeconds} seconds"))
   }
 
   def tasksRemaining = Seq(IO, ImageDispatcher, Ui, Background).exists(_.hasRemainingTasks)
 
-  private def tasksCompletedAfterWait(implicit timeout: FiniteDuration = defaultTimeout) = {
+  private def tasksCompletedAfterWait(implicit timeout: FiniteDuration = DefaultTimeout) = {
     val start = Instant.now
     while(tasksRemaining && Instant.now().isBefore(start + timeout)) Thread.sleep(10)
     !tasksRemaining
   }
+}
+
+object AndroidFreeSpec {
+  val DefaultTimeout = 5.seconds
+  @volatile private var swallowedFailure = Option.empty[exceptions.TestFailedException]
 }
