@@ -17,10 +17,10 @@
  */
 package com.waz.service.images
 
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.NetworkMode
 import com.waz.model._
 import com.waz.service.NetworkModeService
-import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
 import com.waz.service.downloads.AssetLoader.DownloadOnWifiOnlyException
 import com.waz.specs.AndroidFreeSpec
@@ -28,194 +28,179 @@ import com.waz.threading.CancellableFuture
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.Regular
-import com.waz.utils.events.{EventContext, SourceSignal}
+import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Bitmap, FakeBitmap}
 
 import scala.concurrent.Future
 
 class BitmapSignalSpec extends AndroidFreeSpec { test =>
 
+  val network = mock[NetworkModeService]
+  val imageCache = mock[MemoryImageCache]
+  val loader = mock[ImageLoader]
+  (loader.memoryCache _).expects().anyNumberOfTimes().returning(imageCache)
+
   def mockBitmap(asset: AssetData) = FakeBitmap(asset.sizeInBytes.toInt, asset.dimensions.width, asset.dimensions.height, asset.sizeInBytes > 0)
 
   def image(w: Int, h: Int, mime: Mime = Mime.Image.Png, preview: Option[AssetId] = None) =
     AssetData(mime = mime, metaData = Some(AssetMetaData.Image(Dim2(w, h))), previewId = preview)
 
-  class SignalListener(loader: ImageLoader, asset: AssetData, req: BitmapRequest, network: NetworkModeService = mock[NetworkModeService]) {
-    private var results = Seq.empty[BitmapResult]
-    private val signal = new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, forceDownload = false)
-    private val obs = signal { result => results = results :+ result }(EventContext.Global)
-
-    private def medium = results.collectFirst { case BitmapLoaded(b, _) => b }
-
-    def checkLoaded(result: Option[(Int, Int)] = None) = {
-      awaitAllTasks
-
-      withClue(results.mkString(", ")) {
-        medium.map(b => (b.getWidth, b.getHeight)) shouldEqual result
-      }
-    }
-
-    def assetSource(id: AssetId): Option[AssetData] = if(id == asset.id) Some(asset) else None
-  }
-
   feature("Wire asset loading") {
 
-    scenario("Request same size image without a preview") {
-      val req = Regular(64)
-      val result = Some((64,64))
-      val asset = image(64, 64)
+    def init(asset: AssetData, req: BitmapRequest, preview: Option[AssetData] = None, expectPreview: Boolean = false) = {
+      val expectedAsset = preview match {
+        case Some(prev) if expectPreview => prev
+        case _ => asset
+      }
 
-      val imageCache = mock[MemoryImageCache]
-      val loader = mock[ImageLoader]
-      (loader.memoryCache _).expects().anyNumberOfTimes().returning(imageCache)
+      val bmps = Signal(Option.empty[Bitmap])
 
-      var bmp: Option[Bitmap] = None
-      (imageCache.get _).expects(asset.id, req, asset.width).anyNumberOfTimes().onCall(_ => bmp)
-
-      (loader.hasCachedBitmap _).expects(asset, req).anyNumberOfTimes().onCall { (asset, req) =>
+      (imageCache.get _).expects(expectedAsset.id, req, expectedAsset.width).anyNumberOfTimes().onCall { _ => bmps.currentValue.flatten }
+      (loader.hasCachedBitmap _).expects(expectedAsset, req).anyNumberOfTimes().onCall { (asset, req) =>
         Future.successful(imageCache.get(asset.id, req, asset.width).isDefined)
       }
-      (loader.loadBitmap _).expects(asset, req, *).once().onCall { _ =>
-        val bitmap = mockBitmap(asset)
-        bmp = Some(bitmap)
+
+      (loader.loadBitmap _).expects(expectedAsset, req, *).once().onCall { _ =>
+        val bitmap = mockBitmap(expectedAsset)
+        bmps ! Some(bitmap)
         CancellableFuture.successful(bitmap)
       }
 
-      // result should be reported as full image
-      val listener = new SignalListener(loader, asset, req)
-      listener.checkLoaded(result)
+      (loader.loadCachedBitmap _).expects(expectedAsset, req).anyNumberOfTimes.onCall { _ =>
+        bmps.currentValue.flatten match {
+          case Some(bitmap) => CancellableFuture.successful(bitmap)
+          case None => CancellableFuture.failed(new IllegalStateException("Trying to return a non-existing cached bitmap"))
+        }
+      }
+    }
 
-      // this time the result should be loaded from cache (that's why loader.loadBitmap... once)
-      listener.checkLoaded(result)
+    def getSignal(asset: AssetData, req: BitmapRequest)(assetSource: (AssetId) => Option[AssetData]) = {
+      val signal = new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, forceDownload = false)
+      signal.collect { case BitmapLoaded(b, _) => (b.getWidth, b.getHeight) }
+    }
+
+    scenario("Request same size image without a preview") {
+      val req = Regular(64)
+      val res = (64,64)
+      val asset = image(64, 64)
+
+      init(asset, req)
+
+      val s1 = getSignal(asset, req){
+        case asset.id => Some(asset)
+        case _ => None
+      }
+
+      result(s1.filter(_ == res).head)
+
+      val s2 = getSignal(asset, req){
+        case asset.id => Some(asset)
+        case _ => None
+      }
+
+      // this time from the cache
+      result(s2.filter(_ == res).head)
     }
 
     scenario("Load big size with small source image - no scaling") {
       val req = Regular(500)
-      val result = Some((64,64))
+      val res = (64,64)
       val asset = image(64, 64)
 
-      val imageCache = mock[MemoryImageCache]
-      val loader = mock[ImageLoader]
-      (loader.memoryCache _).expects().anyNumberOfTimes().returning(imageCache)
+      init(asset, req)
 
-      var bmp: Option[Bitmap] = None
-      (imageCache.get _).expects(asset.id, req, asset.width).anyNumberOfTimes().onCall(_ => bmp)
-
-      (loader.hasCachedBitmap _).expects(asset, req).anyNumberOfTimes().onCall { (asset, req) =>
-        Future.successful(imageCache.get(asset.id, req, asset.width).isDefined)
-      }
-      (loader.loadBitmap _).expects(asset, req, *).once().onCall { _ =>
-        val bitmap = mockBitmap(asset)
-        bmp = Some(bitmap)
-        CancellableFuture.successful(bitmap)
+      val s1 = getSignal(asset, req){
+        case asset.id => Some(asset)
+        case _ => None
       }
 
-      val listener = new SignalListener(loader, asset, req)
-      listener.checkLoaded(result)
+      result(s1.filter(_ == res).head)
 
-      // this time the result should be loaded from cache
-      listener.checkLoaded(result)
+      val s2 = getSignal(asset, req){
+        case asset.id => Some(asset)
+        case _ => None
+      }
+
+      // this time from the cache
+      result(s2.filter(_ == res).head)
     }
 
     scenario("Load image from preview when small image is requested") {
       val preview = image(64, 64)
 
       val req = Regular(65)
-      val result = Some((64,64))
+      val res = (64,64)
       val asset = image(512, 512, preview = Some(preview.id))
 
-      val imageCache = mock[MemoryImageCache]
-      val loader = mock[ImageLoader]
-      (loader.memoryCache _).expects().anyNumberOfTimes().returning(imageCache)
+      init(asset, req, Some(preview), expectPreview = true)
 
-      var bmp: Option[Bitmap] = None
-      (imageCache.get _).expects(preview.id, req, preview.width).anyNumberOfTimes().onCall(_ => bmp)
-
-      (loader.hasCachedBitmap _).expects(preview, req).anyNumberOfTimes().onCall { (asset, req) =>
-        Future.successful(imageCache.get(asset.id, req, asset.width).isDefined)
-      }
-      (loader.loadBitmap _).expects(preview, req, *).once().onCall { _ =>
-        val bitmap = mockBitmap(preview)
-        bmp = Some(bitmap)
-        CancellableFuture.successful(bitmap)
-      }
-
-      val listener = new SignalListener(loader, asset, req) {
-        override def assetSource(id: AssetId): Option[AssetData] = id match {
-          case asset.id => Some(asset)
-          case preview.id => Some(preview)
-          case _ => None
-        }
+      val signal = getSignal(asset, req) {
+        case asset.id => Some(asset)
+        case preview.id => Some(preview)
+        case _ => None
       }
 
       // loading preview instead of asset
-      listener.checkLoaded(result)
+      result(signal.filter(_ == res).head)
     }
 
     scenario("Load full image when requested is bigger than preview") {
       val preview = image(32, 32)
 
       val req = Regular(65)
-      val result = Some((512,512))
+      val res = (512,512)
       val asset = image(512, 512, preview = Some(preview.id))
 
-      val imageCache = mock[MemoryImageCache]
-      var bmp: Option[Bitmap] = None
-      (imageCache.get _).expects(asset.id, req, asset.width).anyNumberOfTimes().onCall(_ => bmp)
+      init(asset, req, Some(preview))
 
-      val loader = mock[ImageLoader]
-      (loader.memoryCache _).expects().anyNumberOfTimes().returning(imageCache)
-      (loader.hasCachedBitmap _).expects(asset, req).anyNumberOfTimes().onCall { (asset, req) =>
-        Future.successful(imageCache.get(asset.id, req, asset.width).isDefined)
-      }
-      (loader.loadBitmap _).expects(asset, req, *).once().onCall { _ =>
-        val bitmap = mockBitmap(asset)
-        bmp = Some(bitmap)
-        CancellableFuture.successful(bitmap)
+      val signal = getSignal(asset, req) {
+        case asset.id => Some(asset)
+        case preview.id => Some(preview)
+        case _ => None
       }
 
-      val listener = new SignalListener(loader, asset, req) {
-        override def assetSource(id: AssetId): Option[AssetData] = id match {
-          case asset.id => Some(asset)
-          case preview.id => Some(preview)
-          case _ => None
-        }
-      }
-
-      listener.checkLoaded(result)
+      result(signal.filter(_ == res).head)
     }
   }
 
   feature("Restart on wifi") {
     val req = Regular(64)
-    val result = Some((64,64))
+    val res = Some((64,64))
     val asset = image(64, 64)
 
-    val imageCache = mock[MemoryImageCache]
-
-    scenario("load restart after switching to wifi") {
-      val network = mock[NetworkModeService]
-      val networkSignal = new SourceSignal[NetworkMode](Some(NetworkMode._4G))
-      (network.networkMode _).expects().anyNumberOfTimes.returning(networkSignal)
-
-      val loader = mock[ImageLoader]
-      (loader.memoryCache _).expects().anyNumberOfTimes.returning(imageCache)
-      inSequence {
-        // before switching to wifi
-        (loader.hasCachedBitmap _).expects(asset, req).once.returning(Future.successful(false))
-        (loader.loadBitmap _).expects(asset, req, *).once.onCall { _ => CancellableFuture.failed(DownloadOnWifiOnlyException) }
-
-        // after
-        (loader.hasCachedBitmap _).expects(asset, req).once.returning(Future.successful(false))
-        (loader.loadBitmap _).expects(asset, req, *).once.onCall { _ => CancellableFuture.successful(mockBitmap(asset)) }
+    def getSignal(asset: AssetData, req: BitmapRequest)(assetSource: (AssetId) => Option[AssetData]) =
+      new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, forceDownload = false)
+      .map {
+        case BitmapLoaded(b, _) => Some((b.getWidth, b.getHeight))
+        case _ => None
       }
 
-      val listener = new SignalListener(loader, asset, req, network)
-      listener.checkLoaded(None)
+    scenario("load restart after switching to wifi") {
+      val networkSignal = Signal(NetworkMode._4G)
+      (network.networkMode _).expects().anyNumberOfTimes.returning(networkSignal)
+
+      (loader.memoryCache _).expects().anyNumberOfTimes.returning(imageCache)
+      (loader.hasCachedBitmap _).expects(asset, req).anyNumberOfTimes.returning(Future.successful(false))
+      (loader.loadBitmap _).expects(asset, req, *).anyNumberOfTimes.onCall { _ =>
+        networkSignal.currentValue match {
+          case Some(NetworkMode.WIFI) => CancellableFuture.successful(mockBitmap(asset))
+          case _ => CancellableFuture.failed(DownloadOnWifiOnlyException)
+        }
+      }
+
+      val signal = getSignal(asset, req){
+        case asset.id => Some(asset)
+        case _ => None
+      }
+
+      result(networkSignal.filter(_ == NetworkMode._4G).head) // waiting for the network signal to settle down
+      result(signal.filter(_.isEmpty).head)
 
       networkSignal ! NetworkMode.WIFI // switching to wifi should trigger reloading
+      result(networkSignal.filter(_ == NetworkMode.WIFI).head)
+      result(signal.filter(_ == res).head)
 
-      listener.checkLoaded(result)
+      awaitAllTasks
     }
   }
 //
