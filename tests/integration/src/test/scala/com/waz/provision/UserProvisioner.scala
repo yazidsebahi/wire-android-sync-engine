@@ -40,7 +40,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
   val internalBackend = new InternalBackendClient(global.client, global.backend)
 
   def register(): Either[ErrorResponse, UserInfo] = Await.result(retryWithBackOff() {
-    regClient.register(AccountId(), EmailCredentials(EmailAddress(email), Some(pass)), name, None) } .flatMap {
+    regClient.register(AccountData(email = Some(EmailAddress(email)), password = Some(pass)), name, None) } .flatMap {
       case Right((info, cookie)) => internalBackend.activateEmail(EmailAddress(email)) map (_ => Right(info))
       case Left(error) => CancellableFuture.successful(Left(error))
     }, 60.seconds)
@@ -58,7 +58,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
     loop(0, 1.second)
   }
 
-  lazy val client = new ZNetClient(global, email, pass)
+  lazy val client = new ZNetClient(null, null, null)
   lazy val userClient = new UsersClient(client)
   lazy val connClient = new ConnectionsClient(client)
   lazy val convClient = new ConversationsClient(client)

@@ -39,7 +39,7 @@ class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   val (user, password) = InternalCredentials.backend(backend)
-  private val baseUri = Some(URI.parse(backend.baseUrl))
+  private val baseUri = Some(backend.baseUrl)
 
   def activateEmail(email: EmailAddress): ErrorOrResponse[Unit] = {
     val request = Request.Get(

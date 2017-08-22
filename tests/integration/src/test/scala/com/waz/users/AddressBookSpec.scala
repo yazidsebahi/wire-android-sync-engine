@@ -45,7 +45,7 @@ import scala.concurrent.duration._
 class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with ApiSpec with EmailClientSuite { test =>
   @volatile var usersInAddressBook = Seq.empty[UserId]
 
-  override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
+  override def backendHostname: String = testBackend.baseUrl.toString.stripPrefix("https://")
 
   lazy val baseName = s"Android Test User ${randomUUID}"
 

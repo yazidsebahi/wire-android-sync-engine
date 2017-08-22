@@ -49,53 +49,53 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   }
   lazy val asyncClient = globalModule.client
-  lazy val loginClient = new LoginClient(asyncClient, backend)
-  lazy val auth = new AuthenticationManager(loginClient, EmailAddress(provisionedEmail("auto1")), "auto1_pass")
+//  lazy val loginClient = new LoginClient(asyncClient, backend)
+//  lazy val auth = new AuthenticationManager(loginClient, EmailAddress(provisionedEmail("auto1")), "auto1_pass")
 
   feature("Websocket connection") {
 
-    scenario("Connect with basic client") {
-      val token = Await.result(auth.currentToken(), 5.seconds)
-      var webSocket = None : Option[WebSocket]
-
-      val req = token.right.get.prepare(new AsyncHttpGet(backend.websocketUrl))
-      req.setHeader("Accept-Encoding", "identity")
-      import scala.concurrent.ExecutionContext.Implicits.global
-      Await.result(asyncClient.wrapper.map(unwrap), 1.second).websocket(req, null, new WebSocketConnectCallback {
-        override def onCompleted(ex: Exception, socket: WebSocket): Unit = {
-          println(s"WebSocket request finished, ex: $ex, socket: $socket")
-          webSocket = Option(socket)
-        }
-      })
-
-      withDelay {
-        webSocket should be('defined)
-      }
-      webSocket.foreach(_.close())
-    }
-
-    scenario("Receive name change update") {
-      val latch = new CountDownLatch(1)
-      
-      val manager = new WebSocketClient(context, asyncClient, Uri.parse(backend.websocketUrl), auth)
-      import EventContext.Implicits.global
-      manager.onMessage {
-        case resp @ JsonObjectResponse(js) if js.toString.contains("auto1_updated") =>
-          println(s"Received response from websocket: '$resp'")
-          latch.countDown()
-        case resp =>
-          println(s"Received unexpected websocket response $resp")
-      }
-
-      val c = new ZNetClient(new BasicCredentials(EmailAddress(provisionedEmail("auto1")), Some("auto1_pass")), asyncClient, backend, loginClient)
-      Await.result(c(Put("/self", Json("name" -> "auto1_updated"))), 10.seconds) match {
-        case Response(SuccessHttpStatus(), _, _) => //fine
-        case resp => fail(s"Received unexpected response when trying to update the name: $resp")
-      }
-
-      latch.await(5, TimeUnit.SECONDS) shouldEqual true
-
-      manager.close()
-    }
+//    scenario("Connect with basic client") {
+//      val token = Await.result(auth.currentToken(), 5.seconds)
+//      var webSocket = None : Option[WebSocket]
+//
+//      val req = token.right.get.prepare(new AsyncHttpGet(backend.websocketUrl))
+//      req.setHeader("Accept-Encoding", "identity")
+//      import scala.concurrent.ExecutionContext.Implicits.global
+//      Await.result(asyncClient.wrapper.map(unwrap), 1.second).websocket(req, null, new WebSocketConnectCallback {
+//        override def onCompleted(ex: Exception, socket: WebSocket): Unit = {
+//          println(s"WebSocket request finished, ex: $ex, socket: $socket")
+//          webSocket = Option(socket)
+//        }
+//      })
+//
+//      withDelay {
+//        webSocket should be('defined)
+//      }
+//      webSocket.foreach(_.close())
+//    }
+//
+//    scenario("Receive name change update") {
+//      val latch = new CountDownLatch(1)
+//
+//      val manager = new WebSocketClient(context, asyncClient, Uri.parse(backend.websocketUrl), auth)
+//      import EventContext.Implicits.global
+//      manager.onMessage {
+//        case resp @ JsonObjectResponse(js) if js.toString.contains("auto1_updated") =>
+//          println(s"Received response from websocket: '$resp'")
+//          latch.countDown()
+//        case resp =>
+//          println(s"Received unexpected websocket response $resp")
+//      }
+//
+//      val c = new ZNetClient(new BasicCredentials(EmailAddress(provisionedEmail("auto1")), Some("auto1_pass")), asyncClient, backend, loginClient)
+//      Await.result(c(Put("/self", Json("name" -> "auto1_updated"))), 10.seconds) match {
+//        case Response(SuccessHttpStatus(), _, _) => //fine
+//        case resp => fail(s"Received unexpected response when trying to update the name: $resp")
+//      }
+//
+//      latch.await(5, TimeUnit.SECONDS) shouldEqual true
+//
+//      manager.close()
+//    }
   }
 }

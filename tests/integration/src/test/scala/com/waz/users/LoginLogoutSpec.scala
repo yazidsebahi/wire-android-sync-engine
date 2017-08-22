@@ -56,10 +56,10 @@ class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with 
       awaitUi(3.seconds)
 
       @volatile var email = ""
-      api.login(CredentialsFactory.emailCredentials(provisionedEmail("auto2"), "auto2_pass"), new LoginListener {
-        override def onSuccess(user: Self): Unit = email = user.getEmail
-        override def onFailed(code: Int, message: String, label: String): Unit = email = message
-      })
+//      api.login(CredentialsFactory.emailCredentials(provisionedEmail("auto2"), "auto2_pass"), new LoginListener {
+//        override def onSuccess(user: Self): Unit = email = user.getEmail
+//        override def onFailed(code: Int, message: String, label: String): Unit = email = message
+//      })
       withDelay {
         email shouldEqual provisionedEmail("auto2") // FIXME returns "auto1" sometimes
         convs.size should be > 0
@@ -106,7 +106,7 @@ class LoginLogoutSpec extends FeatureSpec with Matchers with GivenWhenThen with 
       invalidateCookies.await() shouldEqual true
 
       accounts.storage.update(zmessaging.accountId, _.copy(password = None)).await()
-      zmessaging.zNetClient.auth.invalidateToken()
+      zmessaging.auth.invalidateToken()
 
       api.search().getRecommendedPeople("test", 10, Array.empty)
 

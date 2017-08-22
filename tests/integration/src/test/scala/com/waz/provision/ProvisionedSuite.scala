@@ -37,7 +37,7 @@ trait ProvisionedSuite extends EmailClientSuite { suite: Suite =>
   val provisionFile: String
   def globalModule: GlobalModule
 
-  override def backendHostname: String = globalModule.backend.baseUrl.stripPrefix("https://")
+  override def backendHostname: String = globalModule.backend.baseUrl.toString.stripPrefix("https://")
 
   val hex = Random.nextLong().toHexString
 

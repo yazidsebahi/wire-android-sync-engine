@@ -112,9 +112,9 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
 
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), zNetClient.auth) {
+      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), auth) {
         override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None
@@ -152,7 +152,9 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
   class MockedZMessagingFactory(global: GlobalModule) extends ZMessagingFactory(global) {
 
-    override def client(credentials: CredentialsHandler): ZNetClient = new EmptyClient
+    override def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
+
+    override def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
 
     override def usersClient(client: ZNetClient): UsersClient = new MockedUsersClient(client)
 
@@ -183,13 +185,12 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModule(context, testBackend) {
     override lazy val client: AsyncClientImpl = testClient
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
-    override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
-      override def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
+    override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
+      override def login(user: AccountData): CancellableFuture[LoginResult] = suite.login(user)
       override def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
-
     }
     override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
-      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = suite.register(user, credentials, name, accentId)
+      override def register(user: AccountData, name: String, accentId: Option[Int]) = suite.register(user, name, accentId)
       override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
       override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCall(phone, kindOfAccess)
 
@@ -241,10 +242,10 @@ trait MockedGcm {
 
 trait MockedClient { test: ApiSpec =>
 
-  def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
+  def login(user: AccountData): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
   def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
-  def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] =
-    successful(Right((UserInfo(UserId(), Some(name), accentId, credentials.maybeEmail, credentials.maybePhone, None), Some(Cookie("cookie")))))
+  def register(user: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] =
+    successful(Right((UserInfo(UserId(), Some(name), accentId, user.email, user.phone, None), Some(Cookie("cookie")))))
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = successful(Right(()))
