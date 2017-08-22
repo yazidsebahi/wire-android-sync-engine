@@ -231,10 +231,6 @@ class AccountsService(val global: GlobalModule) {
     }
   }
 
-
-  //New account methods
-
-  // Phone
   def loginPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
 
     def requestCode(shouldCall: Boolean): Future[Either[ErrorResponse, Unit]] = {
@@ -348,7 +344,6 @@ class AccountsService(val global: GlobalModule) {
     } yield req
   }
 
-  // Generic
   private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
     loginClient.login(accountData).future.flatMap {
       case Right((token, cookie)) =>
@@ -376,7 +371,6 @@ class AccountsService(val global: GlobalModule) {
     }
   }
 
-  // Invitations
   def retrieveInvitationDetails(invitation: PersonalToken): Future[InvitationDetailsResponse] = invitation match {
     case token: PersonalInvitationToken =>
       regClient.getInvitationDetails(token).future.map {

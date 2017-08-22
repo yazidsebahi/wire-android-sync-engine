@@ -17,7 +17,6 @@
  */
 package com.waz.service
 
-import com.waz.api.impl.{EmailCredentials, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient
 import com.waz.client.RegistrationClientImpl.ActivateResult
@@ -27,7 +26,6 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestGlobalPreferences
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.{EventStream, Signal}
-import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.LoginClient
 
@@ -291,7 +289,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
     (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule))
     (globalModule.context _).expects().anyNumberOfTimes().returning(null)
-    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new ZmsLifecycle)
+    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new ZmsLifecycleImpl)
 
     (phoneNumbers.normalize _).expects(*).anyNumberOfTimes().onCall { p: PhoneNumber => Future.successful(Some(p)) }
 

@@ -51,8 +51,8 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
   val defaultDuration = 5.seconds
 
-  def accountData(token: PushToken): AccountData = AccountData(accountId, Left({}), None, "", None, None, Some(token))
-  def accountData(token: Option[PushToken]): AccountData = AccountData(accountId, Left({}), None, "", None, None, token)
+  def accountData(token: PushToken): AccountData = AccountData(accountId, Left({}), None, None, None, Some(token))
+  def accountData(token: Option[PushToken]): AccountData = AccountData(accountId, Left({}), None, None, None, token)
 
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
