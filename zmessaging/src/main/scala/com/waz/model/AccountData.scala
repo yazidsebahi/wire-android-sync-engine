@@ -85,6 +85,10 @@ case class AccountData(id:              AccountId                       = Accoun
        | regWaiting:      $regWaiting
        | code:            $code
        | name:            $name
+       | invitationToken  $invitationToken
+       | firstLogin       $firstLogin
+       | _selfPermissions ${_selfPermissions}
+       | _copyPermissions ${_copyPermissions}
     """.stripMargin
 
 

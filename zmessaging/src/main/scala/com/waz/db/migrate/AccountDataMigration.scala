@@ -26,12 +26,12 @@ object AccountDataMigration {
   }
 
   lazy val v20 = { implicit db: SQLiteDatabase =>
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN pending_email TEXT DEFAULT ''")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN pending_phone TEXT DEFAULT ''")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN reg_waiting BOOL DEFAULT false")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN code TEXT DEFAULT ''")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN invitation_token TEXT DEFAULT ''")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN name TEXT DEFAULT ''")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN first_login BOOL DEFAULT true")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN pending_email TEXT DEFAULT NULL")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN pending_phone TEXT DEFAULT NULL")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN reg_waiting INTEGER DEFAULT 0")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN code TEXT DEFAULT NULL")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN invitation_token TEXT DEFAULT NULL")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN name TEXT DEFAULT NULL")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN first_login INTEGER DEFAULT 1")
   }
 }

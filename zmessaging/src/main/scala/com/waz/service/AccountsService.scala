@@ -176,19 +176,6 @@ class AccountsService(val global: GlobalModule) {
     } yield {}
   }
 
-  private def switchAccount(credentials: Credentials) = {
-    verbose(s"switchAccount($credentials)")
-    for {
-      _          <- logout(flushCredentials = false)
-      normalized <- normalizeCredentials(credentials)
-      matching   <- storage.find(normalized)
-      accountId  =  matching.flatMap(_.authorized(normalized)).map(_.id)
-      _          <- setAccount(accountId)
-      manager    <- accountId.fold(Future successful Option.empty[AccountManager]) { id => getOrCreateAccountManager(id).map(Some(_)) }
-    } yield
-      (normalized, matching, manager)
-  }
-
   def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
 
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
@@ -205,13 +192,6 @@ class AccountsService(val global: GlobalModule) {
     CancellableFuture.lift(phoneNumbers.normalize(phone.phone)) flatMap { normalizedPhone =>
       regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification)
     }
-
-  private def normalizeCredentials(credentials: Credentials): Future[Credentials] = credentials match {
-    case cs @ PhoneCredentials(p, _, _) =>
-      phoneNumbers.normalize(p) map { normalized => cs.copy(phone = normalized.getOrElse(p)) }
-    case other =>
-      Future successful other
-  }
 
   //TODO can be removed after a while
   private val flushOtherCredentials = {
@@ -246,9 +226,10 @@ class AccountsService(val global: GlobalModule) {
     }
 
     for {
-      acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
+      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
+      acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc = acc.copy(pendingPhone = Some(number), phone = None, code = None, regWaiting = false)
+      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), phone = None, code = None, regWaiting = false)
       _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
       _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
     } yield req
@@ -264,9 +245,10 @@ class AccountsService(val global: GlobalModule) {
     }
 
     for {
-      acc <- storage.findByPhone(number).map(_.getOrElse(AccountData()))
+      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
+      acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc = acc.copy(pendingPhone = Some(number), phone = None, code = None, regWaiting = true)
+      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), phone = None, code = None, regWaiting = true)
       _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
       _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
     } yield req match {
@@ -289,8 +271,8 @@ class AccountsService(val global: GlobalModule) {
 
     for {
       Some(acc) <- storage.get(accountId)
-      Some(normalized) <- acc.pendingPhone.fold2(Future.successful(None), phone => normalizeCredentials(PhoneCredentials(phone, Some(code))).map(Option(_)))
-      req <- verifyCodeRequest(normalized.asInstanceOf[PhoneCredentials], acc.id)
+      Some(creds) <- acc.pendingPhone.fold2(Future.successful(None), phone => Future.successful(PhoneCredentials(phone, Some(code))).map(Option(_)))
+      req <- verifyCodeRequest(creds.asInstanceOf[PhoneCredentials], acc.id)
     } yield req
 
   }
