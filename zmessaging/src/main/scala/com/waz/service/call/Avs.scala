@@ -64,19 +64,16 @@ class AvsImpl() extends Avs {
 
   override def registerAccount(cs: CallingService) = available.flatMap { _ =>
     verbose(s"Initialising calling for: ${cs.selfUserId} and current client: ${cs.clientId}")
-    val callingReady = Promise[WCall]()
 
-    var wCall: Option[Pointer] = None
-    wCall = Some(Calling.wcall_create(
+    val callingReady = Promise[Unit]()
+
+    val wCall = Calling.wcall_create(
       cs.selfUserId.str,
       cs.clientId.str,
       new ReadyHandler {
-        override def onReady(version: Int, arg: Pointer) =
-          wCall match {
-            case Some(w) => callingReady.success(w)
-            case None    => callingReady.tryFailure(new IllegalStateException(s"wCall was null"))
-          }
-
+        override def onReady(version: Int, arg: Pointer) = {
+          callingReady.success({})
+        }
       },
       new SendHandler {
         override def onSend(ctx: Pointer, convId: String, userid_self: String, clientid_self: String, userid_dest: String, clientid_dest: String, data: Pointer, len: Size_t, transient: Boolean, arg: Pointer) = {
@@ -108,30 +105,30 @@ class AvsImpl() extends Avs {
           cs.onMetricsReady(RConvId(convId), metricsJson)
       },
       null
-    ))
+    )
 
-    callingReady.future
-  }.map( wCall => {
-    //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
-    Calling.wcall_set_video_state_handler(wCall, new VideoReceiveStateHandler {
-      override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = cs.onVideoReceiveStateChanged(VideoReceiveState(state))
-    })
+    callingReady.future.map { _ =>
+      //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
+      Calling.wcall_set_video_state_handler(wCall, new VideoReceiveStateHandler {
+        override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = cs.onVideoReceiveStateChanged(VideoReceiveState(state))
+      })
 
-    Calling.wcall_set_audio_cbr_enabled_handler(wCall, new BitRateStateHandler {
-      override def onBitRateStateChanged(arg: Pointer) = cs.onBitRateStateChanged()
-    })
+      Calling.wcall_set_audio_cbr_enabled_handler(wCall, new BitRateStateHandler {
+        override def onBitRateStateChanged(arg: Pointer) = cs.onBitRateStateChanged()
+      })
 
-    Calling.wcall_set_group_changed_handler(wCall, new GroupChangedHandler {
-      override def onGroupChanged(convId: String, arg: Pointer) = {
-        //TODO change this set to an ordered set to for special audio effects?
-        val mStruct = wcall_get_members(wCall, convId)
-        val members = if (mStruct.membc.intValue() > 0) mStruct.toArray(mStruct.membc.intValue()).map(u => UserId(u.userid)).toSet else Set.empty[UserId]
-        wcall_free_members(mStruct.getPointer)
-        cs.onGroupChanged(RConvId(convId), members)
-      }
-    })
-    wCall
-  })
+      Calling.wcall_set_group_changed_handler(wCall, new GroupChangedHandler {
+        override def onGroupChanged(convId: String, arg: Pointer) = {
+          //TODO change this set to an ordered set to for special audio effects?
+          val mStruct = wcall_get_members(wCall, convId)
+          val members = if (mStruct.membc.intValue() > 0) mStruct.toArray(mStruct.membc.intValue()).map(u => UserId(u.userid)).toSet else Set.empty[UserId]
+          wcall_free_members(mStruct.getPointer)
+          cs.onGroupChanged(RConvId(convId), members)
+        }
+      })
+      wCall
+    }
+  }
 
   private def withAvsReturning[A](onSuccess: => A, onFailure: => A): Future[A] = available.map(_ => onSuccess).recover {
     case err =>
