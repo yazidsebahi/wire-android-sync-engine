@@ -41,6 +41,7 @@ case class ErrorResponse(code: Int, message: String, label: String) extends com.
 
 object ErrorResponse {
 
+  val Forbidden = 403
   val InternalErrorCode = 499
   val CancelledCode = 498
   val UnverifiedCode = 497
@@ -50,6 +51,7 @@ object ErrorResponse {
   val InternalError = ErrorResponse(InternalErrorCode, "InternalError", "")
   val Cancelled = ErrorResponse(CancelledCode, "Cancelled", "")
   val Unverified = ErrorResponse(UnverifiedCode, "Unverified", "")
+  val PasswordExists = ErrorResponse(Forbidden, "Forbidden", "password-exists")
 
   implicit lazy val Decoder: JsonDecoder[ErrorResponse] = new JsonDecoder[ErrorResponse] {
     import JsonDecoder._

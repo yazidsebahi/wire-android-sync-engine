@@ -20,10 +20,11 @@ package com.waz.service
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.waz.service.BackendConfig.FirebaseOptions
+import com.waz.utils.wrappers.URI
 
 import scala.util.Try
 
-case class BackendConfig(baseUrl: String, websocketUrl: String, firebaseOptions: FirebaseOptions, environment: String) {
+case class BackendConfig(baseUrl: URI, websocketUrl: String, firebaseOptions: FirebaseOptions, environment: String) {
   val pushSenderId = firebaseOptions.pushSenderId
 }
 
@@ -44,10 +45,10 @@ object BackendConfig {
   val StagingFirebaseOptions = FirebaseOptions("723990470614", "1:723990470614:android:9a1527f79aa62284", "AIzaSyAGCoJGUtDBLJJiQPLxHQRrdkbyI0wlbo8")
   val ProdFirebaseOptions    = FirebaseOptions("782078216207", "1:782078216207:android:d3db2443512d2055", "AIzaSyBdYVv2f-Y7JJmHVmDNCKgWvX6Isa8rAGA")
 
-  val StagingBackend = BackendConfig("https://staging-nginz-https.zinfra.io", "https://staging-nginz-ssl.zinfra.io/await", StagingFirebaseOptions, "staging")
-  val ProdBackend    = BackendConfig("https://prod-nginz-https.wire.com",     "https://prod-nginz-ssl.wire.com/await",     ProdFirebaseOptions,    "prod")
+  val StagingBackend = BackendConfig(URI.parse("https://staging-nginz-https.zinfra.io"), "https://staging-nginz-ssl.zinfra.io/await", StagingFirebaseOptions, "staging")
+  val ProdBackend    = BackendConfig(URI.parse("https://prod-nginz-https.wire.com"),     "https://prod-nginz-ssl.wire.com/await",     ProdFirebaseOptions,    "prod")
 
   lazy val byName = Seq(StagingBackend, ProdBackend).map(b => b.environment -> b).toMap
 
-  def apply(baseUrl: String): BackendConfig = BackendConfig(baseUrl, "", StagingFirebaseOptions, "") // XXX only use for testing!
+  def apply(baseUrl: String): BackendConfig = BackendConfig(URI.parse(baseUrl), "", StagingFirebaseOptions, "") // XXX only use for testing!
 }

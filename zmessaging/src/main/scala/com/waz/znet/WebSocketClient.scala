@@ -242,8 +242,8 @@ object WebSocketClient {
 
   val defaultBackoff = new ExponentialBackoff(250.millis, 5.minutes)
 
-  def apply(context: Context, client: ZNetClient, pushUri: => Uri) =
-    new WebSocketClient(context, client.client.asInstanceOf[AsyncClientImpl], pushUri, client.auth)
+  def apply(context: Context, client: ZNetClient, auth: AuthenticationManager, pushUri: => Uri) =
+    new WebSocketClient(context, client.client.asInstanceOf[AsyncClientImpl], pushUri, auth)
 
   trait Disconnect
   object Disconnect {

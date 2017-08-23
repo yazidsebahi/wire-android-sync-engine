@@ -79,20 +79,6 @@ object Preferences {
 
   object Preference {
 
-    //TODO should be able to eventually get rid of apply and inMemory...
-    def apply[A: PrefCodec](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
-      import Threading.Implicits.Background
-      override def apply()      = load
-      override def update(v: A) = save(v) map { _ => signal ! v }
-    }
-
-    def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
-      import Threading.Implicits.Background
-      private var value = defaultValue
-      override def apply()      = Future { value }
-      override def update(v: A) = Future { value = v; signal ! v }
-    }
-
     trait PrefCodec[A] {
       def encode(v: A): String
       def decode(str: String): A
@@ -135,6 +121,7 @@ object Preferences {
     override def toString = s"$str (def: $default)"
   }
 }
+
 
 /**
   * Global preference based on Android SharedPreferences. Note, here we need to save preferences to the correct primitive

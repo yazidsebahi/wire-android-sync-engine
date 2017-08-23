@@ -46,7 +46,7 @@ import scala.concurrent.duration._
       })
     }
 
-    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
+    override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
       override val connected = wsConnected
     }
   }

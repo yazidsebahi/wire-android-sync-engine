@@ -30,7 +30,14 @@ import com.waz.threading.SerialDispatchQueue
 import scala.concurrent.Future
 import scala.util.Try
 
-class PhoneNumberService(context: Context, permissions: PermissionsService) {
+trait PhoneNumberService {
+  def defaultRegion: String
+  def myPhoneNumber: Future[Option[PhoneNumber]]
+  def normalize(phone: PhoneNumber): Future[Option[PhoneNumber]]
+  def normalizeNotThreadSafe(phone: PhoneNumber, util: PhoneNumberUtil): Option[PhoneNumber]
+}
+
+class PhoneNumberServiceImpl(context: Context, permissions: PermissionsService) extends PhoneNumberService{
   private implicit val dispatcher = new SerialDispatchQueue(name = "PhoneNumberService")
 
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]

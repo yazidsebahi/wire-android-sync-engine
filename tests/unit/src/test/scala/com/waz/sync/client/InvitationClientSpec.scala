@@ -19,7 +19,7 @@ package com.waz.sync.client
 
 import java.util.Locale
 
-import com.waz.client.RegistrationClient
+import com.waz.client.RegistrationClientImpl
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
@@ -115,7 +115,7 @@ import org.threeten.bp.Instant
     }
   )
 
-  lazy val registrationClient = new RegistrationClient(new EmptyAsyncClientImpl {
+  lazy val registrationClient = new RegistrationClientImpl(new EmptyAsyncClientImpl {
     override def apply(request: Request[_]): CancellableFuture[Response] =
       CancellableFuture.successful(nextResponse)
   }, BackendConfig.StagingBackend)

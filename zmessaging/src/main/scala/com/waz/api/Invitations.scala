@@ -56,6 +56,11 @@ object Invitations {
     def onRetrievalFailed(response: ErrorResponse): Unit
   }
 
+  trait InvitationDetailsResponse
+  case class EmailAddressResponse(nameOfInvitee: String, emailAddress: String) extends InvitationDetailsResponse
+  case class PhoneNumberResponse(nameOfInvitee: String, emailAddress: String) extends InvitationDetailsResponse
+  case class RetrievalFailed(response: ErrorResponse) extends InvitationDetailsResponse
+
 }
 
 trait Invitations {

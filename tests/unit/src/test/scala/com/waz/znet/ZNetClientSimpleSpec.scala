@@ -50,11 +50,7 @@ import scala.util.Random
     ZMessaging.context = Robolectric.application
     wireMockServer.start()
     configureFor("localhost", wireMockPort)
-    client = new ZNetClient(
-      new BasicCredentials(EmailAddress(email), Some(password)),
-      new AsyncClientImpl,
-      BackendConfig("http://localhost:" + wireMockPort),
-      new LoginClient(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort)))
+    client = new ZNetClient(None, new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl)
   }
 
   after {

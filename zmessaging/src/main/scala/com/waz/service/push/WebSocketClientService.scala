@@ -28,7 +28,7 @@ import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.znet.WebSocketClient.Disconnect
-import com.waz.znet.{WebSocketClient, ZNetClient}
+import com.waz.znet.{AuthenticationManager, WebSocketClient, ZNetClient}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -37,6 +37,7 @@ import scala.concurrent.duration._
 class WebSocketClientService(context:     Context,
                              lifecycle:   ZmsLifecycle,
                              netClient:   ZNetClient,
+                             auth:        AuthenticationManager,
                              val network: DefaultNetworkModeService,
                              backend:     BackendConfig,
                              clientId:    ClientId,
@@ -135,7 +136,7 @@ class WebSocketClientService(context:     Context,
   private def webSocketUri(clientId: ClientId) =
     Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
-  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, webSocketUri(clientId))
+  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, auth, webSocketUri(clientId))
 }
 
 object WebSocketClientService {

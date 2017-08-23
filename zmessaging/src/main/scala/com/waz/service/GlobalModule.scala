@@ -24,7 +24,7 @@ import com.waz.api.ZmsVersion
 import com.waz.bitmap.BitmapDecoder
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.cache.CacheService
-import com.waz.client.RegistrationClient
+import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.content._
 import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call.{Avs, AvsImpl}
@@ -34,13 +34,54 @@ import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
 import com.waz.utils.Cache
-import com.waz.utils.wrappers.{Context, GoogleApi, GoogleApiImpl}
+import com.waz.utils.wrappers.{Context, GoogleApi, GoogleApiImpl, URI}
+import com.waz.znet.Response.ResponseBodyDecoder
 import com.waz.znet._
 
 import scala.concurrent.Future
 
+trait GlobalModule {
+  def context: AContext
+  def backend: BackendConfig
 
-class GlobalModule(val context: AContext, val backend: BackendConfig) { global =>
+  def prefs: GlobalPreferences
+  def googleApi: GoogleApi
+  def storage: Database
+  def metadata: MetaDataService
+  def cache: CacheService
+  def bitmapDecoder: BitmapDecoder
+  def trimmingLruCache: Cache[Key, Entry]
+  def imageCache: MemoryImageCache
+  def network: DefaultNetworkModeService
+  def phoneNumbers: PhoneNumberService
+  def timeouts: Timeouts
+  def permissions: PermissionsService
+  def avs: Avs
+  def reporting: GlobalReportingService
+  def decoder: ResponseBodyDecoder
+  def loginClient: LoginClient
+  def regClient: RegistrationClient
+  def globalAssetClient:AssetClient
+  def globalLoader: AssetLoader
+  def videoTranscoder: VideoTranscoder
+  def audioTranscoder: AudioTranscoder
+  def loaderService: AssetLoaderService
+  def cacheCleanup: CacheCleaningService
+  def accountsStorage: AccountsStorage
+  def teamsStorage: TeamsStorageImpl
+  def recordingAndPlayback: GlobalRecordAndPlayService
+  def tempFiles: TempFileService
+  def clientWrapper: Future[ClientWrapper]
+  def client: AsyncClientImpl
+  def globalClient: ZNetClient
+  def imageLoader: ImageLoader
+  def blacklistClient: VersionBlacklistClient
+  def blacklist: VersionBlacklistService
+  def factory: ZMessagingFactory
+  def lifecycle: ZmsLifecycle
+}
+
+class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extends GlobalModule { global =>
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
@@ -55,7 +96,7 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val imageCache:          MemoryImageCache                 = wire[MemoryImageCache]
 
   lazy val network                                               = wire[DefaultNetworkModeService]
-  lazy val phoneNumbers:        PhoneNumberService               = wire[PhoneNumberService]
+  lazy val phoneNumbers:        PhoneNumberService               = wire[PhoneNumberServiceImpl]
   lazy val timeouts                                              = wire[Timeouts]
   lazy val permissions:         PermissionsService               = wire[PermissionsService]
   lazy val avs:                 Avs                              = wire[AvsImpl]
@@ -63,11 +104,11 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val reporting                                             = wire[GlobalReportingService]
 
   lazy val decoder                                               = Response.CacheResponseBodyDecoder(cache)
-  lazy val loginClient                                           = wire[LoginClient]
-  lazy val regClient:           RegistrationClient               = wire[RegistrationClient]
+  lazy val loginClient:         LoginClient                      = wire[LoginClientImpl]
+  lazy val regClient:           RegistrationClient               = wire[RegistrationClientImpl]
 
   //Not to be used in zms instances
-  lazy val globalAssetClient:   AssetClient                      = AssetClient(new ZNetClient(this, "", ""))
+  lazy val globalAssetClient:   AssetClient                      = AssetClient(globalClient)
   lazy val globalLoader:        AssetLoader                      = wire[AssetLoaderImpl]
   //end of warning...
 
@@ -85,7 +126,7 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
   lazy val client:              AsyncClientImpl                  = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
 
-  lazy val globalClient                                          = new ZNetClient(global, "", "")
+  lazy val globalClient                                          = new ZNetClient(None, client, URI.parse(""))
   lazy val imageLoader:         ImageLoader                      = new ImageLoaderImpl(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
 
   lazy val blacklistClient                                       = new VersionBlacklistClient(globalClient, backend)

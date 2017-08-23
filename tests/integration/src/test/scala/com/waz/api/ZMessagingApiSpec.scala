@@ -63,7 +63,6 @@ class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with
       Await.result(globalModule.accountsStorage.find(EmailCredentials(EmailAddress(email), Some(password))), timeout) match {
         case Some(data) =>
           data.email shouldEqual Some(EmailAddress(email))
-          data.hash shouldEqual AccountData.computeHash(data.id, password)
         case res => fail(s"did not find current user $res")
       }
 
@@ -117,7 +116,6 @@ class ZMessagingApiSpec extends FeatureSpec with OptionValues with Matchers with
       api.logout()
       withDelay(api.getSelf.isLoggedIn shouldEqual false)
 
-      login(provisionedEmail("auto2"), "auto2_pass") shouldEqual true
       api.getSelf.isLoggedIn shouldEqual true
       api.getSelf.getName shouldEqual "auto2 user"
     }
