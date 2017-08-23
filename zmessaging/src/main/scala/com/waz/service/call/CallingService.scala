@@ -38,7 +38,7 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.utils.wrappers.Context
-import com.waz.utils.{RichDate, RichInstant}
+import com.waz.utils.{RichDate, RichInstant, returningF}
 import com.waz.zms.CallWakeService
 import org.threeten.bp.{Duration, Instant}
 
@@ -75,15 +75,12 @@ class CallingService(val selfUserId:      UserId,
   val otherSideCBR   = Signal(false) // by default we assume the call is VBR
 
   val onMetricsAvailable = EventStream[String]()
-
+  
   //exposed for tests only
-  lazy val wCall = {
-    val call = avs.registerAccount(this) // unable to use `returning` because of scala.reflect.internal.FatalError:
-                                         // unexpected UnApply scala.util.control.NonFatal.unapply(<unapply-selector>) <unapply> ((e @ _))
+  lazy val wCall = returningF(avs.registerAccount(this)) { call =>
     call.onFailure {
       case NonFatal(e) => error(s"Failed to initialise WCall for user: $selfUserId", e)
     }
-    call
   }
 
   Option(ZMessaging.currentAccounts).foreach( _.loggedInAccounts.map(_.map(_.id)).map(_.contains(account)) {
