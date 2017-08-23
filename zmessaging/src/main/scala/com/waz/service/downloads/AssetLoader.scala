@@ -67,20 +67,21 @@ class AssetLoaderImpl(context:         Context,
                       videoTranscoder: VideoTranscoder,
                       cache:           CacheService) extends AssetLoader {
 
-  private val downloadEnabled = (for {
-      //Will be set by UserPreferences when available, defaults to always download (false) otherwise.
-      downloadAlways <- Option(ZMessaging.currentAccounts).map(_.activeZms).map {
-        _.flatMap {
-          case None => Signal.const(false)
-          case Some(z) => z.userPrefs.preference(DownloadImagesAlways).signal
-        }
-      }.getOrElse {
-        warn("No CurrentAccounts available - this may be being called too early...")
-        Signal.const(true)
-      }
-      onWifi <- network.networkMode.map(_ == NetworkMode.WIFI)
-    } yield downloadAlways || onWifi)
-      .disableAutowiring()
+  private lazy val downloadAlways = Option(ZMessaging.currentAccounts).map(_.activeZms).map {
+    _.flatMap {
+      case None => Signal.const(false)
+      case Some(z) => z.userPrefs.preference(DownloadImagesAlways).signal
+    }
+  }.getOrElse {
+    warn("No CurrentAccounts available - this may be being called too early...")
+    Signal.const(true)
+  }
+
+  private lazy val downloadEnabled = (for {
+  //Will be set by UserPreferences when available, defaults to always download (false) otherwise.
+    downloadAlways <- downloadAlways
+    onWifi         <- network.networkMode.map(_ == NetworkMode.WIFI)
+  } yield downloadAlways || onWifi).disableAutowiring()
 
   import AssetLoader._
   import com.waz.threading.Threading.Implicits.Background
@@ -95,11 +96,11 @@ class AssetLoaderImpl(context:         Context,
       case _ if asset.mime == Mime.Audio.PCM => transcodeAudio(asset, callback)
       case _ => CancellableFuture.lift(cache.getEntry(asset.cacheKey)).flatMap {
         case Some(cd) => CancellableFuture.successful(cd)
-        case None if asset.isDownloadable =>
-          if (force || downloadEnabled.currentValue.exists(identity))
-            download(asset, callback)
-          else
-            CancellableFuture.failed(DownloadOnWifiOnlyException)
+        case None if asset.isDownloadable && force => download(asset, callback)
+        case None if asset.isDownloadable => CancellableFuture.lift(downloadEnabled.head).flatMap {
+          case true => download(asset, callback)
+          case false => CancellableFuture.failed(DownloadOnWifiOnlyException)
+        }
         case _ =>
           (asset.mime, asset.source) match {
             case (Mime.Video(), Some(uri)) => transcodeVideo(asset.cacheKey, asset.mime, asset.name, uri, callback)

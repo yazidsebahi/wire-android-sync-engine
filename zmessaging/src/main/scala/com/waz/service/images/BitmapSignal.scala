@@ -20,60 +20,63 @@ package com.waz.service.images
 import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
+import com.waz.api.NetworkMode
 import com.waz.bitmap
 import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.gif.{Gif, GifAnimator}
 import com.waz.cache.LocalData
 import com.waz.model.{AssetData, AssetId, Mime}
+import com.waz.service.{DefaultNetworkModeService, NetworkModeService, ZMessaging}
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
+import com.waz.service.downloads.AssetLoader
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Round, Single}
-import com.waz.utils.events.Signal
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{IoUtils, WeakMemCache}
-import com.waz.utils.wrappers.Bitmap
+import com.waz.utils.wrappers.{Bitmap, EmptyBitmap}
 
 import scala.concurrent.Future
 
-// TODO: restart on network changes if it previously failed
-abstract class BitmapSignal(req: BitmapRequest) extends Signal[BitmapResult] {
-  signal =>
+abstract class BitmapSignal(req: BitmapRequest, network: NetworkModeService) extends Signal[BitmapResult] { signal =>
 
   import BitmapSignal._
 
   private var future = CancellableFuture.successful[Unit](())
+  private lazy val waitForWifi: Unit = network.networkMode {
+    case NetworkMode.WIFI => restart()
+    case _ =>
+  }(EventContext.Global)
 
-  override protected def onWire(): Unit = {
-    if (req.width > 0) {
-      // ignore requests with invalid size
-      future = load(loader(req))
-    } else {
-      warn(s"invalid bitmap request, width <= 0: $req")
-    }
-  }
+  override protected def onWire(): Unit = restart()
 
   protected def loader(req: BitmapRequest): Loader
 
   override protected def onUnwire(): Unit = future.cancel()
 
   private def load(loader: Loader) = {
-    val future = loader.loadCached() flatMap {
-      case Some(data) =>
-        loader.process(data, signal)
-      case None => // will try with download
-        loader.load() flatMap { loader.process(_, signal) }
+    future = loader.loadCached().flatMap {
+      case Some(data) => loader.process(data, signal)
+      case None => loader.load().flatMap { loader.process(_, signal) } // will try with download
     }
     future onFailure {
-      case _: CancelException => // ignore
+      case _: CancelException =>
+      case ex@AssetLoader.DownloadOnWifiOnlyException =>
+        signal publish LoadingFailed(ex)
+        waitForWifi
       case ex =>
         warn("bitmap loading failed", ex)
         signal publish LoadingFailed(ex)
     }
-    future
   }
+
+  private def restart() =
+    if (req.width > 0) load(loader(req))
+    else warn(s"invalid bitmap request, width <= 0: $req") // ignore requests with invalid size
+
 }
 
 object BitmapSignal {
@@ -85,15 +88,18 @@ object BitmapSignal {
   /**
     * @param forceDownload true for images that should be downloaded even when "DownloadImagesAlways" is set to false and the user is not on WIFI (true by default)
     */
-  def apply(asset: AssetData, req: BitmapRequest, service: ImageLoader, assets: AssetStore = EmptyAssetStore, forceDownload: Boolean = true): Signal[BitmapResult] = {
-    if (!asset.isImage) {
-      warn(s"asset is not an image: $asset ")
-      Signal(BitmapResult.Empty)
-    }
-    else {
-      signalCache((asset, req), new AssetBitmapSignal(asset, req, service, assets, forceDownload))
-    }
+  def apply(asset: AssetData,
+            req: BitmapRequest,
+            service: ImageLoader,
+            network: DefaultNetworkModeService,
+            assets: AssetStore = EmptyAssetStore,
+            forceDownload: Boolean = true): Signal[BitmapResult] = {
+    if (!asset.isImage) Signal(BitmapResult.Empty)
+    else signalCache((asset, req), new AssetBitmapSignal(asset, req, service, network, assets, forceDownload))
   }
+
+  def apply(zms: ZMessaging, asset: AssetData, req: BitmapRequest): Signal[BitmapResult] =
+    apply(asset, req, zms.imageLoader, zms.network, zms.assetsStorage.get)
 
   sealed trait Loader {
     type Data
@@ -103,14 +109,14 @@ object BitmapSignal {
   }
 
   object EmptyLoader extends Loader {
-    override type Data = ABitmap
+    override type Data = Bitmap
     override def loadCached() = CancellableFuture.successful(None)
     override def load() = CancellableFuture.successful(bitmap.EmptyBitmap)
-    override def process(result: ABitmap, signal: BitmapSignal) = CancellableFuture.successful(())
+    override def process(result: Bitmap, signal: BitmapSignal) = CancellableFuture.successful(())
   }
 
   class MimeCheckLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore, forceDownload: Boolean) extends Loader {
-    override type Data = Either[ABitmap, Gif]
+    override type Data = Either[Bitmap, Gif]
 
     lazy val gifLoader    = new GifLoader(asset, req, imageLoader, assets, forceDownload)
     lazy val bitmapLoader = new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
@@ -142,15 +148,15 @@ object BitmapSignal {
   }
 
   abstract class BitmapLoader(req: BitmapRequest, imageLoader: ImageLoader) extends Loader {
-    override type Data = ABitmap
+    override type Data = Bitmap
 
     val imageCache = imageLoader.memoryCache
 
     def id: AssetId
 
-    override def process(result: ABitmap, signal: BitmapSignal) = {
-      def generateResult: CancellableFuture[ABitmap] = {
-        if (result == bitmap.EmptyBitmap) CancellableFuture.successful(result)
+    override def process(result: Bitmap, signal: BitmapSignal) = {
+      def generateResult: CancellableFuture[Bitmap] = {
+        if (result == EmptyBitmap) CancellableFuture.successful(result)
         else req match {
           case Round(width, borderWidth, borderColor) => //result will be the square bitmap loaded earlier
             withCache(width) {
@@ -161,13 +167,13 @@ object BitmapSignal {
         }
       }
 
-      def withCache(width: Int)(loader: => CancellableFuture[ABitmap]) = {
+      def withCache(width: Int)(loader: => CancellableFuture[Bitmap]) = {
         imageCache.reserve(id, req, width * width * 2)
         imageCache(id, req, width, loader)
       }
 
       generateResult map {
-        case bitmap.EmptyBitmap => signal publish BitmapResult.Empty
+        case EmptyBitmap => signal publish BitmapResult.Empty
         case bmp => signal publish BitmapLoaded(bmp)
       }
     }
@@ -194,14 +200,14 @@ object BitmapSignal {
 
     override def loadCached() = data flatMap { a =>
       CancellableFuture.lift(imageLoader.hasCachedBitmap(a, initialReq)) flatMap {
-        case true => imageLoader.loadCachedBitmap(a, initialReq).map(bmp => Some(Bitmap.toAndroid(bmp)))
+        case true => imageLoader.loadCachedBitmap(a, initialReq).map(Some(_))
         case false => CancellableFuture.successful(None)
       } recover {
         case e: Throwable => None
       }
     }
 
-    override def load() = data flatMap { imageLoader.loadBitmap(_, initialReq, forceDownload) } map Bitmap.toAndroid
+    override def load() = data flatMap { imageLoader.loadBitmap(_, initialReq, forceDownload) }
   }
 
   class GifLoader(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: AssetStore, forceDownload: Boolean) extends Loader {
@@ -234,7 +240,12 @@ object BitmapSignal {
 // TODO: we could listen for AssetData changes and restart this signal,
 // this isn't really needed currently since ImageAsset will be updated and UI will restart this loading
 // but this could be useful in future, if UI forgets to reload or we could stop requiring them to do so
-class AssetBitmapSignal(asset: AssetData, req: BitmapRequest, imageLoader: ImageLoader, assets: BitmapSignal.AssetStore, forceDownload: Boolean) extends BitmapSignal(req) {
+class AssetBitmapSignal(asset: AssetData,
+                        req: BitmapRequest,
+                        imageLoader: ImageLoader,
+                        network: NetworkModeService,
+                        assets: BitmapSignal.AssetStore,
+                        forceDownload: Boolean) extends BitmapSignal(req, network) {
   signal =>
 
   import BitmapSignal._

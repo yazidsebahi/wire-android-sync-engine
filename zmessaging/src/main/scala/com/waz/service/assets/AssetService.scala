@@ -22,7 +22,7 @@ import java.io._
 import java.util.concurrent.atomic.AtomicReference
 
 import android.content.Context
-import android.graphics.Bitmap
+import android.graphics.{Bitmap => ABitmap}
 import android.os.Environment
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -46,7 +46,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
-import com.waz.utils.wrappers.URI
+import com.waz.utils.wrappers.{Bitmap, URI}
 import com.waz.{PermissionsService, api}
 
 import scala.collection.breakOut

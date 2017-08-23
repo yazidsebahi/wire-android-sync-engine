@@ -43,20 +43,34 @@ import com.waz.utils.{IoUtils, Serialized, returning}
 
 import scala.concurrent.Future
 
-class ImageLoader(context:         Context,
-                  fileCache:       CacheService,
-                  val memoryCache: MemoryImageCache,
-                  bitmapLoader:    BitmapDecoder,
-                  permissions:     PermissionsService,
-                  loadService:     AssetLoaderService,
-                  loader:          AssetLoader) {
+trait ImageLoader {
+  def memoryCache: MemoryImageCache
+  def hasCachedBitmap(asset: AssetData, req: BitmapRequest): Future[Boolean]
+  def hasCachedData(asset: AssetData): Future[Boolean]
+  def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap]
+  def loadBitmap(asset: AssetData, req: BitmapRequest, forceDownload: Boolean): CancellableFuture[Bitmap]
+  def loadCachedGif(asset: AssetData): CancellableFuture[Gif]
+  def loadGif(asset: AssetData, forceDownload: Boolean): CancellableFuture[Gif]
+  def loadRawCachedData(asset: AssetData): CancellableFuture[Option[LocalData]]
+  def loadRawImageData(asset: AssetData, forceDownload: Boolean = false): CancellableFuture[Option[LocalData]]
+  def saveImageToGallery(asset: AssetData): Future[Option[URI]]
+  def getImageMetadata(data: LocalData, mirror: Boolean = false): CancellableFuture[ImageLoader.Metadata]
+}
+
+class ImageLoaderImpl(context:                  Context,
+                      fileCache:                CacheService,
+                      override val memoryCache: MemoryImageCache,
+                      bitmapLoader:             BitmapDecoder,
+                      permissions:              PermissionsService,
+                      loadService:              AssetLoaderService,
+                      loader:                   AssetLoader) extends ImageLoader {
 
   import Threading.Implicits.Background
 
   protected def tag = "User"
   private implicit val logTag: LogTag = s"${logTagFor[ImageLoader]}[$tag]"
 
-  def hasCachedBitmap(asset: AssetData, req: BitmapRequest): Future[Boolean] = {
+  override def hasCachedBitmap(asset: AssetData, req: BitmapRequest): Future[Boolean] = {
     val res = asset match {
       case a@IsImage() => Future.successful(memoryCache.get(asset.id, req, a.width).isDefined)
       case _ => Future.successful(false)
@@ -65,7 +79,7 @@ class ImageLoader(context:         Context,
     res
   }
 
-  def hasCachedData(asset: AssetData): Future[Boolean] = asset match {
+  override def hasCachedData(asset: AssetData): Future[Boolean] = asset match {
     case IsImage() => (asset.data, asset.source) match {
       case (Some(data), _) if data.nonEmpty => Future.successful(true)
       case (_, Some(uri)) if isLocalUri(uri) => Future.successful(true)
@@ -74,7 +88,7 @@ class ImageLoader(context:         Context,
     case _ => Future.successful(false)
   }
 
-  def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
+  override def loadCachedBitmap(asset: AssetData, req: BitmapRequest): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
     verbose(s"load cached bitmap for: ${asset.id} and req: $req")
     withMemoryCache(asset.id, req, dims.width) {
       loadLocalAndDecode(asset, decodeBitmap(asset.id, req, _)) map {
@@ -84,7 +98,7 @@ class ImageLoader(context:         Context,
     }
   }
 
-  def loadBitmap(asset: AssetData, req: BitmapRequest, forceDownload: Boolean): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
+  override def loadBitmap(asset: AssetData, req: BitmapRequest, forceDownload: Boolean): CancellableFuture[Bitmap] = ifIsImage(asset) { dims =>
     verbose(s"loadBitmap for ${asset.id} and req: $req")
     Serialized(("loadBitmap", asset.id)) {
       // serialized to avoid cache conflicts, we don't want two same requests running at the same time
@@ -94,22 +108,22 @@ class ImageLoader(context:         Context,
     }
   }
 
-  def loadCachedGif(asset: AssetData): CancellableFuture[Gif] = ifIsImage(asset) { _ =>
+  override def loadCachedGif(asset: AssetData): CancellableFuture[Gif] = ifIsImage(asset) { _ =>
     loadLocalAndDecode(asset, decodeGif) map {
       case Some(gif) => gif
       case None => throw new Exception(s"No local data for: $asset")
     }
   }
 
-  def loadGif(asset: AssetData, forceDownload: Boolean): CancellableFuture[Gif] = ifIsImage(asset) { _ =>
+  override def loadGif(asset: AssetData, forceDownload: Boolean): CancellableFuture[Gif] = ifIsImage(asset) { _ =>
     Serialized(("loadBitmap", asset.id, tag)) {
       downloadAndDecode(asset, decodeGif, forceDownload)
     }
   }
 
-  def loadRawCachedData(asset: AssetData) = ifIsImage(asset)(_ => loadLocalData(asset))
+  override def loadRawCachedData(asset: AssetData): CancellableFuture[Option[LocalData]] = ifIsImage(asset)(_ => loadLocalData(asset))
 
-  def loadRawImageData(asset: AssetData, forceDownload: Boolean = false) = ifIsImage(asset) { _ =>
+  override def loadRawImageData(asset: AssetData, forceDownload: Boolean = false): CancellableFuture[Option[LocalData]] = ifIsImage(asset) { _ =>
     verbose(s"loadRawImageData: assetId: $asset")
     loadLocalData(asset) flatMap {
       case None => downloadImageData(asset, forceDownload)
@@ -117,7 +131,7 @@ class ImageLoader(context:         Context,
     }
   }
 
-  def saveImageToGallery(asset: AssetData): Future[Option[URI]] = ifIsImage(asset) { _ =>
+  override def saveImageToGallery(asset: AssetData): Future[Option[URI]] = ifIsImage(asset) { _ =>
     loadRawImageData(asset, forceDownload = true).future flatMap {
       case Some(data) =>
         saveImageToGallery(data, asset.mime)
@@ -126,6 +140,12 @@ class ImageLoader(context:         Context,
         Future.successful(None)
     }
   }
+
+  override def getImageMetadata(data: LocalData, mirror: Boolean = false): CancellableFuture[ImageLoader.Metadata] =
+    Threading.IO {
+      val o = BitmapUtils.getOrientation(data.inputStream)
+      Metadata(data).withOrientation(if (mirror) Metadata.mirrored(o) else o)
+    }
 
   private def saveImageToGallery(data: LocalData, mime: Mime) =
     permissions.requiring(Set(Permission.WRITE_EXTERNAL_STORAGE), delayUntilProviderIsSet = false)(
@@ -229,12 +249,6 @@ class ImageLoader(context:         Context,
       _ = if (bmp.isEmpty) throw new Exception(s"Bitmap decoding failed, got empty bitmap for asset: $assetId")
     } yield bmp
   }
-
-  def getImageMetadata(data: LocalData, mirror: Boolean = false) =
-    Threading.IO {
-      val o = BitmapUtils.getOrientation(data.inputStream)
-      Metadata(data).withOrientation(if (mirror) Metadata.mirrored(o) else o)
-    }
 
   private def withMemoryCache(assetId: AssetId, req: BitmapRequest, imgWidth: Int)(loader: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
     memoryCache.get(assetId, req, imgWidth) match {
