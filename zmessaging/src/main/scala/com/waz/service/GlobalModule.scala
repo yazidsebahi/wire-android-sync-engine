@@ -29,7 +29,7 @@ import com.waz.content._
 import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call.{Avs, AvsImpl}
 import com.waz.service.downloads._
-import com.waz.service.images.ImageLoader
+import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
@@ -82,16 +82,16 @@ class GlobalModule(val context: AContext, val backend: BackendConfig) { global =
   lazy val teamsStorage                                          = wire[TeamsStorageImpl]
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
 
-  lazy val clientWrapper: Future[ClientWrapper] = ClientWrapper()
-  lazy val client: AsyncClientImpl = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
+  lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
+  lazy val client:              AsyncClientImpl                  = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
 
-  lazy val globalClient = new ZNetClient(global, "", "")
-  lazy val imageLoader = new ImageLoader(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
+  lazy val globalClient                                          = new ZNetClient(global, "", "")
+  lazy val imageLoader:         ImageLoader                      = new ImageLoaderImpl(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
 
-  lazy val blacklistClient = new VersionBlacklistClient(globalClient, backend)
-  lazy val blacklist       = new VersionBlacklistService(metadata, prefs, blacklistClient)
+  lazy val blacklistClient                                       = new VersionBlacklistClient(globalClient, backend)
+  lazy val blacklist                                             = new VersionBlacklistService(metadata, prefs, blacklistClient)
 
-  lazy val factory = new ZMessagingFactory(this)
+  lazy val factory                                               = new ZMessagingFactory(this)
 
   val lifecycle = new ZmsLifecycle()
 }
