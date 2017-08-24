@@ -24,13 +24,13 @@ import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.JSONObject
 import org.robolectric.Robolectric
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
   val searchQueryResponse =
     """
       |{

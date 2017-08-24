@@ -36,7 +36,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
+@Ignore class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
   lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 

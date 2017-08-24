@@ -17,15 +17,17 @@
  */
 package com.waz.service.conversation
 
-import org.scalatest.{Matchers, BeforeAndAfter, FeatureSpec}
+import org.scalatest.{BeforeAndAfter, FeatureSpec, Ignore, Matchers}
+
 import scala.collection.mutable.ListBuffer
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalacheck.Gen
+
 import scala.util.Random
 
 /**
   */
-class SequenceWindowBufferSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks {
+@Ignore class SequenceWindowBufferSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks {
 
   val windows = ListBuffer[(Long, Long)]()
 

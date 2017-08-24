@@ -28,9 +28,9 @@ import com.waz.utils.wrappers.URI
 import org.robolectric.Robolectric
 import org.robolectric.shadows.{ShadowContentResolver2, ShadowLog}
 import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
-class AssetForUploadSpec extends FeatureSpec with Matchers with RobolectricTests with BeforeAndAfter with TableDrivenPropertyChecks {
+@Ignore class AssetForUploadSpec extends FeatureSpec with Matchers with RobolectricTests with BeforeAndAfter with TableDrivenPropertyChecks {
 
   scenario("Determining a MIME type") {
     ShadowLog.stream = System.out

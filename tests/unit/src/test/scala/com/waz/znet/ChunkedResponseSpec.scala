@@ -21,12 +21,12 @@ import com.koushikdutta.async.http.server.{AsyncHttpServer, AsyncHttpServerReque
 import com.waz.model.EmailAddress
 import com.waz.service.BackendConfig
 import com.waz.threading.Threading
-import org.scalatest.{BeforeAndAfter, FeatureSpecLike, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class ChunkedResponseSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class ChunkedResponseSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
   implicit lazy val dispatcher: ExecutionContext = Threading.Background
 
 

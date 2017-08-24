@@ -17,7 +17,7 @@
  */
 package com.waz.cache
 
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{Ignore, BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 import com.waz.db.ZGlobalDB
 import org.robolectric.Robolectric
 import java.lang.System.currentTimeMillis
@@ -28,7 +28,7 @@ import com.waz.model.CacheKey
 import com.waz.testutils._
 import com.waz.utils.wrappers.DB
 
-class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class CacheEntryDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
   import CacheEntryDao._
   var dbHelper: ZGlobalDB = _

@@ -17,12 +17,12 @@
  */
 package com.waz.utils
 
-import org.scalacheck.{Gen, Arbitrary}
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Gen.resultOf
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
 
-class BiRelationSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
+@Ignore class BiRelationSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks {
 
   scenario("Adding and removing single pairs") {
     val a = BiRelation.empty[Int, String]

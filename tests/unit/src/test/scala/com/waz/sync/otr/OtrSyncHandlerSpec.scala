@@ -39,7 +39,7 @@ import org.scalatest.concurrent.ScalaFutures
 import scala.concurrent.Future
 
 
-class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 
   lazy val selfUser = UserData("test")
   lazy val clientId = ClientId()

@@ -17,10 +17,11 @@
  */
 package com.waz.utils
 
-import org.scalatest.{Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
+
 import concurrent.duration._
 
-class ExponentialBackoffSpec extends FeatureSpec with Matchers {
+@Ignore class ExponentialBackoffSpec extends FeatureSpec with Matchers {
 
   scenario("max retries") {
     new ExponentialBackoff(1.second, 10.seconds).maxRetries shouldEqual 4

@@ -25,10 +25,10 @@ import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
 import com.waz.testutils.Matchers._
 import com.waz.utils.wrappers.URI
 import com.waz.znet.JsonResponseFromResources
-import org.scalatest.{FeatureSpec, Matchers, OptionValues, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Duration
 
-class SpotifyClientSpec extends FeatureSpec with Matchers with JsonResponseFromResources with OptionValues with RobolectricTests {
+@Ignore class SpotifyClientSpec extends FeatureSpec with Matchers with JsonResponseFromResources with OptionValues with RobolectricTests {
   import SpotifyClient._
 
   feature("response parsing") {

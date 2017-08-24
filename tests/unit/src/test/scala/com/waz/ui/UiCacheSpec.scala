@@ -18,10 +18,10 @@
 package com.waz.ui
 
 import com.waz.Control.getOrUpdate
-import com.waz.testutils.{MockZMessaging, MockUiModule}
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import com.waz.testutils.{MockUiModule, MockZMessaging}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class UiCacheSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class UiCacheSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   implicit lazy val ui = new MockUiModule(new MockZMessaging())
 

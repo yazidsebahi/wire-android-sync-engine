@@ -38,7 +38,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Success, Try}
 
-class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with OptionValues { test =>
+@Ignore class UserSearchSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with OptionValues { test =>
   private lazy implicit val dispatcher = Threading.Background
 
   def storage = zms.storage.db

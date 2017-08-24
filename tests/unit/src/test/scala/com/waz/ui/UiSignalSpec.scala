@@ -27,7 +27,7 @@ import org.scalatest._
 
 import scala.concurrent.duration._
 
-class UiSignalSpec extends FeatureSpec with Matchers with GivenWhenThen with RobolectricTests with RobolectricUtils with BeforeAndAfter {
+@Ignore class UiSignalSpec extends FeatureSpec with Matchers with GivenWhenThen with RobolectricTests with RobolectricUtils with BeforeAndAfter {
 
   lazy val valueSignal = new IntSignal(1)
 

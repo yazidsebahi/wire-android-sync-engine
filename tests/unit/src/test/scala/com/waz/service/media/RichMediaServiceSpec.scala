@@ -29,13 +29,13 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.threading.Threading
 import com.waz.znet.ZNetClient.ErrorOr
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class RichMediaServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
 
   var richMediaSyncRequest = Option.empty[MessageId]

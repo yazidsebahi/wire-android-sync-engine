@@ -20,9 +20,9 @@ package com.waz.bitmap.gif
 import java.io.File
 
 import com.waz.utils.IoUtils
-import org.scalatest.{RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class GifReaderSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class GifReaderSpec extends FeatureSpec with Matchers with RobolectricTests {
 
 
   feature("Load gif from byte array") {

@@ -18,11 +18,11 @@
 package com.waz.utils
 
 import com.waz.ZLog._
-import org.scalatest.{RobolectricTests, FeatureSpec, Matchers}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.util.Failure
 
-class LoggedTrySpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class LoggedTrySpec extends FeatureSpec with Matchers with RobolectricTests {
 
   implicit val logTag = "test": LogTag
 

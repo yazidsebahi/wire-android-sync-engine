@@ -19,9 +19,9 @@ package com.waz.utils
 
 import org.scalatest.prop.Tables
 import org.scalatest.prop.TableDrivenPropertyChecks._
-import org.scalatest.{Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers}
 
-class NamePartsSpec extends FeatureSpec with Matchers with Tables {
+@Ignore class NamePartsSpec extends FeatureSpec with Matchers with Tables {
 
   val muhammadFull = "محمد بن سعيد بن عبد العزيز الفلسطيني"
   val muhammadFirst = "محمد"

@@ -27,7 +27,7 @@ import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
-class ParcelsSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with BeforeAndAfterAll with RobolectricTests with RobolectricUtils  {
+@Ignore class ParcelsSpec extends FeatureSpec with Matchers with GeneratorDrivenPropertyChecks with BeforeAndAfterAll with RobolectricTests with RobolectricUtils  {
 
   scenario("Generic invitation token")(forAll((_: api.Invitations.GenericToken).shouldRemainEquivalentAfterParcelingInTermsOf(identity)))
   scenario("Personal invitation token")(forAll((_: api.Invitations.PersonalToken).shouldRemainEquivalentAfterParcelingInTermsOf(identity)))
