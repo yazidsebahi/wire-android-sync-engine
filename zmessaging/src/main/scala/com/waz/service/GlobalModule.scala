@@ -125,8 +125,9 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
 
   lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
   lazy val client:              AsyncClientImpl                  = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
-
+  
   lazy val globalClient                                          = new ZNetClient(None, client, URI.parse(""))
+
   lazy val imageLoader:         ImageLoader                      = new ImageLoaderImpl(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
 
   lazy val blacklistClient                                       = new VersionBlacklistClient(globalClient, backend)
