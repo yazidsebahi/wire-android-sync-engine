@@ -29,8 +29,8 @@ import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
 import com.waz.service.assets._
 import com.waz.service.call._
 import com.waz.service.conversation._
-import com.waz.service.downloads.{AssetLoader, AssetLoaderImpl}
-import com.waz.service.images.{ImageAssetGenerator, ImageLoader, ImageLoaderImpl}
+import com.waz.service.downloads.{AssetLoader, AssetLoaderImpl, AssetLoaderService}
+import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
 import com.waz.service.invitations.InvitationService
 import com.waz.service.media._
 import com.waz.service.messages._
@@ -180,8 +180,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val convsContent: ConversationsContentUpdaterImpl = wire[ConversationsContentUpdaterImpl]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
 
-  lazy val assetLoader: AssetLoader                   = wire[AssetLoaderImpl]
-  lazy val imageLoader: ImageLoader                   = wire[ImageLoaderImpl]
+  lazy val assetLoader:     AssetLoader           = wire[AssetLoaderImpl]
+  lazy val imageLoader                            = wire[ImageLoader]
 
   lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
   lazy val pushToken: PushTokenService                = wire[PushTokenService]

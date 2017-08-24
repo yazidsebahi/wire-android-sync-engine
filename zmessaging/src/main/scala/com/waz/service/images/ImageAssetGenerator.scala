@@ -155,10 +155,10 @@ class ImageAssetGenerator(context: Context, cache: CacheService, loader: ImageLo
 
     def load = {
       imageCache.reserve(id, options.req, meta.width, if (meta.isRotated) 2 * meta.height else meta.height)
-      bitmapLoader(() => file.inputStream, 1, meta.orientation)
+      bitmapLoader(() => file.inputStream, 1, meta.orientation).map(Bitmap.toAndroid)
     }
 
-    imageCache(id, options.req, meta.width, load).future.flatMap(bmp => saveImage(file, Bitmap.toAndroid(bmp), Mime.Jpg, options)).lift
+    imageCache(id, options.req, meta.width, load).future.flatMap(saveImage(file, _, Mime.Jpg, options)).lift
   }
 }
 

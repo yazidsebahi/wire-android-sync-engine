@@ -17,50 +17,41 @@
  */
 package com.waz.ui
 
+import android.graphics.{Bitmap => ABitmap}
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.bitmap
 import com.waz.model.AssetId
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
 import com.waz.utils.{Cache, TrimmingLruCache}
 import com.waz.utils.TrimmingLruCache.CacheSize
-import com.waz.utils.wrappers.{Bitmap, Context, EmptyBitmap}
+import com.waz.utils.wrappers.{Bitmap, Context}
 
-trait MemoryImageCache {
-  def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap]
-  def add(id: AssetId, req: BitmapRequest, bmp: Bitmap): Unit
-  def remove(id: AssetId, req: BitmapRequest): Unit
-  def reserve(id: AssetId,  req: BitmapRequest, width: Int, height: Int): Unit
-  def reserve(id: AssetId, req: BitmapRequest, size: Int): Unit
-  def clear(): Unit
-  def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap]
-}
-
-class MemoryImageCacheImpl(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry]) extends MemoryImageCache {
+class MemoryImageCache(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Entry]) {
   import MemoryImageCache._
 
-  override def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap] = Option(lru.get(Key(id, tag(req)))) flatMap {
+  def get(id: AssetId, req: BitmapRequest, imgWidth: Int): Option[Bitmap] = Option(lru.get(Key(id, tag(req)))) flatMap {
     case BitmapEntry(bmp) if bmp.getWidth >= req.width || (imgWidth > 0 && bmp.getWidth > imgWidth) => Some(bmp)
     case _ => None
   }
 
-  override def add(id: AssetId, req: BitmapRequest, bmp: Bitmap): Unit = if (bmp != null && !bmp.isEmpty) {
+  def add(id: AssetId, req: BitmapRequest, bmp: Bitmap): Unit = if (bmp != null && !bmp.isEmpty) {
     lru.put(Key(id, tag(req)), BitmapEntry(bmp))
   }
 
-  override def remove(id: AssetId, req: BitmapRequest): Unit = lru.remove(Key(id, tag(req)))
+  def remove(id: AssetId, req: BitmapRequest): Unit = lru.remove(Key(id, tag(req)))
 
-  override def reserve(id: AssetId,  req: BitmapRequest, width: Int, height: Int): Unit = reserve(id, req, width * height * 4 + 256)
+  def reserve(id: AssetId,  req: BitmapRequest, width: Int, height: Int): Unit = reserve(id, req, width * height * 4 + 256)
 
-  override def reserve(id: AssetId, req: BitmapRequest, size: Int): Unit = lru.synchronized {
+  def reserve(id: AssetId, req: BitmapRequest, size: Int): Unit = lru.synchronized {
     val key = Key(id, tag(req))
     Option(lru.get(key)) getOrElse lru.put(key, EmptyEntry(size))
   }
 
-  override def clear(): Unit = lru.evictAll()
+  def clear(): Unit = lru.evictAll()
 
-  override def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[Bitmap]): CancellableFuture[Bitmap] =
+  def apply(id: AssetId, req: BitmapRequest, imgWidth: Int, load: => CancellableFuture[ABitmap]): CancellableFuture[ABitmap] =
     get(id, req, imgWidth) match {
       case Some(bitmap) =>
         verbose(s"found bitmap for req: $req")
@@ -69,7 +60,7 @@ class MemoryImageCacheImpl(lru: Cache[MemoryImageCache.Key, MemoryImageCache.Ent
         verbose(s"no bitmap for req: $req, loading...")
         val future = load
         future.onSuccess {
-          case EmptyBitmap => // ignore
+          case bitmap.EmptyBitmap => // ignore
           case img => add(id, req, img)
         }(Threading.Ui)
         future
@@ -93,7 +84,7 @@ object MemoryImageCache {
     require(size > 0)
   }
 
-  def apply(context: Context) = new MemoryImageCacheImpl(newTrimmingLru(context))
+  def apply(context: Context) = new MemoryImageCache(newTrimmingLru(context))
 
   def newTrimmingLru(context: Context):Cache[Key, Entry] =
     new TrimmingLruCache[Key, Entry](context, CacheSize(total => math.max(5 * 1024 * 1024, (total - 30 * 1024 * 1024) / 2))) {
