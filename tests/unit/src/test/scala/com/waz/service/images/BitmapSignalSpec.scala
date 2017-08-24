@@ -69,13 +69,13 @@ class BitmapSignalSpec extends AndroidFreeSpec { test =>
       (loader.loadCachedBitmap _).expects(expectedAsset, req).anyNumberOfTimes.onCall { _ =>
         bmps.currentValue.flatten match {
           case Some(bitmap) => CancellableFuture.successful(bitmap)
-          case None => CancellableFuture.failed(new IllegalStateException("Trying to return a non-existing cached bitmap"))
+          case None => fail("Trying to return a non-existing cached bitmap")
         }
       }
     }
 
     def getSignal(asset: AssetData, req: BitmapRequest)(assetSource: (AssetId) => Option[AssetData]) = {
-      val signal = new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, forceDownload = false)
+      val signal = new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, Signal.const(false), forceDownload = false)
       signal.collect { case BitmapLoaded(b, _) => (b.getWidth, b.getHeight) }
     }
 
@@ -168,36 +168,63 @@ class BitmapSignalSpec extends AndroidFreeSpec { test =>
     val res = Some((64,64))
     val asset = image(64, 64)
 
+    val downloadImagesAlways = Signal[Boolean](false)
+    val networkMode = Signal(NetworkMode._4G)
+
+    def init(): Unit = {
+      (network.networkMode _).expects().anyNumberOfTimes.returning(networkMode)
+
+      (loader.memoryCache _).expects().anyNumberOfTimes.returning(imageCache)
+      (loader.hasCachedBitmap _).expects(asset, req).anyNumberOfTimes.returning(Future.successful(false))
+      (loader.loadBitmap _).expects(asset, req, *).anyNumberOfTimes.onCall { _ =>
+        (networkMode.currentValue, downloadImagesAlways.currentValue) match {
+          case (Some(NetworkMode.WIFI), _) => CancellableFuture.successful(mockBitmap(asset))
+          case (_, Some(true)) => CancellableFuture.successful(mockBitmap(asset))
+          case _ => CancellableFuture.failed(DownloadOnWifiOnlyException)
+        }
+      }
+    }
+
     def getSignal(asset: AssetData, req: BitmapRequest)(assetSource: (AssetId) => Option[AssetData]) =
-      new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, forceDownload = false)
+      new AssetBitmapSignal(asset, req, loader, network, { id => Future.successful(assetSource(id)) }, downloadImagesAlways, forceDownload = false)
       .map {
         case BitmapLoaded(b, _) => Some((b.getWidth, b.getHeight))
         case _ => None
       }
 
     scenario("load restart after switching to wifi") {
-      val networkSignal = Signal(NetworkMode._4G)
-      (network.networkMode _).expects().anyNumberOfTimes.returning(networkSignal)
-
-      (loader.memoryCache _).expects().anyNumberOfTimes.returning(imageCache)
-      (loader.hasCachedBitmap _).expects(asset, req).anyNumberOfTimes.returning(Future.successful(false))
-      (loader.loadBitmap _).expects(asset, req, *).anyNumberOfTimes.onCall { _ =>
-        networkSignal.currentValue match {
-          case Some(NetworkMode.WIFI) => CancellableFuture.successful(mockBitmap(asset))
-          case _ => CancellableFuture.failed(DownloadOnWifiOnlyException)
-        }
-      }
+      init()
 
       val signal = getSignal(asset, req){
         case asset.id => Some(asset)
         case _ => None
       }
 
-      result(networkSignal.filter(_ == NetworkMode._4G).head) // waiting for the network signal to settle down
+      result(networkMode.filter(_ == NetworkMode._4G).head) // waiting for the signals to settle down
+      result(downloadImagesAlways.filter(_ == false).head)
       result(signal.filter(_.isEmpty).head)
 
-      networkSignal ! NetworkMode.WIFI // switching to wifi should trigger reloading
-      result(networkSignal.filter(_ == NetworkMode.WIFI).head)
+      networkMode ! NetworkMode.WIFI // switching to wifi should trigger reloading
+      result(networkMode.filter(_ == NetworkMode.WIFI).head)
+      result(signal.filter(_ == res).head)
+
+      awaitAllTasks
+    }
+
+    scenario("load restart after switching to download always") {
+      init()
+
+      val signal = getSignal(asset, req){
+        case asset.id => Some(asset)
+        case _ => None
+      }
+
+      result(networkMode.filter(_ == NetworkMode._4G).head) // waiting for the signals to settle down
+      result(downloadImagesAlways.filter(_ == false).head)
+      result(signal.filter(_.isEmpty).head)
+
+      downloadImagesAlways ! true
+      result(downloadImagesAlways.filter(_ == true).head)
       result(signal.filter(_ == res).head)
 
       awaitAllTasks
