@@ -28,7 +28,7 @@ import scala.concurrent.Promise
 object Calling {
 
   private val available = Promise[Unit]()
-  val v3Available = available.future
+  val avsAvailable = available.future
 
   try {
     verbose("Native.register: avs")
@@ -41,39 +41,43 @@ object Calling {
       available.failure(e)
   }
 
-  @native def wcall_network_changed(): Unit
-
-  @native def wcall_init(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, metricsh: MetricsHandler, arg: Pointer): Int
+  @native def wcall_init(): Int
 
   @native def wcall_close(): Unit
 
-  @native def wcall_start(convid: String, is_video_call: Boolean, is_group: Boolean): Int
+  @native def wcall_create(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, metricsh: MetricsHandler, arg: Pointer): Pointer
 
-  @native def wcall_answer(convid: String, is_group: Boolean): Unit
+  @native def wcall_destroy(arg: Pointer): Unit
 
-  @native def wcall_resp(status: Int, reason: String, arg: Pointer): Int
+  @native def wcall_start(inst: Pointer, convid: String, is_video_call: Boolean, is_group: Boolean): Int
 
-  @native def wcall_recv_msg(msg: Array[Byte], len: Int, curr_time: Uint32_t, msg_time: Uint32_t, convId: String, userId: String, clientId: String): Int
+  @native def wcall_answer(inst: Pointer, convid: String): Unit
 
-  @native def wcall_end(convId: String, is_group: Boolean): Unit
+  @native def wcall_resp(inst: Pointer, status: Int, reason: String, arg: Pointer): Int
 
-  @native def wcall_reject(convId: String, is_group: Boolean): Unit
+  @native def wcall_recv_msg(inst: Pointer, msg: Array[Byte], len: Int, curr_time: Uint32_t, msg_time: Uint32_t, convId: String, userId: String, clientId: String): Int
 
-  @native def wcall_set_video_state_handler(wcall_video_state_change_h: VideoReceiveStateHandler): Unit
+  @native def wcall_end(inst: Pointer, convId: String): Unit
 
-  @native def wcall_set_video_send_active(convid: String, active: Boolean): Unit
+  @native def wcall_reject(inst: Pointer, convId: String): Unit
 
-  @native def wcall_enable_audio_cbr(enabled: Int): Unit
+  @native def wcall_set_video_state_handler(inst: Pointer, wcall_video_state_change_h: VideoReceiveStateHandler): Unit
 
-  @native def wcall_set_audio_cbr_enabled_handler(wcall_audio_cbr_enabled_h: BitRateStateHandler): Unit
+  @native def wcall_set_video_send_active(inst: Pointer, convid: String, active: Boolean): Unit
 
-  @native def wcall_set_group_changed_handler(wcall_group_changed_h: GroupChangedHandler): Unit
+  @native def wcall_network_changed(inst: Pointer): Unit
 
-  @native def wcall_get_members(convid: String): Members
+  @native def wcall_set_group_changed_handler(inst: Pointer, wcall_group_changed_h: GroupChangedHandler): Unit
+
+  @native def wcall_set_audio_cbr_enabled_handler(inst: Pointer, wcall_audio_cbr_enabled_h: BitRateStateHandler): Unit
+
+  @native def wcall_enable_audio_cbr(inst: Pointer, enabled: Int): Unit
+
+  @native def wcall_get_members(inst: Pointer, convid: String): Members
 
   @native def wcall_free_members(pointer: Pointer): Unit
 
-  @native def wcall_set_state_handler(wcall_state_change_h: CallStateChangeHandler): Unit
+  @native def wcall_set_state_handler(inst: Pointer, wcall_state_change_h: CallStateChangeHandler): Unit
 
   /* This will be called when the calling system is ready for calling.
      * The version parameter specifies the config obtained version to use
@@ -85,7 +89,7 @@ object Calling {
 
   /* Send calling message otr data */
   trait SendHandler extends Callback {
-    def onSend(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer): Int
+    def onSend(ctx: Pointer, convId: String, userid_self: String, clientid_self: String, userid_dest: String, clientid_dest: String, data: Pointer, len: Size_t, transient: Boolean, arg: Pointer): Int
   }
 
   /* Incoming call */
