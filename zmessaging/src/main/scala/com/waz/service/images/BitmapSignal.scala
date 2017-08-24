@@ -25,6 +25,8 @@ import com.waz.bitmap
 import com.waz.bitmap.BitmapUtils
 import com.waz.bitmap.gif.{Gif, GifAnimator}
 import com.waz.cache.LocalData
+import com.waz.content.Preferences.Preference
+import com.waz.content.{Preferences, UserPreferences}
 import com.waz.model.{AssetData, AssetId, Mime}
 import com.waz.service.{DefaultNetworkModeService, NetworkModeService, ZMessaging}
 import com.waz.service.assets.AssetService.BitmapResult
@@ -41,13 +43,15 @@ import com.waz.utils.wrappers.{Bitmap, EmptyBitmap}
 
 import scala.concurrent.Future
 
-abstract class BitmapSignal(req: BitmapRequest, network: NetworkModeService) extends Signal[BitmapResult] { signal =>
+abstract class BitmapSignal(req: BitmapRequest, network: NetworkModeService, downloadImagesAlways: Signal[Boolean]) extends Signal[BitmapResult] { signal =>
 
   import BitmapSignal._
 
   private var future = CancellableFuture.successful[Unit](())
-  private lazy val waitForWifi: Unit = network.networkMode {
-    case NetworkMode.WIFI => restart()
+
+  private lazy val waitForWifi: Unit = network.networkMode.zip(downloadImagesAlways) {
+    case (NetworkMode.WIFI, _) => restart()
+    case (_, true) => restart()
     case _ =>
   }(EventContext.Global)
 
@@ -93,13 +97,14 @@ object BitmapSignal {
             service: ImageLoader,
             network: DefaultNetworkModeService,
             assets: AssetStore = EmptyAssetStore,
+            downloadImagesAlways: Signal[Boolean] = Signal.const(true),
             forceDownload: Boolean = true): Signal[BitmapResult] = {
     if (!asset.isImage) Signal(BitmapResult.Empty)
-    else signalCache((asset, req), new AssetBitmapSignal(asset, req, service, network, assets, forceDownload))
+    else signalCache((asset, req), new AssetBitmapSignal(asset, req, service, network, assets, downloadImagesAlways, forceDownload))
   }
 
   def apply(zms: ZMessaging, asset: AssetData, req: BitmapRequest): Signal[BitmapResult] =
-    apply(asset, req, zms.imageLoader, zms.network, zms.assetsStorage.get)
+    apply(asset, req, zms.imageLoader, zms.network, zms.assetsStorage.get, zms.userPrefs.preference(UserPreferences.DownloadImagesAlways).signal)
 
   sealed trait Loader {
     type Data
@@ -245,7 +250,8 @@ class AssetBitmapSignal(asset: AssetData,
                         imageLoader: ImageLoader,
                         network: NetworkModeService,
                         assets: BitmapSignal.AssetStore,
-                        forceDownload: Boolean) extends BitmapSignal(req, network) {
+                        downloadImagesAlways: Signal[Boolean],
+                        forceDownload: Boolean) extends BitmapSignal(req, network, downloadImagesAlways) {
   signal =>
 
   import BitmapSignal._
