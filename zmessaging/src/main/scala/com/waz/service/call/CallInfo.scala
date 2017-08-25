@@ -30,6 +30,7 @@ import org.threeten.bp.Instant
 case class CallInfo(convId:            ConvId,
                     caller:            UserId,
                     state:             CallState,
+                    isGroup:           Boolean, //if a team conversation with only 1 other user, will be false - easier to store here
                     others:            Set[UserId]                       = Set.empty,
                     maxParticipants:   Int                               = 0, //maintains the largest number of users that were ever in the call (for tracking)
                     muted:             Boolean                           = false,
@@ -47,6 +48,7 @@ case class CallInfo(convId:            ConvId,
        | convId:            $convId
        | caller:            $caller
        | state:             $state
+       | isGroup:           $isGroup
        | others:            $others
        | maxParticipants:   $maxParticipants
        | muted:             $muted

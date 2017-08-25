@@ -18,11 +18,11 @@
 package com.waz.service.call
 
 import com.sun.jna.Pointer
+import com.waz.ZLog
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.call.Avs.WCall
 import com.waz.service.call.Calling._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.jna.{Size_t, Uint32_t}
@@ -32,18 +32,23 @@ import org.threeten.bp.Instant
 import scala.concurrent.{Future, Promise}
 
 trait Avs {
-  def registerAccount(callingService: CallingService): Future[WCall]
-  def unregisterAccount(wcall: WCall): Future[Unit]
-  def onNetworkChanged(wCall: WCall): Future[Unit]
-  def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean): Future[Int]
-  def answerCall(wCall: WCall, convId: RConvId): Unit
-  def onHttpResponse(wCall: WCall, status: Int, reason: String, arg: Pointer): Future[Unit]
-  def onReceiveMessage(wCall: WCall, msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
-  def endCall(wCall: WCall, convId: RConvId): Unit
-  def rejectCall(wCall: WCall, convId: RConvId): Unit
-  def setVideoSendActive(wCall: WCall, convId: RConvId, active: Boolean): Unit
+  def available: Future[Unit] //Fails if not available
+  def onNetworkChanged(): Future[Unit]
+  def init(callingService: CallingService): Future[Unit]
+  def close(): Unit
+  def startCall(convId: RConvId, isVideoCall: Boolean, isGroup: Boolean): Future[Int]
+  def answerCall(convId: RConvId, isGroup: Boolean): Unit
+  def onHttpResponse(status: Int, reason: String, arg: Pointer): Future[Unit]
+  def onReceiveMessage(msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
+  def endCall(convId: RConvId, isGroup: Boolean): Unit
+  def rejectCall(convId: RConvId, isGroup: Boolean): Unit
+  def setVideoStateHandler(handler: VideoReceiveStateHandler): Unit
+  def setVideoSendActive(convId: RConvId, active: Boolean): Unit
   //cbr = constant bit rate
-  def enableAudioCbr(wCall: WCall, enabled: Int): Unit
+  def enableAudioCbr(enabled: Int): Unit
+  def setAudioCbrEnabledHandler(handler: BitRateStateHandler): Unit
+  def setGroupChangedHandler(handler: GroupChangedHandler): Unit
+  def setCallStateHandler(handler: CallStateChangeHandler): Unit
 }
 
 /**
@@ -56,28 +61,31 @@ class AvsImpl() extends Avs {
 
   import Avs._
 
-  private val available = Calling.avsAvailable.map { _ =>
-    returning(Calling.wcall_init()) { res =>
-      verbose(s"AVS initialized: $res")
-    }
-  }.map(_ => {})
+  private var _init = Future.failed[Unit](new IllegalStateException("AVS is not yet initialised"))
 
-  override def registerAccount(cs: CallingService) = available.flatMap { _ =>
-    verbose(s"Initialising calling for: ${cs.selfUserId} and current client: ${cs.clientId}")
+  override lazy val available = Calling.v3Available
 
+  override def init(cs: CallingService) = available.flatMap { _ =>
+    verbose(s"Initialising calling for self: ${cs.selfUserId} and current client: ${cs.clientId}")
     val callingReady = Promise[Unit]()
+    _init = returning(callingReady.future) {
+      _.onFailure { case e =>
+        error("Error initialising calling v3", e)
+      }
+    }
 
-    val wCall = Calling.wcall_create(
+    Calling.wcall_init(
       cs.selfUserId.str,
       cs.clientId.str,
       new ReadyHandler {
         override def onReady(version: Int, arg: Pointer) = {
-          callingReady.success({})
+          cs.onReady(version)
+          callingReady.success(())
         }
       },
       new SendHandler {
-        override def onSend(ctx: Pointer, convId: String, userid_self: String, clientid_self: String, userid_dest: String, clientid_dest: String, data: Pointer, len: Size_t, transient: Boolean, arg: Pointer) = {
-          cs.onSend(ctx, RConvId(convId), UserId(userid_dest), ClientId(clientid_dest), data.getString(0, "UTF-8"))
+        override def onSend(ctx: Pointer, convId: String, userId: String, clientId: String, data: Pointer, len: Size_t, arg: Pointer) = {
+          cs.onSend(ctx, RConvId(convId), UserId(userId), ClientId(clientId), data.getString(0, "UTF-8"))
           0
         }
       },
@@ -107,68 +115,69 @@ class AvsImpl() extends Avs {
       null
     )
 
-    callingReady.future.map { _ =>
-      //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
-      Calling.wcall_set_video_state_handler(wCall, new VideoReceiveStateHandler {
-        override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = cs.onVideoReceiveStateChanged(VideoReceiveState(state))
-      })
+    _init
+  }.map( _ => {
+    //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
+    Calling.wcall_set_video_state_handler(new VideoReceiveStateHandler {
+      override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = cs.onVideoReceiveStateChanged(VideoReceiveState(state))
+    })
 
-      Calling.wcall_set_audio_cbr_enabled_handler(wCall, new BitRateStateHandler {
-        override def onBitRateStateChanged(arg: Pointer) = cs.onBitRateStateChanged()
-      })
+    Calling.wcall_set_audio_cbr_enabled_handler(new BitRateStateHandler {
+      override def onBitRateStateChanged(arg: Pointer) = cs.onBitRateStateChanged()
+    })
 
-      Calling.wcall_set_group_changed_handler(wCall, new GroupChangedHandler {
-        override def onGroupChanged(convId: String, arg: Pointer) = {
-          //TODO change this set to an ordered set to for special audio effects?
-          val mStruct = wcall_get_members(wCall, convId)
-          val members = if (mStruct.membc.intValue() > 0) mStruct.toArray(mStruct.membc.intValue()).map(u => UserId(u.userid)).toSet else Set.empty[UserId]
-          wcall_free_members(mStruct.getPointer)
-          cs.onGroupChanged(RConvId(convId), members)
-        }
-      })
-      wCall
-    }
-  }
+    Calling.wcall_set_group_changed_handler(new GroupChangedHandler {
+      override def onGroupChanged(convId: String, arg: Pointer) = {
+        //TODO change this set to an ordered set to for special audio effects?
+        val mStruct = wcall_get_members(convId)
+        val members = if (mStruct.membc.intValue() > 0) mStruct.toArray(mStruct.membc.intValue()).map(u => UserId(u.userid)).toSet else Set.empty[UserId]
+        wcall_free_members(mStruct.getPointer)
+        cs.onGroupChanged(RConvId(convId), members)
+      }
+    })
+  })
 
-  private def withAvsReturning[A](onSuccess: => A, onFailure: => A): Future[A] = available.map(_ => onSuccess).recover {
+  private def withAvsReturning[A](onSuccess: => A, onFailure: => A): Future[A] = _init.map(_ => onSuccess).recover {
     case err =>
-      error("Tried to perform action on avs after it failed to initialise", err)
+      ZLog.error("Tried to perform action on Calling v3 after it failed to initialise", err)
       onFailure
   }
 
-
   private def withAvs(f: => Unit): Future[Unit] = withAvsReturning(f, {})
 
-  override def unregisterAccount(wcall: WCall) = withAvs(Calling.wcall_destroy(wcall))
+  override def onNetworkChanged() = withAvs(Calling.wcall_network_changed())
 
-  override def onNetworkChanged(wCall: WCall) = withAvs(Calling.wcall_network_changed(wCall))
+  override def close() = wcall_close()
 
+  override def startCall(convId: RConvId, isVideoCall: Boolean, isGroup: Boolean) = withAvsReturning(wcall_start(convId.str, isVideoCall, isGroup), -1)
 
-  override def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean) = withAvsReturning(wcall_start(wCall, convId.str, isVideoCall, isGroup), -1)
+  override def answerCall(convId: RConvId, isGroup: Boolean) = withAvs(wcall_answer(convId.str, isGroup))
 
-  override def answerCall(wCall: WCall, convId: RConvId) = withAvs(wcall_answer(wCall: WCall, convId.str))
+  override def onHttpResponse(status: Int, reason: String, arg: Pointer) = withAvs(wcall_resp(status, reason, arg))
 
-  override def onHttpResponse(wCall: WCall, status: Int, reason: String, arg: Pointer) = withAvs(wcall_resp(wCall, status, reason, arg))
-
-  override def onReceiveMessage(wCall: WCall, msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, from: UserId, sender: ClientId) = {
+  override def onReceiveMessage(msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, from: UserId, sender: ClientId) = {
     val bytes = msg.getBytes("UTF-8")
-    withAvs(wcall_recv_msg(wCall, bytes, bytes.length, uint32_tTime(currTime), uint32_tTime(msgTime), convId.str, from.str, sender.str))
+    withAvs(wcall_recv_msg(bytes, bytes.length, uint32_tTime(currTime), uint32_tTime(msgTime), convId.str, from.str, sender.str))
   }
 
-  override def endCall(wCall: WCall, convId: RConvId) = withAvs(wcall_end(wCall, convId.str))
+  override def endCall(convId: RConvId, isGroup: Boolean) = withAvs(wcall_end(convId.str, isGroup))
 
-  override def rejectCall(wCall: WCall, convId: RConvId) = withAvs(wcall_reject(wCall, convId.str))
+  override def rejectCall(convId: RConvId, isGroup: Boolean) = withAvs(wcall_reject(convId.str, isGroup))
 
-  override def setVideoSendActive(wCall: WCall, convId: RConvId, active: Boolean) = withAvs(wcall_set_video_send_active(wCall, convId.str, active))
+  override def setVideoStateHandler(handler: VideoReceiveStateHandler) = withAvs(wcall_set_video_state_handler(handler))
 
-  override def enableAudioCbr(wCall: WCall, enabled: Int) = withAvs(wcall_enable_audio_cbr(wCall, enabled))
+  override def setVideoSendActive(convId: RConvId, active: Boolean) = withAvs(wcall_set_video_send_active(convId.str, active))
 
+  override def enableAudioCbr(enabled: Int) = withAvs(wcall_enable_audio_cbr(enabled))
+
+  override def setAudioCbrEnabledHandler(handler: BitRateStateHandler) = withAvs(wcall_set_audio_cbr_enabled_handler(handler))
+
+  override def setGroupChangedHandler(handler: GroupChangedHandler) = withAvs(wcall_set_group_changed_handler(handler))
+
+  override def setCallStateHandler(handler: CallStateChangeHandler) = withAvs(wcall_set_state_handler(handler))
 }
 
 object Avs {
-
-  type WCall = Pointer
-
   def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)
 
   def uint32_tTime(instant: Instant) =
