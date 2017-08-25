@@ -20,7 +20,8 @@ package com.waz.zms
 import android.app.PendingIntent
 import android.content.{Context, Intent}
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.verbose
+import com.waz.ZLog.{verbose, warn}
+import com.waz.model.AccountId
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils._
@@ -36,23 +37,37 @@ class NotificationsAndroidService extends FutureService {
   override protected lazy val wakeLock = new TimedWakeLock(getApplicationContext, 2.seconds)
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
-    Option(ZMessaging.currentAccounts).fold2(Future successful None, _.getActiveZms).flatMap {
-      case None => Future successful None
-      case Some(zms) if ActionClear == intent.getAction =>
-        verbose("Clearing notifications")
-        Future.successful(zms.notifications.clearNotifications())
-      case Some(zms) =>
-        verbose("Other device no longer active, resetting otherDeviceActiveTime")
-        Future.successful(zms.notifications.otherDeviceActiveTime ! Instant.EPOCH)
+
+    val account = Option(intent.getStringExtra(ExtraAccountId)).map(AccountId)
+
+    Option(ZMessaging.currentAccounts) match {
+      case Some(accs) =>
+        account match {
+          case Some(acc) => accs.getZMessaging(acc).flatMap {
+            case Some(zms) if ActionClear == intent.getAction =>
+              verbose(s"Clearing notifications for account: $acc")
+              Future.successful(zms.notifications.clearNotifications())
+            case Some(zms) =>
+              verbose(s"Other device on account: $acc no longer active, resetting otherDeviceActiveTime")
+              Future.successful(zms.notifications.otherDeviceActiveTime ! Instant.EPOCH)
+          }
+          case None =>
+            warn("No account id passed on intent")
+            Future.successful({})
+        }
+      case None =>
+        warn("No AccountsService available")
+        Future.successful({})
     }
   }
 }
 
 object NotificationsAndroidService {
   val ActionClear = "com.wire.CLEAR_NOTIFICATIONS"
+  val ExtraAccountId = "account_id"
 
-  val checkNotificationsTimeout = 1.minute
+  val checkNotificationsTimeout: FiniteDuration = 1.minute
 
-  def clearNotificationsIntent(context: Context) = PendingIntent.getService(context, 9730, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear), PendingIntent.FLAG_UPDATE_CURRENT)
-  def checkNotificationsIntent(context: Context) = PendingIntent.getService(context, 19047, new Intent(context, classOf[NotificationsAndroidService]), PendingIntent.FLAG_ONE_SHOT)
+  def clearNotificationsIntent(accountId: AccountId, context: Context): PendingIntent = PendingIntent.getService(context, 9730, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_UPDATE_CURRENT)
+  def checkNotificationsIntent(accountId: AccountId, context: Context): PendingIntent = PendingIntent.getService(context, 19047, new Intent(context, classOf[NotificationsAndroidService]).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_ONE_SHOT)
 }

@@ -30,7 +30,7 @@ import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call.{Avs, AvsImpl}
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
-import com.waz.service.push.GlobalTokenService
+import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
@@ -42,45 +42,45 @@ import com.waz.znet._
 import scala.concurrent.Future
 
 trait GlobalModule {
-  def context: AContext
-  def backend: BackendConfig
-
-  def prefs: GlobalPreferences
-  def googleApi: GoogleApi
-  def tokenService: GlobalTokenService
-  def storage: Database
-  def metadata: MetaDataService
-  def cache: CacheService
-  def bitmapDecoder: BitmapDecoder
-  def trimmingLruCache: Cache[Key, Entry]
-  def imageCache: MemoryImageCache
-  def network: DefaultNetworkModeService
-  def phoneNumbers: PhoneNumberService
-  def timeouts: Timeouts
-  def permissions: PermissionsService
-  def avs: Avs
-  def reporting: GlobalReportingService
-  def decoder: ResponseBodyDecoder
-  def loginClient: LoginClient
-  def regClient: RegistrationClient
-  def globalAssetClient:AssetClient
-  def globalLoader: AssetLoader
-  def videoTranscoder: VideoTranscoder
-  def audioTranscoder: AudioTranscoder
-  def loaderService: AssetLoaderService
-  def cacheCleanup: CacheCleaningService
-  def accountsStorage: AccountsStorage
-  def teamsStorage: TeamsStorageImpl
+  def context:              AContext
+  def backend:              BackendConfig
+  def tokenService:         GlobalTokenService
+  def notifications:        GlobalNotificationsService
+  def prefs:                GlobalPreferences
+  def googleApi:            GoogleApi
+  def storage:              Database
+  def metadata:             MetaDataService
+  def cache:                CacheService
+  def bitmapDecoder:        BitmapDecoder
+  def trimmingLruCache:     Cache[Key, Entry]
+  def imageCache:           MemoryImageCache
+  def network:              DefaultNetworkModeService
+  def phoneNumbers:         PhoneNumberService
+  def timeouts:             Timeouts
+  def permissions:          PermissionsService
+  def avs:                  Avs
+  def reporting:            GlobalReportingService
+  def decoder:              ResponseBodyDecoder
+  def loginClient:          LoginClient
+  def regClient:            RegistrationClient
+  def globalAssetClient:    AssetClient
+  def globalLoader:         AssetLoader
+  def videoTranscoder:      VideoTranscoder
+  def audioTranscoder:      AudioTranscoder
+  def loaderService:        AssetLoaderService
+  def cacheCleanup:         CacheCleaningService
+  def accountsStorage:      AccountsStorage
+  def teamsStorage:         TeamsStorageImpl
   def recordingAndPlayback: GlobalRecordAndPlayService
-  def tempFiles: TempFileService
-  def clientWrapper: Future[ClientWrapper]
-  def client: AsyncClientImpl
-  def globalClient: ZNetClient
-  def imageLoader: ImageLoader
-  def blacklistClient: VersionBlacklistClient
-  def blacklist: VersionBlacklistService
-  def factory: ZMessagingFactory
-  def lifecycle: ZmsLifeCycle
+  def tempFiles:            TempFileService
+  def clientWrapper:        Future[ClientWrapper]
+  def client:               AsyncClientImpl
+  def globalClient:         ZNetClient
+  def imageLoader:          ImageLoader
+  def blacklistClient:      VersionBlacklistClient
+  def blacklist:            VersionBlacklistService
+  def factory:              ZMessagingFactory
+  def lifecycle:            ZmsLifeCycle
 }
 
 class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extends GlobalModule { global =>
@@ -88,6 +88,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
   val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
+  lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsService]
 
   lazy val contextWrapper:      Context                          = Context.wrap(context)
   lazy val storage:             Database                         = new GlobalDatabase(context)

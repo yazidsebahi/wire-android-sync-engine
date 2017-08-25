@@ -18,6 +18,7 @@
 package com.waz.model
 
 import com.waz.api.NotificationsHandler.NotificationType
+import com.waz.api.NotificationsHandler.NotificationType.LikedContent
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.utils.wrappers.DBCursor
@@ -25,17 +26,17 @@ import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class NotificationData(id: NotId,
-                            msg: String,
-                            conv: ConvId,
-                            user: UserId,
-                            msgType: NotificationType,
-                            time: Instant = Instant.now,
-                            userName: Option[String] = None,
-                            ephemeral: Boolean = false,
-                            mentions: Seq[UserId] = Seq.empty,
+case class NotificationData(id:                NotId,
+                            msg:               String,
+                            conv:              ConvId,
+                            user:              UserId,
+                            msgType:           NotificationType,
+                            time:              Instant = Instant.now,
+                            userName:          Option[String] = None,
+                            ephemeral:         Boolean = false,
+                            mentions:          Seq[UserId] = Seq.empty,
                             referencedMessage: Option[MessageId] = None,
-                            hasBeenDisplayed: Boolean = false) {
+                            hasBeenDisplayed:  Boolean = false) {
   override def toString: String = s"NotificationData($id, ${msg.take(4)}..., $conv, $user, $msgType, $time, $userName, $ephemeral, $mentions, $referencedMessage, $hasBeenDisplayed)"
 }
 
