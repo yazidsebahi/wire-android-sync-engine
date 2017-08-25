@@ -25,13 +25,13 @@ import com.waz.model._
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.threading.CancellableFuture
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-class SerialProcessingQueueSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
+@Ignore class SerialProcessingQueueSpec extends FeatureSpec with Matchers with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig {
   import com.waz.threading.Threading.Implicits.Background
 
   feature("Grouped event processing queue") {

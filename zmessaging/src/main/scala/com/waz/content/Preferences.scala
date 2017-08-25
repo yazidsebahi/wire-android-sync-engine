@@ -42,7 +42,8 @@ trait Preferences {
 
   implicit protected val dispatcher: ExecutionContext
 
-  private var cache = Map.empty[PrefKey[_], Preference[_]]
+  //protected for test prefs
+  protected var cache = Map.empty[PrefKey[_], Preference[_]]
 
   final def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] =
     cache.getOrElse(key, returning(buildPreference(key))(cache += key -> _)).asInstanceOf[Preference[A]]

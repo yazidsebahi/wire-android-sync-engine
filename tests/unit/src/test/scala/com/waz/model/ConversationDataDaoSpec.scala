@@ -22,12 +22,12 @@ import com.waz.db.ZMessagingDB
 import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Instant
 
 import scala.util.Random
 
-class ConversationDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class ConversationDataDaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
   lazy val dbHelper = new ZMessagingDB(Robolectric.application, "dbName")
 

@@ -33,7 +33,7 @@ import org.scalatest.concurrent.ScalaFutures
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class ImageAssetGeneratorSpec extends FeatureSpec with Matchers with BeforeAndAfterAll with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 
   lazy val zms = new MockZMessaging()
   lazy val generator = zms.assetGenerator

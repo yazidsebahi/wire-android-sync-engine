@@ -32,13 +32,13 @@ import com.waz.testutils.Matchers._
 import com.waz.RobolectricUtils
 import org.robolectric.Robolectric
 import org.scalatest.matchers.Matcher
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import org.threeten.bp.Instant
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class ConversationKnockingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   implicit lazy val dispatcher = Threading.Background
   lazy val globalStorage = new GlobalDatabase(Robolectric.application)
 

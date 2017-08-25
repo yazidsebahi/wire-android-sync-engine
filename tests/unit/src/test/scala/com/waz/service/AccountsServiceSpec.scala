@@ -31,12 +31,12 @@ import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{LoginClient, ZNetClient}
 import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{Ignore, BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
+@Ignore class AccountsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
   var loginRequest: Option[Credentials] = _
   var loginResponse: LoginResult = _

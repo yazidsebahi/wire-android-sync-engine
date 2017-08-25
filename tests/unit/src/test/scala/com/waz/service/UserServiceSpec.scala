@@ -26,12 +26,12 @@ import com.waz.testutils.{EmptySyncService, MockZMessaging}
 import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.utils.returning
 import org.robolectric.Robolectric
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   lazy val users = Seq(UserData("other user 1"), UserData("other user 2"), UserData("some name"),
     UserData("related user 1"), UserData("related user 2"), UserData("other related"),

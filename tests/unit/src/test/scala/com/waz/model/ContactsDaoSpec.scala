@@ -25,9 +25,9 @@ import com.waz.model.UserData.UserDataDao
 import com.waz.service.SearchKey
 import com.waz.utils.wrappers.{DB, DBHelper}
 import org.robolectric.Robolectric
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class ContactsDaoSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class ContactsDaoSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   scenario("Loading contact information") (withDB { implicit db =>
     ContactsDao.insertOrReplace(meep)

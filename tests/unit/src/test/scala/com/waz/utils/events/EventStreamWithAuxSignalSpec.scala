@@ -20,7 +20,7 @@ package com.waz.utils.events
 import com.waz.RobolectricUtils
 import org.scalatest._
 
-class EventStreamWithAuxSignalSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests with RobolectricUtils {
+@Ignore class EventStreamWithAuxSignalSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests with RobolectricUtils {
 
   lazy val e = Publisher[String](None)
   lazy val aux = new SourceSignal[Int]

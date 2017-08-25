@@ -40,7 +40,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Random
 import scala.util.Random.nextInt
 
-class ZNetClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class ZNetClientSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
 
   val wireMockPort = 9000 + Random.nextInt(3000)
   val wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig().port(wireMockPort).withRootDirectory(getClass.getResource("/ZNetClientSpec").getPath))

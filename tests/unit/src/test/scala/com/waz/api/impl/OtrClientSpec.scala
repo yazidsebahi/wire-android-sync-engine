@@ -31,7 +31,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import scala.util.Random
 
-class OtrClientSpec  extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with Tables {
+@Ignore class OtrClientSpec  extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils with Tables {
 
   implicit lazy val ui = new MockUiModule(new MockZMessaging())
 

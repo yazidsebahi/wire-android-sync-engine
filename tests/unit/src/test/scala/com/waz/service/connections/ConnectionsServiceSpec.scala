@@ -35,13 +35,13 @@ import org.scalacheck.{Gen, Shrink}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import com.waz.ZLog.ImplicitTag._
 import com.waz.utils.wrappers.DB
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks { test =>
+@Ignore class ConnectionsServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks { test =>
   implicit lazy val dispatcher = Threading.Background
 
   def storage: ZmsDatabase = service.db

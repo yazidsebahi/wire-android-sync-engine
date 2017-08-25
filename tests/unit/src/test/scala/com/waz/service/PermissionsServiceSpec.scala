@@ -32,7 +32,7 @@ import scala.collection.breakOut
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-class PermissionsServiceSpec extends FeatureSpec with Matchers with Inspectors with RobolectricTests with RobolectricUtils {
+@Ignore class PermissionsServiceSpec extends FeatureSpec with Matchers with Inspectors with RobolectricTests with RobolectricUtils {
 
   feature("Checking permissions") {
     scenario("Initial status") {

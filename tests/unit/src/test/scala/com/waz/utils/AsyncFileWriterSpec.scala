@@ -22,12 +22,12 @@ import java.io.File.createTempFile
 import java.nio.ByteBuffer
 
 import com.waz.testutils.Matchers._
-import org.scalatest.{FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
 import scala.concurrent.duration._
 import scala.util.Random.nextBytes
 
-class AsyncFileWriterSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class AsyncFileWriterSpec extends FeatureSpec with Matchers with RobolectricTests {
   lazy val testData = returning(Array.ofDim[Byte](10 << 20))(nextBytes)
 
   scenario("basic use") {

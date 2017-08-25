@@ -150,6 +150,7 @@ class UserSearchService(selfUserId: UserId,
   private val currentQuery = new AtomicReference[SearchQuery]()
 
   def searchUserData(query: SearchQuery): Signal[SeqMap[UserId, UserData]] = {
+    verbose("searchUserData")
     currentQuery.set(query)
 
     queryCache.optSignal(query).flatMap {
@@ -173,15 +174,24 @@ class UserSearchService(selfUserId: UserId,
         Signal.const(Vector.empty[UserData])
 
       case Some(cached) =>
-        if (cacheRefreshInterval elapsedSince cached.timestamp)
+        verbose(s"cached: $cached")
+        if (cacheRefreshInterval elapsedSince cached.timestamp) {
+          verbose("ellapsed since...")
           queryCache.getOrCreate(query, SearchQueryCache(query, Instant.now, None)).flatMap(_ => sync.syncSearchQuery(query)).logFailure()
-
-        cached.entries match {
-          case Some(ids) => usersStorage.listSignal(ids)
-          case _ => Signal.const(Vector.empty[UserData])
         }
 
-      case _ => Signal.const(Vector.empty[UserData])
+        cached.entries match {
+          case Some(ids) =>
+            verbose("weirder...")
+            usersStorage.listSignal(ids)
+          case _ =>
+            verbose("hmm")
+            Signal.const(Vector.empty[UserData])
+        }
+
+      case _ =>
+        verbose("nothing....")
+        Signal.const(Vector.empty[UserData])
     }.map { users =>
       query match {
         case Recommended(prefix) => users filter recommendedPredicate(prefix)

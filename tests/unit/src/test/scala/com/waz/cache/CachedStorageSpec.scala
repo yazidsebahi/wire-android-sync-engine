@@ -32,13 +32,13 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables
 import org.scalatest.time.{Millis, Seconds, Span}
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.collection.breakOut
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class CachedStorageSpec extends FeatureSpec with Tables with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
+@Ignore class CachedStorageSpec extends FeatureSpec with Tables with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(100, Millis))
 
   import com.waz.utils.events.EventContext.Implicits.global

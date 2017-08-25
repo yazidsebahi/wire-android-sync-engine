@@ -21,22 +21,34 @@ import com.waz.api.User.ConnectionStatus
 import com.waz.content._
 import com.waz.model.SearchQuery.Recommended
 import com.waz.model._
-import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.SyncServiceHandle
-import com.waz.utils.events.{Signal, SourceSignal}
-
-import scala.collection.breakOut
-import scala.concurrent.Future
-import com.waz.utils.Managed
-import com.waz.utils.wrappers.DB
-import org.threeten.bp.Instant
 import com.waz.service.conversation.ConversationsUiService
 import com.waz.service.teams.TeamsService
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.SyncServiceHandle
+import com.waz.utils.Managed
+import com.waz.utils.events.{Signal, SourceSignal}
+import com.waz.utils.wrappers.DB
+import org.threeten.bp.Instant
 
-import scala.language.higherKinds
+import scala.collection.breakOut
 import scala.collection.generic.CanBuild
+import scala.concurrent.Future
+import scala.language.higherKinds
 
 class UserSearchServiceSpec extends AndroidFreeSpec {
+
+  val selfId          = UserId()
+  val teamId          = Option.empty[TeamId]
+
+  val queryCacheStorage = mock[SearchQueryCacheStorage]
+  val userService       = mock[UserService]
+  val usersStorage      = mock[UsersStorage]
+  val membersStorage    = mock[MembersStorage]
+  val teamsService      = mock[TeamsService]
+  val sync              = mock[SyncServiceHandle]
+  val messagesStorage   = mock[MessagesStorage]
+  val convsUi           = mock[ConversationsUiService]
+  val timeouts          = new Timeouts
 
   lazy val users = Map(
     id('a) -> UserData(id('a), "other user 1"),
@@ -54,30 +66,14 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
   def id(s: Symbol) = UserId(s.toString)
   def ids(s: Symbol*) = s.map(id)(breakOut).toSet
 
-  def stubService(userId: UserId = UserId(),
-                  queryCacheStorage: SearchQueryCacheStorage = stub[SearchQueryCacheStorage],
-                  teamId: Option[TeamId] = None,
-                  userService: UserService = stub[UserService],
-                  usersStorage: UsersStorage = stub[UsersStorage],
-                  teamsService: TeamsService = stub[TeamsService],
-                  membersStorage: MembersStorage = stub[MembersStorage],
-                  timeouts: Timeouts = new Timeouts,
-                  sync: SyncServiceHandle = stub[SyncServiceHandle],
-                  messagesStorage: MessagesStorage = stub[MessagesStorage],
-                  convsUi: ConversationsUiService = stub[ConversationsUiService]) =
-    new UserSearchService(userId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsUi)
-
   def verifySearch(prefix: String, matches: Set[UserId]) = {
     val query = Recommended(prefix)
     val expected = users.filterKeys(matches.contains).values.toVector
-    val querySignal = new SourceSignal[Option[SearchQueryCache]]()
+    val querySignal = Signal[Option[SearchQueryCache]]()
     val firstQueryCache = SearchQueryCache(query, Instant.now, None)
     val secondQueryCache = SearchQueryCache(query, Instant.now, Some(matches.toVector))
 
-    val queryCacheStorage = mock[SearchQueryCacheStorage]
-    (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
-    val usersStorage = mock[UsersStorage]
-    val sync = mock[SyncServiceHandle]
+    (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
     (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
     (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
@@ -88,17 +84,22 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     }
 
     (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
-      Future.successful[SyncId] {
+      Future.successful {
         querySignal ! Some(secondQueryCache)
         SyncId()
       }
     }
+
     (usersStorage.listSignal _).expects(*).once().returning(Signal.const(expected))
 
-    val service = stubService(queryCacheStorage = queryCacheStorage, usersStorage = usersStorage, sync = sync)
     querySignal ! Some(firstQueryCache)
+    result(querySignal.filter(_.contains(firstQueryCache)).head)
 
-    result(service.searchUserData(Recommended(prefix)).map(_.keys.toSet).filter(_ == matches).head)
+    val resSignal = getService.searchUserData(Recommended(prefix)).disableAutowiring()
+
+    result(querySignal.filter(_.contains(secondQueryCache)).head)
+
+    result(resSignal.map(_.keys.toSet).filter(_ == matches).head)
   }
 
   feature("Recommended people search") {
@@ -123,21 +124,15 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
   feature("Search by searchState") {
     scenario("search for top people"){
       val expected = ids('g, 'h, 'i)
-      val queryCacheStorage = mock[SearchQueryCacheStorage]
-      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
 
-      val usersStorage = mock[UsersStorage]
+      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
       (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
         .expects(*, *, *, *).once().returning(Future.successful(expected.map(users).toVector))
 
-      val userService = stub[UserService]
-      (userService.acceptedOrBlockedUsers _).when().returns(Signal.const(Map.empty[UserId, UserData]))
+      (userService.acceptedOrBlockedUsers _).expects().returns(Signal.const(Map.empty[UserId, UserData]))
+      (messagesStorage.countLaterThan _).expects(*, *).repeated(3).returning(Future.successful(1L))
 
-      val messagesStorage = mock[MessagesStorage]
-      (messagesStorage.countLaterThan _).expects(*, *).anyNumberOfTimes().returning(Future.successful(1L))
-
-      val service = stubService(queryCacheStorage = queryCacheStorage, userService = userService, usersStorage = usersStorage, messagesStorage = messagesStorage)
-      val res = service.search(SearchState("", false, None), Set.empty[UserId]).map(_.topPeople.map(_.map(_.id).toSet))
+      val res = getService.search(SearchState("", hasSelectedUsers = false, None), Set.empty[UserId]).map(_.topPeople.map(_.map(_.id).toSet))
 
       result(res.filter(_.exists(_ == expected)).head)
     }
@@ -145,28 +140,20 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     scenario("search for local results"){
       val expected = ids('g, 'h)
       val query = Recommended("fr")
-      val queryCacheStorage = mock[SearchQueryCacheStorage]
-      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
-      val querySignal = new SourceSignal[Option[SearchQueryCache]]()
-      (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
 
+      val querySignal = new SourceSignal[Option[SearchQueryCache]]()
       val queryCache = SearchQueryCache(query, Instant.now, Some(Vector.empty[UserId]))
 
-      val usersStorage = mock[UsersStorage]
+      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
+      (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
+
       (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
         .expects(*, *, *, *).once().returning(Future.successful(Vector.empty[UserData]))
-
-      val userService = mock[UserService]
       (userService.acceptedOrBlockedUsers _).expects().once().returning(Signal.const(expected.map(key => (key -> users(key))).toMap))
 
-      val convsUi = stub[ConversationsUiService]
-      (convsUi.findGroupConversations _).when(*, *, *).returns(Future.successful(IndexedSeq.empty[ConversationData]))
+      (convsUi.findGroupConversations _).expects(*, *, *).returns(Future.successful(IndexedSeq.empty[ConversationData]))
+      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning(Future.successful(queryCache))
 
-      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning {
-        Future.successful(queryCache)
-      }
-
-      val sync = mock[SyncServiceHandle]
       (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
         Future.successful[SyncId] {
           querySignal ! Some(queryCache)
@@ -176,8 +163,7 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
 
       (usersStorage.listSignal _).expects(*).once().returning(Signal.const(Vector.empty[UserData]))
 
-      val service = stubService(queryCacheStorage = queryCacheStorage, userService = userService, usersStorage = usersStorage, convsUi = convsUi, sync = sync)
-      val res = service.search(SearchState("fr", false, None), Set.empty[UserId]).map(_.localResults.map(_.map(_.id).toSet))
+      val res = getService.search(SearchState("fr", hasSelectedUsers = false, None), Set.empty[UserId]).map(_.localResults.map(_.map(_.id).toSet))
       querySignal ! None
 
       result(res.filter(_.exists(_ == expected)).head)
@@ -186,28 +172,20 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     scenario("search for remote results") {
       val expected = ids('a, 'b)
       val query = Recommended("ot")
-      val queryCacheStorage = mock[SearchQueryCacheStorage]
-      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
-      val querySignal = new SourceSignal[Option[SearchQueryCache]]()
-      (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
 
+      val querySignal = new SourceSignal[Option[SearchQueryCache]]()
       val queryCache = SearchQueryCache(query, Instant.now, Some(expected.toVector))
 
-      val usersStorage = mock[UsersStorage]
+      (queryCacheStorage.deleteBefore _).expects(*).anyNumberOfTimes().returning(Future.successful[Unit]({}))
+      (queryCacheStorage.optSignal _).expects(query).once().returning(querySignal)
+
       (usersStorage.find(_: UserData => Boolean, _: DB => Managed[TraversableOnce[UserData]], _: UserData => UserData)(_: CanBuild[UserData, Vector[UserData]]))
         .expects(*, *, *, *).once().returning(Future.successful(Vector.empty[UserData]))
-
-      val userService = mock[UserService]
       (userService.acceptedOrBlockedUsers _).expects().once().returning(Signal.const(Map.empty[UserId, UserData]))
 
-      val convsUi = stub[ConversationsUiService]
-      (convsUi.findGroupConversations _).when(*, *, *).returns(Future.successful(IndexedSeq.empty[ConversationData]))
+      (convsUi.findGroupConversations _).expects(*, *, *).returns(Future.successful(IndexedSeq.empty[ConversationData]))
+      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning(Future.successful(queryCache))
 
-      (queryCacheStorage.updateOrCreate _).expects(*, *, *).once().returning {
-        Future.successful(queryCache)
-      }
-
-      val sync = mock[SyncServiceHandle]
       (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
         Future.successful[SyncId] {
           querySignal ! Some(queryCache)
@@ -217,14 +195,14 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
 
       (usersStorage.listSignal _).expects(expected.toVector).once().returning(Signal.const(expected.map(users).toVector))
 
-      val service = stubService(queryCacheStorage = queryCacheStorage, userService = userService, usersStorage = usersStorage, convsUi = convsUi, sync = sync)
-
-      val res = service.search(SearchState("ot", false, None), Set.empty[UserId]).map(_.directoryResults.map(_.map(_.id).toSet))
+      val res = getService.search(SearchState("ot", hasSelectedUsers = false, None), Set.empty[UserId]).map(_.directoryResults.map(_.map(_.id).toSet))
 
       querySignal ! None
 
       result(res.filter(_.exists(_ == expected)).head)
     }
   }
+
+  def getService = new UserSearchService(selfId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsUi)
 
 }

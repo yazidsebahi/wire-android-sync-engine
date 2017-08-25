@@ -18,14 +18,15 @@
 package com.waz.service.otr
 
 import java.io.File
-import java.util.UUID, UUID.randomUUID
+import java.util.UUID
+import UUID.randomUUID
 
 import com.waz.utils.IoUtils
 import com.wire.cryptobox._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, Matchers, FeatureSpec}
+import org.scalatest._
 
-class OtrSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with GeneratorDrivenPropertyChecks {
+@Ignore class OtrSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with GeneratorDrivenPropertyChecks {
 
   val base = new File("target/cryptobox-jni/temp")
   var store: File = _

@@ -68,7 +68,7 @@ class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.Ima
   override def getHeight: Int = data.dimensions.height
 
   protected def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle =
-    BitmapLoadHandle({ zms => BitmapSignal(data, req, zms.imageLoader, zms.assetsStorage.get) }, callback)
+    BitmapLoadHandle({ BitmapSignal(_, data, req) }, callback)
 
   override def isEmpty: Boolean = false
 
@@ -100,8 +100,8 @@ class LocalImageAsset(img: AssetData)(implicit ui: UiModule) extends ImageAsset(
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     new BitmapLoadHandle({
-      case None => BitmapSignal(data, req, ui.globalImageLoader)
-      case Some(zms) => BitmapSignal(data, req, zms.imageLoader, zms.assetsStorage.get)
+      case None => BitmapSignal(data, req, ui.globalImageLoader, ui.network)
+      case Some(zms) => BitmapSignal(zms, data, req)
     }, callback)
   }
 
@@ -129,8 +129,8 @@ class LocalImageAssetWithPreview(preview: Option[AssetData], medium: AssetData)(
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = req match {
       case Single(_, _) => new BitmapLoadHandle ({
-        case Some(zms) => BitmapSignal(preview.getOrElse(medium), req, zms.imageLoader, zms.assetsStorage.get)
-        case _ => BitmapSignal(preview.getOrElse(medium), req, ui.globalImageLoader)
+        case Some(zms) => BitmapSignal(zms, preview.getOrElse(medium), req)
+        case _ => BitmapSignal(preview.getOrElse(medium), req, ui.globalImageLoader, ui.network)
       }, callback)
       case _ => super.getBitmap(req, callback)
     }
@@ -180,7 +180,7 @@ class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTAT
 
   override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
     verbose(s"get bitmap")
-    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.globalImageLoader) }, callback)
+    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.globalImageLoader, ui.network) }, callback)
   }
 
   override def saveImageToGallery(callback: SaveCallback): Unit =

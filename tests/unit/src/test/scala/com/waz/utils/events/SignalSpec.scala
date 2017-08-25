@@ -30,7 +30,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.collection.JavaConverters._
 
-class SignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+@Ignore class SignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   implicit val ec: EventContext = EventContext.Global

@@ -28,7 +28,7 @@ import org.threeten.bp.Instant.now
 
 import scala.concurrent.duration._
 
-class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAndAfter with Matchers with RobolectricTests {
+@Ignore class SearchQueryCacheSpec extends FeatureSpec with GivenWhenThen with BeforeAndAfter with Matchers with RobolectricTests {
 
   lazy val dbHelper = new ZMessagingDB(Robolectric.application, "dbName")
   implicit def db: DB = dbHelper.getWritableDatabase

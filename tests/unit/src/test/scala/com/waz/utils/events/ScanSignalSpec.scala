@@ -17,10 +17,10 @@
  */
 package com.waz.utils.events
 
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 import com.waz.ZLog.ImplicitTag._
 
-class ScanSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore class ScanSignalSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
 
   implicit val ec: EventContext = EventContext.Global
 

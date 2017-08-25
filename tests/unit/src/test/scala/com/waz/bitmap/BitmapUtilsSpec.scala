@@ -17,9 +17,9 @@
  */
 package com.waz.bitmap
 
-import org.scalatest.{RobolectricTests, Matchers, FeatureSpec}
+import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-class BitmapUtilsSpec extends FeatureSpec with Matchers with RobolectricTests {
+@Ignore class BitmapUtilsSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   feature("In sample size") {
 

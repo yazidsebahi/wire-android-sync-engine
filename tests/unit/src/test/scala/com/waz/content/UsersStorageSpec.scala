@@ -27,13 +27,13 @@ import com.waz.utils.events.EventContext.Implicits.global
 import com.waz.utils.events.EventStream
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
-import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
+import org.scalatest._
 
 import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class UsersStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore class UsersStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
   lazy val testUsers = 1 to 100 map { x => UserData(UserId(x.toString), s"user-$x") }
   lazy val newUser = UserData(UserId("new"), "new-user")
   lazy val defaultUser = UserData(UserId("default"), "default")
