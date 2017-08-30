@@ -85,13 +85,9 @@ class UserModule(val userId: UserId, val account: AccountManager) {
           clientsSync.registerClient(account.password) flatMap {
             case Right((state, cl)) =>
               verbose(s"Client registration complete: $state, $cl")
-              def verified(accountData: AccountData) = (state, cl) match {
-                case (REGISTERED, Some(_)) => true
-                case _ =>
-                  sync.syncSelfClients() // request clients sync, UI will need that
-                  accountData.verified
+              if (state != REGISTERED || cl.isEmpty) {
+                sync.syncSelfClients()
               }
-              //TODO: need to check pending?
               accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state)).map(_ => Right({}))
             case Left(err) =>
               error(s"client registration failed: $err")
