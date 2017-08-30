@@ -32,6 +32,6 @@ object AccountDataMigration {
     db.execSQL("ALTER TABLE Accounts ADD COLUMN code TEXT DEFAULT NULL")
     db.execSQL("ALTER TABLE Accounts ADD COLUMN invitation_token TEXT DEFAULT NULL")
     db.execSQL("ALTER TABLE Accounts ADD COLUMN name TEXT DEFAULT NULL")
-    db.execSQL("ALTER TABLE Accounts ADD COLUMN first_login INTEGER DEFAULT 1")
+    db.execSQL("ALTER TABLE Accounts ADD COLUMN first_login INTEGER DEFAULT 0")
   }
 }

@@ -131,22 +131,18 @@ case class AccountData(id:              AccountId                       = Accoun
     o.put("label", id.str)  // this label can be later used for cookie revocation
     invitationToken foreach (i => o.put("invitation_code", i.code))
 
-    (email, handle, phone, pendingEmail) match {
-      case (Some(e), _, _, _) =>
+    (email.orElse(pendingEmail), handle, phone.orElse(pendingPhone)) match {
+      case (Some(e), _, _) =>
         o.put("email", e.str)
         password foreach (o.put("password", _))
 
-      case (_, Some(h), _,  _) =>
+      case (_, Some(h), _) =>
         o.put("handle", h.string)
         password foreach (o.put("password", _))
 
-      case (_, _, Some(p), _) =>
+      case (_, _, Some(p)) =>
         o.put("phone", p.str)
        code foreach { code => o.put(if (isLogin) "code" else "phone_code" , code.str) }
-
-      case (_, _, _, Some(pe)) =>
-        o.put("email", pe.str)
-        password foreach (o.put("password", _))
 
       case _ =>
     }
