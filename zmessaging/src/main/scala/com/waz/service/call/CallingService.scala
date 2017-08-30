@@ -34,7 +34,7 @@ import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState, WCall}
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
-import com.waz.service.push.PushServiceImpl
+import com.waz.service.push.PushService
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
@@ -80,7 +80,7 @@ class CallingService(val selfUserId:      UserId,
                      flowManagerService:  FlowManagerService,
                      messagesService:     MessagesService,
                      mediaManagerService: MediaManagerService,
-                     pushService:         PushServiceImpl,
+                     pushService:         PushService,
                      callLogService:      CallLogService,
                      network:             NetworkModeService,
                      netClient:           ZNetClient,

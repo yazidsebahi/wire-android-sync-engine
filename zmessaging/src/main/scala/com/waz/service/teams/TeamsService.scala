@@ -20,7 +20,6 @@ package com.waz.service.teams
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.ContentChange.{Added, Removed, Updated}
-import com.waz.content.UserPreferences.ShouldSyncTeams
 import com.waz.content._
 import com.waz.model.AccountData.PermissionsMasks
 import com.waz.model.ConversationData.ConversationDataDao
@@ -65,15 +64,6 @@ class TeamsServiceImpl(selfUser:           UserId,
                        userPrefs:          UserPreferences) extends TeamsService {
 
   private implicit val dispatcher = SerialDispatchQueue()
-
-  val shouldSyncTeams = userPrefs.preference(ShouldSyncTeams)
-
-  shouldSyncTeams.mutate {
-    case true =>
-      sync.syncTeam()
-      false
-    case v => v
-  }
 
   val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
     verbose(s"Handling events: $events")

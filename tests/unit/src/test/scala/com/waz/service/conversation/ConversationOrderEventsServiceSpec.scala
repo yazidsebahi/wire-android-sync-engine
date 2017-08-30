@@ -25,7 +25,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConversationData, MemberJoinEvent, _}
 import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
 import com.waz.service.messages.MessagesService
-import com.waz.service.{EventPipeline, EventScheduler, UserService}
+import com.waz.service.{EventPipeline, EventPipelineImpl, EventScheduler, UserService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
@@ -76,7 +76,7 @@ class ConversationOrderEventsServiceSpec extends AndroidFreeSpec {
       )
     )
 
-    val pipeline = new EventPipeline(Vector.empty, scheduler.enqueue)
+    val pipeline = new EventPipelineImpl(Vector.empty, scheduler.enqueue)
 
     val convId = RConvId()
     val events = (1 to 10).map { _ =>
@@ -115,7 +115,7 @@ class ConversationOrderEventsServiceSpec extends AndroidFreeSpec {
     }
 
     lazy val scheduler: EventScheduler = new EventScheduler(Stage(Sequential)(service.conversationOrderEventsStage))
-    lazy val pipeline  = new EventPipeline(Vector.empty, scheduler.enqueue)
+    lazy val pipeline  = new EventPipelineImpl(Vector.empty, scheduler.enqueue)
     lazy val service = new ConversationOrderEventsService(convs, storage, messages, users, sync, pipeline)
 
     val events = Seq(

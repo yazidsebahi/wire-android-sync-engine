@@ -31,7 +31,7 @@ import com.waz.model._
 import com.waz.model.otr._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
-import com.waz.service.push.PushServiceSignals
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.sync.client.OtrClient.EncryptedContent
@@ -53,15 +53,13 @@ trait OtrService {
   def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]): Option[Array[Byte]]
 }
 
-class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushServiceSignals,
+class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushService,
                  cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: ConversationsContentUpdaterImpl,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
                  prefs: GlobalPreferences) extends OtrService {
   import EventContext.Implicits.global
   import OtrService._
   import Threading.Implicits.Background
-
-  push.onSlowSyncNeeded { _ => sync.syncSelfClients() }
 
   lazy val sessions = returning(cryptoBox.sessions) { sessions =>
     // request self clients sync to update prekeys on backend

@@ -26,7 +26,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service._
-import com.waz.service.push.WebSocketClientService
+import com.waz.service.push.{WebSocketClientService, WebSocketClientServiceImpl}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.threading.{CancellableFuture, Threading}
@@ -115,7 +115,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     }
   }
 
-  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+  override lazy val websocket: WebSocketClientService = new WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
     override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }

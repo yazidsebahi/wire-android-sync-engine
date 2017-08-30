@@ -19,185 +19,204 @@ package com.waz.service.push
 
 import java.util.Date
 
-import com.waz.RobolectricUtils
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.Timeouts
-import com.waz.sync.client.EventsClient.LoadNotificationsResponse
-import com.waz.sync.client.{EventsClient, PushNotification}
-import com.waz.testutils.MockZMessaging
+import com.waz.service.{EventPipeline, Timeouts, ZMessaging}
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
+import com.waz.sync.client.{PushNotification, PushNotificationsClient}
+import com.waz.testutils.Matchers.eventually
+import com.waz.testutils.{MockZMessaging, TestUserPreferences}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
+import com.waz.utils.{FakeWakeLock, WakeLock}
 import com.waz.utils.events.EventContext.Implicits.{global => evc}
 import com.waz.utils.events.Signal
-import org.scalatest._
+import com.waz.utils.wrappers.Context
+import com.waz.znet.ZNetClient
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.threeten.bp.Instant
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.duration._
 
-@Ignore class PushServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
-  test =>
+class PushServiceSpec extends AndroidFreeSpec { test =>
+
+  val wsConnected = Signal(false)
+
+  val context = mock[Context]
+  val pipeline = mock[EventPipeline]
+  val webSocket = mock[WebSocketClientService]
+  val znet = mock[ZNetClient]
+  val sync = mock[SyncServiceHandle]
 
   val lastId = Uid()
-  val wsConnected = Signal(false)
-  var lastNotification = Option.empty[PushNotification]
-  var notifications: Either[ErrorResponse, Vector[LoadNotificationsResponse]] = _
+  val orgNots = Vector(PushNotification(lastId, Vector.empty))
+  var notifications = orgNots
 
-  var clientDelay = Duration.Zero
-  var requestedSince = None: Option[Uid]
-  @volatile var slowSyncRequested = 0
-
-  lazy val zms = new MockZMessaging() {
-
-    override def timeouts: Timeouts = new Timeouts {
-      override val webSocket: WebSocket = new WebSocket {
-        override def inactivityTimeout: Timeout = 250.millis
-
-        override def connectionTimeout: Timeout = 250.millis
-      }
+  var loadFailure = false
+  lazy val client = new PushNotificationsClient(znet) {
+    override def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] = {
+      if (loadFailure) CancellableFuture.successful(Left(ErrorResponse.InternalError))
+      else CancellableFuture.successful(Right( LoadNotificationsResponse(notifications, hasMore = false, None) ))
     }
-
-    override lazy val websocket = new WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
-      override val connected = wsConnected
-    }
-
-    override lazy val eventsClient: EventsClient = new EventsClient(zNetClient) {
-      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int) = {
-        requestedSince = since
-        CancellableFuture.delayed(clientDelay)(test.notifications.right map (_.map { n =>
-          onNotificationsPageLoaded ! n
-          n.notifications.lastOption map (_.id)
-        }.last))
-      }
-
-      override def loadLastNotification(client: ClientId) = CancellableFuture.delayed(clientDelay)(Right(lastNotification))
-    }
-
-    pushSignals.onSlowSyncNeeded { _ => slowSyncRequested += 1 }
   }
 
-  lazy val service = zms.push
+  (webSocket.connected _).expects().anyNumberOfTimes().returning(wsConnected)
+  (webSocket.client _).expects().anyNumberOfTimes().returning(Signal.const(None))
+  (pipeline.apply _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+  var syncPerformed = 0
+  (sync.performFullSync _).expects().anyNumberOfTimes().onCall { _ => Future.successful { syncPerformed += 1 } }
 
-  before {
-    requestedSince = None
-    slowSyncRequested = 0
-    clientDelay = Duration.Zero
-    lastNotification = Some(PushNotification(lastId, Nil))
-    notifications = Right(Vector(LoadNotificationsResponse(Vector.empty, lastIdWasFound = false, Some(Instant.now))))
+  private def createService: PushServiceImpl = {
+    new PushServiceImpl(context, new TestUserPreferences(), client, ClientId(), pipeline, webSocket, sync){
+      override lazy val wakeLock: WakeLock = new FakeWakeLock
+    }
   }
 
-  after {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     wsConnected ! false
-    awaitUi(50.millis)
+    awaitAllTasks
+    syncPerformed = 0
+    notifications = orgNots
+    loadFailure = false
   }
 
-  def lastNotificationId = Await.result(service.lastNotification.lastNotificationId(), 5.seconds)
+  feature("Updating lastNotificationId pref") {
+   scenario("Update pref on fresh notification") {
+     val service = createService
 
-  def lastNotificationId_=(id: Option[Uid]) = Await.result(service.lastNotification.idPref := id, 5.seconds)
+      service.updateLastNotificationId(Uid(3, 3))
+      service.updateLastNotificationId(Uid(4, 4))
+      service.updateLastNotificationId(Uid(5, 5))
+      withDelay(service.lastNotificationId() should eventually(be(Some(Uid(5, 5)))))
+    }
 
-  feature("last notification Id") {
+    scenario("Update pref only when notification processing is completed") {
+      val service = createService
+
+      val p = Promise[Unit]()
+      p.future.onSuccess { case _ => service.updateLastNotificationId(Uid(2, 2)) }
+      service.updateLastNotificationId(Uid(5, 5))
+      p.trySuccess(())
+      awaitAllTasks
+      withDelay(service.lastNotificationId() should eventually(be(Some(Uid(2, 2)))))
+    }
+
+    scenario("Update pref to last received notification when it's completed") {
+      val service = createService
+
+      val p1 = Promise[Unit]()
+      val p2 = Promise[Unit]()
+      p1.future.onSuccess { case _ => service.updateLastNotificationId(Uid(3, 3)) }
+      p2.future.onSuccess { case _ => service.updateLastNotificationId(Uid(4, 4)) }
+      p1.trySuccess(())
+      awaitAllTasks
+      p2.trySuccess(())
+      awaitAllTasks
+      withDelay(service.lastNotificationId() should eventually(be(Some(Uid(4, 4)))))
+    }
 
     scenario("store last notification Id on new event") {
+      val service = createService
+
       wsConnected ! true
+      result(wsConnected.filter(_ == true).head)
+
       withDelay {
-        lastNotificationId should be('defined)
+        service.lastNotificationId should eventually(be('defined))
       }
+      awaitAllTasks
+
       val id = Uid()
       service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(RConvId(), new Date, UserId(), Nil))))
       withDelay {
-        lastNotificationId shouldEqual Some(id)
+        service.lastNotificationId should eventually(be(Some(id)))
       }
+
     }
 
     scenario("don't store id on transient notification") {
-      lastNotificationId = None
+      val service = createService
+
       wsConnected ! true
+      awaitAllTasks
+
       withDelay {
-        lastNotificationId should be('defined)
+        service.lastNotificationId should eventually(be('defined))
       }
-      service.onPushNotification(PushNotification(Uid(), Nil, transient = true))
-      awaitUi(1.second)
-      lastNotificationId shouldEqual Some(lastId)
+
+      val newId = Uid()
+      service.onPushNotification(PushNotification(newId, Nil, transient = true))
+      awaitAllTasks
+      withDelay(service.lastNotificationId should eventually(be(lastId)))
     }
 
     scenario("don't update id on otr notification not intended for us") {
-      lastNotificationId = None
+      val service = createService
+
       wsConnected ! true
+      result(wsConnected.filter(_ == true).head)
+
       withDelay {
-        lastNotificationId should be('defined)
+        service.lastNotificationId should eventually(be('defined))
       }
+      awaitAllTasks
+
       service.onPushNotification(PushNotification(Uid(), Seq(OtrMessageEvent(RConvId(), new Date, UserId(), ClientId(), ClientId(), Array.empty))))
-      awaitUi(1.second)
-      lastNotificationId shouldEqual Some(lastId)
+      withDelay(service.lastNotificationId should eventually(be(lastId)))
     }
   }
 
   feature("/notifications") {
 
     scenario("fetch last notification when there is no local last notification id") {
+      val service = createService
+
       wsConnected ! true
+      result(wsConnected.filter(_ == true).head)
+
       withDelay {
-        slowSyncRequested shouldEqual 1
-        lastNotificationId shouldEqual Some(lastId)
+        syncPerformed shouldEqual 1
+        service.lastNotificationId should eventually(be(Some(lastId)))
       }
     }
 
     scenario("fetch notifications and update last id") {
-      lastNotificationId = Some(lastId)
+      val service = createService
+
+      service.updateLastNotificationId(lastId)
       val notification1 = PushNotification(Uid(), Nil)
       val notification2 = PushNotification(Uid(), Nil)
-      notifications = Right(Vector(
-        LoadNotificationsResponse(Vector(notification1), lastIdWasFound = true, Some(Instant.now)),
-        LoadNotificationsResponse(Vector(notification2), lastIdWasFound = true, Some(Instant.now))))
+      notifications = Vector(notification1, notification2)
       wsConnected ! true
+      result(wsConnected.filter(_ == true).head)
 
       withDelay {
-        requestedSince shouldEqual Some(lastId)
-        lastNotificationId shouldEqual Some(notification2.id)
-        slowSyncRequested shouldEqual 0
+        service.lastNotificationId should eventually(be(Some(notification2.id)))
+        syncPerformed shouldEqual 0
       }
     }
 
-    scenario("request slow sync if /notifications returns 404 with notifications") {
-      lastNotificationId = Some(lastId)
+    scenario("request slow sync and fetch last notification if /notifications returns error") {
+      val service = createService
+      loadFailure = true
+
+      service.updateLastNotificationId(lastId)
       val notification1 = PushNotification(Uid(), Nil)
       val notification2 = PushNotification(Uid(), Nil)
-      notifications = Right(Vector(
-        LoadNotificationsResponse(Vector(notification1), lastIdWasFound = false, Some(Instant.now)),
-        LoadNotificationsResponse(Vector(notification2), lastIdWasFound = true, Some(Instant.now))))
+      notifications = Vector(notification1, notification2)
       wsConnected ! true
+      result(wsConnected.filter(_ == true).head)
 
       withDelay {
-        requestedSince shouldEqual Some(lastId)
-        lastNotificationId shouldEqual Some(lastId)
-        slowSyncRequested shouldEqual 1
+        service.lastNotificationId should eventually(be(Some(lastId)))
+        syncPerformed shouldEqual 1
       }
     }
 
-    scenario("request slow sync and fetch last notification if /notifications returns 404 without notifications") {
-      lastNotificationId = Some(lastId)
-      notifications = Right(Vector(LoadNotificationsResponse(Vector.empty, lastIdWasFound = false, Some(Instant.now))))
-      wsConnected ! true
-
-      withDelay {
-        requestedSince shouldEqual Some(lastId)
-        lastNotificationId shouldEqual Some(lastId)
-        slowSyncRequested shouldEqual 1
-      }
-    }
-
-    scenario("request slow sync and fetch last notification id if /notifications fails completely") {
-      lastNotificationId = Some(lastId)
-      notifications = Left(ErrorResponse(500, "", ""))
-      wsConnected ! true
-
-      withDelay {
-        requestedSince shouldEqual Some(lastId)
-        lastNotificationId shouldEqual Some(lastId)
-        slowSyncRequested shouldEqual 1
-      }
-    }
   }
 }

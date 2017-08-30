@@ -30,10 +30,10 @@ import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
-import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, MessageResponse}
 import com.waz.sync.client.PushNotification
+import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
@@ -379,15 +379,15 @@ trait MockOrlop { self: ApiSpec with MockedClient with MockedWebSocket with Mock
 
   @volatile var notifications = Vector.empty[PushNotification]
 
-  override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOrResponse[Option[Uid]] = { // does not emulate paging
-    val tail = notifications.dropWhile(n => since.exists(_ != n.id))
+  override def loadNotifications(lastId: Option[Uid], clientId: ClientId): ErrorOrResponse[LoadNotificationsResponse] = {
+    val tail = notifications.dropWhile(n => lastId.exists(_ != n.id))
     if (tail.isEmpty) {
-      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = false, Some(Instant.now))
-      success(since)
+      self.zmessaging.push.onPushNotifications(notifications)
+      success(LoadNotificationsResponse(notifications, false, None))
     } else {
-      assert(since forall (_ == tail.head.id))
-      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(tail.tail, lastIdWasFound = true, Some(Instant.now))
-      success(tail.lastOption map (_.id) orElse since)
+      assert(lastId forall (_ == tail.head.id))
+      self.zmessaging.push.onPushNotifications(tail.tail)
+      success(LoadNotificationsResponse(tail.tail, false, None))
     }
   }
 

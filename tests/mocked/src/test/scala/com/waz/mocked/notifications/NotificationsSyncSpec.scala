@@ -88,7 +88,7 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
 
     scenario("resume and wait for sync") {
       withDelay {
-        val lastNotificationId = Await.result(zmessaging.push.lastNotification.lastNotificationId(), 1.second)
+        val lastNotificationId = Await.result(zmessaging.push.lastNotificationId(), 1.second)
         lastNotificationId shouldBe 'defined
         lastNotificationId should not be notifications.lastOption.map(_.id)
       }
@@ -96,7 +96,7 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
       api.onResume()
 
       withDelay {
-        Await.result(zmessaging.push.lastNotification.lastNotificationId(), 1.second) shouldBe notifications.lastOption.map(_.id)
+        Await.result(zmessaging.push.lastNotificationId(), 1.second) shouldBe notifications.lastOption.map(_.id)
       }(10.seconds)
 
       info(f"Notifications processed in: ${(System.currentTimeMillis() - time) / 1000d} s")

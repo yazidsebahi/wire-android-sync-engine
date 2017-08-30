@@ -73,7 +73,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   }
 
   class ApiZMessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule) extends ZMessaging(teamId, clientId, user) {
-    override lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), events =>
+    override lazy val eventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), events =>
       returning(eventScheduler.enqueue(events))(_ => eventSpies.get.foreach(pf => events.foreach(e => pf.applyOrElse(e, (_: Event) => ())))))
 
     override lazy val otrClient = new com.waz.sync.client.OtrClient(zNetClient) {
@@ -152,7 +152,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   def netClient = zmessaging.zNetClient
 
-  def znetClientFor(email: String, password: String) = new ZNetClient(None, new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend.baseUrl)
+  def znetClientFor(email: String, password: String): ZNetClient = new ZNetClientImpl(None, new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend.baseUrl)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

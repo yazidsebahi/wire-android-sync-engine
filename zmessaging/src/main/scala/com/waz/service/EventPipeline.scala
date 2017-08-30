@@ -23,11 +23,16 @@ import com.waz.threading.Threading.Implicits.Background
 import scala.concurrent.Future
 import scala.concurrent.Future._
 
-class EventPipeline(transformersByName: => Vector[Vector[Event] => Future[Vector[Event]]], schedulerByName: => Traversable[Event] => Future[Unit]) extends (Traversable[Event] => Future[Unit]) {
+trait EventPipeline extends (Traversable[Event] => Future[Unit]) {
+  def apply(input: Traversable[Event]): Future[Unit]
+}
+
+class EventPipelineImpl(transformersByName: => Vector[Vector[Event] => Future[Vector[Event]]],
+                        schedulerByName: => Traversable[Event] => Future[Unit]) extends EventPipeline {
 
   private lazy val (transformers, scheduler) = (transformersByName, schedulerByName)
 
-  def apply(input: Traversable[Event]): Future[Unit] =
+  override def apply(input: Traversable[Event]): Future[Unit] =
     for {
       events <- transformers.foldLeft(successful(input.toVector))((l, r) => l.flatMap(r))
       _      <- scheduler(events)

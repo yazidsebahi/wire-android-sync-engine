@@ -33,13 +33,14 @@ import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.service
 import com.waz.service._
 import com.waz.service.call.DefaultFlowManagerService
-import com.waz.service.push.PushServiceImpl
+import com.waz.service.push.PushService
 import com.waz.sync.client.AddressBookClient.UserAndContactIds
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientKey, MessageResponse}
+import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client._
 import com.waz.testutils.TestUserPreferences
@@ -51,13 +52,14 @@ import com.waz.znet.ZNetClient._
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import org.scalatest.{Alerting, Informing, Suite}
+import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.util.Random
 
 trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket with MockedGcm { suite: Suite with Alerting with Informing =>
 
-  @volatile private var pushService = Option.empty[PushServiceImpl]
+  @volatile private var pushService = Option.empty[PushService]
   @volatile protected var keyValueStoreOverrides = Map.empty[String, Option[String]]
 
   class MockedStorageModule(context: Context, accountId: AccountId, prefix: String = "", globalPreferences: GlobalPreferences) extends StorageModule(context, accountId, prefix, globalPreferences) {
@@ -87,9 +89,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val messagesClient     = new MessagesClient(zNetClient) {
       override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
     }
-    override lazy val eventsClient       = new EventsClient(zNetClient) {
-      override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int): ErrorOrResponse[Option[Uid]] = suite.loadNotifications(since, client, pageSize)
-      override def loadLastNotification(client: ClientId): ErrorOrResponse[Option[PushNotification]] = suite.loadLastNotification()
+    override lazy val pushNotsClient       = new PushNotificationsClient(zNetClient) {
+      override def loadNotifications(lastId: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] = suite.loadNotifications(lastId, client)
     }
     override lazy val abClient           = new AddressBookClient(zNetClient) {
       override def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = suite.postAddressBook(a)
@@ -111,8 +112,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
-
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
       override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), auth) {
         override def close() = dispatcher {
           connected ! false
@@ -153,7 +153,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 
     override def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
 
-    override def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
+    override def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
     override def usersClient(client: ZNetClient): UsersClient = new MockedUsersClient(client)
 
@@ -250,7 +250,7 @@ trait MockedClient { test: ApiSpec =>
 
   def loadVersionBlacklist(): ErrorOrResponse[VersionBlacklist] = successful(Right(VersionBlacklist()))
   def loadLastNotification(): ErrorOrResponse[Option[PushNotification]] = successful(Right(None))
-  def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOrResponse[Option[Uid]] = CancellableFuture.successful(Right(since))
+  def loadNotifications(lastId: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] = CancellableFuture.successful(Right(LoadNotificationsResponse(Vector.empty, false, None)) )
   def postAddressBook(a: AddressBook): ErrorOrResponse[Seq[UserAndContactIds]] = successful(Right(Nil))
   def postInvitation(i: Invitation): ErrorOrResponse[Either[UserId, ConfirmedInvitation]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadConnections(start: Option[UserId], pageSize: Int): ErrorOrResponse[Seq[UserConnectionEvent]] = successful(Right(Nil))

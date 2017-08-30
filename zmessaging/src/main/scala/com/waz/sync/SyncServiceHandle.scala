@@ -17,9 +17,6 @@
  */
 package com.waz.sync
 
-import android.content.Context
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -84,11 +81,14 @@ trait SyncServiceHandle {
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId]
 
   def postValidateHandles(handles: Seq[Handle]): Future[SyncId]
+
+  def performFullSync(): Future[Unit]
 }
 
 class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeouts) extends SyncServiceHandle {
 
   import com.waz.model.sync.SyncRequest._
+  import Threading.Implicits.Background
 
   private def addRequest(req: SyncRequest, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, optional: Boolean = false, timeout: Long = 0, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] = {
     val timestamp = SyncJob.timestamp
@@ -142,6 +142,15 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId) = addRequest(PostSessionReset(conv, user, client))
 
   override def postValidateHandles(handles: Seq[Handle]): Future[SyncId] = addRequest(ValidateHandles(handles))
+
+  override def performFullSync(): Future[Unit] = {
+    for {
+      _ <- syncConversations()
+      _ <- syncTeam()
+      _ <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
+      _ <- syncSelfClients()
+    } yield ()
+  }
 }
 
 trait SyncHandler {

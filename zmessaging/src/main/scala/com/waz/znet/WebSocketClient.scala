@@ -29,7 +29,7 @@ import com.waz.model.AccountId
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventStream, Signal}
-import com.waz.utils.{ExponentialBackoff, WakeLock, returning}
+import com.waz.utils.{ExponentialBackoff, WakeLockImpl, returning}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent}
 import com.waz.znet.WebSocketClient.Disconnect
 import org.json.JSONObject
@@ -56,7 +56,7 @@ class WebSocketClient(context: Context,
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClient]}#${accountId.str.take(8)}"
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
-  private val wakeLock = new WakeLock(context)
+  private val wakeLock = new WakeLockImpl(context)
 
   val connected = Signal(false)
   val onError   = EventStream[Exception]()

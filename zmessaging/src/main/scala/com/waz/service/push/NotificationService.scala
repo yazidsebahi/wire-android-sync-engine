@@ -99,6 +99,7 @@ class NotificationService(context:         Context,
                           convs:           ConversationStorage,
                           reactionStorage: ReactionsStorage,
                           userPrefs:       UserPreferences,
+                          timeouts:        Timeouts,
                           pushService:     PushService) {
 
   import NotificationService._
