@@ -30,6 +30,7 @@ import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call.{Avs, AvsImpl}
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
+import com.waz.service.push.GlobalTokenService
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
@@ -46,6 +47,7 @@ trait GlobalModule {
 
   def prefs: GlobalPreferences
   def googleApi: GoogleApi
+  def tokenService: GlobalTokenService
   def storage: Database
   def metadata: MetaDataService
   def cache: CacheService
@@ -85,6 +87,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
+  val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
 
   lazy val contextWrapper:      Context                          = Context.wrap(context)
   lazy val storage:             Database                         = new GlobalDatabase(context)
