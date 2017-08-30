@@ -19,7 +19,7 @@ package com.waz.service
 
 import android.content.Context
 import android.telephony.TelephonyManager
-import com.google.i18n.phonenumbers.{NumberParseException, PhoneNumberUtil}
+import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.google.i18n.phonenumbers.Phonenumber.{PhoneNumber => GooglePhoneNumber}
 import com.waz.PermissionsService
 import com.waz.ZLog._
