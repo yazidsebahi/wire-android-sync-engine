@@ -478,7 +478,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
 
     (avs.registerAccount _).expects(*).once().returning(Future.successful(wCall))
-    val service = new CallingService(self, clientId, account, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null)
+    val service = new CallingService(self, clientId, account, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null)
     result(service.wCall)
     service
   }

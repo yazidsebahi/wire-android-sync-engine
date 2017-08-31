@@ -40,6 +40,9 @@ import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichDate, RichInstant, returningF}
 import com.waz.zms.CallWakeService
+import com.waz.znet.Response.SuccessHttpStatus
+import com.waz.znet.ZNetClient.ErrorOrResponse
+import com.waz.znet._
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
@@ -59,7 +62,10 @@ class CallingService(val selfUserId:      UserId,
                      pushService:         PushServiceImpl,
                      callLogService:      CallLogService,
                      network:             NetworkModeService,
+                     netClient:           ZNetClient,
                      errors:              ErrorsService) {
+
+  import CallingService._
 
   private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
@@ -168,6 +174,18 @@ class CallingService(val selfUserId:      UserId,
   def onMetricsReady(convId: RConvId, metricsJson: String) = {
     verbose(s"Call metrics for $convId, metrics: $metricsJson")
     onMetricsAvailable ! metricsJson
+  }
+
+  def onConfigRequest(wcall: WCall): Int = {
+    verbose("onConfigRequest")
+    netClient.withErrorHandling("onConfigRequest", Request.Get(CallConfigPath)) {
+      case Response(SuccessHttpStatus(), CallConfigResponse(js), _) =>
+        verbose(s"Received calls/config: $js")
+        js
+    }.map { resp =>
+      avs.onConfigRequest(wcall, resp.fold(err => err.code, _ => 0), resp.fold(_ => "", identity))
+    }
+    0
   }
 
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
@@ -402,7 +420,6 @@ class CallingService(val selfUserId:      UserId,
     }
   }
 
-
   private def withConv(convId: ConvId)(f: (WCall, ConversationData) => Unit): Future[Unit] = {
     wCall.flatMap { w =>
       convs.convById(convId) map {
@@ -427,6 +444,24 @@ class CallingService(val selfUserId:      UserId,
   private def isGroup(conv: ConversationData) =
     if (conv.team.isDefined) members.getByConvs(Set(conv.id)).map(_.map(_.userId)).map(_.size > 2)
     else Future.successful(conv.convType == ConversationType.Group)
+}
+
+object CallingService {
+  val CallConfigPath = "/calls/config"
+
+  object CallConfigResponse {
+
+    def unapply(response: ResponseContent): Option[String] = try {
+      response match {
+        case JsonObjectResponse(js) => Some(js.toString)
+        case _ => throw new Exception("Unexpected response type from /calls/config")
+      }
+    } catch {
+      case NonFatal(e) =>
+        warn(s"couldn't parse /calls/config response: $response", e)
+        None
+    }
+  }
 }
 
 

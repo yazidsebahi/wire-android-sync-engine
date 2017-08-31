@@ -33,11 +33,12 @@ import scala.concurrent.{Future, Promise}
 
 trait Avs {
   def registerAccount(callingService: CallingService): Future[WCall]
-  def unregisterAccount(wcall: WCall): Future[Unit]
+  def unregisterAccount(wCall: WCall): Future[Unit]
   def onNetworkChanged(wCall: WCall): Future[Unit]
   def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean): Future[Int]
   def answerCall(wCall: WCall, convId: RConvId): Unit
   def onHttpResponse(wCall: WCall, status: Int, reason: String, arg: Pointer): Future[Unit]
+  def onConfigRequest(wCall: WCall, error: Int, json: String): Future[Unit]
   def onReceiveMessage(wCall: WCall, msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
   def endCall(wCall: WCall, convId: RConvId): Unit
   def rejectCall(wCall: WCall, convId: RConvId): Unit
@@ -104,6 +105,10 @@ class AvsImpl() extends Avs {
         override def onMetricsReady(convId: String, metricsJson: String, arg: Pointer) =
           cs.onMetricsReady(RConvId(convId), metricsJson)
       },
+      new CallConfigRequestHandler {
+        override def onConfigRequest(inst: WCall, arg: WCall): Int =
+          cs.onConfigRequest(inst)
+      },
       null
     )
 
@@ -154,6 +159,8 @@ class AvsImpl() extends Avs {
     val bytes = msg.getBytes("UTF-8")
     withAvs(wcall_recv_msg(wCall, bytes, bytes.length, uint32_tTime(currTime), uint32_tTime(msgTime), convId.str, from.str, sender.str))
   }
+
+  override def onConfigRequest(wCall: WCall, error: Int, json: String): Future[Unit] = withAvs(wcall_config_update(wCall, error, json))
 
   override def endCall(wCall: WCall, convId: RConvId) = withAvs(wcall_end(wCall, convId.str))
 
