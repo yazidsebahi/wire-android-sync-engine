@@ -22,16 +22,14 @@ import java.util.Date
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.CauseForCallStateEvent
 import com.waz.model.ConversationEvent.ConversationEventDecoder
-import com.waz.model.Event.{CallProperties, EventDecoder}
+import com.waz.model.Event.EventDecoder
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.OtrClient
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
-import com.waz.znet.ContentEncoder
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -93,8 +91,6 @@ sealed trait ConversationStateEvent extends ConversationEvent
 // events that add or modify some message
 sealed trait MessageEvent extends ConversationEvent
 
-case class IgnoredEvent(json: JSONObject) extends Event
-
 case class UnknownEvent(json: JSONObject) extends Event
 case class UnknownConvEvent(json: JSONObject) extends ConversationEvent {
   override val convId: RConvId = RConvId()
@@ -126,32 +122,6 @@ case class MemberLeaveEvent(convId: RConvId, time: Date, from: UserId, userIds: 
 case class MemberUpdateEvent(convId: RConvId, time: Date, from: UserId, state: ConversationState) extends ConversationStateEvent
 
 case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent
-
-sealed trait CallEvent extends Event {
-  val convId: RConvId
-}
-
-case class UnknownCallEvent(kind: String, json: JSONObject) extends CallEvent {
-  override val convId: RConvId = RConvId()
-}
-
-case class CallSequenceNumber(value: Int) extends AnyVal
-case class CallStateEvent(convId: RConvId, participants: Option[Set[CallParticipant]], device: Option[CallDeviceState] = None, cause: CauseForCallStateEvent, sessionId: Option[CallSessionId] = None, sequenceNumber: Option[CallSequenceNumber] = None) extends CallEvent
-
-case class CallParticipant(user: UserId, joined: Boolean, props: CallProperties)
-
-case class CallDeviceState(joined: Boolean, props: CallProperties)
-
-object CallDeviceState extends ((Boolean, CallProperties) => CallDeviceState) {
-  implicit lazy val Encoder: JsonEncoder[CallDeviceState] = new JsonEncoder[CallDeviceState] {
-    override def apply(v: CallDeviceState): JSONObject = JsonEncoder { o =>
-      o.put("state", if (v.joined) EventDecoder.Joined else EventDecoder.Idle)
-      v.props foreach { p => o.put(p.asJson, true) }
-    }
-  }
-
-  implicit val Content: ContentEncoder[CallDeviceState] = ContentEncoder.json
-}
 
 sealed trait OtrEvent extends ConversationEvent {
   val sender: ClientId
@@ -203,55 +173,18 @@ object ConversationState {
 }
 
 object Event {
-  type CallProperties = Set[CallProperty]
 
   val UnknownDateTime = MessageData.UnknownInstant.javaDate
 
   implicit object EventDecoder extends JsonDecoder[Event] {
-    val Joined = "joined"
-    val Idle = "idle"
 
     import com.waz.utils.JsonDecoder._
-
-    import scala.collection.JavaConverters._
 
     def connectionEvent(implicit js: JSONObject, name: Option[String]) = UserConnectionEvent('conversation, 'from, 'to, 'message, ConnectionStatus('status), 'last_update, fromUserName = name)
 
     def contactJoinEvent(implicit js: JSONObject) = ContactJoinEvent('id, 'name)
 
     def gcmTokenRemoveEvent(implicit js: JSONObject) = PushTokenRemoveEvent(token = 'token, senderId = 'app, client = 'client)
-
-    def joined(d: JSONObject): Boolean = d.getString("state") == Joined
-
-    def cause(d: JSONObject): CauseForCallStateEvent = if (d.has("cause")) try CauseForCallStateEvent.fromJson(d.getString("cause")) catch { case e: IllegalArgumentException =>
-      warn("unknown cause for call state event: " + e)
-      CauseForCallStateEvent.REQUESTED
-    } else CauseForCallStateEvent.REQUESTED
-
-    def callParticipants(js: JSONObject): Set[CallParticipant] = {
-      val parts = js.getJSONObject("participants")
-      parts.keys().asInstanceOf[java.util.Iterator[String]].asScala.map { key => // cast is needed since some android versions don't return generic iterator
-        val d = parts.getJSONObject(key)
-        CallParticipant(UserId(key), joined(d), callProperties(d))
-      }.toSet
-    }
-
-    def callDeviceState(js: JSONObject) = CallDeviceState(joined(js), callProperties(js))
-
-    def callProperties(js: JSONObject): CallProperties = {
-      CallProperty.values .filter (p => js.optBoolean(p.asJson)) .toSet
-    }
-
-    def callStateEvent(implicit js: JSONObject) = {
-      CallStateEvent('conversation,
-        participants = if (js.has("participants") && !js.isNull("participants")) Some(callParticipants(js)) else None,
-        device = if (js.has("self") && !js.isNull("self")) Some(callDeviceState(js.getJSONObject("self"))) else None,
-        cause = cause(js),
-        sessionId = JsonDecoder.decodeOptId('session)(js, CallSessionId.Id),
-        sequenceNumber = JsonDecoder.decodeOptCallSequenceNumber('sequence)(js))
-    }
-
-    val CallEventType = """call\.(.+)""".r
 
     override def apply(implicit js: JSONObject): Event = LoggedTry {
 
@@ -269,9 +202,6 @@ object Event {
         case "user.delete" => UserDeleteEvent(user = 'id)
         case "user.client-add" => OtrClientAddEvent(OtrClient.ClientsResponse.client(js.getJSONObject("client")))
         case "user.client-remove" => OtrClientRemoveEvent(decodeId[ClientId]('id)(js.getJSONObject("client"), implicitly))
-        case "call.state" => callStateEvent
-        case "call.info" => IgnoredEvent(js)
-        case CallEventType(kind) => UnknownCallEvent(kind, js)
         case _ =>
           error(s"unhandled event: $js")
           UnknownEvent(js)

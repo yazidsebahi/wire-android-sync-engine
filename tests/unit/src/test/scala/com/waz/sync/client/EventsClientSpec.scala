@@ -86,32 +86,6 @@ import scala.io.Source
     }
   }
 
-  scenario("parse call state event") {
-    Event.EventDecoder(new json.JSONObject(CallStateEvent)) match {
-      case cp: CallStateEvent =>
-        cp.convId shouldEqual RConvId("a50acb79-d7a3-4fdc-b885-e779ac0c0689")
-        cp.sessionId shouldEqual None
-        info(s"participants: ${cp.participants}")
-      case ev => fail(s"unexpected event: $ev")
-    }
-  }
-
-  scenario("parse call state event with session id") {
-    Event.EventDecoder(new json.JSONObject(CallStateEventWithSession)) match {
-      case cp: CallStateEvent =>
-        cp.convId shouldEqual RConvId("a50acb79-d7a3-4fdc-b885-e779ac0c0689")
-        cp.sessionId shouldEqual Some(CallSessionId("56357538-6b42-44ba-8de8-12df89af7e65"))
-      case ev => fail(s"unexpected event: $ev")
-    }
-  }
-
-  scenario("ignore call info event") {
-    Event.EventDecoder(new json.JSONObject(CallInfoEvent)) match {
-      case cp: IgnoredEvent => // expected
-      case ev => fail(s"unexpected event: $ev")
-    }
-  }
-
   scenario("removed identity event") {
     Event.EventDecoder(new json.JSONObject(userUpdateEventRemovePhone)) match {
       case cp: UserUpdateEvent => cp.removeIdentity shouldEqual true
@@ -151,54 +125,6 @@ import scala.io.Source
       |  ]
       |}
     """.stripMargin
-
-  val CallInfoEvent = """{
-                                |   "type":"call.info",
-                                |   "participants":{
-                                |      "56357538-6b42-44ba-8de8-12df89af7e65":{
-                                |         "quality":null,
-                                |         "state":"idle"
-                                |      },
-                                |      "c43cfe3c-60c6-4f67-8277-8aa44a308684":{
-                                |         "quality":null,
-                                |         "state":"idle"
-                                |      }
-                                |   },
-                                |   "conversation":"a50acb79-d7a3-4fdc-b885-e779ac0c0689"
-                                |}""".stripMargin
-
-  val CallStateEvent = """{
-                                |   "type":"call.state",
-                                |   "cause":"requested",
-                                |   "participants":{
-                                |      "56357538-6b42-44ba-8de8-12df89af7e65":{
-                                |         "quality":null,
-                                |         "state":"idle"
-                                |      },
-                                |      "c43cfe3c-60c6-4f67-8277-8aa44a308684":{
-                                |         "quality":null,
-                                |         "state":"idle"
-                                |      }
-                                |   },
-                                |   "conversation":"a50acb79-d7a3-4fdc-b885-e779ac0c0689"
-                                |}""".stripMargin
-
-  val CallStateEventWithSession = """{
-                                |   "type":"call.state",
-                                |   "cause":"requested",
-                                |   "participants":{
-                                |      "56357538-6b42-44ba-8de8-12df89af7e65":{
-                                |         "quality":null,
-                                |         "state":"idle"
-                                |      },
-                                |      "c43cfe3c-60c6-4f67-8277-8aa44a308684":{
-                                |         "quality":null,
-                                |         "state":"idle"
-                                |      }
-                                |   },
-                                |   "session":"56357538-6b42-44ba-8de8-12df89af7e65",
-                                |   "conversation":"a50acb79-d7a3-4fdc-b885-e779ac0c0689"
-                                |}""".stripMargin
 
   val UserConnectionEvent =
     """{

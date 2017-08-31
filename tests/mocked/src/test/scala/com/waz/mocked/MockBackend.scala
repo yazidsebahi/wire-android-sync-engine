@@ -59,10 +59,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   val searchResults = new mutable.HashMap[SearchQuery, Seq[UserSearchEntry]].withDefaultValue(Seq.empty)
   val convTimeCounter = new mutable.HashMap[RConvId, AtomicLong]
 
-  val callSessionId = new mutable.HashMap[RConvId, CallSessionId].withDefaultValue(CallSessionId("default-session-id"))
-  val callParticipants = new mutable.HashMap[RConvId, Set[CallParticipant]]
-  val callDeviceState = new mutable.HashMap[RConvId, CallDeviceState]
-
   val otrClients = new mutable.HashMap[ClientId, Client]
 
   val clientDelay = 100.millis
@@ -72,7 +68,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def resetMockedBackend(): Unit = {
-    Seq(users, connections, members, conversations, events, searchResults, convTimeCounter, callSessionId, callParticipants, callDeviceState) foreach (_.clear())
+    Seq(users, connections, members, conversations, events, searchResults, convTimeCounter) foreach (_.clear())
     members(RConvId(selfUserId.str)) = Seq(ConversationMemberData(selfUserId, ConvId(selfUserId.str)), ConversationMemberData(selfUserId, ConvId(selfUserId.str)))
     notifications = Vector.empty
   }
@@ -280,9 +276,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     ids.flatMap(id => conversations.get(id).flatMap(c => members.get(id).map(m => ConversationResponse(c, m))))))
 
   override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delayed(clientDelay)(Right(searchResults(query).take(limit)))
-
-  override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] =
-    CancellableFuture.delayed(clientDelay)(Right(CallStateEvent(id, callParticipants.get(id), callDeviceState.get(id), CauseForCallStateEvent.REQUESTED, callParticipants.get(id).map(_ => callSessionId(id)))))
 
   override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
     val conv = addGroupConversation(users, SystemTimeline, name = name)(PushBehaviour.NoPush)

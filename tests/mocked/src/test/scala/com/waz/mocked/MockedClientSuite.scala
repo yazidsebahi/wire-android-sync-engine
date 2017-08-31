@@ -262,7 +262,6 @@ trait MockedClient { test: ApiSpec =>
   def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = successful(Right(IndexedSeq()))
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
-  def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))

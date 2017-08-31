@@ -64,8 +64,6 @@ object Generators {
     )
   }
 
-  implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))
-
   lazy val alphaNumStr = listOf(alphaNumChar).map(_.mkString)
 
   implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
@@ -228,8 +226,6 @@ object Generators {
     implicit lazy val arbPostAssetStatus: Arbitrary[PostAssetStatus] = Arbitrary(resultOf(PostAssetStatus))
     implicit lazy val arbPostReceipt: Arbitrary[PostReceipt] = Arbitrary(resultOf(PostReceipt))
   }
-
-  implicit lazy val arbCallSequenceNumber: Arbitrary[CallSequenceNumber] = Arbitrary(choose(2, 999999) map CallSequenceNumber)
 
   implicit lazy val arbUid: Arbitrary[Uid]               = Arbitrary(sideEffect(Uid()))
   implicit lazy val arbConvId: Arbitrary[ConvId]         = Arbitrary(sideEffect(ConvId()))
