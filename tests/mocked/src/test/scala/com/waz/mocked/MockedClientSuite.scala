@@ -212,9 +212,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 trait MockedFlows { test: ApiSpec =>
   private lazy val mocked = zmessaging.flowmanager.asInstanceOf[MockedFlowManagerService]
 
-  def establishMedia(conv: RConvId): Unit = zmessaging.flowmanager.onMediaEstablished ! conv
-  def changeVolume(conv: RConvId, participant: UserId, volume: Float): Unit = zmessaging.flowmanager.onVolumeChanged ! (conv, participant, volume)
-  def flowManagerError(conv: RConvId, errorCode: Int): Unit = zmessaging.flowmanager.onFlowManagerError ! (conv, errorCode)
   def sessionIdUsedToAcquireFlows: Option[CallSessionId] = mocked.sessionIdUsedToAcquireFlows
   def setCanSendVideo(conv: RConvId, canSend: Boolean): Unit = if (canSend) mocked.convsThatCanSendVideo += conv else mocked.convsThatCanSendVideo -= conv
   def hasConvVideoSendState(conv: RConvId, state: VideoSendState): Boolean = mocked.convsThatSendVideo.get(conv).contains(state)

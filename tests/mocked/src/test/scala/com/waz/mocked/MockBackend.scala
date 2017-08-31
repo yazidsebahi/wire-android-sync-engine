@@ -19,8 +19,8 @@ package com.waz.mocked
 
 import java.util.concurrent.atomic.AtomicLong
 
-import com.waz.api.impl.{Credentials, ErrorResponse}
-import com.waz.api.{ApiSpec, CauseForCallStateEvent}
+import com.waz.api.ApiSpec
+import com.waz.api.impl.ErrorResponse
 import com.waz.mocked.MockBackend._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}

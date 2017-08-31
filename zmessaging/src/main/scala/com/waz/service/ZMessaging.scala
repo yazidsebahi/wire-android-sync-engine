@@ -262,7 +262,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
           connection.contactJoinEventsStage,
           users.userUpdateEventsStage,
           users.userDeleteEventsStage,
-          flowmanager.callEventsStage,
           calling.callMessagesStage,
           teams.eventsProcessingStage,
           typing.typingEventStage,
