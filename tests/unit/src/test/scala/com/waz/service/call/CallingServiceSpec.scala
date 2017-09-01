@@ -376,7 +376,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       val groupMember1 = UserId("groupUser1")
       val groupMember2 = UserId("groupUser2")
-      val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), self, ConversationType.Group)
+      val groupConv = ConversationData(ConvId("group_conv"), RConvId("r_group_conv"), Some("Group Conv"), self, ConversationType.Group)
 
       val otoUser = UserId("otoUser")
       val otoConv = ConversationData(ConvId(otoUser.str), RConvId(otoUser.str), Some("1:1 Conv"), self, ConversationType.OneToOne)
@@ -424,12 +424,18 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       result(checkpoint2.head)
 
-      val checkpoint3 = callCheckpoint(service, _.contains(groupConv.id), _.exists(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == SelfConnected))
+      //Checkpoint 3: 1:1 call is finished
+      val checkpoint3 = callCheckpoint(service, _.contains(groupConv.id), _.isEmpty)
 
       (avs.endCall _).expects(*, *).once().onCall { (rId, _) =>
         service.onClosedCall(Normal, otoConv.remoteId, Instant.now, otoUser)
       }
       service.endCall(otoConv.id)
+
+      result(checkpoint3.head)
+
+      //Checkpoint 4: Join group call
+      val checkpoint4 = callCheckpoint(service, _.contains(groupConv.id), _.exists(curr => curr.others == Set(groupMember1, groupMember2) && curr.state == SelfConnected))
 
       (avs.answerCall _).expects(*, *).once().onCall { (rId, _) =>
         service.onEstablishedCall(groupConv.remoteId, groupMember1)
@@ -437,7 +443,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       }
       service.startCall(groupConv.id)
 
-      result(checkpoint3.head)
+      result(checkpoint4.head)
     }
   }
 
