@@ -45,7 +45,18 @@ object Calling {
 
   @native def wcall_close(): Unit
 
-  @native def wcall_create(userid: String, clientid: String, readyh: Callback, sendh: Callback, incomingh: Callback, missedh: Callback, answeredh: Callback, estabh: Callback, closeh: Callback, metricsh: MetricsHandler, arg: Pointer): Pointer
+  @native def wcall_create(userid:    String,
+                           clientid:  String,
+                           readyh:    ReadyHandler,
+                           sendh:     SendHandler,
+                           incomingh: IncomingCallHandler,
+                           missedh:   MissedCallHandler,
+                           answeredh: AnsweredCallHandler,
+                           estabh:    EstablishedCallHandler,
+                           closeh:    CloseCallHandler,
+                           metricsh:  MetricsHandler,
+                           confreqh:  CallConfigRequestHandler,
+                           arg:       Pointer): Pointer
 
   @native def wcall_destroy(arg: Pointer): Unit
 
@@ -54,6 +65,8 @@ object Calling {
   @native def wcall_answer(inst: Pointer, convid: String): Unit
 
   @native def wcall_resp(inst: Pointer, status: Int, reason: String, arg: Pointer): Int
+
+  @native def wcall_config_update(inst: Pointer, err: Int, json_str: String): Unit
 
   @native def wcall_recv_msg(inst: Pointer, msg: Array[Byte], len: Int, curr_time: Uint32_t, msg_time: Uint32_t, convId: String, userId: String, clientId: String): Int
 
@@ -133,6 +146,10 @@ object Calling {
 
   trait MetricsHandler extends Callback {
     def onMetricsReady(convId: String, metricsJson: String, arg: Pointer): Unit
+  }
+
+  trait CallConfigRequestHandler extends Callback {
+    def onConfigRequest(inst: Pointer, arg: Pointer): Int
   }
 
 }

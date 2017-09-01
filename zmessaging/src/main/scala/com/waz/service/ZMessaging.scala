@@ -143,6 +143,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def audioTranscader   = global.audioTranscoder
   def avs               = global.avs
   def loadService       = global.loaderService
+  def flowmanager       = global.flowmanager
 
   def db                = storage.db
   def userPrefs         = storage.userPrefs
@@ -211,7 +212,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
   lazy val connection: ConnectionService              = wire[ConnectionService]
   lazy val mediamanager                               = wire[DefaultMediaManagerService]
-  lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
   lazy val calling: CallingService                    = wire[CallingService]
   lazy val contacts: ContactsService                  = wire[ContactsService]
   lazy val typing: TypingService                      = wire[TypingService]
@@ -262,7 +262,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
           connection.contactJoinEventsStage,
           users.userUpdateEventsStage,
           users.userDeleteEventsStage,
-          flowmanager.callEventsStage,
           calling.callMessagesStage,
           teams.eventsProcessingStage,
           typing.typingEventStage,

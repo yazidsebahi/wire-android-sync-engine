@@ -27,7 +27,7 @@ import com.waz.cache.CacheService
 import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.content._
 import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
-import com.waz.service.call.{Avs, AvsImpl}
+import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService}
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
 import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
@@ -72,15 +72,17 @@ trait GlobalModule {
   def accountsStorage:      AccountsStorage
   def teamsStorage:         TeamsStorageImpl
   def recordingAndPlayback: GlobalRecordAndPlayService
-  def tempFiles:            TempFileService
-  def clientWrapper:        Future[ClientWrapper]
-  def client:               AsyncClientImpl
-  def globalClient:         ZNetClient
-  def imageLoader:          ImageLoader
-  def blacklistClient:      VersionBlacklistClient
-  def blacklist:            VersionBlacklistService
-  def factory:              ZMessagingFactory
-  def lifecycle:            ZmsLifeCycle
+  def tempFiles: TempFileService
+  def clientWrapper: Future[ClientWrapper]
+  def client: AsyncClientImpl
+  def globalClient: ZNetClient
+  def imageLoader: ImageLoader
+  def blacklistClient: VersionBlacklistClient
+  def blacklist: VersionBlacklistService
+  def factory: ZMessagingFactory
+  def lifecycle: ZmsLifeCycle
+
+  def flowmanager: DefaultFlowManagerService
 }
 
 class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extends GlobalModule { global =>
@@ -138,6 +140,8 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val blacklist                                             = new VersionBlacklistService(metadata, prefs, blacklistClient)
 
   lazy val factory                                               = new ZMessagingFactory(this)
+
+  lazy val flowmanager: DefaultFlowManagerService                = wire[DefaultFlowManagerService]
 
   val lifecycle: ZmsLifeCycle = new ZmsLifeCycleImpl()
 }

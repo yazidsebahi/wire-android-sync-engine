@@ -212,9 +212,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 trait MockedFlows { test: ApiSpec =>
   private lazy val mocked = zmessaging.flowmanager.asInstanceOf[MockedFlowManagerService]
 
-  def establishMedia(conv: RConvId): Unit = zmessaging.flowmanager.onMediaEstablished ! conv
-  def changeVolume(conv: RConvId, participant: UserId, volume: Float): Unit = zmessaging.flowmanager.onVolumeChanged ! (conv, participant, volume)
-  def flowManagerError(conv: RConvId, errorCode: Int): Unit = zmessaging.flowmanager.onFlowManagerError ! (conv, errorCode)
   def sessionIdUsedToAcquireFlows: Option[CallSessionId] = mocked.sessionIdUsedToAcquireFlows
   def setCanSendVideo(conv: RConvId, canSend: Boolean): Unit = if (canSend) mocked.convsThatCanSendVideo += conv else mocked.convsThatCanSendVideo -= conv
   def hasConvVideoSendState(conv: RConvId, state: VideoSendState): Boolean = mocked.convsThatSendVideo.get(conv).contains(state)
@@ -265,7 +262,6 @@ trait MockedClient { test: ApiSpec =>
   def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = successful(Right(IndexedSeq()))
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
-  def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
