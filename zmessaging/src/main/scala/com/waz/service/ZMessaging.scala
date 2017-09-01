@@ -73,7 +73,6 @@ class ZMessagingFactory(global: GlobalModule) {
   def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
 }
 
-
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
   lazy val db                                     = new ZmsDatabase(accountId, context, dbPrefix)
   lazy val userPrefs                              = UserPreferences.apply(context, db, globalPreferences)
