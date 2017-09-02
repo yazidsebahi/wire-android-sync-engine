@@ -41,12 +41,32 @@ import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichDate, RichInstant, returningF}
 import com.waz.zms.CallWakeService
 import com.waz.znet.Response.SuccessHttpStatus
-import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
 import scala.util.control.NonFatal
+
+class GlobalCallingService() {
+
+  lazy val services: Signal[Set[(AccountId, CallingService)]] = ZMessaging.currentAccounts.zmsInstances.map(_.map(z => z.accountId -> z.calling))
+
+  //If there is an active call in one or more of the logged in accounts, returns the account id for the one with the oldest call
+  lazy val activeAccount: Signal[Option[AccountId]] = services.flatMap { ss =>
+    val signals = ss.toSeq.map { case (id, s) =>
+      s.currentCall.map {
+        case Some(call) => Some((id, call))
+        case _          => None
+      }
+    }
+
+    /**
+      * Sort by call start time (sort returns oldest call to newest call) and then always take the oldest.
+      * This should stop any new (should only be incoming) calls from another account from hi-jacking any currently active calls
+      */
+    Signal.sequence(signals: _*).map(_.flatten.sortBy(_._2.startTime).headOption).map(_.map(_._1))
+  }
+}
 
 class CallingService(val selfUserId:      UserId,
                      val clientId:        ClientId,

@@ -21,6 +21,7 @@ import com.sun.jna.Pointer
 import com.waz.api.VideoSendState
 import com.waz.api.VideoSendState._
 import com.waz.model.{ConvId, GenericMessage, UserId}
+import com.waz.service.ZMessaging
 import com.waz.service.call.Avs.ClosedReason.Normal
 import com.waz.service.call.Avs.VideoReceiveState.Stopped
 import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState}
@@ -36,7 +37,8 @@ case class CallInfo(convId:            ConvId,
                     isVideoCall:       Boolean                           = false,
                     videoSendState:    VideoSendState                    = DONT_SEND,
                     videoReceiveState: VideoReceiveState                 = Stopped,
-                    estabTime:         Option[Instant]                   = None,
+                    startTime:         Instant                           = ZMessaging.clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
+                    estabTime:         Option[Instant]                   = None, //the time the call was joined (if any)
                     hangupRequested:   Boolean                           = false, //whether selfUser called end call, or some other reason
                     closedReason:      ClosedReason                      = Normal,
                     outstandingMsg:    Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
@@ -53,6 +55,7 @@ case class CallInfo(convId:            ConvId,
        | isVideoCall:       $isVideoCall
        | videoSendState:    $videoSendState
        | videoReceiveState: $videoReceiveState
+       | startTime:         $startTime
        | estabTime:         $estabTime
        | hangupRequested:   $hangupRequested
        | closedReason       $closedReason

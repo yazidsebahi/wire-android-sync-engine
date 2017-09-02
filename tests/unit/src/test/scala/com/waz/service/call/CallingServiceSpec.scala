@@ -458,7 +458,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       map("direction") shouldEqual "Outgoing"
     }
   }
-
+  
   def callCheckpoint(service: CallingService, activeCheck: Map[ConvId, CallInfo] => Boolean, currentCheck: Option[CallInfo] => Boolean) =
     (for {
       active <- service.availableCalls
