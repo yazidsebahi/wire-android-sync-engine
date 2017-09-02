@@ -65,7 +65,7 @@ object CallInfo {
 
   type CallState = CallState.Value
   object CallState extends Enumeration {
-    val NotActive, SelfCalling, OtherCalling, SelfJoining, SelfConnected = Value
+    val SelfCalling, OtherCalling, SelfJoining, SelfConnected = Value
   }
 
 }
