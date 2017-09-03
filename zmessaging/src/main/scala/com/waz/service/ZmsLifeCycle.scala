@@ -106,22 +106,22 @@ class ZmsLifeCycleImpl extends ZmsLifeCycle {
   private val lifeCycleState = Signal(Stopped: LifeCycleState).disableAutowiring()
   lifeCycleState(state => verbose(s"lifecycle state: $state"))(this)
 
-  override def loggedIn = lifeCycleState.map(_ != Stopped)
+  override val loggedIn = lifeCycleState.map(_ != Stopped).disableAutowiring()
 
-  override def uiActive = lifeCycleState.map {
+  override val uiActive = lifeCycleState.map {
     case UiActive(_, _) => true
     case _              => false
-  }
+  }.disableAutowiring()
 
-  override def idle = lifeCycleState.map {
+  override val idle = lifeCycleState.map {
     case Idle(_) => true
     case _       => false
-  }
+  }.disableAutowiring()
 
-  override def active = lifeCycleState.map {
+  override val active = lifeCycleState.map {
     case UiActive(_, _) | Active(_) => true
     case _ => false
-  }
+  }.disableAutowiring()
 
   override def accLoggedIn(accountId: AccountId) = lifeCycleState.map(_.loggedIn.contains(accountId))
 
