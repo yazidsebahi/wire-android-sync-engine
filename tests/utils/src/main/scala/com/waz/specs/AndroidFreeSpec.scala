@@ -39,7 +39,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
   import AndroidFreeSpec._
 
-  val clock = TestClock()
+  val clock = AndroidFreeSpec.clock
 
   override protected def beforeEach() = {
     super.beforeEach()
@@ -58,8 +58,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     ZMessaging.clock = clock
 
-    InternalLog.reset()
-    InternalLog.add(new SystemLogOutput)
+//    InternalLog.reset()
+//    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 
@@ -126,6 +126,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 }
 
 object AndroidFreeSpec {
+  val clock = TestClock()
+
   val DefaultTimeout = 5.seconds
   @volatile private var swallowedFailure = Option.empty[exceptions.TestFailedException]
 }

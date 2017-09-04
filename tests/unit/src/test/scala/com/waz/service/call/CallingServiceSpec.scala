@@ -37,6 +37,8 @@ import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
+import com.waz.utils.RichInstant
 
 class CallingServiceSpec extends AndroidFreeSpec {
 
@@ -243,7 +245,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   }
 
   feature("Ending calls") {
-    scenario("Leave group call that will continue running in the background") {
+    scenario("Leave group call that will continue running in the background with state Ongoing - established time should not be affected") {
       val groupMember1 = UserId("groupUser1")
       val groupMember2 = UserId("groupUser2")
       val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), self, ConversationType.Group)
@@ -252,11 +254,21 @@ class CallingServiceSpec extends AndroidFreeSpec {
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
 
       val service = initCallingService()
-      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(_.state == SelfConnected))
-      val checkpoint2 = callCheckpoint(service, _.contains(groupConv.id), _.isEmpty)
+      val estTime = clock.instant() + 10.seconds
+
+      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(c => c.state == SelfConnected && c.estabTime.contains(estTime)))
+//      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(c => c.state == SelfConnected))
+      val checkpoint2 = callCheckpoint(service, _.get(groupConv.id).exists(c => c.state == Ongoing && c.estabTime.contains(estTime)), _.isEmpty)
+//      val checkpoint2 = callCheckpoint(service, _.get(groupConv.id).exists(c => c.state == Ongoing), _.isEmpty)
 
       service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
+
+      clock + 10.seconds
+
+      println(clock.instant)
+
       (avs.answerCall _).expects(*, *).once().onCall { (_, _) =>
+        println(s"callback time: ${clock.instant}")
         service.onEstablishedCall(groupConv.remoteId, groupMember1)
         service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
       }
@@ -264,9 +276,12 @@ class CallingServiceSpec extends AndroidFreeSpec {
       result(checkpoint1.head)
 
       (avs.endCall _).expects(*, *).once().onCall { (rId, isGroup) =>
-        service.onClosedCall(StillOngoing, groupConv.remoteId, Instant.now, groupMember1)
+        service.onClosedCall(StillOngoing, groupConv.remoteId, clock.instant(), groupMember1)
       }
-      service.endCall(groupConv.id) //avs won't call the ClosedHandler if a group call is still ongoing in the background
+
+      clock + 10.seconds
+
+      service.endCall(groupConv.id)
       result(checkpoint2.head)
     }
 
@@ -341,7 +356,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
   feature("Simultaneous calls") {
 
-    scenario("Receive incoming call while 1:1 call ongoing") {
+    scenario("Receive incoming call while 1:1 call ongoing - should become active if ongoing call is dropped") {
 
       val ongoingUserId = UserId()
       val ongoingConv = ConversationData(ConvId(ongoingUserId.str), RConvId(ongoingUserId.str), Some("Ongoing Conv"), self, ConversationType.OneToOne)
@@ -360,16 +375,30 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       val service = initCallingService()
 
-      val checkpoint = callCheckpoint(service, _.contains(ongoingConv.id), cur => cur.exists(_.state == SelfConnected) && cur.exists(_.others.contains(ongoingUserId)))
+      val checkpoint1 = callCheckpoint(service, _.contains(ongoingConv.id), cur => cur.exists(_.state == SelfConnected) && cur.exists(_.others.contains(ongoingUserId)))
 
       service.onIncomingCall(ongoingConv.remoteId, ongoingUserId, videoCall = false, shouldRing = true)
       (avs.answerCall _).expects(*, *).once().onCall { (_, _) =>
         service.onEstablishedCall(ongoingConv.remoteId, ongoingUserId)
       }
       service.startCall(ongoingConv.id)
-      service.onIncomingCall(incomingConv.remoteId, incomingUserId, videoCall = false, shouldRing = false) //Receive the second call after first is established
+      await(checkpoint1.head)
 
-      result(checkpoint.head)
+      //Both calls should be in available calls, but the ongoing call should be current
+      val checkpoint2 = callCheckpoint(service, { avail =>
+        avail.contains(ongoingConv.id) && avail.get(incomingConv.id).exists(_.state == OtherCalling)
+      }, cur => cur.exists(_.state == SelfConnected) && cur.exists(_.others.contains(ongoingUserId)))
+
+      service.onIncomingCall(incomingConv.remoteId, incomingUserId, videoCall = false, shouldRing = false) //Receive the second call after first is established
+      await(checkpoint2.head)
+
+      //Hang up the ongoing call - incoming 1:1 call should become current
+      val checkpoint3 = callCheckpoint(service, _.contains(incomingConv.id), cur => cur.exists(_.state == OtherCalling) && cur.exists(_.others.contains(incomingUserId)))
+      (avs.endCall _).expects(*, ongoingConv.remoteId).once().onCall { (_, _) =>
+        service.onClosedCall(Normal, ongoingConv.remoteId, Instant.now, ongoingUserId)
+      }
+      service.endCall(ongoingConv.id)
+      await(checkpoint3.head)
     }
 
     scenario("With a background group call, receive a 1:1 call, finish it, and then still join the group call afterwards") {
@@ -458,7 +487,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       map("direction") shouldEqual "Outgoing"
     }
   }
-
+  
   def callCheckpoint(service: CallingService, activeCheck: Map[ConvId, CallInfo] => Boolean, currentCheck: Option[CallInfo] => Boolean) =
     (for {
       active <- service.availableCalls

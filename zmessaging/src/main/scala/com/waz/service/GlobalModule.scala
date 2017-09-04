@@ -27,7 +27,7 @@ import com.waz.cache.CacheService
 import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.content._
 import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
-import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService}
+import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService, GlobalCallingService}
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
 import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
@@ -90,7 +90,9 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
   val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
+
   lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsService]
+  lazy val calling:             GlobalCallingService             = new GlobalCallingService
 
   lazy val contextWrapper:      Context                          = Context.wrap(context)
   lazy val storage:             Database                         = new GlobalDatabase(context)
