@@ -88,6 +88,14 @@ class PushTokenService(googleApi:    GoogleApi,
     case _ => //do nothing
   }
 
+  //TODO - remove once old notifications are ready in production
+  lifeCycle.accInForeground(accountId).map {
+    case false if backend != StagingBackend =>
+      //clear the token on production on switch account to force register next time
+      accStorage.update(accountId, _.copy(registeredPush = None))
+    case _ => // do nothing
+  }
+
   def onTokenRegistered(token: PushToken): Future[Unit] = {
     verbose(s"onTokenRegistered: $accountId, $token")
     (for {
