@@ -20,7 +20,7 @@ package com.waz.service.push
 import com.waz.content.GlobalPreferences.PushEnabledKey
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model._
-import com.waz.service.ZmsLifeCycle
+import com.waz.service.{BackendConfig, ZmsLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.testutils.TestGlobalPreferences
@@ -302,6 +302,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     (accStorage.signal _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
       loggedInAccounts.map(_.find(_.id == id)).collect { case Some(acc) => acc }
     }
+    (lifecycle.accLoggedIn _).expects(*).anyNumberOfTimes().onCall((id: AccountId) => loggedInAccounts.map(_.map(_.id).contains(id)))
     (lifecycle.accInForeground _).expects(accountId).anyNumberOfTimes().returning(accInForeground)
     (accStorage.update _).expects(*, *).anyNumberOfTimes().onCall { (id, f) =>
       Future.successful {
@@ -317,6 +318,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
         }
       }
     }
-    (global, new PushTokenService(google, global, prefs, lifecycle, accountId, loggedInAccounts.map(_.map(_.id)), accStorage, sync))
+    (global, new PushTokenService(google, BackendConfig.StagingBackend, global, prefs, lifecycle, accountId, accStorage, sync))
   }
 }

@@ -23,7 +23,8 @@ import com.waz.ZLog.{verbose, warn}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
-import com.waz.service.{EventScheduler, ZmsLifeCycle}
+import com.waz.service.BackendConfig.StagingBackend
+import com.waz.service.{BackendConfig, EventScheduler, ZmsLifeCycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
@@ -37,11 +38,11 @@ import scala.util.control.NonFatal
   * Responsible for deciding when to generate and register push tokens and whether they should be active at all.
   */
 class PushTokenService(googleApi:    GoogleApi,
+                       backend:      BackendConfig,
                        globalToken:  GlobalTokenService,
                        prefs:        GlobalPreferences,
                        lifeCycle:    ZmsLifeCycle,
                        accountId:    AccountId,
-                       loggedInAccs: Signal[Set[AccountId]],
                        accStorage:   AccountsStorage,
                        sync:         SyncServiceHandle) {
 
@@ -52,8 +53,9 @@ class PushTokenService(googleApi:    GoogleApi,
   val currentAccount = prefs.preference(CurrentAccountPref)
   val currentToken   = globalToken.currentToken
 
-  //None if user is not logged in.
-  private val isLoggedIn = loggedInAccs.map(_.contains(accountId))
+  //TODO - remove BE check once old notifications are ready in production
+  private val isLoggedIn =
+    if (backend == StagingBackend) lifeCycle.accLoggedIn(accountId) else lifeCycle.accInForeground(accountId)
 
   private val userToken = accStorage.signal(accountId).map(_.registeredPush)
 
