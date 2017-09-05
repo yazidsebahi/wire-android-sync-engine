@@ -245,11 +245,14 @@ class NotificationService(context:         Context,
     storage.remove(ids.map(NotId(_)))
   }
 
-  def clearNotifications() = {
-    lastAccountVisibleTime := Instant.now()
-    // will execute removeNotifications as part of this call,
-    // this ensures that it's actually done while wakeLock is acquired by caller
-    removeNotificationsAfterUiActive(Instant.now)
+  def clearNotifications(): Future[Unit] = {
+    val time = clock.instant()
+    for {
+      _     <- lastAccountVisibleTime := time
+      // will execute removeNotifications as part of this call,
+      // this ensures that it's actually done while wakeLock is acquired by caller
+      res   <- removeNotificationsAfterUiActive(time)
+    } yield {}
   }
 
   private def removeNotificationsAfterUiActive(uiLastVisible: Instant) = {
@@ -260,7 +263,7 @@ class NotificationService(context:         Context,
     }
   }
 
-  private def removeNotifications(filter: NotificationData => Boolean): Unit = {
+  private def removeNotifications(filter: NotificationData => Boolean) = {
     storage.notifications.head flatMap { data =>
       val toRemove = data collect {
         case (id, n) if filter(n) => id

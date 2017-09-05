@@ -46,7 +46,7 @@ class NotificationsAndroidService extends FutureService {
           case Some(acc) => accs.getZMessaging(acc).flatMap {
             case Some(zms) if ActionClear == intent.getAction =>
               verbose(s"Clearing notifications for account: $acc")
-              Future.successful(zms.notifications.clearNotifications())
+              zms.notifications.clearNotifications()
             case Some(zms) =>
               verbose(s"Other device on account: $acc no longer active, resetting otherDeviceActiveTime")
               Future.successful(zms.notifications.otherDeviceActiveTime ! Instant.EPOCH)
