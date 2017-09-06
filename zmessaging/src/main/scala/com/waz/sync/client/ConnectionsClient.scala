@@ -62,7 +62,7 @@ class ConnectionsClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), ConnectionResponseExtractor(event), _) =>
         verbose(s"updateConnection response: $event")
         Some(event)
-      case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) =>
+      case Response(HttpStatus(Status.NoResponse, _), _, _) =>
         warn(s"updateConnection request successful, but returned empty response")
         None
     }
