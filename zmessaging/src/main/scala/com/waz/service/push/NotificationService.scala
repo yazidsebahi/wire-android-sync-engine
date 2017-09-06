@@ -48,25 +48,25 @@ class GlobalNotificationsService(context: Context, lifeCycle: ZmsLifeCycle) {
 
   import com.waz.threading.Threading.Implicits.Background
 
-  lazy val groupedNotifications: Signal[Seq[(AccountId, Boolean, Seq[NotificationInfo])]] = //Boolean = shouldBeSilent
+  lazy val groupedNotifications: Signal[Map[AccountId, Signal[(Boolean, Seq[NotificationInfo])]]] = //Boolean = shouldBeSilent
     Option(ZMessaging.currentAccounts) match {
       case Some(accountsService) =>
-        accountsService.zmsInstances.flatMap { zs =>
-          val services = zs.map(z => z.accountId -> z.notifications).toSeq.sortBy { case (id, _) => id.str }
-          Signal.sequence(services.map { case (id, s) =>
-            val notifications = s.notifications
-            val shouldBeSilent = s.otherDeviceActiveTime.map { t =>
+        accountsService.zmsInstances.map { zs =>
+          zs.map { z =>
+            val notifications = z.notifications.notifications
+            val shouldBeSilent = z.notifications.otherDeviceActiveTime.map { t =>
               val timeDiff = Instant.now.toEpochMilli - t.toEpochMilli
               verbose(s"otherDeviceActiveTime: $t, current time: ${Instant.now}, timeDiff: ${timeDiff.millis.toSeconds}")
               timeDiff < NotificationsAndroidService.checkNotificationsTimeout.toMillis
             }
-            for {
+
+            z.accountId -> (for {
               silent <- shouldBeSilent
-              nots   <- notifications
+              nots <- notifications
             } yield {
-              (id, silent, nots)
-            }
-          }: _*)
+              (silent, nots)
+            })
+          }.toMap
         }
       case None =>
         error("No AccountsService available")
