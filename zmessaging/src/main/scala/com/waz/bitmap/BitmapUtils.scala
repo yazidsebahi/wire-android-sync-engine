@@ -22,9 +22,11 @@ import java.io.{BufferedInputStream, InputStream}
 import android.graphics.Bitmap.Config
 import android.graphics._
 import android.media.ExifInterface
+import android.renderscript.{Allocation, Element, RenderScript, ScriptIntrinsicBlur}
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.utils.IoUtils
+import com.waz.service.ZMessaging
+import com.waz.utils.{IoUtils, returning}
 
 object BitmapUtils {
 
@@ -167,5 +169,25 @@ object BitmapUtils {
     def headerMatches(header: Array[Int]) = header.zipWithIndex.forall(h => h._1 == arr(h._2))
 
     ImageHeaders.find(p => headerMatches(p._1)).fold(Mime.Unknown)(_._2)
+  }
+
+  lazy val renderScript = RenderScript.create(ZMessaging.context)
+
+  def createBlurredBitmap(bitmap: Bitmap, width: Int, blurRadius: Int, blurPasses: Int): Bitmap = {
+
+    val blur = returning(ScriptIntrinsicBlur.create(renderScript, Element.U8_4(renderScript))){ _.setRadius(blurRadius) }
+
+    val copiedBmp = bitmap.copy(bitmap.getConfig, true)
+
+    val blurAlloc = Allocation.createFromBitmap(renderScript, copiedBmp)
+    blur.setInput(blurAlloc)
+    (0 until blurPasses).foreach{ _ =>
+      blur.forEach(blurAlloc)
+    }
+    blurAlloc.copyTo(copiedBmp)
+    blurAlloc.destroy()
+    blur.destroy()
+
+    copiedBmp
   }
 }

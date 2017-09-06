@@ -22,7 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AssetId
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache.BitmapRequest
-import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Round, Single}
+import com.waz.ui.MemoryImageCache.BitmapRequest.{Blurred, Regular, Round, Single}
 import com.waz.utils.{Cache, TrimmingLruCache}
 import com.waz.utils.TrimmingLruCache.CacheSize
 import com.waz.utils.wrappers.{Bitmap, Context, EmptyBitmap}
@@ -109,6 +109,7 @@ object MemoryImageCache {
     case class Regular(width: Int = 0, override val mirror: Boolean = false) extends BitmapRequest
     case class Single(width: Int = 0, override val mirror: Boolean = false) extends BitmapRequest
     case class Round(width: Int = 0, borderWidth: Int = 0, borderColor: Int = 0) extends BitmapRequest
+    case class Blurred(width: Int = 0, blurRadius: Int = 1, blurPasses: Int = 1) extends BitmapRequest
   }
 
   //The width makes BitmapRequests themselves bad keys, remove them
@@ -116,5 +117,6 @@ object MemoryImageCache {
     case Regular(_, mirror) => s"Regular-$mirror"
     case Single(_, mirror) => s"Single-$mirror"
     case Round(_, bw, bc) => s"Round-$bw-$bc"
+    case Blurred(_, br, bp) => s"Blurred-$br-$bp"
   }
 }
