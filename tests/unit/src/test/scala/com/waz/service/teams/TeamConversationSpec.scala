@@ -18,8 +18,7 @@
 package com.waz.service.teams
 
 import com.waz.content.{ConversationStorage, MembersStorage}
-import com.waz.model.ConversationData.ConversationType
-import com.waz.model.ConversationData.ConversationType.{Group, OneToOne}
+import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.{ConversationMemberData, _}
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService, ConversationsUiServiceImpl}
 import com.waz.service.messages.MessagesService

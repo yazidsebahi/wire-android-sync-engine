@@ -92,15 +92,15 @@ class GlobalNotificationsService(context: Context, lifeCycle: ZmsLifeCycle) {
 class NotificationService(context:         Context,
                           accountId:       AccountId,
                           selfUserId:      UserId,
-                          messages:        MessagesStorageImpl,
+                          messages:        MessagesStorage,
                           lifeCycle:       ZmsLifeCycle,
                           storage:         NotificationStorage,
-                          usersStorage:    UsersStorageImpl,
-                          convs:           ConversationStorageImpl,
+                          usersStorage:    UsersStorage,
+                          convs:           ConversationStorage,
                           reactionStorage: ReactionsStorage,
                           userPrefs:       UserPreferences,
                           timeouts:        Timeouts,
-                          pushService:     PushServiceImpl) {
+                          pushService:     PushService) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -112,7 +112,12 @@ class NotificationService(context:         Context,
 
   private val lastAccountVisibleTime = userPrefs.preference(LastAccountVisibleTime)
 
-  val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
+  val alarmService = Option(context) match {
+    case Some(c) => Some(c.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager])
+    case _ =>
+      warn("No context, could not start alarm service")
+      None
+  }
 
   //For UI to decide if it should make sounds or not
   val otherDeviceActiveTime = Signal(Instant.EPOCH)
@@ -134,7 +139,7 @@ class NotificationService(context:         Context,
     events.foreach {
       case GenericMessageEvent(_, _, _, GenericMessage(_, LastRead(conv, time))) =>
         otherDeviceActiveTime ! Instant.now
-        alarmService.set(AlarmManager.RTC, (clock.instant() + checkNotificationsTimeout).toEpochMilli, checkNotificationsIntent(accountId, context))
+        alarmService.foreach(_.set(AlarmManager.RTC, (clock.instant() + checkNotificationsTimeout).toEpochMilli, checkNotificationsIntent(accountId, context)))
       case _ =>
     }
     Future.successful(())
@@ -180,7 +185,7 @@ class NotificationService(context:         Context,
       convs.onUpdated map { _ collect { case (prev, conv) if convLastRead(prev) != convLastRead(conv) => conv } }
     ) filter(_.nonEmpty)
 
-    def loadAll() = convs.getAll.map(_.map(c => c.id -> convLastRead(c)).toMap)
+    def loadAll() = convs.getAllConvs.map(_.map(c => c.id -> convLastRead(c)).toMap)
 
     def update(times: Map[ConvId, Instant], updates: Seq[ConversationData]) =
       times ++ updates.map(c => c.id -> convLastRead(c))(breakOut)

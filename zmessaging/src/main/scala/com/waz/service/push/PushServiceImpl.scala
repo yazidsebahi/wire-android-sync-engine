@@ -39,6 +39,8 @@ import scala.concurrent.{Future, Promise}
 
 trait PushService {
 
+  def beDrift: Signal[Duration]
+
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
 
   def syncHistory(): Future[Unit]
@@ -64,7 +66,7 @@ class PushServiceImpl(context: Context, keyValue: UserPreferences, client: Event
     * Used for calling (time critical) messages that can't always rely on local time, since the drift can be
     * greater than the window in which we need to respond to messages
     */
-  val beDrift = Signal(Duration.ZERO).disableAutowiring()
+  override val beDrift = Signal(Duration.ZERO).disableAutowiring()
 
   webSocket.connected {
     signals.pushConnected ! _

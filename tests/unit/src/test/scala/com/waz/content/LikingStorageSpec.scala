@@ -43,7 +43,7 @@ import scala.util.Random.{nextInt, shuffle}
     override val dbHelper: DBHelper = new ZMessagingDB(Robolectric.application, "dbName")
   }
 
-  lazy val storage = new ReactionsStorage(Robolectric.application, database)
+  lazy val storage = new ReactionsStorageImpl(Robolectric.application, database)
 
   override def beforeAll: Unit = {
     val likings = msgIds flatMap { msgId =>
