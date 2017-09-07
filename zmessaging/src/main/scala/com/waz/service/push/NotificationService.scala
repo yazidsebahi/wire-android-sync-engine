@@ -19,7 +19,7 @@ package com.waz.service.push
 
 import android.app.AlarmManager
 import android.content.Context
-import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog
 import com.waz.ZLog._
 import com.waz.api.Message
 import com.waz.api.NotificationsHandler.NotificationType
@@ -39,24 +39,26 @@ import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
 import com.waz.zms.NotificationsAndroidService
 import com.waz.zms.NotificationsAndroidService.{checkNotificationsIntent, checkNotificationsTimeout}
 import org.threeten.bp.Instant
-import scala.concurrent.duration._
 
+import scala.concurrent.duration._
 import scala.collection.breakOut
 import scala.concurrent.Future
 
 class GlobalNotificationsService(context: Context, lifeCycle: ZmsLifeCycle) {
 
   import com.waz.threading.Threading.Implicits.Background
+  import ZLog.ImplicitTag.implicitLogTag
 
   lazy val groupedNotifications: Signal[Map[AccountId, Signal[(Boolean, Seq[NotificationInfo])]]] = //Boolean = shouldBeSilent
     Option(ZMessaging.currentAccounts) match {
       case Some(accountsService) =>
         accountsService.zmsInstances.map { zs =>
           zs.map { z =>
-            val notifications = z.notifications.notifications
-            val shouldBeSilent = z.notifications.otherDeviceActiveTime.map { t =>
+            val service = z.notifications
+            val notifications = service.notifications
+            val shouldBeSilent = service.otherDeviceActiveTime.map { t =>
               val timeDiff = Instant.now.toEpochMilli - t.toEpochMilli
-              verbose(s"otherDeviceActiveTime: $t, current time: ${Instant.now}, timeDiff: ${timeDiff.millis.toSeconds}")
+              verbose(s"otherDeviceActiveTime: $t, current time: ${Instant.now}, timeDiff: ${timeDiff.millis.toSeconds}")(service.logTag)
               timeDiff < NotificationsAndroidService.checkNotificationsTimeout.toMillis
             }
 
@@ -104,6 +106,7 @@ class NotificationService(context:         Context,
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "NotificationService")
+  implicit lazy val logTag = s"${getClass.getSimpleName}#${accountId.str.take(8)}"
 
   @volatile private var accountActive = false
 
