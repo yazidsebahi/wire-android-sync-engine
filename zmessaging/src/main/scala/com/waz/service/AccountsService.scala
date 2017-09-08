@@ -23,17 +23,16 @@ import com.waz.api.Invitations._
 import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
-import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists, Success}
+import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
-import com.waz.service.AccountsService.SwapAccountCallback
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
-import com.waz.utils.returning
+import com.waz.utils.{RichOption, returning}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
-import com.waz.utils.RichOption
+
 import scala.collection.mutable
 import scala.concurrent.Future
 
@@ -73,25 +72,11 @@ class AccountsService(val global: GlobalModule) {
     returning(zs.flatten.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
-
-  // XXX Temporary stuff to handle team account in signup/signin - start
-  private var _loggedInAccounts = Seq.empty[AccountData]
-
+  
   loggedInAccounts.onUi { accs =>
-    global.lifecycle.setLoggedIn(accs.map(_.id).toSet)
     verbose(s"Logged in accounts: ${accs.map(_.id)}")
-    _loggedInAccounts = accs
+    global.lifecycle.setLoggedIn(accs.map(_.id).toSet)
   }
-
-  def getLoggedInAccounts = _loggedInAccounts
-
-  def hasLoggedInAccount = _loggedInAccounts.nonEmpty
-
-  def fallbackToLastAccount(callback: SwapAccountCallback) =
-    if (_loggedInAccounts.nonEmpty)
-      switchAccount(_loggedInAccounts.head.id).map(_ => callback.onSwapComplete())(Threading.Ui)
-    else callback.onSwapFailed()
-  // XXX Temporary stuff to handle team account in signup/signin - end
 
   val activeAccountPref = prefs.preference(CurrentAccountPref)
   activeAccountPref.signal.onUi { ac =>
@@ -395,11 +380,4 @@ class AccountsService(val global: GlobalModule) {
     storage.update(accountId, _.copy(firstLogin = false)).map(_ => ())
   }
 
-}
-
-object AccountsService {
-  trait SwapAccountCallback {
-    def onSwapComplete(): Unit
-    def onSwapFailed(): Unit
-  }
 }
