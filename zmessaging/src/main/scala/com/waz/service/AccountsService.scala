@@ -53,16 +53,15 @@ class AccountsService(val global: GlobalModule) {
 
   private val firstTimePref = prefs.preference(FirstTimeWithTeams)
 
-  //TODO should probably be Set
   val loggedInAccounts = firstTimePref.signal.flatMap {
     case false =>
       val changes = EventStream.union(
         storage.onChanged.map(_.map(_.id)),
         storage.onDeleted
       )
-      new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
+      new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.findLoggedIn()), changes)
     case true => Signal.const(Seq.empty[AccountData])
-  }.map(_.filter(acc => acc.cookie.isDefined))
+  }
 
   val zmsInstances = (for {
     ids <- loggedInAccounts.map(_.map(_.id))

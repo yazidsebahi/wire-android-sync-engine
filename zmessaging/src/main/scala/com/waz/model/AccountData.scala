@@ -297,5 +297,7 @@ object AccountData {
 
     def deleteForEmail(email: EmailAddress)(implicit db: DB) = delete(Email, Some(email))
 
+    def findLoggedIn()(implicit db: DB) =
+      iterating(db.query(table.name, null, s"${Cookie.name} IS NOT NULL", null, null, null, null))
   }
 }

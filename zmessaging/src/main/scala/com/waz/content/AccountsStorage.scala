@@ -30,6 +30,7 @@ trait AccountsStorage extends CachedStorage[AccountId, AccountData] {
   def findByEmail(email: EmailAddress): Future[Option[AccountData]]
   def findByPhone(phone: PhoneNumber): Future[Option[AccountData]]
   def find(credentials: Credentials): Future[Option[AccountData]]
+  def findLoggedIn(): Future[Seq[AccountData]]
 }
 
 class AccountsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[AccountId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) with AccountsStorage {
@@ -44,4 +45,6 @@ class AccountsStorageImpl(context: Context, storage: Database) extends CachedSto
     case PhoneCredentials(phone, _, _) => findByPhone(phone)
     case _ => Future successful None
   }
+
+  def findLoggedIn() = find(_.cookie.isDefined, AccountDataDao.findLoggedIn()(_), identity)
 }
