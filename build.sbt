@@ -108,7 +108,7 @@ lazy val zmessaging = project
     },
     libraryDependencies ++= Seq(
       Deps.supportV4 % Provided,
-      "com.koushikdutta.async" % "androidasync" % "2.1.8",
+      "com.koushikdutta.async" % "androidasync" % "2.2.1",
       "com.googlecode.libphonenumber" % "libphonenumber" % "7.1.1", // 7.2.x breaks protobuf
       "com.softwaremill.macwire" %% "macros" % "2.2.2" % Provided,
       "com.google.android.gms" % "play-services-base" % "11.0.0" % Provided exclude("com.android.support", "support-v4"),
