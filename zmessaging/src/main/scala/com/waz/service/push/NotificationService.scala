@@ -57,8 +57,8 @@ class GlobalNotificationsService(context: Context, lifeCycle: ZmsLifeCycle) {
             val service = z.notifications
             val notifications = service.notifications
             val shouldBeSilent = service.otherDeviceActiveTime.map { t =>
-              val timeDiff = Instant.now.toEpochMilli - t.toEpochMilli
-              verbose(s"otherDeviceActiveTime: $t, current time: ${Instant.now}, timeDiff: ${timeDiff.millis.toSeconds}")(service.logTag)
+              val timeDiff = clock.instant.toEpochMilli - t.toEpochMilli
+              verbose(s"otherDeviceActiveTime: $t, current time: ${clock.instant}, timeDiff: ${timeDiff.millis.toSeconds}")(service.logTag)
               timeDiff < NotificationsAndroidService.checkNotificationsTimeout.toMillis
             }
 
@@ -99,7 +99,6 @@ class NotificationService(context:         Context,
                           convs:           ConversationStorage,
                           reactionStorage: ReactionsStorage,
                           userPrefs:       UserPreferences,
-                          timeouts:        Timeouts,
                           pushService:     PushService) {
 
   import NotificationService._
@@ -122,9 +121,11 @@ class NotificationService(context:         Context,
   //For UI to decide if it should make sounds or not
   val otherDeviceActiveTime = Signal(Instant.EPOCH)
 
+  private val accInForeground = lifeCycle.accInForeground(accountId)
+
   val notifications = {
     (for {
-      inForeground <- lifeCycle.accInForeground(accountId) if !inForeground
+      inForeground <- accInForeground if !inForeground
       lastVisible  <- lastAccountVisibleTime.signal
       data         <- storage.notifications.map(_.values.toIndexedSeq.sorted)
     } yield {
@@ -138,8 +139,8 @@ class NotificationService(context:         Context,
   val lastReadProcessingStage = EventScheduler.Stage[GenericMessageEvent] { (convId, events) =>
     events.foreach {
       case GenericMessageEvent(_, _, _, GenericMessage(_, LastRead(conv, time))) =>
-        otherDeviceActiveTime ! Instant.now
-        alarmService.foreach(_.set(AlarmManager.RTC, (clock.instant() + checkNotificationsTimeout).toEpochMilli, checkNotificationsIntent(accountId, context)))
+        otherDeviceActiveTime ! clock.instant
+        alarmService.foreach(_.set(AlarmManager.RTC, (clock.instant + checkNotificationsTimeout).toEpochMilli, checkNotificationsIntent(accountId, context)))
       case _ =>
     }
     Future.successful(())
@@ -148,12 +149,12 @@ class NotificationService(context:         Context,
   def markAsDisplayed(ns: Seq[NotId]) = storage.updateAll2(ns, n => n.copy(hasBeenDisplayed = true))
 
   (for {
-    inForeground <- lifeCycle.accInForeground(accountId)
-    drift <- pushService.beDrift //TODO BE do NOT want us to rely on this time, we should find a better way, but for now, it's better than using local time
+    inForeground <- accInForeground
+    drift        <- pushService.beDrift //TODO BE do NOT want us to rely on this time, we should find a better way, but for now, it's better than using local time
   } yield (inForeground, drift)) { case (inForeground, drift) =>
     accountActive = returning(inForeground) { inForeGround =>
       if (inForeGround || accountActive) {
-        val inst = Instant.now()
+        val inst = clock.instant
         verbose(s"Account last active at $inst with BE drift: $drift")
         lastAccountVisibleTime := inst + drift
       }
@@ -193,11 +194,8 @@ class NotificationService(context:         Context,
     new AggregatingSignal(timeUpdates, loadAll(), update)
   }
 
-  // remove notifications once UI is active
-  lastAccountVisibleTime.signal.throttle(timeouts.notifications.clearThrottling)(removeNotificationsAfterUiActive)
-
   // remove notifications read by other devices
-  lastReadMap.throttle(timeouts.notifications.clearThrottling) { lrMap =>
+  lastReadMap.throttle(ClearUiThrottling) { lrMap =>
     removeNotifications { n =>
       val lastRead = lrMap.get(n.conv)
       val filter = lastRead.exists(!_.isBefore(n.time))
@@ -254,7 +252,7 @@ class NotificationService(context:         Context,
   }
 
   def clearNotifications(): Future[Unit] = {
-    val time = clock.instant()
+    val time = clock.instant
     for {
       _     <- lastAccountVisibleTime := time
       // will execute removeNotifications as part of this call,
@@ -262,6 +260,9 @@ class NotificationService(context:         Context,
       res   <- removeNotificationsAfterUiActive(time)
     } yield {}
   }
+
+  // remove notifications once UI is active
+  lastAccountVisibleTime.signal.throttle(ClearUiThrottling)(removeNotificationsAfterUiActive)
 
   private def removeNotificationsAfterUiActive(uiLastVisible: Instant) = {
     //will effectively remove all
@@ -295,8 +296,9 @@ class NotificationService(context:         Context,
     } yield res
 
   private def createNotifications(ns: Seq[NotificationData]): Future[Seq[NotificationInfo]] = {
-
+    verbose(s"createNotifications: ${ns.size}")
     Future.traverse(ns) { data =>
+      verbose(s"processing data: $data")
       usersStorage.get(data.user).flatMap { user =>
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
 
@@ -305,7 +307,7 @@ class NotificationService(context:         Context,
             Future.successful(NotificationInfo(data.id, data.msgType, data.time, data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, isGroupConv = false, hasBeenDisplayed = data.hasBeenDisplayed))
           case _ =>
             for {
-              msg <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
+              msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
               conv <- convs.get(data.conv)
             } yield {
               val (g, t) =
@@ -320,6 +322,9 @@ class NotificationService(context:         Context,
 }
 
 object NotificationService {
+  
+  //var for tests
+  var ClearUiThrottling = 3.seconds
 
   case class NotificationInfo(id: NotId,
                               tpe: NotificationType,

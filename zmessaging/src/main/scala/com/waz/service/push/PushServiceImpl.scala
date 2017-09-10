@@ -39,6 +39,7 @@ import scala.concurrent.{Future, Promise}
 
 trait PushService {
 
+  //+ duration means the BE time is ahead of the device time
   def beDrift: Signal[Duration]
 
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
