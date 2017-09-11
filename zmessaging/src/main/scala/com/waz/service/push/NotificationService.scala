@@ -129,7 +129,7 @@ class NotificationService(context:         Context,
       lastVisible  <- lastAccountVisibleTime.signal
       data         <- storage.notifications.map(_.values.toIndexedSeq.sorted)
     } yield {
-      verbose(s"Retrieved from notifications storage: ${fCol(data)}, lastAccountVisibleTime: $lastVisible")
+      verbose(s"Retrieved from notifications storage: ${data.size}, lastAccountVisibleTime: $lastVisible, toShow: ${data.filterNot(_.time.isBefore(lastVisible)).size}")
       if (data.forall(_.time.isBefore(lastVisible))) Seq.empty[NotificationData] // no new messages, don't show anything
       else data
     }).orElse(Signal.const(Seq.empty[NotificationData]))
