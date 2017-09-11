@@ -66,7 +66,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
     })
 
   override def remove(conv: ConvId, users: UserId*) = {
-    getAll(users.map(_ -> conv)).flatMap(toBeRemoved => remove(users.map(_ -> conv)).map(_ => toBeRemoved.flatten))
+    getAll(users.map(_ -> conv)).flatMap(toBeRemoved => removeAll(users.map(_ -> conv)).map(_ => toBeRemoved.flatten))
   }
 
   def set(conv: ConvId, users: Seq[UserId]): Future[Unit] = getActiveUsers(conv) flatMap { active =>
@@ -79,7 +79,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
 
   override def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
 
-  def delete(conv: ConvId) = getByConv(conv) map { users => remove(users.map(_.userId -> conv)) }
+  def delete(conv: ConvId) = getByConv(conv) map { users => removeAll(users.map(_.userId -> conv)) }
 
   override def getByUsers(users: Set[UserId]) = find(mem => users.contains(mem.userId), ConversationMemberDataDao.findForUsers(users)(_), identity)
 

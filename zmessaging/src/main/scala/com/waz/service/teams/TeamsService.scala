@@ -178,7 +178,7 @@ class TeamsServiceImpl(selfUser:           UserId,
       _ <- teamStorage.insert(team)
       _ <- selfPermissions.fold(Future.successful({}))(onMemberSynced(selfUser, _))
       oldMembers <- userStorage.getByTeam(Set(team.id))
-      _ <- userStorage.remove(oldMembers.map(_.id) -- memberIds)
+      _ <- userStorage.removeAll(oldMembers.map(_.id) -- memberIds)
       _ <- sync.syncUsers(memberIds.toSeq: _* ).flatMap(syncRequestService.scheduler.await)
       _ <- userStorage.updateAll2(memberIds, _.updated(teamId))
     } yield {}
@@ -214,7 +214,7 @@ class TeamsServiceImpl(selfUser:           UserId,
       Future.successful {}
     } else {
       for {
-        _ <- userStorage.remove(userIds)
+        _ <- userStorage.removeAll(userIds)
         _ <- removeUsersFromTeamConversations(userIds)
       } yield {}
     }
@@ -229,7 +229,7 @@ class TeamsServiceImpl(selfUser:           UserId,
     for {
       convs           <- getTeamConversations.map(_.map(_.id))
       membersToRemove = for (u <- users; c <- convs) yield (u, c)
-      _               <- convMemberStorage.remove(membersToRemove)
+      _               <- convMemberStorage.removeAll(membersToRemove)
     } yield {}
   }
 

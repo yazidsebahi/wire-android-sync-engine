@@ -150,7 +150,7 @@ class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedSto
 
   override def removeByTeam(teams: Set[TeamId]) = for {
     members <- getByTeam(teams)
-    _       <- remove(members.map(_.id))
+    _       <- removeAll(members.map(_.id))
   } yield members
 
   override def searchByTeam(team: TeamId, prefix: SearchKey, handleOnly: Boolean) = storage(UserDataDao.search(prefix, handleOnly, Some(team))(_)).future

@@ -41,7 +41,7 @@ import scala.concurrent.duration._
 
   feature("Cache Storage Initialization") {
     scenario("Cache entries where files and data are missing are not loaded.") {
-      cache.insert(Seq(withData, withFile, withoutDataOrFile)).await()
+      cache.insertAll(Seq(withData, withFile, withoutDataOrFile)).await()
 
       cache.get(CacheKey("withData")) should eventually(be('defined))
       cache.get(CacheKey("withFile")) should eventually(be('defined))
@@ -52,7 +52,7 @@ import scala.concurrent.duration._
 
     scenario("Expired cache entries are not loaded.") {
       val exp = expiredWithFile
-      cache.insert(Seq(withData, withFile, expiredWithData, exp)).await()
+      cache.insertAll(Seq(withData, withFile, expiredWithData, exp)).await()
 
       cache.get(CacheKey("withData")) should eventually(be('defined))
       cache.get(CacheKey("withFile")) should eventually(be('defined))

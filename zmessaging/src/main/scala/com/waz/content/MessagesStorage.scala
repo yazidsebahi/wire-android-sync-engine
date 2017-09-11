@@ -205,11 +205,11 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
         Future.successful(())
     }
 
-  override def remove(keys: Iterable[MessageId]): Future[Unit] =
+  override def removeAll(keys: Iterable[MessageId]): Future[Unit] =
     for {
       fromDb <- getAll(keys)
       msgs = fromDb.collect { case Some(m) => m }
-      _ <- super.remove(keys)
+      _ <- super.removeAll(keys)
       _ <- Future.traverse(msgs) { msg => {
         Future(msgsFilteredIndex(msg.convId).foreach(_.delete(msg))).zip(
         msgsIndex(msg.convId).flatMap(_.delete(msg)))

@@ -55,8 +55,8 @@ class MessagesContentUpdater(messagesStorage: MessagesStorage,
   // removes messages and records deletion
   // this is used when user deletes a message manually (on local or remote device)
   def deleteOnUserRequest(ids: Seq[MessageId]) =
-    deletions.insert(ids.map(id => MsgDeletion(id, now(clock)))) flatMap { _ =>
-      messagesStorage.remove(ids)
+    deletions.insertAll(ids.map(id => MsgDeletion(id, now(clock)))) flatMap { _ =>
+      messagesStorage.removeAll(ids)
     }
 
   def addLocalMessage(msg: MessageData, state: Status = Status.PENDING) = Serialized.future("add local message", msg.convId) {

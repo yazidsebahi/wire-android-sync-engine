@@ -58,7 +58,7 @@ class ReactionsStorageImpl(context: Context, storage: Database) extends CachedSt
     Likes(msg, users)
   }
 
-  override def insert(vs: Traversable[Liking]): Future[Set[Liking]] = {
+  override def insertAll(vs: Traversable[Liking]): Future[Set[Liking]] = {
     val values = new mutable.HashMap[(MessageId, UserId), Liking]
     vs foreach { v =>
       if (values.get(v.id).forall(_.timestamp.isBefore(v.timestamp)))

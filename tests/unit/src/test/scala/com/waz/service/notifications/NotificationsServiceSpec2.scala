@@ -26,17 +26,13 @@ import com.waz.service.ZmsLifeCycle
 import com.waz.service.push.{NotificationService, PushService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
+import com.waz.utils.{RichFiniteDuration, RichInstant}
 import com.waz.utils.events.{EventStream, Signal}
-import org.threeten.bp.Duration
+import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.Map
-import scala.concurrent.{Future, duration}
 import scala.concurrent.duration._
-import com.waz.utils.RichFiniteDuration
-import com.waz.utils.RichThreetenBPDuration
-import com.waz.utils.RichInstant
-
-
+import scala.concurrent.{Future, duration}
 
 class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
@@ -70,68 +66,82 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
   val lastAccountVisiblePref = userPrefs.preference(LastAccountVisibleTime)
 
-//  NotificationService.ClearUiThrottling = duration.Duration.Zero
+  NotificationService.ClearUiThrottling = duration.Duration.Zero
 
   feature ("Background behaviour") {
 
-    def beTime = clock.instant + beDrift.map(_.asScala).currentValue("").getOrElse(duration.Duration.Zero)
+    scenario("Display notifications that arrive after account becomes inactive that have not been read elsewhere") {
+      val user = UserData(UserId("user"), "testUser1")
+      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user.id, ConversationType.OneToOne, lastRead = Instant.EPOCH)
+      allConvs ! IndexedSeq(conv)
 
-    def twoSimpleNotifications = {
-      val user = UserId("user")
-      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user, ConversationType.OneToOne)
-      val msg1  = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user)
-      val msg2  = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user)
+      inForeground ! false
+      lastAccountVisiblePref := clock.instant
+      clock + 10.seconds //messages arrive some time after the account was last visible
 
-      val not1 = NotificationData(NotId("notf1"), user = user, conv = conv.id, referencedMessage = Some(msg1.id), time = beTime)
-      val not2 = NotificationData(NotId("notf2"), user = user, conv = conv.id, referencedMessage = Some(msg2.id), time = beTime)
+      val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
+      val msg2 = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user.id)
 
-      notifications ! Map(
-        not1.id -> not1,
-        not2.id -> not2
-      )
-
-      (users.get _).expects(user).twice().returning(Future.successful(Some(UserData("testUser1").copy(id = user))))
-      (messages.getMessage _).expects(*).twice.onCall { id: MessageId =>
-        Future.successful(Some {
-          id match {
-            case msg1.id => msg1
-            case msg2.id => msg2
-            case _ => fail("Unexpected msg id")
-          }
-        })
-      }
+      (users.get _).expects(user.id).twice.returning(Future.successful(Some(user)))
       (convs.get _).expects(conv.id).twice.returning(Future.successful(Some(conv)))
-    }
 
-    scenario("Display notifications") {
-      clock + 10.seconds
-      twoSimpleNotifications
-      result(getService.notifications.filter(_.size == 2).head)
+      val service = getService
+
+      msgsAdded ! Seq(msg1, msg2)
+
+      result(service.notifications.filter(_.size == 2).head)
     }
 
     scenario("Bringing ui to foreground should clear notifications") {
-      clock + 10.seconds
-      twoSimpleNotifications
+      val user = UserData(UserId("user"), "testUser1")
+      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user.id, ConversationType.OneToOne, lastRead = Instant.EPOCH)
+      allConvs ! IndexedSeq(conv)
+
+      inForeground ! false
+      lastAccountVisiblePref := clock.instant
+      clock + 10.seconds //messages arrive some time after the account was last visible
+
+      val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
+      val msg2 = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user.id)
+
+      (users.get _).expects(user.id).twice.returning(Future.successful(Some(user)))
+      (convs.get _).expects(conv.id).twice.returning(Future.successful(Some(conv)))
+
       val service = getService
+
+      msgsAdded ! Seq(msg1, msg2)
+
       result(service.notifications.filter(_.size == 2).head)
 
-      clock + 10.seconds
       inForeground ! true
 
       result(service.notifications.filter(_.isEmpty).head)
     }
 
     scenario("Receiving notifications after app is put to background should take BE drift into account") {
-      clock + 30.seconds
-      beDrift ! (-15.seconds).asJava
+
+      val user = UserData(UserId("user"), "testUser1")
+      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user.id, ConversationType.OneToOne, lastRead = Instant.EPOCH)
+      allConvs ! IndexedSeq(conv)
+
+      clock + 15.seconds
+      val drift = -15.seconds
+      beDrift ! drift.asJava
 
       inForeground ! true
+
       val service = getService
 
       inForeground ! false
 
-      clock + 5.seconds
-      twoSimpleNotifications
+      clock + 10.seconds //messages arrive at some point later but within drift time
+      val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id, time = clock.instant + drift)
+      val msg2 = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user.id, time = clock.instant + drift)
+
+      (users.get _).expects(user.id).twice.returning(Future.successful(Some(user)))
+      (convs.get _).expects(conv.id).twice.returning(Future.successful(Some(conv)))
+
+      msgsAdded ! Seq(msg1, msg2)
 
       result(service.notifications.filter(_.size == 2).head)
     }
@@ -144,6 +154,13 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
     (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
 
     (storage.notifications _).expects().anyNumberOfTimes().returning(notifications)
+
+    (storage.insertAll _).expects(*).anyNumberOfTimes().onCall { nots: Traversable[NotificationData] =>
+      notifications ! nots.map(n => n.id -> n).toMap
+      Future.successful(nots.toSet)
+    }
+
+    (storage.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
     (convs.onAdded _).expects().returning(convsAdded)
     (convs.onUpdated _).expects().returning(convsUpdated)
