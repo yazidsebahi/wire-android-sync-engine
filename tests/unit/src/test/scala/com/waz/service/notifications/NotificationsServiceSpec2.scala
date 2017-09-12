@@ -1,0 +1,179 @@
+/*
+ * Wire
+ * Copyright (C) 2016 Wire Swiss GmbH
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.waz.service.notifications
+
+import com.waz.api.Message
+import com.waz.content.UserPreferences.LastAccountVisibleTime
+import com.waz.content._
+import com.waz.model.ConversationData.ConversationType
+import com.waz.model._
+import com.waz.service.ZmsLifeCycle
+import com.waz.service.push.{NotificationService, PushService}
+import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.TestUserPreferences
+import com.waz.utils.{RichFiniteDuration, RichInstant}
+import com.waz.utils.events.{EventStream, Signal}
+import org.threeten.bp.{Duration, Instant}
+
+import scala.collection.Map
+import scala.concurrent.duration._
+import scala.concurrent.{Future, duration}
+
+class NotificationsServiceSpec2 extends AndroidFreeSpec {
+
+
+  val account   = AccountId()
+  val self      = UserId()
+  val messages  = mock[MessagesStorage]
+  val lifeCycle = mock[ZmsLifeCycle]
+  val storage   = mock[NotificationStorage]
+  val users     = mock[UsersStorage]
+  val convs     = mock[ConversationStorage]
+  val reactions = mock[ReactionsStorage]
+  val userPrefs = new TestUserPreferences
+  val push      = mock[PushService]
+
+
+  val inForeground = Signal(false)
+  val beDrift      = Signal(Duration.ZERO)
+  val convsAdded   = EventStream[Seq[ConversationData]]()
+  val convsUpdated = EventStream[Seq[(ConversationData, ConversationData)]]()
+  val allConvs     = Signal[IndexedSeq[ConversationData]]()
+
+  val notifications = Signal[Map[NotId, NotificationData]]()
+
+  val msgsAdded   = EventStream[Seq[MessageData]]()
+  val msgsUpdated = EventStream[Seq[(MessageData, MessageData)]]()
+  val msgsDeleted = EventStream[Seq[MessageId]]()
+
+  val reactionsChanged = EventStream[Seq[Liking]]()
+  val reactionsDeleted = EventStream[Seq[(MessageId, UserId)]]()
+
+  val lastAccountVisiblePref = userPrefs.preference(LastAccountVisibleTime)
+
+  NotificationService.ClearUiThrottling = duration.Duration.Zero
+
+  feature ("Background behaviour") {
+
+    scenario("Display notifications that arrive after account becomes inactive that have not been read elsewhere") {
+      val user = UserData(UserId("user"), "testUser1")
+      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user.id, ConversationType.OneToOne, lastRead = Instant.EPOCH)
+      allConvs ! IndexedSeq(conv)
+
+      inForeground ! false
+      lastAccountVisiblePref := clock.instant
+      clock + 10.seconds //messages arrive some time after the account was last visible
+
+      val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
+      val msg2 = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user.id)
+
+      (users.get _).expects(user.id).twice.returning(Future.successful(Some(user)))
+      (convs.get _).expects(conv.id).twice.returning(Future.successful(Some(conv)))
+
+      val service = getService
+
+      msgsAdded ! Seq(msg1, msg2)
+
+      result(service.notifications.filter(_.size == 2).head)
+    }
+
+    scenario("Bringing ui to foreground should clear notifications") {
+      val user = UserData(UserId("user"), "testUser1")
+      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user.id, ConversationType.OneToOne, lastRead = Instant.EPOCH)
+      allConvs ! IndexedSeq(conv)
+
+      inForeground ! false
+      lastAccountVisiblePref := clock.instant
+      clock + 10.seconds //messages arrive some time after the account was last visible
+
+      val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
+      val msg2 = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user.id)
+
+      (users.get _).expects(user.id).twice.returning(Future.successful(Some(user)))
+      (convs.get _).expects(conv.id).twice.returning(Future.successful(Some(conv)))
+
+      val service = getService
+
+      msgsAdded ! Seq(msg1, msg2)
+
+      result(service.notifications.filter(_.size == 2).head)
+
+      inForeground ! true
+
+      result(service.notifications.filter(_.isEmpty).head)
+    }
+
+    scenario("Receiving notifications after app is put to background should take BE drift into account") {
+
+      val user = UserData(UserId("user"), "testUser1")
+      val conv = ConversationData(ConvId("conv"), RConvId(), Some("conv"), user.id, ConversationType.OneToOne, lastRead = Instant.EPOCH)
+      allConvs ! IndexedSeq(conv)
+
+      clock + 15.seconds
+      val drift = -15.seconds
+      beDrift ! drift.asJava
+
+      inForeground ! true
+
+      val service = getService
+
+      inForeground ! false
+
+      clock + 10.seconds //messages arrive at some point later but within drift time
+      val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id, time = clock.instant + drift)
+      val msg2 = MessageData(MessageId("msg2"), conv.id, Message.Type.TEXT, user.id, time = clock.instant + drift)
+
+      (users.get _).expects(user.id).twice.returning(Future.successful(Some(user)))
+      (convs.get _).expects(conv.id).twice.returning(Future.successful(Some(conv)))
+
+      msgsAdded ! Seq(msg1, msg2)
+
+      result(service.notifications.filter(_.size == 2).head)
+    }
+  }
+
+
+  def getService = {
+
+    (lifeCycle.accInForeground _).expects(account).returning(inForeground)
+    (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
+
+    (storage.notifications _).expects().anyNumberOfTimes().returning(notifications)
+
+    (storage.insertAll _).expects(*).anyNumberOfTimes().onCall { nots: Traversable[NotificationData] =>
+      notifications ! nots.map(n => n.id -> n).toMap
+      Future.successful(nots.toSet)
+    }
+
+    (storage.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+
+    (convs.onAdded _).expects().returning(convsAdded)
+    (convs.onUpdated _).expects().returning(convsUpdated)
+    (convs.getAllConvs _).expects().returning(allConvs.head)
+
+    (messages.onAdded _).expects().returning(msgsAdded)
+    (messages.onUpdated _).expects().returning(msgsUpdated)
+    (messages.onDeleted _).expects().returning(msgsDeleted)
+
+    (reactions.onChanged _).expects().returning(reactionsChanged)
+    (reactions.onDeleted _).expects().returning(reactionsDeleted)
+
+    new NotificationService(null, account, self, messages, lifeCycle, storage, users, convs, reactions, userPrefs, push)
+  }
+
+}

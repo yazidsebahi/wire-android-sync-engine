@@ -77,7 +77,7 @@ trait CachedStorage[K, V] {
   def signal(key: K): Signal[V]
 
   def insert(v: V): Future[V]
-  def insert(vs: Traversable[V]): Future[Set[V]]
+  def insertAll(vs: Traversable[V]): Future[Set[V]]
 
   def get(key: K): Future[Option[V]]
   def getOrCreate(key: K, creator: => V): Future[V]
@@ -98,7 +98,7 @@ trait CachedStorage[K, V] {
   def getRawCached(key: K): Option[V]
 
   def remove(key: K): Future[Unit]
-  def remove(keys: Iterable[K]): Future[Unit]
+  def removeAll(keys: Iterable[K]): Future[Unit]
 
   def cacheIfNotPresent(key: K, value: V): Unit
 }
@@ -190,7 +190,7 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
 
   def insert(v: V) = put(dao.idExtractor(v), v)
 
-  def insert(vs: Traversable[V]) =
+  def insertAll(vs: Traversable[V]) =
     updateOrCreateAll(vs.map { v => dao.idExtractor(v) -> { (_: Option[V]) => v } }(breakOut))
 
   def get(key: K): Future[Option[V]] = cachedOrElse(key, Future { cachedOrElse(key, loadFromDb(key)) }.flatMap(identity))
@@ -321,7 +321,7 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
     returning(db { delete(Seq(key))(_) } .future) { _ => onDeleted ! Seq(key) }
   } .flatten
 
-  def remove(keys: Iterable[K]): Future[Unit] = Future {
+  def removeAll(keys: Iterable[K]): Future[Unit] = Future {
     keys foreach { key => cache.put(key, None) }
     returning(db { delete(keys)(_) } .future) { _ => onDeleted ! keys.toVector }
   } .flatten

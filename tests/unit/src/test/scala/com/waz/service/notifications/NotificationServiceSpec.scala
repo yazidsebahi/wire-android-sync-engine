@@ -70,7 +70,7 @@ import scala.concurrent.duration._
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    zms.convsStorage.insert(Seq(oneToOneConv, groupConv)).await()
+    zms.convsStorage.insertAll(Seq(oneToOneConv, groupConv)).await()
   }
 
   before {

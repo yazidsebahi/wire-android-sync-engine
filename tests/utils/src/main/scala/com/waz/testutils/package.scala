@@ -258,7 +258,7 @@ package object testutils {
 
   implicit class RichStorage[K, V](storage: CachedStorageImpl[K, V]) {
     def deleteAll() = storage.list() flatMap { vs =>
-      storage.remove(vs.map(storage.dao.idExtractor))
+      storage.removeAll(vs.map(storage.dao.idExtractor))
     }
   }
 

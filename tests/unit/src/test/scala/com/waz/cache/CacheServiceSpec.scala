@@ -46,7 +46,7 @@ import scala.concurrent.duration._
 
   after {
     Thread.sleep(1000) // because some operations (deleting) are scheduled on background
-    cacheStorage.list().map { es => cacheStorage.remove(es.map(_.key)) }.await()
+    cacheStorage.list().map { es => cacheStorage.removeAll(es.map(_.key)) }.await()
   }
 
   feature("Create") {

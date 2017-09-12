@@ -84,7 +84,7 @@ class ErrorsService(accountId: AccountId, context: Context, storage: ZmsDatabase
 
   private def delete(errors: ErrorData*) = {
     verbose(s"delete: $errors")
-    errorsStorage.remove(errors.map(_.id))
+    errorsStorage.removeAll(errors.map(_.id))
   }
 
   def addErrorWhenActive(error: ErrorData) =

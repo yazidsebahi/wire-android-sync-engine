@@ -43,7 +43,7 @@ import scala.util.Random.{nextInt, shuffle}
     override val dbHelper: DBHelper = new ZMessagingDB(Robolectric.application, "dbName")
   }
 
-  lazy val storage = new ReactionsStorage(Robolectric.application, database)
+  lazy val storage = new ReactionsStorageImpl(Robolectric.application, database)
 
   override def beforeAll: Unit = {
     val likings = msgIds flatMap { msgId =>
@@ -68,7 +68,7 @@ import scala.util.Random.{nextInt, shuffle}
         Liking(msgId, userIds(0), sec(1), Unlike),
         Liking(msgId, userIds(0), sec(0), Unlike))
 
-      storage.insert(likings).futureValue
+      storage.insertAll(likings).futureValue
 
       storage.get((msgId, userIds(0))).futureValue shouldEqual Some(Liking(msgId, userIds(0), sec(2), Like))
       storage.getLikes(msgId).futureValue shouldEqual Likes(msgId, Map(userIds(0) -> sec(2)))
@@ -89,7 +89,7 @@ import scala.util.Random.{nextInt, shuffle}
         Liking(msgId, userIds(3), sec(3), Like),
         Liking(msgId, userIds(3), sec(4), Unlike))
 
-      storage.insert(likings).futureValue
+      storage.insertAll(likings).futureValue
 
       storage.getLikes(msgId).futureValue shouldEqual Likes(msgId, Map(userIds(2) -> sec(2)))
     }
@@ -106,7 +106,7 @@ import scala.util.Random.{nextInt, shuffle}
         Liking(msgIds(2), userIds(0), sec(1), Like),
         Liking(msgIds(2), userIds(0), sec(2), Unlike))
 
-      storage.insert(likings).futureValue
+      storage.insertAll(likings).futureValue
 
       storage.loadAll(msgIds).futureValue should contain only (
         Likes(msgIds(0), Map(userIds(0) -> sec(2))),
@@ -132,7 +132,7 @@ import scala.util.Random.{nextInt, shuffle}
 
       val likings = msgIds flatMap likingsFor
 
-      storage.insert(likings).futureValue
+      storage.insertAll(likings).futureValue
 
       storage.loadAll(msgIds).futureValue should contain only (
         Likes(msgIds(0), Map(

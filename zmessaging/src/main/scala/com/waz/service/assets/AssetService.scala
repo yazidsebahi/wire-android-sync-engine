@@ -189,7 +189,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
 
   def mergeOrCreateAsset(assetData: AssetData): Future[Option[AssetData]] = storage.mergeOrCreateAsset(assetData)
 
-  def removeAssets(ids: Iterable[AssetId]): Future[Unit] = Future.traverse(ids)(removeSource).flatMap(_ => storage.remove(ids))
+  def removeAssets(ids: Iterable[AssetId]): Future[Unit] = Future.traverse(ids)(removeSource).flatMap(_ => storage.removeAll(ids))
 
   def removeSource(id: AssetId): Future[Unit] = storage.get(id)
     .collect { case Some(asset) if asset.isVideo || asset.isAudio => asset.source }
