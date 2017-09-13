@@ -45,7 +45,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   val currentToken        = prefs.preference(GlobalPreferences.PushToken)
 
   val googlePlayAvailable = Signal(false)
-  val accInForeground     = Signal(false)
+  val accInForeground     = Signal(Option.empty[AccountId])
   val accountSignal       = Signal[AccountData]()
 
   val loggedInAccounts    = Signal(Set.empty[AccountData])
@@ -124,7 +124,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       googlePlayAvailable ! true
       currentToken := Some(oldToken)
 
-      lazy val (globalToken, service) = initTokenServiceWithGlobal()
+      lazy val (globalToken, Seq(service)) = initTokenServicesWithGlobal()
 
       (sync.deletePushToken _).expects(oldToken).once().returning(Future.successful(SyncId()))
       (sync.registerPush _).expects(newToken).once().onCall { _: PushToken =>
@@ -196,14 +196,14 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       loggedInAccounts ! Set(accountData(accountId, token))
       pushEnabled := true
       googlePlayAvailable ! true
-      accInForeground ! true //websocket should be open
+      accInForeground ! Some(accountId) //websocket should be open
       currentToken := Some(token)
 
       val service = initTokenService()
 
       result(service.pushActive.filter(_ == false).head)
 
-      accInForeground ! false //websocket should be off - use push again
+      accInForeground ! None //websocket should be off - use push again
       result(service.pushActive.filter(_ == true).head)
     }
 
@@ -248,7 +248,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       //This needs to be called
       (google.deleteAllPushTokens _).expects().once()
 
-      val (globalToken, _) = initTokenServiceWithGlobal()
+      val (globalToken, _) = initTokenServicesWithGlobal()
 
       globalToken.resetGlobalToken()
       await(currentToken.signal.filter(_.contains(newToken)).head)
@@ -267,11 +267,9 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       googlePlayAvailable ! true
       currentToken := Some(token)
 
-      val sync2    = mock[SyncServiceHandle]
+      val sync2 = mock[SyncServiceHandle]
 
-      val global = initGlobal //need to share the same global instance
-      lazy val service1 = initTokenService(global = global)
-      lazy val service2 = initTokenService(account2.id, sync2, global = global)
+      lazy val (_, Seq(service1, service2)) = initTokenServicesWithGlobal(Seq(accountId, account2.id), Seq(sync, sync2))
 
       (sync2.registerPush _).expects(token).once().onCall { _: PushToken =>
         Future {
@@ -291,19 +289,18 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     }
   }
 
-  def initGlobal = {
+  def initTokenService(accountId: AccountId = accountId, sync: SyncServiceHandle = sync) = initTokenServicesWithGlobal(Seq(accountId), Seq(sync))._2.head
+
+  def initTokenServicesWithGlobal(accountIds: Seq[AccountId] = Seq(accountId), syncs: Seq[SyncServiceHandle] = Seq(sync)) = {
+
     (google.isGooglePlayServicesAvailable _).expects().anyNumberOfTimes().returning(googlePlayAvailable)
-    new GlobalTokenService(google, prefs)
-  }
+    val global = new GlobalTokenService(google, prefs)
 
-  def initTokenService(accountId: AccountId = accountId, sync: SyncServiceHandle = sync, global: GlobalTokenService = initGlobal) = initTokenServiceWithGlobal(accountId, sync, global)._2
-
-  def initTokenServiceWithGlobal(accountId: AccountId = accountId, sync: SyncServiceHandle = sync, global: GlobalTokenService = initGlobal) = {
     (accStorage.signal _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
       loggedInAccounts.map(_.find(_.id == id)).collect { case Some(acc) => acc }
     }
     (lifecycle.accLoggedIn _).expects(*).anyNumberOfTimes().onCall((id: AccountId) => loggedInAccounts.map(_.map(_.id).contains(id)))
-    (lifecycle.accInForeground _).expects(accountId).anyNumberOfTimes().returning(accInForeground)
+    (lifecycle.accInForeground _).expects(*).anyNumberOfTimes().onCall((id: AccountId) => accInForeground.map(_.contains(id)))
     (accStorage.update _).expects(*, *).anyNumberOfTimes().onCall { (id, f) =>
       Future.successful {
         val account = loggedInAccounts.currentValue("").flatMap(_.find(_.id == id))
@@ -318,6 +315,9 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
         }
       }
     }
-    (global, new PushTokenService(google, BackendConfig.StagingBackend, global, prefs, lifecycle, accountId, accStorage, sync))
+
+    (global, accountIds.zip(syncs).map { case (id, sync) =>
+      new PushTokenService(google, BackendConfig.StagingBackend, global, prefs, lifecycle, id, accStorage, sync)
+    })
   }
 }
