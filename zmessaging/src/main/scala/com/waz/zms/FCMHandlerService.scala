@@ -23,11 +23,10 @@ import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model._
-import com.waz.service.BackendConfig.StagingBackend
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.PushService
-import com.waz.service.{BackendConfig, ZMessaging, ZmsLifeCycle}
+import com.waz.service.{ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.{JsonDecoder, LoggedTry}
@@ -58,36 +57,26 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
       verbose(s"onMessageReceived with data: $data")
       Option(ZMessaging.currentGlobal) match {
         case Some(glob) if glob.backend.pushSenderId == remoteMessage.getFrom =>
-          //TODO remove checks for BE after changed are released to production
-          if (glob.backend == StagingBackend) {
-            data.get(UserKey).map(UserId) match {
-              case Some(target) =>
-                accounts.loggedInAccounts.head.flatMap { accs =>
-                  accs.find(_.userId.exists(_ == target)).map(_.id) match {
-                    case Some(acc) =>
-                      accounts.getZMessaging(acc).flatMap {
-                        case Some(zms) => FCMHandler(zms, data)
-                        case _ =>
-                          warn("Couldn't instantiate zms instance")
-                          Future.successful({})
-                      }
-                    case _ =>
-                      warn("Could not find target account for notification")
-                      Future.successful({})
-                  }
+          data.get(UserKey).map(UserId) match {
+            case Some(target) =>
+              accounts.loggedInAccounts.head.flatMap { accs =>
+                accs.find(_.userId.exists(_ == target)).map(_.id) match {
+                  case Some(acc) =>
+                    accounts.getZMessaging(acc).flatMap {
+                      case Some(zms) => FCMHandler(zms, data)
+                      case _ =>
+                        warn("Couldn't instantiate zms instance")
+                        Future.successful({})
+                    }
+                  case _ =>
+                    warn("Could not find target account for notification")
+                    Future.successful({})
                 }
-              case _ =>
-                warn(UserKeyMissingMsg)
-                HockeyApp.saveException(new Exception(UserKeyMissingMsg), UserKeyMissingMsg)
-                Future.successful({})
-            }
-          } else {
-            accounts.activeZms.head.flatMap {
-              case Some(zms) => FCMHandler(zms, data)
-              case _ =>
-                warn("No active ZMS instance")
-                Future.successful({})
-            }
+              }
+            case _ =>
+              warn(UserKeyMissingMsg)
+              HockeyApp.saveException(new Exception(UserKeyMissingMsg), UserKeyMissingMsg)
+              Future.successful({})
           }
         case Some(_) =>
           warn(s"Received FCM notification from unknown sender: ${remoteMessage.getFrom}. Ignoring...")

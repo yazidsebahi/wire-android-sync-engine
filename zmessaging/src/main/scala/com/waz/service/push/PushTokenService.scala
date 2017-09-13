@@ -23,7 +23,6 @@ import com.waz.ZLog.{verbose, warn}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
-import com.waz.service.BackendConfig.StagingBackend
 import com.waz.service.{BackendConfig, EventScheduler, ZmsLifeCycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
@@ -53,9 +52,7 @@ class PushTokenService(googleApi:    GoogleApi,
   val currentAccount = prefs.preference(CurrentAccountPref)
   val currentToken   = globalToken.currentToken
 
-  //TODO - remove BE check once old notifications are ready in production
-  private val isLoggedIn =
-    if (backend == StagingBackend) lifeCycle.accLoggedIn(accountId) else lifeCycle.accInForeground(accountId)
+  private val isLoggedIn = lifeCycle.accLoggedIn(accountId)
 
   private val userToken = accStorage.signal(accountId).map(_.registeredPush)
 
@@ -86,14 +83,6 @@ class PushTokenService(googleApi:    GoogleApi,
     case (None, Some(user)) =>
       sync.deletePushToken(user)
     case _ => //do nothing
-  }
-
-  //TODO - remove once old notifications are ready in production
-  lifeCycle.accInForeground(accountId).map {
-    case false if backend != StagingBackend =>
-      //clear the token on production on switch account to force register next time
-      accStorage.update(accountId, _.copy(registeredPush = None))
-    case _ => // do nothing
   }
 
   def onTokenRegistered(token: PushToken): Future[Unit] = {
