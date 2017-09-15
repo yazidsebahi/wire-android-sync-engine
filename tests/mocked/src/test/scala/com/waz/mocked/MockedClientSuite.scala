@@ -89,7 +89,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val messagesClient     = new MessagesClient(zNetClient) {
       override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = suite.postMessage(conv, content, ignoreMissing)
     }
-    override lazy val pushNotsClient       = new PushNotificationsClient(zNetClient) {
+    override lazy val pushNotificationsClient = new PushNotificationsClient {
       override def loadNotifications(lastId: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] = suite.loadNotifications(lastId, client)
     }
     override lazy val abClient           = new AddressBookClient(zNetClient) {

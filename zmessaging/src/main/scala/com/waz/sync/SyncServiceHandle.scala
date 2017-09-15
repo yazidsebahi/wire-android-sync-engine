@@ -145,10 +145,11 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
 
   override def performFullSync(): Future[Unit] = {
     for {
-      _ <- syncConversations()
-      _ <- syncTeam()
-      _ <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
-      _ <- syncSelfClients()
+      id1 <- syncConversations()
+      id2 <- syncTeam()
+      id3 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
+      id4 <- syncSelfClients()
+      _ <- service.scheduler.await(Set(id1, id2, id3, id4))
     } yield ()
   }
 }

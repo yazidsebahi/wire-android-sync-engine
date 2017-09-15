@@ -171,7 +171,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val usersClient        = wire[UsersClient]
   lazy val convClient         = wire[ConversationsClient]
   lazy val teamClient         = wire[TeamsClient]
-  lazy val pushNotificationsClient     = new PushNotificationsClient(zNetClient)
+  lazy val pushNotificationsClient: PushNotificationsClient = new PushNotificationsClientImpl(zNetClient)
   lazy val abClient           = wire[AddressBookClient]
   lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]

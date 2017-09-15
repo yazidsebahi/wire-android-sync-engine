@@ -20,14 +20,14 @@ package com.waz.service.push
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.EventPipeline
+import com.waz.service.{EventPipeline, NetworkModeService}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -38,6 +38,19 @@ import org.threeten.bp.{Duration, Instant}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
+import com.waz.znet.Response.Status.NotFound
+
+/** PushService handles notifications coming from FCM, WebSocket, and fetch.
+  * We assume FCM notifications are unreliable, so we use them only as information that we should perform a fetch (syncHistory).
+  * A notification from the web socket may trigger a fetch on error. When fetching we ask BE to send us all notifications since
+  * a given lastId - it may take time and we even may find out that we lost some history (lastId not found) which triggers slow sync.
+  * So, it may happen that during the fetch new notifications will arrive through the web socket. Their processing should be
+  * performed only after the fetch is done. For that we use a serial dispatch queue and we process notifications in futures,
+  * which are put at the end of the queue, essentially making PushService synchronous.
+  * Also, we need to handle fetch failures. If a fetch fails, we want to repeat it - after some time, or on network change.
+  * In such case, new web socket notifications waiting to be processed should be dismissed. The new fetch will (if successful)
+  * will receive them in the right order.
+  */
 
 trait PushService {
 
@@ -59,9 +72,6 @@ trait PushService {
 
   def onPushNotification(n: PushNotification): Unit // used in tests
   def onPushNotifications(allNs: Seq[PushNotification]): Unit
-  def lastNotificationId(): Future[Option[Uid]]
-  def updateLastNotificationId(id: Uid): Future[Unit]
-  def resetLastNotificationId(): Future[Unit] // used in tests
 
 }
 
@@ -71,7 +81,8 @@ class PushServiceImpl(context: Context,
                       clientId: ClientId,
                       pipeline: EventPipeline,
                       webSocket: WebSocketClientService,
-                      sync: SyncServiceHandle
+                      sync: SyncServiceHandle,
+                      network: NetworkModeService
                      ) extends PushService { self =>
   import PushService._
 
@@ -88,9 +99,9 @@ class PushServiceImpl(context: Context,
 
   override val beDrift = Signal(Duration.ZERO).disableAutowiring()
 
-  webSocket.connected {
-    pushConnected ! _
-  }
+  private var processingPushNots = CancellableFuture.successful({})
+
+  webSocket.connected { pushConnected ! _ }
 
   private var subs = Seq.empty[Subscription]
 
@@ -106,8 +117,11 @@ class PushServiceImpl(context: Context,
           verbose(s"got websocket message: $content")
           content match {
             case NotificationsResponse(notifications@_*) =>
-              debug(s"got notifications from data: $content")
-              onPushNotifications(notifications)
+              verbose(s"got notifications from data: $content")
+              processingPushNots = if (processingPushNots.isCompleted)
+                CancellableFuture(onPushNotifications(notifications))
+              else
+                processingPushNots.flatMap(_ => CancellableFuture(onPushNotifications(notifications)))
             case resp =>
               error(s"unexpected push response: $resp")
           }
@@ -121,11 +135,11 @@ class PushServiceImpl(context: Context,
 
   webSocket.connected {
     case true =>
-      debug("onConnected")
+      verbose("onConnected")
       syncHistory()
       connectedPushPromise.trySuccess(self)
     case false =>
-      debug("onDisconnected")
+      verbose("onDisconnected")
       syncHistory()
       connectedPushPromise.tryFailure(new Exception("onDisconnected"))
       connectedPushPromise = Promise()
@@ -146,7 +160,7 @@ class PushServiceImpl(context: Context,
   override def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
 
   override def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
-    debug(s"gotPushNotifications: ${allNs.size}")
+    verbose(s"gotPushNotifications: ${allNs.size}")
 
     val ns = allNs.filter(_.hasEventForClient(clientId))
 
@@ -172,45 +186,66 @@ class PushServiceImpl(context: Context,
     }
   }
 
-  onHistoryLost.on(dispatcher) { _ => sync.performFullSync() }
+  case class Results(notifications: Vector[PushNotification], time: Option[Instant], historyLost: Boolean)
 
-  override def syncHistory() = {
-    def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[(Vector[PushNotification], Boolean, Option[Instant])] = client.loadNotifications(lastId, clientId).flatMap {
-      case Right( LoadNotificationsResponse(nots, false, time) ) => CancellableFuture.successful((nots, false, time))
-      case Right( LoadNotificationsResponse(nots, true, time) ) => load(nots.lastOption.map(_.id)).flatMap {
-        case (moreNots, historyLost, newTime) => CancellableFuture.successful((nots ++ moreNots, historyLost, if (newTime.isDefined) newTime else time))
-      }
-      case Left(ErrorResponse(TimeoutCode | ConnectionErrorCode, _, _)) =>
-        if (attempts >= backoff.maxRetries) {
-          warn(s"/notifications failed due to timeout or connection error. Do nothing and wait for next notification")
-          CancellableFuture.successful((Vector.empty, false, None))
-        } else {
-          warn(s"Request from backend timed out: attempting to load last page (since id: $lastId) again")
-          CancellableFuture.delay(backoff.delay(attempts)).flatMap(_ => load(lastId, attempts + 1)) //try last page again
-        }
-      case Left(err) =>
-        warn(s"/notifications failed with unexpected error: $err, potentially history lost")
-        CancellableFuture.successful((Vector.empty, true, None))
-    }
+  private val syncRetry = Signal[Option[CancellableFuture[Results]]](None)
 
-    lastNotificationId() flatMap { lastId =>
-      load(lastId).map {
-        case (notifications, historyLost, beTime) =>
-          onPushNotifications(notifications)
-          beTime.foreach { time => beDrift ! Instant.now.until(time) }
-          if (historyLost) {
-            onHistoryLost ! clock.instant()
+  syncRetry.zip(network.networkMode) {
+    case (None, _) =>
+    case (_, OFFLINE|UNKNOWN) =>
+    case (Some(retry), _) =>
+      retry.cancel() // cancel the delayed retry since we're doing it now, on network change
+      syncHistory()
+  }
+
+  override def syncHistory(): Future[Unit] = {
+
+    def futureHistoryResults(notifications: Vector[PushNotification] = Vector.empty, time: Option[Instant] = None, historyLost: Boolean = false) =
+      CancellableFuture.successful(Results(notifications, time, historyLost))
+
+    def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] =
+      client.loadNotifications(lastId, clientId).flatMap {
+        case Right(LoadNotificationsResponse(nots, false, time)) =>
+          returning(futureHistoryResults(nots, time)){ _ => syncRetry ! None } // fetch successful, turn off retry on network change
+        case Right(LoadNotificationsResponse(nots, true, time)) =>
+          processingPushNots.cancel()
+          load(nots.lastOption.map(_.id)).flatMap { results =>
+            futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, results.historyLost)
           }
+        case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
+          warn(s"/notifications failed with 404, history lost")
+          processingPushNots.cancel()
+          load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
+        case Left(err) =>
+          // TODO: reset backoff on network changes as well
+          warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
+          processingPushNots.cancel()
+          returning(CancellableFuture.delay(syncHistoryBackoff.delay(attempts)).flatMap(_ => load(lastId, attempts + 1))) { retry =>
+            syncRetry ! Some(retry)
+          } // fetch failed, schedule retry and turn on retry on network change
+      }
+
+    println("sync history")
+    lastNotificationId() flatMap { lastId =>
+      for {
+        Results(nots, time, historyLost) <- load(lastId)
+        _ <- if (historyLost) {
+          val time = clock.instant()
+          CancellableFuture.lift(sync.performFullSync().map(_ => onHistoryLost ! time))
+        } else CancellableFuture.successful({})
+      } yield {
+        onPushNotifications(nots)
+        time.foreach { time => beDrift ! Instant.now.until(time) }
       }
     }
   }
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
-  override def lastNotificationId(): Future[Option[Uid]] = Future(idPref()).flatten // future and flatten ensure that there is no race with onNotification
-  override def updateLastNotificationId(id: Uid): Future[Unit] = { idPref := Some(id) }
-  override def resetLastNotificationId(): Future[Unit] = { idPref := None }
+  def lastNotificationId(): Future[Option[Uid]] = { Future(idPref()).flatten } // future and flatten ensure that there is no race with onNotification
+  def updateLastNotificationId(id: Uid): Future[Unit] = { idPref := Some(id) }
+  def resetLastNotificationId(): Future[Unit] = { idPref := None }
 }
 
 object PushService {
-  val backoff = new ExponentialBackoff(3.second, 15.seconds)
+  val syncHistoryBackoff = new ExponentialBackoff(3.second, 15.seconds)
 }

@@ -94,7 +94,7 @@ class PushNotificationsClientSpec extends AndroidFreeSpec {
         LoadNotificationsResponse(Vector(not1), false, None)
       )
 
-      val client = new PushNotificationsClient(znet)
+      val client = new PushNotificationsClientImpl(znet)
 
       val res = await(client.loadNotifications(None, clientId))
 
@@ -122,7 +122,7 @@ class PushNotificationsClientSpec extends AndroidFreeSpec {
         LoadNotificationsResponse(Vector(not2), false, None)
       )
 
-      val client = new PushNotificationsClient(znet, pageSize)
+      val client = new PushNotificationsClientImpl(znet, pageSize)
 
       await(client.loadNotifications(None, clientId)) match {
         case Right(LoadNotificationsResponse(nots, hasMore, _)) =>

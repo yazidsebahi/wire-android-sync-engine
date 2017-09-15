@@ -47,6 +47,7 @@ trait SyncScheduler {
   val queue: SyncSerializer
 
   def await(id: SyncId): Future[SyncResult]
+  def await(ids: Set[SyncId]): Future[Set[SyncResult]]
   def awaitRunning: Future[Int]
 
   def withConv[A](job: SyncJob, conv: ConvId)(f: ConvLock => Future[A]): Future[A]
@@ -133,6 +134,8 @@ class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: Syn
   }
 
   override def await(id: SyncId) = Future { executions.getOrElse(id, Future.successful(SyncResult.Success)) } flatMap identity
+
+  override def await(ids: Set[SyncId]) = Future.sequence(ids.map(await))
 
   override def awaitRunning = CancellableFuture.delay(1.second).future flatMap { _ => runningCount.filter(_ == 0).head }
 

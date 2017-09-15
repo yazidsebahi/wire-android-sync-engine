@@ -19,14 +19,12 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.impl.ErrorResponse
-import com.waz.api.impl.ErrorResponse.{ConnectionErrorCode, TimeoutCode}
 import com.waz.model.otr.ClientId
 import com.waz.model._
+import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder
 import com.waz.utils.JsonDecoder.arrayColl
-import com.waz.znet.Response.ErrorStatus
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet.{JsonObjectResponse, _}
 import org.json.JSONObject
@@ -34,15 +32,16 @@ import org.threeten.bp.Instant
 
 import scala.util.control.NonFatal
 
-class PushNotificationsClient(netClient: ZNetClient, pageSize: Int = PushNotificationsClient.PageSize) {
+trait PushNotificationsClient {
+  def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse]
+}
+
+class PushNotificationsClientImpl(netClient: ZNetClient, pageSize: Int = PushNotificationsClient.PageSize) extends PushNotificationsClient {
   import PushNotificationsClient._
   import Threading.Implicits.Background
 
-  def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] =
+  override def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] =
     netClient.chainedWithErrorHandling(RequestTag, Request.Get(notificationsPath(since, client, pageSize))) {
-      case Response(ErrorStatus(), ErrorResponse(code@(TimeoutCode|ConnectionErrorCode), msg, label), _) =>
-        CancellableFuture.successful(Left(ErrorResponse(code, msg, label)))
-
       case Response(_, PagedNotificationsResponse((notifications, hasMore, time)), _) =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(notifications, hasMore, time) ))
     }
@@ -108,7 +107,6 @@ case class PushNotification(id: Uid, events: Seq[Event], transient: Boolean = fa
 
 object PushNotification {
   implicit lazy val NotificationDecoder: JsonDecoder[PushNotification] = new JsonDecoder[PushNotification] {
-
     import com.waz.utils.JsonDecoder._
 
     override def apply(implicit js: JSONObject): PushNotification =
