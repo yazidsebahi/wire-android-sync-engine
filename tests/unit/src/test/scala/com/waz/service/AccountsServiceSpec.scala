@@ -135,7 +135,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
       val service = getAccountService
 
       (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountData]))
-      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN_IF_NO_PASSWD).once().returning(CancellableFuture.successful(ActivateResult.Success))
+      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN).once().returning(CancellableFuture.successful(ActivateResult.Success))
       (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, _, creator) =>
 
         creator.phone.shouldBe(None)
@@ -155,7 +155,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
       var account = AccountData().copy(phone = Some(phoneNumber))
 
       (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
-      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN_IF_NO_PASSWD).once().returning(CancellableFuture.successful(ActivateResult.Success))
+      (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN).once().returning(CancellableFuture.successful(ActivateResult.Success))
       (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, updater, _) =>
         account = updater(account)
         Future.successful(account)
