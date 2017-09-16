@@ -30,6 +30,7 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.TestUserPreferences
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
@@ -503,6 +504,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   }
 
   def initCallingService(wCall: WCall = new Pointer(0L)) = {
+    val prefs = new TestUserPreferences()
     (context.startService _).expects(*).anyNumberOfTimes().returning(true)
     (flows.flowManager _).expects().once().returning(None)
     (media.mediaManager _).expects().once().returning(None)
@@ -513,7 +515,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
 
     (avs.registerAccount _).expects(*).once().returning(Future.successful(wCall))
-    val service = new CallingService(self, clientId, account, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null)
+    val service = new CallingService(self, clientId, account, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null, prefs)
     result(service.wCall)
     service
   }
