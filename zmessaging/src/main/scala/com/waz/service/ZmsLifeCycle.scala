@@ -20,8 +20,9 @@ package com.waz.service
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model.AccountId
-import com.waz.threading.Threading
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal, SourceSignal}
+import com.waz.utils.returning
 
 import scala.concurrent.Future
 
@@ -97,13 +98,21 @@ object ZmsLifeCycle {
 class ZmsLifeCycleImpl extends ZmsLifeCycle {
   import ZmsLifeCycle._
 
-  private var _loggedInAccounts = Set.empty[AccountId]
-  private var _activeAccount    = Option.empty[AccountId]
-  private var syncCount = 0
-  private var pushCount = 0
-  private var uiCount = 0
+  private implicit val dispatcher = new SerialDispatchQueue(name = "LifeCycleDispatcher")
 
-  private val lifeCycleState = Signal(Stopped: LifeCycleState).disableAutowiring()
+  private val loggedInAccounts = Signal(Set.empty[AccountId])
+  private val activeAccount    = Signal(Option.empty[AccountId])
+
+  private val deviceState = Signal((0, 0, 0)) //syncCount, pushCount, uiCount
+
+  private val lifeCycleState =
+    (for {
+      (_, p, u) <- deviceState
+      li        <- loggedInAccounts
+      a         <- activeAccount
+    } yield LifeCycleState(a, li, u, p))
+      .disableAutowiring()
+
   lifeCycleState(state => verbose(s"lifecycle state: $state"))(this)
 
   override val loggedIn = lifeCycleState.map(_ != Stopped).disableAutowiring()
@@ -123,40 +132,62 @@ class ZmsLifeCycleImpl extends ZmsLifeCycle {
     case _ => false
   }.disableAutowiring()
 
-  override def accLoggedIn(accountId: AccountId) = lifeCycleState.map(_.loggedIn.contains(accountId))
+  private var accLoggedInSignals = Map.empty[AccountId, Signal[Boolean]]
+  override def accLoggedIn(accountId: AccountId) =
+    returning(accLoggedInSignals.getOrElse(accountId, lifeCycleState.map(_.loggedIn.contains(accountId)))) { sig =>
+      accLoggedInSignals += accountId -> sig
+    }
 
-  override def accInForeground(accountId: AccountId) = lifeCycleState.map {
-    case UiActive(id, _) if id == accountId => true
-    case _                                  => false
+  private var accInForegroundSignals = Map.empty[AccountId, Signal[Boolean]]
+  override def accInForeground(accountId: AccountId) =
+    returning(accInForegroundSignals.getOrElse(accountId, lifeCycleState.map {
+      case UiActive(id, _) if id == accountId => true
+      case _ => false
+    })) (sig => accInForegroundSignals += accountId -> sig)
+
+  override def setLoggedIn(accs: Set[AccountId]) = loggedInAccounts.publish(accs, dispatcher)
+
+  override def setActiveAccount(accountId: Option[AccountId]) = activeAccount.publish(accountId, dispatcher)
+
+  def acquireSync(source: LogTag = ""): Unit = acquire('sync, source)
+  def acquirePush(source: LogTag = ""): Unit = acquire('push, source)
+  def acquireUi(source: LogTag = ""): Unit = acquire('ui, source)
+
+  def releaseSync(source: LogTag = ""): Unit = release('sync, source)
+  def releasePush(source: LogTag = ""): Unit = release('push, source)
+  def releaseUi(source: LogTag = ""): Unit = release('ui, source)
+
+  private def acquire(name: Symbol, source: LogTag): Unit = {
+    deviceState.mutate ({
+      case (s, p, u) =>
+        val (sync, push, ui) = name match {
+          case 'sync => (s + 1, p, u)
+          case 'push => (s, p + 1, u)
+          case 'ui   => (s, p, u + 1)
+          case _     => (s, p, u)
+        }
+        debug(s"acquire${name.name.capitalize}, syncCount: $sync, pushCount: $push, uiCount: $ui, source: '$source'")
+        if ((sync + push + ui) == 1) onContextStart()
+        (sync, push, ui)
+    }, dispatcher)
   }
 
-  override def setLoggedIn(accs: Set[AccountId]) = {
-    Threading.assertUiThread()
-    _loggedInAccounts = accs
-    updateState()
+  private def release(name: Symbol, source: LogTag): Unit = {
+    deviceState.mutate ({
+      case (s, p, u) =>
+        val id = name.name.capitalize
+        val (predicate, sync, push, ui) = name match {
+          case 'sync => (s > 0, s - 1, p, u)
+          case 'push => (p > 0, s, p - 1, u)
+          case 'ui   => (u > 0, s, p, u - 1)
+          case _     => (true, s, p, u)
+        }
+        assert(predicate, s"release$id should be called exactly once for each acquire$id")
+        debug(s"release$id syncCount: $sync, pushCount: $push, uiCount: $ui, source: '$source'")
+        if ((sync + push + ui) == 1) onContextStart()
+        (sync, push, ui)
+    }, dispatcher)
   }
-
-  override def setActiveAccount(accountId: Option[AccountId]) = {
-    Threading.assertUiThread()
-    _activeAccount = accountId
-    updateState()
-  }
-
-  def acquireSync(source: String = ""): Unit = acquire('sync, syncCount += 1, source)
-  def acquirePush(source: String = ""): Unit = acquire('push, pushCount += 1, source)
-  def acquireUi(source: String = ""): Unit = acquire('ui, uiCount += 1, source)
-
-  private def acquire(name: Symbol, action: => Unit, source: String): Unit = {
-    Threading.assertUiThread()
-    action
-    if ((syncCount + pushCount + uiCount) == 1) onContextStart()
-    updateState()
-    debug(s"acquire${name.name.capitalize}, syncCount: $syncCount, pushCount: $pushCount, uiCount: $uiCount, source: '$source'")
-  }
-
-  def releaseSync(source: String = ""): Unit = release('sync, syncCount > 0, syncCount -= 1, source)
-  def releasePush(source: String = ""): Unit = release('push, pushCount > 0, pushCount -= 1, source)
-  def releaseUi(source: String = ""): Unit = release('ui, uiCount > 0, uiCount -= 1, source)
 
   def withSync[Result](body: => Future[Result])(implicit source: LogTag = ""): Future[Result] =
     withStateCounter(acquireSync(source), releaseSync(source))(body)
@@ -168,23 +199,9 @@ class ZmsLifeCycleImpl extends ZmsLifeCycle {
     withStateCounter(acquireUi(source), releaseUi(source))(body)
 
   private def withStateCounter[Result](acquire: => Unit, release: => Unit)(body: => Future[Result]): Future[Result] = {
-    import Threading.Implicits.Background
-    for {
-      _ <- Future(acquire)(Threading.Ui)
-      result <- body
-      _ <- Future(release)(Threading.Ui)
-    } yield result
+    acquire
+    body.andThen { case _ =>
+      release
+    }
   }
-
-  private def release(name: Symbol, predicate: => Boolean, action: => Unit, source: String): Unit = {
-    Threading.assertUiThread()
-    val id = name.name.capitalize
-    assert(predicate, s"release$id should be called exactly once for each acquire$id")
-    action
-    updateState()
-    if ((syncCount + pushCount + uiCount) == 0) onContextStop()
-    debug(s"release$id syncCount: $syncCount, pushCount: $pushCount, uiCount: $uiCount, source: '$source'")
-  }
-
-  private def updateState() = lifeCycleState ! LifeCycleState(_activeAccount, _loggedInAccounts, uiCount, pushCount)
 }

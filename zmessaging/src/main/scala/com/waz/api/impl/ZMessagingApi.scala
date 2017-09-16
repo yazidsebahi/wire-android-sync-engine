@@ -118,13 +118,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def login(credentials: com.waz.api.Credentials, listener: api.LoginListener): Unit = {}
 
-  private def updateSelfUser(acc: AccountData) = {
-    // FIXME: this ensures that self is loaded, but it's pretty ugly
-    ui.users.selfUser.update(Some(acc))
-    ui.users.selfUser
-  }
-
-
   override def register(credentials: com.waz.api.Credentials, name: String, accent: com.waz.api.AccentColor, listener: RegistrationListener): Unit = {}
 
   private def activateResultHandler(kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Try[ActivateResult] => Unit = {

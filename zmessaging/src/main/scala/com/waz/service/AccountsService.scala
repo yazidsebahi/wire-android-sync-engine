@@ -27,7 +27,7 @@ import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordEx
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.{RichOption, returning}
 import com.waz.znet.Response.Status
@@ -44,7 +44,7 @@ class AccountsService(val global: GlobalModule) {
 
   private[waz] val accountMap = new mutable.HashMap[AccountId, AccountManager]()
 
-  lazy val context       = global.context
+  lazy val context  = global.context
   val prefs         = global.prefs
   val storage       = global.accountsStorage
   val phoneNumbers  = global.phoneNumbers
@@ -72,7 +72,7 @@ class AccountsService(val global: GlobalModule) {
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
   
-  loggedInAccounts.onUi { accs =>
+  loggedInAccounts { accs =>
     verbose(s"Logged in accounts: ${accs.map(_.id)}")
     global.lifecycle.setLoggedIn(accs.map(_.id).toSet)
   }
@@ -162,6 +162,7 @@ class AccountsService(val global: GlobalModule) {
       account  <- storage.get(accountId)
       if account.isDefined
       _        <- setAccount(Some(accountId))
+      _        =  global.lifecycle.setActiveAccount(Some(accountId))
       _        <- getOrCreateAccountManager(accountId)
     } yield {}
   }
