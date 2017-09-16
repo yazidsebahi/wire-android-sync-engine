@@ -96,8 +96,8 @@ import scala.util.control.NoStackTrace
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), auth) {
+          override lazy val websocket = new WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }
