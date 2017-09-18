@@ -27,7 +27,7 @@ import com.waz.ZLog.LogTag
 import com.waz.api.UpdateListener
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.wrappers.{URI, URIBuilder}
-import org.json.{JSONArray, JSONObject}
+import org.json.JSONObject
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
@@ -35,8 +35,8 @@ import org.threeten.bp.temporal.ChronoUnit
 
 import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
+import scala.collection.SeqView
 import scala.collection.generic.CanBuild
-import scala.collection.{GenIterable, SeqView}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}

@@ -19,9 +19,9 @@ package com.waz.service.push
 
 import android.content.Context
 import android.net.Uri
-import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
+import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -34,6 +34,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class WebSocketClientService(context:     Context,
+                             accountId:   AccountId,
                              lifecycle:   ZmsLifeCycle,
                              netClient:   ZNetClient,
                              auth:        AuthenticationManager,
@@ -43,6 +44,8 @@ class WebSocketClientService(context:     Context,
                              timeouts:    Timeouts,
                              pushToken:   PushTokenService) {
   import WebSocketClientService._
+  implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
+
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
@@ -135,7 +138,7 @@ class WebSocketClientService(context:     Context,
   private def webSocketUri(clientId: ClientId) =
     Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
-  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, auth, webSocketUri(clientId))
+  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, accountId, netClient, auth, webSocketUri(clientId))
 }
 
 object WebSocketClientService {
@@ -143,7 +146,7 @@ object WebSocketClientService {
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
   class ConnectionStats(network: DefaultNetworkModeService,
                         client: WebSocketClient) {
-
+    import com.waz.ZLog.ImplicitTag._
     import com.waz.utils._
 
     def lastReceiveTime = client.lastReceiveTime.currentValue

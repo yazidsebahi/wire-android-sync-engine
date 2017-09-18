@@ -105,7 +105,7 @@ class NotificationService(context:         Context,
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "NotificationService")
-  implicit lazy val logTag = s"${getClass.getSimpleName}#${accountId.str.take(8)}"
+  implicit lazy val logTag: LogTag = s"${logTagFor[NotificationService]}#${accountId.str.take(8)}"
 
   @volatile private var accountActive = false
 
