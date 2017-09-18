@@ -117,12 +117,12 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
         override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None
-        } (websocket.logTag)
+        } ("")
         override protected def connect() = dispatcher {
           suite.pushService = Some(push)
           connected ! true
           null
-        } (websocket.logTag)
+        } ("")
       }
     }
 
