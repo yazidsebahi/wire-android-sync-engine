@@ -204,9 +204,10 @@ object Avs {
     *   WCALL_VIDEO_RECEIVE_STOPPED  0
     *   WCALL_VIDEO_RECEIVE_STARTED  1
     *   WCALL_VIDEO_RECEIVE_BAD_CONN 2
+    *   Unknown - internal state     3
     */
   type VideoReceiveState = VideoReceiveState.Value
   object VideoReceiveState extends Enumeration {
-    val Stopped, Started, BadConnection = Value
+    val Stopped, Started, BadConnection, Unknown = Value
   }
 }
