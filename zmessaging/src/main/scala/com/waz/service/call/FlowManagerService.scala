@@ -21,7 +21,6 @@ import android.content.Context
 import android.view.View
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api._
 import com.waz.call._
 import com.waz.content.GlobalPreferences
 import com.waz.content.GlobalPreferences._
@@ -49,7 +48,6 @@ class DefaultFlowManagerService(context:      Context,
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "FlowManagerService")
 
-  val stateOfReceivedVideo = Signal[StateOfReceivedVideo](UnknownState)
   val cameraFailedSig = Signal[Boolean]
 
   network.networkMode {  _ =>
@@ -63,14 +61,12 @@ class DefaultFlowManagerService(context:      Context,
   } .toOption
 
   private val flowListener = new FlowManagerListener {
-    override def changeVideoState(state: Int, reason: Int): Unit =
-      stateOfReceivedVideo ! returning(StateAndReason(AvsVideoState fromState state, reason = AvsVideoReason fromReason reason)) { s => debug(s"avs changeVideoState($s)") }
-
     override def cameraFailed(): Unit = {
       debug(s"cameraFailed")
       cameraFailedSig ! true
     }
 
+    override def changeVideoState(state: Int, reason: Int): Unit = ()
     override def volumeChanged(convId: String, participantId: String, volume: Float): Unit = ()
     override def mediaEstablished(convId: String): Unit = ()
     override def handleError(convId: String, errCode: Int): Unit = ()
@@ -131,16 +127,5 @@ class DefaultFlowManagerService(context:      Context,
 }
 
 object FlowManagerService {
-
   case class VideoCaptureDevice(id: String, name: String)
-
-  sealed trait StateOfReceivedVideo {
-    def state: AvsVideoState
-    def reason: AvsVideoReason
-  }
-  case class StateAndReason(state: AvsVideoState, reason: AvsVideoReason) extends StateOfReceivedVideo
-  case object UnknownState extends StateOfReceivedVideo {
-    override def state = AvsVideoState.STOPPED
-    override def reason = AvsVideoReason.NORMAL
-  }
 }
