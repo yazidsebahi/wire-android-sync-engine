@@ -19,7 +19,6 @@ package com.waz.utils.events
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.waz.ZLog
 import com.waz.ZLog._
 import com.waz.threading.CancellableFuture.delayed
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
@@ -112,7 +111,7 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
 
   final def currentValue(implicit logTag: LogTag): Option[A] = {
     if (!wired) {
-      ZLog.warn(s"Accessing value of unwired signal: $this, autowiring will be disabled, returning value: $value")(logTag)
+      warn(s"Accessing value of unwired signal: $this, autowiring will be disabled, returning value: $value")(logTag)
       disableAutowiring()
     }
     value
@@ -367,4 +366,16 @@ class RefreshingSignal[A, B](loader: => CancellableFuture[A], refreshEvent: Even
 
 object RefreshingSignal {
   private implicit val tag: LogTag = "RefreshingSignal"
+}
+
+case class ToggleSignal[A](service: Signal[A], buttonState: Signal[Boolean])(onClick: (A, Boolean) => Unit) extends ProxySignal[Boolean](service, buttonState) {
+
+  def toggle()(implicit logTag: LogTag): Unit = if (wired) {
+    (service.value, buttonState.value) match {
+      case (Some(s), Some(b)) => onClick(s, b)
+      case _ => warn("ToggleSignal is empty")
+    }
+  } else warn("ToggleSignal not wired")
+
+  override protected def computeValue(current: Option[Boolean]) = buttonState.value
 }
