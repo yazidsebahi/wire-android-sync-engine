@@ -36,10 +36,10 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushServiceImpl
 import com.waz.sync.otr.OtrSyncHandler
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
 import com.waz.utils.wrappers.Context
-import com.waz.utils.{RichDate, RichInstant, returningF}
+import com.waz.utils.{RichDate, RichInstant, Serialized, returningF}
 import com.waz.zms.CallWakeService
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
@@ -85,7 +85,7 @@ class CallingService(val selfUserId:      UserId,
                      network:             NetworkModeService,
                      netClient:           ZNetClient,
                      errors:              ErrorsService,
-                     userPrefs:           UserPreferences) {
+                     userPrefs:           UserPreferences) { self =>
 
   import CallingService._
 
@@ -246,9 +246,11 @@ class CallingService(val selfUserId:      UserId,
     0
   }
 
-  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = dispatcher { //ensure call state change is posted to dispatch queue
-    verbose(s"video state changed: $videoReceiveState")
-    updateActiveCall(_.copy(videoReceiveState = videoReceiveState))("onVideoReceiveStateChanged")
+  def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = Serialized.apply(self) {
+    CancellableFuture {
+      verbose(s"video state changed: $videoReceiveState")
+      updateActiveCall(_.copy(videoReceiveState = videoReceiveState))("onVideoReceiveStateChanged")
+    }
   }
 
   //TODO should this be synchronised too?
@@ -422,29 +424,35 @@ class CallingService(val selfUserId:      UserId,
       avs.onReceiveMessage(w, msg, curTime, msgTime, convId, from, sender)
     }
 
-  private def withConv(convId: RConvId)(f: (WCall, ConversationData) => Unit) = {
-    wCall.flatMap { w =>
-      convs.convByRemoteId(convId).map {
-        case Some(conv) => f(w, conv)
-        case _ => error(s"Unknown conv: $convId")
-      }
-    }
-  }
+  private def withConv(convId: RConvId)(f: (WCall, ConversationData) => Unit) =
+    atomicWithConv(convs.convByRemoteId(convId), f, s"Unknown remote convId: $convId")
 
   private def withConv(convId: ConvId)(f: (WCall, ConversationData) => Unit): Future[Unit] = {
-    wCall.flatMap { w =>
-      convs.convById(convId) map {
-        case Some(conv) => f(w, conv)
-        case _ => error(s"Could not find conversation: $convId")
+    atomicWithConv(convs.convById(convId), f, s"Could not find conversation: $convId")
+  }
+
+  /**
+    * Be sure to use serialised to ensure that flatmap, map and then performing f happen in an atomic operation on this dispatcher, or
+    * else other futures posted to the dispatcher can sneak in between.
+    */
+  private def atomicWithConv(loadConversation: => Future[Option[ConversationData]], f: (WCall, ConversationData) => Unit, convNotFoundMsg: String) = {
+    Serialized.future(self) {
+      wCall.flatMap { w =>
+        loadConversation.map {
+          case Some(conv) => f(w, conv)
+          case _          => error(convNotFoundMsg)
+        }
       }
     }
   }
 
   private def withConvAsync(convId: ConvId)(f: (WCall, ConversationData) => Future[_]): Future[Any] = {
-    wCall.flatMap { w =>
-      convs.convById(convId) flatMap {
-        case Some(conv) => f(w, conv)
-        case _ => Future successful error(s"Could not find conversation: $convId")
+    Serialized.future(self) {
+      wCall.flatMap { w =>
+        convs.convById(convId) flatMap {
+          case Some(conv) => f(w, conv)
+          case _ => Future successful error(s"Could not find conversation: $convId")
+        }
       }
     }
   }
