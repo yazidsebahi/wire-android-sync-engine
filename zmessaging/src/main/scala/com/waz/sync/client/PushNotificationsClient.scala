@@ -40,11 +40,12 @@ class PushNotificationsClientImpl(netClient: ZNetClient, pageSize: Int = PushNot
   import PushNotificationsClient._
   import Threading.Implicits.Background
 
-  override def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] =
+  override def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] = {
     netClient.chainedWithErrorHandling(RequestTag, Request.Get(notificationsPath(since, client, pageSize))) {
       case Response(_, PagedNotificationsResponse((notifications, hasMore, time)), _) =>
-        CancellableFuture.successful(Right( LoadNotificationsResponse(notifications, hasMore, time) ))
+        CancellableFuture.successful(Right(LoadNotificationsResponse(notifications, hasMore, time)))
     }
+  }
 }
 
 object PushNotificationsClient {

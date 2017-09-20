@@ -27,7 +27,7 @@ import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.{EventPipeline, NetworkModeService}
+import com.waz.service.EventPipeline
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -71,8 +71,7 @@ trait PushService {
   def beDrift: Signal[Duration]
 
   def onPushNotification(n: PushNotification): Unit // used in tests
-  def onPushNotifications(allNs: Seq[PushNotification]): Unit
-
+  def onPushNotifications(allNs: Seq[PushNotification]): Unit // used in tests
 }
 
 class PushServiceImpl(context: Context,
@@ -81,8 +80,7 @@ class PushServiceImpl(context: Context,
                       clientId: ClientId,
                       pipeline: EventPipeline,
                       webSocket: WebSocketClientService,
-                      sync: SyncServiceHandle,
-                      network: NetworkModeService
+                      sync: SyncServiceHandle
                      ) extends PushService { self =>
   import PushService._
 
@@ -99,7 +97,7 @@ class PushServiceImpl(context: Context,
 
   override val beDrift = Signal(Duration.ZERO).disableAutowiring()
 
-  private var processingPushNots = CancellableFuture.successful({})
+  private var fetchInProgress = CancellableFuture.successful({})
 
   webSocket.connected { pushConnected ! _ }
 
@@ -118,10 +116,10 @@ class PushServiceImpl(context: Context,
           content match {
             case NotificationsResponse(notifications@_*) =>
               verbose(s"got notifications from data: $content")
-              processingPushNots = if (processingPushNots.isCompleted)
+              fetchInProgress = if (fetchInProgress.isCompleted)
                 CancellableFuture(onPushNotifications(notifications))
               else
-                processingPushNots.flatMap(_ => CancellableFuture(onPushNotifications(notifications)))
+                fetchInProgress.flatMap(_ => CancellableFuture(onPushNotifications(notifications)))
             case resp =>
               error(s"unexpected push response: $resp")
           }
@@ -151,7 +149,7 @@ class PushServiceImpl(context: Context,
     case _ => Signal.empty[Set[Uid]]
   }.on(dispatcher) {
     notifications =>
-      if (notifications.nonEmpty){
+      if (notifications.nonEmpty && fetchInProgress.isCompleted){
         verbose("Sync history in response to cloud message notification")
         syncHistory()
       }
@@ -160,7 +158,7 @@ class PushServiceImpl(context: Context,
   override def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
 
   override def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
-    verbose(s"gotPushNotifications: ${allNs.size}")
+    verbose(s"onPushNotifications: ${allNs.size}")
 
     val ns = allNs.filter(_.hasEventForClient(clientId))
 
@@ -188,64 +186,58 @@ class PushServiceImpl(context: Context,
 
   case class Results(notifications: Vector[PushNotification], time: Option[Instant], historyLost: Boolean)
 
-  private val syncRetry = Signal[Option[CancellableFuture[Results]]](None)
+  private def futureHistoryResults(notifications: Vector[PushNotification] = Vector.empty,
+                                   time: Option[Instant] = None,
+                                   historyLost: Boolean = false) =
+    CancellableFuture.successful(Results(notifications, time, historyLost))
 
-  syncRetry.zip(network.networkMode) {
-    case (None, _) =>
-    case (_, OFFLINE|UNKNOWN) =>
-    case (Some(retry), _) =>
-      retry.cancel() // cancel the delayed retry since we're doing it now, on network change
-      syncHistory()
+  webSocket.network.networkMode {
+    case OFFLINE|UNKNOWN =>
+    case _ if !fetchInProgress.isCompleted => syncHistory() // it will restart the fetch
+    case _ =>
   }
 
-  override def syncHistory(): Future[Unit] = {
+  override def syncHistory(): Future[Unit] = returning( lastNotificationId flatMap { syncHistory } ) { f =>
+    if (!fetchInProgress.isCompleted) fetchInProgress.cancel()
+      // a new fetch was ordered so we cancel the old one if it's still in progress, together with any ws notifications processing attached to it
+    fetchInProgress = CancellableFuture.lift(f)
+  }
 
-    def futureHistoryResults(notifications: Vector[PushNotification] = Vector.empty, time: Option[Instant] = None, historyLost: Boolean = false) =
-      CancellableFuture.successful(Results(notifications, time, historyLost))
-
-    def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] =
-      client.loadNotifications(lastId, clientId).flatMap {
-        case Right(LoadNotificationsResponse(nots, false, time)) =>
-          returning(futureHistoryResults(nots, time)){ _ => syncRetry ! None } // fetch successful, turn off retry on network change
-        case Right(LoadNotificationsResponse(nots, true, time)) =>
-          processingPushNots.cancel()
-          load(nots.lastOption.map(_.id)).flatMap { results =>
-            futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, results.historyLost)
-          }
-        case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
-          warn(s"/notifications failed with 404, history lost")
-          processingPushNots.cancel()
-          load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
-        case Left(err) =>
-          // TODO: reset backoff on network changes as well
-          warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
-          processingPushNots.cancel()
-          returning(CancellableFuture.delay(syncHistoryBackoff.delay(attempts)).flatMap(_ => load(lastId, attempts + 1))) { retry =>
-            syncRetry ! Some(retry)
-          } // fetch failed, schedule retry and turn on retry on network change
-      }
-
-    println("sync history")
-    lastNotificationId() flatMap { lastId =>
-      for {
-        Results(nots, time, historyLost) <- load(lastId)
-        _ <- if (historyLost) {
-          val time = clock.instant()
-          CancellableFuture.lift(sync.performFullSync().map(_ => onHistoryLost ! time))
-        } else CancellableFuture.successful({})
-      } yield {
-        onPushNotifications(nots)
-        time.foreach { time => beDrift ! Instant.now.until(time) }
-      }
+  private def syncHistory(lastId: Option[Uid]): Future[Unit] =
+    for {
+      Results(nots, time, historyLost) <- loadNotifications(lastId)
+      _ <- if (historyLost) {
+        val time = clock.instant()
+        CancellableFuture.lift(sync.performFullSync().map(_ => onHistoryLost ! time))
+      } else CancellableFuture.successful({})
+    } yield {
+      onPushNotifications(nots)
+      time.foreach { time => beDrift ! Instant.now.until(time) }
     }
+
+  private def loadNotifications(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
+    case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
+    case Right(LoadNotificationsResponse(nots, true, time)) =>
+      loadNotifications(nots.lastOption.map(_.id)).flatMap { results =>
+        futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, results.historyLost)
+      }
+    case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
+      warn(s"/notifications failed with 404, history lost")
+      loadNotifications(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
+    case Left(err) =>
+      warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
+      CancellableFuture.delay(backoff.delay(attempts)).flatMap { _ => loadNotifications(lastId, attempts + 1) }
+      // fetch failed, schedule retry and turn on retry on network change
   }
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
-  def lastNotificationId(): Future[Option[Uid]] = { Future(idPref()).flatten } // future and flatten ensure that there is no race with onNotification
+  def lastNotificationId: Future[Option[Uid]] = { Future(idPref()).flatten } // future and flatten ensure that there is no race with onNotification
   def updateLastNotificationId(id: Uid): Future[Unit] = { idPref := Some(id) }
   def resetLastNotificationId(): Future[Unit] = { idPref := None }
 }
 
 object PushService {
-  val syncHistoryBackoff = new ExponentialBackoff(3.second, 15.seconds)
+  private var syncHistoryBackoff: Backoff = new ExponentialBackoff(3.second, 15.seconds)
+  def setBackoff(backoff: Backoff) = { syncHistoryBackoff = backoff }
+  def backoff = syncHistoryBackoff
 }
