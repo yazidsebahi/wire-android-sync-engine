@@ -31,15 +31,17 @@ import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
-import com.waz.utils.RichInstant
+import com.waz.utils.{RichInstant, Serialized}
+
+import scala.util.Try
 
 class CallingServiceSpec extends AndroidFreeSpec {
 
@@ -487,6 +489,43 @@ class CallingServiceSpec extends AndroidFreeSpec {
       map("version")   shouldEqual "avs 3.5.37 (arm/linux)"
       map("direction") shouldEqual "Outgoing"
     }
+  }
+
+  scenario("Test...") {
+    //TODO this is simplest example of what's happening on receiving a video call (between incoming call and video state change)
+    //it would be good to find a better way of fixing this, but I'll leave this here for now for future ease of testing
+
+    val lock = 1
+
+    val f1 = {
+      Serialized.future(lock) {
+        for {
+          a <- Future {
+            println("1A")
+            Thread.sleep(1000)
+            1
+          }(Threading.Background)
+          b <- Future {
+            println("1B")
+            Thread.sleep(1000)
+            2
+          } (Threading.Background)
+        } yield println(s"Result of operations: ${a + b}")
+      }.map(res => res)
+    }
+
+    val f2 =
+      Future {
+        println("2A")
+        Thread.sleep(1000)
+        (Threading.Background)
+      }.map { _ =>
+        println("performing task 2")
+      }
+
+
+    result(Future.sequence(Seq(f1, f2)))
+
   }
   
   def callCheckpoint(service: CallingService, activeCheck: Map[ConvId, CallInfo] => Boolean, currentCheck: Option[CallInfo] => Boolean) =
