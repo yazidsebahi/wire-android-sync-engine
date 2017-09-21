@@ -94,7 +94,6 @@ class CallingService(val selfUserId:      UserId,
 
   //need to ensure that flow manager and media manager are initialised for v3 (they are lazy values)
   private val fm = flowManagerService.flowManager
-  private val mm = mediaManagerService.mediaManager
 
   private val callProfile = Signal(CallProfile.Empty)
 

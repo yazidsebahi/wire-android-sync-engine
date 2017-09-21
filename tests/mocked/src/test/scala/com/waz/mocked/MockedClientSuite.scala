@@ -71,7 +71,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   class MockedZMessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) extends ZMessaging(teamId, clientId, userModule) {
 
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, userPrefs, prefs, network)
-    override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, userPrefs)
 
     override lazy val assetClient        = new AssetClientImpl(zNetClient)
 
@@ -224,9 +223,7 @@ trait MockedFlows { test: ApiSpec =>
 }
 
 trait MockedMedia { test: ApiSpec =>
-  private lazy val mocked = zmessaging.mediamanager.asInstanceOf[MockedMediaManagerService]
-
-  def changePlaybackRoute(route: PlaybackRoute): Unit = mocked.changePlaybackRoute(route)
+  def changePlaybackRoute(route: PlaybackRoute): Unit = {}
 }
 
 trait MockedWebSocket {

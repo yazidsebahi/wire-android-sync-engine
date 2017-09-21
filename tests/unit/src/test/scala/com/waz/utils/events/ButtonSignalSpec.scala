@@ -21,38 +21,38 @@ import com.waz.specs.AndroidFreeSpec
 
 class ButtonSignalSpec extends AndroidFreeSpec {
 
-  scenario("Simple toggle") {
+  scenario("Simple button press") {
 
     val service = Signal.const("service")
     val buttonState = Signal(false)
 
 
-    val button = ToggleSignal(service, buttonState) {
+    val button = ButtonSignal(service, buttonState) {
       (s, state) => {
         println(s"$s called, changing button state: $state")
         buttonState ! !state
       }
     }.disableAutowiring()
 
-    button.toggle()("test")
+    button.press()("test")
     result(button.filter(_ == true).head)
 
-    button.toggle()("test")
+    button.press()("test")
     result(button.filter(_ == false).head)
   }
 
-  scenario("Toggle should not be performed on unwired signal") {
+  scenario("OnClick should not be performed on unwired signal") {
     val service = Signal.const("service")
     val buttonState = Signal(false)
 
-    val button = ToggleSignal(service, buttonState) {
+    val button = ButtonSignal(service, buttonState) {
       (s, state) => {
         println(s"$s called, changing button state: $state")
         buttonState ! !state
       }
     }
 
-    button.toggle()("test")
+    button.press()("test")
     result(button.filter(_ == false).head)
   }
 

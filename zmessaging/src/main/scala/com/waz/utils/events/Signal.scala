@@ -366,16 +366,18 @@ class RefreshingSignal[A, B](loader: => CancellableFuture[A], refreshEvent: Even
 
 object RefreshingSignal {
   private implicit val tag: LogTag = "RefreshingSignal"
+
+  def apply[A, B](loader: => Future[A], refreshEvent: EventStream[B]): RefreshingSignal[A, B] = new RefreshingSignal(CancellableFuture.lift(loader), refreshEvent)
 }
 
-case class ToggleSignal[A](service: Signal[A], buttonState: Signal[Boolean])(onClick: (A, Boolean) => Unit) extends ProxySignal[Boolean](service, buttonState) {
+case class ButtonSignal[A](service: Signal[A], buttonState: Signal[Boolean])(onClick: (A, Boolean) => Unit) extends ProxySignal[Boolean](service, buttonState) {
 
-  def toggle()(implicit logTag: LogTag): Unit = if (wired) {
+  def press()(implicit logTag: LogTag): Unit = if (wired) {
     (service.value, buttonState.value) match {
       case (Some(s), Some(b)) => onClick(s, b)
-      case _ => warn("ToggleSignal is empty")
+      case _ => warn("ButtonSignal is empty")
     }
-  } else warn("ToggleSignal not wired")
+  } else warn("ButtonSignal not wired")
 
   override protected def computeValue(current: Option[Boolean]) = buttonState.value
 }
