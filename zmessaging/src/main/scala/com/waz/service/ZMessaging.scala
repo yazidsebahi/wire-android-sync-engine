@@ -21,7 +21,6 @@ import android.content.{ComponentCallbacks2, Context}
 import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
-import com.waz.api.impl.LogLevel
 import com.waz.content.{MembersStorageImpl, UsersStorageImpl, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -320,8 +319,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
 object ZMessaging { self =>
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
-
-  require(LogLevel.initialized)
 
   private[waz] var context: Context = _
 

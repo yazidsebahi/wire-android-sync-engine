@@ -27,17 +27,17 @@ class AndroidLogOutput extends LogOutput {
   override val id = AndroidLogOutput.id
 
   override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = level match {
-    case InternalLog.Error    if ZLog.minimumLogLevel <= android.util.Log.ERROR    => android.util.Log.e(tag, str)
-    case InternalLog.Warn     if ZLog.minimumLogLevel <= android.util.Log.WARN     => android.util.Log.w(tag, str)
-    case InternalLog.Info     if ZLog.minimumLogLevel <= android.util.Log.INFO     => android.util.Log.i(tag, str)
-    case InternalLog.Debug    if ZLog.minimumLogLevel <= android.util.Log.DEBUG    => android.util.Log.d(tag, str)
-    case InternalLog.Verbose  if ZLog.minimumLogLevel <= android.util.Log.VERBOSE  => android.util.Log.v(tag, str)
+    case InternalLog.Error   => android.util.Log.e(tag, str)
+    case InternalLog.Warn    => android.util.Log.w(tag, str)
+    case InternalLog.Info    => android.util.Log.i(tag, str)
+    case InternalLog.Debug   => android.util.Log.d(tag, str)
+    case InternalLog.Verbose => android.util.Log.v(tag, str)
     case _ =>
   }
 
   override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit = level match {
-    case InternalLog.Error    if ZLog.minimumLogLevel <= android.util.Log.ERROR    => android.util.Log.e(tag, str, cause)
-    case InternalLog.Warn     if ZLog.minimumLogLevel <= android.util.Log.WARN     => android.util.Log.w(tag, str, cause)
+    case InternalLog.Error => android.util.Log.e(tag, str, cause)
+    case InternalLog.Warn  => android.util.Log.w(tag, str, cause)
     case _ =>
   }
 

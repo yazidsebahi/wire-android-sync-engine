@@ -25,8 +25,6 @@ import scala.annotation.tailrec
 object ZLog {
   type LogTag = String
 
-  @volatile var minimumLogLevel: Int = android.util.Log.VERBOSE
-
   def logTagFor[A <: Singleton](a: A): String = macro ZLogMacros.logTagForSingleton[A]
   def logTagFor[A]: String = macro ZLogMacros.logTagFor[A]
 
