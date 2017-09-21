@@ -21,56 +21,71 @@ import android.content.Context
 import android.net.Uri
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.content.UserPreferences
+import com.waz.content.Preferences.Preference.PrefCodec.IntensityLevelCodec
 import com.waz.content.UserPreferences.Sounds
 import com.waz.media.manager.config.Configuration
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.media.manager.{MediaManager, MediaManagerListener}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
-import com.waz.utils.events.{EventContext, Signal, SourceSignal}
+import com.waz.utils.events._
 import org.json.JSONObject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
 trait MediaManagerService {
-  def mediaManager: Option[MediaManager]
-  def soundIntensity: Signal[IntensityLevel]
+  def mediaManager:                Future[MediaManager]
+  def soundIntensity:              Signal[IntensityLevel]
+  def isSpeakerOn:                 Signal[Boolean]
+  def setSpeaker(enable: Boolean): Future[Unit]
 }
 
-class DefaultMediaManagerService(context: Context, prefs: UserPreferences) extends MediaManagerService {
+class DefaultMediaManagerService(context: Context) extends MediaManagerService { self =>
   import com.waz.service.MediaManagerService._
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
-  
-  lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
 
-  lazy val mediaManager = LoggedTry {
+  private val onPlaybackRouteChanged = EventStream[PlaybackRoute]()
+  private val audioConfig = LoggedTry(new JSONObject(IoUtils.asString(context.getAssets.open(AudioConfigAsset)))).toOption
+
+  val mediaManager = Future {
     val manager = MediaManager.getInstance(context.getApplicationContext)
-    manager.addListener(listener)
+    manager.addListener(new MediaManagerListener {
+      override def mediaCategoryChanged(convId: String, category: Int): Int = category // we don't need to do anything in here, I guess, and the return value gets ignored anyway
+
+      override def onPlaybackRouteChanged(route: Int): Unit = {
+        val pbr = PlaybackRoute.fromAvsIndex(route)
+        debug(s"onPlaybackRouteChanged($pbr)")
+        self.onPlaybackRouteChanged ! pbr
+      }
+    })
     audioConfig.foreach(manager.registerMediaFromConfiguration)
     manager
-  } .toOption
-
-  lazy val listener: MediaManagerListener = new MediaManagerListener {
-    override def mediaCategoryChanged(convId: String, category: Int): Int = category // we don't need to do anything in here, I guess, and the return value gets ignored anyway
-
-    override def onPlaybackRouteChanged(route: Int): Unit = {
-      val pbr = PlaybackRoute.fromAvsIndex(route)
-      debug(s"onPlaybackRouteChanged($pbr)")
-      isSpeakerOn ! (pbr == PlaybackRoute.Speaker)
-    }
   }
 
-  lazy val soundIntensity = prefs.preference(Sounds).signal
+  mediaManager.onFailure {
+    case NonFatal(e) =>
+      error("MediaManager was not instantiated properly", e)
+  }
 
-  soundIntensity { intensity => withMedia { _.setIntensity(intensity) } }
+  val isSpeakerOn = RefreshingSignal(mediaManager.map(_.isLoudSpeakerOn), onPlaybackRouteChanged)
 
-  lazy val audioConfig =
-    LoggedTry(new JSONObject(IoUtils.asString(context.getAssets.open(AudioConfigAsset)))).toOption
+  val soundIntensity = Option(ZMessaging.currentAccounts).map(_.activeZms.flatMap {
+    case None => Signal.const(IntensityLevelCodec.default)
+    case Some(z) => z.userPrefs.preference(Sounds).signal
+  }).getOrElse {
+    warn("No CurrentAccounts available - this may be being called too early...")
+    Signal.const(IntensityLevelCodec.default)
+  }
 
+  soundIntensity { intensity =>
+    mediaManager.foreach(_.setIntensity(intensity))
+  }
+
+  //TODO these are not used - what were/are they for?
   lazy val audioConfigUris =
     audioConfig.map(new Configuration(_).getSoundMap.asScala.mapValues { value =>
       val packageName = context.getPackageName
@@ -79,9 +94,8 @@ class DefaultMediaManagerService(context: Context, prefs: UserPreferences) exten
 
   def getSoundUri(name: String): Option[Uri] = audioConfigUris.get(name)
 
-  def setSpeaker(speaker: Boolean) = withMedia { mm => if (speaker) mm.turnLoudSpeakerOn() else mm.turnLoudSpeakerOff() }
+  def setSpeaker(speaker: Boolean) = mediaManager.map { mm => if (speaker) mm.turnLoudSpeakerOn() else mm.turnLoudSpeakerOff() }
 
-  private def withMedia[T](op: MediaManager => T): Future[Option[T]] = mediaManager.mapFuture(m => Future(op(m)))
 }
 
 object MediaManagerService {

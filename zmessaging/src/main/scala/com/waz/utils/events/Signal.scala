@@ -366,6 +366,8 @@ class RefreshingSignal[A, B](loader: => CancellableFuture[A], refreshEvent: Even
 
 object RefreshingSignal {
   private implicit val tag: LogTag = "RefreshingSignal"
+
+  def apply[A, B](loader: => Future[A], refreshEvent: EventStream[B]): RefreshingSignal[A, B] = new RefreshingSignal(CancellableFuture.lift(loader), refreshEvent)
 }
 
 case class ButtonSignal[A](service: Signal[A], buttonState: Signal[Boolean])(onClick: (A, Boolean) => Unit) extends ProxySignal[Boolean](service, buttonState) {

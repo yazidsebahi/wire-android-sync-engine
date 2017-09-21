@@ -34,14 +34,12 @@ import com.waz.testutils.TestUserPreferences
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
+import com.waz.utils.{RichInstant, Serialized}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import com.waz.utils.{RichInstant, Serialized}
-
-import scala.util.Try
 
 class CallingServiceSpec extends AndroidFreeSpec {
 
@@ -546,7 +544,6 @@ class CallingServiceSpec extends AndroidFreeSpec {
     val prefs = new TestUserPreferences()
     (context.startService _).expects(*).anyNumberOfTimes().returning(true)
     (flows.flowManager _).expects().once().returning(None)
-    (media.mediaManager _).expects().once().returning(None)
     (callLogService.addEstablishedCall _).expects(*, *, *).anyNumberOfTimes().returning(Future.successful({}))
     (messages.addMissedCallMessage(_:RConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))
     (messages.addMissedCallMessage(_:ConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))

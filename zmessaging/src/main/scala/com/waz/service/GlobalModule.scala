@@ -82,7 +82,8 @@ trait GlobalModule {
   def factory: ZMessagingFactory
   def lifecycle: ZmsLifeCycle
 
-  def flowmanager: DefaultFlowManagerService
+  def flowmanager:  DefaultFlowManagerService
+  def mediaManager: MediaManagerService
 }
 
 class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extends GlobalModule { global =>
@@ -144,7 +145,9 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val factory                                               = new ZMessagingFactory(this)
 
   lazy val flowmanager: DefaultFlowManagerService                = wire[DefaultFlowManagerService]
+  lazy val mediaManager                                          = wire[DefaultMediaManagerService]
 
   val lifecycle: ZmsLifeCycle = new ZmsLifeCycleImpl()
+
 }
 

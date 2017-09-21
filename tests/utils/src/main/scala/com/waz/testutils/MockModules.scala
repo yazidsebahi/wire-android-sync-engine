@@ -121,10 +121,6 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     }
   }
 
-  override lazy val mediamanager = new DefaultMediaManagerService(context, userPrefs) {
-    override lazy val mediaManager = None
-  }
-
   def insertConv(conv: ConversationData) = Await.result(convsStorage.insert(conv), timeout)
   def getConv(id: ConvId): Option[ConversationData] = Await.result(convsContent.convById(id), timeout)
   def getConv(id: RConvId): Option[ConversationData] = Await.result(convsContent.convByRemoteId(id), timeout)
