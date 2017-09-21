@@ -44,7 +44,7 @@ class DefaultMediaManagerService(context: Context, prefs: UserPreferences) exten
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MediaManagerService")
   private implicit val ev = EventContext.Global
-
+  
   lazy val isSpeakerOn = new SourceSignal[Boolean](mediaManager map (_.isLoudSpeakerOn))
 
   lazy val mediaManager = LoggedTry {
