@@ -42,8 +42,6 @@ class MetaDataService(context: Context) {
 
   lazy val appVersion = Try(context.getPackageManager.getPackageInfo(context.getPackageName, 0).versionCode).getOrElse(0)
 
-  lazy val localyticsSenderId = Option(metaData.getString("localytics.gcm"))
-
   lazy val spotifyClientId = Option(metaData.getString("spotify.api.id")).fold(MetaDataService.DefaultSpotifyClientId)(SpotifyClientId)
 
   lazy val internalBuild = metaData.getBoolean("INTERNAL", false)

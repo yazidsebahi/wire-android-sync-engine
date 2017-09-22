@@ -117,8 +117,6 @@ class Self()(implicit ui: UiModule) extends com.waz.api.Self with UiObservable w
 
   override def setAccent(color: api.AccentColor): Unit = users.setSelfColor(AccentColor(color), user)
 
-  override def getTrackingId: String = user.flatMap(_.data.trackingId.map(_.str)).orNull
-
   override def setName(name: String): Unit = users.setSelfName(name, user)
 
   override def setPicture(image: api.ImageAsset): Unit = users.setSelfPicture(image)

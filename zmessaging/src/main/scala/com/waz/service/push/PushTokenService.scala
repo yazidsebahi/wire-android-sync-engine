@@ -28,7 +28,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
-import com.waz.utils.wrappers.{GoogleApi, Localytics}
+import com.waz.utils.wrappers.GoogleApi
 
 import scala.concurrent.Future
 import scala.util.control.NonFatal
@@ -133,10 +133,6 @@ class GlobalTokenService(googleApi: GoogleApi, prefs: GlobalPreferences) {
         t <- dispatcher {
           returning(token.orElse(googleApi.getPushToken)) { t =>
             verbose(s"Setting new push token: $t")
-            t.foreach { t =>
-              Localytics.setPushDisabled(false)
-              Localytics.setPushRegistrationId(t.str)
-            }
           }
         }.recover {
           case NonFatal(ex) =>

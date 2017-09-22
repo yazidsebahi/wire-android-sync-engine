@@ -64,14 +64,6 @@ public interface Self extends UiObservable {
 
     boolean isUpToDate();
 
-    /**
-     * Returns the user's tracking id. Will return null as long as self is not initialized
-     * or for old users that existed before the backend addition of the tracking id.
-     *
-     * @return Tracking ID for localytics (in UUID format: eg "ea4b330a-dd85-47f3-a4a6-a79adf8582ac")
-     */
-    String getTrackingId();
-
     void setName(String name);
 
     /**

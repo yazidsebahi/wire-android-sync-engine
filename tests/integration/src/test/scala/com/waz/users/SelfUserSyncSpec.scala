@@ -65,7 +65,6 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
       self.getName shouldEqual "auto1 user"
     }
     self.getEmail shouldEqual provisionedEmail("auto1")
-    trackingId = Option(self.getTrackingId)
     trackingId should be('defined)
     Option(self.getUser) should be('defined)
 
@@ -82,7 +81,6 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
   scenario("Update self user name and sync it to server") {
     otherClient ? UpdateProfileName("test") should eventually(be(Successful))
     withDelay(self.getName shouldEqual "test")
-    Option(self.getTrackingId) shouldEqual trackingId
   }
 
   scenario("Receive update from other user name change") {
@@ -95,7 +93,6 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
 
     otherClient ? UpdateProfileColor(other) should eventually(be(Successful))
     withDelay(self.getAccent shouldEqual other)
-    Option(self.getTrackingId) shouldEqual trackingId
   }
 
   scenario("Update self user email and sync it to server") {
@@ -126,7 +123,6 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
     }
 
     login(email) shouldEqual true
-    Option(self.getTrackingId) shouldEqual trackingId
   }
 
   scenario("post self picture") {
@@ -151,7 +147,6 @@ class SelfUserSyncSpec extends FeatureSpec with Matchers with ProvisionedApiSpec
       bitmap.failed shouldEqual false
       bitmap.result shouldBe 'defined
       bitmap.result.get.getWidth should be > 128
-      Option(self.getTrackingId) shouldEqual trackingId
     }
 
   }

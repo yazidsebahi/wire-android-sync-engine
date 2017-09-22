@@ -71,8 +71,6 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
       }))
     }, Threading.testUiThreadName))
 
-    Localytics.setUtil(None)
-
     HockeyApp.setUtil(Some(new HockeyAppUtil {
       override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
         t match {
