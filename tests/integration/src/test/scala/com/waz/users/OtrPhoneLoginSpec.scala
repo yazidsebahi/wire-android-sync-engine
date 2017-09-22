@@ -47,7 +47,7 @@ class OtrPhoneLoginSpec extends FeatureSpec with OptionValues with ApiSpec with 
   lazy val remote = registerDevice("second_device_remote")
   lazy val remote2 = registerDevice("email_remote")
 
-  override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
+  override def backendHostname: String = testBackend.baseUrl.toString.stripPrefix("https://")
 
   feature("Register by phone") {
 

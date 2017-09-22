@@ -17,20 +17,20 @@
  */
 package com.waz.utils.events
 
-import java.util.concurrent.{CountDownLatch, ConcurrentLinkedQueue, CyclicBarrier}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, CyclicBarrier, TimeUnit}
 
-import com.waz.RobolectricUtils
+import com.waz.ZLog.ImplicitTag._
+import com.waz.specs.AndroidFreeSpec
+import com.waz.specs.AndroidFreeSpec.DefaultTimeout
 import com.waz.testutils.Implicits._
 import com.waz.threading.{SerialDispatchQueue, Threading}
-import org.scalatest._
-import com.waz.ZLog.ImplicitTag._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.collection.JavaConverters._
+import scala.concurrent._
+import scala.concurrent.duration._
 
-@Ignore class SignalSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+class SignalSpec extends AndroidFreeSpec {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   implicit val ec: EventContext = EventContext.Global
@@ -40,12 +40,14 @@ import scala.collection.JavaConverters._
 
   val eventContext = new EventContext() {}
 
-  before {
+  override protected def beforeEach() = {
+    super.beforeEach()
     received = Seq[Int]()
     eventContext.onContextStart()
   }
 
-  after {
+  override protected def afterEach() = {
+    super.afterEach()
     eventContext.onContextStop()
   }
 
@@ -125,9 +127,9 @@ import scala.collection.JavaConverters._
         y <- Seq(s1, s2)(x)
       } yield y * 2
       r(capture)
-      r.currentValue.value shouldEqual 2
+      r.currentValue.get shouldEqual 2
       s ! 1
-      r.currentValue.value shouldEqual 4
+      r.currentValue.get shouldEqual 4
       received shouldEqual Seq(2, 4)
     }
   }
@@ -178,21 +180,21 @@ import scala.collection.JavaConverters._
     }
 
     scenario("Concurrent updates with incremental values") {
-      incrementalUpdates((s, r) => s { r.add(_) })
+      incrementalUpdates((s, r) => s { r.add })
     }
 
     scenario("Concurrent updates with incremental values with serial dispatch queue") {
       val dispatcher = new SerialDispatchQueue()
-      incrementalUpdates((s, r) => s.on(dispatcher) { r.add(_) })
+      incrementalUpdates((s, r) => s.on(dispatcher) { r.add })
     }
 
     scenario("Concurrent updates with incremental values and onChanged listener") {
-      incrementalUpdates((s, r) => s.onChanged { r.add(_) })
+      incrementalUpdates((s, r) => s.onChanged { r.add })
     }
 
     scenario("Concurrent updates with incremental values and onChanged listener with serial dispatch queue") {
       val dispatcher = new SerialDispatchQueue()
-      incrementalUpdates((s, r) => s.onChanged.on(dispatcher) { r.add(_) })
+      incrementalUpdates((s, r) => s.onChanged.on(dispatcher) { r.add })
     }
 
     def incrementalUpdates(listen: (Signal[Int], ConcurrentLinkedQueue[Int]) => Unit) = {
@@ -211,9 +213,10 @@ import scala.collection.JavaConverters._
           }
           done.countDown()
         })
-        awaitUi(done.getCount == 0)
 
-        signal.currentValue.value shouldEqual send.get()
+        done.await(DefaultTimeout.toMillis, TimeUnit.MILLISECONDS)
+
+        signal.currentValue.get shouldEqual send.get()
 
         val arr = received.asScala.toVector
         arr shouldEqual arr.sorted
@@ -295,7 +298,7 @@ import scala.collection.JavaConverters._
     concurrentUpdates(dispatches, several, (s, n) => s.set(Some(n), dispatchExecutionContext), actualExecutionContext, subscribe)
 
   def concurrentMutations(dispatches: Int, several: Int, eventContext: EventContext, actualExecutionContext: ExecutionContext)(subscribe: Signal[Int] => (Int => Unit) => Subscription = s => g => s(g)(eventContext)): Unit =
-    concurrentUpdates(dispatches, several, (s, n) => s.mutate(_ + n), actualExecutionContext, subscribe, _.currentValue.value shouldEqual 55)
+    concurrentUpdates(dispatches, several, (s, n) => s.mutate(_ + n), actualExecutionContext, subscribe, _.currentValue.get shouldEqual 55)
 
   def concurrentUpdates(dispatches: Int, several: Int, f: (SourceSignal[Int], Int) => Unit, actualExecutionContext: ExecutionContext, subscribe: Signal[Int] => (Int => Unit) => Subscription, additionalAssert: Signal[Int] => Unit = _ => ()): Unit =
     several times {
@@ -303,16 +306,18 @@ import scala.collection.JavaConverters._
 
       @volatile var lastSent = 0
       val received = new AtomicInteger(0)
+      val p = Promise[Unit]()
 
       val subscriber = subscribe(signal) { i =>
         lastSent = i
-        received.incrementAndGet()
+        if (received.incrementAndGet() == dispatches + 1) p.trySuccess({})
       }
 
       (1 to dispatches).foreach(n => Future(f(signal, n))(actualExecutionContext))
 
-      awaitUi(received.get == dispatches + 1, interval = 100.micros)
+      await(p.future)
+
       additionalAssert(signal)
-      signal.currentValue.value shouldEqual lastSent
+      signal.currentValue.get shouldEqual lastSent
     }
 }

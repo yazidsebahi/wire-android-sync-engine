@@ -204,7 +204,7 @@ class MessagesServiceImpl(selfUserId: UserId,
         case Some(_) => None
       }
     } flatMap { msgs =>
-      storage.insert(msgs.flatten)
+      storage.insertAll(msgs.flatten)
     })
 
   private def isGroupOrOneToOne(conv: ConversationData) = conv.convType == ConversationType.Group || conv.convType == ConversationType.OneToOne
@@ -221,7 +221,7 @@ class MessagesServiceImpl(selfUserId: UserId,
           None
       }
     } flatMap { msgs =>
-      storage.insert(msgs.flatten) flatMap { added =>
+      storage.insertAll(msgs.flatten) flatMap { added =>
         // mark messages read if there is no other unread messages
         val times: Map[ConvId, Instant] = added.map(m => m.convId -> m.time) (breakOut)
         convs.storage.updateAll2(times.keys, { c =>

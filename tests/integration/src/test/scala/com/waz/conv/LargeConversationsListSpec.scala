@@ -49,7 +49,7 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
   val emails = indices map emailFor
   val names = indices map { idx => s"test ${idFor(idx)}"}
 
-  override def backendHostname: String = testBackend.baseUrl.stripPrefix("https://")
+  override def backendHostname: String = testBackend.baseUrl.toString.stripPrefix("https://")
 
   lazy val userProvs = emails zip names map { case (em, name) => new UserProvisioner(em, password, name, shouldConnect = true, globalModule) }
 
@@ -167,15 +167,15 @@ class LargeConversationsListSpec extends FeatureSpec with BeforeAndAfterAll with
   // call this in beforeAll() after a user wipe
   private def registerSpecificUsers(): Unit = {
     emails.zip(names) foreach { case (em, name) =>
-      Await.result(regClient.register(AccountId(), EmailCredentials(EmailAddress(em), Some(password)), name, None), 15.seconds) match {
-        case Right((user, _)) => println(s"created user: $user")
-        case Left(err) =>
-          println(s"got error: $err")
-          Await.result(client.requestVerificationEmail(EmailAddress(em)), 10.seconds) match {
-            case Right(res) => println(s"resent verification email to $em")
-            case Left(verr) => println(s"resending failed: $verr")
-          }
-      }
+//      Await.result(regClient.register(AccountId(), EmailCredentials(EmailAddress(em), Some(password)), name, None), 15.seconds) match {
+//        case Right((user, _)) => println(s"created user: $user")
+//        case Left(err) =>
+//          println(s"got error: $err")
+//          Await.result(client.requestVerificationEmail(EmailAddress(em)), 10.seconds) match {
+//            case Right(res) => println(s"resent verification email to $em")
+//            case Left(verr) => println(s"resending failed: $verr")
+//          }
+//      }
       awaitUi(2.seconds)
     }
 

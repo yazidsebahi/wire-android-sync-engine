@@ -19,13 +19,12 @@ package com.waz.service
 
 import com.softwaremill.macwire._
 import com.waz.HockeyApp
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
-import com.waz.content.Preferences.Preference
-import com.waz.model.{UserData, _}
 import com.waz.model.otr.{Client, ClientId}
+import com.waz.model.{UserData, _}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
@@ -33,15 +32,12 @@ import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils._
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.znet.AuthenticationManager._
-import com.waz.znet.CredentialsHandler
+import com.waz.utils.wrappers.Context
+import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 import org.threeten.bp.Instant
-import com.waz.utils.RichInstant
-import com.waz.utils.wrappers.Context
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -89,13 +85,10 @@ class UserModule(val userId: UserId, val account: AccountManager) {
           clientsSync.registerClient(account.password) flatMap {
             case Right((state, cl)) =>
               verbose(s"Client registration complete: $state, $cl")
-              def verified(accountData: AccountData) = (state, cl) match {
-                case (REGISTERED, Some(_)) => true
-                case _ =>
-                  sync.syncSelfClients() // request clients sync, UI will need that
-                  accountData.verified
+              if (state != REGISTERED || cl.isEmpty) {
+                sync.syncSelfClients()
               }
-              accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state, verified = verified(acc))).map(_ => Right({}))
+              accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state)).map(_ => Right({}))
             case Left(err) =>
               error(s"client registration failed: $err")
               Future.successful(Left(err))
@@ -121,7 +114,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
   private val otrClients = accountData.map(_.userId).flatMap {
-    case Some(uid) => storage.otrClientsStorage.signal(uid).map(_.clients.values.toSet)
+    case Some(uid) => storage.otrClientsStorage.signal(uid).map(_.clients.values.toSet).orElse(Signal.const(Set.empty[Client]))
     case _ => Signal.const(Set.empty[Client])
   }
 
@@ -166,10 +159,13 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
   lazy val cryptoBox          = global.factory.cryptobox(id, storage)
-  lazy val netClient          = global.factory.client(credentialsHandler)
+  lazy val auth               = global.factory.auth(id)
+  lazy val netClient          = global.factory.client(id, auth)
   lazy val usersClient        = global.factory.usersClient(netClient)
   lazy val teamsClient        = global.factory.teamsClient(netClient)
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
+
+  auth.onInvalidCredentials.on(dispatcher)(_ => logout(flushCredentials = true))
 
   @volatile private var _userModule = Option.empty[UserModule]
 
@@ -177,18 +173,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     case Some(user) =>
       _userModule = Some(_userModule.getOrElse(global.factory.userModule(user, this)))
       _userModule.get
-  }
-
-  @volatile
-  private[waz] var credentials = Credentials.Empty
-
-  lazy val credentialsHandler = new CredentialsHandler {
-    override val userId: AccountId = id
-    override val cookie: Preference[Option[Cookie]] = Preference[Option[Cookie]](None, accountsStorage.get(id).map(_.flatMap(_.cookie)), { c: Option[Cookie] => accountsStorage.update(id, _.copy(cookie = c)) })
-    override val accessToken: Preference[Option[Token]] = Preference[Option[Token]](None, accountsStorage.get(id).map(_.flatMap(_.accessToken)), { token: Option[Token] => accountsStorage.update(id, _.copy(accessToken = token)) })
-    override def credentials: Credentials = self.credentials
-
-    override def onInvalidCredentials(): Unit = logout(flushCredentials = true)
   }
 
   lazy val accountData = accountsStorage.signal(id)
@@ -213,43 +197,32 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     _zmessaging
   }).orElse(Signal const Option.empty[ZMessaging])
 
-  val isLoggedIn = accounts.activeAccountPref.signal.map(_.contains(id))
-  isLoggedIn.onUi { lifecycle.setLoggedIn }
-
-  accountData { acc =>
-    if (acc.cookie.isDefined) {
-      if (credentials == Credentials.Empty) credentials = acc.credentials
-    }
-  } (EventContext.Global)
-
   for {
-    acc      <- accountData
-    loggedIn <- isLoggedIn
+    acc      <- accountData if acc.verified
+    loggedIn <- global.lifecycle.accLoggedIn(id)
     client   <- otrCurrentClient
-    _        <- otrClients
+    _        <- otrClients.map(_.size)
   } {
-    if (loggedIn && acc.verified) {
-      if (acc.userId.isEmpty || acc.clientId.isEmpty) {
-        verbose(s"account data needs registration: $acc")
-        Serialized.future(self)(ensureFullyRegistered())
-      }
+    if (acc.userId.isEmpty || acc.clientId.isEmpty) {
+      verbose(s"account data needs registration: $acc")
+      Serialized.future(self)(ensureFullyRegistered())
+    }
 
-      client.foreach{ client =>
-        if (client.signalingKey.isEmpty) {
-          returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
-            warn(msg)
-            HockeyApp.saveException(new IllegalStateException(msg), msg)
-          }
-          Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
+    client.foreach { client =>
+      if (client.signalingKey.isEmpty) {
+        returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
+          warn(msg)
+          HockeyApp.saveException(new IllegalStateException(msg), msg)
         }
+        Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
       }
     }
   }
 
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 
-  private val shouldAwaitActivation = lifecycle.uiActive.zip(accountsStorage.optSignal(id)) map {
-    case (true, Some(acc)) => !acc.verified && acc.password.isDefined
+  private val shouldAwaitActivation = lifecycle.accInForeground(id).zip(accountsStorage.optSignal(id)) map {
+    case (true, Some(acc)) => !acc.verified && acc.password.isDefined && (acc.pendingPhone.isDefined || acc.pendingEmail.isDefined)
     case _ => false
   }
 
@@ -258,21 +231,9 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     case false  => awaitActivationFuture.cancel()("stop_await_activate")
   }
 
-  lifecycle.lifecycleState { state => verbose(s"lifecycle state: $state") }
-
-  def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] =
-    Serialized.future(this) {
-      verbose(s"login($credentials)")
-      self.credentials = credentials
-      accountsStorage.updateOrCreate(id, _.updated(credentials), AccountData().updated(credentials)) flatMap { _ => ensureFullyRegistered() }
-    }
-
   def logout(flushCredentials: Boolean): Future[Unit] = {
     verbose(s"logout($id, flushCredentials: $flushCredentials)")
-    for {
-      _ <- if (flushCredentials) Future(credentials = Credentials.Empty) else Future.successful({})
-      _ <- accounts.logout(id, flushCredentials)
-    } yield {}
+    accounts.logout(id, flushCredentials)
   }
 
   def getZMessaging: Future[Option[ZMessaging]] = zmessaging.head flatMap {
@@ -317,7 +278,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     credentialsClient.updatePassword(newPassword, currentPassword).future flatMap {
       case Left(err) => Future successful Left(err)
       case Right(_) =>
-        accountsStorage.update(id, _.copy(hash = AccountData.computeHash(id, newPassword), password = Some(newPassword))) flatMap { _ =>
+        accountsStorage.update(id, _.copy(password = Some(newPassword))) flatMap { _ =>
           getZMessaging map { _ => Right(()) }
         }
     }
@@ -383,7 +344,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   }
 
 
-  private[service] def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
+  def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
 
     def updateSelfUser(accountId: AccountId): ErrorOr[Unit] =
@@ -422,7 +383,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     // we should merge those accounts, delete current one, and switch to the previous one
     (for {
       Some(_)      <- checkCryptoBox
-      Right(_)     <- activate(id, credentials)
+      Right(_)     <- activate(id)
       Right(_)     <- updateSelfUser(id)
       Right(_)     <- userModule.head.flatMap(_.ensureClientRegistered(id))
       Right(_)     <- updateSelfTeam(id)
@@ -436,19 +397,17 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
       }
   }
 
-  private def activate(accountId: AccountId, credentials: Credentials): ErrorOr[AccountData] =
+  private def activate(accountId: AccountId): ErrorOr[AccountData] =
     accountsStorage.get(accountId).flatMap {
       case Some(account) =>
-        if (account.verified) Future successful Right(account)
-        else loginClient.login(account.id, credentials).future flatMap {
+        if (account.verified && !account.regWaiting) Future successful Right(account)
+        else loginClient.login(account).future flatMap {
           case Right((token, cookie)) =>
             for {
-              _ <- credentialsHandler.cookie := cookie
-              _ <- credentialsHandler.accessToken := Some(token)
-              Some((_, acc)) <- accountsStorage.update(id, _.copy(verified = true, cookie = cookie, accessToken = Some(token)))
+              Some((_, acc)) <- accountsStorage.update(id, _.updatedNonPending.copy(cookie = cookie, accessToken = Some(token)))
             } yield Right(acc)
           case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-            accountsStorage.update(accountId, _.copy(verified = false)).collect { case Some((_, acc)) => Right(acc)}
+            accountsStorage.update(accountId, _.updatedPending).collect { case Some((_, acc)) => Left(ErrorResponse(Status.Forbidden, "", "pending-activation"))}
           case Left((_, err)) =>
             verbose(s"activate failed: $err")
             Future.successful(Left(err))
@@ -460,12 +419,14 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     CancellableFuture lift accountsStorage.get(id) flatMap {
       case None => CancellableFuture successful None
       case Some(data) if data.verified => CancellableFuture successful Some(data)
-      case Some(_) if !lifecycle.isUiActive => CancellableFuture successful None
       case Some(data) =>
-        CancellableFuture.lift(activate(data.id, credentials)) flatMap {
-          case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
-          case _ =>
-            CancellableFuture.delay(ActivationThrottling.delay(retry)) flatMap { _ => awaitActivation(retry + 1) }
+        CancellableFuture.lift(lifecycle.accInForeground(id).head).flatMap {
+          case true => CancellableFuture.lift(activate(data.id)).flatMap {
+            case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
+            case _ =>
+              CancellableFuture.delay(ActivationThrottling.delay(retry)) flatMap { _ => awaitActivation(retry + 1) }
+          }
+          case false => CancellableFuture.successful(None)
         }
     }
 

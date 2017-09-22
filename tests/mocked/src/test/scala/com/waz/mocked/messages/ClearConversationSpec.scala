@@ -33,6 +33,7 @@ import com.waz.utils._
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Inside, Matchers}
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class ClearConversationSpec extends FeatureSpec with Matchers with Inside with BeforeAndAfterAll with MockedClientApiSpec with MockBackend with RobolectricUtils {
@@ -201,7 +202,7 @@ class ClearConversationSpec extends FeatureSpec with Matchers with Inside with B
       withDelay(listMessages(conv.id) should have size 11)
 
       latch.ofSize(1) { l =>
-        (1 to 5).foreach(i => conv.sendMessage(new com.waz.api.MessageContent.Text(s"meep: $i")))
+        (1 to 5).foreach(i => zmessaging.convsUi.sendMessage(conv.id, s"meep: $i"))
         awaitUi(1.second)
         conv.clear()
         awaitUi(1.second)

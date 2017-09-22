@@ -23,6 +23,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import android.net.Uri
 import com.waz.RobolectricUtils
+import com.waz.model.AccountId
 import com.waz.testutils.Slow
 import com.waz.utils.{ExponentialBackoff, returning}
 import com.waz.znet.AuthenticationManager.Token
@@ -60,7 +61,7 @@ import scala.util.Try
   val port = 9982
   def createServer() = new TestServer(port)
   def createClient(pongTimeout: FiniteDuration = 15.seconds, backoff: ExponentialBackoff = WebSocketClient.defaultBackoff) = {
-    returning(new WebSocketClient(context, new AsyncClientImpl(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
+    returning(new WebSocketClient(context, AccountId(), new AsyncClientImpl(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
   }
 
   before {

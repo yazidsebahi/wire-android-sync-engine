@@ -45,7 +45,6 @@ import net.hockeyapp.android.Constants
 import org.scalatest._
 import org.scalatest.enablers.{Containing, Emptiness, Length}
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.MessageContent.Text
 import com.waz.content.Likes
 import com.waz.model.MessageData.MessageDataDao
 import org.threeten.bp.Instant
@@ -87,9 +86,9 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   def testBackend: BackendConfig = BackendConfig.StagingBackend
   lazy val testClient = new AsyncClientImpl(wrapper = TestClientWrapper())
 
-  lazy val globalModule: GlobalModule = new ApiSpecGlobal
+  lazy val globalModule: GlobalModuleImpl = new ApiSpecGlobal
 
-  class ApiSpecGlobal extends GlobalModule(context, testBackend) {
+  class ApiSpecGlobal extends GlobalModuleImpl(context, testBackend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
     override lazy val client: AsyncClientImpl = testClient
     override lazy val timeouts: Timeouts = suite.timeouts
@@ -116,7 +115,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   }, 5.seconds)
 
   def getUnreadCount(conv: ConvId) = Await.result(api.zmessaging.flatMap {
-    case Some(zms) => zms.convsStorage.get(conv).map(_.fold(0)(_.unreadCount))
+    case Some(zms) => zms.convsStorage.get(conv).map(_.fold(0)(_.unreadCount.messages))
     case None => Future.successful(0)
   }, 5.seconds)
 
@@ -148,12 +147,12 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   implicit class RichMessage(msg: MessageData) {
     def like() = zmessaging.reactions.like(msg.convId, msg.id)
     def unlike() = zmessaging.reactions.unlike(msg.convId, msg.id)
-    def update(text: Text) = zmessaging.convsUi.updateMessage(msg.convId, msg.id, text)
+    def update(text: String) = zmessaging.convsUi.updateMessage(msg.convId, msg.id, text)
   }
 
   def netClient = zmessaging.zNetClient
 
-  def znetClientFor(email: String, password: String) = new ZNetClient(email, password, new AsyncClientImpl(wrapper = TestClientWrapper()))
+  def znetClientFor(email: String, password: String) = new ZNetClient(None, new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend.baseUrl)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

@@ -103,11 +103,11 @@ import scala.util.Random
 
   scenario("Querying for usernames with @") {
     val handle = Handle("abcd")
-    handle.containsQuery("@AbC") should be(true)
+    handle.startsWithQuery("@AbC") should be(true)
   }
 
   scenario("Querying for usernames without @") {
     val handle = Handle("abcd")
-    handle.containsQuery("AbC") should be(true)
+    handle.startsWithQuery("AbC") should be(true)
   }
 }

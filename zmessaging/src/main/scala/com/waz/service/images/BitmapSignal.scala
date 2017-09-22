@@ -36,7 +36,7 @@ import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache.BitmapRequest
-import com.waz.ui.MemoryImageCache.BitmapRequest.{Round, Single}
+import com.waz.ui.MemoryImageCache.BitmapRequest.{Blurred, Round, Single}
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{IoUtils, WeakMemCache}
 import com.waz.utils.wrappers.{Bitmap, EmptyBitmap}
@@ -167,6 +167,10 @@ object BitmapSignal {
             withCache(width) {
               Threading.ImageDispatcher {BitmapUtils.createRoundBitmap(result, width, borderWidth, borderColor)}
             }
+          case Blurred(width, blurRadius, blurPasses) =>
+            withCache(width) {
+              Threading.ImageDispatcher {BitmapUtils.createBlurredBitmap(result, width, blurRadius, blurPasses)}
+            }
           case _ =>
             CancellableFuture.successful(result)
         }
@@ -200,6 +204,7 @@ object BitmapSignal {
 
     val initialReq = req match {
       case Round(w, _, _) => Single(w) //need to pre-load a separate bitmap (with a separate memCache entry) to be used later in generating the round one
+      case Blurred(w, _, _) => Single(w)
       case req => req
     }
 
@@ -260,7 +265,7 @@ class AssetBitmapSignal(asset: AssetData,
 
   override protected def loader(req: BitmapRequest): Loader =
     req match {
-      case Single(_, _) | Round(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
+      case Single(_, _) | Round(_, _, _) | Blurred(_, _, _) => new AssetBitmapLoader(asset, req, imageLoader, assets, forceDownload)
       case _ =>
         asset.mime match {
           case Mime.Image.Unknown => new MimeCheckLoader(asset, req, imageLoader, assets, forceDownload)

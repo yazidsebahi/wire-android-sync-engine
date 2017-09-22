@@ -45,7 +45,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.Locales
 import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
-import com.waz.znet.{CredentialsHandler, _}
+import com.waz.znet._
 import net.hockeyapp.android.{Constants, ExceptionHandler}
 import org.threeten.bp.{Clock, Instant}
 
@@ -56,7 +56,9 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 
-  def client(credentials: CredentialsHandler) = new ZNetClient(credentials, global.client, global.backend, global.loginClient)
+  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
+
+  def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -71,7 +73,6 @@ class ZMessagingFactory(global: GlobalModule) {
   def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
 }
 
-
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
   lazy val db                                     = new ZmsDatabase(accountId, context, dbPrefix)
   lazy val userPrefs                              = UserPreferences.apply(context, db, globalPreferences)
@@ -79,8 +80,8 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, gl
   lazy val otrClientsStorage: OtrClientsStorage   = wire[OtrClientsStorageImpl]
   lazy val membersStorage                         = wire[MembersStorageImpl]
   lazy val assetsStorage                          = wire[AssetsStorage]
-  lazy val reactionsStorage                       = wire[ReactionsStorage]
-  lazy val notifStorage                           = wire[NotificationStorage]
+  lazy val reactionsStorage                       = wire[ReactionsStorageImpl]
+  lazy val notifStorage                           = wire[NotificationStorageImpl]
   lazy val convsStorage                           = wire[ConversationStorageImpl]
   lazy val msgDeletions:      MsgDeletionStorage  = wire[MsgDeletionStorageImpl]
   lazy val searchQueryCache: SearchQueryCacheStorage = wire[SearchQueryCacheStorageImpl]
@@ -97,10 +98,14 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   val account    = userModule.account
   val global     = account.global
 
+  //TODO - eventually remove and use the AccountsService directly where needed - currently hard to mock.
+  val loggedInAccoutns = ZMessaging.accounts.loggedInAccounts.map(_.map(_.id).toSet)
+
   val selfUserId = userModule.userId
 
   val accountId  = account.id
 
+  val auth       = account.auth
   val zNetClient = account.netClient
   val storage    = account.storage
   val lifecycle  = global.lifecycle
@@ -118,6 +123,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)
   def googleApi         = global.googleApi
+  def globalToken       = global.tokenService
   def imageCache        = global.imageCache
   def permissions       = global.permissions
   def phoneNumbers      = global.phoneNumbers
@@ -137,6 +143,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def audioTranscader   = global.audioTranscoder
   def avs               = global.avs
   def loadService       = global.loaderService
+  def flowmanager       = global.flowmanager
+  def mediamanager      = global.mediaManager
 
   def db                = storage.db
   def userPrefs         = storage.userPrefs
@@ -204,8 +212,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
   lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
   lazy val connection: ConnectionService              = wire[ConnectionService]
-  lazy val mediamanager                               = wire[DefaultMediaManagerService]
-  lazy val flowmanager: DefaultFlowManagerService     = wire[DefaultFlowManagerService]
   lazy val calling: CallingService                    = wire[CallingService]
   lazy val contacts: ContactsService                  = wire[ContactsService]
   lazy val typing: TypingService                      = wire[TypingService]
@@ -256,7 +262,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
           connection.contactJoinEventsStage,
           users.userUpdateEventsStage,
           users.userDeleteEventsStage,
-          flowmanager.callEventsStage,
           calling.callMessagesStage,
           teams.eventsProcessingStage,
           typing.typingEventStage,
@@ -332,13 +337,13 @@ object ZMessaging { self =>
   def useStagingBackend(): Unit = useBackend(BackendConfig.StagingBackend)
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
-  private lazy val global: GlobalModule = new GlobalModule(context, backend)
+  private lazy val global: GlobalModuleImpl = new GlobalModuleImpl(context, backend)
   private lazy val accounts: AccountsService = new AccountsService(global)
   private lazy val ui: UiModule = new UiModule(accounts)
 
   // mutable for testing FIXME: get rid of that
   private [waz] var currentUi: UiModule = _
-  private [waz] var currentGlobal: GlobalModule = _
+  private [waz] var currentGlobal: GlobalModuleImpl = _
   var currentAccounts: AccountsService = _
 
   def onCreate(context: Context) = {

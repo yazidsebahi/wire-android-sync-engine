@@ -19,7 +19,6 @@ package com.waz.messages
 
 import akka.pattern.ask
 import com.waz.api.Asset.LoadCallback
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.model.{AssetStatus => _, MessageContent => _, _}
 import com.waz.provision.ActorMessage._
@@ -129,8 +128,8 @@ class AssetReceivingSpec extends FeatureSpec with Matchers with BeforeAndAfter w
         asset.getStatus shouldEqual AssetStatus.UPLOAD_IN_PROGRESS
       }
 
-      conv.sendMessage(new Text("txt message 1"))
-      conv.sendMessage(new Text("txt message 2"))
+      zmessaging.convsUi.sendMessage(conv.id, "txt message 1")
+      zmessaging.convsUi.sendMessage(conv.id, "txt message 2")
 
       within(20.seconds)(asset.getStatus shouldEqual AssetStatus.UPLOAD_DONE)
 

@@ -19,16 +19,16 @@ package com.waz.zms
 
 import android.util.Base64
 import com.google.firebase.messaging.{FirebaseMessagingService, RemoteMessage}
+import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.PushService
-import com.waz.service.{ZMessaging, ZmsLifecycle}
-import com.waz.sync.SyncServiceHandle
+import com.waz.service.{ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
-import com.waz.threading.{SerialDispatchQueue, Threading}
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.{JsonDecoder, LoggedTry}
 import org.json
 import org.json.JSONObject
@@ -40,7 +40,7 @@ import scala.concurrent.Future
   * For more information, see: https://firebase.google.com/docs/cloud-messaging/android/receive
   */
 class FCMHandlerService extends FirebaseMessagingService with ZMessagingService {
-  import Threading.Implicits.Background
+  import com.waz.threading.Threading.Implicits.Background
 
   lazy val pushSenderId = ZMessaging.currentGlobal.backend.pushSenderId
   lazy val accounts = ZMessaging.currentAccounts
@@ -55,11 +55,35 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
 
     Option(remoteMessage.getData).map(_.asScala.toMap).foreach { data =>
       verbose(s"onMessageReceived with data: $data")
-      accounts.getActiveZms.flatMap {
-        case Some(zms) if zms.backend.pushSenderId == remoteMessage.getFrom =>
-          FCMHandler(zms, data)
-        case Some(_) => warn(s"Received FCM notification from unknown sender: ${remoteMessage.getFrom}. Ignoring..."); Future.successful({})
-        case _ => warn("No zms instance available"); Future.successful({})
+      Option(ZMessaging.currentGlobal) match {
+        case Some(glob) if glob.backend.pushSenderId == remoteMessage.getFrom =>
+          data.get(UserKey).map(UserId) match {
+            case Some(target) =>
+              accounts.loggedInAccounts.head.flatMap { accs =>
+                accs.find(_.userId.exists(_ == target)).map(_.id) match {
+                  case Some(acc) =>
+                    accounts.getZMessaging(acc).flatMap {
+                      case Some(zms) => FCMHandler(zms, data)
+                      case _ =>
+                        warn("Couldn't instantiate zms instance")
+                        Future.successful({})
+                    }
+                  case _ =>
+                    warn("Could not find target account for notification")
+                    Future.successful({})
+                }
+              }
+            case _ =>
+              warn(UserKeyMissingMsg)
+              HockeyApp.saveException(new Exception(UserKeyMissingMsg), UserKeyMissingMsg)
+              Future.successful({})
+          }
+        case Some(_) =>
+          warn(s"Received FCM notification from unknown sender: ${remoteMessage.getFrom}. Ignoring...")
+          Future.successful({})
+        case _ =>
+          warn("No ZMessaging global available - calling too early")
+          Future.successful({})
       }
     }
   }
@@ -74,12 +98,15 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
 }
 
 object FCMHandlerService {
-  class FCMHandler(otrService:   OtrService,
-                   lifecycle:    ZmsLifecycle,
+
+  val UserKeyMissingMsg = "Notification did not contain user key - discarding"
+
+  class FCMHandler(accountId:    AccountId,
+                   otrService:   OtrService,
+                   lifecycle:    ZmsLifeCycle,
                    push:         PushService,
                    self:         UserId,
-                   convsContent: ConversationsContentUpdater,
-                   sync:         SyncServiceHandle) {
+                   convsContent: ConversationsContentUpdater) {
 
     private implicit val dispatcher = new SerialDispatchQueue(name = "FCMHandler")
 
@@ -94,12 +121,8 @@ object FCMHandlerService {
               push.syncHistory()
           }
 
-        case PlainNotification(userId, notification) if userId == self =>
+        case PlainNotification(notification) =>
           addNotificationToProcess(notification.id)
-
-        case PlainNotification(_, _) =>
-          warn(s"Received notification for wrong user")
-          Future.successful({})
 
         case NoticeNotification(nId) =>
           addNotificationToProcess(nId)
@@ -109,13 +132,13 @@ object FCMHandlerService {
     }
 
     private def decryptNotification(content: Array[Byte], mac: Array[Byte]) =
-      otrService.decryptGcm(content, mac) map {
+      otrService.decryptCloudMessage(content, mac) map {
         case Some(DecryptedNotification(notification)) => Some(notification)
         case _ => None
       }
 
     private def addNotificationToProcess(nId: Uid): Future[Unit] = {
-      lifecycle.active.head flatMap {
+      lifecycle.accInForeground(accountId).head flatMap {
         case true => Future.successful(()) // no need to process GCM when ui is active
         case _ =>
           verbose(s"addNotification: $nId")
@@ -126,13 +149,13 @@ object FCMHandlerService {
 
   object FCMHandler {
     def apply(zms: ZMessaging, data: Map[String, String]): Future[Unit] =
-      new FCMHandler(zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.convsContent, zms.sync).handleMessage(data)
+      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.convsContent).handleMessage(data)
   }
 
   val DataKey = "data"
   val UserKey = "user"
   val TypeKey = "type"
-  val MacKey = "mac"
+  val MacKey  = "mac"
 
   object CipherNotification {
     def unapply(data: Map[String, String]): Option[(Array[Byte], Array[Byte])] =
@@ -144,9 +167,9 @@ object FCMHandlerService {
   }
 
   object PlainNotification {
-    def unapply(data: Map[String, String]): Option[(UserId, PushNotification)] =
-      (data.get(UserKey), data.get(DataKey)) match {
-        case (Some(userId), Some(content)) => LoggedTry((UserId(userId), PushNotification.NotificationDecoder(new JSONObject(content)))).toOption
+    def unapply(data: Map[String, String]): Option[PushNotification] =
+      data.get(DataKey) match {
+        case Some(content) => LoggedTry(PushNotification.NotificationDecoder(new JSONObject(content))).toOption
         case _ => None
       }
   }

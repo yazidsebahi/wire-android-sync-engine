@@ -27,7 +27,7 @@ import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil}
+import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -39,7 +39,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
   import AndroidFreeSpec._
 
-  val clock = TestClock()
+  val clock = AndroidFreeSpec.clock
 
   override protected def beforeEach() = {
     super.beforeEach()
@@ -126,6 +126,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 }
 
 object AndroidFreeSpec {
+  val clock = TestClock()
+
   val DefaultTimeout = 5.seconds
   @volatile private var swallowedFailure = Option.empty[exceptions.TestFailedException]
 }

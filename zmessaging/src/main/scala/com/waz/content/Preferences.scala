@@ -19,8 +19,7 @@ package com.waz.content
 
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.{Context, SharedPreferences}
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{debug, verbose, warn}
+import com.waz.ZLog._
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
@@ -41,6 +40,7 @@ import scala.concurrent.{ExecutionContext, Future}
 trait Preferences {
 
   implicit protected val dispatcher: ExecutionContext
+  implicit protected val logTag: LogTag
 
   //protected for test prefs
   protected var cache = Map.empty[PrefKey[_], Preference[_]]
@@ -61,9 +61,9 @@ object Preferences {
 
     import Threading.Implicits.Background
 
-    def apply():          Future[A]    = prefs.getValue(key).map { v => verbose(s"Getting $key: $v"); v }
+    def apply():          Future[A]    = prefs.getValue(key).map { v => verbose(s"Getting $key: $v")(prefs.logTag); v }
     def update(value: A): Future[Unit] = {
-      verbose(s"Setting $key: $value")
+      verbose(s"Setting $key: $value")(prefs.logTag)
       prefs.setValue(key, value).map { _ => signal.publish(value, Threading.Background)}
     }
 
@@ -78,20 +78,6 @@ object Preferences {
   }
 
   object Preference {
-
-    //TODO should be able to eventually get rid of apply and inMemory...
-    def apply[A: PrefCodec](defaultValue: A, load: => Future[A], save: A => Future[Any]): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
-      import Threading.Implicits.Background
-      override def apply()      = load
-      override def update(v: A) = save(v) map { _ => signal ! v }
-    }
-
-    def inMemory[A: PrefCodec](defaultValue: A): Preference[A] = new Preference[A](null, null)(implicitly[PrefCodec[A]]) {
-      import Threading.Implicits.Background
-      private var value = defaultValue
-      override def apply()      = Future { value }
-      override def update(v: A) = Future { value = v; signal ! v }
-    }
 
     trait PrefCodec[A] {
       def encode(v: A): String
@@ -136,6 +122,7 @@ object Preferences {
   }
 }
 
+
 /**
   * Global preference based on Android SharedPreferences. Note, here we need to save preferences to the correct primitive
   * type in SharedPreferences, as the Android system uses these types by default (e.g., a CheckBoxPreference defined in XML
@@ -144,6 +131,7 @@ object Preferences {
 class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Preferences {
 
   override protected implicit val dispatcher = new SerialDispatchQueue(name = "GlobalPreferencesDispatcher")
+  override protected implicit val logTag = logTagFor[GlobalPreferences]
 
   def v31AssetsEnabled = false
 
@@ -192,30 +180,26 @@ class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Pref
     new Preference[A](this, key) {
 
       //No need to update the signal. The SharedPreferences Listener will do this for us.
-      override def update(value: A) = setValue[A](key, value)
+      override def update(value: A) = {
+        verbose(s"Setting $key: $value")
+        setValue[A](key, value)
+      }
 
       private def load = getFromPref(key)
 
       override lazy val signal = new SourceSignal[A](Some(load)) {
 
         private val listener = new OnSharedPreferenceChangeListener {
-          override def onSharedPreferenceChanged(sharedPreferences: SharedPreferences, k: String): Unit = {
-            if (key.str == k) {
-              if (Threading.isUiThread) publish(load, Threading.Ui)
-              else publish(load)
-            }
-          }
+          override def onSharedPreferenceChanged(sharedPreferences: SharedPreferences, k: String): Unit =
+            if (key.str == k) set(Some(load), Some(Threading.Background))
         }
 
         override def onWire(): Unit = {
-          super.onWire()
-          Threading.Ui { prefs.registerOnSharedPreferenceChangeListener(listener) } .map { _ =>
-            publish(load, Threading.Background) // load value again after registering the listener (it could have been changed in meantime)
-          } (Threading.Background)
+          prefs.registerOnSharedPreferenceChangeListener(listener)
+          value = Some(load)
         }
 
-        override def onUnwire(): Unit =
-          Threading.Ui { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+        override def onUnwire(): Unit = prefs.unregisterOnSharedPreferenceChangeListener(listener)
       }
     }
 
@@ -235,14 +219,15 @@ class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Pref
       }
       editor.apply()
     }
-
 }
 
 /**
   * Per-user preference storage in user db.
   */
 class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[String, KeyValueData](new TrimmingLruCache(context, Fixed(128)), storage)(KeyValueDataDao, "KeyValueStorage_Cached") with Preferences {
+
   override protected implicit val dispatcher = Threading.Background
+  override protected implicit val logTag = logTagFor[UserPreferences]
 
   override protected def getValue[A: PrefCodec](key: PrefKey[A]) = {
     get(key.str).map(_.map(_.value)).map(_.map(implicitly[PrefCodec[A]].decode).getOrElse(key.default))
@@ -348,7 +333,7 @@ object UserPreferences {
   lazy val ShouldSyncConversations = PrefKey[Boolean]             ("should_sync_conversations", customDefault = true)
   lazy val ShouldSyncTeams         = PrefKey[Boolean]             ("should_sync_teams", customDefault = true)
 
-  lazy val LastUiVisibleTime      = PrefKey[Instant]    ("last_ui_visible_time")
+  lazy val LastAccountVisibleTime = PrefKey[Instant]    ("last_ui_visible_time")
   lazy val OtrLastPrekey          = PrefKey[Int]        ("otr_last_prekey_id")
   lazy val ClientRegVersion       = PrefKey[Int]        ("otr_client_reg_version")
   lazy val LastStableNotification = PrefKey[Option[Uid]]("last_notification_id")

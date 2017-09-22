@@ -22,7 +22,7 @@ import com.waz.api.KindOfVerification
 import com.waz.api.impl.{EmailCredentials, ErrorResponse, PhoneCredentials}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.GlobalModule
+import com.waz.service.GlobalModuleImpl
 import com.waz.sync.client.{ConnectionsClient, ConversationsClient, CredentialsUpdateClient, UsersClient}
 import com.waz.threading.CancellableFuture
 import com.waz.threading.Threading.Implicits.Background
@@ -33,14 +33,14 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class UserProvisioner(val email: String, val pass: String, val name: String, val shouldConnect: Boolean, global: GlobalModule) {
+class UserProvisioner(val email: String, val pass: String, val name: String, val shouldConnect: Boolean, global: GlobalModuleImpl) {
   private implicit val logTag: LogTag = logTagFor[UserProvisioner]
 
   val regClient = global.regClient
   val internalBackend = new InternalBackendClient(global.client, global.backend)
 
   def register(): Either[ErrorResponse, UserInfo] = Await.result(retryWithBackOff() {
-    regClient.register(AccountId(), EmailCredentials(EmailAddress(email), Some(pass)), name, None) } .flatMap {
+    regClient.register(AccountData(email = Some(EmailAddress(email)), password = Some(pass)), name, None) } .flatMap {
       case Right((info, cookie)) => internalBackend.activateEmail(EmailAddress(email)) map (_ => Right(info))
       case Left(error) => CancellableFuture.successful(Left(error))
     }, 60.seconds)
@@ -58,7 +58,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
     loop(0, 1.second)
   }
 
-  lazy val client = new ZNetClient(global, email, pass)
+  lazy val client = new ZNetClient(null, null, null)
   lazy val userClient = new UsersClient(client)
   lazy val connClient = new ConnectionsClient(client)
   lazy val convClient = new ConversationsClient(client)

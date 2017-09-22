@@ -48,7 +48,7 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
     auto2 ? Login(provisionedEmail("auto2"), "auto2_pass") should eventually(be(Successful))
     auto2 ? AwaitSyncCompleted should eventually(be(Successful))
     (messages should have size 1).soon
-    conv.sendMessage(new MessageContent.Text("meep"))
+    zmessaging.convsUi.sendMessage(conv.id, "meep")
     (messages should have size 2).soon
   }
 
@@ -58,7 +58,7 @@ class AudioMessageSpec extends FeatureSpec with Matchers with BeforeAndAfter wit
       val audio = audioForUpload
       isAudioMessageFromTest += audio.cacheKey
 
-      conv.sendMessage(new MessageContent.Asset(audio, DoNothingAndProceed))
+      zmessaging.convsUi.sendMessage(conv.id, audio, DoNothingAndProceed)
 
       within(1.second)(messages should have size (fromBefore + 1))
 

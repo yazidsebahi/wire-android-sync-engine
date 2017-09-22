@@ -20,7 +20,6 @@ package com.waz.testutils
 import android.net.Uri
 import com.koushikdutta.async.http.WebSocket
 import com.waz.api.Message
-import com.waz.api.impl.Credentials
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.UserData.ConnectionStatus
@@ -45,7 +44,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModule(Robolectric.application, BackendConfig.StagingBackend) { global =>
+class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) { global =>
   override lazy val client: AsyncClientImpl = new EmptyAsyncClientImpl(TestClientWrapper())
   override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   override lazy val storage: Database = new GlobalDatabase(context, dbSuffix)
@@ -55,8 +54,8 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
   Constants.loadFromContext(context)
   override lazy val factory = new MockZMessagingFactory(this)
 
-  override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
-    override def login(userId: AccountId, credentials: Credentials) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
+  override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
+    override def login(account: AccountData) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
 }
@@ -65,7 +64,7 @@ class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(
   override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(teamId, clientId, user)
 }
 
-class MockAccountsService(global: GlobalModule = new MockGlobalModule) extends AccountsService(global) {
+class MockAccountsService(global: GlobalModuleImpl = new MockGlobalModule) extends AccountsService(global) {
 
   if (ZMessaging.currentAccounts == null) ZMessaging.currentAccounts = this
 
@@ -101,7 +100,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
   var timeout = 5.seconds
 
   storage.usersStorage.put(selfUserId, UserData(selfUserId, None, "test name", Some(EmailAddress("test@test.com")), None, searchKey = SearchKey("test name"), connection = ConnectionStatus.Self, handle = Some(Handle("test_username"))))
-  global.accountsStorage.put(accountId, AccountData(accountId, Right(None), Some(EmailAddress("test@test.com")), "", None, handle = Some(Handle("test_username")), None, verified = true, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
+  global.accountsStorage.put(accountId, AccountData(accountId, Right(None), Some(EmailAddress("test@test.com")), None, handle = Some(Handle("test_username")), None, None, None, Some(Cookie("cookie")), Some("passwd"), None, Some(selfUserId), Some(clientId))) map { _ =>
     mockUser.mockAccount.set(this)
   }
 
@@ -116,14 +115,10 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     }
   }
 
-  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
-    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), zNetClient.auth) {
+  override lazy val websocket: WebSocketClientService = new WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
-  }
-
-  override lazy val mediamanager = new DefaultMediaManagerService(context, userPrefs) {
-    override lazy val mediaManager = None
   }
 
   def insertConv(conv: ConversationData) = Await.result(convsStorage.insert(conv), timeout)

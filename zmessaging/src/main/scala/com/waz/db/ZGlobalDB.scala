@@ -52,7 +52,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 19
+  val DbVersion = 20
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao, TeamDataDoa)
 
@@ -89,7 +89,7 @@ object ZGlobalDB {
       },
       Migration(12, 13)(Migrations.v11(context)),
       Migration(13, 14) {
-        implicit db => AccountDataMigration.v78(db)
+        implicit db => AccountDataMigration.v14(db)
       },
       Migration(14, 15) { db =>
 //      no longer valid
@@ -108,6 +108,9 @@ object ZGlobalDB {
       },
       Migration(18, 19) { db =>
         db.execSQL("CREATE TABLE IF NOT EXISTS Teams (_id TEXT PRIMARY KEY, name TEXT, creator TEXT, icon TEXT, icon_key TEXT)")
+      },
+      Migration(19, 20) { db =>
+        AccountDataMigration.v20(db)
       }
     )
 

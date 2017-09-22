@@ -53,7 +53,7 @@ import scala.concurrent.duration._
 import scala.util.Success
 import scala.util.control.NoStackTrace
 
-class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorageImpl, lifecycle: ZmsLifecycle,
+class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorage, lifecycle: ZmsLifeCycle,
                       userPrefs: UserPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
                       timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
                       convs: ConversationStorageImpl, permissions: PermissionsService) {
@@ -61,12 +61,11 @@ class ContactsService(context: Context, accountId: AccountId, teamId: Option[Tea
   import ContactsService._
   import EventContext.Implicits.global
   import Threading.Implicits.Background
-  import lifecycle._
   import timeouts.contacts._
 
-  lifecycleState.on(Background) {
-    case LifecycleState.UiActive => requestUploadIfNeeded()
-    case state =>
+  lifecycle.accInForeground(accountId).on(Background) {
+    case true => requestUploadIfNeeded()
+    case _ =>
   }(lifecycle)
 
   contactsObserver.onChanged.on(Background) { _ =>
@@ -204,14 +203,6 @@ class ContactsService(context: Context, accountId: AccountId, teamId: Option[Tea
     }
 
   lazy val contactsLoaded = EventStream[IndexedSeq[Contact]]()
-
-  private def updateContactsAndMatchesOnStart(): Future[Unit] =
-    convs.find[(ConvId, Boolean), mut.HashMap[ConvId, Boolean]](isEstablished, ConversationDataDao.establishedConversations(_), c => c.id -> c.archived).flatMap { ids =>
-      if (ids.size <= 5 && ids.valuesIterator.forall(! _)) {
-        verbose("user has <= 5 established conversations and no conversation is archived; will update contacts now (if needed)")
-        updateContactsAndMatches()
-      } else Future(verbose(s"established: ${ids.size}, archived: ${ids.valuesIterator.count(identity)}"))
-    }.recoverWithLog()
 
   private def isEstablished(c: ConversationData) = (c.convType == ConversationType.OneToOne || c.convType == ConversationType.Group) && c.isActive && ! c.hidden
 
@@ -351,7 +342,6 @@ class ContactsService(context: Context, accountId: AccountId, teamId: Option[Tea
 
   private def sharedPhoneNumbers(maybeLimit: Option[Int]): Future[GenMap[String, GenSet[PhoneNumber]]] = {
     def loading(limit: Int) = load(Phones, maybeLimit.map(_ => OrderBySortKey), Visible, Col.ContactId, Col.EmailAddress)(new Sink[GenMap[String, GenSet[PhoneNumber]]] {
-      val util = PhoneNumberUtil.getInstance()
       val buf = mut.Map.empty[String, mut.Set[PhoneNumber]]
 
       def done: GenMap[String, GenSet[PhoneNumber]] = buf
@@ -360,7 +350,7 @@ class ContactsService(context: Context, accountId: AccountId, teamId: Option[Tea
         val id = cursor.getString(0)
         val phone = cursor.getString(1)
         if ((id ne null) && (phone ne null)) {
-          val a = phoneNumbers.normalizeNotThreadSafe(PhoneNumber(phone), util)
+          val a = phoneNumbers.normalizeNotThreadSafe(PhoneNumber(phone), PhoneNumberUtil.getInstance())
           if (a.isDefined) buf.getOrElseUpdate(id, mut.HashSet.empty) += a.get
         }
         buf.size < limit

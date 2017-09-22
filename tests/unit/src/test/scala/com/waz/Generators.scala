@@ -24,7 +24,7 @@ import java.util.{Date, Locale}
 
 import com.waz.api.{InvitationTokenFactory, Invitations}
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationType, UnreadCount}
 import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.model.UserData.ConnectionStatus
@@ -64,8 +64,6 @@ object Generators {
     )
   }
 
-  implicit lazy val arbCallDeviceState: Arbitrary[CallDeviceState] = Arbitrary(resultOf(CallDeviceState))
-
   lazy val alphaNumStr = listOf(alphaNumChar).map(_.mkString)
 
   implicit lazy val arbUri: Arbitrary[URI] = Arbitrary(for {
@@ -90,7 +88,7 @@ object Generators {
     cleared <- arbitrary[Instant]
     generatedName <- arbitrary[String]
     searchKey = name map SearchKey
-    unreadCount <- posNum[Int]
+    unreadCount <- arbitrary[UnreadCount]
     failedCount <- posNum[Int]
     missedCall <- arbitrary[Option[MessageId]]
     incomingKnock <- arbitrary[Option[MessageId]]
@@ -153,6 +151,7 @@ object Generators {
   implicit lazy val arbAssetToken: Arbitrary[AssetToken] = Arbitrary(resultOf(AssetToken))
   implicit lazy val arbOtrKey: Arbitrary[AESKey] = Arbitrary(sideEffect(AESKey()))
   implicit lazy val arbSha256: Arbitrary[Sha256] = Arbitrary(arbitrary[Array[Byte]].map(b => Sha256(sha2(b))))
+  implicit lazy val arbUnreadCount: Arbitrary[UnreadCount] = Arbitrary(for (n <- chooseNum(0,1000); c <- chooseNum(0,1000); p <- chooseNum(0,1000)) yield UnreadCount(n, c, p))
 
   object MediaAssets {
     implicit lazy val arbArtistData: Arbitrary[ArtistData] = Arbitrary(resultOf(ArtistData))
@@ -228,8 +227,6 @@ object Generators {
     implicit lazy val arbPostAssetStatus: Arbitrary[PostAssetStatus] = Arbitrary(resultOf(PostAssetStatus))
     implicit lazy val arbPostReceipt: Arbitrary[PostReceipt] = Arbitrary(resultOf(PostReceipt))
   }
-
-  implicit lazy val arbCallSequenceNumber: Arbitrary[CallSequenceNumber] = Arbitrary(choose(2, 999999) map CallSequenceNumber)
 
   implicit lazy val arbUid: Arbitrary[Uid]               = Arbitrary(sideEffect(Uid()))
   implicit lazy val arbConvId: Arbitrary[ConvId]         = Arbitrary(sideEffect(ConvId()))

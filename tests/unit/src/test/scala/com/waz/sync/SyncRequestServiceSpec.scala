@@ -44,9 +44,9 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
   val network   = mock[NetworkModeService]
   val sync      = mock[SyncHandler]
   val reporting = mock[ReportingService]
-  val lifecycle = mock[ZmsLifecycle]
+  val lifecycle = mock[ZmsLifeCycle]
 
-  val lifeCycleState = Signal(LifecycleState.Active)
+  val lifeCycleActive = Signal(true)
 
   val timeouts = new Timeouts
 
@@ -57,32 +57,32 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     networkMode ! UNKNOWN
   }
 
-//  scenario("Execute a few basic tasks") {
-//    (sync.apply (_:SyncRequest)).expects(*).returning(Future.successful(SyncResult(true)))
-//    (sync.apply (_:SerialExecutionWithinConversation, _:ConvLock)).expects(*, *).returning(Future.successful(SyncResult(true)))
-//
-//    val (handle, service) = getSyncServiceHandle
-//
-//    result(for {
-//      id   <- handle.syncSelfUser()
-//      id2  <- handle.postMessage(MessageId(), ConvId(), clock.instant())
-//      res  <- service.scheduler.await(id)
-//      res2 <- service.scheduler.await(id2)
-//    } yield (res, res2))
-//
-//    result(service.listJobs.head) should have size 0
-//  }
-//
-//  def getSyncServiceHandle = {
-//
-//    (db.apply[Vector[SyncJob]](_: (DB) => Vector[SyncJob])(_: LogTag)).expects(*, *).anyNumberOfTimes().returning(CancellableFuture.successful(Vector.empty))
-//    (network.networkMode _).expects().anyNumberOfTimes().returning(networkMode)
-//    (network.isOnlineMode _).expects().anyNumberOfTimes().returning(false)
-//    (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
-//    (lifecycle.lifecycleState _).expects().once().returning(lifeCycleState)
-//
-//    val content = new SyncContentUpdaterImpl(db)
-//    val service = new SyncRequestServiceImpl(context, accountId, content, network, sync, reporting, lifecycle)
-//    (new AndroidSyncServiceHandle(service, timeouts), service)
-//  }
+  scenario("Execute a few basic tasks") {
+    (sync.apply (_:SyncRequest)).expects(*).returning(Future.successful(SyncResult(true)))
+    (sync.apply (_:SerialExecutionWithinConversation, _:ConvLock)).expects(*, *).returning(Future.successful(SyncResult(true)))
+
+    val (handle, service) = getSyncServiceHandle
+
+    result(for {
+      id   <- handle.syncSelfUser()
+      id2  <- handle.postMessage(MessageId(), ConvId(), clock.instant())
+      res  <- service.scheduler.await(id)
+      res2 <- service.scheduler.await(id2)
+    } yield (res, res2))
+
+    result(service.listJobs.head) should have size 0
+  }
+
+  def getSyncServiceHandle = {
+
+    (db.apply[Vector[SyncJob]](_: (DB) => Vector[SyncJob])(_: LogTag)).expects(*, *).anyNumberOfTimes().returning(CancellableFuture.successful(Vector.empty))
+    (network.networkMode _).expects().anyNumberOfTimes().returning(networkMode)
+    (network.isOnlineMode _).expects().anyNumberOfTimes().returning(false)
+    (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
+    (lifecycle.loggedIn _).expects().once().returning(lifeCycleActive)
+
+    val content = new SyncContentUpdaterImpl(db)
+    val service = new SyncRequestServiceImpl(context, accountId, content, network, sync, reporting, lifecycle)
+    (new AndroidSyncServiceHandle(service, timeouts), service)
+  }
 }

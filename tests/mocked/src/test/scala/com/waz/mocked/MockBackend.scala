@@ -19,8 +19,8 @@ package com.waz.mocked
 
 import java.util.concurrent.atomic.AtomicLong
 
-import com.waz.api.impl.{Credentials, ErrorResponse}
-import com.waz.api.{ApiSpec, CauseForCallStateEvent}
+import com.waz.api.ApiSpec
+import com.waz.api.impl.ErrorResponse
 import com.waz.mocked.MockBackend._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Cleared, LastRead, Reaction}
@@ -59,10 +59,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   val searchResults = new mutable.HashMap[SearchQuery, Seq[UserSearchEntry]].withDefaultValue(Seq.empty)
   val convTimeCounter = new mutable.HashMap[RConvId, AtomicLong]
 
-  val callSessionId = new mutable.HashMap[RConvId, CallSessionId].withDefaultValue(CallSessionId("default-session-id"))
-  val callParticipants = new mutable.HashMap[RConvId, Set[CallParticipant]]
-  val callDeviceState = new mutable.HashMap[RConvId, CallDeviceState]
-
   val otrClients = new mutable.HashMap[ClientId, Client]
 
   val clientDelay = 100.millis
@@ -72,7 +68,7 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
   }
 
   def resetMockedBackend(): Unit = {
-    Seq(users, connections, members, conversations, events, searchResults, convTimeCounter, callSessionId, callParticipants, callDeviceState) foreach (_.clear())
+    Seq(users, connections, members, conversations, events, searchResults, convTimeCounter) foreach (_.clear())
     members(RConvId(selfUserId.str)) = Seq(ConversationMemberData(selfUserId, ConvId(selfUserId.str)), ConversationMemberData(selfUserId, ConvId(selfUserId.str)))
     notifications = Vector.empty
   }
@@ -262,8 +258,8 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     addNotification(UserUpdateEvent(info))(PushBehaviour.NoPush)
   })
 
-  override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = {
-    val info = UserInfo(selfUserId, Option(name), accentId, credentials.maybeEmail, credentials.maybePhone, None)
+  override def register(user: AccountData, name: String, accentId: Option[Int]) = {
+    val info = UserInfo(selfUserId, Option(name), accentId, user.email, user.phone, None)
     users += selfUserId -> info
     CancellableFuture.successful(Right((info, Some(Cookie("cookie")))))
   }
@@ -280,9 +276,6 @@ trait MockBackend extends MockedClient with MockedWebSocket with MockedGcm with 
     ids.flatMap(id => conversations.get(id).flatMap(c => members.get(id).map(m => ConversationResponse(c, m))))))
 
   override def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = CancellableFuture.delayed(clientDelay)(Right(searchResults(query).take(limit)))
-
-  override def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] =
-    CancellableFuture.delayed(clientDelay)(Right(CallStateEvent(id, callParticipants.get(id), callDeviceState.get(id), CauseForCallStateEvent.REQUESTED, callParticipants.get(id).map(_ => callSessionId(id)))))
 
   override def postConversation(users: Seq[UserId], name: Option[String]): ErrorOrResponse[ConversationResponse] = {
     val conv = addGroupConversation(users, SystemTimeline, name = name)(PushBehaviour.NoPush)

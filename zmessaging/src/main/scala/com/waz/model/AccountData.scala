@@ -32,30 +32,35 @@ import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor, DBProgram}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import org.json.JSONObject
 
 import scala.collection.mutable
 
 /**
  * Represents a local user account.
  *
- * @param verified - true if user account has been activated
  * @param password - will not be stored in db
  */
-case class AccountData(id:             AccountId               = AccountId(),
-                       teamId:         TriTeamId               = Left({}),
-                       email:          Option[EmailAddress]    = None,
-                       hash:           String                  = "",
-                       phone:          Option[PhoneNumber]     = None,
-                       handle:         Option[Handle]          = None,
-                       registeredPush: Option[PushToken]       = None,
-                       verified:       Boolean                 = false,
-                       cookie:         Option[Cookie]          = None,
-                       password:       Option[String]          = None,
-                       accessToken:    Option[Token]           = None,
-                       userId:         Option[UserId]          = None,
-                       clientId:       Option[ClientId]        = None,
-                       clientRegState: ClientRegistrationState = ClientRegistrationState.UNKNOWN,
-                       privateMode:    Boolean                 = false,
+case class AccountData(id:              AccountId                       = AccountId(),
+                       teamId:          TriTeamId                       = Left({}),
+                       email:           Option[EmailAddress]            = None,
+                       phone:           Option[PhoneNumber]             = None,
+                       handle:          Option[Handle]                  = None,
+                       registeredPush:  Option[PushToken]               = None,
+                       pendingEmail:    Option[EmailAddress]            = None,
+                       pendingPhone:    Option[PhoneNumber]             = None,
+                       cookie:          Option[Cookie]                  = None,
+                       password:        Option[String]                  = None,
+                       accessToken:     Option[Token]                   = None,
+                       userId:          Option[UserId]                  = None,
+                       clientId:        Option[ClientId]                = None,
+                       clientRegState:  ClientRegistrationState         = ClientRegistrationState.UNKNOWN,
+                       privateMode:     Boolean                         = false,
+                       regWaiting:      Boolean                         = false,
+                       code:            Option[ConfirmationCode]        = None,
+                       name:            Option[String]                  = None,
+                       invitationToken: Option[PersonalInvitationToken] = None,
+                       firstLogin:      Boolean                         = true,
                        private val _selfPermissions: Long      = 0,
                        private val _copyPermissions: Long      = 0
                       ) {
@@ -65,11 +70,11 @@ case class AccountData(id:             AccountId               = AccountId(),
        | id:              $id
        | teamId:          $teamId
        | email:           $email
-       | hash:            $hash
        | phone:           $phone
        | handle:          $handle
        | registeredPush:  $registeredPush
-       | verified:        $verified
+       | pendingEmail:    $pendingEmail
+       | pendingPhone:    $pendingPhone
        | cookie:          ${cookie.take(6)}
        | password:        In memory?: ${password.isDefined}
        | accessToken:     ${accessToken.take(6)}
@@ -77,44 +82,83 @@ case class AccountData(id:             AccountId               = AccountId(),
        | clientId:        $clientId
        | clientRegState:  $clientRegState
        | privateMode:     $privateMode
+       | regWaiting:      $regWaiting
+       | code:            $code
+       | name:            $name
+       | invitationToken  $invitationToken
+       | firstLogin       $firstLogin
+       | _selfPermissions ${_selfPermissions}
+       | _copyPermissions ${_copyPermissions}
     """.stripMargin
 
 
   lazy val selfPermissions = AccountData.decodeBitmask(_selfPermissions)
   lazy val copyPermissions = AccountData.decodeBitmask(_copyPermissions)
 
+  def verified = phone.isDefined || email.isDefined
+
   def authorized(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd), _) if email.contains(e) && AccountData.computeHash(id, passwd) == hash =>
+    case EmailCredentials(e, Some(passwd), _) if pendingEmail.contains(e) || email.contains(e) =>
       Some(copy(password = Some(passwd)))
     case _ =>
       None
   }
 
-  def updated(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd), _) =>
-      copy(email = Some(e), hash = AccountData.computeHash(id, passwd), password = Some(passwd))
-    case EmailCredentials(e, None, _) =>
-      copy(email = Some(e))
-    case PhoneCredentials(number, _, _) =>
-      copy(phone = Some(number))
+  def updatedNonPending = (pendingEmail, pendingPhone) match {
+    case (Some(e), _) => copy(email = Some(e), pendingEmail = None)
+    case (_, Some(p)) => copy(phone = Some(p), pendingPhone = None)
     case _ => this
   }
 
-  def credentials: Credentials = (email, phone, password) match {
-    case (None, Some(p), _)   => PhoneCredentials(p, None)
-    case (Some(e), _, passwd) => EmailCredentials(e, passwd)
-    case _ => Credentials.Empty
+  def updatedPending = (email, phone) match {
+    case (Some(e), _) => copy(pendingEmail = Some(e), email = None)
+    case (None, Some(p)) => copy(pendingPhone = Some(p), phone = None)
+    case _ => this
   }
 
+  def canLogin: Boolean = {
+    email.isDefined && password.isDefined ||
+    handle.isDefined && password.isDefined
+  }
+
+  def addToLoginJson(o: JSONObject) =
+    addCredentialsToJson(o)
+
+  def addToRegistrationJson(o: JSONObject) =
+    addCredentialsToJson(o, isLogin = !regWaiting)
+
+  private def addCredentialsToJson(o: JSONObject, isLogin: Boolean = true) = {
+    o.put("label", id.str)  // this label can be later used for cookie revocation
+    invitationToken foreach (i => o.put("invitation_code", i.code))
+
+    (email.orElse(pendingEmail), handle, phone.orElse(pendingPhone)) match {
+      case (Some(e), _, _) =>
+        o.put("email", e.str)
+        password foreach (o.put("password", _))
+
+      case (_, Some(h), _) if password.isDefined =>
+        o.put("handle", h.string)
+        password foreach (o.put("password", _))
+
+      case (_, _, Some(p)) =>
+        o.put("phone", p.str)
+       code foreach { code => o.put(if (isLogin) "code" else "phone_code" , code.str) }
+
+      case _ =>
+    }
+  }
+
+  def autoLoginOnRegistration = phone.isDefined || invitationToken.isDefined
+
   def updated(user: UserInfo): AccountData =
-    copy(userId = Some(user.id), email = user.email.orElse(email), phone = user.phone.orElse(phone), verified = true, handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
+    copy(userId = Some(user.id), email = user.email.orElse(email), pendingEmail = email.fold(pendingEmail)(_ => Option.empty[EmailAddress]), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
 
   def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
-    copy(userId = userId orElse this.userId, verified = this.verified | activated, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
+    copy(userId = userId orElse this.userId, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
 
   def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
     copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
-  
+
   def isTeamAccount: Boolean =
     teamId.fold(_ => false, _.isDefined)
 
@@ -141,12 +185,15 @@ object AccountData {
 
   type PermissionsMasks = (Long, Long) //self and copy permissions
 
-  def apply(id: AccountId, credentials: Credentials): AccountData =
-    new AccountData(id, Left({}), credentials.maybeEmail, "", phone = credentials.maybePhone, password = credentials.maybePassword, handle = credentials.maybeUsername)
+  def apply(credentials: Credentials): AccountData = {
+    val id = AccountId()
+    val hash = credentials.maybePassword.map(computeHash(id, _)).getOrElse("")
+    new AccountData(id, Left({}), password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
+  }
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, Left({}), Some(email), computeHash(id, password), password = Some(password), phone = None, handle = None)
+    AccountData(id, Left({}), Some(email), password = Some(password), phone = None, handle = None)
   }
 
   type Permission = Permission.Value
@@ -218,32 +265,39 @@ object AccountData {
     }).apply(_.teamId)
 
     val Email = opt(emailAddress('email))(_.email)
-    val Hash = text('hash)(_.hash)
     val Phone = opt(phoneNumber('phone))(_.phone)
     val Handle = opt(handle('handle))(_.handle)
     val RegisteredPush = opt(id[PushToken]('registered_push))(_.registeredPush)
-    val EmailVerified = bool('verified)(_.verified)
+    val PendingEmail = opt(emailAddress('pending_email))(_.pendingEmail)
+    val PendingPhone = opt(phoneNumber('pending_phone))(_.pendingPhone)
     val Cookie = opt(text[Cookie]('cookie, _.str, AuthenticationManager.Cookie))(_.cookie)
     val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))(_.accessToken)
     val UserId = opt(id[UserId]('user_id)).apply(_.userId)
     val ClientId = opt(id[ClientId]('client_id))(_.clientId)
     val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
     val PrivateMode = bool('private_mode)(_.privateMode)
+    val RegWaiting = bool('reg_waiting)(_.regWaiting)
+    val Code = opt(text[ConfirmationCode]('code, _.str, ConfirmationCode))(_.code)
+    val InvitationToken = opt(text[PersonalInvitationToken]('invitation_token, _.code, PersonalInvitationToken))(_.invitationToken)
+    val Name = opt(text('name))(_.name)
+    val FirstLogin = bool('first_login)(_.firstLogin)
     val SelfPermissions = long('self_permissions)(_._selfPermissions)
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Team, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegisteredPush, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Hash, Phone, Handle, RegisteredPush, EmailVerified, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
-      iterating(db.query(table.name, null, s"${Email.name} = ?", Array(email.str), null, null, null))
+      iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))
 
     def findByPhone(phone: PhoneNumber)(implicit db: DB) =
-      iterating(db.query(table.name, null, s"${Phone.name} = ?", Array(phone.str), null, null, null))
+      iterating(db.query(table.name, null, s"${Phone.name} = ? OR ${PendingPhone.name} = ?", Array(phone.str, phone.str), null, null, null))
 
     def deleteForEmail(email: EmailAddress)(implicit db: DB) = delete(Email, Some(email))
 
+    def findLoggedIn()(implicit db: DB) =
+      iterating(db.query(table.name, null, s"${Cookie.name} IS NOT NULL", null, null, null, null))
   }
 }

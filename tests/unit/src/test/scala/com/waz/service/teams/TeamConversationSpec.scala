@@ -18,8 +18,7 @@
 package com.waz.service.teams
 
 import com.waz.content.{ConversationStorage, MembersStorage}
-import com.waz.model.ConversationData.ConversationType
-import com.waz.model.ConversationData.ConversationType.{Group, OneToOne}
+import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.{ConversationMemberData, _}
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService, ConversationsUiServiceImpl}
 import com.waz.service.messages.MessagesService
@@ -30,6 +29,7 @@ import scala.concurrent.Future
 
 class TeamConversationSpec extends AndroidFreeSpec {
 
+  val account = AccountId()
   val self = UserId()
   val members      = mock[MembersStorage]
   val convsContent = mock[ConversationsContentUpdater]
@@ -106,7 +106,7 @@ class TeamConversationSpec extends AndroidFreeSpec {
   }
 
   def initService: ConversationsUiService = {
-    new ConversationsUiServiceImpl(self, null, null, null, messages, null, members, null, convsContent, convsStorage, null, null, sync, null, null)
+    new ConversationsUiServiceImpl(account, self, null, null, null, messages, null, members, null, convsContent, convsStorage, null, null, sync, null, null)
   }
 
 

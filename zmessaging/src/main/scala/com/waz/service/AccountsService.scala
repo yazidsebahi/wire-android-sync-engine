@@ -19,14 +19,17 @@ package com.waz.service
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.Invitations._
 import com.waz.api.impl._
-import com.waz.api.{KindOfAccess, KindOfVerification}
-import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.api.{ClientRegistrationState, KindOfAccess, KindOfVerification}
+import com.waz.client.RegistrationClientImpl.ActivateResult
+import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
-import com.waz.service.AccountsService.SwapAccountCallback
+import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
+import com.waz.utils.{RichOption, returning}
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
@@ -41,7 +44,7 @@ class AccountsService(val global: GlobalModule) {
 
   private[waz] val accountMap = new mutable.HashMap[AccountId, AccountManager]()
 
-  val context       = global.context
+  lazy val context  = global.context
   val prefs         = global.prefs
   val storage       = global.accountsStorage
   val phoneNumbers  = global.phoneNumbers
@@ -56,30 +59,29 @@ class AccountsService(val global: GlobalModule) {
         storage.onChanged.map(_.map(_.id)),
         storage.onDeleted
       )
-      new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.list()), changes)
+      new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.findLoggedIn()), changes)
     case true => Signal.const(Seq.empty[AccountData])
-  }.map(_.filter(acc => acc.cookie.isDefined && acc.clientId.isDefined))
-
-  // XXX Temporary stuff to handle team account in signup/signin - start
-  private var _loggedInAccounts = Seq.empty[AccountData]
-
-  loggedInAccounts { accs =>
-    verbose(s"Logged in accounts: ${accs.map(_.id)}")
-    _loggedInAccounts = accs
   }
 
-  def getLoggedInAccounts = _loggedInAccounts
-
-  def hasLoggedInAccount = _loggedInAccounts.nonEmpty
-
-  def fallbackToLastAccount(callback: SwapAccountCallback) =
-    if (_loggedInAccounts.nonEmpty)
-      switchAccount(_loggedInAccounts.head.id).map(_ => callback.onSwapComplete())(Threading.Ui)
-    else callback.onSwapFailed()
-  // XXX Temporary stuff to handle team account in signup/signin - end
+  val zmsInstances = (for {
+    ids <- loggedInAccounts.map(_.map(_.id))
+    ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
+    zs  <- Signal.sequence(ams.map(_.zmessaging): _*)
+  } yield
+    returning(zs.flatten.toSet) { v =>
+      verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
+    }).disableAutowiring()
+  
+  loggedInAccounts { accs =>
+    verbose(s"Logged in accounts: ${accs.map(_.id)}")
+    global.lifecycle.setLoggedIn(accs.map(_.id).toSet)
+  }
 
   val activeAccountPref = prefs.preference(CurrentAccountPref)
-  activeAccountPref.signal(ac => verbose(s"Active account: $ac"))
+  activeAccountPref.signal.onUi { ac =>
+    verbose(s"Active account: $ac")
+    global.lifecycle.setActiveAccount(ac)
+  }
 
   lazy val activeAccount = activeAccountPref.signal.flatMap[Option[AccountData]] {
     case None     => Signal.const(None)
@@ -116,6 +118,7 @@ class AccountsService(val global: GlobalModule) {
     accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
   }
 
+  //TODO - why would we ever NOT want to create the account manager if there is a AccountId available for it?
   def getAccountManager(id: AccountId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
     case Some(acc) =>
       verbose(s"getAccountManager($acc)")
@@ -123,6 +126,8 @@ class AccountsService(val global: GlobalModule) {
     case _ =>
       Future successful None
   }
+
+  def getZMessaging(id: AccountId): Future[Option[ZMessaging]] = getOrCreateAccountManager(id).flatMap(_.getZMessaging)
 
   def logout(flushCredentials: Boolean) = activeAccountManager.head flatMap {
     case Some(account) => account.logout(flushCredentials)
@@ -132,11 +137,21 @@ class AccountsService(val global: GlobalModule) {
   def logout(account: AccountId, flushCredentials: Boolean) = {
     activeAccountPref() flatMap { id =>
         for {
-          otherAccounts <- loggedInAccounts.map(_.map(_.id).filter(!id.contains(_))).head
-          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None)) else storage.update(account, _.copy(registeredPush = None))
+          otherAccounts <- loggedInAccounts.map(_.filter(acc => !id.contains(acc.id) && acc.clientRegState == ClientRegistrationState.REGISTERED).map(_.id)).head
+          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None)) else Future.successful({})
           _ <- if (id.contains(account)) setAccount(if (flushCredentials) otherAccounts.headOption else None) else Future.successful(())
         } yield {}
     }
+  }
+
+  def removeCurrentAccount(): Future[Unit] = activeAccountManager.head flatMap {
+    case Some(account) =>
+      for {
+        _ <- storage.update(account.id, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None, clientRegState = ClientRegistrationState.UNKNOWN, code = None))
+        _ <- setAccount(None)
+      } yield {}
+    case None =>
+      Future.successful(())
   }
 
   private def setAccount(acc: Option[AccountId]) = {
@@ -155,63 +170,11 @@ class AccountsService(val global: GlobalModule) {
       if !cur.contains(accountId)
       _        <- logout(flushCredentials = false)
       account  <- storage.get(accountId)
-      if account.exists { acc =>
-        acc.cookie.exists(_.isValid) || (acc.email.isDefined && acc.password.isDefined)
-      }
+      if account.isDefined
       _        <- setAccount(Some(accountId))
+      _        =  global.lifecycle.setActiveAccount(Some(accountId))
       _        <- getOrCreateAccountManager(accountId)
     } yield {}
-  }
-
-  private def switchAccount(credentials: Credentials) = {
-    verbose(s"switchAccount($credentials)")
-    for {
-      _          <- logout(flushCredentials = false)
-      normalized <- normalizeCredentials(credentials)
-      matching   <- storage.find(normalized)
-      accountId  =  matching.flatMap(_.authorized(normalized)).map(_.id)
-      _          <- setAccount(accountId)
-      manager    <- accountId.fold(Future successful Option.empty[AccountManager]) { id => getOrCreateAccountManager(id).map(Some(_)) }
-    } yield
-      (normalized, matching, manager)
-  }
-
-
-  def login(credentials: Credentials): Future[Either[ErrorResponse, AccountData]] =
-    switchAccount(credentials) flatMap {
-      case (normalized, _, Some(manager)) => manager.login(normalized)
-      case (normalized, Some(account), None) => // found matching account, but is not authorized (wrong password)
-        verbose(s"found matching account: $account, trying to authorize with backend")
-        login(account, normalized)
-      case (normalized, None, None) =>
-        verbose(s"matching account not found, creating new account")
-        login(AccountData(), normalized)
-    }
-
-  private def login(account: AccountData, normalized: Credentials) = {
-    def loginOnBackend() =
-      loginClient.login(account.id, normalized).future map {
-        case Right((token, c)) =>
-          Right(account.updated(normalized).copy(cookie = c, verified = true, accessToken = Some(token)))
-        case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-          verbose(s"account pending activation: $normalized, $error")
-          Right(account.updated(normalized).copy(verified = false, cookie = None, accessToken = None))
-        case Left((_, error)) =>
-          verbose(s"login failed: $error")
-          Left(error)
-      }
-
-    loginOnBackend() flatMap {
-      case Right(a) =>
-        for {
-          acc     <- storage.updateOrCreate(a.id, _.updated(normalized).copy(cookie = a.cookie, verified = true, accessToken = a.accessToken), a)
-          manager <- getOrCreateAccountManager(a.id)
-          _       <- setAccount(Some(a.id))
-          res     <- manager.login(normalized)
-        } yield res
-      case Left(err) =>
-        Future successful Left(err)
-    }
   }
 
   def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
@@ -231,49 +194,6 @@ class AccountsService(val global: GlobalModule) {
       regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification)
     }
 
-  private def normalizeCredentials(credentials: Credentials): Future[Credentials] = credentials match {
-    case cs @ PhoneCredentials(p, _, _) =>
-      phoneNumbers.normalize(p) map { normalized => cs.copy(phone = normalized.getOrElse(p)) }
-    case other =>
-      Future successful other
-  }
-
-  def register(credentials: Credentials, name: String, accent: AccentColor): Future[Either[ErrorResponse, AccountData]] = {
-    debug(s"register($credentials, $name, $accent")
-
-    def register(accountId: AccountId, normalized: Credentials) =
-      regClient.register(accountId, normalized, name, Some(accent.id)).future flatMap {
-        case Right((userInfo, cookie)) =>
-          verbose(s"register($credentials) done, id: $accountId, user: $userInfo, cookie: $cookie")
-          for {
-            acc     <- storage.insert(AccountData(accountId, normalized).copy(cookie = cookie, userId = Some(userInfo.id), verified = normalized.autoLoginOnRegistration))
-            _       = verbose(s"created account: $acc")
-            manager <- getOrCreateAccountManager(accountId)
-            _       <- setAccount(Some(accountId))
-            res     <- manager.login(normalized)
-          } yield res
-        case Left(error) =>
-          info(s"register($credentials, $name) failed: $error")
-          Future successful Left(error)
-      }
-
-    switchAccount(credentials) flatMap {
-      case (normalized, _, Some(manager)) =>
-        verbose(s"register($credentials), found matching account: $manager, will just sign in")
-        manager.login(normalized)
-      case (normalized, Some(account), None) =>
-        verbose(s"register($credentials), found matching account: $account, will try signing in")
-        login(account, normalized) flatMap {
-          case Right(acc) => Future successful Right(acc)
-          case Left(_) =>
-            // login failed, maybe this account has been removed on backend, let's try registering
-            register(account.id, normalized)
-        }
-      case (normalized, None, None) =>
-        register(AccountId(), normalized)
-    }
-  }
-
   //TODO can be removed after a while
   private val flushOtherCredentials = {
     firstTimePref().flatMap {
@@ -291,11 +211,183 @@ class AccountsService(val global: GlobalModule) {
         } yield {}
     }
   }
-}
 
-object AccountsService {
-  trait SwapAccountCallback {
-    def onSwapComplete(): Unit
-    def onSwapFailed(): Unit
+  def loginPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
+
+    def requestCode(shouldCall: Boolean): Future[Either[ErrorResponse, Unit]] = {
+      (if (shouldCall)
+        requestPhoneConfirmationCall(number, KindOfAccess.LOGIN)
+      else
+        requestPhoneConfirmationCode(number, KindOfAccess.LOGIN))
+        .future.map {
+        case Failure(error) => Left(error)
+        case PasswordExists => Left(ErrorResponse.PasswordExists)
+        case _ => Right(())
+      }
+    }
+
+    for {
+      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
+      acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
+      req <- requestCode(shouldCall)
+      updatedAcc = AccountData(acc.id).copy(pendingPhone = Some(normalizedPhone), firstLogin = acc.firstLogin)
+      _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
+      _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
+    } yield req
   }
+
+  def registerPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
+
+    def requestCode(shouldCall: Boolean): Future[ActivateResult] = {
+      if (shouldCall)
+        requestPhoneConfirmationCall(number, KindOfAccess.REGISTRATION).future
+      else
+        requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
+    }
+
+    for {
+      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
+      acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
+      req <- requestCode(shouldCall)
+      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), phone = None, code = None, regWaiting = true)
+      _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
+      _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
+    } yield req match {
+      case Failure(error) => Left(error)
+      case PasswordExists => Left(ErrorResponse.PasswordExists)
+      case _ => Right(())
+    }
+  }
+
+  def activatePhoneOnRegister(accountId: AccountId, code: ConfirmationCode): Future[Either[ErrorResponse, Unit]] = {
+
+    def verifyCodeRequest(credentials: PhoneCredentials, accountId: AccountId): Future[Either[ErrorResponse, Unit]] = {
+      verifyPhoneNumber(credentials, KindOfVerification.PREVERIFY_ON_REGISTRATION).future.flatMap {
+        case Left(errorResponse) =>
+          Future.successful(Left(errorResponse))
+        case Right(()) =>
+          storage.update(accountId, _.copy(phone = Some(credentials.phone), pendingPhone = None, code = Some(code), regWaiting = true)).map( _ => Right(()))
+      }
+    }
+
+    for {
+      Some(acc) <- storage.get(accountId)
+      Some(creds) <- acc.pendingPhone.fold2(Future.successful(None), phone => Future.successful(PhoneCredentials(phone, Some(code))).map(Option(_)))
+      req <- verifyCodeRequest(creds.asInstanceOf[PhoneCredentials], acc.id)
+    } yield req
+
+  }
+
+  def registerNameOnPhone(accountId: AccountId, name: String): Future[Either[ErrorResponse, Unit]] = {
+    for {
+      acc <- storage.get(accountId)
+      req <- acc.fold2(Future.successful(Left(ErrorResponse.InternalError)), accountData => registerOnBackend(accountData, name))
+    } yield req
+  }
+
+  def loginPhone(accountId: AccountId, code: ConfirmationCode): Future[Either[ErrorResponse, Unit]] = {
+    for {
+      Some(acc) <- storage.get(accountId)
+      req <- loginOnBackend(acc.copy(code = Some(code)))
+      _ <- req match {
+        case Right(_) =>
+          storage.update(accountId, _.copy(phone = acc.pendingPhone, pendingPhone = None))
+        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
+          storage.update(accountId, _.copy(phone = None, pendingPhone = acc.pendingPhone)).map(_ => ())
+        case _ =>
+          Future.successful(())
+      }
+    } yield req
+  }
+
+  def loginEmail(emailAddress: EmailAddress, password: String): Future[Either[ErrorResponse, Unit]] = {
+    for {
+      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
+      loginAcc = acc.copy(email = Some(emailAddress), password = Some(password))
+      _ <- storage.updateOrCreate(loginAcc.id, _ => loginAcc, loginAcc)
+      req <- loginOnBackend(loginAcc)
+      _ <- req match {
+        case Right (_) =>
+          switchAccount(acc.id)
+        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
+          storage.update(loginAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))).map(_ => ())
+        case _ => Future.successful(())
+      }
+    } yield req
+  }
+
+  def registerEmail(emailAddress: EmailAddress, password: String, name: String): Future[Either[ErrorResponse, Unit]] = {
+    for {
+      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
+      registerAcc = acc.copy(pendingEmail = Some(emailAddress), password = Some(password), name = Some(name))
+      _ <- storage.updateOrCreate(registerAcc.id, _ => registerAcc, registerAcc)
+      req <- registerOnBackend(registerAcc, name)
+      _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
+      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
+    } yield req
+  }
+
+  private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
+    loginClient.login(accountData).future.flatMap {
+      case Right((token, cookie)) =>
+        storage.update(accountData.id, _.copy(accessToken = Some(token), cookie = cookie, code = None)).map(_ => Right(()))
+      case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
+        verbose(s"account pending activation: ($accountData), $error")
+        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
+      case Left((_, error)) =>
+        verbose(s"login failed: $error")
+        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
+    }
+  }
+
+  private def registerOnBackend(accountData: AccountData, name: String): Future[Either[ErrorResponse, Unit]] = {
+    regClient.register(accountData, name, None).future.flatMap {
+      case Right((userInfo, Some(cookie))) =>
+        verbose(s"register($accountData) done, id: ${accountData.id}, user: $userInfo, cookie: $cookie")
+        storage.update(accountData.id, _.updated(userInfo).copy(cookie = Some(cookie), regWaiting = false, name = Some(name), code = None, firstLogin = false)).map(_ => Right(()))
+      case Right((userInfo, None)) =>
+        verbose(s"register($accountData) done, id: ${accountData.id}, user: $userInfo")
+        storage.update(accountData.id, _.updated(userInfo).copy(cookie = None, regWaiting = false,  name = Some(name), code = None, firstLogin = false)).map(_ => Right(()))
+      case Left(error) =>
+        info(s"register($accountData, $name) failed: $error")
+        Future successful Left(error)
+    }
+  }
+
+  def retrieveInvitationDetails(invitation: PersonalToken): Future[InvitationDetailsResponse] = invitation match {
+    case token: PersonalInvitationToken =>
+      regClient.getInvitationDetails(token).future.map {
+        case Right(ConfirmedInvitation(_, name, Left(email), _)) => EmailAddressResponse(name, email.str)
+        case Right(ConfirmedInvitation(_, name, Right(phone), _)) => PhoneNumberResponse(name, phone.str)
+        case Left(r) => RetrievalFailed(r)
+      }
+  }
+
+  def generateAccountFromInvitation(invitationDetails: InvitationDetailsResponse, invitation: PersonalInvitationToken): Future[Unit] = {
+    invitationDetails match {
+      case EmailAddressResponse(name, email) =>
+        for {
+          acc <- storage.findByEmail(EmailAddress(email)).map(_.getOrElse(AccountData()))
+          updated = acc.copy(email = Some(EmailAddress(email)), pendingEmail = None, name = Some(name), invitationToken = Some(invitation))
+          _ <- storage.updateOrCreate(acc.id, _ => updated, updated)
+        } yield ()
+      case PhoneNumberResponse(name, phone) =>
+        for {
+          acc <- storage.findByPhone(PhoneNumber(phone)).map(_.getOrElse(AccountData()))
+          updated = acc.copy(phone = Some(PhoneNumber(phone)), pendingPhone = None, name = Some(name), invitationToken = Some(invitation))
+          _ <- storage.updateOrCreate(acc.id, _ => updated, updated)
+        } yield ()
+      case _ =>
+        Future.successful(())
+    }
+  }
+
+  def clearInvitation(accountId: AccountId): Future[Unit] = {
+    storage.update(accountId, _.copy(invitationToken = None)).map(_ => ())
+  }
+
+  def setLoggedIn(accountId: AccountId): Future[Unit] = {
+    storage.update(accountId, _.copy(firstLogin = false)).map(_ => ())
+  }
+
 }

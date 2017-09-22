@@ -32,8 +32,10 @@ import scala.collection.{breakOut, mutable}
 import scala.concurrent.duration._
 import scala.concurrent.Future
 
-class ReactionsStorage(context: Context, storage: Database) extends CachedStorageImpl[(MessageId, UserId), Liking](new TrimmingLruCache(context, Fixed(MessagesStorage.cacheSize)), storage)(LikingDao, "LikingStorage") {
-  import ReactionsStorage._
+trait ReactionsStorage extends CachedStorage[(MessageId, UserId), Liking]
+
+class ReactionsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[(MessageId, UserId), Liking](new TrimmingLruCache(context, Fixed(MessagesStorage.cacheSize)), storage)(LikingDao, "LikingStorage") with ReactionsStorage {
+  import ReactionsStorageImpl._
   import EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue()
@@ -56,7 +58,7 @@ class ReactionsStorage(context: Context, storage: Database) extends CachedStorag
     Likes(msg, users)
   }
 
-  override def insert(vs: Traversable[Liking]): Future[Set[Liking]] = {
+  override def insertAll(vs: Traversable[Liking]): Future[Set[Liking]] = {
     val values = new mutable.HashMap[(MessageId, UserId), Liking]
     vs foreach { v =>
       if (values.get(v.id).forall(_.timestamp.isBefore(v.timestamp)))
@@ -92,8 +94,8 @@ class ReactionsStorage(context: Context, storage: Database) extends CachedStorag
   }
 }
 
-object ReactionsStorage {
-  private implicit val logTag: LogTag = logTagFor[ReactionsStorage]
+object ReactionsStorageImpl {
+  private implicit val logTag: LogTag = logTagFor[ReactionsStorageImpl]
 
   private def likers(likings: Seq[Liking]): Map[UserId, Instant] =
     likings.collect { case l if l.action == Action.Like => l.user -> l.timestamp } (breakOut)

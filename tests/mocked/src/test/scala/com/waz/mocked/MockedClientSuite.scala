@@ -24,8 +24,8 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{OtrClient => _, _}
 import com.waz.cache.LocalData
-import com.waz.client.RegistrationClient
-import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.client.RegistrationClientImpl
+import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model.UserData._
 import com.waz.model._
@@ -71,7 +71,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   class MockedZMessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) extends ZMessaging(teamId, clientId, userModule) {
 
     override lazy val flowmanager: DefaultFlowManagerService = new MockedFlowManagerService(context, zNetClient, websocket, userPrefs, prefs, network)
-    override lazy val mediamanager: DefaultMediaManagerService = new MockedMediaManagerService(context, userPrefs)
 
     override lazy val assetClient        = new AssetClientImpl(zNetClient)
 
@@ -112,18 +111,18 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, lifecycle, zNetClient, network, global.backend, clientId, timeouts, pushToken) {
+    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
 
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), zNetClient.auth) {
+      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), auth) {
         override def close() = dispatcher {
           connected ! false
           if (suite.pushService.contains(push)) suite.pushService = None
-        }
+        } (websocket.logTag)
         override protected def connect() = dispatcher {
           suite.pushService = Some(push)
           connected ! true
           null
-        }
+        } (websocket.logTag)
       }
     }
 
@@ -150,9 +149,11 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override def updateKeys(id: ClientId, prekeys: Option[Seq[PreKey]], lastKey: Option[PreKey] = None, sigKey: Option[SignalingKey] = None): ErrorOrResponse[Unit] = suite.updateKeys(id, prekeys, lastKey, sigKey)
   }
 
-  class MockedZMessagingFactory(global: GlobalModule) extends ZMessagingFactory(global) {
+  class MockedZMessagingFactory(global: GlobalModuleImpl) extends ZMessagingFactory(global) {
 
-    override def client(credentials: CredentialsHandler): ZNetClient = new EmptyClient
+    override def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
+
+    override def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
 
     override def usersClient(client: ZNetClient): UsersClient = new MockedUsersClient(client)
 
@@ -180,16 +181,15 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       }(Threading.Background)
     }
 
-  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModule(context, testBackend) {
+  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModuleImpl(context, testBackend) {
     override lazy val client: AsyncClientImpl = testClient
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
-    override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
-      override def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = suite.login(user, credentials)
+    override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
+      override def login(user: AccountData): CancellableFuture[LoginResult] = suite.login(user)
       override def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = suite.access(cookie, token)
-
     }
-    override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
-      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = suite.register(user, credentials, name, accentId)
+    override lazy val regClient: RegistrationClientImpl = new RegistrationClientImpl(client, backend) {
+      override def register(user: AccountData, name: String, accentId: Option[Int]) = suite.register(user, name, accentId)
       override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCode(phone, kindOfAccess)
       override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = suite.requestPhoneConfirmationCall(phone, kindOfAccess)
 
@@ -211,9 +211,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
 trait MockedFlows { test: ApiSpec =>
   private lazy val mocked = zmessaging.flowmanager.asInstanceOf[MockedFlowManagerService]
 
-  def establishMedia(conv: RConvId): Unit = zmessaging.flowmanager.onMediaEstablished ! conv
-  def changeVolume(conv: RConvId, participant: UserId, volume: Float): Unit = zmessaging.flowmanager.onVolumeChanged ! (conv, participant, volume)
-  def flowManagerError(conv: RConvId, errorCode: Int): Unit = zmessaging.flowmanager.onFlowManagerError ! (conv, errorCode)
   def sessionIdUsedToAcquireFlows: Option[CallSessionId] = mocked.sessionIdUsedToAcquireFlows
   def setCanSendVideo(conv: RConvId, canSend: Boolean): Unit = if (canSend) mocked.convsThatCanSendVideo += conv else mocked.convsThatCanSendVideo -= conv
   def hasConvVideoSendState(conv: RConvId, state: VideoSendState): Boolean = mocked.convsThatSendVideo.get(conv).contains(state)
@@ -226,9 +223,7 @@ trait MockedFlows { test: ApiSpec =>
 }
 
 trait MockedMedia { test: ApiSpec =>
-  private lazy val mocked = zmessaging.mediamanager.asInstanceOf[MockedMediaManagerService]
-
-  def changePlaybackRoute(route: PlaybackRoute): Unit = mocked.changePlaybackRoute(route)
+  def changePlaybackRoute(route: PlaybackRoute): Unit = {}
 }
 
 trait MockedWebSocket {
@@ -241,10 +236,10 @@ trait MockedGcm {
 
 trait MockedClient { test: ApiSpec =>
 
-  def login(user: AccountId, credentials: Credentials): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
+  def login(user: AccountData): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
   def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult] = successful[LoginResult](Right((Token("token", "type", Long.MaxValue), Some(Cookie("cookie")))))
-  def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] =
-    successful(Right((UserInfo(UserId(), Some(name), accentId, credentials.maybeEmail, credentials.maybePhone, None), Some(Cookie("cookie")))))
+  def register(user: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] =
+    successful(Right((UserInfo(UserId(), Some(name), accentId, user.email, user.phone, None), Some(Cookie("cookie")))))
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = successful(ActivateResult.Success)
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = successful(Right(()))
@@ -264,7 +259,6 @@ trait MockedClient { test: ApiSpec =>
   def loadConversations(ids: Seq[RConvId]): ErrorOrResponse[Seq[ConversationResponse]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = successful(Right(IndexedSeq()))
   def loadSelf(): ErrorOrResponse[UserInfo] = successful(Left(ErrorResponse.Cancelled))
-  def loadCallState(id: RConvId): ErrorOrResponse[CallStateEvent] = successful(Right(CallStateEvent(id, Some(Set.empty), cause = CauseForCallStateEvent.REQUESTED)))
   def graphSearch(query: SearchQuery, limit: Int): ErrorOrResponse[Seq[UserSearchEntry]] = successful(Right(Seq.empty))
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))
   def postMemberLeave(conv: RConvId, member: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] = successful(Left(ErrorResponse.internalError("not implemented")))

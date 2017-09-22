@@ -21,6 +21,7 @@ import com.sun.jna.Pointer
 import com.waz.api.VideoSendState
 import com.waz.api.VideoSendState._
 import com.waz.model.{ConvId, GenericMessage, UserId}
+import com.waz.service.ZMessaging
 import com.waz.service.call.Avs.ClosedReason.Normal
 import com.waz.service.call.Avs.VideoReceiveState.Stopped
 import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState}
@@ -30,14 +31,14 @@ import org.threeten.bp.Instant
 case class CallInfo(convId:            ConvId,
                     caller:            UserId,
                     state:             CallState,
-                    isGroup:           Boolean, //if a team conversation with only 1 other user, will be false - easier to store here
                     others:            Set[UserId]                       = Set.empty,
                     maxParticipants:   Int                               = 0, //maintains the largest number of users that were ever in the call (for tracking)
                     muted:             Boolean                           = false,
                     isVideoCall:       Boolean                           = false,
                     videoSendState:    VideoSendState                    = DONT_SEND,
                     videoReceiveState: VideoReceiveState                 = Stopped,
-                    estabTime:         Option[Instant]                   = None,
+                    startTime:         Instant                           = ZMessaging.clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
+                    estabTime:         Option[Instant]                   = None, //the time the call was joined (if any)
                     hangupRequested:   Boolean                           = false, //whether selfUser called end call, or some other reason
                     closedReason:      ClosedReason                      = Normal,
                     outstandingMsg:    Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
@@ -48,13 +49,13 @@ case class CallInfo(convId:            ConvId,
        | convId:            $convId
        | caller:            $caller
        | state:             $state
-       | isGroup:           $isGroup
        | others:            $others
        | maxParticipants:   $maxParticipants
        | muted:             $muted
        | isVideoCall:       $isVideoCall
        | videoSendState:    $videoSendState
        | videoReceiveState: $videoReceiveState
+       | startTime:         $startTime
        | estabTime:         $estabTime
        | hangupRequested:   $hangupRequested
        | closedReason       $closedReason
@@ -67,7 +68,7 @@ object CallInfo {
 
   type CallState = CallState.Value
   object CallState extends Enumeration {
-    val NotActive, SelfCalling, OtherCalling, SelfJoining, SelfConnected = Value
+    val SelfCalling, OtherCalling, SelfJoining, SelfConnected, Ongoing = Value
   }
 
 }

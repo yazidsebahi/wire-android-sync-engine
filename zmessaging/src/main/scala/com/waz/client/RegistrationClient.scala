@@ -21,8 +21,10 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.{Credentials, ErrorResponse, PhoneCredentials}
 import com.waz.api.{KindOfAccess, KindOfVerification}
+import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.model._
 import com.waz.service.BackendConfig
+import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.sync.client.UsersClient.UserResponseExtractor
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonEncoder
@@ -38,24 +40,31 @@ import org.json.JSONObject
 
 import scala.concurrent.duration._
 
-class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
-  import Threading.Implicits.Background
-  import com.waz.client.RegistrationClient._
+trait RegistrationClient {
+  def register(account: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
+  def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit]
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
+  def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation]
+}
 
-  def register(userId: AccountId, credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
+class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extends RegistrationClient {
+  import Threading.Implicits.Background
+  import com.waz.client.RegistrationClientImpl._
+
+  def register(account: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
     val json = JsonEncoder { o =>
       o.put("name", name)
-      o.put("label", userId.str)
       accentId foreach (o.put("accent_id", _))
-      credentials.addToRegistrationJson(o)
       o.put("locale", bcp47.languageTagOf(currentLocale))
+      account.addToRegistrationJson(o)
     }
 
-    val request = Request.Post(RegisterPath, JsonContentEncoder(json), baseUri = Some(URI.parse(backend.baseUrl)), timeout = timeout)
+    val request = Request.Post(RegisterPath, JsonContentEncoder(json), baseUri = Some(backend.baseUrl), timeout = timeout)
     client(request) map {
       case resp @ Response(SuccessHttpStatus(), UserResponseExtractor(user), headers) =>
         debug(s"registration succeeded: $resp")
-        Right((user, if (credentials.autoLoginOnRegistration) LoginClient.getCookieFromHeaders(headers) else None))
+        Right((user, if (account.autoLoginOnRegistration) LoginClient.getCookieFromHeaders(headers) else None))
       case Response(_, ErrorResponse(code, msg, label), headers) =>
         info(s"register failed with error: ($code, $msg, $label), headers: $headers")
         Left(ErrorResponse(code, msg, label))
@@ -90,7 +99,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
       case KindOfAccess.REGISTRATION => ActivateSendPath
     }
 
-    val request = Request.Post(uri, JsonContentEncoder(params), baseUri = Some(URI.parse(backend.baseUrl)), timeout = timeout)
+    val request = Request.Post(uri, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)
     client(request) map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"confirmation code requested: $resp")
@@ -107,7 +116,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   }
 
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = {
-    val request = Request.Post(ActivatePath, activateRequestBody(credentials, kindOfVerification), baseUri = Some(URI.parse(backend.baseUrl)), timeout = timeout)
+    val request = Request.Post(ActivatePath, activateRequestBody(credentials, kindOfVerification), baseUri = Some(backend.baseUrl), timeout = timeout)
     client(request) map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"phone number verified: $resp")
@@ -123,13 +132,13 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   import com.waz.sync.client.InvitationClient._
 
   def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation] = {
-    val uri = infoPath(token)
-    val request = Request.Get(uri.getPath, baseUri = Some(URI.parse(backend.baseUrl)))
+    val path = infoPath(token)
+    val request = Request.Get(path.toString, baseUri = Some(backend.baseUrl))
     client(request) map {
       case Response(HttpStatus(Success, _), ConfirmedInvitation(inv), _) =>
         debug(s"received invitation details for $token: $inv")
         Right(inv)
-      case Response(HttpStatus(BadRequest, "invalid-invitation-code"), EmptyResponse, headers) =>
+      case Response(HttpStatus(BadRequest, "invalid-invitation-code"), EmptyResponse, _) =>
         warn(s"invitation token not found: $token")
         Left(ErrorResponse(NotFound, "no such invitation code", "invalid-invitation-code"))
       case other =>
@@ -140,7 +149,7 @@ class RegistrationClient(client: AsyncClient, backend: BackendConfig) {
   private def infoPath(token: PersonalInvitationToken): URI = URI.parse(InvitationPath).buildUpon.appendPath("info").appendQueryParameter("code", token.code).build
 }
 
-object RegistrationClient {
+object RegistrationClientImpl {
   val RegisterPath = "/register"
   val ActivatePath = "/activate"
   val ActivateSendPath = "/activate/send"

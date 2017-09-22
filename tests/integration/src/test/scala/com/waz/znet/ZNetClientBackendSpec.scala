@@ -18,7 +18,7 @@
 package com.waz.znet
 
 import com.waz.provision.ProvisionedSuite
-import com.waz.service.{BackendConfig, GlobalModule}
+import com.waz.service.{BackendConfig, GlobalModuleImpl}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.Json
 import com.waz.znet.Response.{HttpStatus, SuccessHttpStatus}
@@ -34,55 +34,55 @@ class ZNetClientBackendSpec extends FeatureSpec with Matchers with ProvisionedSu
 
   override val provisionFile = "/three_users.json"
 
-  lazy val Seq(client1, client2, client3) = 1 to 3 map { i =>
-    new ZNetClient(provisionedEmail(s"auto$i"), s"auto${i}_pass", new AsyncClientImpl(wrapper = TestClientWrapper()))
-  }
+//  lazy val Seq(client1, client2, client3) = 1 to 3 map { i =>
+//    new ZNetClient(provisionedEmail(s"auto$i"), s"auto${i}_pass", new AsyncClientImpl(wrapper = TestClientWrapper()))
+//  }
 
-  lazy val globalModule = new GlobalModule(Robolectric.application, BackendConfig.StagingBackend) {
+  lazy val globalModule = new GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   }
 
   feature("Login user") {
-
-    scenario("Call /self and get result") {
-      val rs1 = client1(Request.Get("/self", requiresAuthentication = true))
-      val rs2 = client2(Request.Get("/self", requiresAuthentication = true))
-
-      Await.result(rs1, 5.seconds) match {
-        case Response(HttpStatus(200, _), JsonObjectResponse(resp @ SelfResponse(id, name, email)), _) =>
-          email shouldEqual provisionedEmail("auto1")
-          name shouldEqual "auto1 user"
-        case resp => fail(s"received unexpected response: $resp")
-      }
-
-      Await.result(rs2, 5.seconds) match {
-        case Response(HttpStatus(200, _), JsonObjectResponse(resp @ SelfResponse(id, name, email)), _) =>
-          email shouldEqual provisionedEmail("auto2")
-          name shouldEqual "auto2 user"
-        case resp => fail(s"received unexpected response: $resp")
-      }
-    }
-  }
-
-  feature("Conversation") {
-
-    scenario("Create connection") {
-      val id1 = getId(client1)
-      val id2 = getId(client2)
-
-      callJs(client1(Post("/self/connections", Json("message" -> "hello", "user" -> id2, "name" -> "conn1", "status" -> "accepted"), requiresAuthentication = true)))
-      callAny(client2(Put(s"/self/connections/$id1", Json("status" -> "accepted"), requiresAuthentication = true)))
-    }
-
-    scenario("Create conversation") {
-      val id1 = getId(client1)
-      val id2 = getId(client2)
-      val id3 = getId(client3)
-
-      callJs(client1(Post("/self/connections", Json("message" -> "hello user 3", "user" -> id3, "name" -> "conn_2"), requiresAuthentication = true)))
-      callAny(client3(Put(s"/self/connections/$id1", Json("status" -> "accepted"), requiresAuthentication = true)))
-      callJs(client1(Post("/conversations", Json("users" -> Array(id2, id3)), requiresAuthentication = true)))
-    }
+//
+//    scenario("Call /self and get result") {
+//      val rs1 = client1(Request.Get("/self", requiresAuthentication = true))
+//      val rs2 = client2(Request.Get("/self", requiresAuthentication = true))
+//
+//      Await.result(rs1, 5.seconds) match {
+//        case Response(HttpStatus(200, _), JsonObjectResponse(resp @ SelfResponse(id, name, email)), _) =>
+//          email shouldEqual provisionedEmail("auto1")
+//          name shouldEqual "auto1 user"
+//        case resp => fail(s"received unexpected response: $resp")
+//      }
+//
+//      Await.result(rs2, 5.seconds) match {
+//        case Response(HttpStatus(200, _), JsonObjectResponse(resp @ SelfResponse(id, name, email)), _) =>
+//          email shouldEqual provisionedEmail("auto2")
+//          name shouldEqual "auto2 user"
+//        case resp => fail(s"received unexpected response: $resp")
+//      }
+//    }
+//  }
+//
+//  feature("Conversation") {
+//
+//    scenario("Create connection") {
+//      val id1 = getId(client1)
+//      val id2 = getId(client2)
+//
+//      callJs(client1(Post("/self/connections", Json("message" -> "hello", "user" -> id2, "name" -> "conn1", "status" -> "accepted"), requiresAuthentication = true)))
+//      callAny(client2(Put(s"/self/connections/$id1", Json("status" -> "accepted"), requiresAuthentication = true)))
+//    }
+//
+//    scenario("Create conversation") {
+//      val id1 = getId(client1)
+//      val id2 = getId(client2)
+//      val id3 = getId(client3)
+//
+//      callJs(client1(Post("/self/connections", Json("message" -> "hello user 3", "user" -> id3, "name" -> "conn_2"), requiresAuthentication = true)))
+//      callAny(client3(Put(s"/self/connections/$id1", Json("status" -> "accepted"), requiresAuthentication = true)))
+//      callJs(client1(Post("/conversations", Json("users" -> Array(id2, id3)), requiresAuthentication = true)))
+//    }
   }
 
   def callJs(f: CancellableFuture[Response]) = Await.result(f, 10.seconds) match {

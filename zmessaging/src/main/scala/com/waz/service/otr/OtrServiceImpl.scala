@@ -49,7 +49,7 @@ import scala.concurrent.duration._
 
 
 trait OtrService {
-  def decryptGcm(data: Array[Byte], mac: Array[Byte]): Future[Option[JSONObject]]
+  def decryptCloudMessage(data: Array[Byte], mac: Array[Byte]): Future[Option[JSONObject]]
   def decryptAssetData(assetId: AssetId, otrKey: Option[AESKey], sha: Option[Sha256], data: Option[Array[Byte]], encryption: Option[EncryptionAlgorithm]): Option[Array[Byte]]
 }
 
@@ -170,7 +170,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
       syncId <- sync.postSessionReset(conv, user, client)
     } yield syncId
 
-  def decryptGcm(data: Array[Byte], mac: Array[Byte]) = clients.getSelfClient map {
+  def decryptCloudMessage(data: Array[Byte], mac: Array[Byte]) = clients.getSelfClient map {
     case Some(client @ Client(_, _, _, _, _, _, Some(key), _, _)) =>
       verbose(s"decrypting gcm for client $client")
       if (hmacSha256(key, data).toSeq != mac.toSeq) {

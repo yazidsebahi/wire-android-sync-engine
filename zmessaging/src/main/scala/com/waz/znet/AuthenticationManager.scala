@@ -18,17 +18,18 @@
 package com.waz.znet
 
 import com.koushikdutta.async.http.AsyncHttpRequest
-import com.waz.ZLog._
+import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.impl.{Credentials, EmailCredentials, ErrorResponse}
-import com.waz.content.Preferences.Preference
-import com.waz.model.{AccountId, EmailAddress}
+import com.waz.ZLog._
+import com.waz.api.impl.ErrorResponse
+import com.waz.content.AccountsStorage
+import com.waz.model.{AccountData, AccountId}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder}
-import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response._
-import net.hockeyapp.android.ExceptionHandler
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
@@ -38,47 +39,46 @@ trait AccessTokenProvider {
   def currentToken(): Future[Either[Status, Token]]
 }
 
-trait CredentialsHandler {
-  val userId: AccountId
-  val cookie: Preference[Option[Cookie]]
-  val accessToken: Preference[Option[Token]]
-
-  def credentials: Credentials
-  def onInvalidCredentials(): Unit = {}
-}
-
-class BasicCredentials(email: EmailAddress, password: Option[String]) extends CredentialsHandler {
-  override val userId = AccountId()
-  override val credentials = EmailCredentials(email, password)
-  override val accessToken = Preference.inMemory(Option.empty[Token])
-  override val cookie = Preference.inMemory(Option.empty[Cookie])
-}
-
 /**
  * Manages authentication token, and dispatches login requests when needed.
  * Will retry login request if unsuccessful.
  */
-class AuthenticationManager(client: LoginClient, user: CredentialsHandler) extends AccessTokenProvider {
-  def this(client: LoginClient, email: EmailAddress, passwd: String) = this(client, new BasicCredentials(email, Some(passwd))) // currently only used in integration tests
+class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: LoginClient) extends AccessTokenProvider {
 
   import com.waz.znet.AuthenticationManager._
-
-  debug(s"init, \ncredentials: ${user.credentials}")
 
   implicit val dispatcher = new SerialDispatchQueue(name = "AuthenticationManager")
 
   private var closed = false
 
-  private val tokenPref = user.accessToken
+  val onInvalidCredentials = EventStream[Unit]()
+
+  private def token  = withAccount(_.accessToken)
+  private def cookie = withAccount(_.cookie)
+
+  private def account = withAccount(identity)
+
+  private def withAccount[A](f: (AccountData) => A): Future[A] = accStorage.get(id).map {
+    case Some(acc) => f(acc)
+    case _         => throw new IllegalStateException(s"Could not find matching account for: $id")
+  }
+
+  //Only performs safe update - never wipes either the cookie or the token.
+  private def updateCredentials(token: Option[Token] = None, cookie: Option[Cookie] = None) =
+    accStorage.update(id, acc => acc.copy(accessToken = if (token.isDefined) token else acc.accessToken, cookie = if (cookie.isDefined) cookie else acc.cookie))
+
+
+  private def wipeCredentials() =
+    accStorage.update(id, _.copy(accessToken = None, cookie = None))
 
   /**
    * Last login request result. Used to make sure we never send several concurrent login requests.
    */
-  private var loginFuture: CancellableFuture[Either[Status, Token]] = CancellableFuture.lift(tokenPref() map { _.fold[Either[Status, Token]](Left(Cancelled))(Right(_)) })
+  private var loginFuture: CancellableFuture[Either[Status, Token]] = CancellableFuture.lift(token.map { _.fold[Either[Status, Token]](Left(Cancelled))(Right(_)) })
 
-  def invalidateToken() = tokenPref() .map (_.foreach { token => tokenPref := Some(token.copy(expiresAt = 0)) })(dispatcher)
+  def invalidateToken() = token.map(_.foreach(t => updateCredentials(Some(t.copy(expiresAt = 0)))))
 
-  def isExpired(token: Token) = token.expiresAt - expireThreshold < System.currentTimeMillis()
+  def isExpired(token: Token) = token.expiresAt - ExpireThreshold < System.currentTimeMillis()
 
   def close() = dispatcher {
     closed = true
@@ -94,12 +94,12 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
         warn(s"login failed", ex)
         Left(Cancelled)
     } flatMap { _ =>
-      CancellableFuture.lift(tokenPref()) flatMap {
+      CancellableFuture.lift(token) flatMap {
         case Some(token) if !isExpired(token) =>
           verbose(s"Non expired token: $token")
           CancellableFuture.successful(Right(token))
         case token =>
-          CancellableFuture.lift(user.cookie()).flatMap { cookie =>
+          CancellableFuture.lift(cookie).flatMap { cookie =>
             debug(s"Non existent or expired token: $token, will attempt to refresh with cookie: $cookie")
             cookie match {
               case Some(c) =>
@@ -107,10 +107,9 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
                   case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
                     verbose(s"access request failed (label: $label, message: $message), will try login request. token: $token, cookie: $cookie, access resp: $resp")
 
-                    ExceptionHandler.saveException(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
+                    HockeyApp.saveException(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
                     for {
-                      _ <- CancellableFuture.lift(user.cookie := None)
-                      _ <- CancellableFuture.lift(user.accessToken := None)
+                      _ <- CancellableFuture.lift(wipeCredentials())
                       res <- dispatchLoginRequest()
                     } yield res
                 }
@@ -124,32 +123,28 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
   }
 
   private def dispatchLoginRequest(): CancellableFuture[Either[Status, Token]] =
-    if (user.credentials.canLogin) {
-      dispatchRequest(client.login(user.userId, user.credentials)) {
-        case Left((_, resp @ ErrorResponse(Status.Forbidden, _, _))) =>
-          debug(s"login request failed with: $resp")
-          user.onInvalidCredentials()
-          CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, s"login request failed with: $resp")))
+    CancellableFuture.lift(account).flatMap { acc =>
+      if (acc.canLogin) {
+        dispatchRequest(client.login(acc)) {
+          case Left((_, resp@ErrorResponse(Status.Forbidden, _, _))) =>
+            debug(s"login request failed with: $resp")
+            onInvalidCredentials ! {}
+            CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, s"login request failed with: $resp")))
+        }
+      } else {
+        debug("Password or confirmation code missing in dispatchLoginRequest, returning Unauthorized")
+        onInvalidCredentials ! {}
+        CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, "Password missing in dispatchLoginRequest")))
       }
-    } else { // no cookie, no password/code, therefore unable to login, don't even try
-      debug("Password or confirmation code missing in dispatchLoginRequest, returning Unauthorized")
-      user.onInvalidCredentials()
-      CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, "Password missing in dispatchLoginRequest")))
     }
 
   private def dispatchRequest(request: => CancellableFuture[LoginResult], retryCount: Int = 0)(handler: ResponseHandler): CancellableFuture[Either[Status, Token]] =
     request flatMap handler.orElse {
       case Right((token, cookie)) =>
         debug(s"receivedAccessToken: '$token'")
-
-        CancellableFuture.lift(for {
-          _ <- tokenPref := Some(token)
-        //Only save the cookie if we actually get one back - we don't want to set it to None!!
-          _ <- cookie match {
-            case Some(c) => user.cookie := Some(c)
-            case _ => Future.successful({})
-          }
-        } yield Right(token))
+        CancellableFuture.lift {
+          updateCredentials(Some(token), cookie).map(_ => Right(token))
+        }
 
       case Left(_) if closed => CancellableFuture.successful(Left(ClientClosed))
 
@@ -170,7 +165,7 @@ class AuthenticationManager(client: LoginClient, user: CredentialsHandler) exten
 
 object AuthenticationManager {
   val MaxRetryCount = 3
-  val expireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
+  val ExpireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
 
   type ResponseHandler = PartialFunction[LoginResult, CancellableFuture[Either[Status, Token]]]
 

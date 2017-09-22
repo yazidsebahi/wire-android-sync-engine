@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.{ClientRegistrationState, CredentialsFactory, InitListener, LoginListener}
-import com.waz.client.RegistrationClient
+import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
@@ -37,7 +37,7 @@ import com.waz.utils.events.EventContext
 import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
-import com.waz.znet.Response.{HttpStatus}
+import com.waz.znet.Response.HttpStatus
 import com.waz.znet._
 import com.waz.{RobolectricUtils, service}
 import org.json.JSONObject
@@ -80,12 +80,12 @@ import scala.util.control.NoStackTrace
       }
     }
 
-    override lazy val loginClient: LoginClient = new LoginClient(client, backend) {
-      override def login(user: AccountId, credentials: Credentials) = CancellableFuture.successful(loginResponse)
+    override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
+      override def login(account: AccountData) = CancellableFuture.successful(loginResponse)
       override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }
-    override lazy val regClient: RegistrationClient = new RegistrationClient(client, backend) {
-      override def register(user: AccountId, credentials: Credentials, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
+    override lazy val regClient: RegistrationClient = new RegistrationClientImpl(client, backend) {
+      override def register(account: AccountData, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
     }
     override lazy val factory = new MockZMessagingFactory(this) {
       override def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule): service.ZMessaging =
@@ -96,8 +96,8 @@ import scala.util.control.NoStackTrace
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, lifecycle, zNetClient, network, backend, clientId, timeouts, pushToken) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), zNetClient.auth) {
+          override lazy val websocket = new WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }
@@ -135,18 +135,18 @@ import scala.util.control.NoStackTrace
 
   after {
     ShadowLog.stream = null
-    if (api.account.exists(_.global.lifecycle.isUiActive)) {
-      api.onPause()
-      api.account foreach { acc =>
-        Thread.sleep(1000)
-        Await.result(acc.getZMessaging, 5.seconds) foreach { zms =>
-          val dbName = zms.db.dbHelper.getDatabaseName
-          Await.result(zms.db.close().flatMap(_ => zms.global.storage.close()), 5.seconds)
-          context.getDatabasePath(dbName).getParentFile.listFiles.foreach(_.delete())
-        }
-      }
-      api.onDestroy()
-    }
+//    if (api.account.exists(_.global.lifecycle.isUiActive)) {
+//      api.onPause()
+//      api.account foreach { acc =>
+//        Thread.sleep(1000)
+//        Await.result(acc.getZMessaging, 5.seconds) foreach { zms =>
+//          val dbName = zms.db.dbHelper.getDatabaseName
+//          Await.result(zms.db.close().flatMap(_ => zms.global.storage.close()), 5.seconds)
+//          context.getDatabasePath(dbName).getParentFile.listFiles.foreach(_.delete())
+//        }
+//      }
+//      api.onDestroy()
+//    }
 
     (ui.accounts.activeAccountPref := None).futureValue
   }

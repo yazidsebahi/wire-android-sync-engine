@@ -18,7 +18,6 @@
 package com.waz.service.otr
 
 import akka.pattern.ask
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.provision.ActorMessage.{Login, Successful}
 import com.waz.provision.ProvisionedSuite.{Conversation, User}
@@ -94,7 +93,7 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
 
     scenario("send message to group") {
       withDelay(msgs should not be empty)
-      groupConv.sendMessage(new Text("test message 1"))
+      zmessaging.convsUi.sendMessage(groupConv.id, "test message 1")
 
       withDelay {
         msgs.last.contentString shouldEqual "test message 1"
@@ -116,7 +115,8 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("send messages from remotes") {
       val msgCount = msgs.size
       remotes.zipWithIndex foreach { case (rs, i) =>
-        getGroupConv(rs.head.getConversations).sendMessage(new Text(s"remote message $i"))
+        val conv = getGroupConv(rs.head.getConversations)
+        zmessaging.convsUi.sendMessage(groupConv.id, "remote message 1")
       }
 
       withDelay {
@@ -129,7 +129,7 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("write message and check ordering") {
       val msgCount = msgs.size
       for (i <- 0 until 10) {
-        groupConv.sendMessage(new Text(s"ordered message $i"))
+        zmessaging.convsUi.sendMessage(groupConv.id, s"ordered message $i")
         awaitUi(1.millis)
       }
       withDelay {
@@ -148,7 +148,8 @@ class OtrPerformanceSpec extends FeatureSpec with Matchers with BeforeAndAfterAl
     scenario("receive large message from remote") {
       val text = "large message: " + new String(Array.fill(10 * 1024)('_'))
       val msgCount = msgs.size
-      getGroupConv(remotes.head.head.getConversations).sendMessage(new Text(text))
+      val conv = getGroupConv(remotes.head.head.getConversations)
+      zmessaging.convsUi.sendMessage(conv.id, text)
 
       withDelay {
         msgs.last.contentString shouldEqual text

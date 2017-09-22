@@ -24,7 +24,7 @@ import com.waz.api
 import com.waz.api.PermissionProvider
 import com.waz.api.impl.search.Search
 import com.waz.api.ZMessagingApi.{PhoneConfirmationCodeRequestListener, PhoneNumberVerificationListener, RegistrationListener}
-import com.waz.client.RegistrationClient.ActivateResult
+import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.Uris
 import com.waz.model._
 import com.waz.service.AccountManager
@@ -116,49 +116,9 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getSelf: Self = ui.users.selfUser
 
-  override def login(credentials: com.waz.api.Credentials, listener: api.LoginListener): Unit = credentials match {
-    case credentials: Credentials =>
-      verbose(s"login $credentials")
-      (for {
-        account <- accounts.login(credentials)
-        _ <- zmessaging
-      } yield account) onComplete {
-        case Success(Left(err @ ErrorResponse(code, message, label))) =>
-          error(s"Login for credentials: $credentials failed: $err")
-          listener.onFailed(code, message, label)
-        case Success(Right(acc)) =>
-          listener.onSuccess(updateSelfUser(acc))
-        case Failure(ex) =>
-          error(s"Login for credentials: $credentials failed", ex)
-          listener.onFailed(499, ex.getMessage, "internal-error")
-      }
-    case _ => error("Use the Credentials factory to create credentials")
-  }
+  override def login(credentials: com.waz.api.Credentials, listener: api.LoginListener): Unit = {}
 
-  private def updateSelfUser(acc: AccountData) = {
-    // FIXME: this ensures that self is loaded, but it's pretty ugly
-    ui.users.selfUser.update(Some(acc))
-    ui.users.selfUser
-  }
-
-
-  override def register(credentials: com.waz.api.Credentials, name: String, accent: com.waz.api.AccentColor, listener: RegistrationListener): Unit = credentials match {
-    case credentials: Credentials =>
-      verbose(s"register($credentials, $name, $accent)")
-      require(accent.isInstanceOf[AccentColor])
-      accounts.register(credentials, name, accent.asInstanceOf[AccentColor]) onComplete {
-        case Success(Right(acc)) =>
-          verbose(s"registration complete: $acc")
-          listener.onRegistered(updateSelfUser(acc))
-        case Success(Left(ErrorResponse(code, msg, label))) =>
-          verbose(s"registration failed: $code, $msg, $label")
-          listener.onRegistrationFailed(code, msg, label)
-        case Failure(ex) =>
-          error(s"register($credentials, $name) failed", ex)
-          listener.onRegistrationFailed(499, ex.getMessage, "")
-      }
-    case _ => error("Use the Credentials factory to create credentials")
-  }
+  override def register(credentials: com.waz.api.Credentials, name: String, accent: com.waz.api.AccentColor, listener: RegistrationListener): Unit = {}
 
   private def activateResultHandler(kindOfAccess: api.KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Try[ActivateResult] => Unit = {
     case Success(ActivateResult.Success) => listener.onConfirmationCodeSent(kindOfAccess)

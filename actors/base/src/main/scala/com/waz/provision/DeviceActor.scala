@@ -24,7 +24,6 @@ import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import com.waz.api.MessageContent.{Image, Text}
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
@@ -72,7 +71,7 @@ class DeviceActor(val deviceName: String,
     }
   lazy val delayNextAssetPosting = new AtomicBoolean(false)
 
-  lazy val globalModule = new GlobalModule(application, backend) { global =>
+  lazy val globalModule = new GlobalModuleImpl(application, backend) { global =>
     ZMessaging.currentGlobal = this
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
     override lazy val clientWrapper: Future[ClientWrapper] = wrapper
@@ -242,14 +241,14 @@ class DeviceActor(val deviceName: String,
 
     case SendText(remoteId, msg) =>
       whenConversationExists(remoteId) { conv =>
-        conv.sendMessage(new Text(msg))
+        zmessaging.convsUi.sendMessage(conv.id, msg)
         Successful
       }
 
     case UpdateText(msgId, text) =>
       zmessaging.messagesStorage.getMessage(msgId) flatMap {
         case Some(msg) if msg.userId == zmessaging.selfUserId =>
-          zmessaging.convsUi.updateMessage(msg.convId, msgId, new MessageContent.Text(text)) map { _ => Successful }
+          zmessaging.convsUi.updateMessage(msg.convId, msgId, text) map { _ => Successful }
         case Some(_) =>
           Future successful Failed("Can not update messages from other user")
         case None =>
@@ -271,15 +270,15 @@ class DeviceActor(val deviceName: String,
         searchQuery match {
           case "" =>
             waitUntil(api.getGiphy.random())(_.isReady == true) map { results =>
-              conv.sendMessage(new Text("Via giphy.com"))
-              conv.sendMessage(new Image(results.head))
+              zmessaging.convsUi.sendMessage(conv.id, "Via giphy.com")
+              zmessaging.convsUi.sendMessage(conv.id, results.head)
               Successful
             }
 
           case _ =>
             waitUntil(api.getGiphy.search(searchQuery))(_.isReady == true) map { results =>
-              conv.sendMessage(new Text("%s · via giphy.com".format(searchQuery)))
-              conv.sendMessage(new Image(results.head))
+              zmessaging.convsUi.sendMessage(conv.id, "%s · via giphy.com".format(searchQuery))
+              zmessaging.convsUi.sendMessage(conv.id, results.head)
               Successful
             }
         }
@@ -316,13 +315,13 @@ class DeviceActor(val deviceName: String,
 
     case SendImage(remoteId, path) =>
       whenConversationExists(remoteId) { conv =>
-        conv.sendMessage(new Image(ui.images.createImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path)))))
+        zmessaging.convsUi.sendMessage(conv.id, ui.images.createImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path))))
         Successful
       }
 
     case SendImageData(remoteId, bytes) =>
       whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, new Image(ui.images.createImageAssetFrom(bytes))).map { _ =>
+        zmessaging.convsUi.sendMessage(conv.id, ui.images.createImageAssetFrom(bytes)).map { _ =>
           Successful
         }
       }
@@ -330,9 +329,11 @@ class DeviceActor(val deviceName: String,
     case SendAsset(remoteId, bytes, mime, name, delay) =>
       whenConversationExistsFuture(remoteId) { conv =>
         delayNextAssetPosting.set(delay)
-        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(impl.AssetForUpload(AssetId(), Some(name), Mime(mime), Some(bytes.length.toLong)) {
+        val asset = impl.AssetForUpload(AssetId(), Some(name), Mime(mime), Some(bytes.length.toLong)){
           _ => new ByteArrayInputStream(bytes)
-        }, DoNothingAndProceed)).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
+        }
+
+        zmessaging.convsUi.sendMessage(conv.id, asset, DoNothingAndProceed).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
       }
 
     case SendLocation(remoteId, lon, lat, name, zoom) =>
@@ -355,13 +356,13 @@ class DeviceActor(val deviceName: String,
         zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).map { cacheEntry =>
           Mime(mime) match {
             case Mime.Image() =>
-              zmessaging.convsUi.sendMessage(conv.id, new Image(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream))))
+              zmessaging.convsUi.sendMessage(conv.id, api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
               Successful
             case _ =>
               val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
                 _ => new FileInputStream(file)
               }
-              zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Asset(asset, DoNothingAndProceed))
+              zmessaging.convsUi.sendMessage(conv.id, asset, DoNothingAndProceed)
               Successful
           }
         }

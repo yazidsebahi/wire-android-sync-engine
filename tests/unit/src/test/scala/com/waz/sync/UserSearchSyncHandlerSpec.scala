@@ -150,7 +150,7 @@ import scala.util.{Success, Try}
     response = Success(Right(entries))
 
     Given("local db with some users")
-    zms.usersStorage.insert(entries.map(UserData(_).copy(name = "test")))
+    zms.usersStorage.insertAll(entries.map(UserData(_).copy(name = "test")))
 
     When("executing sync returning these users")
     val cache = zms.searchQueryCache.insert(SearchQueryCache(query, now, None)).await()

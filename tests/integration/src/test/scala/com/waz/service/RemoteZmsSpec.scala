@@ -75,13 +75,11 @@ class RemoteZms(ui: UiModule) extends ZMessagingApi()(ui) {
     case None => Future.successful(Vector.empty[MessageData])
   }, 5.seconds)
 
-
-  def postMessage(conv: RConvId, msg: MessageContent) = findConv(conv).map { _.sendMessage(msg) }
 }
 
 trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Suite with ApiSpec =>
 
-  def globalModule(dataTag: String = Random.nextInt().toHexString): GlobalModule =  new GlobalModule(context, testBackend) { global =>
+  def globalModule(dataTag: String = Random.nextInt().toHexString): GlobalModuleImpl =  new GlobalModuleImpl(context, testBackend) { global =>
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
     override lazy val client: AsyncClientImpl = testClient
     override lazy val timeouts: Timeouts = suite.timeouts

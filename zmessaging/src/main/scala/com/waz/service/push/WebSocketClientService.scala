@@ -19,30 +19,33 @@ package com.waz.service.push
 
 import android.content.Context
 import android.net.Uri
-import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
+import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
-import com.waz.service.LifecycleState._
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.znet.WebSocketClient.Disconnect
-import com.waz.znet.{WebSocketClient, ZNetClient}
+import com.waz.znet.{AuthenticationManager, WebSocketClient, ZNetClient}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class WebSocketClientService(context:     Context,
-                             lifecycle:   ZmsLifecycle,
+                             accountId:   AccountId,
+                             lifecycle:   ZmsLifeCycle,
                              netClient:   ZNetClient,
+                             auth:        AuthenticationManager,
                              val network: DefaultNetworkModeService,
                              backend:     BackendConfig,
                              clientId:    ClientId,
                              timeouts:    Timeouts,
                              pushToken:   PushTokenService) {
   import WebSocketClientService._
+  implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
+
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
@@ -54,8 +57,8 @@ class WebSocketClientService(context:     Context,
   // true if web socket should be active,
   val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
-    case _ => lifecycle.lifecycleState.flatMap {
-      case Stopped => Signal const false
+    case _ => lifecycle.loggedIn.flatMap {
+      case false => Signal const false
       case _ => useWebSocketFallback
     }.flatMap {
       case true => Signal.const(true)
@@ -66,14 +69,14 @@ class WebSocketClientService(context:     Context,
     }
   }
 
-  val client = wsActive.zip(lifecycle.lifecycleState) map {
-    case (true, state) =>
+  val client = wsActive.zip(lifecycle.idle) map {
+    case (true, idle) =>
       debug(s"Active, client: $clientId")
 
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
 
-      if (state == Idle) {
+      if (idle) {
         // start android service to keep the app running while we need to be connected.
         com.waz.zms.WebSocketService(context)
       }
@@ -135,7 +138,7 @@ class WebSocketClientService(context:     Context,
   private def webSocketUri(clientId: ClientId) =
     Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
-  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, netClient, webSocketUri(clientId))
+  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, accountId, netClient, auth, webSocketUri(clientId))
 }
 
 object WebSocketClientService {
@@ -143,7 +146,7 @@ object WebSocketClientService {
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
   class ConnectionStats(network: DefaultNetworkModeService,
                         client: WebSocketClient) {
-
+    import com.waz.ZLog.ImplicitTag._
     import com.waz.utils._
 
     def lastReceiveTime = client.lastReceiveTime.currentValue

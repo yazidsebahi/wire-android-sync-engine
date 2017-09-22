@@ -31,7 +31,7 @@ import com.waz.znet.ZNetClient
 import scala.concurrent.Future
 
 class MockedFlowManagerService(context: Context, netClient: ZNetClient, websocket: WebSocketClientService, prefs: UserPreferences, globalPreferences: GlobalPreferences, network: DefaultNetworkModeService)
-  extends DefaultFlowManagerService(context, netClient, websocket, prefs, globalPreferences, network) { self =>
+  extends DefaultFlowManagerService(context, globalPreferences, network) { self =>
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "MockedFlowManagerService")
 
@@ -42,15 +42,6 @@ class MockedFlowManagerService(context: Context, netClient: ZNetClient, websocke
   var convsThatSendVideo: Map[RConvId, VideoSendState] = Map.empty
   var videoCaptureDeviceId = Map.empty[RConvId, String]
 
-  override def acquireFlows(convId: RConvId, selfId: UserId, participantIds: Set[UserId], sessionId: Option[CallSessionId]): Future[Unit] = Future {
-    sessionIdUsedToAcquireFlows = sessionId
-    currentFlows += convId
-  }
-
-  override def setFlowManagerMuted(muted: Boolean): Future[Unit] = Future { flowsMuted = muted }
-  override def releaseFlows(convId: RConvId): Future[Unit] = Future { currentFlows -= convId }
-  override def canSendVideo(convId: RConvId): Boolean = convsThatCanSendVideo contains convId
-  override def setVideoSendState(id: RConvId, state: VideoSendState): Future[Unit] = Future { convsThatSendVideo += id -> state }
   override def getVideoCaptureDevices = Future.successful(Vector(VideoCaptureDevice("front", "front-facing cam"), VideoCaptureDevice("back", "back-facing cam")))
   override def setVideoCaptureDevice(id: RConvId, deviceId: String): Future[Unit] = Future.successful { videoCaptureDeviceId += id -> deviceId }
 

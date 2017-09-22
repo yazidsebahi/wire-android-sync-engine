@@ -18,7 +18,6 @@
 package com.waz.service.otr
 
 import akka.pattern._
-import com.waz.api.MessageContent.Text
 import com.waz.api._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.provision.ActorMessage.{Login, SendText, Successful}
@@ -90,7 +89,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
     scenario("Send message in unverified conv") {
       conv.getVerified shouldEqual Verification.UNKNOWN
-      conv.sendMessage(new Text("test msg"))
+      zmessaging.convsUi.sendMessage(conv.id, "test msg")
       withDelay {
         msgs.last.contentString shouldEqual "test msg"
         msgs.last.state shouldEqual Message.Status.SENT
@@ -109,7 +108,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     }
 
     scenario("Send message in verified conv") {
-      conv.sendMessage(new Text("test msg 1"))
+      zmessaging.convsUi.sendMessage(conv.id, "test msg 1")
       withDelay {
         msgs.last.contentString shouldEqual "test msg 1"
         msgs.last.state shouldEqual Message.Status.SENT
@@ -142,7 +141,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
 
     scenario("Sending a message in unverified conv fails") {
       conv.getVerified shouldEqual Verification.UNVERIFIED
-      conv.sendMessage(new Text("failing msg 1"))
+      zmessaging.convsUi.sendMessage(conv.id, "failing msg 1")
       withDelay {
         msgs.last.contentString shouldEqual "failing msg 1"
         msgs.last.state shouldEqual Message.Status.FAILED
@@ -178,7 +177,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     }
 
     scenario("Send message in verified conv") {
-      conv.sendMessage(new Text("test msg 1"))
+      zmessaging.convsUi.sendMessage(conv.id, "test msg 1")
       withDelay {
         msgs.last.contentString shouldEqual "test msg 1"
         msgs.last.state shouldEqual Message.Status.SENT
@@ -193,7 +192,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     scenario("Sending to conv with new client fails and conv gets unverified") {
       val count = msgs.size
       conv.getVerified shouldEqual Verification.VERIFIED
-      conv.sendMessage(new Text("failing msg 2"))
+      zmessaging.convsUi.sendMessage(conv.id, "failing msg 2")
       withDelay {
         conv.getVerified shouldEqual Verification.UNVERIFIED
         withClue(msgs.map(_.msgType).mkString(", ")) {
@@ -205,7 +204,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
     }
 
     scenario("Trying to send another message also fails") {
-      conv.sendMessage(new Text("failing msg 3"))
+      zmessaging.convsUi.sendMessage(conv.id, "failing msg 3")
       withDelay {
         msgs.last.contentString shouldEqual "failing msg 3"
         msgs.last.state shouldEqual Message.Status.FAILED
@@ -262,7 +261,7 @@ class OtrVerificationSpec extends FeatureSpec with Matchers with BeforeAndAfterA
       val count = msgs.size
       val errors = api.getErrors
       conv.getVerified shouldEqual Verification.VERIFIED
-      conv.sendMessage(new Text("failing msg 4"))
+      zmessaging.convsUi.sendMessage(conv.id, "failing msg 4")
       withDelay {
         conv.getVerified shouldEqual Verification.UNVERIFIED
         withClue(msgs.map(_.msgType).mkString(", ")) {

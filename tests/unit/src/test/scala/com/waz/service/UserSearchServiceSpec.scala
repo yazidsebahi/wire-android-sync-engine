@@ -86,20 +86,24 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
       Future.successful {
         querySignal ! Some(secondQueryCache)
+        result(querySignal.filter(_.contains(secondQueryCache)).head)
         SyncId()
       }
     }
 
-    (usersStorage.listSignal _).expects(*).once().returning(Signal.const(expected))
+    if (matches.nonEmpty)
+      (usersStorage.listSignal _).expects(*).once().returning(Signal.const(expected))
+    else
+      (usersStorage.listSignal _).expects(*).never()
 
     querySignal ! Some(firstQueryCache)
     result(querySignal.filter(_.contains(firstQueryCache)).head)
-
-    val resSignal = getService.searchUserData(Recommended(prefix)).disableAutowiring()
+    
+    val resSignal = getService.searchUserData(Recommended(prefix)).map(_.map(_.id)).disableAutowiring()
 
     result(querySignal.filter(_.contains(secondQueryCache)).head)
 
-    result(resSignal.map(_.keys.toSet).filter(_ == matches).head)
+    result(resSignal.map(_.toSet).filter(_ == matches).head)
   }
 
   feature("Recommended people search") {
@@ -157,14 +161,14 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
       (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
         Future.successful[SyncId] {
           querySignal ! Some(queryCache)
+          result(querySignal.filter(_.contains(queryCache)).head)
           SyncId()
         }
       }
 
-      (usersStorage.listSignal _).expects(*).once().returning(Signal.const(Vector.empty[UserData]))
+      (usersStorage.listSignal _).expects(*).never()
 
       val res = getService.search(SearchState("fr", hasSelectedUsers = false, None), Set.empty[UserId]).map(_.localResults.map(_.map(_.id).toSet))
-      querySignal ! None
 
       result(res.filter(_.exists(_ == expected)).head)
     }
@@ -189,17 +193,16 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
       (sync.syncSearchQuery _).expects(query).once().onCall { _: SearchQuery =>
         Future.successful[SyncId] {
           querySignal ! Some(queryCache)
+          result(querySignal.filter(_.contains(queryCache)).head)
           SyncId()
         }
       }
 
-      (usersStorage.listSignal _).expects(expected.toVector).once().returning(Signal.const(expected.map(users).toVector))
+     (usersStorage.listSignal _).expects(expected.toVector).once().returning(Signal.const(expected.map(users).toVector))
 
       val res = getService.search(SearchState("ot", hasSelectedUsers = false, None), Set.empty[UserId]).map(_.directoryResults.map(_.map(_.id).toSet))
 
-      querySignal ! None
-
-      result(res.filter(_.exists(_ == expected)).head)
+      result(res.filter(_.exists(_.nonEmpty)).head)
     }
   }
 

@@ -17,8 +17,6 @@
  */
 package com.waz.api.impl
 
-import java.lang.Iterable
-
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
@@ -26,7 +24,7 @@ import com.waz.api
 import com.waz.api.ConversationsList.{ConversationCallback, VerificationStateCallback}
 import com.waz.api.impl.ConversationsListState.Data
 import com.waz.api.impl.conversation.{BaseConversationsList, SelfConversation}
-import com.waz.api.{IConversation, LoadHandle, User}
+import com.waz.api.{IConversation, LoadHandle}
 import com.waz.content.Uris
 import com.waz.content.Uris.{SelfConversationUri, SyncIndicatorUri}
 import com.waz.model.ConversationData.ConversationType
