@@ -20,25 +20,20 @@ package com.waz.znet
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import android.annotation.TargetApi
-import android.os.Build
-import android.os.Build.VERSION.SDK_INT
 import com.google.android.gms.security.ProviderInstaller
 import com.koushikdutta.async._
 import com.koushikdutta.async.future.{FutureCallback, Future => AFuture}
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback._
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.service.ZMessaging
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.Context
 import org.apache.http.conn.ssl.{AbstractVerifier, StrictHostnameVerifier}
 
-import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
-import scala.util.Try
 
 trait ClientWrapper {
   def execute(request: HttpRequest, callback: HttpConnectCallback): CancellableFuture[HttpResponse]
@@ -147,6 +142,9 @@ object ClientWrapper {
       client.getSSLSocketMiddleware.setSSLContext(returning(SSLContext.getInstance("TLSv1.2")) { _.init(null, null, null) })
 
       client.getSSLSocketMiddleware.addEngineConfigurator(new AsyncSSLEngineConfigurator {
+
+        override def createEngine(sslContext: SSLContext, peerHost: String, peerPort: Int) = null
+
         override def configureEngine(engine: SSLEngine, data: AsyncHttpClientMiddleware.GetSocketData, host: String, port: Int): Unit = {
           debug(s"configureEngine($host, $port)")
 
@@ -159,67 +157,10 @@ object ClientWrapper {
               if (engine.getSupportedCipherSuites.contains(cipherSuite)) params.setCipherSuites(Array(cipherSuite))
               else warn(s"cipher suite $cipherSuite not supported by this device, falling back to defaults.")
             })
-
-            verbose("enabling SNI")
-            SNIConfigurator(engine, host, port)
           }
         }
       })
 
-    }
-  }
-}
-
-
-object SNIConfigurator {
-
-  lazy val instance =
-    if (SDK_INT >= Build.VERSION_CODES.N) new NougatConfigurator
-    else new ReflectionConfigurator
-
-  def apply(engine: SSLEngine, host: String, port: Int) =
-    instance.configureEngine(engine, null, host, port)
-
-
-  @TargetApi(24)
-  class NougatConfigurator extends AsyncSSLEngineConfigurator {
-    override def configureEngine(engine: SSLEngine, data: AsyncHttpClientMiddleware.GetSocketData, host: String, port: Int): Unit = {
-      import javax.net.ssl._
-      import scala.collection.JavaConverters._
-
-      engine.setSSLParameters(returning(engine.getSSLParameters) { params =>
-        params.setServerNames(Seq[SNIServerName](new SNIHostName(host)).asJava)
-      })
-    }
-  }
-
-  /**
-    * Enables SNI extension using reflection.
-    * This extension was supported in SSLEngine since android 2.3 but was not exposed in public api,
-    * it was only accessible from HTTPUrlConnection (which we don't use).
-    * AndroidAsync used reflection for that in SSLEngineSNIConfigurator, but latest versions started using
-    * obfuscation and that solution no longer works.
-    * This class finds obfuscated `sslParameters` by iterating through all fields.
-    */
-  class ReflectionConfigurator extends AsyncSSLEngineConfigurator {
-
-    class EngineHolder(engineClass: Class[_]) {
-      val peerHost = returning(engineClass.getSuperclass.getDeclaredField("peerHost")) { _.setAccessible(true) }
-      val peerPort = returning(engineClass.getSuperclass.getDeclaredField("peerPort")) { _.setAccessible(true) }
-      val sslParameters = engineClass.getDeclaredFields.find { field => Try(field.getType.getDeclaredField("useSni")).isSuccess }.get
-      val useSni = returning(sslParameters.getType.getDeclaredField("useSni")) { _.setAccessible(true) }
-
-      def apply(engine: SSLEngine, host: String, port: Int) = {
-        peerHost.set(engine, host)
-        peerPort.set(engine, port)
-        useSni.set(sslParameters.get(engine), true)
-      }
-    }
-
-    val holders = new mutable.HashMap[Class[_], EngineHolder]
-
-    override def configureEngine(engine: SSLEngine, data: AsyncHttpClientMiddleware.GetSocketData, host: String, port: Int): Unit = LoggedTry {
-      holders.getOrElseUpdate(engine.getClass, new EngineHolder(engine.getClass)).apply(engine, host, port)
     }
   }
 }
