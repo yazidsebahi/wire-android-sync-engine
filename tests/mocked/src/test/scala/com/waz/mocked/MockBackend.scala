@@ -33,7 +33,6 @@ import com.waz.sync.client.ConversationsClient.ConversationResponse.Conversation
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, MessageResponse}
 import com.waz.sync.client.PushNotification
-import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
@@ -378,18 +377,6 @@ trait MockOrlop { self: ApiSpec with MockedClient with MockedWebSocket with Mock
   def selfUserId: UserId
 
   @volatile var notifications = Vector.empty[PushNotification]
-
-  override def loadNotifications(lastId: Option[Uid], clientId: ClientId): ErrorOrResponse[LoadNotificationsResponse] = {
-    val tail = notifications.dropWhile(n => lastId.exists(_ != n.id))
-    if (tail.isEmpty) {
-      self.zmessaging.push.onPushNotifications(notifications)
-      success(LoadNotificationsResponse(notifications, false, None))
-    } else {
-      assert(lastId forall (_ == tail.head.id))
-      self.zmessaging.push.onPushNotifications(tail.tail)
-      success(LoadNotificationsResponse(tail.tail, false, None))
-    }
-  }
 
   override def loadLastNotification(): ErrorOrResponse[Option[PushNotification]] = CancellableFuture.successful(Right(notifications.lastOption))
 

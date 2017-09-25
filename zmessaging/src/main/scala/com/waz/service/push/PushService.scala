@@ -49,7 +49,7 @@ import com.waz.znet.Response.Status.NotFound
   * which are put at the end of the queue, essentially making PushService synchronous.
   * Also, we need to handle fetch failures. If a fetch fails, we want to repeat it - after some time, or on network change.
   * In such case, new web socket notifications waiting to be processed should be dismissed. The new fetch will (if successful)
-  * will receive them in the right order.
+  * receive them in the right order.
   */
 
 trait PushService {
@@ -69,9 +69,6 @@ trait PushService {
     * greater than the window in which we need to respond to messages
     */
   def beDrift: Signal[Duration]
-
-  def onPushNotification(n: PushNotification): Unit // used in tests
-  def onPushNotifications(allNs: Seq[PushNotification]): Unit // used in tests
 }
 
 class PushServiceImpl(context: Context,
@@ -93,11 +90,13 @@ class PushServiceImpl(context: Context,
   override val pushConnected = Signal[Boolean]()
   override val processing = Signal(false)
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
-  override val cloudPushNotificationsToProcess = Signal(Set[Uid]())
+  override lazy val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
   override val beDrift = Signal(Duration.ZERO).disableAutowiring()
 
   private var fetchInProgress = CancellableFuture.successful({})
+
+  private lazy val idPref = userPrefs.preference(LastStableNotification)
 
   webSocket.connected { pushConnected ! _ }
 
@@ -155,34 +154,26 @@ class PushServiceImpl(context: Context,
       }
   }
 
-  override def onPushNotification(n: PushNotification) = onPushNotifications(Seq(n)) //used in tests
-
-  override def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
+  private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
     verbose(s"onPushNotifications: ${allNs.size}")
 
     val ns = allNs.filter(_.hasEventForClient(clientId))
 
-    val processing = processNotifications(ns) //careful not to inline this - needs to start executing whether transient or not!
-    ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n => processing.onSuccess { case _ => updateLastNotificationId(n.id) } }
+    val p = wakeLock.async {
+      processing ! true
+      pipeline {
+        returning(ns.flatMap(_.eventsForClient(clientId))) {
+          _.foreach { ev => ev.withCurrentLocalTime(); verbose(s"event: $ev") }
+        }
+      }
+      .map { _ => cloudPushNotificationsToProcess mutate (_ -- ns.map(_.id).toSet) }
+      .andThen { case _ => processing ! false }
+    }
+
+    ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n => p.onSuccess { case _ => idPref := Some(n.id) } }
   }
 
   protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
-
-  private def processNotifications(notifications: Seq[PushNotification]) = wakeLock.async {
-    processing ! true
-    pipeline {
-      returning(notifications.flatMap(_.eventsForClient(clientId))) {
-        _.foreach { ev =>
-          ev.withCurrentLocalTime()
-          verbose(s"event: $ev")
-        }
-      }
-    }.map {
-      _ => cloudPushNotificationsToProcess mutate (_ -- notifications.map(_.id).toSet)
-    }.andThen {
-      case _ => processing ! false
-    }
-  }
 
   case class Results(notifications: Vector[PushNotification], time: Option[Instant], historyLost: Boolean)
 
@@ -197,15 +188,24 @@ class PushServiceImpl(context: Context,
     case _ =>
   }
 
-  override def syncHistory(): Future[Unit] = returning( lastNotificationId flatMap { syncHistory } ) { f =>
-    if (!fetchInProgress.isCompleted) fetchInProgress.cancel()
-      // a new fetch was ordered so we cancel the old one if it's still in progress, together with any ws notifications processing attached to it
-    fetchInProgress = CancellableFuture.lift(f)
-  }
+  override def syncHistory(): Future[Unit] = {
+    def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
+      case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
+      case Right(LoadNotificationsResponse(nots, true, time)) =>
+        load(nots.lastOption.map(_.id)).flatMap { results =>
+          futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, results.historyLost)
+        }
+      case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
+        warn(s"/notifications failed with 404, history lost")
+        load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
+      case Left(err) =>
+        warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
+        CancellableFuture.delay(backoff.delay(attempts)).flatMap { _ => load(lastId, attempts + 1) }
+      // fetch failed, schedule retry and turn on retry on network change
+    }
 
-  private def syncHistory(lastId: Option[Uid]): Future[Unit] =
-    for {
-      Results(nots, time, historyLost) <- loadNotifications(lastId)
+    def syncHistory(lastId: Option[Uid]): Future[Unit] = for {
+      Results(nots, time, historyLost) <- load(lastId)
       _ <- if (historyLost) {
         val time = clock.instant()
         CancellableFuture.lift(sync.performFullSync().map(_ => onHistoryLost ! time))
@@ -215,25 +215,12 @@ class PushServiceImpl(context: Context,
       time.foreach { time => beDrift ! Instant.now.until(time) }
     }
 
-  private def loadNotifications(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
-    case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
-    case Right(LoadNotificationsResponse(nots, true, time)) =>
-      loadNotifications(nots.lastOption.map(_.id)).flatMap { results =>
-        futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, results.historyLost)
-      }
-    case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
-      warn(s"/notifications failed with 404, history lost")
-      loadNotifications(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
-    case Left(err) =>
-      warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
-      CancellableFuture.delay(backoff.delay(attempts)).flatMap { _ => loadNotifications(lastId, attempts + 1) }
-      // fetch failed, schedule retry and turn on retry on network change
+    returning( Future(idPref()).flatten flatMap { syncHistory } ) { f => // future and flatten ensure that there is no race with onPushNotifications
+      if (!fetchInProgress.isCompleted) fetchInProgress.cancel()
+      // a new fetch was ordered so we cancel the old one if it's still in progress, together with any ws notifications processing attached to it
+      fetchInProgress = CancellableFuture.lift(f)
+    }
   }
-
-  private lazy val idPref = userPrefs.preference(LastStableNotification)
-  def lastNotificationId: Future[Option[Uid]] = { Future(idPref()).flatten } // future and flatten ensure that there is no race with onNotification
-  def updateLastNotificationId(id: Uid): Future[Unit] = { idPref := Some(id) }
-  def resetLastNotificationId(): Future[Unit] = { idPref := None }
 }
 
 object PushService {

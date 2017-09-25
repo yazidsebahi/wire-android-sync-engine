@@ -27,7 +27,6 @@ import com.waz.testutils.Implicits._
 import com.waz.threading.DispatchQueueStats
 import org.scalatest.{BeforeAndAfterAll, FeatureSpec, Matchers}
 import com.waz.ZLog.ImplicitTag._
-import com.waz.service.push.PushServiceImpl
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -87,51 +86,6 @@ class NotificationsSyncSpec extends FeatureSpec with Matchers with BeforeAndAfte
       DispatchQueueStats.reset()
     }
 
-    scenario("resume and wait for sync") {
-      withDelay {
-        val lastNotificationId = Await.result(zmessaging.push.asInstanceOf[PushServiceImpl].lastNotificationId, 1.second)
-        lastNotificationId shouldBe 'defined
-        lastNotificationId should not be notifications.lastOption.map(_.id)
-      }
-      val time = System.currentTimeMillis()
-      api.onResume()
-
-      withDelay {
-        Await.result(zmessaging.push.asInstanceOf[PushServiceImpl].lastNotificationId, 1.second) shouldBe notifications.lastOption.map(_.id)
-      }(10.seconds)
-
-      info(f"Notifications processed in: ${(System.currentTimeMillis() - time) / 1000d} s")
-
-      withDelay { convs should have size convsCount }
-
-      val addedConvs = convs.filter(c => !prevConvs(c.getId))
-
-      // check messages count in storage
-      addedConvs foreach { c =>
-        val msgs = zmessaging.messagesStorage.getEntries(c.id)
-        msgs.disableAutowiring()
-        try withDelay {
-          withClue(s"${c.getType}, msgs: ${msgs.currentValue.get.map(m => (m.message.msgType, m.message.contentString))}") {
-            msgs.currentValue.map(_.size) shouldEqual Some(msgCount(c.getType)) // FIXME: STARTED_USING_DEVICE and CONNECT_REQUEST should never be shown together in 1-1
-          }
-        } finally {
-          println(s"conv: [${c.getType}] ${c.getId}")
-          msgs.currentValue.get.zipWithIndex.foreach { case (m, i) => println(s"  $i: [${m.message.msgType}] ${m.message.contentString} at ${m.message.time}")}
-        }
-      }
-
-      withDelay {
-        // check messages count in UI list
-        addedConvs foreach { c =>
-          listMessages(c.id) should have size msgCount(c.getType)
-        }
-        Await.result(zmessaging.syncContent.syncStorage(_.getJobs), 1.second) shouldBe empty
-      } (10.seconds)
-
-      info(s"Sync requests processed in: ${(System.currentTimeMillis() - time) / 1000} s")
-
-      DispatchQueueStats.printStats()
-    }
   }
 
   feature("Ignore failures during processing") {

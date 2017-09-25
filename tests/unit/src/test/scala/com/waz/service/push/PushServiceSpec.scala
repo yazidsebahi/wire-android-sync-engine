@@ -33,10 +33,10 @@ import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.testutils.TestUserPreferences
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.{Backoff, FakeWakeLock, WakeLock}
-import com.waz.utils.events.Signal
+import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
+import com.waz.utils._
 import org.json.JSONObject
 
 import scala.concurrent.{Future, Promise}
@@ -56,8 +56,6 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val userPrefs = new TestUserPreferences
   val network = mock[NetworkModeService]
 
-  val lastId = Uid()
-
   implicit val ctx = Threading.Background
   val client = mock[PushNotificationsClient]
 
@@ -76,120 +74,101 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val networkMode = Signal(NetworkMode._4G)
   (network.networkMode _).expects().anyNumberOfTimes.returning(networkMode)
 
-  val notificationsLog = mutable.ListBuffer[Uid]()
+  val cloudPush = Signal(Set.empty[Uid]).disableAutowiring()
 
   val service = new PushServiceImpl(context, userPrefs, client, ClientId(), pipeline, wscService, sync) {
     override lazy val wakeLock: WakeLock = new FakeWakeLock
-
-    override def onPushNotifications(allNs: Seq[PushNotification]): Unit = {
-      super.onPushNotifications(allNs)
-      notificationsLog ++= allNs.map(_.id)
-    }
+    override lazy val cloudPushNotificationsToProcess = cloudPush
   }
 
-  private def waitForLastNotIdChangeTo(id: Option[Uid]) = {
-    val idSig = userPrefs.preference(LastStableNotification).signal
-    result(idSig.filter(_ == id).head)
+  val notJson =
+    """
+      | {
+      |         "id":"fbe54fb4-463e-4746-9861-c28c2961bdd0",
+      |         "payload":[
+      |            {
+      |               "conversation":"3b45e65a-8bf2-447b-bd8a-03c207deae3f",
+      |               "data":{
+      |                  "content":"Test message 2",
+      |                  "nonce":"47745f9f0-0dab-113c-43ad7ee9-394c562"
+      |               },
+      |               "from":"13962457-c316-4de1-9962-929c40f8cff4",
+      |               "id":"f.80011231430865a7",
+      |               "time":"2014-04-14T09:56:00.185Z",
+      |               "type":"conversation.message-add"
+      |            }
+      |         ]
+      |      }
+    """.stripMargin
+
+  val notObject = new JSONObject(notJson)
+  val pushNotification = PushNotification.NotificationDecoder(notObject)
+
+  val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
+    override lazy val wakeLock: WakeLock = new FakeWakeLock
+
+    override def connect(): CancellableFuture[WebSocket] = CancellableFuture.successful(mock[WebSocket])
   }
 
-  feature("Updating lastNotificationId pref") {
+  val lastId = Uid()
 
-    scenario("Update pref on fresh notification") {
-      waitForLastNotIdChangeTo(None)
-
-      service.updateLastNotificationId(Uid(3, 3))
-      service.updateLastNotificationId(Uid(4, 4))
-      service.updateLastNotificationId(Uid(5, 5))
-      waitForLastNotIdChangeTo(Some(Uid(5, 5)))
-    }
-
-    scenario("Update pref only when notification processing is completed") {
-      val p = Promise[Unit]()
-      p.future.onSuccess { case _ => service.updateLastNotificationId(Uid(2, 2)) }(ctx)
-      service.updateLastNotificationId(Uid(5, 5))
-      waitForLastNotIdChangeTo(Some(Uid(5, 5)))
-      p.trySuccess(())
-      waitForLastNotIdChangeTo(Some(Uid(2, 2)))
-    }
-
-    scenario("Update pref to last received notification when it's completed") {
-      val p1 = Promise[Unit]()
-      val p2 = Promise[Unit]()
-      p1.future.onSuccess { case _ => service.updateLastNotificationId(Uid(3, 3)) }(ctx)
-      p2.future.onSuccess { case _ => service.updateLastNotificationId(Uid(4, 4)) }(ctx)
-      p1.trySuccess(())
-      p2.trySuccess(())
-      waitForLastNotIdChangeTo(Some(Uid(4, 4)))
-    }
-
-    scenario("store last notification Id on new event") {
-      (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(PushNotification(lastId, Vector.empty)), hasMore = false, None)))
-      )
-
-      wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
-
-      result(userPrefs.preference(LastStableNotification).signal.filter(_.isDefined).head)
-
-      val id = Uid()
-      service.onPushNotification(PushNotification(id, Seq(MemberJoinEvent(RConvId(), new Date, UserId(), Nil))))
-      waitForLastNotIdChangeTo(Some(id))
-    }
-
-    scenario("don't store id on transient notification") {
-      (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(PushNotification(lastId, Vector.empty)), hasMore = false, None)))
-      )
-
-      wsConnected ! true
-      result(userPrefs.preference(LastStableNotification).signal.filter(_.isDefined).head)
-
-      val newId = Uid()
-      service.onPushNotification(PushNotification(newId, Nil, transient = true))
-      waitForLastNotIdChangeTo(Some(lastId))
-    }
-
-    scenario("don't update id on otr notification not intended for us") {
-      (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(PushNotification(lastId, Vector.empty)), hasMore = false, None) ))
-      )
-
-      wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
-
-      waitForLastNotIdChangeTo(Some(lastId))
-
-      service.onPushNotification(PushNotification(Uid(), Seq(OtrMessageEvent(RConvId(), new Date, UserId(), ClientId(), ClientId(), Array.empty))))
-
-      awaitAllTasks
-      result(service.lastNotificationId) shouldEqual Some(lastId)
-    }
-  }
+  private lazy val idPref = userPrefs.preference(LastStableNotification)
+  def updateLastNotificationId(id: Uid): Future[Unit] = { idPref := Some(id) }
+  private def waitForLastNotIdChangeTo(id: Option[Uid]) = result(idPref.signal.filter(_ == id).head)
 
   feature("/notifications") {
+    scenario("get a notification from cloud") {
+      updateLastNotificationId(lastId)
+      waitForLastNotIdChangeTo(Some(lastId))
+
+      (client.loadNotifications _).expects(*, *).once().returning(
+        CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
+      )
+
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
+      result(wsConnected.filter(_ == false).head)
+
+      cloudPush ! Set(pushNotification.id)
+
+      waitForLastNotIdChangeTo(Some(pushNotification.id))
+    }
 
     scenario("fetch last notification when there is no local last notification id") {
+      updateLastNotificationId(lastId)
+      waitForLastNotIdChangeTo(Some(lastId))
+
       (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(PushNotification(lastId, Vector.empty)), hasMore = false, None) ))
+        CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
       )
+
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
 
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
 
-      waitForLastNotIdChangeTo(Some(lastId))
+      waitForLastNotIdChangeTo(Some(pushNotification.id))
       syncPerformed shouldEqual 0
     }
 
     scenario("fetch notifications and update last id") {
+      updateLastNotificationId(lastId)
+      waitForLastNotIdChangeTo(Some(lastId))
+
       val notification1 = PushNotification(Uid(), Nil)
       val notification2 = PushNotification(Uid(), Nil)
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1, notification2), hasMore = false, None) ))
       )
-      service.updateLastNotificationId(lastId)
+
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
+
       waitForLastNotIdChangeTo(Some(notification2.id))
       syncPerformed shouldEqual 0
     }
@@ -206,10 +185,15 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(PushNotification(Uid(), Nil), PushNotification(Uid(), Nil)), hasMore = false, None) ))
       )
 
-      service.updateLastNotificationId(lastId)
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
+      updateLastNotificationId(lastId)
+      waitForLastNotIdChangeTo(Some(lastId))
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
-      waitForLastNotIdChangeTo(Some(lastId))
+
       result(service.onHistoryLost.filter(_ == time).head)
       syncPerformed shouldEqual 1
       // TODO: this test reports an NPE to Hockey; probably one of the futures finishes after the test has finished
@@ -237,7 +221,12 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       }
 
       PushService.setBackoff(backoff)
-      service.updateLastNotificationId(lastId)
+      updateLastNotificationId(lastId)
+      waitForLastNotIdChangeTo(Some(lastId))
+
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
 
@@ -261,11 +250,14 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       (backoff.delay _).expects(*, *).anyNumberOfTimes().returning(1.days) // long enough so we don't have to worry about it
       PushService.setBackoff(backoff)
 
-      service.updateLastNotificationId(lastId)
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
 
-      result(service.lastNotificationId) should equal(Some(lastId))
+      updateLastNotificationId(lastId)
+      waitForLastNotIdChangeTo(Some(lastId))
 
       networkMode ! NetworkMode.WIFI // switching to wifi should trigger reloading
       result(networkMode.filter(_ == NetworkMode.WIFI).head)
@@ -284,6 +276,9 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       (backoff.delay _).expects(*, *).anyNumberOfTimes().returning(1.days) // long enough so we don't have to worry about it
       PushService.setBackoff(backoff)
 
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
 
@@ -292,48 +287,24 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       networkMode ! NetworkMode.WIFI // switching to wifi should NOT trigger reloading
       result(networkMode.filter(_ == NetworkMode.WIFI).head)
 
-      result(service.lastNotificationId) shouldEqual Some(notification1.id)
+      waitForLastNotIdChangeTo(Some(notification1.id))
     }
   }
 
   feature("web socket notifications") {
-    val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
-      override lazy val wakeLock: WakeLock = new FakeWakeLock
-
-      override def connect(): CancellableFuture[WebSocket] = CancellableFuture.successful(mock[WebSocket])
-    }
-
-    wsClient ! Some(ws)
-
-    val wsNotification1 =
-      """
-        | {
-        |         "id":"fbe54fb4-463e-4746-9861-c28c2961bdd0",
-        |         "payload":[
-        |            {
-        |               "conversation":"3b45e65a-8bf2-447b-bd8a-03c207deae3f",
-        |               "data":{
-        |                  "content":"Test message 2",
-        |                  "nonce":"47745f9f0-0dab-113c-43ad7ee9-394c562"
-        |               },
-        |               "from":"13962457-c316-4de1-9962-929c40f8cff4",
-        |               "id":"f.80011231430865a7",
-        |               "time":"2014-04-14T09:56:00.185Z",
-        |               "type":"conversation.message-add"
-        |            }
-        |         ]
-        |      }
-      """.stripMargin
 
     scenario("receive notifications first with a fetch, then with a push") {
 
       val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(wsNotification1)
+      val wsJson1 = new JSONObject(notJson)
       val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
 
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1), hasMore = false, None)))
       )
+
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
 
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
@@ -343,15 +314,11 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       ws.onMessage ! JsonObjectResponse(wsJson1)
 
       waitForLastNotIdChangeTo(Some(wsNot1.id))
-
-      notificationsLog.size shouldEqual 2
-      notificationsLog(0) shouldEqual notification1.id
-      notificationsLog(1) shouldEqual wsNot1.id
     }
 
     scenario("receive a push notification during a fetch") {
       val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(wsNotification1)
+      val wsJson1 = new JSONObject(notJson)
       val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
 
       (client.loadNotifications _).expects(*, *).once().onCall { _ =>
@@ -365,24 +332,23 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         }
       }
 
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
 
       waitForLastNotIdChangeTo(Some(notification1.id))
 
-      waitForLastNotIdChangeTo(Some(wsNot1.id))
-
-      notificationsLog.size shouldEqual 2
-      notificationsLog(0) shouldEqual notification1.id
-      notificationsLog(1) shouldEqual wsNot1.id // processed as second even though received first
+      waitForLastNotIdChangeTo(Some(wsNot1.id)) // processed as second even though received first
     }
 
     scenario("ignore a push notification while waiting for a network change") {
       val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(wsNotification1)
+      val wsJson1 = new JSONObject(notJson)
       val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
 
-      service.updateLastNotificationId(lastId)
+      updateLastNotificationId(lastId)
       waitForLastNotIdChangeTo(Some(lastId))
 
       (client.loadNotifications _).expects(Some(lastId), *).once().returning(
@@ -402,9 +368,12 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       println("sync history")
 
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
-      result(service.lastNotificationId) should equal(Some(lastId))
+      waitForLastNotIdChangeTo(Some(lastId))
 
       println("initial syncHistory done (and failed)")
       println("sending a push notification")
@@ -421,32 +390,24 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       println("should set the new lastId")
 
       waitForLastNotIdChangeTo(Some(wsNot1.id))
-
-      println("done")
-
-      notificationsLog.size shouldEqual 2
-      notificationsLog(0) shouldEqual notification1.id
-      notificationsLog(1) shouldEqual wsNot1.id // received only once
     }
 
     scenario("ignore a push notification while waiting for a delayed retry") {
       val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(wsNotification1)
-      val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
 
-      service.updateLastNotificationId(lastId)
+      updateLastNotificationId(lastId)
       waitForLastNotIdChangeTo(Some(lastId))
 
       (client.loadNotifications _).expects(Some(lastId), *).once().returning(
         CancellableFuture.successful(Left(ErrorResponse.InternalError))
       )
 
-      // this should be triggered by a network change and it still should use lastId, not wsNot1.id
+      // this should be triggered by a network change and it still should use lastId, not pushNotification.id
       (client.loadNotifications _).expects(Some(lastId), *).once().returning(
-        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1, wsNot1), hasMore = false, None)))
+        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1, pushNotification), hasMore = false, None)))
       )
 
-      (client.loadNotifications _).expects(Some(wsNot1.id), *).never()
+      (client.loadNotifications _).expects(Some(pushNotification.id), *).never()
 
       val backoff = mock[Backoff]
       (backoff.delay _).expects(*, *).anyNumberOfTimes().returning(2.seconds)
@@ -454,24 +415,19 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       println("sync history")
 
+      wsClient ! Some(ws)
+      result(wsClient.filter(_.contains(ws)).head)
+
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
-      result(service.lastNotificationId) should equal(Some(lastId))
+      waitForLastNotIdChangeTo(Some(lastId))
 
       println("initial syncHistory done (and failed)")
       println("sending a push notification")
 
-      ws.onMessage ! JsonObjectResponse(wsJson1)
+      ws.onMessage ! JsonObjectResponse(notObject)
 
-      result(service.lastNotificationId) should equal(Some(lastId))
-
-      waitForLastNotIdChangeTo(Some(wsNot1.id))
-
-      println("done")
-
-      notificationsLog.size shouldEqual 2
-      notificationsLog(0) shouldEqual notification1.id
-      notificationsLog(1) shouldEqual wsNot1.id // received only once
+      waitForLastNotIdChangeTo(Some(pushNotification.id))
     }
   }
 
