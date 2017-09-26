@@ -353,7 +353,7 @@ object UserPreferences {
   lazy val TextTone = PrefKey[String]("text_key")
   lazy val PingTone = PrefKey[String]("ping_key")
 
-  lazy val VBREnabled        = PrefKey[Boolean]("variable_bit_rate_enabled")
+  lazy val VBREnabled        = PrefKey[Boolean]("variable_bit_rate_enabled", customDefault = true)
   lazy val VibrateEnabled    = PrefKey[Boolean]("vibrate_enabled")
   lazy val SendButtonEnabled = PrefKey[Boolean]("send_button_enabled", customDefault = true)
 
