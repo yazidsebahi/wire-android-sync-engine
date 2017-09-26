@@ -82,7 +82,7 @@ class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: Lo
   private def releaseAfterDuration()(implicit srcTag: LogTag): Unit = CancellableFuture.delay(duration).onComplete(_ => release()(s"delayed[$srcTag]"))
 }
 
-class FakeWakeLock extends WakeLock {
+class FakeLock extends WakeLock {
   override def apply[A](body: => A)(implicit srcTag: LogTag): A = body
   override def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A] = body
 }

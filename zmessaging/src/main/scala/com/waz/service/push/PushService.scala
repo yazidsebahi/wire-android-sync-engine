@@ -200,7 +200,7 @@ class PushServiceImpl(context: Context,
         load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
       case Left(err) =>
         warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
-        CancellableFuture.delay(backoff.delay(attempts)).flatMap { _ => load(lastId, attempts + 1) }
+        CancellableFuture.delay(syncHistoryBackoff.delay(attempts)).flatMap { _ => load(lastId, attempts + 1) }
       // fetch failed, schedule retry and turn on retry on network change
     }
 
@@ -224,7 +224,5 @@ class PushServiceImpl(context: Context,
 }
 
 object PushService {
-  private var syncHistoryBackoff: Backoff = new ExponentialBackoff(3.second, 15.seconds)
-  def setBackoff(backoff: Backoff) = { syncHistoryBackoff = backoff }
-  def backoff = syncHistoryBackoff
+  var syncHistoryBackoff: Backoff = new ExponentialBackoff(3.second, 15.seconds)
 }
