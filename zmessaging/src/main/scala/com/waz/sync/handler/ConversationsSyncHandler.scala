@@ -51,12 +51,12 @@ class ConversationsSyncHandler(assetSync: AssetSyncHandler,
   import com.waz.sync.handler.ConversationsSyncHandler._
   private implicit val ec = EventContext.Global
 
-  def syncConversations(ids: Seq[ConvId]): Future[SyncResult] = {
+  def syncConversations(ids: Seq[ConvId]): Future[SyncResult] =
     Future.sequence(ids.map(convs.convById)).flatMap { convs =>
       val remoteIds = convs.collect { case Some(conv) => conv.remoteId }
-      if (remoteIds.size != convs.size) {
-        error(s"syncConversations($ids) - some conversations were not found in local db, skipping")
-      }
+
+      if (remoteIds.size != convs.size) error(s"syncConversations($ids) - some conversations were not found in local db, skipping")
+
       conversationsClient.loadConversations(remoteIds).future flatMap {
         case Right(resps) =>
           debug(s"syncConversations received ${resps.size}")
@@ -66,9 +66,8 @@ class ConversationsSyncHandler(assetSync: AssetSyncHandler,
           Future.successful(SyncResult(error))
       }
     }
-  }
 
-  def syncConversations(start: Option[RConvId] = None): Future[SyncResult] = {
+  def syncConversations(start: Option[RConvId] = None): Future[SyncResult] =
     conversationsClient.loadConversations(start).future flatMap {
       case Right(ConversationsResult(convs, hasMore)) =>
         debug(s"syncConversations received ${convs.size}")
@@ -79,7 +78,6 @@ class ConversationsSyncHandler(assetSync: AssetSyncHandler,
         warn(s"ConversationsClient.loadConversations($start) failed with error: $error")
         CancellableFuture.successful(SyncResult(error))
     }
-  }
 
   def postConversationName(id: ConvId, name: String): Future[SyncResult] =
     postConv(id) { conv => conversationsClient.postName(conv.remoteId, name).future }

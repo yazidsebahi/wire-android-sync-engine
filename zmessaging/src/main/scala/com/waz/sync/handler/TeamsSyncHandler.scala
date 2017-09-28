@@ -38,11 +38,10 @@ class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service:
 
   override def syncTeam(): Future[SyncResult] = teamId match {
     case Some(id) => client.getTeamData(id).future.flatMap {
-      case Right(data) =>
-        client.getTeamMembers(id).future.flatMap {
-          case Left(errorResponse) => Future.successful(SyncResult(errorResponse))
-          case Right(members) => service.onTeamSynced(data, members).map(_ => SyncResult.Success)
-        }
+      case Right(data) => client.getTeamMembers(id).future.flatMap {
+        case Left(errorResponse) => Future.successful(SyncResult(errorResponse))
+        case Right(members) =>  service.onTeamSynced(data, members).map(_ => SyncResult.Success)
+      }
       case Left(error) => Future.successful(SyncResult(error))
     }
     case None => Future.successful(SyncResult.Success)

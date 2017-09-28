@@ -101,7 +101,9 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def syncUsers(ids: UserId*) = addRequest(SyncUser(ids.toSet))
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
-  def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) = addRequest(if (ids.nonEmpty) SyncConversation(ids) else SyncConversations, priority = if (ids.nonEmpty) Priority.Normal else Priority.High, dependsOn = dependsOn.toSeq)
+  def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) =
+    if (ids.nonEmpty) addRequest(SyncConversation(ids), priority = Priority.Normal, dependsOn = dependsOn.toSeq)
+    else              addRequest(SyncConversations,     priority = Priority.High,   dependsOn = dependsOn.toSeq)
   def syncTeam(dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeam, priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncTeamMember(id: UserId): Future[SyncId] = addRequest(SyncTeamMember(id))
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
@@ -143,15 +145,13 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
 
   override def postValidateHandles(handles: Seq[Handle]): Future[SyncId] = addRequest(ValidateHandles(handles))
 
-  override def performFullSync(): Future[Unit] = {
-    for {
-      id1 <- syncConversations()
-      id2 <- syncTeam()
-      id3 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
-      id4 <- syncSelfClients()
-      _ <- service.scheduler.await(Set(id1, id2, id3, id4))
-    } yield ()
-  }
+  override def performFullSync(): Future[Unit] = for {
+    id1 <- syncConversations()
+    id2 <- syncTeam()
+    id3 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
+    id4 <- syncSelfClients()
+    _ <- service.scheduler.await(Set(id1, id2, id3, id4))
+  } yield ()
 }
 
 trait SyncHandler {
