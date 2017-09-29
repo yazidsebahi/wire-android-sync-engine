@@ -33,6 +33,7 @@ import org.apache.http.entity.ContentType
 import org.apache.http.util.EntityUtils
 import org.json.JSONObject
 
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
@@ -74,5 +75,9 @@ class ApacheHttpClient extends AsyncClient {
     }
   }
 
-  override def close() = ???
+  override def close(): Unit = {}
+
+  override val userAgent: String = AsyncClient.userAgent()
+
+  override val wrapper: Future[ClientWrapper] = ClientWrapper()
 }

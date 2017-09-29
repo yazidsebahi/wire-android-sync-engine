@@ -57,7 +57,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
 
-  def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
+  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -171,7 +171,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val usersClient        = wire[UsersClient]
   lazy val convClient         = wire[ConversationsClient]
   lazy val teamClient         = wire[TeamsClient]
-  lazy val eventsClient       = wire[EventsClient]
+  lazy val pushNotificationsClient: PushNotificationsClient = new PushNotificationsClientImpl(zNetClient)
   lazy val abClient           = wire[AddressBookClient]
   lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
@@ -190,13 +190,12 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val assetLoader: AssetLoader                   = wire[AssetLoaderImpl]
   lazy val imageLoader: ImageLoader                   = wire[ImageLoaderImpl]
 
-  lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
+  lazy val push: PushService                          = wire[PushServiceImpl]
   lazy val pushToken: PushTokenService                = wire[PushTokenService]
-  lazy val pushSignals                                = wire[PushServiceSignals]
   lazy val errors                                     = wire[ErrorsService]
   lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
-  lazy val websocket: WebSocketClientService          = wire[WebSocketClientService]
+  lazy val websocket: WebSocketClientService          = wire[WebSocketClientServiceImpl]
   lazy val userSearch                                 = wire[UserSearchService]
   lazy val assetGenerator                             = wire[ImageAssetGenerator]
   lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
@@ -250,7 +249,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val openGraphSync    = wire[OpenGraphSyncHandler]
   lazy val handlesSync      = wire[HandlesSyncHandler]
 
-  lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), eventScheduler.enqueue)
+  lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 
   lazy val eventScheduler = {
 

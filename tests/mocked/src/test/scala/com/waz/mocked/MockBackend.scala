@@ -30,7 +30,6 @@ import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
-import com.waz.sync.client.EventsClient.LoadNotificationsResponse
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, MessageResponse}
 import com.waz.sync.client.PushNotification
@@ -378,18 +377,6 @@ trait MockOrlop { self: ApiSpec with MockedClient with MockedWebSocket with Mock
   def selfUserId: UserId
 
   @volatile var notifications = Vector.empty[PushNotification]
-
-  override def loadNotifications(since: Option[Uid], client: ClientId, pageSize: Int, isFirstPage: Boolean = true): ErrorOrResponse[Option[Uid]] = { // does not emulate paging
-    val tail = notifications.dropWhile(n => since.exists(_ != n.id))
-    if (tail.isEmpty) {
-      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(notifications, lastIdWasFound = false, Some(Instant.now))
-      success(since)
-    } else {
-      assert(since forall (_ == tail.head.id))
-      self.zmessaging.eventsClient.onNotificationsPageLoaded ! LoadNotificationsResponse(tail.tail, lastIdWasFound = true, Some(Instant.now))
-      success(tail.lastOption map (_.id) orElse since)
-    }
-  }
 
   override def loadLastNotification(): ErrorOrResponse[Option[PushNotification]] = CancellableFuture.successful(Right(notifications.lastOption))
 

@@ -29,7 +29,7 @@ import com.waz.model.AccountId
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventStream, Signal}
-import com.waz.utils.{ExponentialBackoff, WakeLock, returning}
+import com.waz.utils.{ExponentialBackoff, WakeLock, WakeLockImpl, returning}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent}
 import com.waz.znet.WebSocketClient.Disconnect
 import org.json.JSONObject
@@ -45,9 +45,10 @@ import scala.util.{Failure, Left, Try}
   * Can also maintain a constant ping to the websocket server to ensure that the connection is alive.
   * If the connection drops, it will automatically try to reconnect.
   */
+
 class WebSocketClient(context: Context,
                       accountId: AccountId,
-                      client: AsyncClientImpl,
+                      client: AsyncClient,
                       uri: => Uri,
                       auth: AccessTokenProvider,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
@@ -56,7 +57,7 @@ class WebSocketClient(context: Context,
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClient]}#${accountId.str.take(8)}"
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
-  private val wakeLock = new WakeLock(context)
+  protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
 
   val connected = Signal(false)
   val onError   = EventStream[Exception]()
@@ -66,7 +67,7 @@ class WebSocketClient(context: Context,
   val lastReceiveTime = Signal[Instant]() // time when something was last received on websocket
   val onConnectionLost = EventStream[Disconnect]()
 
-  private var init  : CancellableFuture[WebSocket] = connect()
+  private var init: CancellableFuture[WebSocket] = connect()
   init.onFailure {
     case e: CancelException => CancellableFuture.cancelled()
     case NonFatal(ex) => retryLostConnection(ex)

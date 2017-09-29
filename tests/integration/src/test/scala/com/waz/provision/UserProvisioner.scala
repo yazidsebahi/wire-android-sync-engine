@@ -58,7 +58,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
     loop(0, 1.second)
   }
 
-  lazy val client = new ZNetClient(null, null, null)
+  lazy val client = new ZNetClientImpl(null, null, null)
   lazy val userClient = new UsersClient(client)
   lazy val connClient = new ConnectionsClient(client)
   lazy val convClient = new ConversationsClient(client)

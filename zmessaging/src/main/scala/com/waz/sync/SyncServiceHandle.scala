@@ -17,9 +17,6 @@
  */
 package com.waz.sync
 
-import android.content.Context
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -84,11 +81,14 @@ trait SyncServiceHandle {
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId]
 
   def postValidateHandles(handles: Seq[Handle]): Future[SyncId]
+
+  def performFullSync(): Future[Unit]
 }
 
 class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeouts) extends SyncServiceHandle {
 
   import com.waz.model.sync.SyncRequest._
+  import Threading.Implicits.Background
 
   private def addRequest(req: SyncRequest, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, optional: Boolean = false, timeout: Long = 0, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] = {
     val timestamp = SyncJob.timestamp
@@ -101,7 +101,9 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def syncUsers(ids: UserId*) = addRequest(SyncUser(ids.toSet))
   def syncSelfUser() = addRequest(SyncSelf, priority = Priority.High)
   def deleteAccount() = addRequest(DeleteAccount)
-  def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) = addRequest(if (ids.nonEmpty) SyncConversation(ids) else SyncConversations, priority = if (ids.nonEmpty) Priority.Normal else Priority.High, dependsOn = dependsOn.toSeq)
+  def syncConversations(ids: Set[ConvId], dependsOn: Option[SyncId]) =
+    if (ids.nonEmpty) addRequest(SyncConversation(ids), priority = Priority.Normal, dependsOn = dependsOn.toSeq)
+    else              addRequest(SyncConversations,     priority = Priority.High,   dependsOn = dependsOn.toSeq)
   def syncTeam(dependsOn: Option[SyncId] = None): Future[SyncId] = addRequest(SyncTeam, priority = Priority.High, dependsOn = dependsOn.toSeq)
   def syncTeamMember(id: UserId): Future[SyncId] = addRequest(SyncTeamMember(id))
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
@@ -142,6 +144,14 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId) = addRequest(PostSessionReset(conv, user, client))
 
   override def postValidateHandles(handles: Seq[Handle]): Future[SyncId] = addRequest(ValidateHandles(handles))
+
+  override def performFullSync(): Future[Unit] = for {
+    id1 <- syncConversations()
+    id2 <- syncTeam()
+    id3 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
+    id4 <- syncSelfClients()
+    _ <- service.scheduler.await(Set(id1, id2, id3, id4))
+  } yield ()
 }
 
 trait SyncHandler {

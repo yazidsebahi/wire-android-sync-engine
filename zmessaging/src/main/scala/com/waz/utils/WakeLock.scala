@@ -26,7 +26,12 @@ import com.waz.threading.Threading.Implicits.Background
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(implicit tag: LogTag) {
+trait WakeLock {
+  def apply[A](body: => A)(implicit srcTag: LogTag): A
+  def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A]
+}
+
+class WakeLockImpl(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(implicit tag: LogTag) extends WakeLock {
 
   protected val appContext = context.getApplicationContext
   protected lazy val powerManager = appContext.getSystemService(Context.POWER_SERVICE).asInstanceOf[PowerManager]
@@ -58,7 +63,7 @@ class WakeLock(context: Context, level: Int = PowerManager.PARTIAL_WAKE_LOCK)(im
 }
 
 //To keep wakelock for a given period of time after executing it's code
-class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: LogTag) extends WakeLock(context) {
+class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: LogTag) extends WakeLockImpl(context) {
 
   override def apply[A](body: => A)(implicit srcTag: LogTag): A = {
     acquire()(srcTag)
@@ -75,4 +80,9 @@ class TimedWakeLock(context: Context, duration: FiniteDuration)(implicit tag: Lo
   }
 
   private def releaseAfterDuration()(implicit srcTag: LogTag): Unit = CancellableFuture.delay(duration).onComplete(_ => release()(s"delayed[$srcTag]"))
+}
+
+class FakeLock extends WakeLock {
+  override def apply[A](body: => A)(implicit srcTag: LogTag): A = body
+  override def async[A](body: Future[A])(implicit srcTag: LogTag): Future[A] = body
 }

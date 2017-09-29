@@ -79,6 +79,8 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
 
   override def postValidateHandles(handles: Seq[Handle]): Future[SyncId] = sid
 
+  override def performFullSync(): Future[Unit] = Future.successful({})
+
   private def sid = Future.successful(SyncId())
 
 }
