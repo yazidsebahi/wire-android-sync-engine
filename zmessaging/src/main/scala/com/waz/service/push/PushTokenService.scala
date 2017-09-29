@@ -17,20 +17,23 @@
  */
 package com.waz.service.push
 
-import com.waz.HockeyApp
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{verbose, warn}
+import java.io.IOException
+
+import com.waz.ZLog
+import com.waz.ZLog._
+import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
-import com.waz.service.{BackendConfig, EventScheduler, ZmsLifeCycle}
+import com.waz.service._
 import com.waz.sync.SyncServiceHandle
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.utils.returning
 import com.waz.utils.wrappers.GoogleApi
+import com.waz.utils.{Backoff, ExponentialBackoff, returning}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 /**
@@ -44,6 +47,8 @@ class PushTokenService(googleApi:    GoogleApi,
                        accountId:    AccountId,
                        accStorage:   AccountsStorage,
                        sync:         SyncServiceHandle) {
+
+  implicit lazy val logTag: LogTag = s"${logTagFor[PushTokenService]}#${accountId.str.take(8)}"
 
   implicit val dispatcher = globalToken.dispatcher
   implicit val ev = globalToken.ev
@@ -96,18 +101,25 @@ class PushTokenService(googleApi:    GoogleApi,
   }
 }
 
-class GlobalTokenService(googleApi: GoogleApi, prefs: GlobalPreferences) {
+class GlobalTokenService(googleApi: GoogleApi,
+                         prefs: GlobalPreferences,
+                         network: NetworkModeService) {
+  import PushTokenService._
+  import ZLog.ImplicitTag._
 
   implicit val dispatcher = new SerialDispatchQueue(name = "PushTokenDispatchQueue")
   implicit val ev = EventContext.Global
 
   val currentToken = prefs.preference(GlobalPreferences.PushToken)
-  private var settingToken = Future.successful({})
+
+  private var attempts = 0
+  private var settingToken = CancellableFuture.successful({})
 
   private val shouldGenerateNewToken = for {
     play    <- googleApi.isGooglePlayServicesAvailable
     current <- currentToken.signal
-  } yield play && current.isEmpty
+    network <- network.networkMode
+  } yield play && current.isEmpty && network != NetworkMode.OFFLINE
 
   shouldGenerateNewToken {
     case true => setNewToken()
@@ -120,26 +132,38 @@ class GlobalTokenService(googleApi: GoogleApi, prefs: GlobalPreferences) {
       case Some(t) if toRemove.contains(t) || toRemove.isEmpty =>
         verbose("Resetting push token")
         googleApi.deleteAllPushTokens()
-        for {
-          _ <- currentToken := None
-          _ <- setNewToken()
-        } yield {}
+        currentToken := None
       case _ => Future.successful({})
     }
 
-  def setNewToken(token: Option[PushToken] = None): Future[Unit] = {
+  def setNewToken(): Future[Unit] = {
+
+    def generateToken(): CancellableFuture[PushToken] = {
+      dispatcher {
+        returning(googleApi.getPushToken) { t =>
+          verbose(s"Setting new push token: $t")
+        }
+      }.recoverWith {
+        case ex: IOException =>
+          error(s"Failed to generate push token due to server connectivity error, will retry again", ex)
+          attempts += 1
+          for {
+            _ <- CancellableFuture.delay(ResetBackoff.delay(attempts))
+            _ <- CancellableFuture.lift(network.networkMode.filter(_ != NetworkMode.OFFLINE).head)
+            t <- generateToken()
+          } yield t
+
+        case NonFatal(ex) =>
+          error(s"Something went wrong trying to generate push token, aborting", ex)
+          CancellableFuture.failed(ex)
+      }
+    }
+
     if (settingToken.isCompleted) {
+      attempts = 0
       settingToken = for {
-        t <- dispatcher {
-          returning(token.orElse(googleApi.getPushToken)) { t =>
-            verbose(s"Setting new push token: $t")
-          }
-        }.recover {
-          case NonFatal(ex) =>
-            HockeyApp.saveException(ex, s"unable to set push token")
-            Option.empty[PushToken]
-        }.future
-        _ <- currentToken := t
+        t <- generateToken().map(Some(_))
+        _ <- CancellableFuture.lift(currentToken := t)
       } yield {}
     }
     settingToken
@@ -147,5 +171,6 @@ class GlobalTokenService(googleApi: GoogleApi, prefs: GlobalPreferences) {
 }
 
 object PushTokenService {
+  var ResetBackoff: Backoff = new ExponentialBackoff(1000.millis, 10.seconds)
   case class PushSenderId(str: String) extends AnyVal
 }

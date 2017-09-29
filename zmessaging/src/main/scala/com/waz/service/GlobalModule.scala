@@ -90,7 +90,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
-  val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
+  lazy val tokenService:        GlobalTokenService               = wire[GlobalTokenService]
 
   lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsService]
   lazy val calling:             GlobalCallingService             = new GlobalCallingService

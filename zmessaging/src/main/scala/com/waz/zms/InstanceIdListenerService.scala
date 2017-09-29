@@ -24,11 +24,9 @@ import com.waz.service.ZMessaging
 
 class InstanceIdListenerService extends FirebaseInstanceIdService with ZMessagingService {
 
-
   override def onTokenRefresh(): Unit = {
-    val token = Option(ZMessaging.currentGlobal).flatMap(_.googleApi.getPushToken)
-    info(s"FCM: onTokenRefresh() called. Got token: $token")
-    Option(ZMessaging.currentGlobal).foreach(_.tokenService.setNewToken(token))
+    info(s"FCM: onTokenRefresh()")
+    Option(ZMessaging.currentGlobal).foreach(_.tokenService.setNewToken())
   }
 
 }
