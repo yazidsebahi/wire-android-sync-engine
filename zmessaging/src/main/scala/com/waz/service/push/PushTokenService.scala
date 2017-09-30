@@ -165,8 +165,8 @@ class GlobalTokenService(googleApi: GoogleApi,
     }
 
     if (settingToken.isCompleted) {
-      attempts = 0
       settingToken = for {
+        _ <- dispatcher(attempts = 0)
         t <- generateToken().map(Some(_))
         _ <- CancellableFuture.lift(currentToken := t)
       } yield {}

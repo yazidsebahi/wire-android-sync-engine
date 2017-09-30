@@ -28,7 +28,7 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.testutils.{TestBackoff, TestGlobalPreferences}
 import com.waz.threading.Threading
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.utils.wrappers.GoogleApi
 
@@ -46,6 +46,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   val accountId   = AccountId()
 
   val pushEnabled         = prefs.preference(PushEnabledKey)
+  await(pushEnabled := true)
 
   val currentToken        = prefs.preference(GlobalPreferences.PushToken)
   val resetToken          = prefs.preference(GlobalPreferences.ResetPushToken)
@@ -68,7 +69,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       (google.getPushToken _).expects().returning(token)
       val service = initTokenService()
 
-      pushEnabled := true
       googlePlayAvailable ! true
       result(service.currentToken.signal.filter(_.contains(token)).head)
     }
@@ -77,7 +77,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val oldToken = PushToken("oldToken")
       val newToken = PushToken("newToken")
-      pushEnabled := true
       currentToken := Some(oldToken)
       googlePlayAvailable ! true
 
@@ -146,9 +145,10 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       //it's hard to only call `setNewToken` while currently setting one for the sake of the test, so just fire two calls
       //quickly, and hope the second one always slips in before the first one is set.
-      global.setNewToken()
+      val res = global.setNewToken()
       global.setNewToken()
       result(currentToken.signal.filter(_.contains(token1)).head)
+      await(res)
 
       //Repeat to make sure the future is freed up
       global.setNewToken()
@@ -166,7 +166,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       loggedInAccounts ! Set(accountData(accountId, oldToken))
 
       currentToken := Some(newToken)
-      pushEnabled := true
       googlePlayAvailable ! true
 
       lazy val service = initTokenService()
@@ -189,7 +188,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val newToken = PushToken("newToken")
 
       loggedInAccounts ! Set(accountData(accountId, oldToken))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(oldToken)
 
@@ -218,7 +216,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val token = PushToken("token")
 
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -250,7 +247,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if push is enabled and inactive if not") {
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true //set active
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -265,7 +261,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if app is in background and inactive if not") {
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true
       googlePlayAvailable ! true
       accInForeground ! Some(accountId) //websocket should be open
       currentToken := Some(token)
@@ -281,7 +276,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be inactive if play services are unavailable") {
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -297,7 +291,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, None))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -342,6 +335,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       resetToken := true
       await(currentToken.signal.filter(_.contains(newToken)).head)
+      await(resetToken.signal.filter(_ == false).head)
     }
 
     scenario("Add second account and it should get the current global token") {
@@ -353,7 +347,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val account2 = accountData(AccountId(), None)
 
       loggedInAccounts ! Set(account1, account2)
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
