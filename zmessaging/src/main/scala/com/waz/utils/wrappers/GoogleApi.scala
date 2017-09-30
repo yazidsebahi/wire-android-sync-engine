@@ -22,7 +22,6 @@ import java.io.IOException
 import android.app.Activity
 import com.google.android.gms.common.ConnectionResult._
 import com.google.android.gms.common.GoogleApiAvailability
-import com.google.firebase.FirebaseApp
 import com.google.firebase.iid.FirebaseInstanceId
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{info, warn}

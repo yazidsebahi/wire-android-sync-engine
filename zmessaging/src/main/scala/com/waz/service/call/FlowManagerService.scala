@@ -40,7 +40,7 @@ trait FlowManagerService {
 
 class DefaultFlowManagerService(context:      Context,
                                 globalPrefs:  GlobalPreferences,
-                                network:      DefaultNetworkModeService) extends FlowManagerService {
+                                network:      NetworkModeService) extends FlowManagerService {
   import FlowManagerService._
 
   val avsAudioTestFlag: Long = 1 << 1

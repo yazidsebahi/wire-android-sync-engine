@@ -90,7 +90,9 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
-  lazy val tokenService:        GlobalTokenService               = wire[GlobalTokenService]
+  val lifecycle:                ZmsLifeCycle                     = new ZmsLifeCycleImpl()
+  val network:                  DefaultNetworkModeService        = wire[DefaultNetworkModeService]
+  val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
 
   lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsService]
   lazy val calling:             GlobalCallingService             = new GlobalCallingService
@@ -104,7 +106,6 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val trimmingLruCache:    Cache[Key, Entry]                = MemoryImageCache.newTrimmingLru(context)
   lazy val imageCache:          MemoryImageCache                 = wire[MemoryImageCache]
 
-  lazy val network                                               = wire[DefaultNetworkModeService]
   lazy val phoneNumbers:        PhoneNumberService               = wire[PhoneNumberServiceImpl]
   lazy val timeouts                                              = wire[Timeouts]
   lazy val permissions:         PermissionsService               = wire[PermissionsService]
@@ -147,7 +148,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val flowmanager: DefaultFlowManagerService                = wire[DefaultFlowManagerService]
   lazy val mediaManager                                          = wire[DefaultMediaManagerService]
 
-  val lifecycle: ZmsLifeCycle = new ZmsLifeCycleImpl()
+
 
 }
 

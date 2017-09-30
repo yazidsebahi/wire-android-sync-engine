@@ -360,7 +360,6 @@ object ZMessaging { self =>
 
       globalReady.success(_global)
       accsReady.success(_accounts)
-
       Threading.Background { Locales.preloadTransliterator(); ContentSearchQuery.preloadTransliteration(); } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
   }
