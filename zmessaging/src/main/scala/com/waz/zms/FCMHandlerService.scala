@@ -127,7 +127,9 @@ object FCMHandlerService {
         case NoticeNotification(nId) =>
           addNotificationToProcess(nId)
 
-        case _ => warn(s"Unexpected notification"); Future.successful({})
+        case _ =>
+          warn(s"Unexpected notification, sync anyway")
+          push.syncHistory()
       }
     }
 
@@ -168,8 +170,8 @@ object FCMHandlerService {
 
   object PlainNotification {
     def unapply(data: Map[String, String]): Option[PushNotification] =
-      data.get(DataKey) match {
-        case Some(content) => LoggedTry(PushNotification.NotificationDecoder(new JSONObject(content))).toOption
+      (data.get(TypeKey), data.get(DataKey)) match {
+        case (Some("plain"), Some(content)) => LoggedTry(PushNotification.NotificationDecoder(new JSONObject(content))).toOption
         case _ => None
       }
   }
