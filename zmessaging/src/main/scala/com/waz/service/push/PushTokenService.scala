@@ -113,8 +113,8 @@ class GlobalTokenService(googleApi: GoogleApi,
   val currentToken = prefs.preference(GlobalPreferences.PushToken)
   val resetToken   = prefs.preference(GlobalPreferences.ResetPushToken)
 
-  private var attempts = 0
-  private var settingToken = CancellableFuture.successful({})
+  private var settingToken = Future.successful({})
+  private var deletingToken = Future.successful({})
 
   for {
     play    <- googleApi.isGooglePlayServicesAvailable
@@ -132,46 +132,44 @@ class GlobalTokenService(googleApi: GoogleApi,
   def resetGlobalToken(toRemove: Vector[PushToken] = Vector.empty) =
     currentToken().flatMap {
       case Some(t) if toRemove.contains(t) || toRemove.isEmpty =>
-        verbose("Resetting push token")
-        googleApi.deleteAllPushTokens()
-        for {
-          _ <- resetToken := false
-          _ <- currentToken := None
-        } yield {}
+        if (deletingToken.isCompleted) {
+          deletingToken = for {
+            _ <- retry({
+              verbose("Deleting all push tokens")
+              googleApi.deleteAllPushTokens()
+            })
+            _ <- resetToken := false
+            _ <- currentToken := None
+          } yield {}
+        }
+        deletingToken
       case _ => Future.successful({})
     }
 
   def setNewToken(): Future[Unit] = {
-
-    def generateToken(): CancellableFuture[PushToken] = {
-      dispatcher {
-        returning(googleApi.getPushToken) { t =>
-          verbose(s"Setting new push token: $t")
-        }
-      }.recoverWith {
-        case ex: IOException =>
-          error(s"Failed to generate push token due to server connectivity error, will retry again", ex)
-          attempts += 1
-          for {
-            _ <- CancellableFuture.delay(ResetBackoff.delay(attempts))
-            _ <- CancellableFuture.lift(network.networkMode.filter(_ != NetworkMode.OFFLINE).head)
-            t <- generateToken()
-          } yield t
-
-        case NonFatal(ex) =>
-          error(s"Something went wrong trying to generate push token, aborting", ex)
-          CancellableFuture.failed(ex)
-      }
-    }
-
     if (settingToken.isCompleted) {
       settingToken = for {
-        _ <- dispatcher(attempts = 0)
-        t <- generateToken().map(Some(_))
-        _ <- CancellableFuture.lift(currentToken := t)
+        t <- retry(returning(googleApi.getPushToken) { t => verbose(s"Setting new push token: $t") })
+        _ <- currentToken := Some(t)
       } yield {}
     }
     settingToken
+  }
+
+  private def retry[A](f: => A, attempts: Int = 0): Future[A] = {
+    dispatcher(f).future.recoverWith {
+      case ex: IOException =>
+        error(s"Failed action on google APIs, probably due to server connectivity error, will retry again", ex)
+        for {
+          _ <- CancellableFuture.delay(ResetBackoff.delay(attempts)).future
+          _ <- network.networkMode.filter(_ != NetworkMode.OFFLINE).head
+          t <- retry(f, attempts + 1)
+        } yield t
+
+      case NonFatal(ex) =>
+        error(s"Something went wrong trying using google APIs, aborting", ex)
+        Future.failed(ex)
+    }
   }
 }
 
