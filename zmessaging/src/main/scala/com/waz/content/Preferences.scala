@@ -306,6 +306,8 @@ object GlobalPreferences {
 
   lazy val GPSErrorDialogShowCount    = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 
+  lazy val ResetPushToken             = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
+
   //DEPRECATED!!! Use the UserPreferences instead!!
   lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
   lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")

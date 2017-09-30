@@ -46,7 +46,10 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   val accountId   = AccountId()
 
   val pushEnabled         = prefs.preference(PushEnabledKey)
+
   val currentToken        = prefs.preference(GlobalPreferences.PushToken)
+  val resetToken          = prefs.preference(GlobalPreferences.ResetPushToken)
+  await(resetToken := false)
 
   val googlePlayAvailable = Signal(false)
   val accInForeground     = Signal(Option.empty[AccountId])
@@ -320,6 +323,24 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val (globalToken, _) = initTokenServicesWithGlobal()
 
       globalToken.resetGlobalToken()
+      await(currentToken.signal.filter(_.contains(newToken)).head)
+    }
+
+    scenario("Reset global token via reset preference") {
+      val oldToken = PushToken("oldToken")
+      val newToken = PushToken("newToken")
+
+      currentToken := Some(oldToken)
+      googlePlayAvailable ! true
+      await(currentToken.signal.filter(_.contains(oldToken)).head)
+
+      (google.getPushToken _).expects().once().returning(newToken)
+      //This needs to be called
+      (google.deleteAllPushTokens _).expects().once()
+
+      val (globalToken, _) = initTokenServicesWithGlobal()
+
+      resetToken := true
       await(currentToken.signal.filter(_.contains(newToken)).head)
     }
 

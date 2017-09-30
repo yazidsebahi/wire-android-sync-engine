@@ -111,20 +111,22 @@ class GlobalTokenService(googleApi: GoogleApi,
   implicit val ev = EventContext.Global
 
   val currentToken = prefs.preference(GlobalPreferences.PushToken)
+  val resetToken   = prefs.preference(GlobalPreferences.ResetPushToken)
 
   private var attempts = 0
   private var settingToken = CancellableFuture.successful({})
 
-  private val shouldGenerateNewToken = for {
+  for {
     play    <- googleApi.isGooglePlayServicesAvailable
     current <- currentToken.signal
     network <- network.networkMode
-  } yield play && current.isEmpty && network != NetworkMode.OFFLINE
+  } if (play && current.isEmpty && network != NetworkMode.OFFLINE) setNewToken()
 
-  shouldGenerateNewToken {
-    case true => setNewToken()
-    case _ =>
-  }
+  for {
+    play    <- googleApi.isGooglePlayServicesAvailable
+    reset   <- resetToken.signal
+    network <- network.networkMode
+  } if (play && reset && network != NetworkMode.OFFLINE) resetGlobalToken()
 
   //Specify empty to force remove all tokens, or else only remove if `toRemove` contains the current token.
   def resetGlobalToken(toRemove: Vector[PushToken] = Vector.empty) =
@@ -132,7 +134,10 @@ class GlobalTokenService(googleApi: GoogleApi,
       case Some(t) if toRemove.contains(t) || toRemove.isEmpty =>
         verbose("Resetting push token")
         googleApi.deleteAllPushTokens()
-        currentToken := None
+        for {
+          _ <- resetToken := false
+          _ <- currentToken := None
+        } yield {}
       case _ => Future.successful({})
     }
 
