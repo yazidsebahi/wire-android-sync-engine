@@ -58,7 +58,8 @@ trait PushService {
   def onMissedCloudPushNotifications: EventStream[MissedPushes]
   def onFetchedPushNotifications:     EventStream[Seq[ReceivedPushData]]
 
-  def syncHistory(reason: String): Future[Unit]
+  //set withRetries to false if the caller is to handle their own retry logic
+  def syncHistory(reason: String, withRetries: Boolean = true): Future[Unit]
 
   def onHistoryLost: SourceSignal[Instant] with BgEventSource
   def processing: Signal[Boolean]
@@ -120,9 +121,9 @@ class PushServiceImpl(context:        Context,
             case NotificationsResponse(notifications@_*) =>
               verbose(s"got notifications from data: $content")
               fetchInProgress = if (fetchInProgress.isCompleted)
-                Future(onPushNotifications(notifications))
+                onPushNotifications(notifications)
               else
-                fetchInProgress.flatMap(_ => Future(onPushNotifications(notifications)))
+                fetchInProgress.flatMap(_ => onPushNotifications(notifications))
             case resp =>
               error(s"unexpected push response: $resp")
           }
@@ -133,26 +134,24 @@ class PushServiceImpl(context:        Context,
       )
   }
 
-  webSocket.connected.onChanged.map(_ => "web socket connection change").on(dispatcher)(syncHistory)
+  webSocket.connected.onChanged.map(_ => "web socket connection change").on(dispatcher)(syncHistory(_))
 
-  protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
-
-  private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
-    verbose(s"onPushNotifications: ${allNs.size}")
-
-    val ns = allNs.filter(_.hasEventForClient(clientId))
-
-    val p = wakeLock.async {
+  private def onPushNotifications(allNs: Seq[PushNotification]): Future[Unit] =
+    if (allNs.nonEmpty) {
+      verbose(s"onPushNotifications: ${allNs.size}")
+      val ns = allNs.filter(_.hasEventForClient(clientId))
       processing ! true
       pipeline {
-        returning(ns.flatMap(_.eventsForClient(clientId))) {
-          _.foreach { ev => ev.withCurrentLocalTime(); verbose(s"event: $ev") }
-        }
-      }.andThen { case _ => processing ! false }
-    }
-
-    ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n => p.onSuccess { case _ => idPref := Some(n.id) } }
-  }
+        returning(ns.flatMap(_.eventsForClient(clientId)))(_.foreach { ev =>
+          ev.withCurrentLocalTime()
+          verbose(s"event: $ev")
+        })
+      }.flatMap { _ =>
+        ns.lift(ns.lastIndexWhere(!_.transient)).fold(Future.successful({}))(n => idPref := Some(n.id))
+      }.andThen {
+        case _ => processing ! false
+      }
+    } else Future.successful({})
 
   case class Results(notifications: Vector[PushNotification], time: Option[Instant], historyLost: Boolean)
 
@@ -164,7 +163,7 @@ class PushServiceImpl(context:        Context,
   //expose retry loop to tests
   protected[push] val waitingForRetry = Signal(false).disableAutowiring()
 
-  override def syncHistory(reason: String): Future[Unit] = {
+  override def syncHistory(reason: String, withRetries: Boolean = true): Future[Unit] = {
     def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
       case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
       case Right(LoadNotificationsResponse(nots, true, time)) =>
@@ -175,33 +174,36 @@ class PushServiceImpl(context:        Context,
         warn(s"/notifications failed with 404, history lost")
         load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
       case Left(err) =>
-        warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
-        //We want to retry the download after the backoff is elapsed and the network is available,
-        //OR on a network state change (that is not offline/unknown)
-        //OR on a websocket state change
-        val retry = Promise[Unit]()
+        warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again? $withRetries")
+        if (!withRetries) CancellableFuture.failed(FetchFailedException(err))
+        else {
+          //We want to retry the download after the backoff is elapsed and the network is available,
+          //OR on a network state change (that is not offline/unknown)
+          //OR on a websocket state change
+          val retry = Promise[Unit]()
 
-        //TODO it would be nice to have a method on EventStream#onChanged which can return a future for the first event
-        val currentNetwork = network.networkMode.currentValue.getOrElse(UNKNOWN)
-        network.networkMode.filter(!Set(UNKNOWN, OFFLINE, currentNetwork).contains(_)).head.map(_ => retry.trySuccess({}))
+          //TODO it would be nice to have a method on EventStream#onChanged which can return a future for the first event
+          val currentNetwork = network.networkMode.currentValue.getOrElse(UNKNOWN)
+          network.networkMode.filter(!Set(UNKNOWN, OFFLINE, currentNetwork).contains(_)).head.map(_ => retry.trySuccess({}))
 
-        val currentWSState = webSocket.connected.currentValue.getOrElse(false)
-        webSocket.connected.filter(_ != currentWSState).head.map(_ => retry.trySuccess({}))
+          val currentWSState = webSocket.connected.currentValue.getOrElse(false)
+          webSocket.connected.filter(_ != currentWSState).head.map(_ => retry.trySuccess({}))
 
-        for {
-          _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
-          _ <- lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
-        } yield retry.trySuccess({})
+          for {
+            _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
+            _ <- lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
+          } yield retry.trySuccess({})
 
-        waitingForRetry ! true
-        lift(retry.future).flatMap { _ =>
-          waitingForRetry ! false
-          load(lastId, attempts + 1)
+          waitingForRetry ! true
+          lift(retry.future).flatMap { _ =>
+            waitingForRetry ! false
+            load(lastId, attempts + 1)
+          }
         }
     }
 
     def syncHistory(lastId: Option[Uid]): Future[Unit] =
-      for {
+      (for {
         Results(nots, time, historyLost) <- load(lastId).future
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
         drift  <- beDrift.head
@@ -217,8 +219,8 @@ class PushServiceImpl(context:        Context,
         if (pushes.nonEmpty)
           onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))
 
-        onPushNotifications(nots)
-      }
+        nots
+      }).flatMap(onPushNotifications)
 
     if (fetchInProgress.isCompleted) {
       verbose(s"Sync history in response to $reason")
@@ -229,5 +231,8 @@ class PushServiceImpl(context:        Context,
 }
 
 object PushService {
+
+  case class FetchFailedException(err: ErrorResponse) extends Exception(s"Failed to fetch notifications: ${err.message}")
+
   var syncHistoryBackoff: Backoff = new ExponentialBackoff(3.second, 15.seconds)
 }

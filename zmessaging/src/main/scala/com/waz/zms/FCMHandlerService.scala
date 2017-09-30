@@ -29,8 +29,7 @@ import com.waz.service.otr.OtrService
 import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
 import com.waz.service.{NetworkModeService, ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
-import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.{JsonDecoder, LoggedTry, RichInstant}
+import com.waz.utils.{JsonDecoder, LoggedTry, RichInstant, Serialized}
 import org.json
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -49,7 +48,7 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
 
   /**
     * According to the docs, we have 10 seconds to process notifications upon receiving the `remoteMessage`.
-    * This should be plenty of time (?)
+    * it is sometimes not enough time to process everything - leading to missing messages!
     */
   override def onMessageReceived(remoteMessage: RemoteMessage) = {
 
@@ -113,7 +112,7 @@ object FCMHandlerService {
                    convsContent:   ConversationsContentUpdater,
                    sentTime:       Instant) {
 
-    private implicit val dispatcher = new SerialDispatchQueue(name = "FCMHandler")
+    import com.waz.threading.Threading.Implicits.Background
 
     def handleMessage(data: Map[String, String]): Future[Unit] = {
       data match {
@@ -149,7 +148,8 @@ object FCMHandlerService {
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
         nw    <- network.networkMode.head
-        now = clock.instant + drift
+        now   = clock.instant + drift
+        idle  = network.isDeviceIdleMode
         _ <- receivedPushes.insert(
           ReceivedPushData(
             nId.getOrElse(Uid()),
@@ -157,10 +157,20 @@ object FCMHandlerService {
             now,
             nw,
             network.getNetworkOperatorName,
-            network.isDeviceIdleMode)
-        )
-        _ <- push.syncHistory("received cloud message push")
-      } yield ()
+            idle
+          ))
+
+        /**
+          * Warning: Here we want to trigger a direct fetch if we are in doze mode - when we get an FCM in doze mode, it is
+          * unlikely that we are competing with other apps for CPU time, and we need to do the request ASAP while we have
+          * network connectivity. TODO There is still the chance we can miss messages though
+          *
+          * When not in doze mode, we want to handle the case where the device might be overwhelmed by lots of apps coming
+          * online at once. For that reason, we start a job which can run for as long as we need to avoid the app from being
+          * killed mid-processing messages.
+          */
+        _ <- if (idle) push.syncHistory("fetch from device idle") else Serialized.future("fetch")(Future(FetchJob(accountId)))
+      } yield {}
   }
 
   object FCMHandler {

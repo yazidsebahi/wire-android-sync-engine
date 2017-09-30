@@ -171,13 +171,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       verbose(s"push ignored, web socket not connected")
       false
   }
-  override def pushGcm(notification: PushNotification, userId: UserId) =
-    Option(ZMessaging.currentAccounts) foreach { accounts =>
-      accounts.getActiveZms.foreach {
-        case Some(zms) if zms.selfUserId == userId => zms.push.cloudPushNotificationsToProcess.mutate(_ + notification.id)
-        case _ =>
-      }(Threading.Background)
-    }
+  override def pushGcm(notification: PushNotification, userId: UserId) = {}
 
   class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModuleImpl(context, testBackend) {
     override lazy val client: AsyncClientImpl = testClient
