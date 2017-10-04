@@ -35,16 +35,14 @@ trait Avs {
   def registerAccount(callingService: CallingService): Future[WCall]
   def unregisterAccount(wCall: WCall): Future[Unit]
   def onNetworkChanged(wCall: WCall): Future[Unit]
-  def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean): Future[Int]
-  def answerCall(wCall: WCall, convId: RConvId): Unit
+  def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean, cbrEnabled: Boolean): Future[Int]
+  def answerCall(wCall: WCall, convId: RConvId, cbrEnabled: Boolean): Unit
   def onHttpResponse(wCall: WCall, status: Int, reason: String, arg: Pointer): Future[Unit]
   def onConfigRequest(wCall: WCall, error: Int, json: String): Future[Unit]
   def onReceiveMessage(wCall: WCall, msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
   def endCall(wCall: WCall, convId: RConvId): Unit
   def rejectCall(wCall: WCall, convId: RConvId): Unit
   def setVideoSendActive(wCall: WCall, convId: RConvId, active: Boolean): Unit
-  //cbr = constant bit rate
-  def enableAudioCbr(wCall: WCall, enabled: Int): Unit
 }
 
 /**
@@ -109,19 +107,19 @@ class AvsImpl() extends Avs {
         override def onConfigRequest(inst: WCall, arg: WCall): Int =
           cs.onConfigRequest(inst)
       },
+      new CbrStateChangeHandler {
+        override def onBitRateStateChanged(enabled: Boolean, arg: WCall): Unit =
+          cs.onBitRateStateChanged(enabled)
+      },
+      new VideoReceiveStateHandler {
+        override def onVideoReceiveStateChanged(state: Int, arg: WCall): Unit =
+          cs.onVideoReceiveStateChanged(VideoReceiveState(state))
+      },
       null
     )
 
     callingReady.future.map { _ =>
-      //TODO it would be nice to convince AVS to move these methods into the method wcall_init.
-      Calling.wcall_set_video_state_handler(wCall, new VideoReceiveStateHandler {
-        override def onVideoReceiveStateChanged(state: Int, arg: Pointer) = cs.onVideoReceiveStateChanged(VideoReceiveState(state))
-      })
-
-      Calling.wcall_set_audio_cbr_enabled_handler(wCall, new BitRateStateHandler {
-        override def onBitRateStateChanged(arg: Pointer) = cs.onBitRateStateChanged()
-      })
-
+      //TODO it would be nice to convince AVS to move this last method into the method wcall_init.
       Calling.wcall_set_group_changed_handler(wCall, new GroupChangedHandler {
         override def onGroupChanged(convId: String, arg: Pointer) = {
           //TODO change this set to an ordered set to for special audio effects?
@@ -149,9 +147,9 @@ class AvsImpl() extends Avs {
   override def onNetworkChanged(wCall: WCall) = withAvs(Calling.wcall_network_changed(wCall))
 
 
-  override def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean) = withAvsReturning(wcall_start(wCall, convId.str, isVideoCall, isGroup), -1)
+  override def startCall(wCall: WCall, convId: RConvId, isVideoCall: Boolean, isGroup: Boolean, cbrEnabled: Boolean) = withAvsReturning(wcall_start(wCall, convId.str, isVideoCall, isGroup, cbrEnabled), -1)
 
-  override def answerCall(wCall: WCall, convId: RConvId) = withAvs(wcall_answer(wCall: WCall, convId.str))
+  override def answerCall(wCall: WCall, convId: RConvId, cbrEnabled: Boolean) = withAvs(wcall_answer(wCall: WCall, convId.str, cbrEnabled))
 
   override def onHttpResponse(wCall: WCall, status: Int, reason: String, arg: Pointer) = withAvs(wcall_resp(wCall, status, reason, arg))
 
@@ -167,8 +165,6 @@ class AvsImpl() extends Avs {
   override def rejectCall(wCall: WCall, convId: RConvId) = withAvs(wcall_reject(wCall, convId.str))
 
   override def setVideoSendActive(wCall: WCall, convId: RConvId, active: Boolean) = withAvs(wcall_set_video_send_active(wCall, convId.str, active))
-
-  override def enableAudioCbr(wCall: WCall, enabled: Int) = withAvs(wcall_enable_audio_cbr(wCall, enabled))
 
 }
 
