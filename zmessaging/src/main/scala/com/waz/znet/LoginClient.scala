@@ -91,8 +91,12 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
 
   def loginNow(account: AccountData) = {
     debug(s"trying to login to account: ${account.id}")
-    val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
-    client(request) map responseHandler
+    if (account.canLogin) {
+      val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
+      client(request) map responseHandler
+    } else {
+      CancellableFuture(Left((None, ErrorResponse.internalError("Tried to login with insufficient credentials"))))
+    }
   }
 
   def accessNow(cookie: Cookie, token: Option[Token]) = {

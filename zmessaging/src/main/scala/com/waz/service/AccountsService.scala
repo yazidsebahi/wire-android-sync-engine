@@ -230,7 +230,7 @@ class AccountsService(val global: GlobalModule) {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc = AccountData(acc.id).copy(pendingPhone = Some(normalizedPhone), firstLogin = acc.firstLogin)
+      updatedAcc  = acc.copy(phone = None, pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
       _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
       _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
     } yield req

@@ -117,8 +117,9 @@ case class AccountData(id:              AccountId                       = Accoun
   }
 
   def canLogin: Boolean = {
-    email.isDefined && password.isDefined ||
-    handle.isDefined && password.isDefined
+    (email.orElse(pendingEmail).isDefined && password.isDefined) ||
+      (handle.isDefined && password.isDefined) ||
+      (phone.orElse(pendingPhone).isDefined && code.isDefined)
   }
 
   def addToLoginJson(o: JSONObject) =
