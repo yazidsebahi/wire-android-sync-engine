@@ -308,9 +308,6 @@ object GlobalPreferences {
 
   lazy val ResetPushToken             = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
 
-  lazy val crashPref                  = PrefKey[String]("USER_PREF_APP_CRASH")
-  lazy val crashDetails               = PrefKey[String]("USER_PREF_APP_CRASH_DETAILS")
-
   //DEPRECATED!!! Use the UserPreferences instead!!
   lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
   lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")
