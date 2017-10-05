@@ -267,12 +267,10 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
           pushToken.eventProcessingStage,
           Stage(Sequential)(
             convOrder.conversationOrderEventsStage,
-            Stage(Parallel)(
-              conversations.convStateEventProcessingStage,
-              Stage(Interleaved)(
-                msgEvents.messageEventProcessingStage,
-                genericMsgs.eventProcessingStage
-              )
+            conversations.convStateEventProcessingStage,
+            Stage(Interleaved)(
+              msgEvents.messageEventProcessingStage,
+              genericMsgs.eventProcessingStage
             )
           )
         ),
