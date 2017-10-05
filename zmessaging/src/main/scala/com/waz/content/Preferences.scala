@@ -25,6 +25,7 @@ import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
+import com.waz.service.push.ReceivedPush
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -321,6 +322,8 @@ object UserPreferences {
 
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
     returning(new UserPreferences(context, storage))(_.migrateFromGlobal(globalPreferences))
+
+  lazy val OutstandingPush          = PrefKey[Option[ReceivedPush]]("outstanding_push_notification")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")

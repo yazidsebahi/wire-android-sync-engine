@@ -27,13 +27,15 @@ import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.EventPipeline
+import com.waz.service.{EventPipeline, ZMessaging}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events._
 import org.threeten.bp.{Duration, Instant}
+import com.waz.utils.RichInstant
+import com.waz.utils.RichThreetenBPDuration
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
@@ -55,6 +57,9 @@ import com.waz.znet.Response.Status.NotFound
 trait PushService {
 
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
+
+  def onMissedCloudPushNotification: EventStream[MissedPush]
+  def onReceivedPushNotification:    EventStream[ReceivedPush]
 
   def syncHistory(): Future[Unit]
 
@@ -85,6 +90,9 @@ class PushServiceImpl(context: Context,
   private implicit val ec = EventContext.Global
 
   private var connectedPushPromise = Promise[PushServiceImpl]()
+
+  override val onMissedCloudPushNotification = EventStream[MissedPush]()
+  override val onReceivedPushNotification    = EventStream[ReceivedPush]()
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val pushConnected = Signal[Boolean]()
@@ -154,6 +162,7 @@ class PushServiceImpl(context: Context,
       }
   }
 
+  lazy val outstandingNot = userPrefs.preference(UserPreferences.OutstandingPush)
   private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
     verbose(s"onPushNotifications: ${allNs.size}")
 
@@ -204,12 +213,20 @@ class PushServiceImpl(context: Context,
       // fetch failed, schedule retry and turn on retry on network change
     }
 
-    def syncHistory(lastId: Option[Uid]): Future[Unit] = for {
-      Results(nots, time, historyLost) <- load(lastId)
-      _ <- if (historyLost) {
-        val time = clock.instant()
-        CancellableFuture.lift(sync.performFullSync().map(_ => onHistoryLost ! time))
-      } else CancellableFuture.successful({})
+    def syncHistory(lastId: Option[Uid]): Future[Unit] =
+      for {
+        Results(nots, time, historyLost) <- load(lastId).future
+        _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
+        _ <- outstandingNot.mutate {
+          case Some(n) =>
+            if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant)))
+            //TODO what would the else here mean? We received a notification and did a fetch, but that notification was not in the result?
+            None
+          case None =>
+            //TODO, what else do we want to track here?
+            if (nots.nonEmpty) onMissedCloudPushNotification ! MissedPush(clock.instant)
+            None
+        }
     } yield {
       onPushNotifications(nots)
       time.foreach { time => beDrift ! Instant.now.until(time) }
