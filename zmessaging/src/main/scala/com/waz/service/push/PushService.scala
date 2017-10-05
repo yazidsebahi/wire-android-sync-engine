@@ -19,7 +19,6 @@ package com.waz.service.push
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences
@@ -27,20 +26,18 @@ import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.{EventPipeline, ZMessaging}
+import com.waz.service.{EventPipeline, NetworkModeService}
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils._
 import com.waz.utils.events._
-import org.threeten.bp.{Duration, Instant}
-import com.waz.utils.RichInstant
-import com.waz.utils.RichThreetenBPDuration
-
-import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.concurrent.duration._
-import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
+import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status.NotFound
+import org.threeten.bp.{Duration, Instant}
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** PushService handles notifications coming from FCM, WebSocket, and fetch.
   * We assume FCM notifications are unreliable, so we use them only as information that we should perform a fetch (syncHistory).
@@ -80,16 +77,17 @@ class PushServiceImpl(context: Context,
                       userPrefs: UserPreferences,
                       client: PushNotificationsClient,
                       clientId: ClientId,
+                      accountId: AccountId,
                       pipeline: EventPipeline,
                       webSocket: WebSocketClientService,
+                      network: NetworkModeService,
                       sync: SyncServiceHandle
                      ) extends PushService { self =>
   import PushService._
 
+  implicit val logTag: LogTag = s"${logTagFor[PushService]}#${accountId.str.take(8)}"
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val ec = EventContext.Global
-
-  private var connectedPushPromise = Promise[PushServiceImpl]()
 
   override val onMissedCloudPushNotification = EventStream[MissedPush]()
   override val onReceivedPushNotification    = EventStream[ReceivedPush]()
@@ -118,7 +116,7 @@ class PushServiceImpl(context: Context,
     case Some(ws) =>
       subs.foreach(_.destroy())
       subs = Seq(
-        ws.onMessage { content =>
+        ws.onMessage.on(dispatcher) { content =>
           verbose(s"got websocket message: $content")
           content match {
             case NotificationsResponse(notifications@_*) =>
@@ -131,38 +129,23 @@ class PushServiceImpl(context: Context,
               error(s"unexpected push response: $resp")
           }
         },
-        ws.onError { ex =>
+        ws.onError.on(dispatcher) { ex =>
           warn(s"some PushNotification processing failed, will sync history", ex)
           syncHistory()
         }
       )
   }
 
-  webSocket.connected {
-    case true =>
-      verbose("onConnected")
+  EventStream.union(
+    cloudPushNotificationsToProcess.onChanged.filter(_.nonEmpty).map(_ => "cloud notifications"),
+    webSocket.connected.onChanged.map(_ => "web socket connection change")
+  ).on(dispatcher) { reason =>
+    if (fetchInProgress.isCompleted) {
+      verbose(s"Sync history in response to $reason")
       syncHistory()
-      connectedPushPromise.trySuccess(self)
-    case false =>
-      verbose("onDisconnected")
-      syncHistory()
-      connectedPushPromise.tryFailure(new Exception("onDisconnected"))
-      connectedPushPromise = Promise()
+    }
   }
 
-  //no need to sync history on cloud messaging if websocket is connected
-  webSocket.connected.flatMap {
-    case false => cloudPushNotificationsToProcess
-    case _ => Signal.empty[Set[Uid]]
-  }.on(dispatcher) {
-    notifications =>
-      if (notifications.nonEmpty && fetchInProgress.isCompleted){
-        verbose("Sync history in response to cloud message notification")
-        syncHistory()
-      }
-  }
-
-  lazy val outstandingNot = userPrefs.preference(UserPreferences.OutstandingPush)
   private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
     verbose(s"onPushNotifications: ${allNs.size}")
 
@@ -191,12 +174,6 @@ class PushServiceImpl(context: Context,
                                    historyLost: Boolean = false) =
     CancellableFuture.successful(Results(notifications, time, historyLost))
 
-  webSocket.network.networkMode {
-    case OFFLINE|UNKNOWN =>
-    case _ if !fetchInProgress.isCompleted => syncHistory() // it will restart the fetch
-    case _ =>
-  }
-
   override def syncHistory(): Future[Unit] = {
     def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
       case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
@@ -209,28 +186,37 @@ class PushServiceImpl(context: Context,
         load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
       case Left(err) =>
         warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
-        CancellableFuture.delay(syncHistoryBackoff.delay(attempts)).flatMap { _ => load(lastId, attempts + 1) }
-      // fetch failed, schedule retry and turn on retry on network change
+        //We want to retry the download after the backoff is elapsed and the network is available,
+        //OR on a network state change (that is not offline/unknown)
+        val retry = Promise[Unit]()
+
+        val currentNetwork = network.networkMode.currentValue.getOrElse(UNKNOWN)
+        network.networkMode.filter(!Set(UNKNOWN, OFFLINE, currentNetwork).contains(_)).head.map(_ => retry.trySuccess({}))
+
+        for {
+          _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
+          _ <- CancellableFuture.lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
+        } yield retry.trySuccess({})
+
+        CancellableFuture.lift(retry.future).flatMap(_ => load(lastId, attempts + 1))
     }
 
     def syncHistory(lastId: Option[Uid]): Future[Unit] =
       for {
         Results(nots, time, historyLost) <- load(lastId).future
+        _ = time.foreach { t => beDrift !  clock.instant.until(t)}
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
-        _ <- outstandingNot.mutate {
+        _ <- userPrefs.preference(UserPreferences.OutstandingPush).mutate {
           case Some(n) =>
             if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant)))
             //TODO what would the else here mean? We received a notification and did a fetch, but that notification was not in the result?
             None
           case None =>
             //TODO, what else do we want to track here?
-            if (nots.nonEmpty) onMissedCloudPushNotification ! MissedPush(clock.instant)
+            if (nots.nonEmpty) onMissedCloudPushNotification ! MissedPush(clock.instant + drift)
             None
         }
-    } yield {
-      onPushNotifications(nots)
-      time.foreach { time => beDrift ! Instant.now.until(time) }
-    }
+    } yield onPushNotifications(nots)
 
     returning( Future(idPref()).flatten flatMap { syncHistory } ) { f => // future and flatten ensure that there is no race with onPushNotifications
       if (!fetchInProgress.isCompleted) fetchInProgress.cancel()
