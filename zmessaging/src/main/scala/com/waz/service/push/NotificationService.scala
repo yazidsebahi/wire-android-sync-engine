@@ -32,22 +32,23 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.ZMessaging.clock
 import com.waz.service._
+import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.{RichInstant, _}
 import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
+import com.waz.utils.{RichInstant, _}
 import com.waz.zms.NotificationsAndroidService
 import com.waz.zms.NotificationsAndroidService.{checkNotificationsIntent, checkNotificationsTimeout}
 import org.threeten.bp.Instant
 
-import scala.concurrent.duration._
 import scala.collection.breakOut
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class GlobalNotificationsService(context: Context, lifeCycle: ZmsLifeCycle) {
 
-  import com.waz.threading.Threading.Implicits.Background
   import ZLog.ImplicitTag.implicitLogTag
+  import com.waz.threading.Threading.Implicits.Background
 
   lazy val groupedNotifications: Signal[Map[AccountId, Signal[(Boolean, Seq[NotificationInfo])]]] = //Boolean = shouldBeSilent
     Option(ZMessaging.currentAccounts) match {
@@ -97,9 +98,11 @@ class NotificationService(context:         Context,
                           storage:         NotificationStorage,
                           usersStorage:    UsersStorage,
                           convs:           ConversationStorage,
+                          members:         MembersStorage,
                           reactionStorage: ReactionsStorage,
                           userPrefs:       UserPreferences,
-                          pushService:     PushService) {
+                          pushService:     PushService,
+                          convsStats:      ConversationsListStateService) {
 
   import NotificationService._
   import com.waz.utils.events.EventContext.Implicits.global
@@ -125,8 +128,7 @@ class NotificationService(context:         Context,
 
   val notifications = {
     (for {
-      inForeground <- accInForeground.throttle(ClearUiThrottling) if !inForeground
-      _ = verbose("in background")
+      inForeground <- accInForeground.throttle(ClearUiThrottling)
       lastVisible  <- lastAccountVisibleTime.signal
       _ = verbose(s"last visible: $lastVisible")
       _            <- Signal.future(removeNotificationsAfterUiActive(lastVisible))
@@ -286,11 +288,12 @@ class NotificationService(context:         Context,
   private def add(notifications: Seq[NotificationData]) =
     for {
       lrMap <- lastReadMap.head
+      selectedConv <- convsStats.selectedConversationId.head
       res <- storage.insertAll(notifications filter { n =>
         //Filter notifications for those coming from other users, and that have come after the last-read time for their respective conversations.
         //Note that for muted conversations, the last-read time is set to Instant.MAX, so they can never come after.
         val lastRead = lrMap.get(n.conv)
-        val filter = n.user != selfUserId && lastRead.forall(_.isBefore(n.time))
+        val filter = n.user != selfUserId && lastRead.forall(_.isBefore(n.time)) && (!accountActive || selectedConv.isEmpty || selectedConv.get != n.conv)
         verbose(s"Inserting notif(${n.id}) if conv lastRead: $lastRead isBefore ${n.time}?: $filter")
         filter
       })
@@ -310,12 +313,17 @@ class NotificationService(context:         Context,
           case _ =>
             for {
               msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
-              conv <- convs.get(data.conv)
+              conv <- convs.get(data.conv) if conv.isDefined
+              membersCount <- members.getByConv(conv.get.id).map(_.map(_.userId).size)
             } yield {
               val (g, t) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
                 else (data, None)
-              NotificationInfo(g.id, g.msgType, g.time, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = conv.exists(_.convType == ConversationType.Group), isUserMentioned = data.mentions.contains(selfUserId), likedContent = t, hasBeenDisplayed = data.hasBeenDisplayed)
+
+              val groupConv = if (!conv.exists(_.team.isDefined)) conv.exists(_.convType == ConversationType.Group)
+              else membersCount > 2
+
+              NotificationInfo(g.id, g.msgType, g.time, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = groupConv, isUserMentioned = data.mentions.contains(selfUserId), likedContent = t, hasBeenDisplayed = data.hasBeenDisplayed)
             }
         }
       }
