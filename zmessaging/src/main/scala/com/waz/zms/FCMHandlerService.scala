@@ -28,7 +28,7 @@ import com.waz.service.ZMessaging.clock
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.{PushService, ReceivedPush}
-import com.waz.service.{ZMessaging, ZmsLifeCycle}
+import com.waz.service.{NetworkModeService, ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.{JsonDecoder, LoggedTry}
@@ -110,6 +110,7 @@ object FCMHandlerService {
                    lifecycle:    ZmsLifeCycle,
                    push:         PushService,
                    self:         UserId,
+                   network:      NetworkModeService,
                    prefs:        UserPreferences,
                    convsContent: ConversationsContentUpdater,
                    sentTime:     Instant) {
@@ -149,9 +150,10 @@ object FCMHandlerService {
       for {
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
+        nw    <- network.networkMode.head
         now = clock.instant
         //it's not obvious in the docs, but it seems as though the notification sent time already takes drift into account
-        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime.until(now), now + drift))
+        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime.until(now), now + drift, nw, network.getNetworkOperatorName))
       } yield {
         push.cloudPushNotificationsToProcess.mutate(_ + nId)
         verbose(s"addNotification: $nId")
@@ -161,7 +163,7 @@ object FCMHandlerService {
 
   object FCMHandler {
     def apply(zms: ZMessaging, data: Map[String, String], sentTime: Instant): Future[Unit] =
-      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.userPrefs, zms.convsContent, sentTime).handleMessage(data)
+      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.network, zms.userPrefs, zms.convsContent, sentTime).handleMessage(data)
   }
 
   val DataKey = "data"

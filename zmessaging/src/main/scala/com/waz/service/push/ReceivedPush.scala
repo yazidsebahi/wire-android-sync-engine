@@ -17,6 +17,7 @@
  */
 package com.waz.service.push
 
+import com.waz.api.NetworkMode
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.model.Uid
 import com.waz.utils.returning
@@ -28,7 +29,12 @@ import org.threeten.bp.{Duration, Instant}
   * @param receivedAt instant the push notification was received
   * @param toFetch time elapsed until we successfully fetched the notification
   */
-case class ReceivedPush(id: Uid, sinceSent: Duration, receivedAt: Instant, toFetch: Option[Duration] = None)
+case class ReceivedPush(id: Uid,
+                        sinceSent:       Duration,
+                        receivedAt:      Instant,
+                        networkMode:     NetworkMode,
+                        networkOperator: String,
+                        toFetch:         Option[Duration] = None)
 
 object ReceivedPush {
 
@@ -37,6 +43,8 @@ object ReceivedPush {
       o.put("id", v.id.str)
       o.put("since_sent", v.sinceSent.toMillis)
       o.put("received_at", v.receivedAt.toEpochMilli)
+      o.put("network_mode", v.networkMode)
+      o.put("network_operator", v.networkOperator)
       v.toFetch.foreach(d => o.put("to_fetch", d.toMillis))
     }.toString
 
@@ -47,6 +55,8 @@ object ReceivedPush {
         decodeId[Uid]('id),
         decodeDuration('since_sent),
         decodeInstant('received_at),
+        NetworkMode.valueOf(decodeString('network_mode)),
+        decodeString('network_operator),
         decodeOptDuration('to_fetch)
       )
     }
@@ -56,4 +66,4 @@ object ReceivedPush {
 
 }
 
-case class MissedPush(time: Instant)
+case class MissedPush(time: Instant, networkMode: NetworkMode, networkOperator: String)

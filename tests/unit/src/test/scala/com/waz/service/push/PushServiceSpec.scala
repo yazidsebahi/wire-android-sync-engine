@@ -70,6 +70,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   val networkMode = Signal(NetworkMode._4G)
   (network.networkMode _).expects().anyNumberOfTimes.returning(networkMode)
+  (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")
 
   val cloudPush = Signal(Set.empty[Uid]).disableAutowiring()
 

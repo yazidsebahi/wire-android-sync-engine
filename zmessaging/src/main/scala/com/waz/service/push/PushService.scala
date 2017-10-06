@@ -206,9 +206,9 @@ class PushServiceImpl(context:   Context,
     def syncHistory(lastId: Option[Uid]): Future[Unit] =
       for {
         Results(nots, time, historyLost) <- load(lastId).future
-        _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
         drift <- beDrift.head
+        nw    <- network.networkMode.head
         _ <- userPrefs.preference(OutstandingPush).mutate {
           case Some(n) =>
             if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant + drift)))
@@ -216,10 +216,13 @@ class PushServiceImpl(context:   Context,
             None
           case None =>
             //TODO, what else do we want to track here?
-            if (nots.nonEmpty) onMissedCloudPushNotification ! MissedPush(clock.instant + drift)
+            if (nots.nonEmpty) onMissedCloudPushNotification ! MissedPush(clock.instant + drift, nw, network.getNetworkOperatorName)
             None
         }
-    } yield onPushNotifications(nots)
+        _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
+    } yield {
+        onPushNotifications(nots)
+      }
 
     returning( Future(idPref()).flatten flatMap { syncHistory } ) { f => // future and flatten ensure that there is no race with onPushNotifications
       if (!fetchInProgress.isCompleted) fetchInProgress.cancel()

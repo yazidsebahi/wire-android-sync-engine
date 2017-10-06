@@ -31,6 +31,7 @@ trait NetworkModeService {
   def networkMode: Signal[NetworkMode]
   def isOfflineMode: Boolean
   def isOnlineMode: Boolean
+  def getNetworkOperatorName: String
 }
 
 class DefaultNetworkModeService(context: Context, zmsLifeCycle: ZmsLifeCycle) extends NetworkModeService {
@@ -63,6 +64,8 @@ class DefaultNetworkModeService(context: Context, zmsLifeCycle: ZmsLifeCycle) ex
 
     networkMode.publish(mode, Threading.Background)
   }
+
+  def getNetworkOperatorName = Option(telephonyManager.getNetworkOperatorName).filter(_.nonEmpty).getOrElse("unknown")
 
   def isOfflineMode = networkMode.currentValue contains NetworkMode.OFFLINE
   def isUnknown = networkMode.currentValue contains NetworkMode.UNKNOWN

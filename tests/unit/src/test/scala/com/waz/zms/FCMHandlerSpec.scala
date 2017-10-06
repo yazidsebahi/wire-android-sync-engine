@@ -17,9 +17,10 @@
  */
 package com.waz.zms
 
+import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, ConvId, Uid, UserId}
-import com.waz.service.ZmsLifeCycle
+import com.waz.service.{NetworkModeService, ZmsLifeCycle}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.PushService
@@ -40,6 +41,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   val lifecycle = mock[ZmsLifeCycle]
   val push = mock[PushService]
   val self = UserId()
+  val network = mock[NetworkModeService]
   val convsContent = mock[ConversationsContentUpdater]
   val prefs = new TestUserPreferences
 
@@ -125,6 +127,8 @@ class FCMHandlerSpec extends AndroidFreeSpec {
     (lifecycle.accInForeground _).expects(accountId).anyNumberOfTimes().returning(accInForeground)
     (push.cloudPushNotificationsToProcess _).expects().anyNumberOfTimes().returning(cloudNotsToHandle)
     (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
-    new FCMHandler(accountId, otrService, lifecycle, push, self, prefs, convsContent, clock.instant())
+    (network.networkMode _).expects().anyNumberOfTimes().returning(Signal.const(NetworkMode.WIFI))
+    (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")
+    new FCMHandler(accountId, otrService, lifecycle, push, self, network, prefs, convsContent, clock.instant())
   }
 }
