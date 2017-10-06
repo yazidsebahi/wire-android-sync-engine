@@ -29,35 +29,35 @@ import org.threeten.bp.{Duration, Instant}
   * @param receivedAt instant the push notification was received
   * @param toFetch time elapsed until we successfully fetched the notification
   */
-case class ReceivedPush(id: Uid,
-                        sinceSent:       Duration,
+case class ReceivedPush(sinceSent:       Duration,
                         receivedAt:      Instant,
                         networkMode:     NetworkMode,
                         networkOperator: String,
-                        toFetch:         Option[Duration] = None)
+                        toFetch:         Option[Duration] = None,
+                        id:              Option[Uid]      = None)
 
 object ReceivedPush {
 
   implicit lazy val ReceivedPushPrefCodec = new PrefCodec[ReceivedPush] {
     override def encode(v: ReceivedPush) = returning(new JSONObject()) { o =>
-      o.put("id", v.id.str)
       o.put("since_sent", v.sinceSent.toMillis)
       o.put("received_at", v.receivedAt.toEpochMilli)
       o.put("network_mode", v.networkMode)
       o.put("network_operator", v.networkOperator)
       v.toFetch.foreach(d => o.put("to_fetch", d.toMillis))
+      v.id.foreach(id => o.put("id", id))
     }.toString
 
     override def decode(str: String) = {
       import com.waz.utils.JsonDecoder._
       implicit val js = new json.JSONObject(str)
       ReceivedPush(
-        decodeId[Uid]('id),
         decodeDuration('since_sent),
         decodeInstant('received_at),
         NetworkMode.valueOf(decodeString('network_mode)),
         decodeString('network_operator),
-        decodeOptDuration('to_fetch)
+        decodeOptDuration('to_fetch),
+        decodeOptId[Uid]('id)
       )
     }
 
@@ -66,4 +66,4 @@ object ReceivedPush {
 
 }
 
-case class MissedPush(time: Instant, networkMode: NetworkMode, networkOperator: String)
+case class MissedPushes(time: Instant, countMissed: Int, networkMode: NetworkMode, networkOperator: String)

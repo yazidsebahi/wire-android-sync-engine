@@ -122,21 +122,21 @@ object FCMHandlerService {
         case CipherNotification(content, mac) =>
           decryptNotification(content, mac) flatMap {
             case Some(notification) =>
-              addNotificationToProcess(notification.id)
+              addNotificationToProcess(Some(notification.id))
             case None =>
               warn(s"gcm decoding failed: triggering notification history sync in case this notification is for us.")
-              push.syncHistory()
+              addNotificationToProcess(None)
           }
 
         case PlainNotification(notification) =>
-          addNotificationToProcess(notification.id)
+          addNotificationToProcess(Some(notification.id))
 
         case NoticeNotification(nId) =>
-          addNotificationToProcess(nId)
+          addNotificationToProcess(Some(nId))
 
         case _ =>
           warn(s"Unexpected notification, sync anyway")
-          push.syncHistory()
+          addNotificationToProcess(None)
       }
     }
 
@@ -146,16 +146,22 @@ object FCMHandlerService {
         case _ => None
       }
 
-    private def addNotificationToProcess(nId: Uid): Future[Unit] = {
+    private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] = {
       for {
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
         nw    <- network.networkMode.head
         now = clock.instant
         //it's not obvious in the docs, but it seems as though the notification sent time already takes drift into account
-        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime.until(now), now + drift, nw, network.getNetworkOperatorName))
+        _ <- prefs.preference(UserPreferences.OutstandingPushes).mutate { ps =>
+          ps :+ ReceivedPush(sentTime.until(now), now + drift, nw, network.getNetworkOperatorName, id = nId)
+        }
       } yield {
-        push.cloudPushNotificationsToProcess.mutate(_ + nId)
+        nId match {
+          case Some(n) => push.cloudPushNotificationsToProcess.mutate(_ + n)
+          case _       => push.syncHistory()
+        }
+
         verbose(s"addNotification: $nId")
       }
     }

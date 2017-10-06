@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.GlobalPreferences.BackendDrift
-import com.waz.content.UserPreferences.{LastStableNotification, OutstandingPush}
+import com.waz.content.UserPreferences.{LastStableNotification, OutstandingPushes}
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -56,8 +56,8 @@ trait PushService {
 
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
 
-  def onMissedCloudPushNotification: EventStream[MissedPush]
-  def onReceivedPushNotification:    EventStream[ReceivedPush]
+  def onMissedCloudPushNotifications: EventStream[MissedPushes]
+  def onFetchedPushNotifications:     EventStream[Seq[ReceivedPush]]
 
   def syncHistory(): Future[Unit]
 
@@ -90,8 +90,8 @@ class PushServiceImpl(context:   Context,
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val ec = EventContext.Global
 
-  override val onMissedCloudPushNotification = EventStream[MissedPush]()
-  override val onReceivedPushNotification    = EventStream[ReceivedPush]()
+  override val onMissedCloudPushNotifications = EventStream[MissedPushes]()
+  override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPush]]()
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val pushConnected = Signal[Boolean]()
@@ -209,20 +209,15 @@ class PushServiceImpl(context:   Context,
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
         drift <- beDrift.head
         nw    <- network.networkMode.head
-        _ <- userPrefs.preference(OutstandingPush).mutate {
-          case Some(n) =>
-            if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant + drift)))
-            //TODO what would the else here mean? We received a notification and did a fetch, but that notification was not in the result?
-            None
-          case None =>
-            //TODO, what else do we want to track here?
-            if (nots.nonEmpty) onMissedCloudPushNotification ! MissedPush(clock.instant + drift, nw, network.getNetworkOperatorName)
-            None
+        _ <- userPrefs.preference(OutstandingPushes).mutate { pushes =>
+            if (pushes.isEmpty && nots.nonEmpty)
+              onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size, nw, network.getNetworkOperatorName)
+            else if (pushes.nonEmpty)
+              onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))
+            Seq.empty
         }
         _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
-    } yield {
-        onPushNotifications(nots)
-      }
+    } yield onPushNotifications(nots)
 
     returning( Future(idPref()).flatten flatMap { syncHistory } ) { f => // future and flatten ensure that there is no race with onPushNotifications
       if (!fetchInProgress.isCompleted) fetchInProgress.cancel()
