@@ -149,11 +149,12 @@ object FCMHandlerService {
       for {
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
-        now = clock.instant() + drift
-        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime.until(now), now))
+        now = clock.instant
+        //it's not obvious in the docs, but it seems as though the notification sent time already takes drift into account
+        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime.until(now), now + drift))
       } yield {
-        verbose(s"addNotification: $nId")
         push.cloudPushNotificationsToProcess.mutate(_ + nId)
+        verbose(s"addNotification: $nId")
       }
     }
   }

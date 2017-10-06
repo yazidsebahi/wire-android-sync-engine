@@ -74,17 +74,16 @@ trait PushService {
   def beDrift: Signal[Duration]
 }
 
-class PushServiceImpl(context: Context,
+class PushServiceImpl(context:   Context,
                       userPrefs: UserPreferences,
-                      prefs: GlobalPreferences,
-                      client: PushNotificationsClient,
-                      clientId: ClientId,
+                      prefs:     GlobalPreferences,
+                      client:    PushNotificationsClient,
+                      clientId:  ClientId,
                       accountId: AccountId,
-                      pipeline: EventPipeline,
+                      pipeline:  EventPipeline,
                       webSocket: WebSocketClientService,
-                      network: NetworkModeService,
-                      sync: SyncServiceHandle
-                     ) extends PushService { self =>
+                      network:   NetworkModeService,
+                      sync:      SyncServiceHandle) extends PushService { self =>
   import PushService._
 
   implicit val logTag: LogTag = s"${logTagFor[PushService]}#${accountId.str.take(8)}"
@@ -100,7 +99,7 @@ class PushServiceImpl(context: Context,
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
   override lazy val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
-  private val beDriftPref = userPrefs.preference(BackendDrift)
+  private val beDriftPref = prefs.preference(BackendDrift)
   override val beDrift = beDriftPref.signal.disableAutowiring()
 
   private var fetchInProgress = CancellableFuture.successful({})

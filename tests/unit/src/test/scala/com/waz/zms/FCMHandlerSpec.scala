@@ -24,11 +24,12 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.PushService
 import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.zms.FCMHandlerService.FCMHandler
 import org.json
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
 
@@ -40,8 +41,10 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   val push = mock[PushService]
   val self = UserId()
   val convsContent = mock[ConversationsContentUpdater]
+  val prefs = new TestUserPreferences
 
   var accInForeground = Signal(false)
+  val beDrift = Signal(Duration.ofMillis(2000))
   var cloudNotsToHandle = Signal(Set.empty[Uid])
 
   override protected def afterEach() = {
@@ -56,8 +59,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
       val notId = Uid()
       val fcm = plainPayload(id = notId)
 
-      val handler = initHandler
-      handler.handleMessage(fcm)
+      initHandler.handleMessage(fcm)
       result(cloudNotsToHandle.filter(_.contains(notId)).head)
     }
 
@@ -70,8 +72,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
 
       (otrService.decryptCloudMessage _).expects(*, *).once().returning(Future.successful(Some(decryptedValue)))
 
-      val handler = initHandler
-      handler.handleMessage(fcm)
+      initHandler.handleMessage(fcm)
       result(cloudNotsToHandle.filter(_.contains(notId)).head)
 
     }
@@ -123,6 +124,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   def initHandler = {
     (lifecycle.accInForeground _).expects(accountId).anyNumberOfTimes().returning(accInForeground)
     (push.cloudPushNotificationsToProcess _).expects().anyNumberOfTimes().returning(cloudNotsToHandle)
-    new FCMHandler(accountId, otrService, lifecycle, push, self, convsContent)
+    (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
+    new FCMHandler(accountId, otrService, lifecycle, push, self, prefs, convsContent, clock.instant())
   }
 }
