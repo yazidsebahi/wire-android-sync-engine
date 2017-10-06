@@ -21,8 +21,9 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.UserPreferences
-import com.waz.content.UserPreferences.LastStableNotification
+import com.waz.content.GlobalPreferences.BackendDrift
+import com.waz.content.UserPreferences.{LastStableNotification, OutstandingPush}
+import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
@@ -75,6 +76,7 @@ trait PushService {
 
 class PushServiceImpl(context: Context,
                       userPrefs: UserPreferences,
+                      prefs: GlobalPreferences,
                       client: PushNotificationsClient,
                       clientId: ClientId,
                       accountId: AccountId,
@@ -98,7 +100,8 @@ class PushServiceImpl(context: Context,
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
   override lazy val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
-  override val beDrift = Signal(Duration.ZERO).disableAutowiring()
+  private val beDriftPref = userPrefs.preference(BackendDrift)
+  override val beDrift = beDriftPref.signal.disableAutowiring()
 
   private var fetchInProgress = CancellableFuture.successful({})
 
@@ -204,10 +207,10 @@ class PushServiceImpl(context: Context,
     def syncHistory(lastId: Option[Uid]): Future[Unit] =
       for {
         Results(nots, time, historyLost) <- load(lastId).future
-        _ = time.foreach { t => beDrift !  clock.instant.until(t)}
+        _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
         drift <- beDrift.head
-        _ <- userPrefs.preference(UserPreferences.OutstandingPush).mutate {
+        _ <- userPrefs.preference(OutstandingPush).mutate {
           case Some(n) =>
             if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant + drift)))
             //TODO what would the else here mean? We received a notification and did a fetch, but that notification was not in the result?
