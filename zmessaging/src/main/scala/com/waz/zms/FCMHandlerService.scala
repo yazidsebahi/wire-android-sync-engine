@@ -35,6 +35,7 @@ import com.waz.utils.{JsonDecoder, LoggedTry}
 import org.json
 import org.json.JSONObject
 import org.threeten.bp.Instant
+import com.waz.utils.RichInstant
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -147,7 +148,9 @@ object FCMHandlerService {
     private def addNotificationToProcess(nId: Uid): Future[Unit] = {
       for {
         false <- lifecycle.accInForeground(accountId).head
-        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime, clock.instant()))
+        drift <- push.beDrift.head
+        now = clock.instant() + drift
+        _     <- prefs.preference(UserPreferences.OutstandingPush) := Some(ReceivedPush(nId, sentTime.until(now), now))
       } yield {
         verbose(s"addNotification: $nId")
         push.cloudPushNotificationsToProcess.mutate(_ + nId)

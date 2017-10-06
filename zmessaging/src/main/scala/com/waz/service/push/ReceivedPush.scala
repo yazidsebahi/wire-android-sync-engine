@@ -28,14 +28,14 @@ import org.threeten.bp.{Duration, Instant}
   * @param receivedAt instant the push notification was received
   * @param toFetch time elapsed until we successfully fetched the notification
   */
-case class ReceivedPush(id: Uid, sentTime: Instant, receivedAt: Instant, toFetch: Option[Duration] = None)
+case class ReceivedPush(id: Uid, sinceSent: Duration, receivedAt: Instant, toFetch: Option[Duration] = None)
 
 object ReceivedPush {
 
   implicit lazy val ReceivedPushPrefCodec = new PrefCodec[ReceivedPush] {
     override def encode(v: ReceivedPush) = returning(new JSONObject()) { o =>
       o.put("id", v.id.str)
-      o.put("sent_time", v.sentTime.toEpochMilli)
+      o.put("since_sent", v.sinceSent.toMillis)
       o.put("received_at", v.receivedAt.toEpochMilli)
       v.toFetch.foreach(d => o.put("to_fetch", d.toMillis))
     }.toString
@@ -45,7 +45,7 @@ object ReceivedPush {
       implicit val js = new json.JSONObject(str)
       ReceivedPush(
         decodeId[Uid]('id),
-        decodeInstant('sent_time),
+        decodeDuration('since_sent),
         decodeInstant('received_at),
         decodeOptDuration('to_fetch)
       )

@@ -206,9 +206,10 @@ class PushServiceImpl(context: Context,
         Results(nots, time, historyLost) <- load(lastId).future
         _ = time.foreach { t => beDrift !  clock.instant.until(t)}
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
+        drift <- beDrift.head
         _ <- userPrefs.preference(UserPreferences.OutstandingPush).mutate {
           case Some(n) =>
-            if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant)))
+            if (nots.map(_.id).contains(n.id)) onReceivedPushNotification ! n.copy(toFetch = Some(n.receivedAt.until(clock.instant + drift)))
             //TODO what would the else here mean? We received a notification and did a fetch, but that notification was not in the result?
             None
           case None =>
