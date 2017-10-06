@@ -40,9 +40,22 @@ import scala.util.{Failure, Success}
  * there is no point in retrying if know that there is no usable network,
  * and it would be good to retry connections as soon as we are back online
  */
-class ZNetClient(auth:       Option[AuthenticationManager] = None,
-                 val client: AsyncClient,
-                 baseUri:    URI) {
+
+trait ZNetClient {
+  import ZNetClient._
+
+  def apply[A](r: Request[A]): CancellableFuture[Response]
+  def updateWithErrorHandling[A](name: String, r: Request[A])(implicit ec: ExecutionContext): ErrorOrResponse[Unit]
+  def withErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOrResponse[T]
+  def withFutureErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOr[T]
+  def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T]
+  def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T]
+  def close(): Future[Unit]
+
+  def client: AsyncClient
+}
+
+class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val client: AsyncClient, baseUri: URI) extends ZNetClient {
 
   import ZNetClient._
   private implicit val logTag: LogTag = logTagFor[ZNetClient]
@@ -66,7 +79,7 @@ class ZNetClient(auth:       Option[AuthenticationManager] = None,
   def MaxConcurrentRequests = 4
   def LongRunning = 45.seconds
 
-  def apply[A](r: Request[A]): CancellableFuture[Response] = {
+  override def apply[A](r: Request[A]): CancellableFuture[Response] = {
     val handle = new RequestHandle(r)
     enqueue(handle)
     new CancellableFuture[Response](handle.promise) {
@@ -78,25 +91,25 @@ class ZNetClient(auth:       Option[AuthenticationManager] = None,
     }
   }
 
-  def updateWithErrorHandling[A](name: String, r: Request[A])(implicit ec: ExecutionContext): ErrorOrResponse[Unit] =
+  override def updateWithErrorHandling[A](name: String, r: Request[A])(implicit ec: ExecutionContext): ErrorOrResponse[Unit] =
     withErrorHandling(name, r) { case Response(SuccessHttpStatus(), _, _) => () } (ec)
 
-  def withErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
+  override def withErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
     apply(r).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
 
 
-  def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
+  override def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T] =
     apply(r).flatMap(pf.orElse(errorHandling(name) andThen CancellableFuture.successful))(ec)
 
 
-  def withFutureErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOr[T] =
+  override def withFutureErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOr[T] =
     apply(r).future.map(pf.andThen(Right(_)).orElse(errorHandling(name))).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
 
 
-  def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T] =
+  override def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T] =
     apply(r).future.flatMap(pf.orElse(errorHandling(name) andThen Future.successful))(ec).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
 
-  def close(): Future[Unit] = Future {
+  override def close(): Future[Unit] = Future {
     closed = true
     queue.foreach(_.promise.success(Response(Response.Cancelled)))
     queue.clear()
@@ -225,7 +238,7 @@ object ZNetClient {
       CancellableFuture.failed(new Exception("Empty async client"))
   }
 
-  class EmptyClient extends ZNetClient(None, new EmptyAsyncClientImpl(), BackendConfig.StagingBackend.baseUrl) {
+  class EmptyClient extends ZNetClientImpl(None, new EmptyAsyncClientImpl(), BackendConfig.StagingBackend.baseUrl) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
     override def close(): Future[Unit] = Future.successful({})
   }

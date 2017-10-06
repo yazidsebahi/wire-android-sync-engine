@@ -39,11 +39,14 @@ trait AsyncClient {
   def apply(request: Request[_]): CancellableFuture[Response]
 
   def close(): Unit
+
+  def userAgent: String
+  def wrapper: Future[ClientWrapper]
 }
 
 class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
-                      val userAgent: String = AsyncClient.userAgent(),
-                      val wrapper: Future[ClientWrapper] = ClientWrapper(),
+                      override val userAgent: String = AsyncClient.userAgent(),
+                      override val wrapper: Future[ClientWrapper] = ClientWrapper(),
                       requestWorker: RequestWorker = new HttpRequestImplWorker,
                       responseWorker: ResponseWorker = new ResponseImplWorker
                  ) extends AsyncClient {

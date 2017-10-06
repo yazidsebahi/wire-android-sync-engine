@@ -26,14 +26,14 @@ import com.waz.ZLog._
 import com.waz.model.AccountId
 import com.waz.service.{AccountManager, ZMessaging}
 import com.waz.threading.Threading
-import com.waz.utils.WakeLock
+import com.waz.utils.WakeLockImpl
 
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
 abstract class FutureService extends Service {
 
-  protected lazy val wakeLock = new WakeLock(getApplicationContext)
+  protected lazy val wakeLock = new WakeLockImpl(getApplicationContext)
 
   override def onBind(intent: Intent): IBinder = null
 

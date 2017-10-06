@@ -18,7 +18,6 @@
 package com.waz.androidactors
 
 import android.app.Application
-import com.localytics.android.{Localytics, LocalyticsActivityLifecycleCallbacks}
 import com.waz.service.MetaDataService
 import net.hockeyapp.android.{CrashManager, CrashManagerListener}
 
@@ -29,10 +28,6 @@ class ActorsApplication extends Application {
 
   override def onCreate(): Unit = {
     super.onCreate()
-
-    Localytics.integrate(getApplicationContext, metadata.metaData.getString("LOCALYTICS_APP_KEY"))
-    registerActivityLifecycleCallbacks(new LocalyticsActivityLifecycleCallbacks(this, metadata.metaData.getString("LOCALYTICS_APP_KEY")))
-    Localytics.setPushDisabled(false)
 
     CrashManager.register(getApplicationContext, metadata.metaData.getString("HOCKEY_APP_KEY"), new CrashManagerListener() {
       override def shouldAutoUploadCrashes: Boolean = false

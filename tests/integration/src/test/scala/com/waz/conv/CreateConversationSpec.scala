@@ -24,8 +24,7 @@ import com.waz.api.{IConversation, ProvisionedApiSpec, Message => ApiMessage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.push.PushService.SlowSyncRequest
-import com.waz.service.RemoteZmsSpec
+import com.waz.service.{RemoteZmsSpec, ZMessaging}
 import com.waz.sync.client.ConnectionsClient
 import com.waz.testutils.DefaultPatienceConfig
 import com.waz.testutils.Implicits._
@@ -55,7 +54,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
 
   lazy val allUserIds = Seq("auto1", "auto2", "auto3", "auto4", "auto5", "auto6") map provisionedUserId
 
-  lazy val auto6 = new ConnectionsClient(new ZNetClient(null, null, null))//provisionedEmail("auto6"), "auto6_pass", new AsyncClientImpl(wrapper = TestClientWrapper())))
+  lazy val auto6 = new ConnectionsClient(new ZNetClientImpl(null, null, null))//provisionedEmail("auto6"), "auto6_pass", new AsyncClientImpl(wrapper = TestClientWrapper())))
 
   lazy val auto4Id = Await.result(auto4.zmessaging.currentValue.flatten.get.users.getSelfUser, 15.seconds).get.id
 
@@ -168,7 +167,7 @@ class CreateConversationSpec extends FeatureSpec with Matchers with OptionValues
         msg.members should contain theSameElementsAs auto1Members
       }
 
-      api.zmessaging.futureValue.value.pushSignals.onSlowSyncNeeded ! SlowSyncRequest(System.currentTimeMillis)
+      api.zmessaging.futureValue.value.push.onHistoryLost ! ZMessaging.clock.instant()
 
       awaitUi(1.second)
       withDelay {

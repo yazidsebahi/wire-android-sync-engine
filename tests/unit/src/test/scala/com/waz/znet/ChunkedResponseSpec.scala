@@ -58,7 +58,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
   scenario("receive chunked response") {
     val client = new AsyncClientImpl
-    val netClient = new ZNetClient(None, client, BackendConfig("http://localhost:9000").baseUrl)
+    val netClient = new ZNetClientImpl(None, client, BackendConfig("http://localhost:9000").baseUrl)
 
     val response = Await.result(Future.traverse(1 to 20) { _ =>
       netClient(Request.Get("/", requiresAuthentication = false))

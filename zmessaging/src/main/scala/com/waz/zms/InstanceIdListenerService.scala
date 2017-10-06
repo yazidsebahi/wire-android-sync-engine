@@ -21,14 +21,15 @@ import com.google.firebase.iid.FirebaseInstanceIdService
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.service.ZMessaging
+import com.waz.threading.Threading
 
 class InstanceIdListenerService extends FirebaseInstanceIdService with ZMessagingService {
 
-
   override def onTokenRefresh(): Unit = {
-    val token = Option(ZMessaging.currentGlobal).flatMap(_.googleApi.getPushToken)
-    info(s"FCM: onTokenRefresh() called. Got token: $token")
-    Option(ZMessaging.currentGlobal).foreach(_.tokenService.setNewToken(token))
+    ZMessaging.globalModule.map {
+      info(s"FCM: onTokenRefresh()")
+      _.tokenService.setNewToken()
+    } (Threading.Background)
   }
 
 }

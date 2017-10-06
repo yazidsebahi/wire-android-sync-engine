@@ -44,11 +44,7 @@ class TeamsServiceSpec extends AndroidFreeSpec {
   val syncRequests = mock[SyncRequestService]
   val userPrefs =    new TestUserPreferences
 
-  val shouldSyncTeamsPref = userPrefs.preference(ShouldSyncTeams)
-
   scenario("Complete team members signal updates on member add and remove") {
-    result(shouldSyncTeamsPref := false)
-
     val userStorageOnAdded    = EventStream[Seq[UserData]]()
     val userStorageOnUpdated  = EventStream[Seq[(UserData, UserData)]]()
     val userStorageOnDeleted  = EventStream[Seq[UserId]]()
@@ -81,8 +77,6 @@ class TeamsServiceSpec extends AndroidFreeSpec {
   }
 
   scenario("Search team members signal updates on member change") {
-    result(shouldSyncTeamsPref := false)
-
     val userStorageOnAdded    = EventStream[Seq[UserData]]()
     val userStorageOnUpdated  = EventStream[Seq[(UserData, UserData)]]()
     val userStorageOnDeleted  = EventStream[Seq[UserId]]()
@@ -113,8 +107,6 @@ class TeamsServiceSpec extends AndroidFreeSpec {
   }
 
   scenario("Search team members signal doesn't update on non member add") {
-    result(shouldSyncTeamsPref := false)
-
     val userStorageOnAdded    = EventStream[Seq[UserData]]()
     val userStorageOnUpdated  = EventStream[Seq[(UserData, UserData)]]()
     val userStorageOnDeleted  = EventStream[Seq[UserId]]()
@@ -147,8 +139,6 @@ class TeamsServiceSpec extends AndroidFreeSpec {
   }
 
   scenario("Search team members signal updates current values on member update") {
-    result(shouldSyncTeamsPref := false)
-
     val userStorageOnAdded    = EventStream[Seq[UserData]]()
     val userStorageOnUpdated  = EventStream[Seq[(UserData, UserData)]]()
     val userStorageOnDeleted  = EventStream[Seq[UserId]]()

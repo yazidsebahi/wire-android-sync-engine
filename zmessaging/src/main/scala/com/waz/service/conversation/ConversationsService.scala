@@ -24,13 +24,12 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
-import com.waz.service.push.PushServiceSignals
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.threading.Threading
@@ -45,7 +44,7 @@ import scala.util.control.NoStackTrace
 
 class ConversationsService(context:         Context,
                            selfUserId:      UserId,
-                           push:            PushServiceSignals,
+                           push:            PushService,
                            users:           UserServiceImpl,
                            usersStorage:    UsersStorageImpl,
                            membersStorage:  MembersStorageImpl,
@@ -68,22 +67,12 @@ class ConversationsService(context:         Context,
     RichFuture.processSequential(events)(processConversationEvent(_, selfUserId))
   }
 
-  push.onSlowSyncNeeded { req =>
+  push.onHistoryLost { req =>
     verbose(s"onSlowSyncNeeded($req)")
-    for {
-      _ <- if (req.lostHistory) onHistoryLost() else successful(())
-      _ <- sync.syncConversations()
-      _ <- sync.syncTeam()
-    } yield ()
-  }
-
-  val shouldSyncConversations = userPrefs.preference(ShouldSyncConversations)
-
-  shouldSyncConversations.mutate {
-    case true =>
-      sync.syncConversations()
-      false
-    case false => false
+    // TODO: this is just very basic implementation creating empty message
+    // This should be updated to include information about possibly missed changes
+    // this message will be shown rarely (when notifications stream skips data)
+    convsStorage.list.flatMap(messages.addHistoryLostMessages(_, selfUserId))
   }
 
   errors.onErrorDismissed {
@@ -94,12 +83,6 @@ class ConversationsService(context:         Context,
     case ErrorData(_, ErrorType.CANNOT_SEND_MESSAGE_TO_UNVERIFIED_CONVERSATION, _, _, Some(conv), _, _, _, _) =>
       convsStorage.setUnknownVerification(conv)
   }
-
-  // TODO: this is just very basic implementation creating empty message
-  // This should be updated to include information about possibly missed changes
-  // this message will be shown rarely (when notifications stream skips data)
-  private def onHistoryLost() =
-    convsStorage.list.flatMap(messages.addHistoryLostMessages(_, selfUserId))
 
   def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0): Future[Any] = ev match {
     case CreateConversationEvent(rConvId, time, from, data) =>

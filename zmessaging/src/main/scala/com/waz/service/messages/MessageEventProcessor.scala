@@ -47,6 +47,7 @@ class MessageEventProcessor(selfUserId:          UserId,
                             verificationUpdater: VerificationStateUpdater,
                             otr:                 OtrService) {
 
+  import MessageEventProcessor._
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
 
@@ -211,6 +212,21 @@ class MessageEventProcessor(selfUserId:          UserId,
         MessageData(id, conv.id, Message.Type.UNKNOWN, from, time = time, localTime = event.localTime.instant, protos = Seq(msg))
     }
 
+    /**
+      * Creates safe version of incoming message.
+      * Messages sent by malicious contacts might contain content intended to break the app. One example of that
+      * are very long text messages, backend doesn't restrict the size much to allow for assets and group messages,
+      * because of encryption it's also not possible to limit text messages there. On client such messages are handled
+      * inline, and will cause memory problems.
+      * We may need to do more involved checks in future.
+      */
+    def sanitize(msg: GenericMessage): GenericMessage = msg match {
+      case GenericMessage(uid, Text(text, mentions, links)) if text.length > MaxTextContentLength =>
+        GenericMessage(uid, Text(text.take(MaxTextContentLength), mentions, links.filter { p => p.url.length + p.urlOffset <= MaxTextContentLength }))
+      case _ =>
+        msg
+    }
+
     event match {
       case ConnectRequestEvent(_, time, from, text, recipient, name, email) =>
         MessageData(id, convId, Message.Type.CONNECT_REQUEST, from, MessageData.textContent(text), recipient = Some(recipient), email = email, name = Some(name), time = time.instant, localTime = event.localTime.instant)
@@ -224,8 +240,9 @@ class MessageEventProcessor(selfUserId:          UserId,
         MessageData (id, conv.id, Message.Type.OTR_IDENTITY_CHANGED, from, time = time.instant, localTime = event.localTime.instant)
       case OtrErrorEvent(_, time, from, otrError) =>
         MessageData (id, conv.id, Message.Type.OTR_ERROR, from, time = time.instant, localTime = event.localTime.instant)
-      case GenericMessageEvent(_, time, from, proto @ GenericMessage(uid, msgContent)) =>
-        content(MessageId(uid.str), msgContent, from, time.instant, proto)
+      case GenericMessageEvent(_, time, from, proto) =>
+        val sanitized @ GenericMessage(uid, msgContent) = sanitize(proto)
+        content(MessageId(uid.str), msgContent, from, time.instant, sanitized)
       case GenericAssetEvent(_, time, from, proto @ GenericMessage(uid, msgContent), dataId, data) =>
         assetContent(MessageId(uid.str), msgContent, from, time.instant, proto)
       case _ =>
@@ -268,4 +285,8 @@ class MessageEventProcessor(selfUserId:          UserId,
         Future.successful(())
     }
 
+}
+
+object MessageEventProcessor {
+  val MaxTextContentLength = 8192
 }

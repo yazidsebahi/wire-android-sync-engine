@@ -7,8 +7,8 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "108"
-val MinorVersion = "1" // hotfix release
+val MajorVersion = "109"
+val MinorVersion = "0" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -40,7 +40,6 @@ resolvers in ThisBuild ++= Seq(
   "Maven central 1" at "http://repo1.maven.org/maven2",
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
   "Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases",
-  "Localytics" at "http://maven.localytics.com/public",
   "Google Maven repo" at "https://maven.google.com"
 )
 
@@ -108,7 +107,7 @@ lazy val zmessaging = project
     },
     libraryDependencies ++= Seq(
       Deps.supportV4 % Provided,
-      "com.koushikdutta.async" % "androidasync" % "2.1.8",
+      "com.koushikdutta.async" % "androidasync" % "2.2.1",
       "com.googlecode.libphonenumber" % "libphonenumber" % "7.1.1", // 7.2.x breaks protobuf
       "com.softwaremill.macwire" %% "macros" % "2.2.2" % Provided,
       "com.google.android.gms" % "play-services-base" % "11.0.0" % Provided exclude("com.android.support", "support-v4"),
@@ -122,7 +121,6 @@ lazy val zmessaging = project
       "org.threeten" % "threetenbp" % "1.3.+" % Provided,
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
       Deps.hockeyApp % Provided,
-      Deps.localytics,
       "net.java.dev.jna" % "jna" % "4.4.0" % Provided,
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
@@ -238,7 +236,6 @@ lazy val testapp = project.in(file("tests") / "app")
       Deps.spotifyAuth,
       "com.google.android.gms" % "play-services-base" % "7.8.0" exclude("com.android.support", "support-v4"),
       "com.google.android.gms" % "play-services-gcm" % "7.8.0",
-      Deps.localytics,
       "junit" % "junit" % "4.12" % Test,
       "com.android.support" % "support-annotations" % supportLibVersion % Test,
       "com.android.support.test" % "runner" % "0.5" % Test,
@@ -280,8 +277,7 @@ lazy val actors_android = project.in(file("actors") / "android_app")
       Deps.avsAudio,
       Deps.cryptobox,
       "com.google.android.gms" % "play-services-base" % "7.8.0" exclude("com.android.support", "support-v4"),
-      "com.google.android.gms" % "play-services-gcm" % "7.8.0",
-      Deps.localytics
+      "com.google.android.gms" % "play-services-gcm" % "7.8.0"
     )
   )
 
@@ -356,7 +352,6 @@ lazy val actors_app: Project = project.in(file("actors") / "remote_app")
       Deps.avs,
       "org.threeten" % "threetenbp" % "1.3",
       "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2",
-      Deps.localytics,
       "com.android.support" % "support-v4" % supportLibVersion % Provided,
       "com.google.android.gms" % "play-services-base" % "7.8.0" % Provided exclude("com.android.support", "support-v4"),
       "com.google.android.gms" % "play-services-gcm" % "7.8.0" % Provided

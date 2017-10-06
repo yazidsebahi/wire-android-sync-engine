@@ -23,6 +23,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
 import com.waz.api.impl._
+import com.waz.content.UserPreferences.ShouldSyncInitial
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{UserData, _}
 import com.waz.service.otr.OtrService.sessionId
@@ -143,7 +144,13 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
     case Some(user) => (user.email, user.phone)
   } { case (email, phone) =>
     verbose(s"self user data changed, email: $email, phone: $phone")
-    accountsStorage.update(id, _.copy(email = email, phone = phone))
+    accountsStorage.update(id, { acc =>
+      if (acc.pendingPhone == phone) {
+        acc.copy(email = email)
+      } else {
+        acc.copy(email = email, phone = phone)
+      }
+    })
   }
 
   selfUserData.map(_.exists(_.deleted)) { deleted =>
@@ -183,6 +190,12 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   // logged in zmessaging instance
   @volatile private var _zmessaging = Option.empty[ZMessaging]
+
+  private val shouldSyncInitial = storage.userPrefs.preference(ShouldSyncInitial)
+  for {
+    um         <- userModule
+    shouldSync <- shouldSyncInitial.signal
+  } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncInitial := false)
 
   val zmessaging = (for {
     Some(cId)  <- clientId

@@ -20,9 +20,9 @@ package com.waz.service
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.waz.service.BackendConfig.FirebaseOptions
+import com.waz.utils.LoggedTry
 import com.waz.utils.wrappers.URI
-
-import scala.util.Try
+import com.waz.ZLog.ImplicitTag._
 
 case class BackendConfig(baseUrl: URI, websocketUrl: String, firebaseOptions: FirebaseOptions, environment: String) {
   val pushSenderId = firebaseOptions.pushSenderId
@@ -32,7 +32,7 @@ object BackendConfig {
 
   case class FirebaseOptions(pushSenderId: String, appId: String, apiKey: String) {
 
-    def apply(context: Context) = Try {
+    def apply(context: Context) = LoggedTry {
       FirebaseApp.initializeApp(context, new com.google.firebase.FirebaseOptions.Builder()
         .setApplicationId(appId)
         .setApiKey(apiKey)

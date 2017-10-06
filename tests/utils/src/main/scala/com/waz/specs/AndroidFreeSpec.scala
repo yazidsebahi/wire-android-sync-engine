@@ -24,16 +24,16 @@ import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.service.ZMessaging
 import com.waz.testutils.TestClock
 import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
-import com.waz.threading.{SerialDispatchQueue, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil, ZLog}
+import com.waz.{HockeyApp, HockeyAppUtil}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory with OneInstancePerTest { this: Suite =>
 
@@ -71,8 +71,6 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
       }))
     }, Threading.testUiThreadName))
 
-    Localytics.setUtil(None)
-
     HockeyApp.setUtil(Some(new HockeyAppUtil {
       override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
         t match {
@@ -104,9 +102,9 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
     }
   }
 
-  def await[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = result(future)(defaultDuration)
+  def await[A](future: Future[A])(implicit defaultDuration: FiniteDuration = DefaultTimeout): A = result(future)(defaultDuration)
 
-  def result[A](future: Future[A])(implicit defaultDuration: FiniteDuration = 5.seconds): A = Await.result(future, defaultDuration)
+  def result[A](future: Future[A])(implicit defaultDuration: FiniteDuration = DefaultTimeout): A = Await.result(future, defaultDuration)
 
   /**
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
@@ -123,6 +121,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
     while(tasksRemaining && Instant.now().isBefore(start + timeout)) Thread.sleep(10)
     !tasksRemaining
   }
+
+  def withDelay[T](body: => T, delay: FiniteDuration = 100.millis)(implicit ec: ExecutionContext) = CancellableFuture.delayed(delay)(body)
 }
 
 object AndroidFreeSpec {

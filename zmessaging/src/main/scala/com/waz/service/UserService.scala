@@ -28,8 +28,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.UserService._
 import com.waz.service.assets.AssetService
-import com.waz.service.push.PushService.SlowSyncRequest
-import com.waz.service.push.PushServiceSignals
+import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.UsersClient
@@ -59,7 +58,7 @@ class UserServiceImpl(override val selfUserId: UserId,
                       accounts:       AccountsService,
                       usersStorage:   UsersStorageImpl,
                       userPrefs:      UserPreferences,
-                      push:           PushServiceSignals,
+                      push:           PushService,
                       assets:         AssetService,
                       usersClient:    UsersClient,
                       sync:           SyncServiceHandle,
@@ -88,11 +87,9 @@ class UserServiceImpl(override val selfUserId: UserId,
   //TODO remove this and move the necessary user data up to the account storage
   accounts.loggedInAccounts.map(_.flatMap(_.userId).filterNot(_ == selfUserId))(syncNotExistingOrExpired)
 
-  push.onSlowSyncNeeded { case SlowSyncRequest(time, _) =>
+  push.onHistoryLost { time =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")
-    lastSlowSyncTimestamp := Some(time)
-
-    sync.syncSelfUser().map(dependency => sync.syncConnections(Some(dependency)))
+    lastSlowSyncTimestamp := Some(time.toEpochMilli)
   }
 
   override lazy val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]] =

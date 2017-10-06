@@ -21,7 +21,6 @@ import android.content.{ComponentCallbacks2, Context}
 import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
-import com.waz.api.impl.LogLevel
 import com.waz.content.{MembersStorageImpl, UsersStorageImpl, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -49,7 +48,7 @@ import com.waz.znet._
 import net.hockeyapp.android.{Constants, ExceptionHandler}
 import org.threeten.bp.{Clock, Instant}
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
 class ZMessagingFactory(global: GlobalModule) {
@@ -58,7 +57,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
 
-  def client(accountId: AccountId, auth: AuthenticationManager) = new ZNetClient(Some(auth), global.client, global.backend.baseUrl)
+  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -99,7 +98,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   val global     = account.global
 
   //TODO - eventually remove and use the AccountsService directly where needed - currently hard to mock.
-  val loggedInAccoutns = ZMessaging.accounts.loggedInAccounts.map(_.map(_.id).toSet)
+  val loggedInAccoutns = ZMessaging._accounts.loggedInAccounts.map(_.map(_.id).toSet)
 
   val selfUserId = userModule.userId
 
@@ -172,7 +171,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val usersClient        = wire[UsersClient]
   lazy val convClient         = wire[ConversationsClient]
   lazy val teamClient         = wire[TeamsClient]
-  lazy val eventsClient       = wire[EventsClient]
+  lazy val pushNotificationsClient: PushNotificationsClient = new PushNotificationsClientImpl(zNetClient)
   lazy val abClient           = wire[AddressBookClient]
   lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
@@ -191,13 +190,12 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val assetLoader: AssetLoader                   = wire[AssetLoaderImpl]
   lazy val imageLoader: ImageLoader                   = wire[ImageLoaderImpl]
 
-  lazy val push: PushServiceImpl                      = wire[PushServiceImpl]
+  lazy val push: PushService                          = wire[PushServiceImpl]
   lazy val pushToken: PushTokenService                = wire[PushTokenService]
-  lazy val pushSignals                                = wire[PushServiceSignals]
   lazy val errors                                     = wire[ErrorsService]
   lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
-  lazy val websocket: WebSocketClientService          = wire[WebSocketClientService]
+  lazy val websocket: WebSocketClientService          = wire[WebSocketClientServiceImpl]
   lazy val userSearch                                 = wire[UserSearchService]
   lazy val assetGenerator                             = wire[ImageAssetGenerator]
   lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
@@ -251,7 +249,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val openGraphSync    = wire[OpenGraphSyncHandler]
   lazy val handlesSync      = wire[HandlesSyncHandler]
 
-  lazy val eventPipeline = new EventPipeline(Vector(otrService.eventTransformer), eventScheduler.enqueue)
+  lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 
   lazy val eventScheduler = {
 
@@ -269,12 +267,10 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
           pushToken.eventProcessingStage,
           Stage(Sequential)(
             convOrder.conversationOrderEventsStage,
-            Stage(Parallel)(
-              conversations.convStateEventProcessingStage,
-              Stage(Interleaved)(
-                msgEvents.messageEventProcessingStage,
-                genericMsgs.eventProcessingStage
-              )
+            conversations.convStateEventProcessingStage,
+            Stage(Interleaved)(
+              msgEvents.messageEventProcessingStage,
+              genericMsgs.eventProcessingStage
             )
           )
         ),
@@ -321,8 +317,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 object ZMessaging { self =>
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
 
-  require(LogLevel.initialized)
-
   private[waz] var context: Context = _
 
   //var for tests - and set here so that it is globally available without the need for DI
@@ -337,14 +331,20 @@ object ZMessaging { self =>
   def useStagingBackend(): Unit = useBackend(BackendConfig.StagingBackend)
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
-  private lazy val global: GlobalModuleImpl = new GlobalModuleImpl(context, backend)
-  private lazy val accounts: AccountsService = new AccountsService(global)
-  private lazy val ui: UiModule = new UiModule(accounts)
+  private lazy val _global: GlobalModuleImpl = new GlobalModuleImpl(context, backend)
+  private lazy val _accounts: AccountsService = new AccountsService(_global)
+  private lazy val ui: UiModule = new UiModule(_accounts)
 
-  // mutable for testing FIXME: get rid of that
+  //Try to avoid using these - map from the futures instead.
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModuleImpl = _
   var currentAccounts: AccountsService = _
+
+  private lazy val globalReady = Promise[GlobalModule]()
+  private lazy val accsReady = Promise[AccountsService]()
+
+  lazy val globalModule:    Future[GlobalModule]    = globalReady.future
+  lazy val accountsService: Future[AccountsService] = accsReady.future
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()
@@ -353,8 +353,11 @@ object ZMessaging { self =>
       this.context = context.getApplicationContext
       Constants.loadFromContext(context)
       currentUi = ui
-      currentGlobal = global
-      currentAccounts = accounts
+      currentGlobal = _global
+      currentAccounts = _accounts
+
+      globalReady.success(_global)
+      accsReady.success(_accounts)
       Threading.Background { Locales.preloadTransliterator(); ContentSearchQuery.preloadTransliteration(); } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
   }

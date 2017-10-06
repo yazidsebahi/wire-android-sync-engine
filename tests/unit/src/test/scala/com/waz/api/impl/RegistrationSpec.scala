@@ -27,7 +27,7 @@ import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
-import com.waz.service.push.WebSocketClientService
+import com.waz.service.push.{WebSocketClientService, WebSocketClientServiceImpl}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccountsService, MockGlobalModule, MockUiModule, MockZMessagingFactory}
@@ -96,7 +96,8 @@ import scala.util.control.NoStackTrace
               super.syncSelfUser()
             }
           }
-          override lazy val websocket = new WebSocketClientService(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+
+          override lazy val websocket = new WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
             override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }

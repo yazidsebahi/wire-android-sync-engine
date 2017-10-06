@@ -17,13 +17,16 @@
  */
 package com.waz.service.push
 
+import java.io.IOException
+
+import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.PushEnabledKey
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model._
-import com.waz.service.{BackendConfig, ZmsLifeCycle}
+import com.waz.service.{BackendConfig, NetworkModeService, ZmsLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
-import com.waz.testutils.TestGlobalPreferences
+import com.waz.testutils.{TestBackoff, TestGlobalPreferences}
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
@@ -33,16 +36,21 @@ import scala.concurrent.Future
 
 class PushTokenServiceSpec extends AndroidFreeSpec {
 
-  val google      = mock[GoogleApi]
-  val lifecycle   = mock[ZmsLifeCycle]
-  val accStorage  = mock[AccountsStorage]
-  val prefs       = new TestGlobalPreferences()
+  val google         = mock[GoogleApi]
+  val lifecycle      = mock[ZmsLifeCycle]
+  val accStorage     = mock[AccountsStorage]
+  val networkService = mock[NetworkModeService]
+  val prefs          = new TestGlobalPreferences()
 
   val sync        = mock[SyncServiceHandle]
   val accountId   = AccountId()
 
   val pushEnabled         = prefs.preference(PushEnabledKey)
+  await(pushEnabled := true)
+
   val currentToken        = prefs.preference(GlobalPreferences.PushToken)
+  val resetToken          = prefs.preference(GlobalPreferences.ResetPushToken)
+  await(resetToken := false)
 
   val googlePlayAvailable = Signal(false)
   val accInForeground     = Signal(Option.empty[AccountId])
@@ -50,16 +58,17 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
   val loggedInAccounts    = Signal(Set.empty[AccountData])
 
+  val networkMode         = Signal(NetworkMode.WIFI)
+
   def accountData(accountId: AccountId, token: PushToken): AccountData = AccountData(accountId, registeredPush = Some(token))
   def accountData(accountId: AccountId, token: Option[PushToken]): AccountData = AccountData(accountId, registeredPush = token)
 
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
       val token = PushToken("token")
-      (google.getPushToken _).expects().returning(Some(token))
+      (google.getPushToken _).expects().returning(token)
       val service = initTokenService()
 
-      pushEnabled := true
       googlePlayAvailable ! true
       result(service.currentToken.signal.filter(_.contains(token)).head)
     }
@@ -68,12 +77,10 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val oldToken = PushToken("oldToken")
       val newToken = PushToken("newToken")
-      pushEnabled := true
       currentToken := Some(oldToken)
       googlePlayAvailable ! true
 
-      (google.getPushToken _).expects().once().returning(Some(newToken))
-
+      (google.getPushToken _).expects().once().returning(newToken)
       //This needs to be called
       (google.deleteAllPushTokens _).expects().once()
 
@@ -86,6 +93,68 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       //new token should be set
       result(service.currentToken.signal.filter(_.contains(newToken)).head)
     }
+
+    scenario("Failing push token generation should continually retry on IOException, if there is a network connection") {
+
+      googlePlayAvailable ! true
+
+      /*
+      The network starts offline - we want the global token service to try registering once - this is because I'm not entirely sure
+      what happens inside the google play services. Maybe sometimes, a token can be available if there is no internet, no idea. Anyway,
+      try once, and then if it fails with an IOException - it's most likely because there is no connection, so then wait for the device
+      to come back online, then try again
+      */
+      networkMode ! NetworkMode.OFFLINE
+
+      val newToken = PushToken("new_token")
+      var calls = 0
+      (google.getPushToken _).expects.twice().onCall { _ =>
+        calls += 1
+        calls match {
+          case 1 => throw new IOException()
+          case 2 => newToken
+          case _ => fail("unexpected number of calls")
+        }
+      }
+
+      PushTokenService.ResetBackoff = TestBackoff()
+
+      val (global, _) = initTokenServicesWithGlobal()
+
+      global.setNewToken()
+
+      awaitAllTasks
+      calls shouldEqual 1
+      networkMode ! NetworkMode._4G
+      result(currentToken.signal.filter(_.contains(newToken)).head)
+
+    }
+
+    scenario("Multiple simultaneous calls to set token only generate one while still processing") {
+
+      googlePlayAvailable ! true
+
+      await(currentToken := Some(PushToken("oldToken")))
+
+      val token1 = PushToken("token1")
+      val token2 = PushToken("token2")
+      (google.getPushToken _).expects.returning(token1)
+      (google.getPushToken _).expects.returning(token2)
+
+      val (global, _) = initTokenServicesWithGlobal()
+
+      //it's hard to only call `setNewToken` while currently setting one for the sake of the test, so just fire two calls
+      //quickly, and hope the second one always slips in before the first one is set.
+      val res = global.setNewToken()
+      global.setNewToken()
+      result(currentToken.signal.filter(_.contains(token1)).head)
+      await(res)
+
+      //Repeat to make sure the future is freed up
+      global.setNewToken()
+      global.setNewToken()
+      result(currentToken.signal.filter(_.contains(token2)).head)
+    }
   }
 
   feature("Token registration") {
@@ -97,7 +166,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       loggedInAccounts ! Set(accountData(accountId, oldToken))
 
       currentToken := Some(newToken)
-      pushEnabled := true
       googlePlayAvailable ! true
 
       lazy val service = initTokenService()
@@ -120,7 +188,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val newToken = PushToken("newToken")
 
       loggedInAccounts ! Set(accountData(accountId, oldToken))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(oldToken)
 
@@ -133,21 +200,22 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
           SyncId()
         } (Threading.Background)
       }
+      (google.getPushToken _).expects().returning(newToken)
 
       result(service.currentToken.signal.filter(_.contains(oldToken)).head)
       result(loggedInAccounts.filter(_.exists(acc => acc.id == accountId && acc.registeredPush.contains(oldToken))).head)
 
-      globalToken.setNewToken(Some(newToken)) //InstanceIDService triggers new token
+      globalToken.setNewToken() //InstanceIDService triggers new token
 
       result(service.currentToken.signal.filter(_.contains(newToken)).head)
-      result(loggedInAccounts.filter(_.exists(acc => acc.id == accountId && acc.registeredPush.contains(newToken))).head)
+
+      result(accountSignal(accountId).filter(_.registeredPush.contains(newToken)).head)
     }
 
     scenario("After user is logged out, clearing their current push token should NOT trigger new registration") {
       val token = PushToken("token")
 
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -163,7 +231,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       result(service.pushActive.filter(_ == false).head)
 
       /**
-        * It seems as though there can be a couple of instances of zms (and therefore the push token service) available.
+        * There can be a couple of instances of zms (and therefore the push token service) available.
         * So lets make sure we only register the account assigned to our instance. Logging in then with another account
         * shouldn't change the state of this instance.
         */
@@ -179,7 +247,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if push is enabled and inactive if not") {
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true //set active
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -194,7 +261,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be active if app is in background and inactive if not") {
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true
       googlePlayAvailable ! true
       accInForeground ! Some(accountId) //websocket should be open
       currentToken := Some(token)
@@ -210,7 +276,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     scenario("Push should be inactive if play services are unavailable") {
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, token))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -226,7 +291,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       val token = PushToken("token")
       loggedInAccounts ! Set(accountData(accountId, None))
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -242,9 +306,10 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val newToken = PushToken("newToken")
 
       currentToken := Some(oldToken)
+      googlePlayAvailable ! true
       await(currentToken.signal.filter(_.contains(oldToken)).head)
 
-      (google.getPushToken _).expects().once().returning(Some(newToken))
+      (google.getPushToken _).expects().once().returning(newToken)
       //This needs to be called
       (google.deleteAllPushTokens _).expects().once()
 
@@ -252,6 +317,25 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
       globalToken.resetGlobalToken()
       await(currentToken.signal.filter(_.contains(newToken)).head)
+    }
+
+    scenario("Reset global token via reset preference") {
+      val oldToken = PushToken("oldToken")
+      val newToken = PushToken("newToken")
+
+      currentToken := Some(oldToken)
+      googlePlayAvailable ! true
+      await(currentToken.signal.filter(_.contains(oldToken)).head)
+
+      (google.getPushToken _).expects().once().returning(newToken)
+      //This needs to be called
+      (google.deleteAllPushTokens _).expects().once()
+
+      val (globalToken, _) = initTokenServicesWithGlobal()
+
+      resetToken := true
+      await(currentToken.signal.filter(_.contains(newToken)).head)
+      await(resetToken.signal.filter(_ == false).head)
     }
 
     scenario("Add second account and it should get the current global token") {
@@ -263,7 +347,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val account2 = accountData(AccountId(), None)
 
       loggedInAccounts ! Set(account1, account2)
-      pushEnabled := true
       googlePlayAvailable ! true
       currentToken := Some(token)
 
@@ -282,19 +365,20 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       service1
       service2
 
-      await(loggedInAccounts.filter { accs =>
-        accs.exists(acc => acc.id == accountId && acc.registeredPush.contains(token)) &&
-        accs.exists(acc => acc.id == account2.id && acc.registeredPush.contains(token))
-      }.head)
+      result(accountSignal(accountId).filter(_.registeredPush.contains(token)).head)
+      result(accountSignal(account2.id).filter(_.registeredPush.contains(token)).head)
     }
   }
+
+  def accountSignal(id: AccountId) = loggedInAccounts.map(_.find(_.id == id)).collect { case Some(acc) => acc }
 
   def initTokenService(accountId: AccountId = accountId, sync: SyncServiceHandle = sync) = initTokenServicesWithGlobal(Seq(accountId), Seq(sync))._2.head
 
   def initTokenServicesWithGlobal(accountIds: Seq[AccountId] = Seq(accountId), syncs: Seq[SyncServiceHandle] = Seq(sync)) = {
 
     (google.isGooglePlayServicesAvailable _).expects().anyNumberOfTimes().returning(googlePlayAvailable)
-    val global = new GlobalTokenService(google, prefs)
+    (networkService.networkMode _).expects.anyNumberOfTimes().returning(networkMode)
+    val global = new GlobalTokenService(google, prefs, networkService)
 
     (accStorage.signal _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
       loggedInAccounts.map(_.find(_.id == id)).collect { case Some(acc) => acc }

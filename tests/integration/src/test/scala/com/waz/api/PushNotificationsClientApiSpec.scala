@@ -20,8 +20,8 @@ package com.waz.api
 import com.waz.ZLog._
 import com.waz.model.Uid
 import com.waz.model.otr.ClientId
-import com.waz.sync.client.EventsClient
-import com.waz.sync.client.EventsClient.LoadNotificationsResponse
+import com.waz.sync.client.PushNotificationsClient
+import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventContext
 import org.scalatest._
@@ -29,22 +29,19 @@ import org.scalatest._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class EventsClientApiSpec extends FeatureSpec with Matchers with BeforeAndAfter with ProvisionedApiSpec {
+class PushNotificationsClientApiSpec extends FeatureSpec with Matchers with BeforeAndAfter with ProvisionedApiSpec {
 
-  private implicit val logTag: LogTag = logTagFor[EventsClientApiSpec]
+  private implicit val logTag: LogTag = logTagFor[PushNotificationsClientApiSpec]
   implicit val ec = EventContext.Global
   implicit val timeout = 10.seconds: Timeout
   override val provisionFile = "/one_user.json"
 
-  lazy val client: EventsClient = zmessaging.eventsClient
+  lazy val client: PushNotificationsClient = zmessaging.pushNotificationsClient
 
   var lastResponse = Option.empty[LoadNotificationsResponse]
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    client.onNotificationsPageLoaded.onUi { r =>
-      lastResponse = Some(r)
-    }
   }
 
   before {
@@ -53,8 +50,8 @@ class EventsClientApiSpec extends FeatureSpec with Matchers with BeforeAndAfter 
 
   scenario("Load all notifications") {
     val since = Option(Uid())
-    Await.result(client.loadNotifications(since = since, client = ClientId(), pageSize = 100), timeout) match {
-      case Right(Some(lastId)) => info(s"received notifications, ok - last id is $lastId")
+    Await.result(client.loadNotifications(since = since, client = ClientId()), timeout) match {
+      case Right(LoadNotificationsResponse(lastId, _, _)) => info(s"received notifications, ok - last id is $lastId")
       case _ => fail("load notifications failed - got None")
     }
 

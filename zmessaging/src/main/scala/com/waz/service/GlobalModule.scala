@@ -90,6 +90,8 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
+  val lifecycle:                ZmsLifeCycle                     = new ZmsLifeCycleImpl()
+  val network:                  DefaultNetworkModeService        = wire[DefaultNetworkModeService]
   val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
 
   lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsService]
@@ -104,7 +106,6 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val trimmingLruCache:    Cache[Key, Entry]                = MemoryImageCache.newTrimmingLru(context)
   lazy val imageCache:          MemoryImageCache                 = wire[MemoryImageCache]
 
-  lazy val network                                               = wire[DefaultNetworkModeService]
   lazy val phoneNumbers:        PhoneNumberService               = wire[PhoneNumberServiceImpl]
   lazy val timeouts                                              = wire[Timeouts]
   lazy val permissions:         PermissionsService               = wire[PermissionsService]
@@ -135,7 +136,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
   lazy val client:              AsyncClientImpl                  = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
   
-  lazy val globalClient                                          = new ZNetClient(None, client, URI.parse(""))
+  lazy val globalClient:        ZNetClient                       = new ZNetClientImpl(None, client, URI.parse(""))
 
   lazy val imageLoader:         ImageLoader                      = new ImageLoaderImpl(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
 
@@ -147,7 +148,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val flowmanager: DefaultFlowManagerService                = wire[DefaultFlowManagerService]
   lazy val mediaManager                                          = wire[DefaultMediaManagerService]
 
-  val lifecycle: ZmsLifeCycle = new ZmsLifeCycleImpl()
+
 
 }
 

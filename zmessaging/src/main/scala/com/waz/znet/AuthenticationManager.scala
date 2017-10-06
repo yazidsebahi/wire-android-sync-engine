@@ -124,17 +124,11 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
 
   private def dispatchLoginRequest(): CancellableFuture[Either[Status, Token]] =
     CancellableFuture.lift(account).flatMap { acc =>
-      if (acc.canLogin) {
-        dispatchRequest(client.login(acc)) {
-          case Left((_, resp@ErrorResponse(Status.Forbidden, _, _))) =>
-            debug(s"login request failed with: $resp")
-            onInvalidCredentials ! {}
-            CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, s"login request failed with: $resp")))
-        }
-      } else {
-        debug("Password or confirmation code missing in dispatchLoginRequest, returning Unauthorized")
-        onInvalidCredentials ! {}
-        CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, "Password missing in dispatchLoginRequest")))
+      dispatchRequest(client.login(acc)) {
+        case Left((_, resp@ErrorResponse(Status.Forbidden, _, _))) =>
+          debug(s"login request failed with: $resp")
+          onInvalidCredentials ! {}
+          CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, s"login request failed with: $resp")))
       }
     }
 

@@ -33,16 +33,28 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class WebSocketClientService(context:     Context,
-                             accountId:   AccountId,
-                             lifecycle:   ZmsLifeCycle,
-                             netClient:   ZNetClient,
-                             auth:        AuthenticationManager,
-                             val network: DefaultNetworkModeService,
-                             backend:     BackendConfig,
-                             clientId:    ClientId,
-                             timeouts:    Timeouts,
-                             pushToken:   PushTokenService) {
+trait WebSocketClientService {
+  def network: NetworkModeService
+  def useWebSocketFallback: Signal[Boolean]
+  def wsActive: Signal[Boolean]
+  def client: Signal[Option[WebSocketClient]]
+  def connected: Signal[Boolean]
+  def connectionError: Signal[Boolean]
+  def connectionStats: Signal[WebSocketClientService.ConnectionStats]
+  def verifyConnection(): Future[Unit]
+  def awaitActive(): Future[Unit]
+}
+
+class WebSocketClientServiceImpl(context:     Context,
+                                 accountId:   AccountId,
+                                 lifecycle:   ZmsLifeCycle,
+                                 netClient:   ZNetClient,
+                                 auth:        AuthenticationManager,
+                                 override val network: NetworkModeService,
+                                 backend:     BackendConfig,
+                                 clientId:    ClientId,
+                                 timeouts:    Timeouts,
+                                 pushToken:   PushTokenService) extends WebSocketClientService {
   import WebSocketClientService._
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
 
@@ -52,10 +64,10 @@ class WebSocketClientService(context:     Context,
   @volatile
   private var prevClient = Option.empty[WebSocketClient]
 
-  val useWebSocketFallback = pushToken.pushActive.map(!_)
+  override val useWebSocketFallback = pushToken.pushActive.map(!_)
 
   // true if web socket should be active,
-  val wsActive = network.networkMode.flatMap {
+  override val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
     case _ => lifecycle.loggedIn.flatMap {
       case false => Signal const false
@@ -69,7 +81,7 @@ class WebSocketClientService(context:     Context,
     }
   }
 
-  val client = wsActive.zip(lifecycle.idle) map {
+  override val client = wsActive.zip(lifecycle.idle) map {
     case (true, idle) =>
       debug(s"Active, client: $clientId")
 
@@ -88,7 +100,7 @@ class WebSocketClientService(context:     Context,
       None
   }
 
-  val connected = client flatMap {
+  override val connected = client flatMap {
     case Some(c) => c.connected
     case None => Signal const false
   }
@@ -97,7 +109,7 @@ class WebSocketClientService(context:     Context,
     * Indicates if there is some network connection error on websocket.
     * Signals `true` if we have a client, and it has been unconnected for some time.
     */
-  val connectionError = client.zip(network.networkMode) flatMap {
+  override val connectionError = client.zip(network.networkMode) flatMap {
     case (None, _) => Signal const false
     case (Some(c), nm) =>
       c.connected flatMap {
@@ -108,13 +120,12 @@ class WebSocketClientService(context:     Context,
     }
   }
 
-  val connectionStats = client collect { case Some(c) => new ConnectionStats(network, c) }
+  override val connectionStats = client collect { case Some(c) => new ConnectionStats(network, c) }
 
-  def verifyConnection() =
-    client.head flatMap {
-      case None => Future.successful(())
-      case Some(c) => c.verifyConnection().future
-    }
+  override def verifyConnection() = client.head flatMap {
+    case None => Future.successful(())
+    case Some(c) => c.verifyConnection().future
+  }
 
   network.networkMode {
     case NetworkMode.OFFLINE => //no point in checking connection
@@ -124,7 +135,7 @@ class WebSocketClientService(context:     Context,
     verifyConnection()
   }
 
-  def awaitActive(): Future[Unit] = wsActive.collect { case false => () }.head
+  override def awaitActive(): Future[Unit] = wsActive.collect { case false => () }.head
 
   /**
     * Increase the timeout for poorer networks before showing a connection error
@@ -144,7 +155,7 @@ class WebSocketClientService(context:     Context,
 object WebSocketClientService {
 
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
-  class ConnectionStats(network: DefaultNetworkModeService,
+  class ConnectionStats(network: NetworkModeService,
                         client: WebSocketClient) {
     import com.waz.ZLog.ImplicitTag._
     import com.waz.utils._
