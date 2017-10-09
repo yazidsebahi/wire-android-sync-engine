@@ -85,4 +85,8 @@ object ReceivedPushData {
 
 }
 
-case class MissedPushes(time: Instant, countMissed: Int, networkMode: NetworkMode, networkOperator: String)
+case class MissedPushes(time:            Instant,
+                        countMissed:     Int,
+                        inBackground:    Boolean, //will help rull out false-positivie - missed pushes in foreground may be legitimate misses!
+                        networkMode:     NetworkMode,
+                        networkOperator: String)

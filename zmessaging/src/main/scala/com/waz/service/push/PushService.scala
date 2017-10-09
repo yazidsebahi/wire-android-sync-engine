@@ -27,7 +27,7 @@ import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.{EventPipeline, NetworkModeService}
+import com.waz.service.{EventPipeline, NetworkModeService, ZmsLifeCycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
@@ -84,6 +84,7 @@ class PushServiceImpl(context:        Context,
                       pipeline:       EventPipeline,
                       webSocket:      WebSocketClientService,
                       network:        NetworkModeService,
+                      lifeCycle:      ZmsLifeCycle,
                       sync:           SyncServiceHandle) extends PushService { self =>
   import PushService._
 
@@ -213,9 +214,10 @@ class PushServiceImpl(context:        Context,
         pushes <- receivedPushes.list()
         _ <- receivedPushes.removeAll(pushes.map(_.id))
         _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
+        inBackground <- lifeCycle.uiActive.head
     } yield {
         if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
-          onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size - pushes.size, nw, network.getNetworkOperatorName)
+          onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName)
 
         if (pushes.nonEmpty)
           onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))

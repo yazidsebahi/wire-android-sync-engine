@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.{EventPipeline, NetworkModeService}
+import com.waz.service.{EventPipeline, NetworkModeService, ZmsLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
@@ -54,15 +54,18 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val prefs     = new TestGlobalPreferences
   val userPrefs = new TestUserPreferences
   val network = mock[NetworkModeService]
+  val lifeCycle = mock[ZmsLifeCycle]
 
   implicit val ctx = Threading.Background
   val client = mock[PushNotificationsClient]
 
   val wsClient = Signal(Option.empty[WebSocketClient])
+  val uiActive = Signal(true)
 
   (wscService.connected _).expects().anyNumberOfTimes().returning(wsConnected)
   (wscService.client _).expects().anyNumberOfTimes().returning(wsClient)
   (pipeline.apply _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+  (lifeCycle.uiActive _).expects().anyNumberOfTimes().returning(uiActive)
 
   val syncPerformed = Signal(0)
   (sync.performFullSync _).expects().anyNumberOfTimes().onCall { _ =>
@@ -78,7 +81,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
-  val service = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, ClientId(), account, pipeline, wscService, network, sync) {
+  val service = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, ClientId(), account, pipeline, wscService, network, lifeCycle, sync) {
     override lazy val wakeLock: WakeLock = new FakeLock
     override lazy val cloudPushNotificationsToProcess = cloudPush
   }
