@@ -165,7 +165,7 @@ object FCMHandlerService {
       } yield {
         nId match {
           case Some(n) => push.cloudPushNotificationsToProcess.mutate(_ + n)
-          case _       => push.syncHistory()
+          case _       => push.syncHistory("Unreadable FCM notification")
         }
         verbose(s"addNotification: $nId")
       }

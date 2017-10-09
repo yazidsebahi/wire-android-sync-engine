@@ -31,7 +31,7 @@ import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.testutils.{TestBackoff, TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.events.Signal
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
 import com.waz.utils._
@@ -47,7 +47,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val account = AccountId()
   val context = mock[Context]
   val pipeline = mock[EventPipeline]
-  val wscService = mock[WebSocketClientService]
+  val websocket = mock[WebSocketClientService]
   val receivedPushes = mock[ReceivedPushStorage]
   val znet = mock[ZNetClient]
   val sync = mock[SyncServiceHandle]
@@ -62,8 +62,8 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val wsClient = Signal(Option.empty[WebSocketClient])
   val uiActive = Signal(true)
 
-  (wscService.connected _).expects().anyNumberOfTimes().returning(wsConnected)
-  (wscService.client _).expects().anyNumberOfTimes().returning(wsClient)
+  (websocket.connected _).expects().anyNumberOfTimes().returning(wsConnected)
+  (websocket.client _).expects().anyNumberOfTimes().returning(wsClient)
   (pipeline.apply _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
   (lifeCycle.uiActive _).expects().anyNumberOfTimes().returning(uiActive)
 
@@ -76,14 +76,11 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   (network.networkMode _).expects().anyNumberOfTimes.returning(networkMode)
   (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")
 
-  val cloudPush = Signal(Set.empty[Uid]).disableAutowiring()
-
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
-  val service = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, ClientId(), account, pipeline, wscService, network, lifeCycle, sync) {
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, ClientId("clientId"), account, pipeline, websocket, network, lifeCycle, sync) {
     override lazy val wakeLock: WakeLock = new FakeLock
-    override lazy val cloudPushNotificationsToProcess = cloudPush
   }
 
   val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
@@ -108,7 +105,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       result(wsConnected.filter(_ == false).head)
 
-      cloudPush ! Set(pushNotification.id)
+      getService.cloudPushNotificationsToProcess ! Set(pushNotification.id)
 
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
@@ -172,7 +169,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       wsConnected ! true
       result(wsConnected.filter(_ == true).head)
 
-      result(service.onHistoryLost.filter(_ == time).head)
+      result(getService.onHistoryLost.filter(_ == time).head)
       result(syncPerformed.filter(_ == 1).head)
     }
 
@@ -223,7 +220,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1, notification2), hasMore = false, None) ))
       )
 
-      PushService.syncHistoryBackoff = new TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
+      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
 
       wsClient ! Some(ws)
       result(wsClient.filter(_.contains(ws)).head)
@@ -247,7 +244,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1), hasMore = false, None) ))
       )
 
-      PushService.syncHistoryBackoff = new TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
+      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
 
       wsClient ! Some(ws)
       result(wsClient.filter(_.contains(ws)).head)
@@ -336,9 +333,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       (client.loadNotifications _).expects(Some(wsNot1.id), *).never()
 
-      PushService.syncHistoryBackoff = new TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
-
-      println("sync history")
+      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
 
       wsClient ! Some(ws)
       result(wsClient.filter(_.contains(ws)).head)
@@ -347,25 +342,20 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       result(wsConnected.filter(_ == true).head)
       result(idPref.signal.filter(_.contains(lastId)).head)
 
-      println("initial syncHistory done (and failed)")
-      println("sending a push notification")
-
       ws.onMessage ! JsonObjectResponse(wsJson1)
-
-      println("changing the network mode")
 
       networkMode ! NetworkMode.WIFI // switching to wifi should trigger reloading, but the sinceId should stay the same (lastId)
 
-      println("should trigger fetch retry")
       result(networkMode.filter(_ == NetworkMode.WIFI).head)
-
-      println("should set the new lastId")
 
       result(idPref.signal.filter(_.contains(wsNot1.id)).head)
     }
 
     scenario("ignore a push notification while waiting for a delayed retry") {
       val notification1 = PushNotification(Uid(), Nil)
+
+      wsConnected ! true
+      wsClient ! Some(ws)
 
       idPref := Some(lastId)
       result(idPref.signal.filter(_.contains(lastId)).head)
@@ -381,22 +371,43 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       (client.loadNotifications _).expects(Some(pushNotification.id), *).never()
 
-      PushService.syncHistoryBackoff = new TestBackoff(testDelay = 2.seconds)
+      PushService.syncHistoryBackoff = TestBackoff(testDelay = 2.seconds)
 
-      println("sync history")
-
-      wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
-      wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
       result(idPref.signal.filter(_.contains(lastId)).head)
-
-      println("initial syncHistory done (and failed)")
-      println("sending a push notification")
 
       ws.onMessage ! JsonObjectResponse(notObject)
 
+      result(idPref.signal.filter(_.contains(pushNotification.id)).head)
+    }
+
+    scenario("Opening websocket while waiting for a fetch retry should immediately drop the delay and re-try") {
+      val notification1 = PushNotification(Uid("not1"), Nil)
+
+      idPref := Some(lastId)
+      wsClient ! Some(ws)
+      result(idPref.signal.filter(_.contains(lastId)).head)
+      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.day) //plenty of time in which the websocket can become active
+
+      (client.loadNotifications _).expects(Some(lastId), *).once().returning(
+        CancellableFuture.successful(Left(ErrorResponse.InternalError))
+      )
+
+      // this should be triggered by a websocket connectivity change and it still should use lastId, not pushNotification.id
+      (client.loadNotifications _).expects(*, *).anyNumberOfTimes().returning(
+        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1, pushNotification), hasMore = false, None)))
+      )
+
+      (client.loadNotifications _).expects(Some(pushNotification.id), *).never()
+      val service = getService
+
+      service.cloudPushNotificationsToProcess.mutate(_ + notification1.id)
+
+      service.waitingForRetry { v =>
+        println(s"waiting for retry: $v")
+      } (EventContext.Global)
+
+      await(service.waitingForRetry.filter(_ == true).head)
+      wsConnected ! true
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
   }
