@@ -153,7 +153,15 @@ object FCMHandlerService {
         nw    <- network.networkMode.head
         now = clock.instant
         //it's not obvious in the docs, but it seems as though the notification sent time already takes drift into account
-        _ <- receivedPushes.insert(ReceivedPushData(nId.getOrElse(Uid()), sentTime.until(now), now + drift, nw, network.getNetworkOperatorName))
+        _ <- receivedPushes.insert(
+          ReceivedPushData(
+            nId.getOrElse(Uid()),
+            sentTime.until(now),
+            now + drift,
+            nw,
+            network.getNetworkOperatorName,
+            network.isDeviceIdleMode)
+        )
       } yield {
         nId match {
           case Some(n) => push.cloudPushNotificationsToProcess.mutate(_ + n)

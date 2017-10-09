@@ -128,6 +128,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
     (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
     (network.networkMode _).expects().anyNumberOfTimes().returning(Signal.const(NetworkMode.WIFI))
     (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")
+    (network.isDeviceIdleMode _).expects().anyNumberOfTimes().returning(true)
     (receivedPushes.insert _).expects(*).anyNumberOfTimes().onCall((res: ReceivedPushData) => Future.successful(res))
     new FCMHandler(accountId, otrService, lifecycle, push, self, network, receivedPushes, convsContent, clock.instant())
   }

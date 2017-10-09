@@ -44,6 +44,7 @@ case class ReceivedPushData(id:              Uid, //for notifications where we d
                             receivedAt:      Instant,
                             networkMode:     NetworkMode,
                             networkOperator: String,
+                            isDeviceIdle:    Boolean,
                             toFetch:         Option[Duration] = None)
 
 object ReceivedPushData {
@@ -55,6 +56,7 @@ object ReceivedPushData {
       o.put("received_at", v.receivedAt.toEpochMilli)
       o.put("network_mode", v.networkMode)
       o.put("network_operator", v.networkOperator)
+      o.put("is_device_idle", v.isDeviceIdle)
       v.toFetch.foreach(d => o.put("to_fetch", d.toMillis))
     }
   }
@@ -68,6 +70,7 @@ object ReceivedPushData {
         decodeInstant('received_at),
         NetworkMode.valueOf(decodeString('network_mode)),
         decodeString('network_operator),
+        decodeBool('is_device_idle),
         decodeOptDuration('to_fetch)
       )
     }
