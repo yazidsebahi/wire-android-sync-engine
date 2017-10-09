@@ -27,7 +27,7 @@ import com.waz.model._
 import com.waz.service.ZMessaging.clock
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
-import com.waz.service.push.{PushService, ReceivedPush}
+import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
 import com.waz.service.{NetworkModeService, ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
 import com.waz.threading.SerialDispatchQueue
@@ -105,15 +105,15 @@ object FCMHandlerService {
 
   val UserKeyMissingMsg = "Notification did not contain user key - discarding"
 
-  class FCMHandler(accountId:    AccountId,
-                   otrService:   OtrService,
-                   lifecycle:    ZmsLifeCycle,
-                   push:         PushService,
-                   self:         UserId,
-                   network:      NetworkModeService,
-                   prefs:        UserPreferences,
-                   convsContent: ConversationsContentUpdater,
-                   sentTime:     Instant) {
+  class FCMHandler(accountId:      AccountId,
+                   otrService:     OtrService,
+                   lifecycle:      ZmsLifeCycle,
+                   push:           PushService,
+                   self:           UserId,
+                   network:        NetworkModeService,
+                   receivedPushes: ReceivedPushStorage,
+                   convsContent:   ConversationsContentUpdater,
+                   sentTime:       Instant) {
 
     private implicit val dispatcher = new SerialDispatchQueue(name = "FCMHandler")
 
@@ -153,15 +153,12 @@ object FCMHandlerService {
         nw    <- network.networkMode.head
         now = clock.instant
         //it's not obvious in the docs, but it seems as though the notification sent time already takes drift into account
-        _ <- prefs.preference(UserPreferences.OutstandingPushes).mutate { ps =>
-          ps :+ ReceivedPush(sentTime.until(now), now + drift, nw, network.getNetworkOperatorName, id = nId)
-        }
+        _ <- receivedPushes.insert(ReceivedPushData(nId.getOrElse(Uid()), sentTime.until(now), now + drift, nw, network.getNetworkOperatorName))
       } yield {
         nId match {
           case Some(n) => push.cloudPushNotificationsToProcess.mutate(_ + n)
           case _       => push.syncHistory()
         }
-
         verbose(s"addNotification: $nId")
       }
     }
@@ -169,7 +166,7 @@ object FCMHandlerService {
 
   object FCMHandler {
     def apply(zms: ZMessaging, data: Map[String, String], sentTime: Instant): Future[Unit] =
-      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.network, zms.userPrefs, zms.convsContent, sentTime).handleMessage(data)
+      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.network, zms.receivedPushStorage, zms.convsContent, sentTime).handleMessage(data)
   }
 
   val DataKey = "data"

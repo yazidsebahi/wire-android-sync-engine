@@ -25,7 +25,7 @@ import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
-import com.waz.service.push.ReceivedPush
+import com.waz.service.push.ReceivedPushData
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -101,19 +101,6 @@ object Preferences {
 
       implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode, implicitly[Id[A]].empty)
       implicit def optCodec[A: PrefCodec]: PrefCodec[Option[A]] = apply[Option[A]](_.fold("")(implicitly[PrefCodec[A]].encode), { str => if (str == "") None else Some(implicitly[PrefCodec[A]].decode(str)) }, None)
-
-      //TODO this method relies on the PrefCode converting A to a string of a JSONObject, refer to above TO-DO!
-      implicit def seqCodec[A: PrefCodec]: PrefCodec[Seq[A]] = new PrefCodec[Seq[A]] {
-        override def encode(vs: Seq[A]) = JsonEncoder.array(vs) {
-          (arr, v) => arr.put(implicitly[PrefCodec[A]].encode(v))
-        }.toString
-
-        override def decode(str: String) = JsonDecoder.array(new JSONArray(str), (arr, i) =>
-          implicitly[PrefCodec[A]].decode(arr.get(i).asInstanceOf[String])
-        )
-
-        override val default = Seq.empty
-      }
 
       implicit lazy val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
       implicit lazy val DurationCodec = apply[Duration](d => String.valueOf(d.toMillis), s => Duration.ofMillis(java.lang.Long.parseLong(s)), Duration.ZERO)
@@ -339,8 +326,6 @@ object UserPreferences {
 
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
     returning(new UserPreferences(context, storage))(_.migrateFromGlobal(globalPreferences))
-
-  lazy val OutstandingPushes          = PrefKey[Seq[ReceivedPush]]("outstanding_push_notifications")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")

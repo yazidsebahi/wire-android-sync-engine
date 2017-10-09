@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.GlobalPreferences.BackendDrift
-import com.waz.content.UserPreferences.{LastStableNotification, OutstandingPushes}
+import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -57,7 +57,7 @@ trait PushService {
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
 
   def onMissedCloudPushNotifications: EventStream[MissedPushes]
-  def onFetchedPushNotifications:     EventStream[Seq[ReceivedPush]]
+  def onFetchedPushNotifications:     EventStream[Seq[ReceivedPushData]]
 
   def syncHistory(): Future[Unit]
 
@@ -74,16 +74,17 @@ trait PushService {
   def beDrift: Signal[Duration]
 }
 
-class PushServiceImpl(context:   Context,
-                      userPrefs: UserPreferences,
-                      prefs:     GlobalPreferences,
-                      client:    PushNotificationsClient,
-                      clientId:  ClientId,
-                      accountId: AccountId,
-                      pipeline:  EventPipeline,
-                      webSocket: WebSocketClientService,
-                      network:   NetworkModeService,
-                      sync:      SyncServiceHandle) extends PushService { self =>
+class PushServiceImpl(context:        Context,
+                      userPrefs:      UserPreferences,
+                      prefs:          GlobalPreferences,
+                      receivedPushes: ReceivedPushStorage,
+                      client:         PushNotificationsClient,
+                      clientId:       ClientId,
+                      accountId:      AccountId,
+                      pipeline:       EventPipeline,
+                      webSocket:      WebSocketClientService,
+                      network:        NetworkModeService,
+                      sync:           SyncServiceHandle) extends PushService { self =>
   import PushService._
 
   implicit val logTag: LogTag = s"${logTagFor[PushService]}#${accountId.str.take(8)}"
@@ -91,7 +92,7 @@ class PushServiceImpl(context:   Context,
   private implicit val ec = EventContext.Global
 
   override val onMissedCloudPushNotifications = EventStream[MissedPushes]()
-  override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPush]]()
+  override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPushData]]()
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val pushConnected = Signal[Boolean]()
@@ -207,17 +208,20 @@ class PushServiceImpl(context:   Context,
       for {
         Results(nots, time, historyLost) <- load(lastId).future
         _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
-        drift <- beDrift.head
-        nw    <- network.networkMode.head
-        _ <- userPrefs.preference(OutstandingPushes).mutate { pushes =>
-            if (pushes.isEmpty && nots.nonEmpty)
-              onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size, nw, network.getNetworkOperatorName)
-            else if (pushes.nonEmpty)
-              onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))
-            Seq.empty
-        }
+        drift  <- beDrift.head
+        nw     <- network.networkMode.head
+        pushes <- receivedPushes.list()
+        _ <- receivedPushes.removeAll(pushes.map(_.id))
         _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
-    } yield onPushNotifications(nots)
+    } yield {
+        if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
+          onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size - pushes.size, nw, network.getNetworkOperatorName)
+
+        if (pushes.nonEmpty)
+          onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))
+
+        onPushNotifications(nots)
+      }
 
     returning( Future(idPref()).flatten flatMap { syncHistory } ) { f => // future and flatten ensure that there is no race with onPushNotifications
       if (!fetchInProgress.isCompleted) fetchInProgress.cancel()

@@ -20,12 +20,11 @@ package com.waz.zms
 import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, ConvId, Uid, UserId}
-import com.waz.service.{NetworkModeService, ZmsLifeCycle}
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
-import com.waz.service.push.PushService
+import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
+import com.waz.service.{NetworkModeService, ZmsLifeCycle}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.zms.FCMHandlerService.FCMHandler
@@ -40,10 +39,10 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   val otrService = mock[OtrService]
   val lifecycle = mock[ZmsLifeCycle]
   val push = mock[PushService]
+  val receivedPushes = mock[ReceivedPushStorage]
   val self = UserId()
   val network = mock[NetworkModeService]
   val convsContent = mock[ConversationsContentUpdater]
-  val prefs = new TestUserPreferences
 
   var accInForeground = Signal(false)
   val beDrift = Signal(Duration.ofMillis(2000))
@@ -129,6 +128,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
     (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
     (network.networkMode _).expects().anyNumberOfTimes().returning(Signal.const(NetworkMode.WIFI))
     (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")
-    new FCMHandler(accountId, otrService, lifecycle, push, self, network, prefs, convsContent, clock.instant())
+    (receivedPushes.insert _).expects(*).anyNumberOfTimes().onCall((res: ReceivedPushData) => Future.successful(res))
+    new FCMHandler(accountId, otrService, lifecycle, push, self, network, receivedPushes, convsContent, clock.instant())
   }
 }

@@ -48,6 +48,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val context = mock[Context]
   val pipeline = mock[EventPipeline]
   val wscService = mock[WebSocketClientService]
+  val receivedPushes = mock[ReceivedPushStorage]
   val znet = mock[ZNetClient]
   val sync = mock[SyncServiceHandle]
   val prefs     = new TestGlobalPreferences
@@ -74,7 +75,10 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   val cloudPush = Signal(Set.empty[Uid]).disableAutowiring()
 
-  val service = new PushServiceImpl(context, userPrefs, prefs, client, ClientId(), account, pipeline, wscService, network, sync) {
+  (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
+  (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+
+  val service = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, ClientId(), account, pipeline, wscService, network, sync) {
     override lazy val wakeLock: WakeLock = new FakeLock
     override lazy val cloudPushNotificationsToProcess = cloudPush
   }
