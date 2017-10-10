@@ -244,7 +244,6 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
 
       val shareContacts = if (!currentPrefs.contains(ShareContacts.str))    setValue(ShareContacts,    gPrefs.getFromPref(GlobalPreferences._ShareContacts))    else Future.successful({})
       val darKTheme     = if (!currentPrefs.contains(DarkTheme.str))        setValue(DarkTheme,        gPrefs.getFromPref(GlobalPreferences._DarkTheme))        else Future.successful({})
-      val analytics     = if (!currentPrefs.contains(AnalyticsEnabled.str)) setValue(AnalyticsEnabled, gPrefs.getFromPref(GlobalPreferences._AnalyticsEnabled)) else Future.successful({})
       val sounds        =
         if (!currentPrefs.contains(Sounds.str)) {
           import IntensityLevel._
@@ -271,7 +270,6 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
         _ <- shareContacts
         _ <- darKTheme
         _ <- sounds
-        _ <- analytics
         _ <- wifiDownload
       } yield {}
     }
@@ -307,12 +305,12 @@ object GlobalPreferences {
   lazy val GPSErrorDialogShowCount    = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 
   lazy val ResetPushToken             = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
+  lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
 
   //DEPRECATED!!! Use the UserPreferences instead!!
   lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
   lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")
   lazy val _SoundsPrefKey              = PrefKey[String] ("PREF_KEY_SOUND")
-  lazy val _AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
   lazy val _DownloadImages             = PrefKey[String]("zms_pref_image_download")
 
 }
@@ -325,7 +323,6 @@ object UserPreferences {
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
   lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
-  lazy val AnalyticsEnabled         = PrefKey[Boolean]       ("analytics_enabled", customDefault = true)
 
   lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_always", customDefault = true)
 
