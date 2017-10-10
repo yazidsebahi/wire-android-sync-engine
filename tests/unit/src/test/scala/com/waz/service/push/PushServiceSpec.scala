@@ -31,10 +31,10 @@ import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.testutils.{TestBackoff, TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils._
+import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
-import com.waz.utils._
 import org.json.JSONObject
 
 import scala.concurrent.Future
@@ -45,6 +45,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val wsConnected = Signal(false)
 
   val account = AccountId()
+  val clientId  = ClientId()
   val context = mock[Context]
   val pipeline = mock[EventPipeline]
   val websocket = mock[WebSocketClientService]
@@ -64,7 +65,13 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   (websocket.connected _).expects().anyNumberOfTimes().returning(wsConnected)
   (websocket.client _).expects().anyNumberOfTimes().returning(wsClient)
-  (pipeline.apply _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+
+  val processedEvents = Signal(Set.empty[Event]).disableAutowiring()
+
+  (pipeline.apply _).expects(*).anyNumberOfTimes().onCall { ev: Traversable[Event] =>
+    processedEvents.mutate(_ ++ ev.toSet)
+    Future.successful({})
+  }
   (lifeCycle.uiActive _).expects().anyNumberOfTimes().returning(uiActive)
 
   val syncPerformed = Signal(0)
@@ -79,7 +86,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, ClientId("clientId"), account, pipeline, websocket, network, lifeCycle, sync) {
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account, pipeline, websocket, network, lifeCycle, sync) {
     override lazy val wakeLock: WakeLock = new FakeLock
   }
 
@@ -91,58 +98,51 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    idPref := Some(lastId)
+    result(idPref.signal.filter(_.contains(lastId)).head)
+  }
+
   feature("/notifications") {
     scenario("get a notification from cloud messaging push") {
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
+      wsClient ! Some(ws)
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
       )
 
-      wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
-      result(wsConnected.filter(_ == false).head)
-
       getService.cloudPushNotificationsToProcess ! Set(pushNotification.id)
-
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
 
     scenario("fetch last notification when there is no local last notification id") {
-      //idPref := None
+
+      idPref := None
       result(idPref.signal.filter(_.isEmpty).head)
 
       (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
+          CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
       )
 
-      wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
+      getService
 
+      wsClient ! Some(ws)
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
       result(syncPerformed.filter(_ == 0).head)
     }
 
     scenario("fetch notifications and update last id") {
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
       val notification1 = PushNotification(Uid(), Nil)
       val notification2 = PushNotification(Uid(), Nil)
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1, notification2), hasMore = false, None) ))
       )
 
+      getService
       wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
       result(idPref.signal.filter(_.contains(notification2.id)).head)
       awaitAllTasks
@@ -151,28 +151,22 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
     scenario("request slow sync and fetch last notification if /notifications returns error") {
       clock + 10.minutes
-      val time = AndroidFreeSpec.clock.instant()
+      val time = clock.instant()
       (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Left(ErrorResponse(Response.Status.NotFound, "", "")))
+          CancellableFuture.successful(Left(ErrorResponse(Response.Status.NotFound, "", "")))
       )
 
       (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(PushNotification(Uid(), Nil), PushNotification(Uid(), Nil)), hasMore = false, None) ))
+          CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(PushNotification(Uid(), Nil), PushNotification(Uid(), Nil)), hasMore = false, None) ))
       )
 
+      val service = getService
       wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
-      result(getService.onHistoryLost.filter(_ == time).head)
+      result(service.onHistoryLost.filter(_ == time).head)
       result(syncPerformed.filter(_ == 1).head)
     }
-
   }
 
   feature("network changes") {
@@ -187,26 +181,13 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1, notification2), hasMore = false, None) ))
       )
 
-      val backoff = mock[Backoff]
-      var backoffDelayCalled = 0
-      (backoff.delay _).expects(*, *).anyNumberOfTimes().onCall { _ =>
-        backoffDelayCalled += 1
-        1.seconds
-      }
+      PushService.syncHistoryBackoff = TestBackoff()
 
-      PushService.syncHistoryBackoff = backoff
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
+      getService
       wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
       result(idPref.signal.filter(_.contains(notification2.id)).head)
-
-      backoffDelayCalled shouldEqual 1
     }
 
     scenario("sync history on network change after a failed load") {
@@ -220,19 +201,13 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1, notification2), hasMore = false, None) ))
       )
 
-      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
-
+      val service = getService
+      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.day) // long enough so we don't have to worry about it
       wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
+      await(service.waitingForRetry.filter(_ == true).head)
       networkMode ! NetworkMode.WIFI // switching to wifi should trigger reloading
-      result(networkMode.filter(_ == NetworkMode.WIFI).head)
 
       result(idPref.signal.filter(_.contains(notification2.id)).head)
     }
@@ -246,18 +221,15 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
 
-      wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
+      getService
 
+      wsClient ! Some(ws)
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
       result(idPref.signal.filter(_.contains(notification1.id)).head)
 
       networkMode ! NetworkMode.WIFI // switching to wifi should NOT trigger reloading
-      result(networkMode.filter(_ == NetworkMode.WIFI).head)
       awaitAllTasks
-
       result(idPref.signal.filter(_.contains(notification1.id)).head)
     }
   }
@@ -266,100 +238,57 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
     scenario("receive notifications first with a fetch, then with a push") {
 
-      val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(notJson)
-      val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
+      val pushNot = PushNotification(Uid("push-not-id"), Nil)
+      val wsJson = new JSONObject(notJson)
+      val wsNot = PushNotification.NotificationDecoder(wsJson)
 
       (client.loadNotifications _).expects(*, *).once().returning(
-        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1), hasMore = false, None)))
+        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(pushNot), hasMore = false, None)))
       )
 
+      getService
       wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
-      result(idPref.signal.filter(_.contains(notification1.id)).head)
+      result(idPref.signal.filter(_.contains(pushNot.id)).head)
 
-      ws.onMessage ! JsonObjectResponse(wsJson1)
+      ws.onMessage ! JsonObjectResponse(wsJson)
 
-      result(idPref.signal.filter(_.contains(wsNot1.id)).head)
+      result(idPref.signal.filter(_.contains(wsNot.id)).head)
     }
 
     scenario("receive a push notification during a fetch") {
-      val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(notJson)
-      val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
+
+      /**
+        * Note, here we will end up processing the websocket notification twice if it is included in the fetch payload.
+        * However, this scenario should not happen often and the worst that can happen is that we process an event twice,
+        * getting duplicate errors from Cryptobox or discarding the event further down the line.
+        */
+
+      val pushNot = PushNotification(Uid("push-not-id"), Seq(OtrClientRemoveEvent(ClientId())))
+      val wsJson = new JSONObject(notJson)
+      val wsNot = PushNotification.NotificationDecoder(wsJson)
 
       (client.loadNotifications _).expects(*, *).once().onCall { _ =>
-        Future {
-          ws.onMessage ! JsonObjectResponse(wsJson1)
-        }
-        Thread.sleep(100L)
-
+        ws.onMessage.publish(JsonObjectResponse(wsJson), Threading.Background)
         CancellableFuture.successful {
-          Right(LoadNotificationsResponse(Vector(notification1), hasMore = false, None))
+          Right(LoadNotificationsResponse(Vector(pushNot, wsNot), hasMore = false, None))
         }
       }
 
+      getService
       wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
       wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
 
-      result(idPref.signal.filter(_.contains(notification1.id)).head)
-
-      result(idPref.signal.filter(_.contains(wsNot1.id)).head) // processed as second even though received first
+      result(idPref.signal.filter(_.contains(wsNot.id)).head) // processed as second even though received first
+      result(processedEvents.filter(_.size == 2).head)
     }
+  }
 
-    scenario("ignore a push notification while waiting for a network change") {
+  feature("Fetch retries") {
+
+    scenario("Retry should occur after delay expires") {
       val notification1 = PushNotification(Uid(), Nil)
-      val wsJson1 = new JSONObject(notJson)
-      val wsNot1 = PushNotification.NotificationDecoder(wsJson1)
-
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
-      (client.loadNotifications _).expects(Some(lastId), *).once().returning(
-        CancellableFuture.successful(Left(ErrorResponse.InternalError))
-      )
-
-      // this should be triggered by a network change and it still should use lastId, not wsNot1.id
-      (client.loadNotifications _).expects(Some(lastId), *).once().returning(
-        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1, wsNot1), hasMore = false, None)))
-      )
-
-      (client.loadNotifications _).expects(Some(wsNot1.id), *).never()
-
-      PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.days) // long enough so we don't have to worry about it
-
-      wsClient ! Some(ws)
-      result(wsClient.filter(_.contains(ws)).head)
-
-      wsConnected ! true
-      result(wsConnected.filter(_ == true).head)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
-      ws.onMessage ! JsonObjectResponse(wsJson1)
-
-      networkMode ! NetworkMode.WIFI // switching to wifi should trigger reloading, but the sinceId should stay the same (lastId)
-
-      result(networkMode.filter(_ == NetworkMode.WIFI).head)
-
-      result(idPref.signal.filter(_.contains(wsNot1.id)).head)
-    }
-
-    scenario("ignore a push notification while waiting for a delayed retry") {
-      val notification1 = PushNotification(Uid(), Nil)
-
-      wsConnected ! true
-      wsClient ! Some(ws)
-
-      idPref := Some(lastId)
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
       (client.loadNotifications _).expects(Some(lastId), *).once().returning(
         CancellableFuture.successful(Left(ErrorResponse.InternalError))
       )
@@ -369,23 +298,17 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(notification1, pushNotification), hasMore = false, None)))
       )
 
-      (client.loadNotifications _).expects(Some(pushNotification.id), *).never()
-
-      PushService.syncHistoryBackoff = TestBackoff(testDelay = 2.seconds)
-
-      result(idPref.signal.filter(_.contains(lastId)).head)
-
-      ws.onMessage ! JsonObjectResponse(notObject)
+      PushService.syncHistoryBackoff = TestBackoff()
+      getService
+      wsConnected ! true
+      wsClient ! Some(ws)
 
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
 
     scenario("Opening websocket while waiting for a fetch retry should immediately drop the delay and re-try") {
       val notification1 = PushNotification(Uid("not1"), Nil)
-
-      idPref := Some(lastId)
       wsClient ! Some(ws)
-      result(idPref.signal.filter(_.contains(lastId)).head)
       PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.day) //plenty of time in which the websocket can become active
 
       (client.loadNotifications _).expects(Some(lastId), *).once().returning(
@@ -402,10 +325,6 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
       service.cloudPushNotificationsToProcess.mutate(_ + notification1.id)
 
-      service.waitingForRetry { v =>
-        println(s"waiting for retry: $v")
-      } (EventContext.Global)
-
       await(service.waitingForRetry.filter(_ == true).head)
       wsConnected ! true
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
@@ -413,10 +332,17 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   }
 
   val lastId = Uid("last-id")
-  val notJson = """
+  val notJson = s"""
       | {
-      |         "id":"fbe54fb4-463e-4746-9861-c28c2961bdd0",
-      |         "payload":[]
+      |         "id":"ws-not-id",
+      |         "payload":[
+      |           {
+      |             "type": "user.client-remove",
+      |             "client": {
+      |               "id": "some-client"
+      |             }
+      |          }
+      |        ]
       | }
     """.stripMargin
   val notObject = new JSONObject(notJson)

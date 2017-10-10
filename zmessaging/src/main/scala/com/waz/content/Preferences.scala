@@ -25,14 +25,13 @@ import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
-import com.waz.service.push.ReceivedPushData
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{Signal, SourceSignal}
-import com.waz.utils.{CachedStorageImpl, JsonDecoder, JsonEncoder, Serialized, TrimmingLruCache, returning}
+import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
-import org.json.{JSONArray, JSONObject}
+import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.JavaConverters._

@@ -63,7 +63,6 @@ trait PushService {
   def syncHistory(reason: String): Future[Unit]
 
   def onHistoryLost: SourceSignal[Instant] with BgEventSource
-  def pushConnected: Signal[Boolean]
   def processing: Signal[Boolean]
   def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T]
 
@@ -97,7 +96,6 @@ class PushServiceImpl(context:        Context,
   override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPushData]]()
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
-  override val pushConnected = Signal[Boolean]()
   override val processing = Signal(false)
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
   override lazy val cloudPushNotificationsToProcess = Signal(Set[Uid]())
@@ -108,8 +106,6 @@ class PushServiceImpl(context:        Context,
   private var fetchInProgress = Future.successful({})
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
-
-  webSocket.connected { pushConnected ! _ }
 
   private var subs = Seq.empty[Subscription]
 
@@ -139,6 +135,7 @@ class PushServiceImpl(context:        Context,
         }
       )
   }
+
 
   EventStream.union(
     cloudPushNotificationsToProcess.onChanged.filter(_.nonEmpty).map(_ => "cloud notifications"),
@@ -175,7 +172,7 @@ class PushServiceImpl(context:        Context,
                                    historyLost: Boolean = false) =
     CancellableFuture.successful(Results(notifications, time, historyLost))
 
-  //expose loop to tests
+  //expose retry loop to tests
   protected[push] val waitingForRetry = Signal(false).disableAutowiring()
 
   override def syncHistory(reason: String): Future[Unit] = {
@@ -189,7 +186,6 @@ class PushServiceImpl(context:        Context,
         warn(s"/notifications failed with 404, history lost")
         load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
       case Left(err) =>
-        waitingForRetry ! true
         warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
         //We want to retry the download after the backoff is elapsed and the network is available,
         //OR on a network state change (that is not offline/unknown)
@@ -208,6 +204,7 @@ class PushServiceImpl(context:        Context,
           _ <- lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
         } yield retry.trySuccess({})
 
+        waitingForRetry ! true
         lift(retry.future).flatMap { _ =>
           waitingForRetry ! false
           load(lastId, attempts + 1)
