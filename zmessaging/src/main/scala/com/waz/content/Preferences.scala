@@ -32,7 +32,7 @@ import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import org.json.JSONObject
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -52,7 +52,7 @@ trait Preferences {
     Preference[A](this, key)
 
   protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A]
-  protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit]
+  def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit]
 }
 
 object Preferences {
@@ -100,7 +100,9 @@ object Preferences {
 
       implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode, implicitly[Id[A]].empty)
       implicit def optCodec[A: PrefCodec]: PrefCodec[Option[A]] = apply[Option[A]](_.fold("")(implicitly[PrefCodec[A]].encode), { str => if (str == "") None else Some(implicitly[PrefCodec[A]].decode(str)) }, None)
+
       implicit lazy val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
+      implicit lazy val DurationCodec = apply[Duration](d => String.valueOf(d.toMillis), s => Duration.ofMillis(java.lang.Long.parseLong(s)), Duration.ZERO)
 
       implicit lazy val AuthTokenCodec = apply[Option[Token]] (
         { t => optCodec[String].encode(t map Token.Encoder.apply map (_.toString)) },
@@ -206,7 +208,7 @@ class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Pref
   override protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A] =
     dispatcher(getFromPref[A](key))
 
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] =
+  override def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] =
     dispatcher {
       import PrefCodec._
       val codec = implicitly[PrefCodec[A]]
@@ -233,18 +235,37 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
     get(key.str).map(_.map(_.value)).map(_.map(implicitly[PrefCodec[A]].decode).getOrElse(key.default))
   }
 
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+  override def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
     put(key.str, KeyValueData(key.str, implicitly[PrefCodec[A]].encode(value))).map(_ => {})
 
+  def migrate(gPrefs: GlobalPreferences) = Serialized.future(GlobalPreferences.MigrationKey) {
+    for {
+      _ <- migrateFromGlobal(gPrefs)
+      _ <- migrateToGlobal(gPrefs)
+    } yield ()
+  }
+
+  def migrateToGlobal(gPrefs: GlobalPreferences)(implicit ec: ExecutionContext) = {
+    list().map(_.map(kvd => kvd.key -> kvd.value).toMap).flatMap { currentPrefs =>
+      currentPrefs.get("analytics_enabled").map(PrefCodec.BooleanCodec.decode).fold {
+        Future.successful(())
+      } {
+        case false =>
+          gPrefs.setValue(GlobalPreferences.AnalyticsEnabled, false).map(_ => remove("analytics_enabled"))
+        case _ =>
+          remove("analytics_enabled")
+      }
+    }
+  }
+
   //TODO eventually remove
-  def migrateFromGlobal(gPrefs: GlobalPreferences) = Serialized.future(GlobalPreferences.MigrationKey) {
+  def migrateFromGlobal(gPrefs: GlobalPreferences)(implicit ec: ExecutionContext) = {
     list().map(_.map(_.key)).flatMap { currentPrefs =>
       verbose(s"migrating global prefs to user prefs: $currentPrefs")
       import UserPreferences._
 
       val shareContacts = if (!currentPrefs.contains(ShareContacts.str))    setValue(ShareContacts,    gPrefs.getFromPref(GlobalPreferences._ShareContacts))    else Future.successful({})
       val darKTheme     = if (!currentPrefs.contains(DarkTheme.str))        setValue(DarkTheme,        gPrefs.getFromPref(GlobalPreferences._DarkTheme))        else Future.successful({})
-      val analytics     = if (!currentPrefs.contains(AnalyticsEnabled.str)) setValue(AnalyticsEnabled, gPrefs.getFromPref(GlobalPreferences._AnalyticsEnabled)) else Future.successful({})
       val sounds        =
         if (!currentPrefs.contains(Sounds.str)) {
           import IntensityLevel._
@@ -271,7 +292,6 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
         _ <- shareContacts
         _ <- darKTheme
         _ <- sounds
-        _ <- analytics
         _ <- wifiDownload
       } yield {}
     }
@@ -290,6 +310,8 @@ object GlobalPreferences {
   lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
 
+  lazy val BackendDrift       = PrefKey[Duration]("backend_drift")
+
   //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct
   lazy val AutoAnswerCallPrefKey      = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")
   lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
@@ -307,12 +329,12 @@ object GlobalPreferences {
   lazy val GPSErrorDialogShowCount    = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 
   lazy val ResetPushToken             = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
+  lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
 
   //DEPRECATED!!! Use the UserPreferences instead!!
   lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
   lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")
   lazy val _SoundsPrefKey              = PrefKey[String] ("PREF_KEY_SOUND")
-  lazy val _AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
   lazy val _DownloadImages             = PrefKey[String]("zms_pref_image_download")
 
 }
@@ -320,12 +342,11 @@ object GlobalPreferences {
 object UserPreferences {
 
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
-    returning(new UserPreferences(context, storage))(_.migrateFromGlobal(globalPreferences))
+    returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
   lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
-  lazy val AnalyticsEnabled         = PrefKey[Boolean]       ("analytics_enabled", customDefault = true)
 
   lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_always", customDefault = true)
 

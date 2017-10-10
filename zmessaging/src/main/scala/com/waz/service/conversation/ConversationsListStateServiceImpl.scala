@@ -30,10 +30,15 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
+trait ConversationsListStateService {
+  def selectedConversationId: Signal[Option[ConvId]]
+  def selectConversation(id: Option[ConvId]): Future[Unit]
+}
+
 /**
  * Keeps track of general conversation list stats needed for display of conversations lists.
  */
-class ConversationsListStateService(convs: ConversationStorageImpl, userPrefs: UserPreferences) {
+class ConversationsListStateServiceImpl(convs: ConversationStorageImpl, userPrefs: UserPreferences) extends ConversationsListStateService {
 
   import ConversationsListState.Data
   import com.waz.utils.events.EventContext.Implicits.global
@@ -59,7 +64,7 @@ class ConversationsListStateService(convs: ConversationStorageImpl, userPrefs: U
 
   convs.list .map { cs =>
     cs foreach onAdded
-  } .recoverWithLog(reportHockey = true)(logTagFor[ConversationsListStateService])
+  } .recoverWithLog(reportHockey = true)(logTagFor[ConversationsListStateServiceImpl])
 
   private def onAdded(c: ConversationData) = if (!c.archived) {
     addToCounts(c, +1)

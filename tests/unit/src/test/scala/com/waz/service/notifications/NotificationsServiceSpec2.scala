@@ -23,11 +23,12 @@ import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.ZmsLifeCycle
+import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.{NotificationService, PushService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
-import com.waz.utils.{RichFiniteDuration, RichInstant}
 import com.waz.utils.events.{EventStream, Signal}
+import com.waz.utils.{RichFiniteDuration, RichInstant}
 import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.Map
@@ -47,6 +48,8 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
   val reactions = mock[ReactionsStorage]
   val userPrefs = new TestUserPreferences
   val push      = mock[PushService]
+  val convsStats = mock[ConversationsListStateService]
+  val members   = mock[MembersStorage]
 
 
   val inForeground = Signal(false)
@@ -173,7 +176,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
     (reactions.onChanged _).expects().returning(reactionsChanged)
     (reactions.onDeleted _).expects().returning(reactionsDeleted)
 
-    new NotificationService(null, account, self, messages, lifeCycle, storage, users, convs, reactions, userPrefs, push)
+    new NotificationService(null, account, self, messages, lifeCycle, storage, users, convs, members, reactions, userPrefs, push, convsStats)
   }
 
 }

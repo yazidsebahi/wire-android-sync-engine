@@ -17,18 +17,19 @@
  */
 package com.waz.zms
 
+import com.waz.api.NetworkMode
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, ConvId, Uid, UserId}
-import com.waz.service.ZmsLifeCycle
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
-import com.waz.service.push.PushService
+import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
+import com.waz.service.{NetworkModeService, ZmsLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.zms.FCMHandlerService.FCMHandler
 import org.json
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
 
@@ -38,10 +39,13 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   val otrService = mock[OtrService]
   val lifecycle = mock[ZmsLifeCycle]
   val push = mock[PushService]
+  val receivedPushes = mock[ReceivedPushStorage]
   val self = UserId()
+  val network = mock[NetworkModeService]
   val convsContent = mock[ConversationsContentUpdater]
 
   var accInForeground = Signal(false)
+  val beDrift = Signal(Duration.ofMillis(2000))
   var cloudNotsToHandle = Signal(Set.empty[Uid])
 
   override protected def afterEach() = {
@@ -56,8 +60,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
       val notId = Uid()
       val fcm = plainPayload(id = notId)
 
-      val handler = initHandler
-      handler.handleMessage(fcm)
+      initHandler.handleMessage(fcm)
       result(cloudNotsToHandle.filter(_.contains(notId)).head)
     }
 
@@ -70,8 +73,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
 
       (otrService.decryptCloudMessage _).expects(*, *).once().returning(Future.successful(Some(decryptedValue)))
 
-      val handler = initHandler
-      handler.handleMessage(fcm)
+      initHandler.handleMessage(fcm)
       result(cloudNotsToHandle.filter(_.contains(notId)).head)
 
     }
@@ -123,6 +125,11 @@ class FCMHandlerSpec extends AndroidFreeSpec {
   def initHandler = {
     (lifecycle.accInForeground _).expects(accountId).anyNumberOfTimes().returning(accInForeground)
     (push.cloudPushNotificationsToProcess _).expects().anyNumberOfTimes().returning(cloudNotsToHandle)
-    new FCMHandler(accountId, otrService, lifecycle, push, self, convsContent)
+    (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
+    (network.networkMode _).expects().anyNumberOfTimes().returning(Signal.const(NetworkMode.WIFI))
+    (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")
+    (network.isDeviceIdleMode _).expects().anyNumberOfTimes().returning(true)
+    (receivedPushes.insert _).expects(*).anyNumberOfTimes().onCall((res: ReceivedPushData) => Future.successful(res))
+    new FCMHandler(accountId, otrService, lifecycle, push, self, network, receivedPushes, convsContent, clock.instant())
   }
 }
