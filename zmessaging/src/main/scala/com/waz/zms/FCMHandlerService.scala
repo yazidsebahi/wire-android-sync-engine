@@ -151,13 +151,12 @@ object FCMHandlerService {
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
         nw    <- network.networkMode.head
-        now = clock.instant
-        //it's not obvious in the docs, but it seems as though the notification sent time already takes drift into account
+        now = clock.instant + drift
         _ <- receivedPushes.insert(
           ReceivedPushData(
             nId.getOrElse(Uid()),
             sentTime.until(now),
-            now + drift,
+            now,
             nw,
             network.getNetworkOperatorName,
             network.isDeviceIdleMode)
