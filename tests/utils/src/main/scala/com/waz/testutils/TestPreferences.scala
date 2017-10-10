@@ -34,7 +34,7 @@ class TestGlobalPreferences extends GlobalPreferences(null, null) {
   override protected def getValue[A: PrefCodec](key: PrefKey[A]) =
     dispatcher(values.get(key.str).map(implicitly[PrefCodec[A]].decode).getOrElse(key.default))
 
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+  override def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
     dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
 
   def print() = dispatcher(println(values))
@@ -49,7 +49,7 @@ class TestUserPreferences extends UserPreferences(null, null) {
   override protected def getValue[A: PrefCodec](key: PrefKey[A]) =
     dispatcher(values.get(key.str).map(implicitly[PrefCodec[A]].decode).getOrElse(key.default))
 
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+  override def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
     dispatcher(values += (key.str -> implicitly[PrefCodec[A]].encode(value)))
 
   def print() = dispatcher(println(values))
