@@ -32,7 +32,7 @@ import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import org.json.JSONObject
-import org.threeten.bp.Instant
+import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -100,7 +100,9 @@ object Preferences {
 
       implicit def idCodec[A: Id]: PrefCodec[A] = apply[A](implicitly[Id[A]].encode, implicitly[Id[A]].decode, implicitly[Id[A]].empty)
       implicit def optCodec[A: PrefCodec]: PrefCodec[Option[A]] = apply[Option[A]](_.fold("")(implicitly[PrefCodec[A]].encode), { str => if (str == "") None else Some(implicitly[PrefCodec[A]].decode(str)) }, None)
+
       implicit lazy val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
+      implicit lazy val DurationCodec = apply[Duration](d => String.valueOf(d.toMillis), s => Duration.ofMillis(java.lang.Long.parseLong(s)), Duration.ZERO)
 
       implicit lazy val AuthTokenCodec = apply[Option[Token]] (
         { t => optCodec[String].encode(t map Token.Encoder.apply map (_.toString)) },
@@ -307,6 +309,8 @@ object GlobalPreferences {
 
   lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
+
+  lazy val BackendDrift       = PrefKey[Duration]("backend_drift")
 
   //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct
   lazy val AutoAnswerCallPrefKey      = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")

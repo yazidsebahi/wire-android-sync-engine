@@ -19,26 +19,27 @@ package com.waz.service.push
 
 import android.content.Context
 import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
 import com.waz.api.NetworkMode.{OFFLINE, UNKNOWN}
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.UserPreferences
+import com.waz.content.GlobalPreferences.BackendDrift
 import com.waz.content.UserPreferences.LastStableNotification
+import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.EventPipeline
+import com.waz.service.{EventPipeline, NetworkModeService, ZmsLifeCycle}
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
+import com.waz.threading.CancellableFuture.lift
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils._
 import com.waz.utils.events._
+import com.waz.utils.{RichInstant, _}
+import com.waz.znet.Response.Status.NotFound
 import org.threeten.bp.{Duration, Instant}
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
-import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
-import com.waz.znet.Response.Status.NotFound
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** PushService handles notifications coming from FCM, WebSocket, and fetch.
   * We assume FCM notifications are unreliable, so we use them only as information that we should perform a fetch (syncHistory).
@@ -56,10 +57,12 @@ trait PushService {
 
   def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
 
-  def syncHistory(): Future[Unit]
+  def onMissedCloudPushNotifications: EventStream[MissedPushes]
+  def onFetchedPushNotifications:     EventStream[Seq[ReceivedPushData]]
+
+  def syncHistory(reason: String): Future[Unit]
 
   def onHistoryLost: SourceSignal[Instant] with BgEventSource
-  def pushConnected: Signal[Boolean]
   def processing: Signal[Boolean]
   def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T]
 
@@ -71,34 +74,38 @@ trait PushService {
   def beDrift: Signal[Duration]
 }
 
-class PushServiceImpl(context: Context,
-                      userPrefs: UserPreferences,
-                      client: PushNotificationsClient,
-                      clientId: ClientId,
-                      pipeline: EventPipeline,
-                      webSocket: WebSocketClientService,
-                      sync: SyncServiceHandle
-                     ) extends PushService { self =>
+class PushServiceImpl(context:        Context,
+                      userPrefs:      UserPreferences,
+                      prefs:          GlobalPreferences,
+                      receivedPushes: ReceivedPushStorage,
+                      client:         PushNotificationsClient,
+                      clientId:       ClientId,
+                      accountId:      AccountId,
+                      pipeline:       EventPipeline,
+                      webSocket:      WebSocketClientService,
+                      network:        NetworkModeService,
+                      lifeCycle:      ZmsLifeCycle,
+                      sync:           SyncServiceHandle) extends PushService { self =>
   import PushService._
 
+  implicit val logTag: LogTag = s"${logTagFor[PushService]}#${accountId.str.take(8)}"
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
   private implicit val ec = EventContext.Global
 
-  private var connectedPushPromise = Promise[PushServiceImpl]()
+  override val onMissedCloudPushNotifications = EventStream[MissedPushes]()
+  override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPushData]]()
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
-  override val pushConnected = Signal[Boolean]()
   override val processing = Signal(false)
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
   override lazy val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
-  override val beDrift = Signal(Duration.ZERO).disableAutowiring()
+  private val beDriftPref = prefs.preference(BackendDrift)
+  override val beDrift = beDriftPref.signal.disableAutowiring()
 
-  private var fetchInProgress = CancellableFuture.successful({})
+  private var fetchInProgress = Future.successful({})
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
-
-  webSocket.connected { pushConnected ! _ }
 
   private var subs = Seq.empty[Subscription]
 
@@ -110,48 +117,31 @@ class PushServiceImpl(context: Context,
     case Some(ws) =>
       subs.foreach(_.destroy())
       subs = Seq(
-        ws.onMessage { content =>
+        ws.onMessage.on(dispatcher) { content =>
           verbose(s"got websocket message: $content")
           content match {
             case NotificationsResponse(notifications@_*) =>
               verbose(s"got notifications from data: $content")
               fetchInProgress = if (fetchInProgress.isCompleted)
-                CancellableFuture(onPushNotifications(notifications))
+                Future(onPushNotifications(notifications))
               else
-                fetchInProgress.flatMap(_ => CancellableFuture(onPushNotifications(notifications)))
+                fetchInProgress.flatMap(_ => Future(onPushNotifications(notifications)))
             case resp =>
               error(s"unexpected push response: $resp")
           }
         },
-        ws.onError { ex =>
-          warn(s"some PushNotification processing failed, will sync history", ex)
-          syncHistory()
+        ws.onError.on(dispatcher) { ex =>
+          syncHistory("websocket error")
         }
       )
   }
 
-  webSocket.connected {
-    case true =>
-      verbose("onConnected")
-      syncHistory()
-      connectedPushPromise.trySuccess(self)
-    case false =>
-      verbose("onDisconnected")
-      syncHistory()
-      connectedPushPromise.tryFailure(new Exception("onDisconnected"))
-      connectedPushPromise = Promise()
-  }
 
-  //no need to sync history on cloud messaging if websocket is connected
-  webSocket.connected.flatMap {
-    case false => cloudPushNotificationsToProcess
-    case _ => Signal.empty[Set[Uid]]
-  }.on(dispatcher) {
-    notifications =>
-      if (notifications.nonEmpty && fetchInProgress.isCompleted){
-        verbose("Sync history in response to cloud message notification")
-        syncHistory()
-      }
+  EventStream.union(
+    cloudPushNotificationsToProcess.onChanged.filter(_.nonEmpty).map(_ => "cloud notifications"),
+    webSocket.connected.onChanged.map(_ => "web socket connection change")
+  ).on(dispatcher) { reason =>
+    syncHistory(reason)
   }
 
   private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
@@ -182,13 +172,10 @@ class PushServiceImpl(context: Context,
                                    historyLost: Boolean = false) =
     CancellableFuture.successful(Results(notifications, time, historyLost))
 
-  webSocket.network.networkMode {
-    case OFFLINE|UNKNOWN =>
-    case _ if !fetchInProgress.isCompleted => syncHistory() // it will restart the fetch
-    case _ =>
-  }
+  //expose retry loop to tests
+  protected[push] val waitingForRetry = Signal(false).disableAutowiring()
 
-  override def syncHistory(): Future[Unit] = {
+  override def syncHistory(reason: String): Future[Unit] = {
     def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
       case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
       case Right(LoadNotificationsResponse(nots, true, time)) =>
@@ -200,26 +187,55 @@ class PushServiceImpl(context: Context,
         load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
       case Left(err) =>
         warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again")
-        CancellableFuture.delay(syncHistoryBackoff.delay(attempts)).flatMap { _ => load(lastId, attempts + 1) }
-      // fetch failed, schedule retry and turn on retry on network change
+        //We want to retry the download after the backoff is elapsed and the network is available,
+        //OR on a network state change (that is not offline/unknown)
+        //OR on a websocket state change
+        val retry = Promise[Unit]()
+
+        //TODO it would be nice to have a method on EventStream#onChanged which can return a future for the first event
+        val currentNetwork = network.networkMode.currentValue.getOrElse(UNKNOWN)
+        network.networkMode.filter(!Set(UNKNOWN, OFFLINE, currentNetwork).contains(_)).head.map(_ => retry.trySuccess({}))
+
+        val currentWSState = webSocket.connected.currentValue.getOrElse(false)
+        webSocket.connected.filter(_ != currentWSState).head.map(_ => retry.trySuccess({}))
+
+        for {
+          _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
+          _ <- lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
+        } yield retry.trySuccess({})
+
+        waitingForRetry ! true
+        lift(retry.future).flatMap { _ =>
+          waitingForRetry ! false
+          load(lastId, attempts + 1)
+        }
     }
 
-    def syncHistory(lastId: Option[Uid]): Future[Unit] = for {
-      Results(nots, time, historyLost) <- load(lastId)
-      _ <- if (historyLost) {
-        val time = clock.instant()
-        CancellableFuture.lift(sync.performFullSync().map(_ => onHistoryLost ! time))
-      } else CancellableFuture.successful({})
+    def syncHistory(lastId: Option[Uid]): Future[Unit] =
+      for {
+        Results(nots, time, historyLost) <- load(lastId).future
+        _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
+        drift  <- beDrift.head
+        nw     <- network.networkMode.head
+        pushes <- receivedPushes.list()
+        _ <- receivedPushes.removeAll(pushes.map(_.id))
+        _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
+        inBackground <- lifeCycle.uiActive.head
     } yield {
-      onPushNotifications(nots)
-      time.foreach { time => beDrift ! Instant.now.until(time) }
-    }
+        if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
+          onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName)
 
-    returning( Future(idPref()).flatten flatMap { syncHistory } ) { f => // future and flatten ensure that there is no race with onPushNotifications
-      if (!fetchInProgress.isCompleted) fetchInProgress.cancel()
-      // a new fetch was ordered so we cancel the old one if it's still in progress, together with any ws notifications processing attached to it
-      fetchInProgress = CancellableFuture.lift(f)
+        if (pushes.nonEmpty)
+          onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))
+
+        onPushNotifications(nots)
+      }
+
+    if (fetchInProgress.isCompleted) {
+      verbose(s"Sync history in response to $reason")
+      fetchInProgress = idPref().flatMap(syncHistory)
     }
+    fetchInProgress
   }
 }
 

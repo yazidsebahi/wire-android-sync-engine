@@ -17,20 +17,27 @@
  */
 package com.waz.service
 
+import android.annotation.TargetApi
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
 import android.net.{ConnectivityManager, NetworkInfo}
+import android.os.Build.VERSION_CODES.M
+import android.os.PowerManager
 import android.telephony.TelephonyManager
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
 
+import scala.util.control.NonFatal
+
 trait NetworkModeService {
   def networkMode: Signal[NetworkMode]
   def isOfflineMode: Boolean
   def isOnlineMode: Boolean
+  def getNetworkOperatorName: String
+  def isDeviceIdleMode: Boolean
 }
 
 class DefaultNetworkModeService(context: Context, zmsLifeCycle: ZmsLifeCycle) extends NetworkModeService {
@@ -63,6 +70,15 @@ class DefaultNetworkModeService(context: Context, zmsLifeCycle: ZmsLifeCycle) ex
 
     networkMode.publish(mode, Threading.Background)
   }
+
+  override def getNetworkOperatorName = Option(telephonyManager.getNetworkOperatorName).filter(_.nonEmpty).getOrElse("unknown")
+
+  //this method doesn't really belong here, but it's only used for tracking - just tells us if the device was in doze mode or not
+  @TargetApi(M)
+  override def isDeviceIdleMode =
+    if (android.os.Build.VERSION.SDK_INT >= M)
+      Option(context.getSystemService(Context.POWER_SERVICE)).map(_.asInstanceOf[PowerManager]).exists(_.isDeviceIdleMode)
+    else false
 
   def isOfflineMode = networkMode.currentValue contains NetworkMode.OFFLINE
   def isUnknown = networkMode.currentValue contains NetworkMode.UNKNOWN

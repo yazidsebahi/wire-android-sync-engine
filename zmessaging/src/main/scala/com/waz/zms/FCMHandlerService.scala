@@ -22,16 +22,20 @@ import com.google.firebase.messaging.{FirebaseMessagingService, RemoteMessage}
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.content.UserPreferences
 import com.waz.model._
+import com.waz.service.ZMessaging.clock
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
-import com.waz.service.push.PushService
-import com.waz.service.{ZMessaging, ZmsLifeCycle}
+import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
+import com.waz.service.{NetworkModeService, ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.{JsonDecoder, LoggedTry}
 import org.json
 import org.json.JSONObject
+import org.threeten.bp.Instant
+import com.waz.utils.RichInstant
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -63,7 +67,7 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
                 accs.find(_.userId.exists(_ == target)).map(_.id) match {
                   case Some(acc) =>
                     accounts.getZMessaging(acc).flatMap {
-                      case Some(zms) => FCMHandler(zms, data)
+                      case Some(zms) => FCMHandler(zms, data, Instant.ofEpochMilli(remoteMessage.getSentTime))
                       case _ =>
                         warn("Couldn't instantiate zms instance")
                         Future.successful({})
@@ -101,12 +105,15 @@ object FCMHandlerService {
 
   val UserKeyMissingMsg = "Notification did not contain user key - discarding"
 
-  class FCMHandler(accountId:    AccountId,
-                   otrService:   OtrService,
-                   lifecycle:    ZmsLifeCycle,
-                   push:         PushService,
-                   self:         UserId,
-                   convsContent: ConversationsContentUpdater) {
+  class FCMHandler(accountId:      AccountId,
+                   otrService:     OtrService,
+                   lifecycle:      ZmsLifeCycle,
+                   push:           PushService,
+                   self:           UserId,
+                   network:        NetworkModeService,
+                   receivedPushes: ReceivedPushStorage,
+                   convsContent:   ConversationsContentUpdater,
+                   sentTime:       Instant) {
 
     private implicit val dispatcher = new SerialDispatchQueue(name = "FCMHandler")
 
@@ -115,21 +122,21 @@ object FCMHandlerService {
         case CipherNotification(content, mac) =>
           decryptNotification(content, mac) flatMap {
             case Some(notification) =>
-              addNotificationToProcess(notification.id)
+              addNotificationToProcess(Some(notification.id))
             case None =>
               warn(s"gcm decoding failed: triggering notification history sync in case this notification is for us.")
-              push.syncHistory()
+              addNotificationToProcess(None)
           }
 
         case PlainNotification(notification) =>
-          addNotificationToProcess(notification.id)
+          addNotificationToProcess(Some(notification.id))
 
         case NoticeNotification(nId) =>
-          addNotificationToProcess(nId)
+          addNotificationToProcess(Some(nId))
 
         case _ =>
           warn(s"Unexpected notification, sync anyway")
-          push.syncHistory()
+          addNotificationToProcess(None)
       }
     }
 
@@ -139,19 +146,34 @@ object FCMHandlerService {
         case _ => None
       }
 
-    private def addNotificationToProcess(nId: Uid): Future[Unit] = {
-      lifecycle.accInForeground(accountId).head flatMap {
-        case true => Future.successful(()) // no need to process GCM when ui is active
-        case _ =>
-          verbose(s"addNotification: $nId")
-          Future.successful(push.cloudPushNotificationsToProcess.mutate(_ + nId))
+    private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] = {
+      for {
+        false <- lifecycle.accInForeground(accountId).head
+        drift <- push.beDrift.head
+        nw    <- network.networkMode.head
+        now = clock.instant + drift
+        _ <- receivedPushes.insert(
+          ReceivedPushData(
+            nId.getOrElse(Uid()),
+            sentTime.until(now),
+            now,
+            nw,
+            network.getNetworkOperatorName,
+            network.isDeviceIdleMode)
+        )
+      } yield {
+        nId match {
+          case Some(n) => push.cloudPushNotificationsToProcess.mutate(_ + n)
+          case _       => push.syncHistory("Unreadable FCM notification")
+        }
+        verbose(s"addNotification: $nId")
       }
     }
   }
 
   object FCMHandler {
-    def apply(zms: ZMessaging, data: Map[String, String]): Future[Unit] =
-      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.convsContent).handleMessage(data)
+    def apply(zms: ZMessaging, data: Map[String, String], sentTime: Instant): Future[Unit] =
+      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.network, zms.receivedPushStorage, zms.convsContent, sentTime).handleMessage(data)
   }
 
   val DataKey = "data"

@@ -40,6 +40,7 @@ import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
 import com.waz.model.sync.SyncJob.SyncJobDao
+import com.waz.service.push.ReceivedPushData.ReceivedPushDataDao
 
 class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getApplicationContext, dbName, null, DbVersion, daos, migrations) {
 
@@ -52,12 +53,12 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 95
+  val DbVersion = 96
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
-    SyncJobDao, NotificationDataDao, ErrorDataDao,
+    SyncJobDao, NotificationDataDao, ErrorDataDao, ReceivedPushDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
     ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao, MessageContentIndexDao
   )
@@ -169,6 +170,9 @@ object ZMessagingDB {
     Migration(94, 95) { db =>
       db.execSQL("ALTER TABLE Conversations ADD COLUMN unread_call_count INTEGER DEFAULT 0")
       db.execSQL("ALTER TABLE Conversations ADD COLUMN unread_ping_count INTEGER DEFAULT 0")
+    },
+    Migration(95, 96) { db =>
+      db.execSQL("CREATE TABLE ReceivedPushes (_id TEXT PRIMARY KEY, data TEXT)")
     }
   )
 }

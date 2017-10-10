@@ -161,6 +161,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val messagesStorage: MessagesStorageImpl = wire[MessagesStorageImpl]
   lazy val msgAndLikes: MessageAndLikesStorageImpl = wire[MessageAndLikesStorageImpl]
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
+  lazy val receivedPushStorage: ReceivedPushStorage = wire[ReceivedPushStorageImpl]
 
   lazy val spotifyClientId  = metadata.spotifyClientId
 
