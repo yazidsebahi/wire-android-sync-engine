@@ -220,7 +220,7 @@ class PushServiceImpl(context:        Context,
         pushes <- receivedPushes.list()
         _ <- receivedPushes.removeAll(pushes.map(_.id))
         _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
-        inBackground <- lifeCycle.uiActive.head
+        inBackground <- lifeCycle.uiActive.map(!_).head
     } yield {
         if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
           onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName)
