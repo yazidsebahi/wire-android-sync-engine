@@ -52,7 +52,7 @@ trait Preferences {
     Preference[A](this, key)
 
   protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A]
-  protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit]
+  def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit]
 }
 
 object Preferences {
@@ -206,7 +206,7 @@ class GlobalPreferences(context: Context, prefs: SharedPreferences) extends Pref
   override protected def getValue[A: PrefCodec](key: PrefKey[A]): Future[A] =
     dispatcher(getFromPref[A](key))
 
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] =
+  override def setValue[A: PrefCodec](key: PrefKey[A], value: A): Future[Unit] =
     dispatcher {
       import PrefCodec._
       val codec = implicitly[PrefCodec[A]]
@@ -233,11 +233,31 @@ class UserPreferences(context: Context, storage: ZmsDatabase) extends CachedStor
     get(key.str).map(_.map(_.value)).map(_.map(implicitly[PrefCodec[A]].decode).getOrElse(key.default))
   }
 
-  override protected def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
+  override def setValue[A: PrefCodec](key: PrefKey[A], value: A) =
     put(key.str, KeyValueData(key.str, implicitly[PrefCodec[A]].encode(value))).map(_ => {})
 
+  def migrate(gPrefs: GlobalPreferences) = Serialized.future(GlobalPreferences.MigrationKey) {
+    for {
+      _ <- migrateFromGlobal(gPrefs)
+      _ <- migrateToGlobal(gPrefs)
+    } yield ()
+  }
+
+  def migrateToGlobal(gPrefs: GlobalPreferences)(implicit ec: ExecutionContext) = {
+    list().map(_.map(kvd => kvd.key -> kvd.value).toMap).flatMap { currentPrefs =>
+      currentPrefs.get("analytics_enabled").map(PrefCodec.BooleanCodec.decode).fold {
+        Future.successful(())
+      } {
+        case false =>
+          gPrefs.setValue(GlobalPreferences.AnalyticsEnabled, false).map(_ => remove("analytics_enabled"))
+        case _ =>
+          remove("analytics_enabled")
+      }
+    }
+  }
+
   //TODO eventually remove
-  def migrateFromGlobal(gPrefs: GlobalPreferences) = Serialized.future(GlobalPreferences.MigrationKey) {
+  def migrateFromGlobal(gPrefs: GlobalPreferences)(implicit ec: ExecutionContext) = {
     list().map(_.map(_.key)).flatMap { currentPrefs =>
       verbose(s"migrating global prefs to user prefs: $currentPrefs")
       import UserPreferences._
@@ -318,7 +338,7 @@ object GlobalPreferences {
 object UserPreferences {
 
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
-    returning(new UserPreferences(context, storage))(_.migrateFromGlobal(globalPreferences))
+    returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
