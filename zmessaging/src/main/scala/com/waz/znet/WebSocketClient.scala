@@ -35,37 +35,57 @@ import com.waz.znet.WebSocketClient.Disconnect
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.concurrent.Promise
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Left, Try}
+
+
+trait WireWebSocket {
+
+  def connected:        Signal[Boolean]
+  def lastReceivedTime: Signal[Instant]
+
+  def onMessage:        EventStream[ResponseContent]
+  def onError:          EventStream[Exception]
+  def onConnectionLost: EventStream[Disconnect]
+
+  def send[A: ContentEncoder](msg: A): CancellableFuture[Unit]
+
+  def verifyConnection(): CancellableFuture[Unit]
+
+  def scheduleRecurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit]
+
+  def close(): Future[Unit]
+}
+
 
 /**
   * Handles WebSocket connection, will pass all received messages to callback.
   * Can also maintain a constant ping to the websocket server to ensure that the connection is alive.
   * If the connection drops, it will automatically try to reconnect.
   */
-
 class WebSocketClient(context: Context,
                       accountId: AccountId,
                       client: AsyncClient,
                       uri: => Uri,
                       auth: AccessTokenProvider,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
-                      pongTimeout: FiniteDuration = 15.seconds) {
+                      pongTimeout: FiniteDuration = 15.seconds) extends WireWebSocket {
 
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClient]}#${accountId.str.take(8)}"
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
   protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
 
-  val connected = Signal(false)
-  val onError   = EventStream[Exception]()
-  val onMessage = EventStream[ResponseContent]()
-  val onPing    = EventStream[Unit]()
-  val onPong    = EventStream[Unit]()
-  val lastReceiveTime = Signal[Instant]() // time when something was last received on websocket
-  val onConnectionLost = EventStream[Disconnect]()
+  override val connected = Signal(false)
+  override val onError   = EventStream[Exception]()
+  override val onMessage = EventStream[ResponseContent]()
+  override val lastReceivedTime = Signal[Instant]() // time when something was last received on websocket
+  override val onConnectionLost = EventStream[Disconnect]()
+
+  private val onPing    = EventStream[Unit]()
+  private val onPong    = EventStream[Unit]()
 
   private var init: CancellableFuture[WebSocket] = connect()
   init.onFailure {
@@ -84,7 +104,7 @@ class WebSocketClient(context: Context,
   //needed to ensure we have just one periodic ping running
   private var pingSchedule = CancellableFuture.cancelled[Unit]()
 
-  def send[A: ContentEncoder](msg: A): CancellableFuture[Unit] = init flatMap { s =>
+  override def send[A: ContentEncoder](msg: A) = init flatMap { s =>
     implicitly[ContentEncoder[A]].apply(msg) match {
       case EmptyRequestContent =>
         error(s"Sending EmptyRequest with webSocket for msg: '$msg'")
@@ -98,7 +118,7 @@ class WebSocketClient(context: Context,
     }
   }
 
-  def close() = dispatcher {
+  override def close() = dispatcher {
     info(s"closing socket: $socket")
     closed = true
     init.cancel()
@@ -112,7 +132,7 @@ class WebSocketClient(context: Context,
     socket = None
   }
 
-  protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.lift(auth.currentToken()) flatMap {
+  private def connect(): CancellableFuture[WebSocket] = CancellableFuture.lift(auth.currentToken()) flatMap {
     case Right(token) if closed => CancellableFuture.failed(new Exception("WebSocket client closed"))
     case Right(token) =>
       val p = Promise[WebSocket]()
@@ -143,17 +163,17 @@ class WebSocketClient(context: Context,
     retryCount = 0
 
     connected ! true
-    lastReceiveTime ! Instant.now
+    lastReceivedTime ! Instant.now
 
     webSocket.setStringCallback(new StringCallback {
       override def onStringAvailable(s: String): Unit = wakeLock {
-        lastReceiveTime ! Instant.now
+        lastReceivedTime ! Instant.now
         onMessage ! Try(JsonObjectResponse(new JSONObject(s))).getOrElse(StringResponse(s))
       }
     })
     webSocket.setDataCallback(new DataCallback {
       override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit = wakeLock {
-        lastReceiveTime ! Instant.now
+        lastReceivedTime ! Instant.now
         onMessage ! Try(JsonObjectResponse(new JSONObject(new String(bb.getAllByteArray, "utf8")))).getOrElse(BinaryResponse(bb.getAllByteArray, ""))
       }
     })
@@ -169,7 +189,7 @@ class WebSocketClient(context: Context,
     webSocket.setPongCallback(new PongCallback {
       override def onPongReceived(s: String): Unit = {
         info(s"pong")
-        lastReceiveTime ! Instant.now
+        lastReceivedTime ! Instant.now
         onPong ! (())
       }
     })
@@ -200,7 +220,7 @@ class WebSocketClient(context: Context,
   }
 
   //Continually ping the BE at a given frequency to ensure the websocket remains connected.
-  def scheduleRecurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
+  override def scheduleRecurringPing(pingPeriod: FiniteDuration) = {
     verbose(s"scheduling new recurring ping every $pingPeriod")
 
     def recurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
@@ -219,7 +239,7 @@ class WebSocketClient(context: Context,
   }
 
   //Ping, and attempt to reconnect if it fails according to the backoff
-  def verifyConnection(): CancellableFuture[Unit] = pingPong().recoverWith {
+  override def verifyConnection(): CancellableFuture[Unit] = pingPong().recoverWith {
     case NonFatal(ex) if !closed =>
       warn("Ping to server failed, attempting to re-establish connection")
       onConnectionLost ! Disconnect.NoPong

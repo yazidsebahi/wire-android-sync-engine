@@ -110,20 +110,6 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
       override def updateConnection(user: UserId, status: ConnectionStatus): ErrorOrResponse[Option[UserConnectionEvent]] = suite.updateConnection(user, status)
     }
 
-    override lazy val websocket: service.push.WebSocketClientService = new service.push.WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, global.backend, clientId, timeouts, pushToken) {
-      override def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse(backend.websocketUrl), auth) {
-        override def close() = dispatcher {
-          connected ! false
-          if (suite.pushService.contains(push)) suite.pushService = None
-        } ("")
-        override protected def connect() = dispatcher {
-          suite.pushService = Some(push)
-          connected ! true
-          null
-        } ("")
-      }
-    }
-
     override lazy val timeouts = suite.timeouts
   }
 

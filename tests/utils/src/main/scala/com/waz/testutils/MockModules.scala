@@ -115,12 +115,6 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     }
   }
 
-  override lazy val websocket: WebSocketClientService = new WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
-    override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), auth) {
-      override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
-    }
-  }
-
   def insertConv(conv: ConversationData) = Await.result(convsStorage.insert(conv), timeout)
   def getConv(id: ConvId): Option[ConversationData] = Await.result(convsContent.convById(id), timeout)
   def getConv(id: RConvId): Option[ConversationData] = Await.result(convsContent.convByRemoteId(id), timeout)

@@ -27,22 +27,22 @@ import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.znet.WebSocketClient.Disconnect
-import com.waz.znet.{AuthenticationManager, WebSocketClient, ZNetClient}
+import com.waz.znet.{AuthenticationManager, WebSocketClient, WireWebSocket, ZNetClient}
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 trait WebSocketClientService {
-  def network: NetworkModeService
+  def network:              NetworkModeService
   def useWebSocketFallback: Signal[Boolean]
-  def wsActive: Signal[Boolean]
-  def client: Signal[Option[WebSocketClient]]
-  def connected: Signal[Boolean]
-  def connectionError: Signal[Boolean]
-  def connectionStats: Signal[WebSocketClientService.ConnectionStats]
-  def verifyConnection(): Future[Unit]
-  def awaitActive(): Future[Unit]
+  def wsActive:             Signal[Boolean]
+  def client:               Signal[Option[WireWebSocket]]
+  def connected:            Signal[Boolean]
+  def connectionError:      Signal[Boolean]
+  def connectionStats:      Signal[WebSocketClientService.ConnectionStats]
+  def verifyConnection():   Future[Unit]
+  def awaitActive():        Future[Unit]
 }
 
 class WebSocketClientServiceImpl(context:     Context,
@@ -62,7 +62,7 @@ class WebSocketClientServiceImpl(context:     Context,
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
   @volatile
-  private var prevClient = Option.empty[WebSocketClient]
+  private var prevClient = Option.empty[WireWebSocket]
 
   override val useWebSocketFallback = pushToken.pushActive.map(!_)
 
@@ -156,14 +156,14 @@ object WebSocketClientService {
 
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
   class ConnectionStats(network: NetworkModeService,
-                        client: WebSocketClient) {
+                        client:  WireWebSocket) {
     import com.waz.ZLog.ImplicitTag._
     import com.waz.utils._
 
-    def lastReceiveTime = client.lastReceiveTime.currentValue
+    def lastReceiveTime = client.lastReceivedTime.currentValue
 
     // last inactivity duration computed from lastReceiveTime
-    val inactiveDuration = client.lastReceiveTime.scan(Option.empty[(Instant, FiniteDuration)]) {
+    val inactiveDuration = client.lastReceivedTime.scan(Option.empty[(Instant, FiniteDuration)]) {
       case (Some((prev, _)), time) => Some((time, prev.until(time).asScala))
       case (_, time) => Some((time, Duration.Zero))
     }

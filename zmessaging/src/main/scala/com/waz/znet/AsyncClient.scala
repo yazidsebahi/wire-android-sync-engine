@@ -20,6 +20,8 @@ package com.waz.znet
 import java.net.{ConnectException, UnknownHostException}
 import java.util.concurrent.TimeoutException
 
+import com.koushikdutta.async.AsyncServer
+import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback.HttpConnectCallback
 import com.waz.HockeyApp.NoReporting
@@ -27,20 +29,31 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.returning
+import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.MultipartRequestContent
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, ResponseBodyDecoder}
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
 trait AsyncClient {
-  def apply(request: Request[_]): CancellableFuture[Response]
+
+  def decoder: ResponseBodyDecoder
+
+  def userAgent: String
+
+  def execute(request: Request[_]): CancellableFuture[Response]
+
+  def apply(request: Request[_]): CancellableFuture[Response] = execute(request)
 
   def close(): Unit
 
-  def userAgent: String
+  def websocket(request: Request[_]): WireWebSocket
+
   def wrapper: Future[ClientWrapper]
 }
 
@@ -55,7 +68,7 @@ class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDeco
 
   protected implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
-  def apply(request: Request[_]): CancellableFuture[Response] = {
+  override def execute(request: Request[_]): CancellableFuture[Response] = {
     val body = request.getBody
     debug(s"Starting request[${request.httpMethod}](${request.absoluteUri}) with body: '${if (body.toString.contains("password")) "<body>" else body}', headers: '${request.headers}'")
 
@@ -88,7 +101,7 @@ class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDeco
           } else {
             val networkActivityCallback = () => lastNetworkActivity = System.currentTimeMillis
             debug(s"got connection response for request: ${request.absoluteUri}")
-            val future = responseWorker.processResponse(request.absoluteUri, response, request.decoder.getOrElse(bodyDecoder), request.downloadCallback, networkActivityCallback)
+            val future = responseWorker.processResponse(request.absoluteUri, response, request.decoder.getOrElse(decoder), request.downloadCallback, networkActivityCallback)
             p.tryCompleteWith(future)
 
             // XXX: order is important here, we first set processFuture and then check cancelled to avoid race condition in cancel callback
