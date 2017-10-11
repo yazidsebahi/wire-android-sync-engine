@@ -88,7 +88,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account, pipeline, websocket, network, lifeCycle, sync)
 
-  val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
+  val ws = new WebSocketClient(context, AccountId(), mock[HttpClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
 
     override def connect(): CancellableFuture[WebSocket] = CancellableFuture.successful(mock[WebSocket])

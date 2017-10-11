@@ -42,7 +42,7 @@ trait LoginClient {
   def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]
 }
 
-class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends LoginClient {
+class LoginClientImpl(client: HttpClient, backend: BackendConfig) extends LoginClient {
   import com.waz.znet.LoginClient._
   private implicit val dispatcher = new SerialDispatchQueue(name = "LoginClient")
 

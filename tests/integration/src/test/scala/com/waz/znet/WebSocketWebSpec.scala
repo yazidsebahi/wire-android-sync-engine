@@ -34,13 +34,13 @@ import scala.concurrent.duration._
 class WebSocketWebSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll with RobolectricTests with RobolectricUtils {
   implicit val timeout: Timeout = 15.seconds
 
-  var client: AsyncClientImpl = _
+  var client: HttpClientImpl = _
   var cl: AsyncHttpClient = _
   var echo: sys.process.Process = _
 
   before {
     ShadowLog.stream = System.out
-    client = new AsyncClientImpl(wrapper = TestClientWrapper())
+    client = new HttpClientImpl(wrapper = TestClientWrapper())
   }
 
   after {

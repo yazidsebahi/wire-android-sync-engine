@@ -74,7 +74,7 @@ trait GlobalModule {
   def recordingAndPlayback: GlobalRecordAndPlayService
   def tempFiles: TempFileService
   def clientWrapper: Future[ClientWrapper]
-  def client: AsyncClientImpl
+  def client: HttpClientImpl
   def globalClient: ZNetClient
   def imageLoader: ImageLoader
   def blacklistClient: VersionBlacklistClient
@@ -134,7 +134,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
 
   lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
-  lazy val client:              AsyncClientImpl                  = new AsyncClientImpl(decoder, AsyncClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
+  lazy val client:              HttpClientImpl                  = new HttpClientImpl(decoder, HttpClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
   
   lazy val globalClient:        ZNetClient                       = new ZNetClientImpl(None, client, URI.parse(""))
 

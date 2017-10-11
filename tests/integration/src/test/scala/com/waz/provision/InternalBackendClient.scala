@@ -33,7 +33,7 @@ import com.waz.znet._
 
 import scala.util.Try
 
-class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
+class InternalBackendClient(client: HttpClientImpl, backend: BackendConfig) {
   private implicit val logTag: LogTag = logTagFor[InternalBackendClient]
 
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -46,7 +46,7 @@ class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
       Request.query("/i/users/activation-code", "email" -> email.str),
       baseUri = baseUri,
       headers = basicAuthHeader,
-      timeout = AsyncClient.DefaultTimeout
+      timeout = HttpClient.DefaultTimeout
     )
 
     client(request) flatMap {
@@ -60,7 +60,7 @@ class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
   def getPhoneLoginCode(phone: PhoneNumber): ErrorOrResponse[ConfirmationCode] = getPhoneConfirmationCode(phone, "login")
 
   private def verifyEmail(email: EmailAddress, code: ConfirmationCode): ErrorOrResponse[Unit] = {
-    val request = Request.Post("/activate", data = verifyRequestBody(email, code), baseUri = baseUri, timeout = AsyncClient.DefaultTimeout)
+    val request = Request.Post("/activate", data = verifyRequestBody(email, code), baseUri = baseUri, timeout = HttpClient.DefaultTimeout)
     client(request) map {
       case Response(SuccessHttpStatus(), _, _) => Right(())
       case Response(_, ErrorResponse(status, msg, label), _) => Left(ErrorResponse(status, msg, label))
@@ -73,7 +73,7 @@ class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
       Request.query(s"/i/users/$kindOfCode-code", "phone" -> phone.str),
       baseUri = baseUri,
       headers = basicAuthHeader,
-      timeout = AsyncClient.DefaultTimeout
+      timeout = HttpClient.DefaultTimeout
     )
 
     client(request) map {
@@ -88,7 +88,7 @@ class InternalBackendClient(client: AsyncClientImpl, backend: BackendConfig) {
       Request.query("/i/users/invitation-code", "inviter" -> inviter.str, "invitation_id" -> invitation.str),
       baseUri = baseUri,
       headers = basicAuthHeader,
-      timeout = AsyncClient.DefaultTimeout
+      timeout = HttpClient.DefaultTimeout
     )
 
     client(request) map {

@@ -159,8 +159,8 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
   }
   override def pushGcm(notification: PushNotification, userId: UserId) = {}
 
-  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: AsyncClientImpl) extends GlobalModuleImpl(context, testBackend) {
-    override lazy val client: AsyncClientImpl = testClient
+  class MockedGlobalModule(context: Context, backend: BackendConfig, testClient: HttpClientImpl) extends GlobalModuleImpl(context, testBackend) {
+    override lazy val client: HttpClientImpl = testClient
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
     override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
       override def login(user: AccountData): CancellableFuture[LoginResult] = suite.login(user)
@@ -179,7 +179,7 @@ trait MockedClientSuite extends ApiSpec with MockedClient with MockedWebSocket w
     override lazy val factory: ZMessagingFactory = new MockedZMessagingFactory(this)
   }
 
-  override lazy val testClient: AsyncClientImpl = new EmptyAsyncClientImpl
+  override lazy val testClient: HttpClientImpl = new EmptyAsyncClientImpl
 
   override lazy val globalModule = new MockedGlobalModule(context, testBackend, testClient)
 

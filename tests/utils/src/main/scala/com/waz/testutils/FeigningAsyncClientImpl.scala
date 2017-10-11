@@ -20,7 +20,7 @@ package com.waz.testutils
 import com.waz.threading.CancellableFuture
 import com.waz.znet._
 
-class FeigningAsyncClientImpl extends AsyncClientImpl(wrapper = TestClientWrapper()) {
+class FeigningAsyncClientImpl extends HttpClientImpl(wrapper = TestClientWrapper()) {
   @volatile var simulateNetworkFailure = false
 
   override def apply(request: Request[_]): CancellableFuture[Response] =

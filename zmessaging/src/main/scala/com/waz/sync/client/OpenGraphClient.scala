@@ -39,7 +39,7 @@ class OpenGraphClient(netClient: ZNetClient) {
     def load(uri: URI, cookie: Map[String, String]): ErrorOrResponse[Option[OpenGraphData]] = {
 
       val headers = Map(
-        AsyncClient.UserAgentHeader -> DesktopUserAgent,  // using empty User-Agent to avoid getting mobile website version
+        HttpClient.UserAgentHeader -> DesktopUserAgent,  // using empty User-Agent to avoid getting mobile website version
         "Cookie" -> cookie.map { case (k, v) => s"$k=$v" } .mkString("; ")
       )
 

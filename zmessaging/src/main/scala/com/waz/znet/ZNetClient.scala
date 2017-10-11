@@ -52,10 +52,10 @@ trait ZNetClient {
   def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T]
   def close(): Future[Unit]
 
-  def client: AsyncClient
+  def client: HttpClient
 }
 
-class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val client: AsyncClient, baseUri: URI) extends ZNetClient {
+class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val client: HttpClient, baseUri: URI) extends ZNetClient {
 
   import ZNetClient._
   private implicit val logTag: LogTag = logTagFor[ZNetClient]
@@ -233,7 +233,7 @@ object ZNetClient {
   private val handleId = new AtomicInteger(0)
   def nextId = handleId.incrementAndGet()
 
-  class EmptyAsyncClientImpl(client: Future[ClientWrapper] = ClientWrapper()) extends AsyncClientImpl(wrapper = client) {
+  class EmptyAsyncClientImpl(client: Future[ClientWrapper] = ClientWrapper()) extends HttpClientImpl(wrapper = client) {
     override def apply(request: Request[_]): CancellableFuture[Response] =
       CancellableFuture.failed(new Exception("Empty async client"))
   }

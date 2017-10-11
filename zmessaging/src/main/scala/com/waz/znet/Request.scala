@@ -47,7 +47,7 @@ case class Request[A: ContentEncoder](httpMethod:             String            
                                       headers:                Map[String, String]         = Request.EmptyHeaders,
                                       retryPolicy:            RetryPolicy                 = RetryPolicy.NeverRetry,
                                       followRedirect:         Boolean                     = true,
-                                      timeout:                FiniteDuration              = AsyncClient.DefaultTimeout
+                                      timeout:                FiniteDuration              = HttpClient.DefaultTimeout
 ) extends HttpRequest {
 
   assert(uploadCallback.isEmpty, "uploadCallback is not supported yet") //TODO
@@ -84,7 +84,7 @@ object Request {
                               uploadCallback: Option[ProgressCallback] = None,
                               requiresAuthentication: Boolean = true,
                               headers: Map[String, String] = EmptyHeaders,
-                              timeout: FiniteDuration = AsyncClient.DefaultTimeout) =
+                              timeout: FiniteDuration = HttpClient.DefaultTimeout) =
     Request[A](PostMethod, resourcePath = Some(path), baseUri = baseUri, data = Some(data),
                uploadCallback = uploadCallback, requiresAuthentication = requiresAuthentication,
                headers = headers, timeout = timeout)
@@ -111,7 +111,7 @@ object Request {
           downloadCallback:       Option[ProgressCallback]    = None,
           requiresAuthentication: Boolean                     = true,
           headers:                Map[String, String]         = EmptyHeaders,
-          timeout:                FiniteDuration              = AsyncClient.DefaultTimeout,
+          timeout:                FiniteDuration              = HttpClient.DefaultTimeout,
           decoder:                Option[ResponseBodyDecoder] = None) =
     Request[Unit](GetMethod, resourcePath = Some(path), baseUri = baseUri, downloadCallback = downloadCallback, requiresAuthentication = requiresAuthentication, headers = headers, timeout = timeout, decoder = decoder)(EmptyContentEncoder)
 

@@ -67,7 +67,7 @@ trait WireWebSocket {
   */
 class WebSocketClient(context: Context,
                       accountId: AccountId,
-                      client: AsyncClient,
+                      client: HttpClient,
                       uri: => Uri,
                       auth: AccessTokenProvider,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
@@ -266,7 +266,7 @@ object WebSocketClient {
   val defaultBackoff = new ExponentialBackoff(250.millis, 5.minutes)
 
   def apply(context: Context, accountId: AccountId, client: ZNetClient, auth: AuthenticationManager, pushUri: => Uri) =
-    new WebSocketClient(context, accountId, client.client.asInstanceOf[AsyncClientImpl], pushUri, auth)
+    new WebSocketClient(context, accountId, client.client.asInstanceOf[HttpClientImpl], pushUri, auth)
 
   trait Disconnect
   object Disconnect {

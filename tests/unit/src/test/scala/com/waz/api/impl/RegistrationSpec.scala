@@ -70,7 +70,7 @@ import scala.util.control.NoStackTrace
 
   class MockGlobal extends MockGlobalModule {
 
-    override lazy val client: AsyncClientImpl = new AsyncClientImpl(wrapper = TestClientWrapper()) {
+    override lazy val client: HttpClientImpl = new HttpClientImpl(wrapper = TestClientWrapper()) {
       override def apply(req: Request[_]): CancellableFuture[Response] = {
         val body = req.getBody
         val uri = req.absoluteUri.get
@@ -98,7 +98,7 @@ import scala.util.control.NoStackTrace
           }
 
           override lazy val websocket = new WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("/"), auth) {
+            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[HttpClientImpl], Uri.parse("/"), auth) {
               override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }

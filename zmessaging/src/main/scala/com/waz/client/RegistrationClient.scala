@@ -48,7 +48,7 @@ trait RegistrationClient {
   def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation]
 }
 
-class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extends RegistrationClient {
+class RegistrationClientImpl(client: HttpClient, backend: BackendConfig) extends RegistrationClient {
   import Threading.Implicits.Background
   import com.waz.client.RegistrationClientImpl._
 

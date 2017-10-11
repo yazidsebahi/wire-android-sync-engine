@@ -25,7 +25,7 @@ import com.waz.model.{MessageContent => _, _}
 import com.waz.testutils.Implicits._
 import com.waz.threading.Threading
 import com.waz.ui.UiModule
-import com.waz.znet.{AsyncClientImpl, ClientWrapper, TestClientWrapper}
+import com.waz.znet.{HttpClientImpl, ClientWrapper, TestClientWrapper}
 import org.scalatest.{BeforeAndAfterAll, RobolectricTests, Suite}
 
 import scala.concurrent.{Await, Future, Promise}
@@ -81,7 +81,7 @@ trait RemoteZmsSpec extends RobolectricTests with BeforeAndAfterAll { suite: Sui
 
   def globalModule(dataTag: String = Random.nextInt().toHexString): GlobalModuleImpl =  new GlobalModuleImpl(context, testBackend) { global =>
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
-    override lazy val client: AsyncClientImpl = testClient
+    override lazy val client: HttpClientImpl = testClient
     override lazy val timeouts: Timeouts = suite.timeouts
 
     override lazy val storage: Database = new GlobalDatabase(context, dataTag)

@@ -38,11 +38,11 @@ import scala.concurrent.duration._
 
 class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests with ScalaFutures with DefaultPatienceConfig {
 
-  var client: AsyncClientImpl = _
+  var client: HttpClientImpl = _
   var cl: AsyncHttpClient = _
 
   before {
-    client = new AsyncClientImpl(wrapper = TestClientWrapper())
+    client = new HttpClientImpl(wrapper = TestClientWrapper())
   }
 
   after {

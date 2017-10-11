@@ -61,7 +61,7 @@ import scala.util.Try
   val port = 9982
   def createServer() = new TestServer(port)
   def createClient(pongTimeout: FiniteDuration = 15.seconds, backoff: ExponentialBackoff = WebSocketClient.defaultBackoff) = {
-    returning(new WebSocketClient(context, AccountId(), new AsyncClientImpl(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
+    returning(new WebSocketClient(context, AccountId(), new HttpClientImpl(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
   }
 
   before {

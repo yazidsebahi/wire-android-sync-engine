@@ -45,7 +45,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Random
 
 class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) { global =>
-  override lazy val client: AsyncClientImpl = new EmptyAsyncClientImpl(TestClientWrapper())
+  override lazy val client: HttpClientImpl = new EmptyAsyncClientImpl(TestClientWrapper())
   override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   override lazy val storage: Database = new GlobalDatabase(context, dbSuffix)
 

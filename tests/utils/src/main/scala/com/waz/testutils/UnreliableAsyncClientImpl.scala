@@ -23,7 +23,7 @@ import com.waz.znet._
 import scala.concurrent.duration._
 import scala.util.matching.Regex
 
-class UnreliableAsyncClientImpl extends AsyncClientImpl(wrapper = TestClientWrapper()) {
+class UnreliableAsyncClientImpl extends HttpClientImpl(wrapper = TestClientWrapper()) {
   @volatile var delayInMillis: Long = 200L
   @volatile var failFor: Option[(Regex, String)] = None
 

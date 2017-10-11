@@ -84,13 +84,13 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   private lazy val eventSpies = new AtomicReference(Vector.empty[Event =/> Unit])
 
   def testBackend: BackendConfig = BackendConfig.StagingBackend
-  lazy val testClient = new AsyncClientImpl(wrapper = TestClientWrapper())
+  lazy val testClient = new HttpClientImpl(wrapper = TestClientWrapper())
 
   lazy val globalModule: GlobalModuleImpl = new ApiSpecGlobal
 
   class ApiSpecGlobal extends GlobalModuleImpl(context, testBackend) {
     override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
-    override lazy val client: AsyncClientImpl = testClient
+    override lazy val client: HttpClientImpl = testClient
     override lazy val timeouts: Timeouts = suite.timeouts
 
     ZMessaging.currentGlobal = this
@@ -152,7 +152,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
   def netClient = zmessaging.zNetClient
 
-  def znetClientFor(email: String, password: String): ZNetClient = new ZNetClientImpl(None, new AsyncClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend.baseUrl)
+  def znetClientFor(email: String, password: String): ZNetClient = new ZNetClientImpl(None, new HttpClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend.baseUrl)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

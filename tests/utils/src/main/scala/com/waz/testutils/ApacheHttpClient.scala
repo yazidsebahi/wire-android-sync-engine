@@ -24,7 +24,7 @@ import com.waz.ZLog.debug
 import com.waz.threading.CancellableFuture
 import com.waz.utils.returning
 import com.waz.utils.wrappers.JavaURI
-import com.waz.znet.AsyncClient.UserAgentHeader
+import com.waz.znet.HttpClient.UserAgentHeader
 import com.waz.znet.ContentEncoder.{GzippedRequestContent, RequestContent}
 import com.waz.znet.Response.HttpStatus
 import com.waz.znet._
@@ -40,7 +40,7 @@ import scala.util.Try
 /**
   * Provides a simple HTTP client for exploring the real internet when building tests and can be used in full integration tests.
   */
-class ApacheHttpClient extends AsyncClient {
+class ApacheHttpClient extends HttpClient {
 
   import com.waz.threading.Threading.Implicits.Background
 
@@ -77,7 +77,7 @@ class ApacheHttpClient extends AsyncClient {
 
   override def close(): Unit = {}
 
-  override val userAgent: String = AsyncClient.userAgent()
+  override val userAgent: String = HttpClient.userAgent()
 
   override val wrapper: Future[ClientWrapper] = ClientWrapper()
 }

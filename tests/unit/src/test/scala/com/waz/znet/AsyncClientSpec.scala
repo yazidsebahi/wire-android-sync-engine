@@ -160,7 +160,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     override def stop(): Unit = ???
   }
 
-  private def client = new AsyncClientImpl(
+  private def client = new HttpClientImpl(
     bodyDecoder = DefaultResponseBodyDecoder,
     userAgent="test",
     wrapper = Future { new FakeClientWrapper(Some(100L)) },
@@ -168,7 +168,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     responseWorker = new ResponseImplWorker
   )
 
-  private def clientWithDelay = new AsyncClientImpl(
+  private def clientWithDelay = new HttpClientImpl(
     bodyDecoder = DefaultResponseBodyDecoder,
     userAgent="test",
     wrapper = Future { new FakeClientWrapper(Some(3000L)) },
@@ -189,7 +189,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     Await.result(client(request), waitTime)
   }
 
-  private def doPost[A: ContentEncoder](path: String, data: A, auth: Boolean = false, timeout: FiniteDuration = AsyncClient.DefaultTimeout, waitTime: FiniteDuration = 500.millis, client: AsyncClientImpl = client) = {
+  private def doPost[A: ContentEncoder](path: String, data: A, auth: Boolean = false, timeout: FiniteDuration = HttpClient.DefaultTimeout, waitTime: FiniteDuration = 500.millis, client: HttpClientImpl = client) = {
     val request = Request.Post(path, implicitly[ContentEncoder[A]].apply(data), baseUri = Some(URI.parse("http://localhost")), requiresAuthentication = auth, timeout = timeout)
     Await.result(client(request), waitTime)
   }
@@ -322,7 +322,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
       val data = JsonContentEncoder(new JSONObject(jsonRequest))
       (0 to 255) foreach { _ =>
         val path = "/post/json_json200"
-        val future = client(Request.Post(path, data, baseUri = baseUri, timeout = AsyncClient.DefaultTimeout))
+        val future = client(Request.Post(path, data, baseUri = baseUri, timeout = HttpClient.DefaultTimeout))
         Thread.sleep(Random.nextInt(50))
         future.cancel()
         try {
@@ -352,7 +352,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
       val os = new PipedOutputStream()
       val is = new PipedInputStream(os)
       val path = "/post/json_json200"
-      val future = client(Request.Post(path, StreamRequestContent(is, "application/json", -1), baseUri = baseUri, timeout = AsyncClient.DefaultTimeout))
+      val future = client(Request.Post(path, StreamRequestContent(is, "application/json", -1), baseUri = baseUri, timeout = HttpClient.DefaultTimeout))
       os.write("""{"key":"""".getBytes("utf8"))
       future.cancel()
       os.write("""value"}""".getBytes("utf8"))
@@ -369,8 +369,8 @@ class AsyncClientSpec extends AndroidFreeSpec {
       val obj = Json((1 to 100).map(i => s"key_$i" -> Seq.tabulate(i)(identity).mkString(",")).toMap)
 
       val path = "/post/gzipped"
-      val future = client(Request.Post(path, GzippedRequestContent(obj.toString.getBytes("utf8"), "application/json"), baseUri = Some(URI.parse("http://localhost")), timeout = AsyncClient.DefaultTimeout))
-      Await.result(future, AsyncClient.DefaultTimeout) match {
+      val future = client(Request.Post(path, GzippedRequestContent(obj.toString.getBytes("utf8"), "application/json"), baseUri = Some(URI.parse("http://localhost")), timeout = HttpClient.DefaultTimeout))
+      Await.result(future, HttpClient.DefaultTimeout) match {
         case Response(SuccessHttpStatus(), JsonObjectResponse(json), headers) if json.getString("result") == "ok" && headers("Content-Encoding") == Some("gzip") => // fine
         case other => fail(s"Wrong response: $other")
       }
@@ -395,7 +395,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
       def stop(): Unit = {}
     }
 
-    lazy val mockedClient = new AsyncClientImpl(
+    lazy val mockedClient = new HttpClientImpl(
       bodyDecoder = DefaultResponseBodyDecoder,
       userAgent="test",
       wrapper = Future { clientWrapper },

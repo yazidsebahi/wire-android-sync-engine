@@ -20,27 +20,22 @@ package com.waz.znet
 import java.net.{ConnectException, UnknownHostException}
 import java.util.concurrent.TimeoutException
 
-import com.koushikdutta.async.AsyncServer
-import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback.HttpConnectCallback
 import com.waz.HockeyApp.NoReporting
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.returning
-import com.waz.utils.wrappers.URI
 import com.waz.znet.ContentEncoder.MultipartRequestContent
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, ResponseBodyDecoder}
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
-trait AsyncClient {
+trait HttpClient {
 
   def decoder: ResponseBodyDecoder
 
@@ -57,14 +52,14 @@ trait AsyncClient {
   def wrapper: Future[ClientWrapper]
 }
 
-class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
-                      override val userAgent: String = AsyncClient.userAgent(),
-                      override val wrapper: Future[ClientWrapper] = ClientWrapper(),
-                      requestWorker: RequestWorker = new HttpRequestImplWorker,
-                      responseWorker: ResponseWorker = new ResponseImplWorker
-                 ) extends AsyncClient {
-  import AsyncClient._
-  import AsyncClientImpl._
+class HttpClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
+                     override val userAgent: String = HttpClient.userAgent(),
+                     override val wrapper: Future[ClientWrapper] = ClientWrapper(),
+                     requestWorker: RequestWorker = new HttpRequestImplWorker,
+                     responseWorker: ResponseWorker = new ResponseImplWorker
+                 ) extends HttpClient {
+  import HttpClient._
+  import HttpClientImpl._
 
   protected implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
@@ -85,9 +80,9 @@ class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDeco
       @volatile var timeoutForPhase = requestTimeout
       val interval = 5.seconds min request.timeout
 
-      val ua = request.headers.getOrElse(AsyncClient.UserAgentHeader, userAgent)
+      val ua = request.headers.getOrElse(HttpClient.UserAgentHeader, userAgent)
       val requestBuilt = requestWorker.processRequest(
-        request.withTimeout(0.millis).withHeaders(Map(AsyncClient.UserAgentHeader -> ua))
+        request.withTimeout(0.millis).withHeaders(Map(HttpClient.UserAgentHeader -> ua))
       ) // switching off the AsyncHttpClient's timeout - we will use our own
       debug(s"request headers: ${requestBuilt.headers}")
 
@@ -142,7 +137,7 @@ class AsyncClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDeco
 
 }
 
-object AsyncClientImpl {
+object HttpClientImpl {
   private def exceptionStatus: PartialFunction[Throwable, Response] = {
     case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
     case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))
@@ -155,7 +150,7 @@ object AsyncClientImpl {
   }
 }
 
-object AsyncClient {
+object HttpClient {
 
   val MultipartPostTimeout = 15.minutes
   val DefaultTimeout = 30.seconds
