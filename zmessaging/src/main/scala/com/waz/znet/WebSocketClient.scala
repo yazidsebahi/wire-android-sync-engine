@@ -67,6 +67,7 @@ trait WireWebSocket {
   */
 class WebSocketClient(context: Context,
                       accountId: AccountId,
+                      userAgent: String,
                       client: HttpClient,
                       uri: => Uri,
                       auth: AccessTokenProvider,
@@ -75,9 +76,7 @@ class WebSocketClient(context: Context,
 
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClient]}#${accountId.str.take(8)}"
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
-
-  protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
-
+  
   override val connected = Signal(false)
   override val onError   = EventStream[Exception]()
   override val onMessage = EventStream[ResponseContent]()
@@ -139,7 +138,7 @@ class WebSocketClient(context: Context,
       debug(s"Sending webSocket request: $uri")
       val req = token.prepare(new AsyncHttpGet(uri))
       req.setHeader("Accept-Encoding", "identity") // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
-      req.setHeader("User-Agent", client.userAgent)
+      req.setHeader("User-Agent", userAgent)
 
       CancellableFuture.lift(client.wrapper) flatMap { client =>
         val f = client.websocket(req, null, new WebSocketConnectCallback {
@@ -166,13 +165,13 @@ class WebSocketClient(context: Context,
     lastReceivedTime ! Instant.now
 
     webSocket.setStringCallback(new StringCallback {
-      override def onStringAvailable(s: String): Unit = wakeLock {
+      override def onStringAvailable(s: String): Unit = {
         lastReceivedTime ! Instant.now
         onMessage ! Try(JsonObjectResponse(new JSONObject(s))).getOrElse(StringResponse(s))
       }
     })
     webSocket.setDataCallback(new DataCallback {
-      override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit = wakeLock {
+      override def onDataAvailable(emitter: DataEmitter, bb: ByteBufferList): Unit = {
         lastReceivedTime ! Instant.now
         onMessage ! Try(JsonObjectResponse(new JSONObject(new String(bb.getAllByteArray, "utf8")))).getOrElse(BinaryResponse(bb.getAllByteArray, ""))
       }
