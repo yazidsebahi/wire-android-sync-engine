@@ -17,8 +17,6 @@
  */
 package com.waz.testutils
 
-import android.net.Uri
-import com.koushikdutta.async.http.WebSocket
 import com.waz.api.Message
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.MessageData.MessageDataDao
@@ -26,7 +24,6 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service._
-import com.waz.service.push.{WebSocketClientService, WebSocketClientServiceImpl}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.threading.{CancellableFuture, Threading}
@@ -34,7 +31,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
-import com.waz.znet.ZNetClient.{EmptyAsyncClientImpl, ErrorOrResponse}
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
 import net.hockeyapp.android.Constants
@@ -45,8 +42,6 @@ import scala.concurrent.{Await, Future}
 import scala.util.Random
 
 class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) { global =>
-  override lazy val client: HttpClientImpl = new EmptyAsyncClientImpl(TestClientWrapper())
-  override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
   override lazy val storage: Database = new GlobalDatabase(context, dbSuffix)
 
   ZMessaging.context = context

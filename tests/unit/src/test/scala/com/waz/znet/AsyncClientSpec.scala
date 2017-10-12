@@ -161,7 +161,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
   }
 
   private def client = new HttpClientImpl(
-    bodyDecoder = DefaultResponseBodyDecoder,
+    decoder = DefaultResponseBodyDecoder,
     userAgent="test",
     wrapper = Future { new FakeClientWrapper(Some(100L)) },
     requestWorker = requestWorker,
@@ -169,7 +169,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
   )
 
   private def clientWithDelay = new HttpClientImpl(
-    bodyDecoder = DefaultResponseBodyDecoder,
+    decoder = DefaultResponseBodyDecoder,
     userAgent="test",
     wrapper = Future { new FakeClientWrapper(Some(3000L)) },
     requestWorker = requestWorker,
@@ -396,7 +396,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
     }
 
     lazy val mockedClient = new HttpClientImpl(
-      bodyDecoder = DefaultResponseBodyDecoder,
+      decoder = DefaultResponseBodyDecoder,
       userAgent="test",
       wrapper = Future { clientWrapper },
       requestWorker = requestWorker,

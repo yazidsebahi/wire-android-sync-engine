@@ -39,8 +39,6 @@ import com.waz.utils.wrappers.{Context, GoogleApi, GoogleApiImpl, URI}
 import com.waz.znet.Response.ResponseBodyDecoder
 import com.waz.znet._
 
-import scala.concurrent.Future
-
 trait GlobalModule {
   def context:              AContext
   def backend:              BackendConfig
@@ -72,15 +70,15 @@ trait GlobalModule {
   def accountsStorage:      AccountsStorage
   def teamsStorage:         TeamsStorageImpl
   def recordingAndPlayback: GlobalRecordAndPlayService
-  def tempFiles: TempFileService
-  def clientWrapper: Future[ClientWrapper]
-  def client: HttpClientImpl
-  def globalClient: ZNetClient
-  def imageLoader: ImageLoader
-  def blacklistClient: VersionBlacklistClient
-  def blacklist: VersionBlacklistService
-  def factory: ZMessagingFactory
-  def lifecycle: ZmsLifeCycle
+
+  def tempFiles:            TempFileService
+  def client:               HttpClient
+  def globalClient:         ZNetClient
+  def imageLoader:          ImageLoader
+  def blacklistClient:      VersionBlacklistClient
+  def blacklist:            VersionBlacklistService
+  def factory:              ZMessagingFactory
+  def lifecycle:            ZmsLifeCycle
 
   def flowmanager:  DefaultFlowManagerService
   def mediaManager: MediaManagerService
@@ -133,8 +131,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val teamsStorage                                          = wire[TeamsStorageImpl]
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
 
-  lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()
-  lazy val client:              HttpClientImpl                  = new HttpClientImpl(decoder, HttpClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION), clientWrapper)
+  lazy val client:              HttpClient                       = new HttpClientImpl(context, decoder, HttpClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION))
   
   lazy val globalClient:        ZNetClient                       = new ZNetClientImpl(None, client, URI.parse(""))
 

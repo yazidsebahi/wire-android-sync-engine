@@ -26,7 +26,6 @@ import com.waz.model.{ConvId, MessageData, RConvId}
 import com.waz.provision._
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.UnreliableAsyncClientImpl
 import com.waz.utils._
 import com.waz.utils.events.EventContext
 import org.robolectric.Robolectric

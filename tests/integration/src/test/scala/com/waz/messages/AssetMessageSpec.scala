@@ -40,7 +40,7 @@ import com.waz.service.{UserModule, ZMessaging, ZMessagingFactory}
 import com.waz.sync.otr.OtrSyncHandlerImpl
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, FeigningAsyncClientImpl, TestResourceContentProvider}
+import com.waz.testutils.{DefaultPatienceConfig, TestResourceContentProvider}
 import com.waz.threading.Threading
 import com.waz.utils.returning
 import org.robolectric.Robolectric.{getShadowApplication, shadowOf}

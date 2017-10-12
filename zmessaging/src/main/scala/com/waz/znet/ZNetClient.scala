@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.service.BackendConfig
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
@@ -232,16 +231,6 @@ object ZNetClient {
 
   private val handleId = new AtomicInteger(0)
   def nextId = handleId.incrementAndGet()
-
-  class EmptyAsyncClientImpl(client: Future[ClientWrapper] = ClientWrapper()) extends HttpClientImpl(wrapper = client) {
-    override def apply(request: Request[_]): CancellableFuture[Response] =
-      CancellableFuture.failed(new Exception("Empty async client"))
-  }
-
-  class EmptyClient extends ZNetClientImpl(None, new EmptyAsyncClientImpl(), BackendConfig.StagingBackend.baseUrl) {
-    override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
-    override def close(): Future[Unit] = Future.successful({})
-  }
 
   def errorHandling[T](name: String)(implicit logTag: LogTag): PartialFunction[Response, Either[ErrorResponse, T]] = {
     case Response(Cancelled, _, _) =>

@@ -19,19 +19,24 @@ package com.waz.service.push
 
 import android.content.Context
 import android.net.Uri
+import com.koushikdutta.async.http.WebSocket
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
 import com.waz.service._
+import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
-import com.waz.znet.WebSocketClient.Disconnect
-import com.waz.znet.{AuthenticationManager, WebSocketClient, WireWebSocket, ZNetClient}
+import com.waz.utils.returning
+import com.waz.utils.wrappers.URI
+import com.waz.znet.WebSocketClient.{Disconnect, defaultBackoff}
+import com.waz.znet._
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 trait WebSocketClientService {
   def network:              NetworkModeService
@@ -48,6 +53,7 @@ trait WebSocketClientService {
 class WebSocketClientServiceImpl(context:     Context,
                                  accountId:   AccountId,
                                  lifecycle:   ZmsLifeCycle,
+                                 httpClient:  HttpClient,
                                  netClient:   ZNetClient,
                                  auth:        AuthenticationManager,
                                  override val network: NetworkModeService,
@@ -60,6 +66,32 @@ class WebSocketClientServiceImpl(context:     Context,
 
   private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
+
+  //needed to ensure we have just one periodic ping running
+  private var pingSchedule = CancellableFuture.cancelled[Unit]()
+
+  private var init = httpClient.websocket(accountId, webSocketUri(clientId), auth)
+
+  init.onFailure {
+    case e: CancelException => CancellableFuture.cancelled()
+    case NonFatal(ex) => retryLostConnection(ex)
+  }
+
+  private def retryLostConnection(ex: Throwable): CancellableFuture[Any] = if (closed || !init.isCompleted) { //if closed, this should be cancelled, else let it finish
+    verbose(s"Will not retry connection: ${if (closed) "Connection closed" else "Connection still underway"}")
+    init
+  }
+  else {
+    error(s"Retrying lost connection after failure", ex)
+    closeCurrentSocket()
+    val delay = defaultBackoff.delay(retryCount)
+    retryCount += 1
+    debug(s"Retrying in $delay, retryCount = $retryCount")
+    returning(CancellableFuture.delay(delay) flatMap { _ => connect() })(init = _)
+  }.recover  {
+    case e: CancelException => CancellableFuture.cancelled()
+    case NonFatal(ex) => retryLostConnection(ex)
+  }
 
   @volatile
   private var prevClient = Option.empty[WireWebSocket]
@@ -147,9 +179,34 @@ class WebSocketClientServiceImpl(context:     Context,
   })
 
   private def webSocketUri(clientId: ClientId) =
-    Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
+    URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
 
-  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, accountId, netClient, auth, webSocketUri(clientId))
+  //Ping, and attempt to reconnect if it fails according to the backoff
+  private def verifyConnection(): CancellableFuture[Unit] = pingPong().recoverWith {
+    case NonFatal(ex) if !closed =>
+      warn("Ping to server failed, attempting to re-establish connection")
+      onConnectionLost ! Disconnect.NoPong
+      retryLostConnection(ex).flatMap ( _ => verifyConnection() )
+  }
+
+  //Continually ping the BE at a given frequency to ensure the websocket remains connected.
+  override def scheduleRecurringPing(pingPeriod: FiniteDuration) = {
+    verbose(s"scheduling new recurring ping every $pingPeriod")
+
+    def recurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
+      CancellableFuture.delay(pingPeriod).flatMap { _ =>
+        if (closed) CancellableFuture.successful(()) //client is intentionally closed, do nothing to avoid re-establishing connection
+        else {
+          verbose("Performing scheduled ping")
+          verifyConnection().flatMap(_ => recurringPing(pingPeriod))
+        }
+      }
+    }
+
+    pingSchedule.cancel() //cancel any currently out-standing pings. They might have a much greater period
+    pingSchedule = recurringPing(pingPeriod)
+    pingSchedule
+  }
 }
 
 object WebSocketClientService {

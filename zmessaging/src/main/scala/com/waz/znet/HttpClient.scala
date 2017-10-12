@@ -18,21 +18,31 @@
 package com.waz.znet
 
 import java.net.{ConnectException, UnknownHostException}
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeoutException
+import javax.net.ssl.{SSLContext, SSLEngine, SSLException, X509TrustManager}
 
+import com.google.android.gms.security.ProviderInstaller
+import com.koushikdutta.async.AsyncServer
+import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback.HttpConnectCallback
 import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.model.AccountId
+import com.waz.model.otr.ClientId
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.utils.returning
+import com.waz.utils.{returning, _}
+import com.waz.utils.wrappers.{Context, URI}
 import com.waz.znet.ContentEncoder.MultipartRequestContent
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, ResponseBodyDecoder}
+import org.apache.http.conn.ssl.{AbstractVerifier, StrictHostnameVerifier}
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.util.{Failure, Left, Try}
 import scala.util.control.NonFatal
 
 trait HttpClient {
@@ -47,19 +57,20 @@ trait HttpClient {
 
   def close(): Unit
 
-  def websocket(request: Request[_]): WireWebSocket
-
-  def wrapper: Future[ClientWrapper]
+  def websocket(accountId: AccountId, pushUri: URI, auth: AuthenticationManager): CancellableFuture[WireWebSocket]
 }
 
-class HttpClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
+class HttpClientImpl(context: Context,
+                     override val decoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
                      override val userAgent: String = HttpClient.userAgent(),
-                     override val wrapper: Future[ClientWrapper] = ClientWrapper(),
                      requestWorker: RequestWorker = new HttpRequestImplWorker,
                      responseWorker: ResponseWorker = new ResponseImplWorker
                  ) extends HttpClient {
   import HttpClient._
   import HttpClientImpl._
+
+  private val client: Future[AsyncHttpClient] = Future(returning(new AsyncHttpClient(new AsyncServer))(c => init(c, context)))
+
 
   protected implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
@@ -72,7 +83,7 @@ class HttpClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecod
       case _ => request.timeout
     }
 
-    CancellableFuture.lift(wrapper) flatMap { client =>
+    CancellableFuture.lift(client) flatMap { c =>
       val p = Promise[Response]()
       @volatile var cancelled = false
       @volatile var processFuture = None: Option[CancellableFuture[_]]
@@ -86,7 +97,7 @@ class HttpClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecod
       ) // switching off the AsyncHttpClient's timeout - we will use our own
       debug(s"request headers: ${requestBuilt.headers}")
 
-      val httpFuture = client.execute(requestBuilt, new HttpConnectCallback {
+      val httpFuture = c.execute(requestBuilt, new HttpConnectCallback {
         override def onConnectCompleted(ex: Exception, response: AsyncHttpResponse): Unit = {
           debug(s"Connect completed for uri: '${request.absoluteUri}', ex: '$ex', cancelled: $cancelled")
           timeoutForPhase = request.timeout
@@ -133,24 +144,42 @@ class HttpClientImpl(bodyDecoder: ResponseBodyDecoder = DefaultResponseBodyDecod
     }
   }
 
-  def close(): Unit = wrapper foreach { _.stop() }
+  def close(): Unit = client foreach { _.getServer.stop() }
 
-}
+  override def websocket(accountId: AccountId, pushUri: URI, auth: AuthenticationManager) = {
 
-object HttpClientImpl {
-  private def exceptionStatus: PartialFunction[Throwable, Response] = {
-    case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
-    case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))
-    case e: ConnectionClosedException => Response(Response.ConnectionError(e.getMessage))
-    case e: ConnectionFailedException => Response(Response.ConnectionError(e.getMessage))
-    case e: RedirectLimitExceededException => Response(Response.ConnectionError(e.getMessage))
-    case e: TimeoutException => Response(Response.ConnectionError(e.getMessage))
-    case e: CancelException => Response(Response.Cancelled)
-    case NonFatal(e) => Response(Response.InternalError(e.getMessage, Some(e)))
+    CancellableFuture.lift(auth.currentToken()) flatMap {
+      case Right(token) =>
+        val p = Promise[WebSocket]()
+        val uri = URI.unwrap(pushUri)
+        debug(s"Sending webSocket request: ${uri.toString}")
+        val req = token.prepare(new AsyncHttpGet(uri))
+        req.setHeader("Accept-Encoding", "identity") // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
+        req.setHeader("User-Agent", userAgent)
+
+        CancellableFuture.lift(client) flatMap { c =>
+          val f = c.websocket(req, null, new WebSocketConnectCallback {
+            override def onCompleted(ex: Exception, socket: WebSocket): Unit = {
+              debug(s"WebSocket request finished, ex: $ex, socket: $socket")
+              p.tryComplete(if (ex == null) Try(socket) else Failure(ex))
+            }
+          })
+          returning(new CancellableFuture(p).withTimeout(30.seconds)) { _.onFailure { case _ => f.cancel() } }
+        }
+      case Left(status) =>
+        CancellableFuture.failed(new Exception(s"Authentication returned error status: $status"))
+    }
+
+
   }
+
 }
 
 object HttpClient {
+
+  val domains @ Seq(zinfra, wire) = Seq("zinfra.io", "wire.com")
+  val protocol = "TLSv1.2"
+  val cipherSuite = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
 
   val MultipartPostTimeout = 15.minutes
   val DefaultTimeout = 30.seconds
@@ -164,4 +193,93 @@ object HttpClient {
     s"Wire/$appVersion (zms $zmsVersion; Android ${VERSION.RELEASE}; $MANUFACTURER $MODEL)"
   }
 
+}
+
+object HttpClientImpl {
+
+  import HttpClient._
+  private def exceptionStatus: PartialFunction[Throwable, Response] = {
+    case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
+    case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))
+    case e: ConnectionClosedException => Response(Response.ConnectionError(e.getMessage))
+    case e: ConnectionFailedException => Response(Response.ConnectionError(e.getMessage))
+    case e: RedirectLimitExceededException => Response(Response.ConnectionError(e.getMessage))
+    case e: TimeoutException => Response(Response.ConnectionError(e.getMessage))
+    case e: CancelException => Response(Response.Cancelled)
+    case NonFatal(e) => Response(Response.InternalError(e.getMessage, Some(e)))
+  }
+
+  private def init(client: AsyncHttpClient, context: Context): Unit = {
+    val installGmsCoreOpenSslProvider = Future (try {
+      ProviderInstaller.installIfNeeded(context)
+    } catch {
+      case t: Throwable => debug("Looking up GMS Core OpenSSL provider failed fatally.") // this should only happen in the tests
+    })
+
+    installGmsCoreOpenSslProvider map { _ =>
+      // using specific hostname verifier to ensure compatibility with `isCertForDomain` (below)
+      client.getSSLSocketMiddleware.setHostnameVerifier(new StrictHostnameVerifier)
+      client.getSSLSocketMiddleware.setTrustManagers(Array(new X509TrustManager {
+        override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {
+          debug(s"checking certificate for authType $authType, name: ${chain(0).getSubjectDN.getName}")
+          chain.headOption.fold(throw new SSLException("expected at least one certificate!")) { cert =>
+            val tm = if (isCertForDomain(zinfra, cert) || isCertForDomain(wire, cert)) {
+              verbose("using backend trust manager")
+              ServerTrust.backendTrustManager
+            } else {
+              verbose("using system trust manager")
+              ServerTrust.systemTrustManager
+            }
+            try {
+              tm.checkServerTrusted(chain, authType)
+            } catch {
+              case e: Throwable =>
+                error("certificate check failed", e)
+                throw e
+            }
+          }
+        }
+
+        override def checkClientTrusted(chain: Array[X509Certificate], authType: String): Unit = throw new SSLException("unexpected call to checkClientTrusted")
+
+        override def getAcceptedIssuers: Array[X509Certificate] = throw new SSLException("unexpected call to getAcceptedIssuers")
+
+        /**
+          * Checks if certificate matches given domain.
+          * This is used to check if currently verified server is known to wire, and we should do certificate pinning for it.
+          *
+          * Warning: it's very important that this implementation matches used HostnameVerifier.
+          * If HostnameVerifier accepts this cert with some wire sub-domain then this function must return true,
+          * otherwise pinning will be skipped and we risk MITM attack.
+          */
+        private def isCertForDomain(domain: String, cert: X509Certificate): Boolean = {
+          def iter(arr: Array[String]) = Option(arr).fold2(Iterator.empty, _.iterator)
+          (iter(AbstractVerifier.getCNs(cert)) ++ iter(AbstractVerifier.getDNSSubjectAlts(cert))).exists(_.endsWith(s".$domain"))
+        }
+      }))
+
+      client.getSSLSocketMiddleware.setSSLContext(returning(SSLContext.getInstance("TLSv1.2")) { _.init(null, null, null) })
+
+      client.getSSLSocketMiddleware.addEngineConfigurator(new AsyncSSLEngineConfigurator {
+
+        override def createEngine(sslContext: SSLContext, peerHost: String, peerPort: Int) = null
+
+        override def configureEngine(engine: SSLEngine, data: AsyncHttpClientMiddleware.GetSocketData, host: String, port: Int): Unit = {
+          debug(s"configureEngine($host, $port)")
+
+          if (domains.exists(host.endsWith)) {
+            verbose("restricting to TLSv1.2")
+            engine.setSSLParameters(returning(engine.getSSLParameters) { params =>
+              if (engine.getSupportedProtocols.contains(protocol)) params.setProtocols(Array(protocol))
+              else warn(s"$protocol not supported by this device, falling back to defaults.")
+
+              if (engine.getSupportedCipherSuites.contains(cipherSuite)) params.setCipherSuites(Array(cipherSuite))
+              else warn(s"cipher suite $cipherSuite not supported by this device, falling back to defaults.")
+            })
+          }
+        }
+      })
+
+    }
+  }
 }
