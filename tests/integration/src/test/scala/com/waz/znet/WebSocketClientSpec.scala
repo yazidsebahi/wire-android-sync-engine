@@ -46,9 +46,9 @@ class WebSocketClientSpec extends FeatureSpec with Matchers with ProvisionedSuit
   val backend = BackendConfig.StagingBackend
 
   lazy val globalModule: GlobalModuleImpl = new GlobalModuleImpl(Robolectric.application, backend) {
-    override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
+    override lazy val clientWrapper: Future[ClientWrapper] = TestClient()
   }
-  lazy val asyncClient = globalModule.client
+  lazy val asyncClient = globalModule.httpClient
 //  lazy val loginClient = new LoginClient(asyncClient, backend)
 //  lazy val auth = new AuthenticationManager(loginClient, EmailAddress(provisionedEmail("auto1")), "auto1_pass")
 

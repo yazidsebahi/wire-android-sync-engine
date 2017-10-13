@@ -72,7 +72,7 @@ trait GlobalModule {
   def recordingAndPlayback: GlobalRecordAndPlayService
 
   def tempFiles:            TempFileService
-  def client:               HttpClient
+  def httpClient:               HttpClient
   def globalClient:         ZNetClient
   def imageLoader:          ImageLoader
   def blacklistClient:      VersionBlacklistClient
@@ -131,9 +131,9 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val teamsStorage                                          = wire[TeamsStorageImpl]
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
 
-  lazy val client:              HttpClient                       = new HttpClientImpl(context, decoder, HttpClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION))
+  lazy val httpClient:          HttpClient                       = new HttpClientImpl(context, decoder, HttpClient.userAgent(metadata.appVersion.toString, ZmsVersion.ZMS_VERSION))
   
-  lazy val globalClient:        ZNetClient                       = new ZNetClientImpl(None, client, URI.parse(""))
+  lazy val globalClient:        ZNetClient                       = new ZNetClientImpl(None, httpClient, URI.parse(""))
 
   lazy val imageLoader:         ImageLoader                      = new ImageLoaderImpl(context, cache, imageCache, bitmapDecoder, permissions, loaderService, globalLoader) { override def tag = "Global" }
 

@@ -42,7 +42,7 @@ class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAft
   var cl: AsyncHttpClient = _
 
   before {
-    client = new HttpClientImpl(wrapper = TestClientWrapper())
+    client = new HttpClientImpl(wrapper = TestClient())
   }
 
   after {
@@ -61,7 +61,7 @@ class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAft
 
     scenario("AsyncHttpClient get https://www.wire.com") {
       import scala.concurrent.ExecutionContext.Implicits.global
-      cl = TestClientWrapper(new AsyncHttpClient(new AsyncServer)).map(ClientWrapper.unwrap).futureValue
+      cl = TestClient(new AsyncHttpClient(new AsyncServer)).map(ClientWrapper.unwrap).futureValue
       val r = new AsyncHttpGet("https://www.wire.com")
       val ret = cl.executeString(r, NullStringCallback)
       println("First request returned: " + ret.get(15, TimeUnit.SECONDS).substring(0, 256))
@@ -73,7 +73,7 @@ class AsyncClientWebSpec extends FeatureSpecLike with Matchers with BeforeAndAft
 
     scenario("AsyncHttpClient https get") {
       import scala.concurrent.ExecutionContext.Implicits.global
-      cl = TestClientWrapper(new AsyncHttpClient(new AsyncServer)).map(ClientWrapper.unwrap).futureValue
+      cl = TestClient(new AsyncHttpClient(new AsyncServer)).map(ClientWrapper.unwrap).futureValue
       @volatile var ex: Exception = null
       val ret = cl.executeString(new AsyncHttpGet("https://www.wire.com/"), new StringCallback() {
         override def onCompleted(e: Exception, source: AsyncHttpResponse, result: String): Unit = {

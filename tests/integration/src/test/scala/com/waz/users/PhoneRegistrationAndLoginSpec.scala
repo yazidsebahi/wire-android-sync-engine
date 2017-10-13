@@ -41,7 +41,7 @@ class PhoneRegistrationAndLoginSpec extends FeatureSpec with OptionValues with A
   lazy val phone = randomPhoneNumber
   override lazy val email = s"android.test+${UUID.randomUUID}@wire.com"
 
-  lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
+  lazy val internalBackendClient = new InternalBackendClient(globalModule.httpClient, testBackend)
 
   var confirmationCodeSent: Boolean = false
   var passwordExists = false

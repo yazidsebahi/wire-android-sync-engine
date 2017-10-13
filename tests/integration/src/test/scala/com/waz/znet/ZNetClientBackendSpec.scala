@@ -39,7 +39,7 @@ class ZNetClientBackendSpec extends FeatureSpec with Matchers with ProvisionedSu
 //  }
 
   lazy val globalModule = new GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) {
-    override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
+    override lazy val clientWrapper: Future[ClientWrapper] = TestClient()
   }
 
   feature("Login user") {

@@ -40,13 +40,13 @@ class AuthenticationManagerBackendSpec extends FeatureSpec with Matchers with Be
   override protected lazy val logfileBaseDir: File = new File("target/logcat/integration")
 
   lazy val globalModule: GlobalModuleImpl = new GlobalModuleImpl(Robolectric.application, BackendConfig.StagingBackend) {
-    override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
+    override lazy val clientWrapper: Future[ClientWrapper] = TestClient()
   }
 
   lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
   lazy val keyValue = new UserPreferences(Robolectric.application, storage)
 
-  lazy val client = new LoginClientImpl(new HttpClientImpl(wrapper = TestClientWrapper()), BackendConfig.StagingBackend)
+  lazy val client = new LoginClientImpl(new HttpClientImpl(wrapper = TestClient()), BackendConfig.StagingBackend)
 
   lazy val email = provisionedEmail("auto1")
   lazy val passwd = "auto1_pass"

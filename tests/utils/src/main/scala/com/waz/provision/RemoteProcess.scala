@@ -26,7 +26,7 @@ import com.waz.ZLog._
 import com.waz.api.Permission
 import com.waz.service.BackendConfig
 import com.waz.utils.LoggedTry
-import com.waz.znet.TestClientWrapper
+import com.waz.znet.TestClient
 import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 import org.scalatest.Informer
@@ -56,7 +56,7 @@ class RemoteProcess extends RoboProcess {
 
     val backend = BackendConfig.byName(args(3))
 
-    val processActor = actorSystem.actorOf(RemoteProcessActor.props(Robolectric.application, processName, coordinatorActor, backend, TestClientWrapper()), processName.replaceAll("\\s+", "_"))
+    val processActor = actorSystem.actorOf(RemoteProcessActor.props(Robolectric.application, processName, coordinatorActor, backend, TestClient()), processName.replaceAll("\\s+", "_"))
 
     Robolectric.getShadowApplication.grantPermissions(Permission.values.map(_.id):_*)
 

@@ -38,7 +38,7 @@ object HockeyCrashReporter {
     val path = s"/api/2/apps/$hockeyId/crashes/upload"
 
     val request = Request.Post(path, MultipartRequestContent(Seq("attachment0" -> dump, "log" -> log)), baseUri = Some(baseUri), timeout = 1.minute)
-    ZMessaging.currentGlobal.client(request) map {
+    ZMessaging.currentGlobal.httpClient(request) map {
       case Response(SuccessHttpStatus(), _, _) => verbose("crash report successfully sent")
       case resp => error(s"Unexpected response from hockey crash report request: $resp")
     } map { _ =>

@@ -67,19 +67,16 @@ class PingIntervalService(lifecycle: ZmsLifeCycle,
   private var subs = Seq.empty[Subscription]
 
   for {
-    ws <- wsService.client
-    active <- lifecycle.active
+    active   <- lifecycle.active
     interval <- interval
-  } {
-    ws.foreach { _.scheduleRecurringPing(if (active) PING_INTERVAL_FOREGROUND else interval) }
-  }
+  } wsService.scheduleRecurringPing(if (active) PING_INTERVAL_FOREGROUND else interval)
 
   wsService.connectionStats { cs =>
     subs foreach { _.destroy() }
     subs = Seq(
-      cs.maxInactiveDuration { updateMaxInactive(_) },
-      cs.lostOnPingDuration { updateLostOnPing(_) },
-      cs.aliveDuration { updateAlive(_) }
+      cs.maxInactiveDuration { updateMaxInactive },
+      cs.lostOnPingDuration { updateLostOnPing },
+      cs.aliveDuration { updateAlive }
     )
   }
 

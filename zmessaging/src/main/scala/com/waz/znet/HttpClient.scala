@@ -47,10 +47,6 @@ import scala.util.control.NonFatal
 
 trait HttpClient {
 
-  def decoder: ResponseBodyDecoder
-
-  def userAgent: String
-
   def execute(request: Request[_]): CancellableFuture[Response]
 
   def apply(request: Request[_]): CancellableFuture[Response] = execute(request)
@@ -60,19 +56,17 @@ trait HttpClient {
   def websocket(accountId: AccountId, pushUri: URI, auth: AuthenticationManager): CancellableFuture[WireWebSocket]
 }
 
-class HttpClientImpl(context: Context,
-                     override val decoder: ResponseBodyDecoder = DefaultResponseBodyDecoder,
-                     override val userAgent: String = HttpClient.userAgent(),
-                     requestWorker: RequestWorker = new HttpRequestImplWorker,
-                     responseWorker: ResponseWorker = new ResponseImplWorker
-                 ) extends HttpClient {
+class HttpClientImpl(context:         Context,
+                     decoder:         ResponseBodyDecoder = DefaultResponseBodyDecoder,
+                     userAgent:       String              = HttpClient.userAgent()) extends HttpClient {
   import HttpClient._
   import HttpClientImpl._
 
-  private val client: Future[AsyncHttpClient] = Future(returning(new AsyncHttpClient(new AsyncServer))(c => init(c, context)))
+  protected implicit val dispatcher = new SerialDispatchQueue(name = "HttpClient")
 
-
-  protected implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
+  private val requestWorker  = new HttpRequestImplWorker
+  private val responseWorker = new ResponseImplWorker
+  private val client         = Future(returning(new AsyncHttpClient(new AsyncServer))(c => init(c, context)))
 
   override def execute(request: Request[_]): CancellableFuture[Response] = {
     val body = request.getBody
@@ -124,7 +118,7 @@ class HttpClientImpl(context: Context,
         override def cancel()(implicit tag: LogTag): Boolean = {
           debug(s"cancelling request for ${request.absoluteUri}")(tag)
           cancelled = true
-          httpFuture.cancel()(tag)
+          httpFuture.cancel()
           processFuture.foreach(_.cancel()(tag))
           super.cancel()(tag)
         }
@@ -148,20 +142,20 @@ class HttpClientImpl(context: Context,
 
   override def websocket(accountId: AccountId, pushUri: URI, auth: AuthenticationManager) = {
 
-    CancellableFuture.lift(auth.currentToken()) flatMap {
+    CancellableFuture.lift(auth.currentToken()).flatMap {
       case Right(token) =>
-        val p = Promise[WebSocket]()
+        val p = Promise[WireWebSocket]()
         val uri = URI.unwrap(pushUri)
         debug(s"Sending webSocket request: ${uri.toString}")
         val req = token.prepare(new AsyncHttpGet(uri))
         req.setHeader("Accept-Encoding", "identity") // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
         req.setHeader("User-Agent", userAgent)
 
-        CancellableFuture.lift(client) flatMap { c =>
+        CancellableFuture.lift(client).flatMap { c =>
           val f = c.websocket(req, null, new WebSocketConnectCallback {
             override def onCompleted(ex: Exception, socket: WebSocket): Unit = {
               debug(s"WebSocket request finished, ex: $ex, socket: $socket")
-              p.tryComplete(if (ex == null) Try(socket) else Failure(ex))
+              p.tryComplete(if (ex == null) Try(new WebSocketClient(accountId, socket)) else Failure(ex))
             }
           })
           returning(new CancellableFuture(p).withTimeout(30.seconds)) { _.onFailure { case _ => f.cancel() } }
@@ -169,10 +163,7 @@ class HttpClientImpl(context: Context,
       case Left(status) =>
         CancellableFuture.failed(new Exception(s"Authentication returned error status: $status"))
     }
-
-
   }
-
 }
 
 object HttpClient {
@@ -198,6 +189,8 @@ object HttpClient {
 object HttpClientImpl {
 
   import HttpClient._
+  import Threading.Implicits.Background
+
   private def exceptionStatus: PartialFunction[Throwable, Response] = {
     case e: ConnectException => Response(Response.ConnectionError(e.getMessage))
     case e: UnknownHostException => Response(Response.ConnectionError(e.getMessage))

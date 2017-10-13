@@ -146,7 +146,7 @@ class PersonalInvitationSpec extends FeatureSpec with Matchers with BeforeAndAft
   @volatile var inviter = Option.empty[UserId]
   @volatile var token = Option.empty[PersonalInvitationToken]
 
-  lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
+  lazy val internalBackendClient = new InternalBackendClient(globalModule.httpClient, testBackend)
 
   override lazy val zmessagingFactory = new ZMessagingFactory(globalModule) {
     override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): service.ZMessaging =

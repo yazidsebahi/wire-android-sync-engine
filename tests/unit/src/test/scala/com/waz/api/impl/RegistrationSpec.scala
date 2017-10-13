@@ -70,7 +70,7 @@ import scala.util.control.NoStackTrace
 
   class MockGlobal extends MockGlobalModule {
 
-    override lazy val client: HttpClientImpl = new HttpClientImpl(wrapper = TestClientWrapper()) {
+    override lazy val httpClient: HttpClientImpl = new HttpClientImpl(wrapper = TestClient()) {
       override def apply(req: Request[_]): CancellableFuture[Response] = {
         val body = req.getBody
         val uri = req.absoluteUri.get
@@ -80,11 +80,11 @@ import scala.util.control.NoStackTrace
       }
     }
 
-    override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
+    override lazy val loginClient: LoginClient = new LoginClientImpl(httpClient, backend) {
       override def login(account: AccountData) = CancellableFuture.successful(loginResponse)
       override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(loginResponse)
     }
-    override lazy val regClient: RegistrationClient = new RegistrationClientImpl(client, backend) {
+    override lazy val regClient: RegistrationClient = new RegistrationClientImpl(httpClient, backend) {
       override def register(account: AccountData, name: String, accentId: Option[Int]) = CancellableFuture.successful(registerResponse)
     }
     override lazy val factory = new MockZMessagingFactory(this) {

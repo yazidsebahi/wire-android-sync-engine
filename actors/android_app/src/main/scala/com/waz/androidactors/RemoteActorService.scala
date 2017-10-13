@@ -37,7 +37,7 @@ import com.waz.threading.Threading
 import com.waz.utils.{LoggedTry, Serialized}
 import com.waz.utils.events.{ServiceEventContext, Signal}
 import com.waz.zms.FutureService
-import com.waz.znet.TestClientWrapper
+import com.waz.znet.TestClient
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -99,7 +99,7 @@ class RemoteActorService(context: Context) {
       dbs.listFiles() foreach { db =>
         println(s"deleting db: $db, res:" + db.delete())
       }
-      currentActor ! actorSystem.actorOf(RemoteProcessActor.props(context, name, None, backend, TestClientWrapper()), name.replaceAll("\\s+", "_"))
+      currentActor ! actorSystem.actorOf(RemoteProcessActor.props(context, name, None, backend, TestClient()), name.replaceAll("\\s+", "_"))
     }
   }
 

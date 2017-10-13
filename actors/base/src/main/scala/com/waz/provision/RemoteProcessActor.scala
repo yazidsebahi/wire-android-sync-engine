@@ -21,17 +21,16 @@ import akka.actor.Actor.Receive
 import akka.actor._
 import android.content.Context
 import com.waz.service.BackendConfig
-import com.waz.znet.ClientWrapper
+import com.waz.znet.HttpClient
 import org.threeten.bp.Instant.now
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class RemoteProcessActor(application: Context,
                          processName: String,
                          coordinator: Option[ActorRef],
                          backend: BackendConfig = BackendConfig.StagingBackend,
-                         wrapper: Future[ClientWrapper]) extends FSM[RemoteProcessActor.State, Option[ActorRef]] with ActorLogging {
+                         wrapper: HttpClient) extends FSM[RemoteProcessActor.State, Option[ActorRef]] with ActorLogging {
 
   import ActorMessage._
   import RemoteProcessActor._
@@ -86,7 +85,7 @@ object RemoteProcessActor {
             processName: String,
             mainCoordinatorRef: Option[ActorRef],
             backend: BackendConfig = BackendConfig.StagingBackend,
-            wrapper: Future[ClientWrapper]) =
+            wrapper: HttpClient) =
     Props(new RemoteProcessActor(context, processName, mainCoordinatorRef, backend, wrapper))
 
   trait State

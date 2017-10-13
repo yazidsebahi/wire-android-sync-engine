@@ -88,8 +88,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   lazy val globalModule: GlobalModuleImpl = new ApiSpecGlobal
 
   class ApiSpecGlobal extends GlobalModuleImpl(context, testBackend) {
-    override lazy val clientWrapper: Future[ClientWrapper] = TestClientWrapper()
-    override lazy val client: HttpClientImpl = testClient
+    override lazy val httpClient: HttpClient = null
     override lazy val timeouts: Timeouts = suite.timeouts
 
     ZMessaging.currentGlobal = this

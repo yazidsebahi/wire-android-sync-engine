@@ -59,7 +59,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
 
-  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
+  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.httpClient, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -147,6 +147,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def flowmanager       = global.flowmanager
   def mediamanager      = global.mediaManager
   def gNotifcations     = global.notifications
+  def httpClient        = global.httpClient
 
   def db                = storage.db
   def userPrefs         = storage.userPrefs
@@ -199,7 +200,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val errors                                     = wire[ErrorsService]
   lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
-  lazy val websocket: WebSocketClientService          = wire[WebSocketClientServiceImpl]
+  lazy val websocket:    WebSocketClientService       = wire[WebSocketClientServiceImpl]
   lazy val userSearch                                 = wire[UserSearchService]
   lazy val assetGenerator                             = wire[ImageAssetGenerator]
   lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]

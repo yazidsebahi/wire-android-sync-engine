@@ -140,16 +140,14 @@ class WebSocketClient(accountId:   AccountId,
   //Pings the BE. Will return a future of whether a pong was received within the pongTimeout. If the future
   //succeeds, we can assume the ping was successful.
   def pingPong(): CancellableFuture[Unit] = dispatcher {
-    case Some(c) =>
-      import com.waz.utils.events.EventContext.Implicits.global
-
-      if (pongFuture.isCompleted) { // ping only if not waiting for pong already
-        pongFuture = onPong.next.withTimeout(pongTimeout)
-        info(s"ping")
-        webSocket.ping(s"ping")
-        onPing ! ({})
-      }
-      pongFuture
+    import com.waz.utils.events.EventContext.Implicits.global
+    if (pongFuture.isCompleted) { // ping only if not waiting for pong already
+      pongFuture = onPong.next.withTimeout(pongTimeout)
+      info(s"ping")
+      webSocket.ping(s"ping")
+      onPing ! ({})
+    }
+    pongFuture
   }.flatten
 }
 

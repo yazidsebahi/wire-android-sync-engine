@@ -34,7 +34,7 @@ import com.waz.testutils._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.sha2
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import com.waz.znet.{HttpClientImpl, TestClientWrapper}
+import com.waz.znet.{HttpClientImpl, TestClient}
 import org.robolectric.shadows.ShadowContentResolver
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers}
 
@@ -146,7 +146,7 @@ class AddressBookSpec extends FeatureSpec with Matchers with BeforeAndAfter with
   val uuids = (1 to 8) map (_ => randomUUID())
   val emails = uuids map (id => EmailAddress(s"android.test+$id@wire.com"))
 
-  def newClient = new RegistrationClientImpl(new HttpClientImpl(wrapper = TestClientWrapper()), testBackend)
+  def newClient = new RegistrationClientImpl(new HttpClientImpl(wrapper = TestClient()), testBackend)
 
   override lazy val zmessagingFactory: ZMessagingFactory = new ZMessagingFactory(globalModule) {
     override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = new ApiZMessaging(teamId, clientId, user) {

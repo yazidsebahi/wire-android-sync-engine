@@ -27,7 +27,7 @@ import scala.util.{Failure, Success, Random}
 
 trait RegistrationUtils { self: ApiSpec =>
   import com.waz.threading.Threading.Implicits.Background
-  lazy val internalBackendClient = new InternalBackendClient(globalModule.client, testBackend)
+  lazy val internalBackendClient = new InternalBackendClient(globalModule.httpClient, testBackend)
 
   def randomPhoneNumber: PhoneNumber = PhoneNumber("+0" + (Random.nextInt(9) + 1) + Array.fill(13)(Random.nextInt(10)).mkString)
 

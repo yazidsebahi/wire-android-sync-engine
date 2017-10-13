@@ -40,7 +40,7 @@ import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
-import com.waz.znet.ClientWrapper
+import com.waz.znet.HttpClient
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future.successful
@@ -52,14 +52,14 @@ object DeviceActor {
   def props(deviceName: String,
             application: Context,
             backend: BackendConfig = BackendConfig.StagingBackend,
-            wrapper: Future[ClientWrapper]) =
+            wrapper: HttpClient) =
   Props(new DeviceActor(deviceName, application, backend, wrapper)).withDispatcher("ui-dispatcher")
 }
 
 class DeviceActor(val deviceName: String,
                   val application: Context,
                   backend: BackendConfig = BackendConfig.StagingBackend,
-                  wrapper: Future[ClientWrapper]) extends Actor with ActorLogging {
+                  wrapper: HttpClient) extends Actor with ActorLogging {
 
   import ActorMessage._
 
@@ -74,7 +74,7 @@ class DeviceActor(val deviceName: String,
   lazy val globalModule = new GlobalModuleImpl(application, backend) { global =>
     ZMessaging.currentGlobal = this
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
-    override lazy val clientWrapper: Future[ClientWrapper] = wrapper
+    override lazy val httpClient: HttpClient = wrapper
 
     override lazy val metadata: MetaDataService = new MetaDataService(context) {
       override val cryptoBoxDirName: String = "otr_" + Random.nextInt().toHexString

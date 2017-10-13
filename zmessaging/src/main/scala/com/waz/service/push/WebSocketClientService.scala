@@ -18,8 +18,6 @@
 package com.waz.service.push
 
 import android.content.Context
-import android.net.Uri
-import com.koushikdutta.async.http.WebSocket
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.AccountId
@@ -28,10 +26,11 @@ import com.waz.service._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
-import com.waz.utils.returning
+import com.waz.utils.{returning, returningF}
 import com.waz.utils.wrappers.URI
 import com.waz.znet.WebSocketClient.{Disconnect, defaultBackoff}
 import com.waz.znet._
+import com.waz.zms.WebSocketService
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -39,28 +38,25 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 trait WebSocketClientService {
-  def network:              NetworkModeService
-  def useWebSocketFallback: Signal[Boolean]
-  def wsActive:             Signal[Boolean]
-  def client:               Signal[Option[WireWebSocket]]
-  def connected:            Signal[Boolean]
-  def connectionError:      Signal[Boolean]
-  def connectionStats:      Signal[WebSocketClientService.ConnectionStats]
-  def verifyConnection():   Future[Unit]
-  def awaitActive():        Future[Unit]
+  def useWebSocketFallback:                              Signal[Boolean]
+  def client:                                            Signal[Option[WireWebSocket]]
+  def connected:                                         Signal[Boolean]
+  def connectionError:                                   Signal[Boolean]
+  def connectionStats:                                   Signal[WebSocketClientService.ConnectionStats]
+  def awaitActive():                                     Future[Unit]
+  def scheduleRecurringPing(pingPeriod: FiniteDuration): Future[Unit]
 }
 
-class WebSocketClientServiceImpl(context:     Context,
-                                 accountId:   AccountId,
-                                 lifecycle:   ZmsLifeCycle,
-                                 httpClient:  HttpClient,
-                                 netClient:   ZNetClient,
-                                 auth:        AuthenticationManager,
-                                 override val network: NetworkModeService,
-                                 backend:     BackendConfig,
-                                 clientId:    ClientId,
-                                 timeouts:    Timeouts,
-                                 pushToken:   PushTokenService) extends WebSocketClientService {
+class WebSocketClientServiceImpl(context:    Context,
+                                 accountId:  AccountId,
+                                 lifecycle:  ZmsLifeCycle,
+                                 httpClient: HttpClient,
+                                 auth:       AuthenticationManager,
+                                 network:    NetworkModeService,
+                                 backend:    BackendConfig,
+                                 clientId:   ClientId,
+                                 timeouts:   Timeouts,
+                                 pushToken:  PushTokenService) extends WebSocketClientService {
   import WebSocketClientService._
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
 
@@ -70,36 +66,12 @@ class WebSocketClientServiceImpl(context:     Context,
   //needed to ensure we have just one periodic ping running
   private var pingSchedule = CancellableFuture.cancelled[Unit]()
 
-  private var init = httpClient.websocket(accountId, webSocketUri(clientId), auth)
-
-  init.onFailure {
-    case e: CancelException => CancellableFuture.cancelled()
-    case NonFatal(ex) => retryLostConnection(ex)
-  }
-
-  private def retryLostConnection(ex: Throwable): CancellableFuture[Any] = if (closed || !init.isCompleted) { //if closed, this should be cancelled, else let it finish
-    verbose(s"Will not retry connection: ${if (closed) "Connection closed" else "Connection still underway"}")
-    init
-  }
-  else {
-    error(s"Retrying lost connection after failure", ex)
-    closeCurrentSocket()
-    val delay = defaultBackoff.delay(retryCount)
-    retryCount += 1
-    debug(s"Retrying in $delay, retryCount = $retryCount")
-    returning(CancellableFuture.delay(delay) flatMap { _ => connect() })(init = _)
-  }.recover  {
-    case e: CancelException => CancellableFuture.cancelled()
-    case NonFatal(ex) => retryLostConnection(ex)
-  }
-
-  @volatile
-  private var prevClient = Option.empty[WireWebSocket]
+  private var retryCount = 0
 
   override val useWebSocketFallback = pushToken.pushActive.map(!_)
 
   // true if web socket should be active,
-  override val wsActive = network.networkMode.flatMap {
+  private val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
     case _ => lifecycle.loggedIn.flatMap {
       case false => Signal const false
@@ -113,23 +85,59 @@ class WebSocketClientServiceImpl(context:     Context,
     }
   }
 
-  override val client = wsActive.zip(lifecycle.idle) map {
-    case (true, idle) =>
-      debug(s"Active, client: $clientId")
+  // start android service to keep the app running while we need to be connected.
+  lifecycle.idle.onChanged.filter(_ == true)(_ => WebSocketService(context))
 
-      if (prevClient.isEmpty)
-        prevClient = Some(createWebSocketClient(clientId))
-
-      if (idle) {
-        // start android service to keep the app running while we need to be connected.
-        com.waz.zms.WebSocketService(context)
+  override val client = (for {
+    wsActive <- wsActive
+    ws <- Signal.future {
+      if (wsActive) {
+        debug(s"Active, client: $clientId")
+        openWebsocket()
+      } else {
+        debug(s"onInactive")
+        init.cancel()
+        CancellableFuture.successful(None)
       }
-      prevClient
-    case (false, _) =>
-      debug(s"onInactive")
-      prevClient foreach (_.close())
-      prevClient = None
-      None
+    }
+  } yield ws).orElse(Signal.const(None))
+
+  private var currentSocket = Option.empty[WireWebSocket]
+  private var init = CancellableFuture.cancelled[WireWebSocket]()
+
+  private def openWebsocket() = {
+    def open(): CancellableFuture[WireWebSocket] = returningF(httpClient.websocket(accountId, webSocketUri(clientId), auth)) { f =>
+      f.recoverWith {
+        case _: CancelException =>
+          warn("Opening websocket was cancelled")
+          closeWebSocket()
+          CancellableFuture.cancelled()
+        case NonFatal(ex) =>
+          val delay = defaultBackoff.delay(retryCount)
+          warn(s"Failed to open websocket, retrying after $delay, retryCount = $retryCount", ex)
+          retryCount += 1
+          CancellableFuture.delay(delay).flatMap(_ => closeWebSocket()).flatMap(_ => open())
+      }
+      retryCount = 0
+      init = f
+    }
+
+    verbose(s"Opening new socket. Current socket: $currentSocket, already opening?: ${!init.isCompleted}")
+    if (!init.isCompleted) init else {
+      closeWebSocket()
+      open()
+    }
+  }.map { ws =>
+    currentSocket = Some(ws)
+    currentSocket
+  }
+
+  private def closeWebSocket(): CancellableFuture[Unit] = {
+    verbose(s"Closing current websocket: $currentSocket")
+    init.cancel()
+    returning(currentSocket.fold(CancellableFuture.successful({}))(ws => CancellableFuture.lift(ws.close()))) { _ =>
+      currentSocket = None
+    }
   }
 
   override val connected = client flatMap {
@@ -154,12 +162,16 @@ class WebSocketClientServiceImpl(context:     Context,
 
   override val connectionStats = client collect { case Some(c) => new ConnectionStats(network, c) }
 
-  override def verifyConnection() = client.head flatMap {
-    case None => Future.successful(())
-    case Some(c) => c.verifyConnection().future
+  private def verifyConnection(): CancellableFuture[Unit] = CancellableFuture.lift(client.head).flatMap {
+    case None => CancellableFuture.successful(())
+    case Some(c) => c.pingPong().recoverWith {
+      case NonFatal(_) =>
+        warn("Ping to server failed, attempting to re-establish connection")
+        openWebsocket().flatMap ( _ => verifyConnection() )
+    }
   }
 
-  network.networkMode {
+  network.networkMode.onChanged {
     case NetworkMode.OFFLINE => //no point in checking connection
     case n =>
     // ping web socket on network changes, this should help us discover potential network outage
@@ -178,35 +190,23 @@ class WebSocketClientServiceImpl(context:     Context,
     case _ => 1
   })
 
-  private def webSocketUri(clientId: ClientId) =
-    URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
-
-  //Ping, and attempt to reconnect if it fails according to the backoff
-  private def verifyConnection(): CancellableFuture[Unit] = pingPong().recoverWith {
-    case NonFatal(ex) if !closed =>
-      warn("Ping to server failed, attempting to re-establish connection")
-      onConnectionLost ! Disconnect.NoPong
-      retryLostConnection(ex).flatMap ( _ => verifyConnection() )
-  }
-
   //Continually ping the BE at a given frequency to ensure the websocket remains connected.
-  override def scheduleRecurringPing(pingPeriod: FiniteDuration) = {
+  override def scheduleRecurringPing(pingPeriod: FiniteDuration): Future[Unit] = {
     verbose(s"scheduling new recurring ping every $pingPeriod")
-
     def recurringPing(pingPeriod: FiniteDuration): CancellableFuture[Unit] = {
       CancellableFuture.delay(pingPeriod).flatMap { _ =>
-        if (closed) CancellableFuture.successful(()) //client is intentionally closed, do nothing to avoid re-establishing connection
-        else {
-          verbose("Performing scheduled ping")
-          verifyConnection().flatMap(_ => recurringPing(pingPeriod))
-        }
+        verbose("Performing scheduled ping")
+        verifyConnection().flatMap(_ => recurringPing(pingPeriod))
       }
     }
 
     pingSchedule.cancel() //cancel any currently out-standing pings. They might have a much greater period
     pingSchedule = recurringPing(pingPeriod)
-    pingSchedule
+    pingSchedule.future
   }
+
+  private def webSocketUri(clientId: ClientId) =
+    URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
 }
 
 object WebSocketClientService {

@@ -40,7 +40,7 @@ class WebSocketWebSpec extends FeatureSpecLike with Matchers with BeforeAndAfter
 
   before {
     ShadowLog.stream = System.out
-    client = new HttpClientImpl(wrapper = TestClientWrapper())
+    client = new HttpClientImpl(wrapper = TestClient())
   }
 
   after {

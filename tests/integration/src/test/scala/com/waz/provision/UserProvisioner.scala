@@ -37,7 +37,7 @@ class UserProvisioner(val email: String, val pass: String, val name: String, val
   private implicit val logTag: LogTag = logTagFor[UserProvisioner]
 
   val regClient = global.regClient
-  val internalBackend = new InternalBackendClient(global.client, global.backend)
+  val internalBackend = new InternalBackendClient(global.httpClient, global.backend)
 
   def register(): Either[ErrorResponse, UserInfo] = Await.result(retryWithBackOff() {
     regClient.register(AccountData(email = Some(EmailAddress(email)), password = Some(pass)), name, None) } .flatMap {

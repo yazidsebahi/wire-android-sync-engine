@@ -21,9 +21,10 @@ import java.net.{URI => JURI}
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.debug
+import com.waz.model.AccountId
 import com.waz.threading.CancellableFuture
 import com.waz.utils.returning
-import com.waz.utils.wrappers.JavaURI
+import com.waz.utils.wrappers.{JavaURI, URI}
 import com.waz.znet.HttpClient.UserAgentHeader
 import com.waz.znet.ContentEncoder.{GzippedRequestContent, RequestContent}
 import com.waz.znet.Response.HttpStatus
@@ -77,7 +78,7 @@ class ApacheHttpClient extends HttpClient {
 
   override def close(): Unit = {}
 
-  override val userAgent: String = HttpClient.userAgent()
+  override def execute(request: Request[_]) = ???
 
-  override val wrapper: Future[ClientWrapper] = ClientWrapper()
+  override def websocket(accountId: AccountId, pushUri: URI, auth: AuthenticationManager) = ???
 }
