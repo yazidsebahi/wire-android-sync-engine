@@ -17,8 +17,6 @@
  */
 package com.waz.service.push
 
-import android.net.Uri
-import com.koushikdutta.async.http.WebSocket
 import com.waz.api.NetworkMode
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastStableNotification
@@ -32,7 +30,7 @@ import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.testutils.{TestBackoff, TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
-import com.waz.utils.events.Signal
+import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
 import org.json.JSONObject
@@ -60,7 +58,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   implicit val ctx = Threading.Background
   val client = mock[PushNotificationsClient]
 
-  val wsClient = Signal(Option.empty[WebSocketClient])
+  val wsClient = Signal(Option.empty[WireWebSocket])
   val uiActive = Signal(true)
 
   (websocket.connected _).expects().anyNumberOfTimes().returning(wsConnected)
@@ -87,12 +85,6 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
   def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account, pipeline, websocket, network, lifeCycle, sync)
-
-  val ws = new WebSocketClient(context, AccountId(), mock[HttpClient], Uri.parse(""), mock[AccessTokenProvider]) {
-    override lazy val wakeLock: WakeLock = new FakeLock
-
-    override def connect(): CancellableFuture[WebSocket] = CancellableFuture.successful(mock[WebSocket])
-  }
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
 
@@ -345,4 +337,16 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
     """.stripMargin
   val notObject = new JSONObject(notJson)
   val pushNotification = PushNotification.NotificationDecoder(notObject)
+
+  lazy val ws = new WireWebSocket {
+    override def onError = ???
+    override def connected = ???
+    override def pingPong() = ???
+    override def lastReceivedTime = ???
+    override def close() = ???
+    override def send[A](msg: A)(implicit evidence$1: ContentEncoder[A]) = ???
+    override def onConnectionLost = ???
+
+    override val onMessage = EventStream[ResponseContent]()
+  }
 }

@@ -401,7 +401,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
     }
 
     (global, accountIds.zip(syncs).map { case (id, sync) =>
-      new PushTokenService(google, BackendConfig.StagingBackend, global, prefs, lifecycle, id, accStorage, sync)
+      new PushTokenServiceImpl(google, BackendConfig.StagingBackend, global, prefs, lifecycle, id, accStorage, sync)
     })
   }
 }

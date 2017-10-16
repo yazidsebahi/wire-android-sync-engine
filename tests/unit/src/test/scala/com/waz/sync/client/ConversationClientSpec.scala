@@ -18,19 +18,15 @@
 package com.waz.sync.client
 
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConversationData, _}
+import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
-import com.waz.threading.CancellableFuture
 import com.waz.utils.IoUtils.asString
 import com.waz.utils._
-import com.waz.znet.Response.Status.Success
-import com.waz.znet.Response._
-import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.JSONObject
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 
 @Ignore class ConversationClientSpec extends FeatureSpec with Matchers with ScalaFutures with BeforeAndAfterAll with RobolectricTests {
 
@@ -173,8 +169,9 @@ import org.scalatest._
 
   @volatile var response: ResponseContent = EmptyResponse
 
-  lazy val client = new ConversationsClient(new EmptyClient {
-      override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.successful(Response(HttpStatus(Success), response))
-    }
+  lazy val client = new ConversationsClient(null
+//  new EmptyClient {
+//      override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.successful(Response(HttpStatus(Success), response))
+//    }
   )
 }

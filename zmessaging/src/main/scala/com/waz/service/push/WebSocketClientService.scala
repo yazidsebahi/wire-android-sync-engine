@@ -49,13 +49,12 @@ trait WebSocketClientService {
 
 class WebSocketClientServiceImpl(context:    Context,
                                  accountId:  AccountId,
-                                 lifecycle:  ZmsLifeCycle,
+                                 lifeCycle:  ZmsLifeCycle,
                                  httpClient: HttpClient,
                                  auth:       AuthenticationManager,
                                  network:    NetworkModeService,
                                  backend:    BackendConfig,
                                  clientId:   ClientId,
-                                 timeouts:   Timeouts,
                                  pushToken:  PushTokenService) extends WebSocketClientService {
   import WebSocketClientService._
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
@@ -73,7 +72,7 @@ class WebSocketClientServiceImpl(context:    Context,
   // true if web socket should be active,
   private val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
-    case _ => lifecycle.loggedIn.flatMap {
+    case _ => lifeCycle.accLoggedIn(accountId).flatMap {
       case false => Signal const false
       case _ => useWebSocketFallback
     }.flatMap {
@@ -81,12 +80,15 @@ class WebSocketClientServiceImpl(context:    Context,
       case false =>
         // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
         verbose(s"lifecycle no longer active, should stop the client")
-        Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+        Signal.future(CancellableFuture.delayed(inactivityTimeout)(false)).orElse(Signal const true)
     }
   }
 
   // start android service to keep the app running while we need to be connected.
-  lifecycle.idle.onChanged.filter(_ == true)(_ => WebSocketService(context))
+  lifeCycle.idle.onChanged.filter(_ == true)(_ => Option(context) match {
+    case Some(c) => WebSocketService(c)
+    case _ => verbose("No context, websocket may not be kept open in the background")
+  })
 
   override val client = (for {
     wsActive <- wsActive
@@ -106,7 +108,7 @@ class WebSocketClientServiceImpl(context:    Context,
   private var init = CancellableFuture.cancelled[WireWebSocket]()
 
   private def openWebsocket() = {
-    def open(): CancellableFuture[WireWebSocket] = returningF(httpClient.websocket(accountId, webSocketUri(clientId), auth)) { f =>
+    def open(): CancellableFuture[WireWebSocket] = returningF(httpClient.websocket(accountId, webSocketUri(clientId, backend), auth)) { f =>
       f.recoverWith {
         case _: CancelException =>
           warn("Opening websocket was cancelled")
@@ -184,7 +186,7 @@ class WebSocketClientServiceImpl(context:    Context,
   /**
     * Increase the timeout for poorer networks before showing a connection error
     */
-  private def getErrorTimeout(networkMode: NetworkMode) = timeouts.webSocket.connectionTimeout * (networkMode match {
+  private def getErrorTimeout(networkMode: NetworkMode) = connectionTimeout * (networkMode match {
     case NetworkMode._2G => 3
     case NetworkMode._3G => 2
     case _ => 1
@@ -204,12 +206,15 @@ class WebSocketClientServiceImpl(context:    Context,
     pingSchedule = recurringPing(pingPeriod)
     pingSchedule.future
   }
-
-  private def webSocketUri(clientId: ClientId) =
-    URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
 }
 
 object WebSocketClientService {
+
+  def webSocketUri(clientId: ClientId, backend: BackendConfig) =
+    URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
+
+  var inactivityTimeout = 3.seconds
+  var connectionTimeout = 8.seconds
 
   // collects websocket connection statistics for tracking and optimal ping timeout calculation
   class ConnectionStats(network: NetworkModeService,

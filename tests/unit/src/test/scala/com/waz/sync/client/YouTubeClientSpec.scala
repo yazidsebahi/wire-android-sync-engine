@@ -19,16 +19,14 @@ package com.waz.sync.client
 
 import com.waz.api.MediaProvider
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.{AssetData, Dim2}
-import com.waz.utils.wrappers.URI
 import com.waz.model.AssetMetaData.Image
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.messages.media.MediaAssetData.MediaWithImages
 import com.waz.model.messages.media.{ArtistData, PlaylistData, TrackData}
+import com.waz.model.{AssetData, Dim2}
 import com.waz.testutils.Matchers._
-import com.waz.threading.CancellableFuture
+import com.waz.utils.wrappers.URI
 import com.waz.znet.Response.HttpStatus
-import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.JSONObject
 import org.scalatest._
@@ -119,9 +117,11 @@ import org.scalatest._
 
     var response: Response = Response(HttpStatus(200))
 
-    lazy val client = new YouTubeClient(new EmptyClient() {
-      override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.successful(response)
-    })
+    lazy val client = new YouTubeClient(null
+//    new EmptyClient() {
+//      override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.successful(response)
+//    }
+    )
 
     scenario("Load sample snippet") {
       response = Response(HttpStatus(200), sampleTrackResponse)
@@ -153,15 +153,17 @@ import org.scalatest._
   }
 
   feature("Load playlist") {
-    lazy val client = new YouTubeClient(new EmptyClient() {
-      @volatile var first = true
-
-      override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.successful(Response(HttpStatus(200),
-        if (first) {
-          first = false; samplePlaylistResponse
-        } else samplePlaylistItemsResponse
-      ))
-    })
+    lazy val client = new YouTubeClient(null
+//    new EmptyClient() {
+//      @volatile var first = true
+//
+//      override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.successful(Response(HttpStatus(200),
+//        if (first) {
+//          first = false; samplePlaylistResponse
+//        } else samplePlaylistItemsResponse
+//      ))
+//    }
+    )
 
     scenario("Load playlist") {
       client.loadPlaylist("id") should eventually(beMatching({

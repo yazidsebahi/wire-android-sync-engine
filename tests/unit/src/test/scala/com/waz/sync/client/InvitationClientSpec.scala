@@ -23,10 +23,8 @@ import com.waz.client.RegistrationClientImpl
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
-import com.waz.threading.CancellableFuture
-import com.waz.znet.ContentEncoder.{ByteArrayRequestContent}
+import com.waz.znet.ContentEncoder.ByteArrayRequestContent
 import com.waz.znet.Response.{HttpStatus, Status}
-import com.waz.znet.ZNetClient.{EmptyAsyncClientImpl, EmptyClient}
 import com.waz.znet._
 import org.json.JSONObject
 import org.scalatest._
@@ -107,18 +105,21 @@ import org.threeten.bp.Instant
   @volatile var mostRecentRequest: Request[_] = _
   @volatile var nextResponse: Response = emptyResponse
 
-  lazy val invitationClient = new InvitationClient(new EmptyClient() {
-      override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-        mostRecentRequest = r
-        CancellableFuture.successful(nextResponse)
-      }
-    }
+  lazy val invitationClient = new InvitationClient(null
+//  new EmptyClient() {
+//      override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+//        mostRecentRequest = r
+//        CancellableFuture.successful(nextResponse)
+//      }
+//    }
   )
 
-  lazy val registrationClient = new RegistrationClientImpl(new EmptyAsyncClientImpl {
-    override def apply(request: Request[_]): CancellableFuture[Response] =
-      CancellableFuture.successful(nextResponse)
-  }, BackendConfig.StagingBackend)
+  lazy val registrationClient = new RegistrationClientImpl(null,
+//  new EmptyAsyncClientImpl {
+//    override def apply(request: Request[_]): CancellableFuture[Response] =
+//      CancellableFuture.successful(nextResponse)
+//  },
+  BackendConfig.StagingBackend)
 
   def inviteBy(method: Either[EmailAddress, PhoneNumber]) = invitationClient.postInvitation(Invitation(ContactId("meep"), method, "Meep", "Moop", "Hey!", Some(Locale.GERMANY))).future
 

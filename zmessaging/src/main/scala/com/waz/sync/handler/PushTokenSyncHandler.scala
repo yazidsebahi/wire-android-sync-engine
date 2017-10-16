@@ -22,7 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, PushToken}
 import com.waz.service.BackendConfig
-import com.waz.service.push.PushTokenService
+import com.waz.service.push.PushTokenServiceImpl
 import com.waz.sync.SyncResult
 import com.waz.sync.client.PushTokenClient
 import com.waz.sync.client.PushTokenClient.PushTokenRegistration
@@ -30,7 +30,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future
 
-class PushTokenSyncHandler(user: AccountId, pushTokenService: PushTokenService, backend: BackendConfig, clientId: ClientId, client: PushTokenClient) {
+class PushTokenSyncHandler(user: AccountId, pushTokenService: PushTokenServiceImpl, backend: BackendConfig, clientId: ClientId, client: PushTokenClient) {
 
   import Threading.Implicits.Background
 

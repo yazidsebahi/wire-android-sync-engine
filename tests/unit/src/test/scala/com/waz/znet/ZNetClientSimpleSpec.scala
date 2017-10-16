@@ -22,8 +22,7 @@ import java.util.concurrent.TimeUnit
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
-import com.waz.model.EmailAddress
-import com.waz.service.{BackendConfig, ZMessaging}
+import com.waz.service.ZMessaging
 import com.waz.znet.Response.HttpStatus
 import org.json.JSONObject
 import org.robolectric.Robolectric
@@ -50,7 +49,7 @@ import scala.util.Random
     ZMessaging.context = Robolectric.application
     wireMockServer.start()
     configureFor("localhost", wireMockPort)
-    client = new ZNetClientImpl(None, new HttpClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl)
+//    client = new ZNetClientImpl(None, new HttpClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl)
   }
 
   after {

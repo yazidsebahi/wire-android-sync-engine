@@ -19,16 +19,13 @@ package com.waz.sync.client
 
 import com.waz.model.SearchQuery.{Recommended, TopPeople}
 import com.waz.service.ZMessaging
-import com.waz.threading.CancellableFuture
-import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.JSONObject
 import org.robolectric.Robolectric
 import org.scalatest._
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 
 @Ignore class UserSearchClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests {
   val searchQueryResponse =
@@ -247,16 +244,16 @@ import scala.concurrent.{Await, Future}
 
   var request: Request[Unit] = _
 
-  def testClient(response: ResponseContent) = new EmptyClient {
-    override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-      request = r.asInstanceOf[Request[Unit]]
-      CancellableFuture.successful(Response(Response.HttpStatus(200, "OK"),response))
-    }
+//  def testClient(response: ResponseContent) = new EmptyClient {
+//    override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+//      request = r.asInstanceOf[Request[Unit]]
+//      CancellableFuture.successful(Response(Response.HttpStatus(200, "OK"),response))
+//    }
+//
+//    override def close(): Future[Unit] = Future(Unit)
+//  }
 
-    override def close(): Future[Unit] = Future(Unit)
-  }
-
-  class TestUserSearchClient(val response: ResponseContent) extends UserSearchClient(testClient(response)) {
+  class TestUserSearchClient(val response: ResponseContent) extends UserSearchClient(null) { //testClient(response)) {
     def this(resp: String) = this(JsonObjectResponse(new JSONObject(resp)))
   }
 

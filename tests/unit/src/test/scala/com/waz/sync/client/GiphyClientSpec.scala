@@ -22,10 +22,8 @@ import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.{AssetData, Dim2, Mime}
 import com.waz.sync.client.GiphyClient.{RandomGiphyResponse, SearchGiphyResponse}
 import com.waz.testutils.Matchers._
-import com.waz.threading.CancellableFuture
 import com.waz.utils.wrappers.URI
-import com.waz.znet.ZNetClient.EmptyClient
-import com.waz.znet.{JsonObjectResponse, Request, Response, StringResponse}
+import com.waz.znet.{JsonObjectResponse, Response, StringResponse}
 import org.json.JSONObject
 import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
@@ -178,14 +176,15 @@ import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
   def notFound: Response = Response(Response.HttpStatus(404))
 
-  def mockedClient(responses: Response*) = new GiphyClient(new EmptyClient {
-      private var idx = 0
-
-      override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-        val resp = responses(idx)
-        idx += 1
-        CancellableFuture.successful(resp)
-      }
-    }
+  def mockedClient(responses: Response*) = new GiphyClient(null
+//    new EmptyClient {
+//      private var idx = 0
+//
+//      override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+//        val resp = responses(idx)
+//        idx += 1
+//        CancellableFuture.successful(resp)
+//      }
+//    }
   )
 }

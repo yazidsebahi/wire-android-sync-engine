@@ -18,13 +18,10 @@
 package com.waz.znet
 
 import com.koushikdutta.async.http.server.{AsyncHttpServer, AsyncHttpServerRequest, AsyncHttpServerResponse, HttpServerRequestCallback}
-import com.waz.model.EmailAddress
-import com.waz.service.BackendConfig
 import com.waz.threading.Threading
 import org.scalatest._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
 @Ignore class ChunkedResponseSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
   implicit lazy val dispatcher: ExecutionContext = Threading.Background
@@ -57,14 +54,14 @@ import scala.concurrent.{Await, ExecutionContext, Future}
   }
 
   scenario("receive chunked response") {
-    val client = new HttpClientImpl
-    val netClient = new ZNetClientImpl(None, client, BackendConfig("http://localhost:9000").baseUrl)
-
-    val response = Await.result(Future.traverse(1 to 20) { _ =>
-      netClient(Request.Get("/", requiresAuthentication = false))
-    }, 10.seconds)
-
-    response should have size 20
+//    val client = new HttpClientImpl
+//    val netClient = new ZNetClientImpl(None, client, BackendConfig("http://localhost:9000").baseUrl)
+//
+//    val response = Await.result(Future.traverse(1 to 20) { _ =>
+//      netClient(Request.Get("/", requiresAuthentication = false))
+//    }, 10.seconds)
+//
+//    response should have size 20
   }
 
   def delay(): Unit = Thread.sleep(200L)

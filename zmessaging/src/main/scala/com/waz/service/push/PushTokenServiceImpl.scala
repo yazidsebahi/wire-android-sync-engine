@@ -39,16 +39,20 @@ import scala.util.control.NonFatal
 /**
   * Responsible for deciding when to generate and register push tokens and whether they should be active at all.
   */
-class PushTokenService(googleApi:    GoogleApi,
-                       backend:      BackendConfig,
-                       globalToken:  GlobalTokenService,
-                       prefs:        GlobalPreferences,
-                       lifeCycle:    ZmsLifeCycle,
-                       accountId:    AccountId,
-                       accStorage:   AccountsStorage,
-                       sync:         SyncServiceHandle) {
+trait PushTokenService {
+  def pushActive: Signal[Boolean]
+}
 
-  implicit lazy val logTag: LogTag = s"${logTagFor[PushTokenService]}#${accountId.str.take(8)}"
+class PushTokenServiceImpl(googleApi:    GoogleApi,
+                           backend:      BackendConfig,
+                           globalToken:  GlobalTokenService,
+                           prefs:        GlobalPreferences,
+                           lifeCycle:    ZmsLifeCycle,
+                           accountId:    AccountId,
+                           accStorage:   AccountsStorage,
+                           sync:         SyncServiceHandle) extends PushTokenService {
+
+  implicit lazy val logTag: LogTag = s"${logTagFor[PushTokenServiceImpl]}#${accountId.str.take(8)}"
 
   implicit val dispatcher = globalToken.dispatcher
   implicit val ev = globalToken.ev

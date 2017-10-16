@@ -27,10 +27,6 @@ import com.waz.model.GenericContent.{ImageAsset, Knock}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.testutils._
-import com.waz.threading.CancellableFuture
-import com.waz.threading.CancellableFuture.CancelException
-import com.waz.znet.ZNetClient.EmptyClient
-import com.waz.znet.{Request, Response}
 import org.scalatest._
 import org.scalatest.matchers.Matcher
 import org.threeten.bp.Instant
@@ -52,13 +48,7 @@ import scala.concurrent.{Await, Future}
   before {
     messageSync = None
 
-    val account = new MockAccountManager() {
-      override lazy val netClient = new EmptyClient {
-        override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-          CancellableFuture.failed(new CancelException(""))
-        }
-      }
-    }
+    val account = new MockAccountManager()
 
     service = new MockZMessaging(account, selfUserId = selfUser.id) {
 

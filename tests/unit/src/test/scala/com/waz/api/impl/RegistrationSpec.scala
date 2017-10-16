@@ -17,26 +17,26 @@
  */
 package com.waz.api.impl
 
-import android.net.Uri
-import com.koushikdutta.async.http.WebSocket
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api.{ClientRegistrationState, CredentialsFactory, InitListener, LoginListener}
 import com.waz.client.{RegistrationClient, RegistrationClientImpl}
+import com.waz.content.GlobalPreferences.CurrentAccountPref
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service._
-import com.waz.service.push.{WebSocketClientService, WebSocketClientServiceImpl}
 import com.waz.testutils.Implicits._
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockAccountsService, MockGlobalModule, MockUiModule, MockZMessagingFactory}
 import com.waz.threading.CancellableFuture
 import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, Json}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, EmptyRequestContent, RequestContent}
+import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response.HttpStatus
 import com.waz.znet._
 import com.waz.{RobolectricUtils, service}
@@ -44,14 +44,9 @@ import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
-import com.waz.ZLog.ImplicitTag._
-import com.waz.content.GlobalPreferences.CurrentAccountPref
-import com.waz.utils.wrappers.URI
-import com.waz.znet.LoginClient.LoginResult
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.util.control.NoStackTrace
 
 @Ignore class RegistrationSpec extends FeatureSpec with Matchers with OptionValues with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
   import com.waz.threading.Threading.Implicits.Background
@@ -70,15 +65,16 @@ import scala.util.control.NoStackTrace
 
   class MockGlobal extends MockGlobalModule {
 
-    override lazy val httpClient: HttpClientImpl = new HttpClientImpl(wrapper = TestClient()) {
-      override def apply(req: Request[_]): CancellableFuture[Response] = {
-        val body = req.getBody
-        val uri = req.absoluteUri.get
-        println(s"uri: $uri, body: $body")
-        request = Some((uri, body))
-        CancellableFuture.successful(response(request.value))
-      }
-    }
+    override lazy val httpClient: HttpClientImpl = null
+//      new HttpClientImpl(wrapper = TestClient()) {
+//      override def apply(req: Request[_]): CancellableFuture[Response] = {
+//        val body = req.getBody
+//        val uri = req.absoluteUri.get
+//        println(s"uri: $uri, body: $body")
+//        request = Some((uri, body))
+//        CancellableFuture.successful(response(request.value))
+//      }
+//    }
 
     override lazy val loginClient: LoginClient = new LoginClientImpl(httpClient, backend) {
       override def login(account: AccountData) = CancellableFuture.successful(loginResponse)
@@ -94,12 +90,6 @@ import scala.util.control.NoStackTrace
             override def syncSelfUser(): Future[SyncId] = {
               selfUserSyncRequested = true
               super.syncSelfUser()
-            }
-          }
-
-          override lazy val websocket = new WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
-            override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[HttpClientImpl], Uri.parse("/"), auth) {
-              override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock") with NoStackTrace)
             }
           }
         }

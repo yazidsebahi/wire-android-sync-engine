@@ -22,17 +22,13 @@ import java.util.TimeZone
 
 import com.waz.model._
 import com.waz.service.ZMessaging
-import com.waz.threading.CancellableFuture
-import com.waz.znet.ContentEncoder.ByteArrayRequestContent
-import com.waz.znet.Response.HttpStatus
-import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.JSONObject
 import org.robolectric.Robolectric
 import org.scalatest._
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 
 @Ignore class ConnectionsClientSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests {
 
@@ -71,19 +67,20 @@ import scala.concurrent.{Await, Future}
 
     scenario("Load connection from response") {
 
-      class MockUsersClient extends ConnectionsClient(new EmptyClient {
-        @volatile private var more = false
-
-        override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-            val response = if (!more) {
-              more = true
-              Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(new JSONObject(connectionsResponse)))
-            } else
-              Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(new JSONObject(connectionsResponseMore)))
-            CancellableFuture.successful(response)
-          }
-          override def close(): Future[Unit] = Future.successful(Unit)
-        }
+      class MockUsersClient extends ConnectionsClient(null
+//      new EmptyClient {
+//        @volatile private var more = false
+//
+//        override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+//            val response = if (!more) {
+//              more = true
+//              Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(new JSONObject(connectionsResponse)))
+//            } else
+//              Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(new JSONObject(connectionsResponseMore)))
+//            CancellableFuture.successful(response)
+//          }
+//          override def close(): Future[Unit] = Future.successful(Unit)
+//        }
       )
 
       val client = new MockUsersClient
@@ -97,19 +94,20 @@ import scala.concurrent.{Await, Future}
 
       var sendJson: Option[JSONObject] = None
 
-      class MockUsersClient extends ConnectionsClient(new EmptyClient {
-          override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-
-            r.getBody match {
-              case c: ByteArrayRequestContent => sendJson = Some(new JSONObject(new String(c.sourceData, "UTF8")))
-              case _ =>
-            }
-
-            val response = Response(HttpStatus(200, "HTTP/1.1 200 OK"))
-            CancellableFuture.successful(response)
-          }
-          override def close(): Future[Unit] = Future.successful(Unit)
-        }
+      class MockUsersClient extends ConnectionsClient(null
+//        new EmptyClient {
+//          override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+//
+//            r.getBody match {
+//              case c: ByteArrayRequestContent => sendJson = Some(new JSONObject(new String(c.sourceData, "UTF8")))
+//              case _ =>
+//            }
+//
+//            val response = Response(HttpStatus(200, "HTTP/1.1 200 OK"))
+//            CancellableFuture.successful(response)
+//          }
+//          override def close(): Future[Unit] = Future.successful(Unit)
+//        }
       )
 
       val client = new MockUsersClient

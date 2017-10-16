@@ -20,8 +20,6 @@ package com.waz.sync.client
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.sync.client.UsersClient.UserResponseExtractor
-import com.waz.threading.CancellableFuture
-import com.waz.znet.ZNetClient.EmptyClient
 import com.waz.znet._
 import org.json.{JSONArray, JSONObject}
 import org.robolectric.Robolectric
@@ -138,13 +136,14 @@ import scala.io.Source
   def notFound: Response = Response(Response.HttpStatus(404))
   def uriTooLong: Response = Response(Response.HttpStatus(414))
 
-  def mockedClient(responses: Response*) = new UsersClient(new EmptyClient {
-      private var idx = 0
-      override def apply[A](r: Request[A]): CancellableFuture[Response] = {
-        val resp = responses(idx)
-        idx += 1
-        CancellableFuture.successful(resp)
-      }
-    }
+  def mockedClient(responses: Response*) = new UsersClient(null
+//  new EmptyClient {
+//      private var idx = 0
+//      override def apply[A](r: Request[A]): CancellableFuture[Response] = {
+//        val resp = responses(idx)
+//        idx += 1
+//        CancellableFuture.successful(resp)
+//      }
+//    }
   )
 }

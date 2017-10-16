@@ -196,7 +196,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val imageLoader: ImageLoader                   = wire[ImageLoaderImpl]
 
   lazy val push: PushService                          = wire[PushServiceImpl]
-  lazy val pushToken: PushTokenService                = wire[PushTokenService]
+  lazy val pushToken: PushTokenServiceImpl                = wire[PushTokenServiceImpl]
   lazy val errors                                     = wire[ErrorsService]
   lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
