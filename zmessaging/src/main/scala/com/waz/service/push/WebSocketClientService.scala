@@ -26,11 +26,11 @@ import com.waz.service._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
-import com.waz.utils.{returning, returningF}
 import com.waz.utils.wrappers.URI
-import com.waz.znet.WebSocketClient.{Disconnect, defaultBackoff}
-import com.waz.znet._
+import com.waz.utils.{Backoff, ExponentialBackoff, returning, returningF}
 import com.waz.zms.WebSocketService
+import com.waz.znet.WebSocketClient.Disconnect
+import com.waz.znet._
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
@@ -38,12 +38,11 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 trait WebSocketClientService {
-  def useWebSocketFallback:                              Signal[Boolean]
+  def websocketActive:                                   Signal[Boolean]
   def client:                                            Signal[Option[WireWebSocket]]
   def connected:                                         Signal[Boolean]
   def connectionError:                                   Signal[Boolean]
   def connectionStats:                                   Signal[WebSocketClientService.ConnectionStats]
-  def awaitActive():                                     Future[Unit]
   def scheduleRecurringPing(pingPeriod: FiniteDuration): Future[Unit]
 }
 
@@ -67,39 +66,33 @@ class WebSocketClientServiceImpl(context:    Context,
 
   private var retryCount = 0
 
-  override val useWebSocketFallback = pushToken.pushActive.map(!_)
-
   // true if web socket should be active,
-  private val wsActive = network.networkMode.flatMap {
+  override val websocketActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
-    case _ => lifeCycle.accLoggedIn(accountId).flatMap {
-      case false => Signal const false
-      case _ => useWebSocketFallback
-    }.flatMap {
-      case true => Signal.const(true)
-      case false =>
-        // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
-        verbose(s"lifecycle no longer active, should stop the client")
-        Signal.future(CancellableFuture.delayed(inactivityTimeout)(false)).orElse(Signal const true)
-    }
+    case _ => pushToken.pushActive.map(!_)
+  }.flatMap {
+    case true => Signal.const(true)
+    case false =>
+      // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+      verbose(s"push now active, should close the websocket")
+      Signal.future(CancellableFuture.delayed(inactivityTimeout)(false)).orElse(Signal const true)
   }
 
   // start android service to keep the app running while we need to be connected.
   lifeCycle.idle.onChanged.filter(_ == true)(_ => Option(context) match {
     case Some(c) => WebSocketService(c)
-    case _ => verbose("No context, websocket may not be kept open in the background")
+    case _ => verbose("No context, websocket might not be kept open in the background")
   })
 
   override val client = (for {
-    wsActive <- wsActive
+    wsActive <- websocketActive
     ws <- Signal.future {
       if (wsActive) {
-        debug(s"Active, client: $clientId")
+        verbose(s"Active, opening websocket for client: $clientId")
         openWebsocket()
       } else {
-        debug(s"onInactive")
-        init.cancel()
-        CancellableFuture.successful(None)
+        verbose(s"onInactive")
+        closeWebSocket().map(_ => None)
       }
     }
   } yield ws).orElse(Signal.const(None))
@@ -130,12 +123,13 @@ class WebSocketClientServiceImpl(context:    Context,
       open()
     }
   }.map { ws =>
+    verbose(s"websocket open: $ws")
     currentSocket = Some(ws)
     currentSocket
   }
 
   private def closeWebSocket(): CancellableFuture[Unit] = {
-    verbose(s"Closing current websocket: $currentSocket")
+    currentSocket.foreach(s => verbose(s"Closing current websocket: $s"))
     init.cancel()
     returning(currentSocket.fold(CancellableFuture.successful({}))(ws => CancellableFuture.lift(ws.close()))) { _ =>
       currentSocket = None
@@ -181,8 +175,6 @@ class WebSocketClientServiceImpl(context:    Context,
     verifyConnection()
   }
 
-  override def awaitActive(): Future[Unit] = wsActive.collect { case false => () }.head
-
   /**
     * Increase the timeout for poorer networks before showing a connection error
     */
@@ -213,6 +205,8 @@ object WebSocketClientService {
   def webSocketUri(clientId: ClientId, backend: BackendConfig) =
     URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
 
+  //var for tests
+  var defaultBackoff: Backoff = new ExponentialBackoff(250.millis, 5.minutes)
   var inactivityTimeout = 3.seconds
   var connectionTimeout = 8.seconds
 

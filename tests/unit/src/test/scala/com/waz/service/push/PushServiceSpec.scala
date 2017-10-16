@@ -339,14 +339,8 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val pushNotification = PushNotification.NotificationDecoder(notObject)
 
   lazy val ws = new WireWebSocket {
-    override def onError = ???
-    override def connected = ???
+    override def send[A: ContentEncoder](msg: A) = ???
     override def pingPong() = ???
-    override def lastReceivedTime = ???
     override def close() = ???
-    override def send[A](msg: A)(implicit evidence$1: ContentEncoder[A]) = ???
-    override def onConnectionLost = ???
-
-    override val onMessage = EventStream[ResponseContent]()
   }
 }

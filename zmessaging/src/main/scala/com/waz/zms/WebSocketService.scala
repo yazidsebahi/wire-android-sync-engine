@@ -56,13 +56,13 @@ class WebSocketService extends FutureService with ServiceEventContext {
 
   val restartIntervals = for {
     Some(zms) <- zmessaging
-    true      <- zms.websocket.useWebSocketFallback
+    true      <- zms.websocket.websocketActive
     interval  <- zms.pingInterval.interval
   } yield Option(interval)
 
   val notificationsState = for {
     Some(zms) <- zmessaging
-    true <- zms.websocket.useWebSocketFallback
+    true <- zms.websocket.websocketActive
     true <- zms.prefs.preference(WsForegroundKey).signal // only when foreground service is enabled
     offline <- zms.network.networkMode.map(_ == NetworkMode.OFFLINE)
     connected <- zms.websocket.connected
@@ -119,7 +119,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
 
       case Some(zms) =>
         // wait as long as web socket fallback is used, this keeps the wakeLock and service running
-        zms.websocket.useWebSocketFallback.filter(_ == false).head
+        zms.websocket.websocketActive.filter(_ == false).head
     }
   }
 }

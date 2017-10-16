@@ -23,65 +23,83 @@ import com.waz.model.otr.ClientId
 import com.waz.service.push.WebSocketClientService.webSocketUri
 import com.waz.service.{BackendConfig, NetworkModeService, ZmsLifeCycle}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.threading.CancellableFuture
+import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.utils.events.EventContext
 import com.waz.utils.events.Signal
-import com.waz.znet.{ContentEncoder, HttpClient, WireWebSocket}
+import com.waz.znet.{ContentEncoder, HttpClient, StringResponse, WireWebSocket}
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class WebSocketClientServiceSpec extends AndroidFreeSpec {
 
+  import Threading.Implicits.Background
+  import EventContext.Implicits.global
 
-  val account    = AccountId("account")
-  val client     = ClientId("client")
+  val accountId  = AccountId("account")
+  val clientId   = ClientId("client")
   val lifeCycle  = mock[ZmsLifeCycle]
   val httpClient = mock[HttpClient]
   val network    = mock[NetworkModeService]
   val token      = mock[PushTokenService]
 
-
   val accLoggedIn = Signal(false)
-  val idle = Signal(false)
+  val idle        = Signal(false)
   val networkMode = Signal(NetworkMode.WIFI)
-  val pushActive = Signal(false)
+  val pushActive  = Signal(false)
 
-  scenario("Open websocket on app in active state") {
+  scenario("Open websocket on account in active state and receive message") {
 
-    (httpClient.websocket _).expects(account, webSocketUri(client, BackendConfig.StagingBackend), null).returning(CancellableFuture.successful(testWebSocket("1")))
-
-
+    accLoggedIn ! true
     val service = getService
 
-    println(result(service.client.head))
+    val client = result(service.client.filter(_.contains(testWebSocket)).head).get
 
+    testWebSocket.connected ! true
+    result(service.connected.filter(_ == true).head)
 
+    val res = client.onMessage.next
+    testWebSocket.onMessage ! StringResponse("test")
+    result(res).asInstanceOf[StringResponse].value shouldEqual "test"
   }
 
-  def testWebSocket(id: String) = new WireWebSocket {
+  scenario("Account goes into background with push active should disable websocket, coming back should re-enable") {
+    WebSocketClientService.inactivityTimeout = 0.seconds
 
-    override def onError = ???
+    pushActive ! true
+    accLoggedIn ! true
+    val service = getService
 
-    override def connected = ???
+    testWebSocket.connected ! true
+    result(service.client.filter(_.contains(testWebSocket)).head)
+    result(service.connected.filter(_ == true).head)
 
+
+    accLoggedIn ! false
+    result(service.client.filter(_.isEmpty).head)
+    result(service.connected.filter(_ == false).head)
+    testWebSocket.closeCount shouldEqual 1
+
+    accLoggedIn ! true
+    testWebSocket.connected ! true
+    result(service.client.filter(_.contains(testWebSocket)).head)
+    result(service.connected.filter(_ == true).head)
+  }
+
+  val testWebSocket = new WireWebSocket {
+    var closeCount = 0
     override def pingPong() = ???
-
-    override def lastReceivedTime = ???
-
-    override def onMessage = ???
-
-    override def close() = ???
-
+    override def close() = Future.successful(closeCount += 1)
     override def send[A: ContentEncoder](msg: A) = ???
-
-    override def onConnectionLost = ???
   }
 
   def getService = {
-
+    (httpClient.websocket _).expects(accountId, webSocketUri(clientId, BackendConfig.StagingBackend), null).anyNumberOfTimes().returning(CancellableFuture.successful(testWebSocket))
     (lifeCycle.idle _).expects().anyNumberOfTimes().returning(idle)
-    (lifeCycle.accLoggedIn _).expects(account).anyNumberOfTimes().returning(accLoggedIn)
+    (lifeCycle.accLoggedIn _).expects(accountId).anyNumberOfTimes().returning(accLoggedIn)
     (network.networkMode _).expects().anyNumberOfTimes().returning(networkMode)
     (token.pushActive _).expects().anyNumberOfTimes().returning(pushActive)
-
-    new WebSocketClientServiceImpl(null, account, lifeCycle, httpClient, null, network, BackendConfig.StagingBackend, client, token)
+    new WebSocketClientServiceImpl(null, accountId, lifeCycle, httpClient, null, network, BackendConfig.StagingBackend, clientId, token)
   }
 
 }

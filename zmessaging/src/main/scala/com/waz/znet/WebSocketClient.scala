@@ -39,12 +39,12 @@ import scala.util.Try
 
 trait WireWebSocket {
 
-  def connected:        Signal[Boolean]
-  def lastReceivedTime: Signal[Instant]
+  lazy val connected        = Signal(false)
+  lazy val lastReceivedTime = Signal[Instant]() // time when something was last received on websocket
 
-  def onMessage:        EventStream[ResponseContent]
-  def onError:          EventStream[Exception]
-  def onConnectionLost: EventStream[Disconnect]
+  lazy val onError          = EventStream[Exception]()
+  lazy val onMessage        = EventStream[ResponseContent]()
+  lazy val onConnectionLost = EventStream[Disconnect]()
 
   def send[A: ContentEncoder](msg: A): Future[Unit]
   def pingPong(): CancellableFuture[Unit]
@@ -65,12 +65,6 @@ class WebSocketClient(accountId:   AccountId,
 
   implicit val logTag: LogTag = s"${logTagFor[WebSocketClient]}#${accountId.str.take(8)}"
   implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClient")
-
-  override val connected = Signal(false)
-  override val onError   = EventStream[Exception]()
-  override val onMessage = EventStream[ResponseContent]()
-  override val lastReceivedTime = Signal[Instant]() // time when something was last received on websocket
-  override val onConnectionLost = EventStream[Disconnect]()
 
   private val onPing    = EventStream[Unit]()
   private val onPong    = EventStream[Unit]()
@@ -152,9 +146,6 @@ class WebSocketClient(accountId:   AccountId,
 }
 
 object WebSocketClient {
-
-  //var for tests
-  var defaultBackoff: Backoff = new ExponentialBackoff(250.millis, 5.minutes)
 
   trait Disconnect
   object Disconnect {
