@@ -246,5 +246,5 @@ import scala.concurrent.duration._
     }
   }
 
-  def clearNotifications(): Unit = service.clearNotifications()
+  def clearNotifications(): Unit = service.removeNotifications()
 }

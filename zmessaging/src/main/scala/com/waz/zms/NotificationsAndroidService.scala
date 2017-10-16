@@ -46,7 +46,7 @@ class NotificationsAndroidService extends FutureService {
           case Some(acc) => accs.getZMessaging(acc).flatMap {
             case Some(zms) if ActionClear == intent.getAction =>
               verbose(s"Clearing notifications for account: $acc")
-              zms.notifications.clearNotifications()
+              zms.notifications.removeNotifications()
             case Some(zms) =>
               verbose(s"Other device on account: $acc no longer active, resetting otherDeviceActiveTime")
               Future.successful(zms.notifications.otherDeviceActiveTime ! Instant.EPOCH)
@@ -68,6 +68,6 @@ object NotificationsAndroidService {
 
   val checkNotificationsTimeout: FiniteDuration = 1.minute
 
-  def clearNotificationsIntent(accountId: AccountId, context: Context): PendingIntent = PendingIntent.getService(context, 9730, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_UPDATE_CURRENT)
-  def checkNotificationsIntent(accountId: AccountId, context: Context): PendingIntent = PendingIntent.getService(context, 19047, new Intent(context, classOf[NotificationsAndroidService]).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_ONE_SHOT)
+  def clearNotificationsIntent(accountId: AccountId, context: Context): PendingIntent = PendingIntent.getService(context, accountId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_UPDATE_CURRENT)
+  def checkNotificationsIntent(accountId: AccountId, context: Context): PendingIntent = PendingIntent.getService(context, accountId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_ONE_SHOT)
 }
