@@ -42,7 +42,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
 
   implicit val selfUserId: UserId = users.selfUserId
 
-  private[service] def shouldChangeOrder(event: ConversationEvent)(implicit selfUserId: UserId): Boolean = {
+  private[service] def shouldChangeOrder(event: ConversationEvent)(implicit selfUserId: UserId): Boolean =
     event match {
       case _: CreateConversationEvent => true
       case _: CallMessageEvent        => true
@@ -75,14 +75,12 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
         }
       case _ => false
     }
-  }
 
-  private[service] def shouldUnarchive(event: ConversationEvent)(implicit selfUserId: UserId): Boolean = {
+  private[service] def shouldUnarchive(event: ConversationEvent)(implicit selfUserId: UserId): Boolean =
     event match {
       case MemberLeaveEvent(_, _, _, leaving) if leaving contains selfUserId => false
       case _ => shouldChangeOrder(event)
     }
-  }
 
   val conversationOrderEventsStage: Stage.Atomic = EventScheduler.Stage[ConversationEvent] { (convId, es) =>
 
@@ -114,7 +112,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
   private def processConversationOrderEvents(convId: RConvId, es: Seq[ConversationEvent]) =
     if (es.isEmpty) Future.successful(())
     else convs.processConvWithRemoteId(convId, retryAsync = true) { conv =>
-      verbose(s"updateLastEvent($conv, $es)")
+      verbose(s"processConversationOrderEvents($conv, $es)")
       val lastTime = es.maxBy(_.time).time
       val fromSelf = es.filter(_.from == selfUserId)
       val lastRead = if (fromSelf.isEmpty) None else Some(fromSelf.maxBy(_.time).time.instant)
@@ -130,7 +128,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
 
   private def processConversationUnarchiveEvents(convId: RConvId, events: Seq[ConversationEvent]) = {
     users.withSelfUserFuture { implicit selfUserId =>
-
+      verbose(s"processConversationUnarchiveEvents($convId, ${events.size} events)")
       def unarchiveTime(es: Traversable[ConversationEvent]) = {
         val all = es.filter(shouldUnarchive)
         if (all.isEmpty) None
@@ -144,7 +142,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
           convs.get(conv.remoteId).flatten match {
             case Some((time, unarchiveMuted)) if conv.archiveTime.isBefore(time) && (!conv.muted || unarchiveMuted) =>
               conv.copy(archived = false, archiveTime = time)
-            case time =>
+            case _ =>
               conv
           }
         })

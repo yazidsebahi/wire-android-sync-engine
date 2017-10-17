@@ -18,7 +18,6 @@
 package com.waz.service.notifications
 
 import com.waz.api.Message
-import com.waz.content.UserPreferences.LastNotificationClearTime
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
@@ -69,8 +68,6 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
   val reactionsChanged = EventStream[Seq[Liking]]()
   val reactionsDeleted = EventStream[Seq[(MessageId, UserId)]]()
 
-  val lastNotificationClearTime = userPrefs.preference(LastNotificationClearTime)
-
   NotificationService.ClearThrottling = duration.Duration.Zero
 
   feature ("Background behaviour") {
@@ -82,7 +79,6 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
       allConvs ! IndexedSeq(conv)
 
       inForeground ! false
-      lastNotificationClearTime := clock.instant
       clock + 10.seconds //messages arrive some time after the account was last visible
 
       val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
@@ -105,7 +101,6 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
       allConvs ! IndexedSeq(conv)
 
       inForeground ! false
-      await(lastNotificationClearTime := clock.instant)
       clock + 10.seconds //messages arrive some time after the account was last visible
 
       val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
@@ -122,7 +117,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
       clock + 10.seconds
       inForeground ! true
-      globalNots.conversationListVisible ! true
+      globalNots.notificationsSourceVisible ! scala.collection.immutable.Map((account, scala.Predef.Set(conv.id)))
 
       result(service.notifications.filter(_.isEmpty).head)
     }
@@ -167,8 +162,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
     inForeground ! true
     currentConv ! Some(conv2.id)
-    globalNots.messageStreamVisible ! true
-    lastNotificationClearTime := clock.instant
+    globalNots.notificationsSourceVisible ! scala.collection.immutable.Map((account, scala.Predef.Set(conv2.id)))
     clock + 10.seconds //messages arrive some time after the account was last visible
 
     val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
@@ -191,9 +185,6 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
   def getService = {
 
-    (lifeCycle.accInForeground _).expects(account).anyNumberOfTimes().returning(inForeground)
-    (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
-
     (storage.notifications _).expects().anyNumberOfTimes().returning(notifications)
 
     (storage.insertAll _).expects(*).anyNumberOfTimes().onCall { nots: Traversable[NotificationData] =>
@@ -201,7 +192,10 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
       Future.successful(nots.toSet)
     }
 
-    (storage.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+    (storage.removeAll _).expects(*).anyNumberOfTimes().onCall { keys: Traversable[NotId] =>
+      notifications.mutate(_ -- keys.toSet)
+      Future.successful({})
+    }
 
     (convs.onAdded _).expects().returning(convsAdded)
     (convs.onUpdated _).expects().returning(convsUpdated)
@@ -213,8 +207,6 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
     (reactions.onChanged _).expects().returning(reactionsChanged)
     (reactions.onDeleted _).expects().returning(reactionsDeleted)
-
-    (convsStats.selectedConversationId _).expects().returning(currentConv)
 
     new NotificationService(null, account, self, messages, lifeCycle, storage, users, convs, members, reactions, userPrefs, push, convsStats, globalNots)
   }
