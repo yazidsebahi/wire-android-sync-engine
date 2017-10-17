@@ -42,6 +42,12 @@ class EventScheduler(layout: EventScheduler.Stage) {
   private def schedule(stage: Stage, events: Stream[Event]): Schedule = {
     val eligible = events.filter(stage.isEligible)
 
+    val logTag: LogTag = stage match {
+      case s: Stage.Atomic => s.eventTag
+      case Stage.Composite(strat: Strategy, _) => strat.getClass.getSimpleName
+    }
+    verbose(s"scheduling ${eligible.size} eligible events from total ${events.size}")(s"${logTagFor[Stage]}[$logTag]")
+
     if (eligible.isEmpty) NOP else stage match {
       case s: Stage.Atomic =>
         Leaf(s, eligible.toVector)
@@ -86,12 +92,18 @@ object EventScheduler {
     }
 
     trait Atomic extends Stage {
+
+      val eventTag: String = "Event"
+
       def apply(conv: RConvId, es: Traversable[Event]): Future[Any]
     }
 
     def apply(strategy: SchedulingStrategy)(stages: Stage*): Composite = Composite(strategy, stages.toVector)
 
     def apply[A <: Event](processor: (RConvId, Vector[A]) => Future[Any], include: A => Boolean = (_: A) => true)(implicit EligibleEvent: ClassTag[A]): Atomic = new Atomic {
+
+      override val eventTag = EligibleEvent.runtimeClass.getSimpleName
+
       def isEligible(e: Event): Boolean = e match {
         case EligibleEvent(a) if include(a) => true
         case _ => false
@@ -99,7 +111,7 @@ object EventScheduler {
 
       def apply(conv: RConvId, es: Traversable[Event]): Future[Any] = {
         val events: Vector[A] = es.collect { case EligibleEvent(a) if include(a) => a }(breakOut)
-        verbose(s"processing ${events.size} ${if (events.size == 1) "event" else "events"}: ${events.take(10)} ${if (events.size > 10) "..." else ""}")(s"${logTagFor[Stage]}[${EligibleEvent.runtimeClass.getSimpleName}]")
+        verbose(s"processing ${events.size} ${if (events.size == 1) "event" else "events"}: ${events.take(10)} ${if (events.size > 10) "..." else ""}")(s"${logTagFor[Stage]}[$eventTag]")
         processor(conv, events)
       }
     }
