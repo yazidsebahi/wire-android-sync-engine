@@ -34,6 +34,7 @@ case class CallInfo(convId:            ConvId,
                     others:            Set[UserId]                       = Set.empty,
                     maxParticipants:   Int                               = 0, //maintains the largest number of users that were ever in the call (for tracking)
                     muted:             Boolean                           = false,
+                    isCbrEnabled:      Boolean                           = false,
                     isVideoCall:       Boolean                           = false,
                     videoSendState:    VideoSendState                    = DONT_SEND,
                     videoReceiveState: VideoReceiveState                 = Stopped,
@@ -52,6 +53,7 @@ case class CallInfo(convId:            ConvId,
        | others:            $others
        | maxParticipants:   $maxParticipants
        | muted:             $muted
+       | isCbrEnabled:      $isCbrEnabled
        | isVideoCall:       $isVideoCall
        | videoSendState:    $videoSendState
        | videoReceiveState: $videoReceiveState

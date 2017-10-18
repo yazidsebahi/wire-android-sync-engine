@@ -56,13 +56,15 @@ object Calling {
                            closeh:    CloseCallHandler,
                            metricsh:  MetricsHandler,
                            confreqh:  CallConfigRequestHandler,
+                           acbrh:     CbrStateChangeHandler,
+                           vstateh:   VideoReceiveStateHandler,
                            arg:       Pointer): Pointer
 
   @native def wcall_destroy(arg: Pointer): Unit
 
-  @native def wcall_start(inst: Pointer, convid: String, is_video_call: Boolean, is_group: Boolean): Int
+  @native def wcall_start(inst: Pointer, convid: String, is_video_call: Boolean, is_group: Boolean, audio_cbr: Boolean): Int
 
-  @native def wcall_answer(inst: Pointer, convid: String): Unit
+  @native def wcall_answer(inst: Pointer, convid: String, audio_cbr: Boolean): Unit
 
   @native def wcall_resp(inst: Pointer, status: Int, reason: String, arg: Pointer): Int
 
@@ -74,17 +76,11 @@ object Calling {
 
   @native def wcall_reject(inst: Pointer, convId: String): Unit
 
-  @native def wcall_set_video_state_handler(inst: Pointer, wcall_video_state_change_h: VideoReceiveStateHandler): Unit
-
   @native def wcall_set_video_send_active(inst: Pointer, convid: String, active: Boolean): Unit
 
   @native def wcall_network_changed(inst: Pointer): Unit
 
   @native def wcall_set_group_changed_handler(inst: Pointer, wcall_group_changed_h: GroupChangedHandler): Unit
-
-  @native def wcall_set_audio_cbr_enabled_handler(inst: Pointer, wcall_audio_cbr_enabled_h: BitRateStateHandler): Unit
-
-  @native def wcall_enable_audio_cbr(inst: Pointer, enabled: Int): Unit
 
   @native def wcall_get_members(inst: Pointer, convid: String): Members
 
@@ -128,8 +124,8 @@ object Calling {
     def onClosedCall(reason: Int, convid: String, msg_time: Uint32_t, userid: String, arg: Pointer): Unit
   }
 
-  trait BitRateStateHandler extends Callback {
-    def onBitRateStateChanged(arg: Pointer): Unit
+  trait CbrStateChangeHandler extends Callback {
+    def onBitRateStateChanged(enabled: Boolean, arg: Pointer): Unit
   }
 
   trait CallStateChangeHandler extends Callback {
