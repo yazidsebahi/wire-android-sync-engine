@@ -111,7 +111,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
       )
 
-      getService.cloudPushNotificationsToProcess ! Set(pushNotification.id)
+      getService.syncHistory("cloud messaging push")
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
 
@@ -323,7 +323,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       (client.loadNotifications _).expects(Some(pushNotification.id), *).never()
       val service = getService
 
-      service.cloudPushNotificationsToProcess.mutate(_ + notification1.id)
+      service.syncHistory("cloud message push")
 
       await(service.waitingForRetry.filter(_ == true).head)
       wsConnected ! true

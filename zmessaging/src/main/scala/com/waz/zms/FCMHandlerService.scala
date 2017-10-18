@@ -22,7 +22,6 @@ import com.google.firebase.messaging.{FirebaseMessagingService, RemoteMessage}
 import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.content.UserPreferences
 import com.waz.model._
 import com.waz.service.ZMessaging.clock
 import com.waz.service.conversation.ConversationsContentUpdater
@@ -31,11 +30,10 @@ import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
 import com.waz.service.{NetworkModeService, ZMessaging, ZmsLifeCycle}
 import com.waz.sync.client.PushNotification
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.{JsonDecoder, LoggedTry}
+import com.waz.utils.{JsonDecoder, LoggedTry, RichInstant}
 import org.json
 import org.json.JSONObject
 import org.threeten.bp.Instant
-import com.waz.utils.RichInstant
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -146,7 +144,7 @@ object FCMHandlerService {
         case _ => None
       }
 
-    private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] = {
+    private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] =
       for {
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
@@ -161,14 +159,8 @@ object FCMHandlerService {
             network.getNetworkOperatorName,
             network.isDeviceIdleMode)
         )
-      } yield {
-        nId match {
-          case Some(n) => push.cloudPushNotificationsToProcess.mutate(_ + n)
-          case _       => push.syncHistory("Unreadable FCM notification")
-        }
-        verbose(s"addNotification: $nId")
-      }
-    }
+        _ <- push.syncHistory("received cloud message push")
+      } yield ()
   }
 
   object FCMHandler {

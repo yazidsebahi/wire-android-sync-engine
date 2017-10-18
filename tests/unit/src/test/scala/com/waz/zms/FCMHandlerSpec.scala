@@ -124,7 +124,7 @@ class FCMHandlerSpec extends AndroidFreeSpec {
 
   def initHandler = {
     (lifecycle.accInForeground _).expects(accountId).anyNumberOfTimes().returning(accInForeground)
-    (push.cloudPushNotificationsToProcess _).expects().anyNumberOfTimes().returning(cloudNotsToHandle)
+    (push.syncHistory _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
     (push.beDrift _).expects().anyNumberOfTimes().returning(beDrift)
     (network.networkMode _).expects().anyNumberOfTimes().returning(Signal.const(NetworkMode.WIFI))
     (network.getNetworkOperatorName _).expects().anyNumberOfTimes().returning("Network operator")

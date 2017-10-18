@@ -55,8 +55,6 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 
 trait PushService {
 
-  def cloudPushNotificationsToProcess: SourceSignal[Set[Uid]]
-
   def onMissedCloudPushNotifications: EventStream[MissedPushes]
   def onFetchedPushNotifications:     EventStream[Seq[ReceivedPushData]]
 
@@ -98,7 +96,6 @@ class PushServiceImpl(context:        Context,
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val processing = Signal(false)
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
-  override lazy val cloudPushNotificationsToProcess = Signal(Set[Uid]())
 
   private val beDriftPref = prefs.preference(BackendDrift)
   override val beDrift = beDriftPref.signal.disableAutowiring()
@@ -136,13 +133,9 @@ class PushServiceImpl(context:        Context,
       )
   }
 
+  webSocket.connected.onChanged.map(_ => "web socket connection change").on(dispatcher)(syncHistory)
 
-  EventStream.union(
-    cloudPushNotificationsToProcess.onChanged.filter(_.nonEmpty).map(_ => "cloud notifications"),
-    webSocket.connected.onChanged.map(_ => "web socket connection change")
-  ).on(dispatcher) { reason =>
-    syncHistory(reason)
-  }
+  protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
 
   private def onPushNotifications(allNs: Seq[PushNotification]): Unit = if (allNs.nonEmpty) {
     verbose(s"onPushNotifications: ${allNs.size}")
@@ -155,15 +148,11 @@ class PushServiceImpl(context:        Context,
         returning(ns.flatMap(_.eventsForClient(clientId))) {
           _.foreach { ev => ev.withCurrentLocalTime(); verbose(s"event: $ev") }
         }
-      }
-      .map { _ => cloudPushNotificationsToProcess mutate (_ -- ns.map(_.id).toSet) }
-      .andThen { case _ => processing ! false }
+      }.andThen { case _ => processing ! false }
     }
 
     ns.lift(ns.lastIndexWhere(!_.transient)).foreach { n => p.onSuccess { case _ => idPref := Some(n.id) } }
   }
-
-  protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
 
   case class Results(notifications: Vector[PushNotification], time: Option[Instant], historyLost: Boolean)
 
