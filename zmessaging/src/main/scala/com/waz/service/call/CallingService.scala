@@ -102,8 +102,6 @@ class CallingService(val selfUserId:      UserId,
   val currentCall: Signal[Option[CallInfo]] = callProfile.map(_.activeCall)
   val previousCall: SourceSignal[Option[CallInfo]] = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
 
-  val otherSideCBR   = Signal(false) // by default we assume the call is VBR
-
   val onMetricsAvailable = EventStream[String]()
   
   //exposed for tests only
@@ -126,7 +124,6 @@ class CallingService(val selfUserId:      UserId,
   }
 
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
-    otherSideCBR.mutate(_ => false)
     withConv(convId) { (_, conv) =>
       sendCallMessage(conv.id, GenericMessage(Uid(), GenericContent.Calling(msg)), ctx)
     }
@@ -139,7 +136,6 @@ class CallingService(val selfUserId:      UserId,
     */
   def onIncomingCall(convId: RConvId, userId: UserId, videoCall: Boolean, shouldRing: Boolean) = withConv(convId) { (_, conv) =>
     verbose(s"Incoming call from $userId in conv: $convId (should ring: $shouldRing)")
-    otherSideCBR.mutate(_ => false)
 
     val newCall = CallInfo(
       conv.id,
@@ -245,15 +241,19 @@ class CallingService(val selfUserId:      UserId,
     0
   }
 
+  def onBitRateStateChanged(enabled: Boolean): Unit = {
+    verbose(s"onBitRateStateChanged enabled=$enabled")
+    updateActiveCall { c =>
+      c.copy(isCbrEnabled = enabled)
+    } ("onBitRateStateChanged")
+  }
+
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = Serialized.apply(self) {
     CancellableFuture {
       verbose(s"video state changed: $videoReceiveState")
       updateActiveCall(_.copy(videoReceiveState = videoReceiveState))("onVideoReceiveStateChanged")
     }
   }
-
-  //TODO should this be synchronised too?
-  def onBitRateStateChanged() = otherSideCBR.mutate(_ => true)
 
   def onGroupChanged(convId: RConvId, members: Set[UserId]) = withConv(convId) { (_, conv) =>
     verbose(s"group members changed, convId: $convId, other members: $members")
@@ -296,7 +296,7 @@ class CallingService(val selfUserId:      UserId,
           call.state match {
             case OtherCalling =>
               verbose(s"Answering call")
-              avs.answerCall(w, conv.remoteId)
+              avs.answerCall(w, conv.remoteId, !vbr)
               updateActiveCall(_.copy(state = SelfJoining))("startCall/OtherCalling")
             case _ =>
               warn("Tried to join an already joined/connecting call - ignoring")
@@ -307,13 +307,12 @@ class CallingService(val selfUserId:      UserId,
           profile.availableCalls.get(convId) match {
             case Some(call) =>
               verbose("Joining an ongoing background call")
-              avs.answerCall(w, conv.remoteId)
+              avs.answerCall(w, conv.remoteId, !vbr)
               val active = call.copy(state = SelfJoining)
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
             case None =>
               verbose("No active call, starting new call")
-              setAudioConstantBitRateEnabled(0) //TODO reuse vbr setting when avs is fixed (if(vbr) 0 else 1)
-              avs.startCall(w, conv.remoteId, isVideo, isGroup).map {
+              avs.startCall(w, conv.remoteId, isVideo, isGroup, !vbr).map {
                 case 0 =>
                   //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
                   val newCall = CallInfo(
@@ -402,12 +401,6 @@ class CallingService(val selfUserId:      UserId,
       })("setVideoSendActive")
     }
   }
-
-  def setAudioConstantBitRateEnabled(enabled: Int): Unit =
-    wCall.map { w =>
-      verbose(s"setting the audio cbr to $enabled")
-      avs.enableAudioCbr(w, enabled)
-    }
 
   val callMessagesStage = EventScheduler.Stage[CallMessageEvent] {
     case (_, events) => Future.successful(events.sortBy(_.time).foreach { e =>
