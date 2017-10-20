@@ -37,9 +37,16 @@ class JavaURI(val uri: JURI) extends URI {
   override def getScheme                      = uri.getScheme
   override def getAuthority                   = uri.getAuthority
   override def getHost                        = uri.getHost
-  override def getPathSegments                = ???
-  override def getLastPathSegment             = ???
-  override def getQueryParameter(key: String) = ???
+  override def getPathSegments                = uri.getPath.split("/").toList
+  override def getLastPathSegment             = uri.getPath.substring(uri.getPath.lastIndexOf('/') + 1)
+  override def getQueryParameter(key: String) =
+    Option(uri.getQuery).flatMap(_.split("&").flatMap { query =>
+      val querySeq = query.split("=")
+      if (querySeq.length != 2)
+        None
+      else
+        Some(querySeq.head -> querySeq.last)
+    }.toMap.get(key)).getOrElse(null)
   override def normalizeScheme                = JavaURIUtil.parse(uri.toString.toLowerCase)
   override def toString                       = uri.toString
 }
