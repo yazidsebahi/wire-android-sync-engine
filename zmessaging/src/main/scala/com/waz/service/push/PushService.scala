@@ -94,7 +94,7 @@ class PushServiceImpl(context:        Context,
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
 
   private val beDriftPref = prefs.preference(BackendDrift)
-  override val beDrift = beDriftPref.signal.disableAutowiring()
+  override val beDrift: SourceSignal[Duration] = beDriftPref.signal.disableAutowiring()
 
   private var fetchInProgress = Future.successful({})
 
@@ -123,7 +123,7 @@ class PushServiceImpl(context:        Context,
               error(s"unexpected push response: $resp")
           }
         },
-        ws.onError.on(dispatcher) { ex =>
+        ws.onError.on(dispatcher) { _ =>
           syncHistory("websocket error")
         }
       )
@@ -156,7 +156,7 @@ class PushServiceImpl(context:        Context,
     CancellableFuture.successful(Results(notifications, time, historyLost))
 
   //expose retry loop to tests
-  protected[push] val waitingForRetry = Signal(false).disableAutowiring()
+  protected[push] val waitingForRetry: SourceSignal[Boolean] = Signal(false).disableAutowiring()
 
   override def syncHistory(reason: String, withRetries: Boolean = true): Future[Unit] = {
     def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
