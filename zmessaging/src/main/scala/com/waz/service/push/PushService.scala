@@ -182,12 +182,8 @@ class PushServiceImpl(context:        Context,
           //OR on a websocket state change
           val retry = Promise[Unit]()
 
-          //TODO it would be nice to have a method on EventStream#onChanged which can return a future for the first event
-          val currentNetwork = network.networkMode.currentValue.getOrElse(UNKNOWN)
-          network.networkMode.filter(!Set(UNKNOWN, OFFLINE, currentNetwork).contains(_)).head.map(_ => retry.trySuccess({}))
-
-          val currentWSState = webSocket.connected.currentValue.getOrElse(false)
-          webSocket.connected.filter(_ != currentWSState).head.map(_ => retry.trySuccess({}))
+          network.networkMode.onChanged.filter(!Set(UNKNOWN, OFFLINE).contains(_)).next.map(_ => retry.trySuccess({}))
+          webSocket.connected.onChanged.next.map(_ => retry.trySuccess({}))
 
           for {
             _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
