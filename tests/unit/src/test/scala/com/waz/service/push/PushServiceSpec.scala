@@ -86,9 +86,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account, pipeline, websocket, network, lifeCycle, sync) {
-    override lazy val wakeLock: WakeLock = new FakeLock
-  }
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account, pipeline, websocket, network, lifeCycle, sync)
 
   val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
@@ -111,7 +109,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(pushNotification), hasMore = false, None) ))
       )
 
-      getService.cloudPushNotificationsToProcess ! Set(pushNotification.id)
+      getService.syncHistory("cloud messaging push")
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
 
@@ -323,7 +321,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       (client.loadNotifications _).expects(Some(pushNotification.id), *).never()
       val service = getService
 
-      service.cloudPushNotificationsToProcess.mutate(_ + notification1.id)
+      service.syncHistory("cloud message push")
 
       await(service.waitingForRetry.filter(_ == true).head)
       wsConnected ! true

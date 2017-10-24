@@ -18,13 +18,14 @@
 package com.waz.service
 
 import android.content.{ComponentCallbacks2, Context}
+import com.evernote.android.job.{JobCreator, JobManager}
 import com.softwaremill.macwire._
 import com.waz.ZLog._
 import com.waz.api.ContentSearchQuery
 import com.waz.content.{MembersStorageImpl, UsersStorageImpl, ZmsDatabase, _}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.EventScheduler.{Interleaved, Parallel, Sequential, Stage}
+import com.waz.service.EventScheduler.{Interleaved, Sequential, Stage}
 import com.waz.service.assets._
 import com.waz.service.call._
 import com.waz.service.conversation._
@@ -44,6 +45,7 @@ import com.waz.ui.UiModule
 import com.waz.utils.Locales
 import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
+import com.waz.zms.FetchJob
 import com.waz.znet._
 import net.hockeyapp.android.{Constants, ExceptionHandler}
 import org.threeten.bp.{Clock, Instant}
@@ -360,6 +362,13 @@ object ZMessaging { self =>
 
       globalReady.success(_global)
       accsReady.success(_accounts)
+
+      JobManager.create(context).addJobCreator(new JobCreator {
+        override def create(tag: String) =
+          if (tag.contains(FetchJob.Tag)) new FetchJob
+          else null
+      })
+
       Threading.Background { Locales.preloadTransliterator(); ContentSearchQuery.preloadTransliteration(); } // "preload"... - this should be very fast, normally, but slows down to 10 to 20 seconds when multidexed...
     }
   }
