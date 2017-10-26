@@ -8,7 +8,7 @@ import sbtassembly.MappingSet
 import SharedSettings._
 
 val MajorVersion = "111"
-val MinorVersion = "1" // hotfix release
+val MinorVersion = "2" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -362,7 +362,7 @@ lazy val macrosupport = project
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
   .settings(publishSettings: _*)
   .settings(
-    version := "3.0",
+    version := "3.1",
     crossPaths := false,
     exportJars := true,
     name := "zmessaging-android-macrosupport",
