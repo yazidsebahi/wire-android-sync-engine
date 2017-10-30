@@ -7,8 +7,8 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "111"
-val MinorVersion = "2" // hotfix release
+val MajorVersion = "112"
+val MinorVersion = "0" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -107,7 +107,6 @@ lazy val zmessaging = project
     },
     libraryDependencies ++= Seq(
       Deps.supportV4 % Provided,
-      "com.evernote" % "android-job" % "1.2.0",
       "com.koushikdutta.async" % "androidasync" % "2.2.1",
       "com.googlecode.libphonenumber" % "libphonenumber" % "7.1.1", // 7.2.x breaks protobuf
       "com.softwaremill.macwire" %% "macros" % "2.2.2" % Provided,
