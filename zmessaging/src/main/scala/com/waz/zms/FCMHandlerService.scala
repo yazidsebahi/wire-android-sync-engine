@@ -145,7 +145,6 @@ object FCMHandlerService {
 
     private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] =
       for {
-        appForeground <- lifecycle.uiActive.head
         false <- lifecycle.accInForeground(accountId).head
         drift <- push.beDrift.head
         nw    <- network.networkMode.head
@@ -170,7 +169,7 @@ object FCMHandlerService {
           * online at once. For that reason, we start a job which can run for as long as we need to avoid the app from being
           * killed mid-processing messages.
           */
-        _ <- if (idle || appForeground) push.syncHistory("fetch from device idle") else Serialized.future("fetch")(Future(FetchJob(accountId)))
+        _ <- if (idle) push.syncHistory("fetch from device idle") else Serialized.future("fetch")(Future(FetchJob(accountId)))
       } yield {}
   }
 

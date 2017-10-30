@@ -38,16 +38,17 @@ class FetchJob extends Job {
   import Threading.Implicits.Background
 
   override def onRunJob(params: Job.Params) = {
-    val appActive = Option(ZMessaging.currentGlobal).flatMap(_.lifecycle.active.currentValue).contains(true)
     val account = Option(params.getExtras.getString(AccountExtra, null)).map(AccountId)
-    verbose(s"onStartJob, appActive?: $appActive, account: $account")
+    val accActive = account.flatMap(id => Option(ZMessaging.currentGlobal).flatMap(_.lifecycle.accInForeground(id).currentValue)).contains(true)
+
+    verbose(s"onStartJob, appActive?: $accActive, account: $account")
 
     def syncAccount(accountId: AccountId): Future[Unit] =
       for {
         Some(zms) <- ZMessaging.accountsService.flatMap(_.getZMessaging(accountId))
         _ <- zms.push.syncHistory("fetch job", withRetries = false)
       } yield {}
-    val result = account.filter(_ => !appActive).fold(Future.successful({}))(syncAccount)
+    val result = account.filter(_ => !accActive).fold(Future.successful({}))(syncAccount)
     try {
       Await.result(result, 1.minute) //Give the job a long time to complete
       Result.SUCCESS
