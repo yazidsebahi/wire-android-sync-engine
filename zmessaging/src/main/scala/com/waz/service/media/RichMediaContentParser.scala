@@ -25,6 +25,7 @@ import com.waz.ZLog._
 import com.waz.api.Message.Part
 import com.waz.model.MessageContent
 import com.waz.sync.client.{SoundCloudClient, SpotifyClient, YouTubeClient}
+import com.waz.utils.LoggedTry
 import com.waz.utils.wrappers.URI
 
 import scala.collection.JavaConverters._
@@ -154,10 +155,18 @@ object RichMediaContentParser {
   }
 
   def parseUriWithScheme(content: String, defaultScheme: String = "http") = {
-    val decoded = URLDecoder.decode(content, "utf-8")
-    val u = URI.parse(decoded)
-    if (u.getScheme != null) u.normalizeScheme
-    else URI.parse(s"$defaultScheme://$content")
+    LoggedTry {
+      val cleanContent = cleanInvalidEscapes(content)
+
+      val u = URI.parse(cleanContent)
+      if (u.getScheme != null) u.normalizeScheme
+      else URI.parse(s"$defaultScheme://$cleanContent")
+    }.getOrElse(URI.parse(""))
+  }
+
+  def cleanInvalidEscapes(content: String) = {
+    val illegalEscapes = "%[^(0-9|a-f|A-F)]|%.[^(0-9|a-f|A-F)]".r
+    illegalEscapes.replaceAllIn(content, m => m.toString().replace("%", "%25"))
   }
 }
 

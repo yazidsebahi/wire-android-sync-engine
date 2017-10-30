@@ -21,12 +21,13 @@ import com.waz.api.Message.Part.Type._
 import com.waz.model.MessageContent
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
-import org.scalatest._
 import RichMediaContentParser._
+import com.waz.specs.AndroidFreeSpec
+import com.waz.utils.wrappers.URI
 
-import scala.io.Source
+import scala.io.{Codec, Source}
 
-@Ignore class RichMediaContentParserSpec extends FeatureSpec with Matchers with OptionValues with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
+class RichMediaContentParserSpec extends AndroidFreeSpec with TableDrivenPropertyChecks with GeneratorDrivenPropertyChecks {
 
   feature("match links") {
 
@@ -144,7 +145,7 @@ import scala.io.Source
   //TODO there are still some emojis missing - but there are no clean lists for the ranges of unicode characters
   feature("Emoji") {
 
-    lazy val emojis = Source.fromInputStream(getClass.getResourceAsStream("/emojis.txt")).getLines().toSeq.filterNot(_.startsWith("#"))
+    lazy val emojis = Source.fromInputStream(getClass.getResourceAsStream("/emojis.txt"))(Codec.UTF8).getLines().toSeq.filterNot(_.startsWith("#"))
 
     lazy val whitespaces = " \t\n\r".toCharArray.map(_.toString).toSeq
 
@@ -205,6 +206,21 @@ import scala.io.Source
         if (str.str.nonEmpty)
           splitContent(str.str) shouldEqual Seq(MessageContent(TEXT_EMOJI_ONLY, str.str))
       }
+    }
+
+    scenario("escape characters shouldn't crash") {
+      val url = "https://wire.com/%20%20%25stuff"
+      RichMediaContentParser.parseUriWithScheme(url).getHost shouldBe "wire.com"
+    }
+
+    scenario("invalid escaped characters shouldn't crash") {
+      val url = "https://wire.com/%x%z%%"
+      RichMediaContentParser.parseUriWithScheme(url).getHost shouldBe "wire.com"
+    }
+
+    scenario("invalid characters in uris shouldn't crash") {
+      val url = "https://wire.com/ a"
+      RichMediaContentParser.parseUriWithScheme(url).isInstanceOf[URI] shouldBe true
     }
   }
 }
