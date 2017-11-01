@@ -26,6 +26,7 @@ import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
 import com.waz.service.AccountsService.InForeground
+import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -49,7 +50,7 @@ class PushTokenService(googleApi:    GoogleApi,
                        accStorage:   AccountsStorage,
                        sync:         SyncServiceHandle) {
 
-  implicit lazy val logTag: LogTag = s"${logTagFor[PushTokenService]}#${accountId.str.take(8)}"
+  implicit lazy val logTag: LogTag = accountTag[PushTokenService](accountId)
 
   implicit val dispatcher = globalToken.dispatcher
   implicit val ev = globalToken.ev

@@ -94,24 +94,19 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
-  private implicit val ev = EventContext.Global
 
   val account    = userModule.account
   val global     = account.global
-
-  //TODO - eventually remove and use the AccountsService directly where needed - currently hard to mock.
-  val loggedInAccoutns = ZMessaging._accounts.loggedInAccounts.map(_.map(_.id).toSet)
-
   val selfUserId = userModule.userId
 
   val accountId  = account.id
-
   val auth       = account.auth
   val zNetClient = account.netClient
   val storage    = account.storage
   val lifecycle  = global.lifecycle
 
   lazy val accounts             = ZMessaging.currentAccounts
+  implicit lazy val evContext   = userModule.accountContext
   lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync
   lazy val syncHandler          = userModule.syncHandler
@@ -319,6 +314,9 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 }
 
 object ZMessaging { self =>
+
+  def accountTag[A: reflect.Manifest](accountId: AccountId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${accountId.str.take(8)}"
+
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
 
   private[waz] var context: Context = _

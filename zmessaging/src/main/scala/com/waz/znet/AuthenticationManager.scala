@@ -19,11 +19,12 @@ package com.waz.znet
 
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.HockeyApp
-import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.AccountsStorage
 import com.waz.model.{AccountData, AccountId}
+import com.waz.service.ZMessaging
+import com.waz.service.ZMessaging.accountTag
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder}
@@ -44,6 +45,8 @@ trait AccessTokenProvider {
  * Will retry login request if unsuccessful.
  */
 class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: LoginClient) extends AccessTokenProvider {
+
+  lazy implicit val logTag: LogTag = accountTag[AuthenticationManager](id)
 
   import com.waz.znet.AuthenticationManager._
 

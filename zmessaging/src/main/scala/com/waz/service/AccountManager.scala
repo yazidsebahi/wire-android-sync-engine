@@ -70,6 +70,7 @@ class UserModule(val userId: UserId, val account: AccountManager) {
 
   lazy val otrClient = new OtrClient(account.netClient)
 
+  implicit lazy val accountContext: AccountContext      = new AccountContext(accountId, accountService)
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]

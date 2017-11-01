@@ -28,11 +28,11 @@ import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.AccountsService.Active
-import com.waz.service.{AccountsService, NetworkModeService}
+import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.utils.wrappers.Context
 import com.waz.zms.SyncService
@@ -58,9 +58,16 @@ trait SyncScheduler {
   def reportString: Future[String]
 }
 
-class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, accounts: AccountsService) extends SyncScheduler {
+class SyncSchedulerImpl(context:     Context,
+                        accountId:   AccountId,
+                        val content: SyncContentUpdater,
+                        val network: NetworkModeService,
+                        service:     SyncRequestServiceImpl,
+                        handler:     => SyncHandler,
+                        accounts:    AccountsService)
+                       (implicit accountContext: AccountContext) extends SyncScheduler {
 
-  import EventContext.Implicits.global
+
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncSchedulerQueue")
 

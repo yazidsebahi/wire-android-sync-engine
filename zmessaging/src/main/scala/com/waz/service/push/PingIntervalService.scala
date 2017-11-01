@@ -24,17 +24,16 @@ import com.waz.content.Preferences.PrefKey
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.UserPreferences
 import com.waz.model.AccountId
-import com.waz.service.AccountsService.{Active, InForeground}
+import com.waz.service.AccountsService.InForeground
 import com.waz.service.push.PingIntervalService.NetworkStats.NetworkStatsCodec
-import com.waz.service.{AccountsService, NetworkModeService, UiLifeCycle}
+import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
 import com.waz.utils.events.Subscription
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{FiniteDuration, _}
 import scala.util.Try
-import scala.concurrent.duration._
 
 
 /**
@@ -48,10 +47,9 @@ class PingIntervalService(accountId: AccountId,
                           accounts:  AccountsService,
                           network:   NetworkModeService,
                           wsService: WebSocketClientService,
-                          userPrefs: UserPreferences) {
+                          userPrefs: UserPreferences) (implicit accountContext: AccountContext) {
   import PingIntervalService._
   import com.waz.utils._
-  import com.waz.utils.events.EventContext.Implicits.global
 
   import scala.concurrent.duration._
 

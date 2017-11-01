@@ -26,6 +26,8 @@ import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket}
 import com.koushikdutta.async.{ByteBufferList, DataEmitter}
 import com.waz.ZLog._
 import com.waz.model.AccountId
+import com.waz.service.ZMessaging
+import com.waz.service.ZMessaging.accountTag
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{EventStream, Signal}
@@ -54,7 +56,7 @@ class WebSocketClient(context: Context,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
                       pongTimeout: FiniteDuration = 15.seconds) {
 
-  implicit val logTag: LogTag = s"${logTagFor[WebSocketClient]}#${accountId.str.take(8)}"
+  implicit val logTag: LogTag = accountTag[WebSocketClient](accountId)
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
   protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests

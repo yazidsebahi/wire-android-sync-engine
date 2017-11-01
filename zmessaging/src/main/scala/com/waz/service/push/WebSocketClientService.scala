@@ -24,6 +24,7 @@ import com.waz.api.NetworkMode
 import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
 import com.waz.service.AccountsService.{InBackground, LoggedOut}
+import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
@@ -55,11 +56,10 @@ class WebSocketClientServiceImpl(context:     Context,
                                  backend:     BackendConfig,
                                  clientId:    ClientId,
                                  timeouts:    Timeouts,
-                                 pushToken:   PushTokenService) extends WebSocketClientService {
+                                 pushToken:   PushTokenService)(implicit ev: AccountContext) extends WebSocketClientService {
   import WebSocketClientService._
-  implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
+  implicit val logTag: LogTag = accountTag[WebSocketClientService](accountId)
 
-  private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
   @volatile

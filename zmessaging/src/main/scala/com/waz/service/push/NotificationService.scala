@@ -29,7 +29,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.LastRead
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
-import com.waz.service.ZMessaging.clock
+import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service._
 import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.NotificationService.NotificationInfo
@@ -115,7 +115,7 @@ class NotificationService(context:         Context,
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "NotificationService")
-  implicit lazy val logTag: LogTag = s"${logTagFor[NotificationService]}#${accountId.str.take(8)}"
+  implicit lazy val logTag: LogTag = accountTag[NotificationService](accountId)
 
   val alarmService = Option(context) match {
     case Some(c) => Some(c.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager])

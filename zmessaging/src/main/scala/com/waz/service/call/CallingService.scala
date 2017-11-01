@@ -85,11 +85,10 @@ class CallingService(val selfUserId:      UserId,
                      network:             NetworkModeService,
                      netClient:           ZNetClient,
                      errors:              ErrorsService,
-                     userPrefs:           UserPreferences) { self =>
+                     userPrefs:           UserPreferences)(implicit accountContext: AccountContext) { self =>
 
   import CallingService._
 
-  private implicit val eventContext = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "CallingService")
 
   //need to ensure that flow manager and media manager are initialised for v3 (they are lazy values)

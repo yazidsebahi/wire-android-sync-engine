@@ -26,8 +26,8 @@ import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.ZMessaging.clock
-import com.waz.service.{EventPipeline, NetworkModeService, UiLifeCycle}
+import com.waz.service.ZMessaging.{accountTag, clock}
+import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
@@ -84,12 +84,11 @@ class PushServiceImpl(context:        Context,
                       webSocket:      WebSocketClientService,
                       network:        NetworkModeService,
                       lifeCycle:      UiLifeCycle,
-                      sync:           SyncServiceHandle) extends PushService { self =>
+                      sync:           SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
   import PushService._
 
-  implicit val logTag: LogTag = s"${logTagFor[PushService]}#${accountId.str.take(8)}"
+  implicit val logTag: LogTag = accountTag[PushServiceImpl](accountId)
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
-  private implicit val ec = EventContext.Global
 
   override val onMissedCloudPushNotifications = EventStream[MissedPushes]()
   override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPushData]]()
