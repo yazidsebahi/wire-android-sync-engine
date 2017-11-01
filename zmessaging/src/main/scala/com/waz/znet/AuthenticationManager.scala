@@ -28,7 +28,7 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager.Token
-import com.waz.znet.LoginClient.LoginResult
+import com.waz.znet.LoginClient.{InsufficientCredentials, LoginResult}
 import com.waz.znet.Response._
 import org.json.JSONObject
 import org.threeten.bp.Instant
@@ -125,10 +125,10 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
   private def dispatchLoginRequest(): CancellableFuture[Either[Status, Token]] =
     CancellableFuture.lift(account).flatMap { acc =>
       dispatchRequest(client.login(acc)) {
-        case Left((_, resp@ErrorResponse(Status.Forbidden, _, _))) =>
+        case Left((_, resp)) if resp.code == Status.Forbidden || resp.message == InsufficientCredentials =>
           debug(s"login request failed with: $resp")
           onInvalidCredentials ! {}
-          CancellableFuture.successful(Left(HttpStatus(Status.Unauthorized, s"login request failed with: $resp")))
+          CancellableFuture.successful(Left(HttpStatus(resp.code, resp.message)))
       }
     }
 

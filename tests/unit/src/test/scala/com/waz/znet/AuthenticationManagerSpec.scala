@@ -184,7 +184,7 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       var logoutCalled = false
       manager.onInvalidCredentials(_ => logoutCalled = true)(EventContext.Global)
 
-      result(manager.currentToken()) shouldEqual Left(HttpStatus(401, "Password missing in dispatchLoginRequest"))
+      result(manager.currentToken()) shouldEqual Left(HttpStatus(499, LoginClient.InsufficientCredentials))
       logoutCalled shouldEqual true
     }
   }
