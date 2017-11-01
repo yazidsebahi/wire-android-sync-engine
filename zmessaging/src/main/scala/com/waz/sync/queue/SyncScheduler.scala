@@ -22,12 +22,13 @@ import java.io.PrintWriter
 import android.app.{AlarmManager, PendingIntent}
 import android.content.Context.ALARM_SERVICE
 import android.support.v4.content.WakefulBroadcastReceiver
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
-import com.waz.service.{NetworkModeService, ZmsLifeCycle}
+import com.waz.service.AccountsService.Active
+import com.waz.service.{AccountsService, NetworkModeService}
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -57,7 +58,7 @@ trait SyncScheduler {
   def reportString: Future[String]
 }
 
-class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, lifecycle: ZmsLifeCycle) extends SyncScheduler {
+class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, accounts: AccountsService) extends SyncScheduler {
 
   import EventContext.Implicits.global
 
@@ -102,9 +103,9 @@ class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: Syn
       }
   }
 
-  lifecycle.accLoggedIn(accountId).on(dispatcher) {
-    case true => waitEntries.foreach(_._2.onRestart())
-    case false =>
+  accounts.accountState(accountId).on(dispatcher) {
+    case _: Active => waitEntries.foreach(_._2.onRestart())
+    case _ =>
   }
 
   network.networkMode.on(dispatcher) {

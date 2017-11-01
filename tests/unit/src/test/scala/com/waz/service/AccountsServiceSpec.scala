@@ -279,7 +279,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
 
   }
 
-  def getAccountService: AccountsService = {
+  def getAccountService: AccountsServiceImpl = {
     val prefs = new TestGlobalPreferences()
 
     (globalModule.accountsStorage _).expects().anyNumberOfTimes.returning(storage)
@@ -289,7 +289,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
     (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule))
     (globalModule.context _).expects().anyNumberOfTimes().returning(null)
-    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new ZmsLifeCycleImpl)
+    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new UiLifeCycleImpl)
 
     (phoneNumbers.normalize _).expects(*).anyNumberOfTimes().onCall { p: PhoneNumber => Future.successful(Some(p)) }
 
@@ -300,6 +300,6 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     (storage.signal _).expects(*).anyNumberOfTimes().returning(Signal.empty[AccountData])
     (storage.optSignal _).expects(*).anyNumberOfTimes().returning(Signal.empty[Option[AccountData]])
 
-    new AccountsService(globalModule)
+    new AccountsServiceImpl(globalModule)
   }
 }

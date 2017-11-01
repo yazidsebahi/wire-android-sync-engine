@@ -23,7 +23,7 @@ import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.PushEnabledKey
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model._
-import com.waz.service.{BackendConfig, NetworkModeService, ZmsLifeCycle}
+import com.waz.service.{BackendConfig, NetworkModeService, UiLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.testutils.{TestBackoff, TestGlobalPreferences}
@@ -37,7 +37,7 @@ import scala.concurrent.Future
 class PushTokenServiceSpec extends AndroidFreeSpec {
 
   val google         = mock[GoogleApi]
-  val lifecycle      = mock[ZmsLifeCycle]
+  val lifecycle      = mock[UiLifeCycle]
   val accStorage     = mock[AccountsStorage]
   val networkService = mock[NetworkModeService]
   val prefs          = new TestGlobalPreferences()

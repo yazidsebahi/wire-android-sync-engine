@@ -23,8 +23,10 @@ import com.waz.api.{NetworkMode, ZmsVersion}
 import com.waz.content.Preferences.PrefKey
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.UserPreferences
+import com.waz.model.AccountId
+import com.waz.service.AccountsService.{Active, InForeground}
 import com.waz.service.push.PingIntervalService.NetworkStats.NetworkStatsCodec
-import com.waz.service.{NetworkModeService, ZmsLifeCycle}
+import com.waz.service.{AccountsService, NetworkModeService, UiLifeCycle}
 import com.waz.utils.events.Subscription
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.{JSONArray, JSONObject}
@@ -42,7 +44,8 @@ import scala.concurrent.duration._
   *
   * @see com.waz.service.WebSocketClientService.ConnectionStats ConnectionStats
   */
-class PingIntervalService(lifecycle: ZmsLifeCycle,
+class PingIntervalService(accountId: AccountId,
+                          accounts:  AccountsService,
                           network:   NetworkModeService,
                           wsService: WebSocketClientService,
                           userPrefs: UserPreferences) {
@@ -67,11 +70,11 @@ class PingIntervalService(lifecycle: ZmsLifeCycle,
   private var subs = Seq.empty[Subscription]
 
   for {
-    ws <- wsService.client
-    active <- lifecycle.active
-    interval <- interval
+    ws           <- wsService.client
+    inForeground <- accounts.accountState(accountId).map(_ == InForeground)
+    interval     <- interval
   } {
-    ws.foreach { _.scheduleRecurringPing(if (active) PING_INTERVAL_FOREGROUND else interval) }
+    ws.foreach { _.scheduleRecurringPing(if (inForeground) PING_INTERVAL_FOREGROUND else interval) }
   }
 
   wsService.connectionStats { cs =>

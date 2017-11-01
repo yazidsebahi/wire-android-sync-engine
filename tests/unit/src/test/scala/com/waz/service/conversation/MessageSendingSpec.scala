@@ -69,7 +69,7 @@ class MessageSendingSpec extends AndroidFreeSpec { test =>
                            network:         NetworkModeService           = stub[NetworkModeService],
                            convs:           ConversationsService         = null, //stub[ConversationsService],
                            sync:            SyncServiceHandle            = stub[SyncServiceHandle],
-                           lifecycle:       ZmsLifeCycle                 = stub[ZmsLifeCycle],
+                           lifecycle:       UiLifeCycle                 = stub[UiLifeCycle],
                            errors:          ErrorsService                = null //stub[ErrorsService]
   ) = new ConversationsUiServiceImpl(accountId,
     UserId(), assets, users, usersStorage, messages, messagesContent, members,

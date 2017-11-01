@@ -23,11 +23,12 @@ import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model._
+import com.waz.service.AccountsService.InForeground
 import com.waz.service.ZMessaging.clock
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
-import com.waz.service.{NetworkModeService, ZMessaging, ZmsLifeCycle}
+import com.waz.service.{AccountsService, NetworkModeService, ZMessaging}
 import com.waz.sync.client.PushNotification
 import com.waz.utils.{JsonDecoder, LoggedTry, RichInstant, Serialized}
 import org.json
@@ -104,7 +105,7 @@ object FCMHandlerService {
 
   class FCMHandler(accountId:      AccountId,
                    otrService:     OtrService,
-                   lifecycle:      ZmsLifeCycle,
+                   accounts:       AccountsService,
                    push:           PushService,
                    self:           UserId,
                    network:        NetworkModeService,
@@ -145,7 +146,7 @@ object FCMHandlerService {
 
     private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] =
       for {
-        false <- lifecycle.accInForeground(accountId).head
+        false <- accounts.accountState(accountId).map(_ == InForeground).head
         drift <- push.beDrift.head
         nw    <- network.networkMode.head
         now   = clock.instant + drift
@@ -175,7 +176,7 @@ object FCMHandlerService {
 
   object FCMHandler {
     def apply(zms: ZMessaging, data: Map[String, String], sentTime: Instant): Future[Unit] =
-      new FCMHandler(zms.accountId, zms.otrService, zms.lifecycle, zms.push, zms.selfUserId, zms.network, zms.receivedPushStorage, zms.convsContent, sentTime).handleMessage(data)
+      new FCMHandler(zms.accountId, zms.otrService, zms.accounts, zms.push, zms.selfUserId, zms.network, zms.receivedPushStorage, zms.convsContent, sentTime).handleMessage(data)
   }
 
   val DataKey = "data"

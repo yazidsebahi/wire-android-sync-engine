@@ -336,19 +336,19 @@ object ZMessaging { self =>
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
   private lazy val _global: GlobalModuleImpl = new GlobalModuleImpl(context, backend)
-  private lazy val _accounts: AccountsService = new AccountsService(_global)
+  private lazy val _accounts: AccountsServiceImpl = new AccountsServiceImpl(_global)
   private lazy val ui: UiModule = new UiModule(_accounts)
 
   //Try to avoid using these - map from the futures instead.
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModuleImpl = _
-  var currentAccounts: AccountsService = _
+  var currentAccounts: AccountsServiceImpl = _
 
   private lazy val globalReady = Promise[GlobalModule]()
-  private lazy val accsReady = Promise[AccountsService]()
+  private lazy val accsReady = Promise[AccountsServiceImpl]()
 
   lazy val globalModule:    Future[GlobalModule]    = globalReady.future
-  lazy val accountsService: Future[AccountsService] = accsReady.future
+  lazy val accountsService: Future[AccountsServiceImpl] = accsReady.future
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()

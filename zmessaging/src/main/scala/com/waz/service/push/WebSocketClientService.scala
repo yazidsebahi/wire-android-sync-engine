@@ -23,6 +23,7 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
+import com.waz.service.AccountsService.{InBackground, LoggedOut}
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
@@ -47,7 +48,7 @@ trait WebSocketClientService {
 
 class WebSocketClientServiceImpl(context:     Context,
                                  accountId:   AccountId,
-                                 lifecycle:   ZmsLifeCycle,
+                                 accounts:    AccountsService,
                                  netClient:   ZNetClient,
                                  auth:        AuthenticationManager,
                                  override val network: NetworkModeService,
@@ -66,11 +67,13 @@ class WebSocketClientServiceImpl(context:     Context,
 
   override val useWebSocketFallback = pushToken.pushActive.map(!_)
 
+  val accState = accounts.accountState(accountId)
+
   // true if web socket should be active,
   override val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
-    case _ => lifecycle.loggedIn.flatMap {
-      case false => Signal const false
+    case _ => accState.flatMap {
+      case LoggedOut => Signal const false
       case _ => useWebSocketFallback
     }.flatMap {
       case true => Signal.const(true)
@@ -81,14 +84,14 @@ class WebSocketClientServiceImpl(context:     Context,
     }
   }
 
-  override val client = wsActive.zip(lifecycle.idle) map {
-    case (true, idle) =>
+  override val client = wsActive.zip(accState) map {
+    case (true, state) =>
       debug(s"Active, client: $clientId")
 
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
 
-      if (idle) {
+      if (state == InBackground) {
         // start android service to keep the app running while we need to be connected.
         com.waz.zms.WebSocketService(context)
       }

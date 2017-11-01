@@ -80,7 +80,7 @@ trait GlobalModule {
   def blacklistClient: VersionBlacklistClient
   def blacklist: VersionBlacklistService
   def factory: ZMessagingFactory
-  def lifecycle: ZmsLifeCycle
+  def lifecycle: UiLifeCycle
 
   def flowmanager:  DefaultFlowManagerService
   def mediaManager: MediaManagerService
@@ -90,7 +90,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
-  val lifecycle:                ZmsLifeCycle                     = new ZmsLifeCycleImpl()
+  val lifecycle:                UiLifeCycle                     = new UiLifeCycleImpl()
   val network:                  DefaultNetworkModeService        = wire[DefaultNetworkModeService]
   val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
 

@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.{EventPipeline, NetworkModeService, ZmsLifeCycle}
+import com.waz.service.{EventPipeline, NetworkModeService, UiLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
@@ -55,7 +55,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val prefs     = new TestGlobalPreferences
   val userPrefs = new TestUserPreferences
   val network = mock[NetworkModeService]
-  val lifeCycle = mock[ZmsLifeCycle]
+  val lifeCycle = mock[UiLifeCycle]
 
   implicit val ctx = Threading.Background
   val client = mock[PushNotificationsClient]

@@ -27,7 +27,7 @@ import com.waz.content.{GlobalPreferences, UserPreferences}
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.clock
-import com.waz.service.{EventPipeline, NetworkModeService, ZmsLifeCycle}
+import com.waz.service.{EventPipeline, NetworkModeService, UiLifeCycle}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
@@ -83,7 +83,7 @@ class PushServiceImpl(context:        Context,
                       pipeline:       EventPipeline,
                       webSocket:      WebSocketClientService,
                       network:        NetworkModeService,
-                      lifeCycle:      ZmsLifeCycle,
+                      lifeCycle:      UiLifeCycle,
                       sync:           SyncServiceHandle) extends PushService { self =>
   import PushService._
 

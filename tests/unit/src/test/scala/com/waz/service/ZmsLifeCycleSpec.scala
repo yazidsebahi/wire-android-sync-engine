@@ -18,7 +18,7 @@
 package com.waz.service
 
 import com.waz.model.AccountId
-import com.waz.service.ZmsLifeCycle.{LifeCycleState, _}
+import com.waz.service.UiLifeCycle.{LifeCycleState, _}
 import com.waz.specs.AndroidFreeSpec
 
 class ZmsLifeCycleSpec extends AndroidFreeSpec {

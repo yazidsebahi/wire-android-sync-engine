@@ -102,7 +102,7 @@ trait UiEventContext {
   }
 }
 
-class UiModule(val accounts: AccountsService) extends UiEventContext with ZMessagingResolverComponent {
+class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZMessagingResolverComponent {
   import com.softwaremill.macwire._
   private implicit val logTag = logTagFor[UiModule]
 

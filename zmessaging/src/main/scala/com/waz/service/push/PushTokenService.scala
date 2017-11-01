@@ -25,6 +25,7 @@ import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
+import com.waz.service.AccountsService.InForeground
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -43,8 +44,8 @@ class PushTokenService(googleApi:    GoogleApi,
                        backend:      BackendConfig,
                        globalToken:  GlobalTokenService,
                        prefs:        GlobalPreferences,
-                       lifeCycle:    ZmsLifeCycle,
                        accountId:    AccountId,
+                       accounts:     AccountsService,
                        accStorage:   AccountsStorage,
                        sync:         SyncServiceHandle) {
 
@@ -62,10 +63,10 @@ class PushTokenService(googleApi:    GoogleApi,
   private val userToken = accStorage.signal(accountId).map(_.registeredPush)
 
   val pushActive = (for {
-    push           <- pushEnabled.signal                      if push
-    play           <- googleApi.isGooglePlayServicesAvailable if play
-    inForeground   <- lifeCycle.accInForeground(accountId)    if !inForeground
-    current        <- currentToken.signal                     if current.isDefined
+    push           <- pushEnabled.signal                                      if push
+    play           <- googleApi.isGooglePlayServicesAvailable                 if play
+    inForeground   <- accounts.accountState(accountId).map(_ == InForeground) if !inForeground
+    current        <- currentToken.signal                                     if current.isDefined
     userRegistered <- userToken.map(_ == current)
   } yield userRegistered)
     .orElse(Signal.const(false))
