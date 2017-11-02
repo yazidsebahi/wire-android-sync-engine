@@ -58,9 +58,10 @@ class PushTokenService(googleApi:    GoogleApi,
   val currentAccount = prefs.preference(CurrentAccountPref)
   val currentToken   = globalToken.currentToken
 
-  private val isLoggedIn = accStorage.signal(accountId).map(acc => acc.cookie.isDefined || acc.accessToken.isDefined)
+  private val account = accStorage.signal(accountId)
 
-  private val userToken = accStorage.signal(accountId).map(_.registeredPush)
+  private val isLoggedIn = account.map(acc => acc.cookie.isDefined || acc.accessToken.isDefined)
+  private val userToken = account.map(_.registeredPush)
 
   val pushActive = (for {
     push           <- pushEnabled.signal                                      if push
