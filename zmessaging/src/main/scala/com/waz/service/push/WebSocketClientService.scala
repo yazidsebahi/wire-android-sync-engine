@@ -103,6 +103,9 @@ class WebSocketClientServiceImpl(context:     Context,
       None
   }
 
+  //The client needs to be closed after logging out (outside the account event context)
+  client(_ => {})(EventContext.Global)
+
   override val connected = client flatMap {
     case Some(c) => c.connected
     case None => Signal const false
