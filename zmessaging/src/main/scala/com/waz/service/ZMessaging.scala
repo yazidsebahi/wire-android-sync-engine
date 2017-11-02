@@ -43,7 +43,6 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
-import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
 import com.waz.zms.FetchJob
 import com.waz.znet._

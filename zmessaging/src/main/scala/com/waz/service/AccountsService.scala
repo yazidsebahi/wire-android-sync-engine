@@ -262,7 +262,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc  = acc.copy(phone = None, pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
+      updatedAcc  = acc.copy(pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
       _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
       _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
     } yield req
@@ -281,7 +281,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), phone = None, code = None, regWaiting = true)
+      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), code = None, regWaiting = true)
       _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
       _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
     } yield req match {
@@ -342,7 +342,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         case Right (_) =>
           switchAccount(acc.id)
         case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-          storage.update(loginAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))).map(_ => ())
+          storage.update(loginAcc.id, _.copy(pendingEmail = Some(emailAddress))).map(_ => ())
         case _ => Future.successful(())
       }
     } yield req
@@ -355,7 +355,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       _ <- storage.updateOrCreate(registerAcc.id, _ => registerAcc, registerAcc)
       req <- registerOnBackend(registerAcc, name)
       _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
-      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
+      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(pendingEmail = Some(emailAddress))) else Future.successful(())
     } yield req
   }
 
