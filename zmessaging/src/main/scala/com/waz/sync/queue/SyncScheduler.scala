@@ -27,7 +27,7 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
-import com.waz.service.AccountsService.Active
+import com.waz.service.AccountsService.{Active, LoggedOut}
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
@@ -165,9 +165,15 @@ class SyncSchedulerImpl(context:     Context,
 
     val entry = new WaitEntry(job)
     waitEntries.put(job.id, entry)
-    entry.future onComplete { _ => waitEntries -= job.id }
 
-    countWaiting(job.id, getStartTime(job))(entry.future) flatMap { _ =>
+    val jobReady = for {
+      _ <- accounts.accountState(accountId).filter(_ != LoggedOut).head
+      _ <- entry.future
+    } yield {}
+
+    jobReady.onComplete(_ => waitEntries -= job.id)
+
+    countWaiting(job.id, getStartTime(job))(jobReady) flatMap { _ =>
       returning(f)(_.onComplete(_ => queue.release()))
     }
   }

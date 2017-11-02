@@ -48,12 +48,11 @@ class PushTokenService(googleApi:    GoogleApi,
                        accountId:    AccountId,
                        accounts:     AccountsService,
                        accStorage:   AccountsStorage,
-                       sync:         SyncServiceHandle) {
+                       sync:         SyncServiceHandle)(implicit accountContext: AccountContext) {
 
   implicit lazy val logTag: LogTag = accountTag[PushTokenService](accountId)
 
   implicit val dispatcher = globalToken.dispatcher
-  implicit val ev = globalToken.ev
 
   val pushEnabled    = prefs.preference(PushEnabledKey)
   val currentAccount = prefs.preference(CurrentAccountPref)
