@@ -33,7 +33,7 @@ import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.{EventContext, EventStream, Signal, SourceStream}
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status
@@ -129,6 +129,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   otrCurrentClient.map(_.isDefined) { exists =>
     if (hasClient && !exists) {
       info(s"client has been removed on backend, logging out")
+      OnRemovedClient ! id
       logoutAndResetClient()
     }
     hasClient = exists
@@ -156,6 +157,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   selfUserData.map(_.exists(_.deleted)) { deleted =>
     if (deleted) {
       info(s"self user was deleted, logging out")
+      OnSelfDeleted ! id
       for {
         _ <- logoutAndResetClient()
         _ =  accounts.accountMap.remove(id)
@@ -172,7 +174,10 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
   lazy val teamsClient        = global.factory.teamsClient(netClient)
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
 
-  auth.onInvalidCredentials.on(dispatcher)(_ => logout(flushCredentials = true))
+  auth.onInvalidCredentials.on(dispatcher){ _ =>
+    OnInvalidCredentials ! id
+    logout(flushCredentials = true)
+  }
 
   @volatile private var _userModule = Option.empty[UserModule]
 
@@ -454,4 +459,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
 object AccountManager {
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
+
+  val OnRemovedClient: SourceStream[AccountId] = EventStream[AccountId]()
+  val OnSelfDeleted: SourceStream[AccountId] = EventStream[AccountId]()
+  val OnInvalidCredentials: SourceStream[AccountId] = EventStream[AccountId]()
 }
