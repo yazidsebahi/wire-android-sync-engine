@@ -22,6 +22,7 @@ import android.content.{Context, Intent}
 import android.support.v4.app.RemoteInput
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{verbose, warn}
+import com.waz.api.EphemeralExpiration
 import com.waz.model.{AccountId, ConvId}
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading.Implicits.Background
@@ -53,7 +54,9 @@ class NotificationsAndroidService extends FutureService {
             case Some(zms) if ActionQuickReply == intent.getAction =>
               (instantReplyContent, conversation) match {
                 case (Some(content), Some(convId)) =>
-                  zms.convsUi.sendMessage(convId, content.toString).map(_ => ())
+                  zms.convsUi.setEphemeral(convId, EphemeralExpiration.NONE).flatMap { _ =>
+                    zms.convsUi.sendMessage(convId, content.toString).map(_ => ())
+                  }
                 case _ =>
                   Future.successful({})
               }
