@@ -36,6 +36,7 @@ import com.waz.model.MessageContentIndexDao
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
 import com.waz.model.NotificationData.NotificationDataDao
+import com.waz.model.PushNotificationEvents.PushNotificationEventsDao
 import com.waz.model.SearchQueryCache.SearchQueryCacheDao
 import com.waz.model.UserData.UserDataDao
 import com.waz.model.otr.UserClients.UserClientsDao
@@ -53,14 +54,15 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 98
+  val DbVersion = 99
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, NotificationDataDao, ErrorDataDao, ReceivedPushDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
-    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao, EditHistoryDao, MessageContentIndexDao
+    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao,
+    EditHistoryDao, MessageContentIndexDao, PushNotificationEventsDao
   )
 
   lazy val migrations = Seq(
@@ -180,6 +182,12 @@ object ZMessagingDB {
     Migration(97, 98) { db =>
       db.execSQL("ALTER TABLE Users ADD COLUMN provider_id TEXT DEFAULT null")
       db.execSQL("ALTER TABLE Users ADD COLUMN integration_id TEXT DEFAULT null")
+    },
+    Migration(98, 99) { db =>
+      db.execSQL("""CREATE TABLE PushNotificationEvents(pushId TEXT, event_index INTEGER,
+                                                        decrypted INTEGER, event TEXT,
+                                                        plain BLOB, transient BOOLEAN,
+                    PRIMARY KEY (pushId, event_index)""")
     }
   )
 }

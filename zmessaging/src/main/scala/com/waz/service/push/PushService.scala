@@ -24,23 +24,27 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.GlobalPreferences.BackendDrift
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.content.{GlobalPreferences, UserPreferences}
+import com.waz.model.Event.EventDecoder
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service._
 import com.waz.service.tracking.{MissedPushEvent, ReceivedPushEvent, TrackingService}
+import com.waz.service.otr.OtrService
 import com.waz.sync.SyncServiceHandle
-import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
-import com.waz.sync.client.{PushNotification, PushNotificationsClient}
+import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponseEncoded}
+import com.waz.sync.client.{PushNotificationEncoded, PushNotificationsClient}
 import com.waz.threading.CancellableFuture.lift
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status.NotFound
+import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.{Failure, Success}
 
 /** PushService handles notifications coming from FCM, WebSocket, and fetch.
   * We assume FCM notifications are unreliable, so we use them only as information that we should perform a fetch (syncHistory).
@@ -71,36 +75,42 @@ trait PushService {
   def beDrift: Signal[Duration]
 }
 
-class PushServiceImpl(context:        Context,
-                      userPrefs:      UserPreferences,
-                      prefs:          GlobalPreferences,
-                      receivedPushes: ReceivedPushStorage,
-                      client:         PushNotificationsClient,
-                      clientId:       ClientId,
-                      accountId:      AccountId,
-                      pipeline:       EventPipeline,
-                      webSocket:      WebSocketClientService,
-                      network:        NetworkModeService,
-                      lifeCycle:      UiLifeCycle,
-                      tracking:       TrackingService,
-                      sync:           SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
+class PushServiceImpl(context:              Context,
+                      userPrefs:            UserPreferences,
+                      prefs:                GlobalPreferences,
+                      receivedPushes:       ReceivedPushStorage,
+                      notificationStorage:  PushNotificationEventsStorage,
+                      client:               PushNotificationsClient,
+                      clientId:             ClientId,
+                      accountId:            AccountId,
+                      pipeline:             EventPipeline,
+                      otrService:           OtrService,
+                      webSocket:            WebSocketClientService,
+                      network:              NetworkModeService,
+                      lifeCycle:            UiLifeCycle,
+                      tracking:             TrackingService,
+                      sync:                 SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
   import PushService._
 
   implicit val logTag: LogTag = accountTag[PushServiceImpl](accountId)
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
+
+  private val pipelineKey = "pipeline_processing"
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val processing = Signal(false)
   override def afterProcessing[T](f : => Future[T])(implicit ec: ExecutionContext): Future[T] = processing.filter(_ == false).head.flatMap(_ => f)
 
   private val beDriftPref = prefs.preference(BackendDrift)
-  override val beDrift: SourceSignal[Duration] = beDriftPref.signal.disableAutowiring()
+  override val beDrift = beDriftPref.signal.disableAutowiring()
 
   private var fetchInProgress = Future.successful({})
 
   private lazy val idPref = userPrefs.preference(LastStableNotification)
 
   private var subs = Seq.empty[Subscription]
+
+  notificationStorage.registerEventHandler(processEncryptedNotifications)
 
   webSocket.client.on(dispatcher) {
     case None =>
@@ -113,12 +123,12 @@ class PushServiceImpl(context:        Context,
         ws.onMessage.on(dispatcher) { content =>
           verbose(s"got websocket message: $content")
           content match {
-            case NotificationsResponse(notifications@_*) =>
+            case NotificationsResponseEncoded(notifications@_*) =>
               verbose(s"got notifications from data: $content")
               fetchInProgress = if (fetchInProgress.isCompleted)
-                onPushNotifications(notifications)
+                storeNotifications(notifications)
               else
-                fetchInProgress.flatMap(_ => onPushNotifications(notifications))
+                fetchInProgress.flatMap(_ => storeNotifications(notifications))
             case resp =>
               error(s"unexpected push response: $resp")
           }
@@ -131,26 +141,69 @@ class PushServiceImpl(context:        Context,
 
   webSocket.connected.onChanged.map(_ => "web socket connection change").on(dispatcher)(syncHistory(_))
 
-  private def onPushNotifications(allNs: Seq[PushNotification]): Future[Unit] =
-    if (allNs.nonEmpty) {
-      verbose(s"onPushNotifications: ${allNs.size}")
-      val ns = allNs.filter(_.hasEventForClient(clientId))
+  private def storeNotifications(notifications: Seq[PushNotificationEncoded]): Future[Unit] =
+    Serialized.future(pipelineKey)(notificationStorage.saveAll(notifications).flatMap { _ =>
+      notifications.lift(notifications.lastIndexWhere(!_.transient)).fold(Future.successful(()))(n => idPref := Some(n.id))
+    })
+
+  private def processEncryptedNotifications(): Future[Unit] =
+    Serialized.future(pipelineKey) {
       processing ! true
-      pipeline {
-        returning(ns.flatMap(_.eventsForClient(clientId)))(_.foreach { ev =>
-          ev.withCurrentLocalTime()
-          verbose(s"event: $ev")
-        })
-      }.flatMap { _ =>
-        ns.lift(ns.lastIndexWhere(!_.transient)).fold(Future.successful({}))(n => idPref := Some(n.id))
+      notificationStorage.encryptedEvents.flatMap { rows =>
+        verbose(s"Processing ${rows.size} encrypted rows")
+        Future.sequence {
+          rows
+            .map { row =>
+              if (!isOtrEventJson(row.event)) {
+                notificationStorage.setAsDecrypted(row.pushId, row.index)
+              } else {
+                val otrEvent = ConversationEvent.ConversationEventDecoder(row.event).asInstanceOf[OtrEvent]
+                val writer = notificationStorage.writeClosure(row.pushId, row.index)
+                otrService.decryptStoredOtrEvent(otrEvent, writer).flatMap {
+                  case Left(Duplicate) =>
+                    verbose("Ignoring duplicate message")
+                    notificationStorage.remove(row.pushId, row.index)
+                  case Left(error) =>
+                    val e = OtrErrorEvent(otrEvent.convId, otrEvent.time, otrEvent.from, error)
+                    verbose(s"Got error when decrypting: ${e.toString}\nOtrError: ${error.toString}")
+                    notificationStorage.writeError(row.pushId, row.index, e)
+                  case Right(_) => Future.successful(())
+                }
+              }
+            }
+        }
       }.andThen {
-        case _ => processing ! false
+        case Success(_) => processStoredNotifications()
+        case Failure(ex) =>
+          processing ! false
+          throw ex
+      }.map(_ => ())
+    }
+
+  private def isOtrEventJson(ev: JSONObject) =
+    ev.getString("type").equals("conversation.otr-message-add")
+
+  private def processStoredNotifications(): Future[Unit] =
+    notificationStorage.decryptedEvents.flatMap { rows =>
+      val events = rows.flatMap { event =>
+        if(event.plain.isDefined) {
+          val msg = GenericMessage(event.plain.get)
+          val msgEvent = ConversationEvent.ConversationEventDecoder(event.event)
+          //If there is plain text, then the message is an OtrMessageEvent, so this cast is safe
+          otrService.parseGenericMessage(msgEvent.asInstanceOf[OtrMessageEvent], msg)
+        } else {
+          Some(EventDecoder(event.event))
+        }
       }
-    } else Future.successful({})
+      verbose(s"Processing ${events.size} decrypted events")
+      pipeline(events)
+        .flatMap { _ => notificationStorage.removeEventsWithIds(rows.map(_.pushId).distinct) }
+        .andThen { case _ => processing ! false }
+    }
 
-  case class Results(notifications: Vector[PushNotification], time: Option[Instant], historyLost: Boolean)
+  case class Results(notifications: Vector[PushNotificationEncoded], time: Option[Instant], historyLost: Boolean)
 
-  private def futureHistoryResults(notifications: Vector[PushNotification] = Vector.empty,
+  private def futureHistoryResults(notifications: Vector[PushNotificationEncoded] = Vector.empty,
                                    time: Option[Instant] = None,
                                    historyLost: Boolean = false) =
     CancellableFuture.successful(Results(notifications, time, historyLost))
@@ -211,7 +264,7 @@ class PushServiceImpl(context:        Context,
           pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift)))).foreach(p => tracking.track(ReceivedPushEvent(p)))
 
         nots
-      }).flatMap(onPushNotifications)
+      }).flatMap(storeNotifications)
 
     if (fetchInProgress.isCompleted) {
       verbose(s"Sync history in response to $reason")

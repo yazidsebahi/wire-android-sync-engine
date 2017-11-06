@@ -27,7 +27,7 @@ import com.waz.ZLog.LogTag
 import com.waz.api.UpdateListener
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.wrappers.{URI, URIBuilder}
-import org.json.JSONObject
+import org.json.{JSONArray, JSONObject}
 import org.threeten.bp
 import org.threeten.bp.Instant
 import org.threeten.bp.Instant.now
@@ -37,6 +37,7 @@ import scala.annotation.tailrec
 import scala.collection.Searching.{Found, InsertionPoint, SearchResult}
 import scala.collection.SeqView
 import scala.collection.generic.CanBuild
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
@@ -282,7 +283,23 @@ package object utils {
         e.printStackTrace()
         Map.empty[String, String]
     }
+
+    def setType(eventType: String): JSONObject = json.put("type", eventType)
   }
+
+  implicit class RichJSONArray(val js: JSONArray) extends AnyVal {
+    def foldLeft[B](z: B)(op: (B, JSONObject) => B): B = {
+      var result = z
+      for (i <- 0 until js.length()) {
+        result = op(result, js.getJSONObject(i))
+      }
+      result
+    }
+
+    def toVector: Seq[JSONObject] =
+      js.foldLeft(new ArrayBuffer[JSONObject])((buf, obj) => buf += obj)
+  }
+
 
   def uri(from: String)(f: URIBuilder => URIBuilder): URI = f(URI.parse(from).buildUpon).build
   def uri(from: URI, firstPartsOfPath: String = "")(f: URIBuilder => URIBuilder): URI = f(from.buildUpon.appendEncodedPath(firstPartsOfPath)).build

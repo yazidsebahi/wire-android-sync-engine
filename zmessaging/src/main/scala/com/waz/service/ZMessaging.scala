@@ -159,6 +159,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val messagesStorage: MessagesStorageImpl = wire[MessagesStorageImpl]
   lazy val msgAndLikes: MessageAndLikesStorageImpl = wire[MessageAndLikesStorageImpl]
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
+  lazy val eventStorage: PushNotificationEventsStorage = wire[PushNotificationEventsStorageImpl]
   lazy val receivedPushStorage: ReceivedPushStorage = wire[ReceivedPushStorageImpl]
 
   lazy val youtubeClient      = wire[YouTubeClient]
@@ -248,7 +249,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val handlesSync                                = wire[HandlesSyncHandler]
   lazy val integrationsSync: IntegrationsSyncHandler  = wire[IntegrationsSyncHandlerImpl]
 
-  lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), eventScheduler.enqueue)
+  lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(), eventScheduler.enqueue)
 
   lazy val eventScheduler = {
 
