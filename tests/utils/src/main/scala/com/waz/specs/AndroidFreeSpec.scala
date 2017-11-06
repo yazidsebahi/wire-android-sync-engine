@@ -75,8 +75,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     ZMessaging.clock = clock
 
-    InternalLog.reset()
-    InternalLog.add(new SystemLogOutput)
+//    InternalLog.reset()
+//    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 

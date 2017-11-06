@@ -5,7 +5,7 @@ android:
       - tools
       - platform-tools
       - tools
-      - android-24
+      - android-26
       - extra-android-support
       - extra-android-m2repository
       - extra-google-m2repository
@@ -30,5 +30,4 @@ before_install:
   - wget https://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/0.13.12/sbt-launch.jar
   - export SBT_OPTS="-Xms512M -Xmx1536M -Xss1M -XX:+CMSClassUnloadingEnabled"
 
-script:
-  - java $SBT_OPTS -jar sbt-launch.jar test:compile
+script: ./travis_large.sh

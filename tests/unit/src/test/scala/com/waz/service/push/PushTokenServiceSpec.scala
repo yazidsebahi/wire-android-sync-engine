@@ -349,9 +349,6 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       val account2 = accountData(AccountId(), None)
 
       loggedInAccounts ! Set(account1, account2)
-      accountStates { v =>
-        println(s"states: $v")
-      }
       updateAccountState(account2.id, InBackground)
       googlePlayAvailable ! true
       currentToken := Some(token)
