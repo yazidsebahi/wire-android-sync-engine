@@ -44,21 +44,20 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   val wsConnected = Signal(false)
 
-  val account = AccountId()
-  val clientId  = ClientId()
-  val context = mock[Context]
-  val pipeline = mock[EventPipeline]
-  val websocket = mock[WebSocketClientService]
-  val receivedPushes = mock[ReceivedPushStorage]
-  val znet = mock[ZNetClient]
-  val sync = mock[SyncServiceHandle]
-  val prefs     = new TestGlobalPreferences
-  val userPrefs = new TestUserPreferences
-  val network = mock[NetworkModeService]
-  val lifeCycle = mock[UiLifeCycle]
+  val clientId        = ClientId()
+  val context         = mock[Context]
+  val pipeline        = mock[EventPipeline]
+  val websocket       = mock[WebSocketClientService]
+  val receivedPushes  = mock[ReceivedPushStorage]
+  val znet            = mock[ZNetClient]
+  val sync            = mock[SyncServiceHandle]
+  val prefs           = new TestGlobalPreferences
+  val userPrefs       = new TestUserPreferences
+  val network         = mock[NetworkModeService]
+  val lifeCycle       = mock[UiLifeCycle]
+  val client          = mock[PushNotificationsClient]
 
   implicit val ctx = Threading.Background
-  val client = mock[PushNotificationsClient]
 
   val wsClient = Signal(Option.empty[WebSocketClient])
   val uiActive = Signal(true)
@@ -85,8 +84,6 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
-
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account, pipeline, websocket, network, lifeCycle, sync)
 
   val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
@@ -328,6 +325,8 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
       result(idPref.signal.filter(_.contains(pushNotification.id)).head)
     }
   }
+
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account1Id, pipeline, websocket, network, lifeCycle, sync)
 
   val lastId = Uid("last-id")
   val notJson = s"""

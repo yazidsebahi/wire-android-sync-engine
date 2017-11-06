@@ -23,12 +23,14 @@ import java.util.Date
 import android.util.Base64
 import com.waz.RobolectricUtils
 import com.waz.api.Verification
+import com.waz.cache.LocalData
+import com.waz.content.GlobalPreferences
 import com.waz.model.ConversationData.ConversationType
+import com.waz.model.GenericContent.EncryptionAlgorithm
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, SignalingKey}
 import com.waz.testutils._
-import com.waz.testutils.Implicits._
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
 import com.waz.utils.crypto.AESUtils
@@ -38,10 +40,6 @@ import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
-import com.waz.ZLog.ImplicitTag._
-import com.waz.cache.LocalData
-import com.waz.content.GlobalPreferences
-import com.waz.model.GenericContent.EncryptionAlgorithm
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -114,7 +112,7 @@ import scala.util.Random
     var syncCheckRequests = Seq.empty[FiniteDuration]
 
     lazy val zms = new MockZMessaging() {
-      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(selfUserId, Signal.const(Some(clientId)), otrClient, userPrefs, otrClientsStorage, sync, lifecycle, verificationUpdater) {
+      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(AccountId(), selfUserId, Signal.const(Some(clientId)), otrClient, userPrefs, otrClientsStorage, sync, null, verificationUpdater) {
         override def requestSyncIfNeeded(retryInterval: Timeout): Future[Unit] =
           Future successful { syncCheckRequests = syncCheckRequests :+ retryInterval }
       }

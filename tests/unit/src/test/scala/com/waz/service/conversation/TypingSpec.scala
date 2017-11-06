@@ -60,7 +60,7 @@ import scala.concurrent.duration._
     }
   }
 
-  lazy val service = new TypingService(AccountId(), storage.convsStorage, timeouts, lifecycle, new EmptySyncService {
+  lazy val service = new TypingService(AccountId(), storage.convsStorage, timeouts, null, new EmptySyncService {
     override def postTypingState(id: ConvId, typing: Boolean) = {
       test.syncWasTyping = typing
       test.typingSync = Some(id)

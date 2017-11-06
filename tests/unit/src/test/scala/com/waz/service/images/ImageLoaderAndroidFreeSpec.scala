@@ -17,29 +17,7 @@
  */
 package com.waz.service.images
 
-import java.io.InputStream
-
-import com.waz.PermissionsService
-import com.waz.bitmap.BitmapDecoder
-import com.waz.cache._
-import com.waz.content.Database
-import com.waz.model.AssetStatus.UploadNotStarted
-import com.waz.model._
-import com.waz.service.downloads.{AssetLoader, AssetLoaderService}
-import com.waz.service.images.ImageLoader.Metadata
 import com.waz.specs.AndroidFreeSpec
-import com.waz.threading.CancellableFuture
-import com.waz.ui.MemoryImageCache
-import com.waz.ui.MemoryImageCache.BitmapEntry
-import com.waz.ui.MemoryImageCache.BitmapRequest.Regular
-import com.waz.utils.Cache
-import com.waz.utils.wrappers._
-import org.scalacheck.Arbitrary.arbitrary
-import org.scalacheck.Gen.alphaNumChar
-import org.scalacheck.{Arbitrary, Gen}
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 
 class ImageLoaderAndroidFreeSpec extends AndroidFreeSpec {
 

@@ -25,7 +25,7 @@ import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
-import com.waz.service.AccountsService.InForeground
+import com.waz.service.AccountsService.{Active, InForeground}
 import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
@@ -60,7 +60,10 @@ class PushTokenService(googleApi:    GoogleApi,
 
   private val account = accStorage.signal(accountId)
 
-  private val isLoggedIn = account.map(acc => acc.cookie.isDefined || acc.accessToken.isDefined)
+  private val isLoggedIn = accounts.accountState(accountId).map {
+    case _: Active => true
+    case _         => false
+  }
   private val userToken = account.map(_.registeredPush)
 
   val pushActive = (for {

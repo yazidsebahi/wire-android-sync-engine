@@ -21,11 +21,14 @@ import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.{LogTag, error}
 import com.waz.log.{InternalLog, SystemLogOutput}
-import com.waz.service.ZMessaging
+import com.waz.model.AccountId
+import com.waz.service.AccountsService.{AccountState, InBackground, InForeground, LoggedOut}
+import com.waz.service.{AccountContext, AccountsService, ZMessaging}
 import com.waz.testutils.TestClock
 import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils._
+import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
 import com.waz.{HockeyApp, HockeyAppUtil}
 import org.scalamock.scalatest.MockFactory
@@ -40,6 +43,20 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
   import AndroidFreeSpec._
 
   val clock = AndroidFreeSpec.clock
+
+  val account1Id  = AccountId("account1")
+  val accounts    = mock[AccountsService]
+
+  val accountStates = Signal[Map[AccountId, AccountState]](Map(account1Id -> InForeground))
+
+  (accounts.accountState _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
+    accountStates.map(_.getOrElse(id, LoggedOut))
+  }
+
+  def updateAccountState(id: AccountId, state: AccountState) =
+    accountStates.mutate(_ + (id -> state))
+
+  implicit val accountContext = new AccountContext(account1Id, accounts)
 
   override protected def beforeEach() = {
     super.beforeEach()
