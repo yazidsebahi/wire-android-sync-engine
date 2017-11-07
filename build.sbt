@@ -133,7 +133,7 @@ lazy val unit = project.in(file("tests") / "unit")
   .dependsOn(testutils % Test)
   .settings(testSettings: _*)
   .settings(
-    parallelExecution in Test := true,
+    parallelExecution in Test := false,
     concurrentRestrictions in Global ++= Seq(Tags.limit(Tags.ForkedTestGroup, getRuntime.availableProcessors))
   )
 
