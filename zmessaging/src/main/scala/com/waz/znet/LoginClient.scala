@@ -95,7 +95,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
       val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
       client(request) map responseHandler
     } else {
-      CancellableFuture(Left((None, ErrorResponse.internalError("Tried to login with insufficient credentials"))))
+      CancellableFuture(Left((None, ErrorResponse.internalError(InsufficientCredentials))))
     }
   }
 
@@ -133,6 +133,8 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
 object LoginClient {
   type LoginResult = Either[(Option[String], ErrorResponse), (Token, Option[Cookie])]
   type AccessToken = (String, Int, String)
+
+  val InsufficientCredentials = "insufficient credentials"
 
   val SetCookie = "Set-Cookie"
   val Cookie = "Cookie"

@@ -30,6 +30,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.{Location, MsgEdit}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
+import com.waz.service.AccountsService.InForeground
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
@@ -101,7 +102,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
                                  network:         NetworkModeService,
                                  convs:           ConversationsService,
                                  sync:            SyncServiceHandle,
-                                 lifecycle:       ZmsLifeCycle,
+                                 accounts:        AccountsService,
                                  errors:          ErrorsService) extends ConversationsUiService {
   import ConversationsUiService._
   import Threading.Implicits.Background
@@ -442,7 +443,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     if (size < LargeAssetWarningThresholdInBytes) Future successful None
     else for {
       mode         <- network.networkMode.head
-      inForeground <- lifecycle.accInForeground(accountId).head
+      inForeground <- accounts.accountState(accountId).map(_ == InForeground).head
     } yield {
       (mode, inForeground) match {
         case (OFFLINE | WIFI, _) => None

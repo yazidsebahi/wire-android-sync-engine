@@ -24,7 +24,8 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastSelfClientsSyncRequestedTime
 import com.waz.content._
 import com.waz.model.otr.{Client, ClientId, UserClients}
-import com.waz.model.{OtrClientAddEvent, OtrClientEvent, OtrClientRemoveEvent, UserId}
+import com.waz.model._
+import com.waz.service.AccountsService.Active
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
@@ -36,16 +37,24 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class OtrClientsService(userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, userPrefs: UserPreferences, storage: OtrClientsStorage, sync: SyncServiceHandle, lifecycle: ZmsLifeCycle, updater: VerificationStateUpdater) {
+class OtrClientsService(accountId: AccountId,
+                        userId:    UserId,
+                        clientId:  Signal[Option[ClientId]],
+                        netClient: OtrClient,
+                        userPrefs: UserPreferences,
+                        storage:   OtrClientsStorage,
+                        sync:      SyncServiceHandle,
+                        accounts:  AccountsService,
+                        updater:   VerificationStateUpdater) {
 
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
   private lazy val lastSelfClientsSyncPref = userPrefs.preference(LastSelfClientsSyncRequestedTime)
 
-  lifecycle.loggedIn {
-    case true => requestSyncIfNeeded()
-    case false =>
+  accounts.accountState(accountId) {
+    case _: Active => requestSyncIfNeeded()
+    case _ =>
   }
 
   val otrClientsProcessingStage = EventScheduler.Stage[OtrClientEvent] { (convId, events) =>

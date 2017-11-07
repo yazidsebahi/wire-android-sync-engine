@@ -32,10 +32,8 @@ class SyncService extends FutureService with ZMessagingService {
   override protected def onIntent(intent: Intent, id: Int): Future[Any] =
     onAccountIntent(intent) { acc =>
       debug(s"onIntent $intent")
-      acc.global.lifecycle.withSync {
-        acc.userModule.head flatMap {
-          _.syncRequests.scheduler.awaitRunning
-        }
+      acc.userModule.head flatMap {
+        _.syncRequests.scheduler.awaitRunning
       }
     }
 }

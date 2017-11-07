@@ -23,6 +23,7 @@ import com.evernote.android.job.util.support.PersistableBundleCompat
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
 import com.waz.model.AccountId
+import com.waz.service.AccountsService.InBackground
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.returning
@@ -39,16 +40,22 @@ class FetchJob extends Job {
 
   override def onRunJob(params: Job.Params) = {
     val account = Option(params.getExtras.getString(AccountExtra, null)).map(AccountId)
-    val accActive = account.flatMap(id => Option(ZMessaging.currentGlobal).flatMap(_.lifecycle.accInForeground(id).currentValue)).contains(true)
-
-    verbose(s"onStartJob, appActive?: $accActive, account: $account")
-
+    verbose(s"onStartJob, account: $account")
     def syncAccount(accountId: AccountId): Future[Unit] =
       for {
         Some(zms) <- ZMessaging.accountsService.flatMap(_.getZMessaging(accountId))
         _ <- zms.push.syncHistory("fetch job", withRetries = false)
       } yield {}
-    val result = account.filter(_ => !accActive).fold(Future.successful({}))(syncAccount)
+
+    val result = account.fold(Future.successful({})) { id =>
+      ZMessaging.accountsService.flatMap(_.accountState(id).head).flatMap {
+        case InBackground => syncAccount(id)
+        case _            =>
+          verbose("account active, no point in executing fetch job")
+          Future.successful({})
+      }
+    }
+
     try {
       Await.result(result, 1.minute) //Give the job a long time to complete
       Result.SUCCESS

@@ -17,45 +17,18 @@
  */
 package com.waz.service
 
-import java.util.Date
-
-import com.waz.ZLog.LogTag
-import com.waz.api.{EphemeralExpiration, Message}
+import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.api.Message.Type._
-import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.{ConversationStorage, EditHistoryStorage, MessagesStorage, MsgDeletionStorage}
-import com.waz.model.AssetData.RemoteData
-import com.waz.model.AssetMetaData.Image
-import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model.AssetStatus.{UploadCancelled, UploadInProgress}
-import com.waz.model.ConversationData.ConversationType
-import com.waz.model.Event.EventDecoder
-import com.waz.model.GenericContent.{Asset, Knock}
-import com.waz.model.GenericMessage.TextMessage
-import com.waz.model.{Mime, _}
-import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsContentUpdaterImpl}
+import com.waz.model._
+import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
-import com.waz.testutils.Implicits._
-import com.waz.testutils.Matchers._
-import com.waz.testutils._
-import com.waz.threading.Threading
-import com.waz.utils._
-import com.waz.utils.crypto.AESUtils
-import com.waz.utils.wrappers.DB
-import com.waz.{api, _}
-import org.json.JSONObject
-import org.robolectric.shadows.ShadowLog
-import org.scalatest._
-import org.scalatest.concurrent.ScalaFutures
-import org.threeten.bp.{Clock, Instant, ZoneId}
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.io.Source
-import scala.util.Try
 
 class MessagesServiceSpec extends AndroidFreeSpec {
 

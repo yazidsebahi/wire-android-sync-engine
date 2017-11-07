@@ -27,7 +27,7 @@ import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordEx
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.{RichOption, returning}
 import com.waz.znet.Response.Status
@@ -36,7 +36,32 @@ import com.waz.znet.ZNetClient._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-class AccountsService(val global: GlobalModule) {
+trait AccountsService {
+  import AccountsService._
+
+  def accountState(accId: AccountId): Signal[AccountState]
+
+  def loggedInAccounts: Signal[Set[AccountData]]
+
+  def loggedInAccountIds: Signal[Set[AccountId]] = loggedInAccounts.map(_.map(_.id))
+
+  def activeZms: Signal[Option[ZMessaging]]
+
+}
+
+object AccountsService {
+  trait AccountState
+
+  case object LoggedOut extends AccountState
+
+  trait Active extends AccountState
+  case object InBackground extends Active
+  case object InForeground extends Active
+}
+
+class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
+
+  import AccountsService._
 
   implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
 
@@ -53,34 +78,42 @@ class AccountsService(val global: GlobalModule) {
 
   private val firstTimePref = prefs.preference(FirstTimeWithTeams)
 
+  val activeAccountPref = prefs.preference(CurrentAccountPref)
+
   val loggedInAccounts = firstTimePref.signal.flatMap {
     case false =>
       val changes = EventStream.union(
         storage.onChanged.map(_.map(_.id)),
         storage.onDeleted
-      )
-      new RefreshingSignal[Seq[AccountData], Seq[AccountId]](CancellableFuture.lift(storage.findLoggedIn()), changes)
-    case true => Signal.const(Seq.empty[AccountData])
+      ).map(_.toSet)
+      new RefreshingSignal[Set[AccountData], Set[AccountId]](CancellableFuture.lift(storage.findLoggedIn().map(_.toSet)), changes)
+    case true => Signal.const(Set.empty[AccountData])
   }
 
   val zmsInstances = (for {
     ids <- loggedInAccounts.map(_.map(_.id))
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
-    zs  <- Signal.sequence(ams.map(_.zmessaging): _*)
+    zs  <- Signal.sequence(ams.map(_.zmessaging).toSeq: _*)
   } yield
     returning(zs.flatten.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
-  
-  loggedInAccounts { accs =>
-    verbose(s"Logged in accounts: ${accs.map(_.id)}")
-    global.lifecycle.setLoggedIn(accs.map(_.id).toSet)
-  }
 
-  val activeAccountPref = prefs.preference(CurrentAccountPref)
-  activeAccountPref.signal.onUi { ac =>
-    verbose(s"Active account: $ac")
-    global.lifecycle.setActiveAccount(ac)
+  @volatile private var accountStateSignals = Map.empty[AccountId, Signal[AccountState]]
+  override def accountState(accountId: AccountId) = {
+
+    lazy val newSignal: Signal[AccountState] = for {
+      selected <- activeAccountPref.signal.map(_.contains(accountId))
+      loggedIn <- loggedInAccountIds.map(_.contains(accountId))
+      uiActive <- global.lifecycle.uiActive
+    } yield
+      returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
+        verbose(s"account state changed: $accountId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
+      }
+
+    accountStateSignals.getOrElse(accountId, returning(newSignal) { sig =>
+      accountStateSignals += accountId -> sig
+    })
   }
 
   lazy val activeAccount = activeAccountPref.signal.flatMap[Option[AccountData]] {
@@ -172,7 +205,6 @@ class AccountsService(val global: GlobalModule) {
       account  <- storage.get(accountId)
       if account.isDefined
       _        <- setAccount(Some(accountId))
-      _        =  global.lifecycle.setActiveAccount(Some(accountId))
       _        <- getOrCreateAccountManager(accountId)
     } yield {}
   }
@@ -230,7 +262,7 @@ class AccountsService(val global: GlobalModule) {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc  = acc.copy(phone = None, pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
+      updatedAcc  = acc.copy(pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
       _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
       _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
     } yield req
@@ -249,7 +281,7 @@ class AccountsService(val global: GlobalModule) {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
       req <- requestCode(shouldCall)
-      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), phone = None, code = None, regWaiting = true)
+      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), code = None, regWaiting = true)
       _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
       _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
     } yield req match {
@@ -310,7 +342,7 @@ class AccountsService(val global: GlobalModule) {
         case Right (_) =>
           switchAccount(acc.id)
         case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-          storage.update(loginAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))).map(_ => ())
+          storage.update(loginAcc.id, _.copy(pendingEmail = Some(emailAddress))).map(_ => ())
         case _ => Future.successful(())
       }
     } yield req
@@ -323,7 +355,7 @@ class AccountsService(val global: GlobalModule) {
       _ <- storage.updateOrCreate(registerAcc.id, _ => registerAcc, registerAcc)
       req <- registerOnBackend(registerAcc, name)
       _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
-      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
+      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(pendingEmail = Some(emailAddress))) else Future.successful(())
     } yield req
   }
 

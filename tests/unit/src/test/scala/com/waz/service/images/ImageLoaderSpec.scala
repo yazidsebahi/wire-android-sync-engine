@@ -17,34 +17,9 @@
  */
 package com.waz.service.images
 
-import java.io.{ByteArrayInputStream, File, FileInputStream}
-
-import android.R
-import android.media.ExifInterface
-import android.util.Base64
 import com.waz.RobolectricUtils
-import com.waz.bitmap.ExifOrientation
-import com.waz.cache.CacheEntry
-import com.waz.model.AssetData.RemoteData
-import com.waz.model.AssetMetaData.Image
-import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model._
-import com.waz.service.assets.AssetService.BitmapResult
-import com.waz.service.assets.AssetService.BitmapResult.BitmapLoaded
-import com.waz.service.downloads
-import com.waz.testutils.Matchers._
-import com.waz.testutils.MockZMessaging
-import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.ui.MemoryImageCache.BitmapRequest
-import com.waz.ui.MemoryImageCache.BitmapRequest.Regular
-import com.waz.utils.IoUtils
-import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowLog
 import org.scalatest.{BeforeAndAfter, FeatureSpec, Matchers, RobolectricTests}
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 @Config(manifest = "tests/OtrAndroidManifest.xml", reportSdk = 17)
 class ImageLoaderSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>

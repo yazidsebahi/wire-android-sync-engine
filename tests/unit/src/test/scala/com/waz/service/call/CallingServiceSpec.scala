@@ -23,12 +23,13 @@ import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{UserId, _}
+import com.waz.service.AccountsService.{AccountState, InForeground}
 import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
 import com.waz.service.call.Avs.WCall
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
-import com.waz.service.{MediaManagerService, NetworkModeService}
+import com.waz.service.{AccountContext, AccountsService, MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
 import com.waz.threading.{SerialDispatchQueue, Threading}
@@ -43,7 +44,6 @@ import scala.concurrent.duration._
 
 class CallingServiceSpec extends AndroidFreeSpec {
 
-  implicit val eventContext = EventContext.Implicits.global
   implicit val executionContext = new SerialDispatchQueue(name = "CallingServiceSpec")
 
   val context        = mock[Context]
@@ -58,7 +58,6 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
   val self     = UserId("selfUserId")
   val clientId = ClientId("selfClient")
-  val account  = AccountId(self.str)
 
   feature("Basics") {
     scenario("CallingService intialization") {
@@ -525,7 +524,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
     result(Future.sequence(Seq(f1, f2)))
 
   }
-  
+
   def callCheckpoint(service: CallingService, activeCheck: Map[ConvId, CallInfo] => Boolean, currentCheck: Option[CallInfo] => Boolean) =
     (for {
       active <- service.availableCalls
@@ -551,7 +550,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
 
     (avs.registerAccount _).expects(*).once().returning(Future.successful(wCall))
-    val service = new CallingService(self, clientId, account, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null, prefs)
+    val service = new CallingService(self, clientId, account1Id, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null, prefs)
     result(service.wCall)
     service
   }

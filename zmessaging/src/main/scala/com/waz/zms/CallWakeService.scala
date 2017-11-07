@@ -44,17 +44,15 @@ class CallWakeService extends FutureService with ZMessagingService {
       val convId = ConvId(intent.getStringExtra(ConvIdExtra))
       debug(s"convId: $convId")
 
-      zms.lifecycle.withPush {
-        intent.getAction match {
-          case ActionJoin => join(zms, convId, withVideo = false)
-          case ActionJoinGroup => join(zms, convId, withVideo = false)
-          case ActionJoinWithVideo => join(zms, convId, withVideo = true)
-          case ActionJoinGroupWithVideo => join(zms, convId, withVideo = true)
-          case ActionLeave => leave(zms, convId)
-          case ActionSilence => silence(zms, convId)
-          case _ => track(zms, convId)
-        }
-      } (s"CallWakeService[${intent.getAction}] $id")
+      intent.getAction match {
+        case ActionJoin => join(zms, convId, withVideo = false)
+        case ActionJoinGroup => join(zms, convId, withVideo = false)
+        case ActionJoinWithVideo => join(zms, convId, withVideo = true)
+        case ActionJoinGroupWithVideo => join(zms, convId, withVideo = true)
+        case ActionLeave => leave(zms, convId)
+        case ActionSilence => silence(zms, convId)
+        case _ => track(zms, convId)
+      }
     } else {
       error("missing intent extras")
       Future.successful({})

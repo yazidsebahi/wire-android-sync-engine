@@ -23,6 +23,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ConversationStorageImpl
 import com.waz.model._
+import com.waz.service.AccountsService.InForeground
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -32,7 +33,11 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class TypingService(accountId: AccountId, conversations: ConversationStorageImpl, timeouts: Timeouts, lifecycle: ZmsLifeCycle, sync: SyncServiceHandle) {
+class TypingService(accountId:     AccountId,
+                    conversations: ConversationStorageImpl,
+                    timeouts:      Timeouts,
+                    accounts:      AccountsService,
+                    sync:          SyncServiceHandle) {
   import timeouts.typing._
 
   private implicit val ev = EventContext.Global
@@ -49,9 +54,9 @@ class TypingService(accountId: AccountId, conversations: ConversationStorageImpl
 
   val typingEventStage = EventScheduler.Stage[TypingEvent]((c, es) => processSequential(es filter isRecent)(handleTypingEvent))
 
-  lifecycle.accInForeground(accountId).on(dispatcher) {
-    case true => // fine
-    case _ => stopTyping()
+  accounts.accountState(accountId).on(dispatcher) {
+    case InForeground => // fine
+    case _            => stopTyping()
   }
 
   def typingUsers(conv: ConvId) = new AggregatingSignal[IndexedSeq[TypingUser], IndexedSeq[UserId]](onTypingChanged.filter(_._1 == conv).map(_._2), Future { typing(conv).map(_.id) }, { (_, updated) => updated.map(_.id) })

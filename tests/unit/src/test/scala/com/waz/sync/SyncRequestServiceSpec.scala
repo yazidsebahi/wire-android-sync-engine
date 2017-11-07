@@ -23,7 +23,7 @@ import com.waz.ZLog.LogTag
 import com.waz.api.NetworkMode
 import com.waz.api.NetworkMode.UNKNOWN
 import com.waz.content.Database
-import com.waz.model.{AccountId, _}
+import com.waz.model._
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service._
 import com.waz.specs.AndroidFreeSpec
@@ -38,15 +38,11 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
 
   import com.waz.threading.Threading.Implicits.Background
 
-  val accountId = AccountId()
   val context   = mock[Context]
   val db        = mock[Database]
   val network   = mock[NetworkModeService]
   val sync      = mock[SyncHandler]
   val reporting = mock[ReportingService]
-  val lifecycle = mock[ZmsLifeCycle]
-
-  val lifeCycleActive = Signal(true)
 
   val timeouts = new Timeouts
 
@@ -79,10 +75,9 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().anyNumberOfTimes().returning(networkMode)
     (network.isOnlineMode _).expects().anyNumberOfTimes().returning(false)
     (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
-    (lifecycle.loggedIn _).expects().once().returning(lifeCycleActive)
 
     val content = new SyncContentUpdaterImpl(db)
-    val service = new SyncRequestServiceImpl(context, accountId, content, network, sync, reporting, lifecycle)
+    val service = new SyncRequestServiceImpl(context, account1Id, content, network, sync, reporting, accounts)
     (new AndroidSyncServiceHandle(service, timeouts), service)
   }
 }

@@ -55,7 +55,7 @@ trait UserService {
 
 class UserServiceImpl(override val selfUserId: UserId,
                       account:        AccountId,
-                      accounts:       AccountsService,
+                      accounts:       AccountsServiceImpl,
                       usersStorage:   UsersStorageImpl,
                       userPrefs:      UserPreferences,
                       push:           PushService,
@@ -85,7 +85,7 @@ class UserServiceImpl(override val selfUserId: UserId,
 
   //Update user data for other accounts
   //TODO remove this and move the necessary user data up to the account storage
-  accounts.loggedInAccounts.map(_.flatMap(_.userId).filterNot(_ == selfUserId))(syncNotExistingOrExpired)
+  accounts.loggedInAccounts.map(_.flatMap(_.userId).toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
 
   push.onHistoryLost { time =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")

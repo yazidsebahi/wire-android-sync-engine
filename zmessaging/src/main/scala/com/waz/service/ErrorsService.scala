@@ -25,6 +25,7 @@ import com.waz.content.MessagesStorageImpl
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model._
 import com.waz.content.ZmsDatabase
+import com.waz.service.AccountsService.InForeground
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.RefreshingSignal
@@ -34,7 +35,11 @@ import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 import com.waz.utils._
 
-class ErrorsService(accountId: AccountId, context: Context, storage: ZmsDatabase, lifeCycle: ZmsLifeCycle, messages: MessagesStorageImpl) {
+class ErrorsService(accountId: AccountId,
+                    context:   Context,
+                    storage:   ZmsDatabase,
+                    accounts:  AccountsService,
+                    messages:  MessagesStorageImpl) {
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ErrorsService")
@@ -88,9 +93,9 @@ class ErrorsService(accountId: AccountId, context: Context, storage: ZmsDatabase
   }
 
   def addErrorWhenActive(error: ErrorData) =
-    lifeCycle.accInForeground(accountId).head.flatMap {
-      case true => errorsStorage.insert(error)
-      case false => dismissed(error)
+    accounts.accountState(accountId).head.flatMap {
+      case InForeground => errorsStorage.insert(error)
+      case _            => dismissed(error)
     }
 
   def addError(error: ErrorData) = errorsStorage.insert(error)

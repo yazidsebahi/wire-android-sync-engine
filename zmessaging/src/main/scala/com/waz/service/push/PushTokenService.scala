@@ -25,6 +25,8 @@ import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
 import com.waz.content.{AccountsStorage, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
+import com.waz.service.AccountsService.{Active, InForeground}
+import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -43,29 +45,32 @@ class PushTokenService(googleApi:    GoogleApi,
                        backend:      BackendConfig,
                        globalToken:  GlobalTokenService,
                        prefs:        GlobalPreferences,
-                       lifeCycle:    ZmsLifeCycle,
                        accountId:    AccountId,
+                       accounts:     AccountsService,
                        accStorage:   AccountsStorage,
-                       sync:         SyncServiceHandle) {
+                       sync:         SyncServiceHandle)(implicit accountContext: AccountContext) {
 
-  implicit lazy val logTag: LogTag = s"${logTagFor[PushTokenService]}#${accountId.str.take(8)}"
+  implicit lazy val logTag: LogTag = accountTag[PushTokenService](accountId)
 
   implicit val dispatcher = globalToken.dispatcher
-  implicit val ev = globalToken.ev
 
   val pushEnabled    = prefs.preference(PushEnabledKey)
   val currentAccount = prefs.preference(CurrentAccountPref)
   val currentToken   = globalToken.currentToken
 
-  private val isLoggedIn = accStorage.signal(accountId).map(acc => acc.cookie.isDefined || acc.accessToken.isDefined)
+  private val account = accStorage.signal(accountId)
 
-  private val userToken = accStorage.signal(accountId).map(_.registeredPush)
+  private val isLoggedIn = accounts.accountState(accountId).map {
+    case _: Active => true
+    case _         => false
+  }
+  private val userToken = account.map(_.registeredPush)
 
   val pushActive = (for {
-    push           <- pushEnabled.signal                      if push
-    play           <- googleApi.isGooglePlayServicesAvailable if play
-    inForeground   <- lifeCycle.accInForeground(accountId)    if !inForeground
-    current        <- currentToken.signal                     if current.isDefined
+    push           <- pushEnabled.signal                                      if push
+    play           <- googleApi.isGooglePlayServicesAvailable                 if play
+    inForeground   <- accounts.accountState(accountId).map(_ == InForeground) if !inForeground
+    current        <- currentToken.signal                                     if current.isDefined
     userRegistered <- userToken.map(_ == current)
   } yield userRegistered)
     .orElse(Signal.const(false))

@@ -17,17 +17,7 @@
  */
 package com.waz.service.assets
 
-import java.io.{ByteArrayInputStream, FileNotFoundException}
-import java.util.concurrent.CountDownLatch
-
-import com.waz.api.impl
-import com.waz.model.{AssetId, Mime}
-import com.waz.testutils.Matchers._
-import com.waz.testutils.MockGlobalModule
-import com.waz.utils.returning
 import org.scalatest._
-
-import scala.util.Random
 
 @Ignore class InputStreamAssetLoaderSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
 

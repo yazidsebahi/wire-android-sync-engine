@@ -47,25 +47,25 @@ resolvers in ThisBuild ++= Seq(
 lazy val licenseHeaders = HeaderPlugin.autoImport.headers := Set("scala", "java", "rs") .map { _ -> GPLv3("2016", "Wire Swiss GmbH") } (collection.breakOut)
 
 lazy val root = Project("zmessaging-android", file("."))
-  .aggregate(macrosupport, zmessaging, actors, testutils, unit, mocked, integration, actors, actors_android, actors_app, testapp)
+  .aggregate(macrosupport, zmessaging, actors, testutils, unit, /*mocked, integration,*/ actors /*actors_android, actors_app, testapp*/)
   .settings(
     aggregate := false,
     aggregate in clean := true,
     aggregate in (Compile, compile) := true,
 
     test := {
-      (ndkBuild in zmessaging).value
+//      (ndkBuild in zmessaging).value
       (test in unit in Test).value
     },
     addCommandAlias("testQuick", ";unit/testQuick"),
     addCommandAlias("testOnly", ";unit/testOnly"),
 
-    test in IntegrationTest := {
-      (ndkBuild in zmessaging).value
-      (test in integration in Test).value
-    },
-    testQuick in IntegrationTest := { println("use integration/testQuick") },
-    testOnly in IntegrationTest := { println("use integration/testOnly") },
+//    test in IntegrationTest := {
+//      (ndkBuild in zmessaging).value
+//      (test in integration in Test).value
+//    },
+//    testQuick in IntegrationTest := { println("use integration/testQuick") },
+//    testOnly in IntegrationTest := { println("use integration/testOnly") },
 
     publish := {
       (publish in zmessaging).value
@@ -137,28 +137,28 @@ lazy val unit = project.in(file("tests") / "unit")
     concurrentRestrictions in Global ++= Seq(Tags.limit(Tags.ForkedTestGroup, getRuntime.availableProcessors))
   )
 
-lazy val integration = project.in(file("tests") / "integration")
-  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
-  .androidBuildWith(zmessaging)
-  .dependsOn(testutils % Test)
-  .configs(RegressionTest)
-  .settings(testSettings: _*)
-  .settings(integrationCredentials: _*)
-  .settings(
-    parallelExecution in Test := false,
-    libraryDependencies += "javax.mail" % "mail" % "1.4.7",
-    testOptions in RegressionTest += Tests.Argument(TestFrameworks.ScalaTest, "-l", "com.waz.tags.FixMe")
-  )
+//lazy val integration = project.in(file("tests") / "integration")
+//  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+//  .androidBuildWith(zmessaging)
+//  .dependsOn(testutils % Test)
+//  .configs(RegressionTest)
+//  .settings(testSettings: _*)
+//  .settings(integrationCredentials: _*)
+//  .settings(
+//    parallelExecution in Test := false,
+//    libraryDependencies += "javax.mail" % "mail" % "1.4.7",
+//    testOptions in RegressionTest += Tests.Argument(TestFrameworks.ScalaTest, "-l", "com.waz.tags.FixMe")
+//  )
 
-lazy val mocked = project.in(file("tests") / "mocked")
-  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
-  .androidBuildWith(zmessaging)
-  .dependsOn(testutils % Test)
-  .settings(testSettings: _*)
-  .settings(integrationCredentials: _*)
-  .settings(
-    parallelExecution in Test := false
-  )
+//lazy val mocked = project.in(file("tests") / "mocked")
+//  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+//  .androidBuildWith(zmessaging)
+//  .dependsOn(testutils % Test)
+//  .settings(testSettings: _*)
+//  .settings(integrationCredentials: _*)
+//  .settings(
+//    parallelExecution in Test := false
+//  )
 
 lazy val actors: Project = project.in(file("actors") / "base")
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
@@ -201,163 +201,163 @@ lazy val testutils = project.in(file("tests") / "utils")
     dependencyOverrides += "junit" % "junit" % "4.12"
   )
 
-lazy val testapp = project.in(file("tests") / "app")
-  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
-  .androidBuildWith(zmessaging)
-  .settings(
-    name := "testapp",
-    crossPaths := false,
-    libraryProject := false,
-    platformTarget := "android-24",
-    proguardConfig ++= IO.readLines(file("tests") / "app" / "proguard.txt"),
-    proguardCache := Seq(),
-    typedResources := false,
-    retrolambdaEnabled := false,
-    dexMulti := true,
-    publishArtifact in (Compile, packageBin) := false,
-    publishArtifact in (Compile, packageDoc) := false,
-    useProguard := false,
-    useProguardInDebug := useProguard.value,
-    proguardScala := useProguard.value,
-    debugIncludesTests := false,
-    instrumentTestRunner := "android.support.test.runner.AndroidJUnitRunner",
-    ndkAbiFilter := Seq("armeabi-v7a", "x86"),
-    packagingOptions := {
-      val p = packagingOptions.value
-      p.copy(excludes = p.excludes ++ Seq("META-INF/DEPENDENCIES", "META-INF/DEPENDENCIES.txt", "META-INF/LICENSE.txt", "META-INF/NOTICE", "META-INF/NOTICE.txt", "META-INF/LICENSE", "LICENSE.txt", "META-INF/LICENSE.txt", "reference.conf"))
-    },
-    dexMainClasses := Seq("com.waz.testapp.EmptyTestActivity. com.waz.testapp.TestAssetProvider"),
-    dexMaxHeap := "2048M",
-    libraryDependencies ++= Seq (
-      "com.android.support" % "multidex" % "1.0.1",
-      "com.android.support" % "support-v4" % supportLibVersion,
-      "com.jakewharton.threetenabp" % "threetenabp" % "1.0.3",
-      Deps.avs,
-      Deps.spotifyPlayer,
-      Deps.spotifyAuth,
-      "com.google.android.gms" % "play-services-base" % "7.8.0" exclude("com.android.support", "support-v4"),
-      "com.google.android.gms" % "play-services-gcm" % "7.8.0",
-      "junit" % "junit" % "4.12" % Test,
-      "com.android.support" % "support-annotations" % supportLibVersion % Test,
-      "com.android.support.test" % "runner" % "0.5" % Test,
-      "com.android.support.test" % "rules" % "0.5" % Test
-    )
-  )
+//lazy val testapp = project.in(file("tests") / "app")
+//  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+//  .androidBuildWith(zmessaging)
+//  .settings(
+//    name := "testapp",
+//    crossPaths := false,
+//    libraryProject := false,
+//    platformTarget := "android-24",
+//    proguardConfig ++= IO.readLines(file("tests") / "app" / "proguard.txt"),
+//    proguardCache := Seq(),
+//    typedResources := false,
+//    retrolambdaEnabled := false,
+//    dexMulti := true,
+//    publishArtifact in (Compile, packageBin) := false,
+//    publishArtifact in (Compile, packageDoc) := false,
+//    useProguard := false,
+//    useProguardInDebug := useProguard.value,
+//    proguardScala := useProguard.value,
+//    debugIncludesTests := false,
+//    instrumentTestRunner := "android.support.test.runner.AndroidJUnitRunner",
+//    ndkAbiFilter := Seq("armeabi-v7a", "x86"),
+//    packagingOptions := {
+//      val p = packagingOptions.value
+//      p.copy(excludes = p.excludes ++ Seq("META-INF/DEPENDENCIES", "META-INF/DEPENDENCIES.txt", "META-INF/LICENSE.txt", "META-INF/NOTICE", "META-INF/NOTICE.txt", "META-INF/LICENSE", "LICENSE.txt", "META-INF/LICENSE.txt", "reference.conf"))
+//    },
+//    dexMainClasses := Seq("com.waz.testapp.EmptyTestActivity. com.waz.testapp.TestAssetProvider"),
+//    dexMaxHeap := "2048M",
+//    libraryDependencies ++= Seq (
+//      "com.android.support" % "multidex" % "1.0.1",
+//      "com.android.support" % "support-v4" % supportLibVersion,
+//      "com.jakewharton.threetenabp" % "threetenabp" % "1.0.3",
+//      Deps.avs,
+//      Deps.spotifyPlayer,
+//      Deps.spotifyAuth,
+//      "com.google.android.gms" % "play-services-base" % "7.8.0" exclude("com.android.support", "support-v4"),
+//      "com.google.android.gms" % "play-services-gcm" % "7.8.0",
+//      "junit" % "junit" % "4.12" % Test,
+//      "com.android.support" % "support-annotations" % supportLibVersion % Test,
+//      "com.android.support.test" % "runner" % "0.5" % Test,
+//      "com.android.support.test" % "rules" % "0.5" % Test
+//    )
+//  )
 
-lazy val actors_android = project.in(file("actors") / "android_app")
-  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
-  .dependsOn(actors)
-  .androidBuildWith(zmessaging)
-  .settings(
-    name := "androidactors",
-    crossPaths := false,
-    libraryProject := false,
-    platformTarget := "android-24",
-    proguardOptions ++= IO.readLines(file("actors") / "android_app" / "proguard.txt"),
-    proguardCache := Seq(),
-    useProguard := true,
-    useProguardInDebug := true,
-    typedResources := false,
-    retrolambdaEnabled := false,
-    dexMulti := true,
-    publishArtifact in (Compile, packageBin) := false,
-    publishArtifact in (Compile, packageDoc) := false,
-    packagingOptions := {
-      val p = packagingOptions.value
-      p.copy(excludes = p.excludes ++ Seq("META-INF/DEPENDENCIES", "META-INF/DEPENDENCIES.txt", "META-INF/LICENSE.txt", "META-INF/NOTICE", "META-INF/NOTICE.txt", "META-INF/LICENSE", "LICENSE.txt", "META-INF/LICENSE.txt", "reference.conf"))
-    },
-    dexMainClasses ++= Seq("com.waz.androidactors.MainActivity"),
-    dexMaxHeap := "2048M",
-    libraryDependencies ++= Seq (
-      "com.android.support" % "multidex" % "1.0.1",
-      "com.android.support" % "support-v4" % supportLibVersion,
-      "com.android.support" % "recyclerview-v7" % supportLibVersion,
-      "com.jakewharton.threetenabp" % "threetenabp" % "1.0.3",
-      Deps.hockeyApp,
-      Deps.avs,
-      Deps.avsAudio,
-      Deps.cryptobox,
-      "com.google.android.gms" % "play-services-base" % "7.8.0" exclude("com.android.support", "support-v4"),
-      "com.google.android.gms" % "play-services-gcm" % "7.8.0"
-    )
-  )
+//lazy val actors_android = project.in(file("actors") / "android_app")
+//  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+//  .dependsOn(actors)
+//  .androidBuildWith(zmessaging)
+//  .settings(
+//    name := "androidactors",
+//    crossPaths := false,
+//    libraryProject := false,
+//    platformTarget := "android-24",
+//    proguardOptions ++= IO.readLines(file("actors") / "android_app" / "proguard.txt"),
+//    proguardCache := Seq(),
+//    useProguard := true,
+//    useProguardInDebug := true,
+//    typedResources := false,
+//    retrolambdaEnabled := false,
+//    dexMulti := true,
+//    publishArtifact in (Compile, packageBin) := false,
+//    publishArtifact in (Compile, packageDoc) := false,
+//    packagingOptions := {
+//      val p = packagingOptions.value
+//      p.copy(excludes = p.excludes ++ Seq("META-INF/DEPENDENCIES", "META-INF/DEPENDENCIES.txt", "META-INF/LICENSE.txt", "META-INF/NOTICE", "META-INF/NOTICE.txt", "META-INF/LICENSE", "LICENSE.txt", "META-INF/LICENSE.txt", "reference.conf"))
+//    },
+//    dexMainClasses ++= Seq("com.waz.androidactors.MainActivity"),
+//    dexMaxHeap := "2048M",
+//    libraryDependencies ++= Seq (
+//      "com.android.support" % "multidex" % "1.0.1",
+//      "com.android.support" % "support-v4" % supportLibVersion,
+//      "com.android.support" % "recyclerview-v7" % supportLibVersion,
+//      "com.jakewharton.threetenabp" % "threetenabp" % "1.0.3",
+//      Deps.hockeyApp,
+//      Deps.avs,
+//      Deps.avsAudio,
+//      Deps.cryptobox,
+//      "com.google.android.gms" % "play-services-base" % "7.8.0" exclude("com.android.support", "support-v4"),
+//      "com.google.android.gms" % "play-services-gcm" % "7.8.0"
+//    )
+//  )
 
-lazy val actors_app: Project = project.in(file("actors") / "remote_app")
-  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
-  .androidBuildWith(zmessaging)
-  .configs(IntegrationTest)
-  .dependsOn(testutils)
-  .dependsOn(integration % "it -> test")
-  .settings(Defaults.itSettings: _*)
-  .settings(nativeLibsSettings: _*)
-  .settings(publishSettings: _*)
-  .settings (
-    name := "zmessaging-actor",
-    crossPaths := false,
-    fork := true,
-    typedResources := false,
-    parallelExecution in IntegrationTest := true,
-    javaOptions in IntegrationTest ++= Seq(libraryPathOption(nativeLibs.value)),
-    test in IntegrationTest <<= (test in IntegrationTest).dependsOn(assembly),
-    assemblyMergeStrategy in assembly := {
-      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
-      case PathList("META-INF", "LICENSE") => MergeStrategy.discard
-      case "application.conf"            => MergeStrategy.concat
-      case "reference.conf"              => MergeStrategy.concat
-      case x if x.startsWith("com/waz/znet/ClientWrapper") => MergeStrategy.last
-      case _ => MergeStrategy.first
-
-    },
-    scalacOptions ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8"),
-    actorsResources := {
-      val out = target.value / "actors_res.zip"
-      val manifest = baseDirectory.value / "src" / "main" / "AndroidManifest.xml"
-      val res = zmessaging.base / "src" / "main" / "res"
-      val mappings = {
-        val libs = nativeLibs.value.files.flatMap(d => (d ** "*").get).filter(_.isFile)
-        val distinct = { // remove duplicate libs, always select first one, as nativeLibs are first on the path
-          val names = new scala.collection.mutable.HashSet[String]()
-          libs.filter { f => names.add(f.getName) }
-        }
-        println(s"libs: $libs\n distinct: $distinct")
-        distinct.map(f => (f, s"/libs/${f.getName}")) ++ ((res ** "*").get pair rebase(res, "/res")) :+ (manifest, "/AndroidManifest.xml")
-      }
-      IO.zip(mappings, out)
-      out
-    },
-    assemblyJarName := s"remote-actor-${version.value}.jar",
-    assembledMappings in assembly := {
-      val res = actorsResources.value
-      assert(res.exists() && res.length() > 0)
-      (assembledMappings in assembly).value :+ MappingSet(None, Vector((actorsResources.value, s"actor_res.jar")))
-    },
-    addArtifact(artifact in Compile, assembly),
-    publishArtifact in (Compile, packageBin) := false,
-    publishArtifact in (Compile, packageDoc) := false,
-    pomPostProcess := { (node: scala.xml.Node) =>
-      new scala.xml.transform.RuleTransformer(new scala.xml.transform.RewriteRule {
-        override def transform(n: scala.xml.Node): scala.xml.NodeSeq =
-          n.nameToString(new StringBuilder).toString match {
-            case "dependency" | "repository" => scala.xml.NodeSeq.Empty
-            case _ => n
-          }
-      }).transform(node).head
-    },
-    unmanagedResourceDirectories in Compile ++= Seq(root.base / "src/it/resources"),
-    mainClass in assembly := Some("com.waz.RemoteActorApp"),
-    libraryDependencies ++= Seq(
-      "org.apache.httpcomponents" % "httpclient" % "4.5.1", // to override version included in robolectric
-      "junit" % "junit" % "4.8.2", //to override version included in robolectric
-      "org.apache.httpcomponents" % "httpcore" % "4.4.4",
-      "org.robolectric" % "android-all" % RobolectricVersion,
-      Deps.avs,
-      "org.threeten" % "threetenbp" % "1.3",
-      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2",
-      "com.android.support" % "support-v4" % supportLibVersion % Provided,
-      "com.google.android.gms" % "play-services-base" % "7.8.0" % Provided exclude("com.android.support", "support-v4"),
-      "com.google.android.gms" % "play-services-gcm" % "7.8.0" % Provided
-    )
-  )
+//lazy val actors_app: Project = project.in(file("actors") / "remote_app")
+//  .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
+//  .androidBuildWith(zmessaging)
+//  .configs(IntegrationTest)
+//  .dependsOn(testutils)
+//  .dependsOn(integration % "it -> test")
+//  .settings(Defaults.itSettings: _*)
+//  .settings(nativeLibsSettings: _*)
+//  .settings(publishSettings: _*)
+//  .settings (
+//    name := "zmessaging-actor",
+//    crossPaths := false,
+//    fork := true,
+//    typedResources := false,
+//    parallelExecution in IntegrationTest := true,
+//    javaOptions in IntegrationTest ++= Seq(libraryPathOption(nativeLibs.value)),
+//    test in IntegrationTest <<= (test in IntegrationTest).dependsOn(assembly),
+//    assemblyMergeStrategy in assembly := {
+//      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+//      case PathList("META-INF", "LICENSE") => MergeStrategy.discard
+//      case "application.conf"            => MergeStrategy.concat
+//      case "reference.conf"              => MergeStrategy.concat
+//      case x if x.startsWith("com/waz/znet/ClientWrapper") => MergeStrategy.last
+//      case _ => MergeStrategy.first
+//
+//    },
+//    scalacOptions ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8"),
+//    actorsResources := {
+//      val out = target.value / "actors_res.zip"
+//      val manifest = baseDirectory.value / "src" / "main" / "AndroidManifest.xml"
+//      val res = zmessaging.base / "src" / "main" / "res"
+//      val mappings = {
+//        val libs = nativeLibs.value.files.flatMap(d => (d ** "*").get).filter(_.isFile)
+//        val distinct = { // remove duplicate libs, always select first one, as nativeLibs are first on the path
+//          val names = new scala.collection.mutable.HashSet[String]()
+//          libs.filter { f => names.add(f.getName) }
+//        }
+//        println(s"libs: $libs\n distinct: $distinct")
+//        distinct.map(f => (f, s"/libs/${f.getName}")) ++ ((res ** "*").get pair rebase(res, "/res")) :+ (manifest, "/AndroidManifest.xml")
+//      }
+//      IO.zip(mappings, out)
+//      out
+//    },
+//    assemblyJarName := s"remote-actor-${version.value}.jar",
+//    assembledMappings in assembly := {
+//      val res = actorsResources.value
+//      assert(res.exists() && res.length() > 0)
+//      (assembledMappings in assembly).value :+ MappingSet(None, Vector((actorsResources.value, s"actor_res.jar")))
+//    },
+//    addArtifact(artifact in Compile, assembly),
+//    publishArtifact in (Compile, packageBin) := false,
+//    publishArtifact in (Compile, packageDoc) := false,
+//    pomPostProcess := { (node: scala.xml.Node) =>
+//      new scala.xml.transform.RuleTransformer(new scala.xml.transform.RewriteRule {
+//        override def transform(n: scala.xml.Node): scala.xml.NodeSeq =
+//          n.nameToString(new StringBuilder).toString match {
+//            case "dependency" | "repository" => scala.xml.NodeSeq.Empty
+//            case _ => n
+//          }
+//      }).transform(node).head
+//    },
+//    unmanagedResourceDirectories in Compile ++= Seq(root.base / "src/it/resources"),
+//    mainClass in assembly := Some("com.waz.RemoteActorApp"),
+//    libraryDependencies ++= Seq(
+//      "org.apache.httpcomponents" % "httpclient" % "4.5.1", // to override version included in robolectric
+//      "junit" % "junit" % "4.8.2", //to override version included in robolectric
+//      "org.apache.httpcomponents" % "httpcore" % "4.4.4",
+//      "org.robolectric" % "android-all" % RobolectricVersion,
+//      Deps.avs,
+//      "org.threeten" % "threetenbp" % "1.3",
+//      "com.wire.cryptobox" % "cryptobox-jni" % "0.8.2",
+//      "com.android.support" % "support-v4" % supportLibVersion % Provided,
+//      "com.google.android.gms" % "play-services-base" % "7.8.0" % Provided exclude("com.android.support", "support-v4"),
+//      "com.google.android.gms" % "play-services-gcm" % "7.8.0" % Provided
+//    )
+//  )
 
 lazy val macrosupport = project
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
@@ -411,7 +411,7 @@ lazy val fullCoverage = taskKey[Unit]("Runs all tests and generates coverage rep
 
 fullCoverage := {
   (test in unit in Test).value
-  (test in mocked in Test).value
-  (test in integration in Test).value
+//  (test in mocked in Test).value
+//  (test in integration in Test).value
   (coverageReport in zmessaging).value
 }

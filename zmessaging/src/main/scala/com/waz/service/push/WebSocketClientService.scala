@@ -23,6 +23,8 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
+import com.waz.service.AccountsService.{InBackground, LoggedOut}
+import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, Signal}
@@ -47,18 +49,17 @@ trait WebSocketClientService {
 
 class WebSocketClientServiceImpl(context:     Context,
                                  accountId:   AccountId,
-                                 lifecycle:   ZmsLifeCycle,
+                                 accounts:    AccountsService,
                                  netClient:   ZNetClient,
                                  auth:        AuthenticationManager,
                                  override val network: NetworkModeService,
                                  backend:     BackendConfig,
                                  clientId:    ClientId,
                                  timeouts:    Timeouts,
-                                 pushToken:   PushTokenService) extends WebSocketClientService {
+                                 pushToken:   PushTokenService)(implicit ev: AccountContext) extends WebSocketClientService {
   import WebSocketClientService._
-  implicit val logTag: LogTag = s"${logTagFor[WebSocketClientService]}#${accountId.str.take(8)}"
+  implicit val logTag: LogTag = accountTag[WebSocketClientService](accountId)
 
-  private implicit val ec = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
   @volatile
@@ -66,11 +67,13 @@ class WebSocketClientServiceImpl(context:     Context,
 
   override val useWebSocketFallback = pushToken.pushActive.map(!_)
 
+  val accState = accounts.accountState(accountId)
+
   // true if web socket should be active,
   override val wsActive = network.networkMode.flatMap {
     case NetworkMode.OFFLINE => Signal const false
-    case _ => lifecycle.loggedIn.flatMap {
-      case false => Signal const false
+    case _ => accState.flatMap {
+      case LoggedOut => Signal const false
       case _ => useWebSocketFallback
     }.flatMap {
       case true => Signal.const(true)
@@ -81,14 +84,14 @@ class WebSocketClientServiceImpl(context:     Context,
     }
   }
 
-  override val client = wsActive.zip(lifecycle.idle) map {
-    case (true, idle) =>
+  override val client = wsActive.zip(accState) map {
+    case (true, state) =>
       debug(s"Active, client: $clientId")
 
       if (prevClient.isEmpty)
         prevClient = Some(createWebSocketClient(clientId))
 
-      if (idle) {
+      if (state == InBackground) {
         // start android service to keep the app running while we need to be connected.
         com.waz.zms.WebSocketService(context)
       }
@@ -99,6 +102,9 @@ class WebSocketClientServiceImpl(context:     Context,
       prevClient = None
       None
   }
+
+  //The client needs to be closed after logging out (outside the account event context)
+  client(_ => {})(EventContext.Global)
 
   override val connected = client flatMap {
     case Some(c) => c.connected

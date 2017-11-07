@@ -22,7 +22,7 @@ import java.util.Date
 import com.waz._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.service.{StorageModule, Timeouts, ZmsLifeCycle, ZmsLifeCycleImpl}
+import com.waz.service.{StorageModule, Timeouts, UiLifeCycle, UiLifeCycleImpl}
 import com.waz.testutils.EmptySyncService
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventContext
@@ -47,7 +47,7 @@ import scala.concurrent.duration._
     convsStorage.insert(conv)
   }
 
-  lazy val lifecycle: ZmsLifeCycle = new ZmsLifeCycleImpl {
+  lazy val lifecycle: UiLifeCycle = new UiLifeCycleImpl {
 //    setLoggedIn(true)
     acquireUi()
   }
@@ -60,7 +60,7 @@ import scala.concurrent.duration._
     }
   }
 
-  lazy val service = new TypingService(AccountId(), storage.convsStorage, timeouts, lifecycle, new EmptySyncService {
+  lazy val service = new TypingService(AccountId(), storage.convsStorage, timeouts, null, new EmptySyncService {
     override def postTypingState(id: ConvId, typing: Boolean) = {
       test.syncWasTyping = typing
       test.typingSync = Some(id)
