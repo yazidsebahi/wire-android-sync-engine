@@ -111,9 +111,9 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         verbose(s"account state changed: $accountId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
       }
 
-    returning(accountStateSignals.getOrElse(accountId, newSignal)) { sig =>
+    accountStateSignals.getOrElse(accountId, returning(newSignal) { sig =>
       accountStateSignals += accountId -> sig
-    }
+    })
   }
 
   lazy val activeAccount = activeAccountPref.signal.flatMap[Option[AccountData]] {
