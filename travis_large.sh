@@ -25,7 +25,7 @@ trap 'error_handler' ERR
 bash -c "while true; do echo \$(date) - building ...; sleep $PING_SLEEP; done" &
 PING_LOOP_PID=$!
 
-java $SBT_OPTS -jar sbt-launch.jar unit/test --error
+java $SBT_OPTS -jar sbt-launch.jar test:compile --error
 
 # The build finished without returning an error so dump a tail of the output
 dump_output
