@@ -39,7 +39,8 @@ public interface NotificationsHandler {
 
         public enum LikedContent {
             TEXT_OR_URL, // the text or URL is contained in #getMessage in this case
-            PICTURE
+            PICTURE,
+            OTHER
         }
     }
 }

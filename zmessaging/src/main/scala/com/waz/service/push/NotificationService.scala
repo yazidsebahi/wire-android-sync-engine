@@ -265,24 +265,45 @@ class NotificationService(context:         Context,
       verbose(s"processing notif: $data")
       usersStorage.get(data.user).flatMap { user =>
         val userName = user map (_.getDisplayName) filterNot (_.isEmpty) orElse data.userName
+        val userPicture = user.flatMap(_.picture)
 
         data.msgType match {
           case CONNECT_REQUEST | CONNECT_ACCEPTED =>
-            Future.successful(NotificationInfo(data.id, data.msgType, data.time, data.msg, data.conv, convName = userName, userName = userName, isEphemeral = data.ephemeral, hasBeenDisplayed = data.hasBeenDisplayed))
+            Future.successful(NotificationInfo(data.id, data.msgType, data.time, data.msg, data.conv, convName = userName,
+              userName = userName, userPicture = userPicture, isEphemeral = data.ephemeral, hasBeenDisplayed = data.hasBeenDisplayed))
           case _ =>
             for {
               msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
               conv <- convs.get(data.conv) if conv.isDefined
               membersCount <- members.getByConv(conv.get.id).map(_.map(_.userId).size)
             } yield {
-              val (g, t) =
-                if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map(m => if (m.msgType == Message.Type.ASSET) LikedContent.PICTURE else LikedContent.TEXT_OR_URL))
+              val (notificationData, maybeLikedContent) =
+                if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map { m =>
+                  m.msgType match {
+                    case Message.Type.ASSET => LikedContent.PICTURE
+                    case Message.Type.TEXT | Message.Type.TEXT_EMOJI_ONLY => LikedContent.TEXT_OR_URL
+                    case _ => LikedContent.OTHER
+                  }
+                })
                 else (data, None)
 
               val groupConv = if (!conv.exists(_.team.isDefined)) conv.exists(_.convType == ConversationType.Group)
               else membersCount > 2
 
-              NotificationInfo(g.id, g.msgType, g.time, g.msg, g.conv, convName = conv.map(_.displayName), userName = userName, isEphemeral = data.ephemeral, isGroupConv = groupConv, isUserMentioned = data.mentions.contains(selfUserId), likedContent = t, hasBeenDisplayed = data.hasBeenDisplayed)
+              NotificationInfo(
+                notificationData.id,
+                notificationData.msgType,
+                notificationData.time,
+                notificationData.msg,
+                notificationData.conv,
+                convName = conv.map(_.displayName),
+                userName = userName,
+                userPicture = userPicture,
+                isEphemeral = data.ephemeral,
+                isGroupConv = groupConv,
+                isUserMentioned = data.mentions.contains(selfUserId),
+                likedContent = maybeLikedContent,
+                hasBeenDisplayed = data.hasBeenDisplayed)
             }
         }
       }
@@ -302,6 +323,7 @@ object NotificationService {
                               convId: ConvId,
                               convName: Option[String] = None,
                               userName: Option[String] = None,
+                              userPicture: Option[AssetId] = None,
                               isGroupConv: Boolean = false,
                               isUserMentioned: Boolean = false,
                               isEphemeral: Boolean = false,
