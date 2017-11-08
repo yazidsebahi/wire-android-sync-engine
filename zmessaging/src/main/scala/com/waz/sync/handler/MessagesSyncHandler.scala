@@ -144,11 +144,11 @@ class MessagesSyncHandler(context:    Context,
 
           }
       case (Some(msg), None) =>
-        HockeyApp.saveException(new Exception("postMessage failed, couldn't find conversation for msg"), s"msg: $msg")
+        HockeyApp.saveException(new Exception("postMessage failed, couldn't find conversation for msg"), "postMessage failed, couldn't find conversation for msg")
         service.messageDeliveryFailed(msg.convId, msg, internalError("conversation not found")) map (_ => SyncResult.aborted())
 
       case (msg, conv) =>
-        HockeyApp.saveException(new Exception("postMessage failed, couldn't find a message nor conversation"), s"msg id: $id")
+        HockeyApp.saveException(new Exception("postMessage failed, couldn't find a message nor conversation"), "postMessage failed, couldn't find a message nor conversation")
         successful(SyncResult.aborted())
     }
   }
