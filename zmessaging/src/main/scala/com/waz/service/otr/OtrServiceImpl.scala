@@ -156,7 +156,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
   // update client info and send error report to hockey, we want client info to somehow track originating platform
   private def reportOtrError(e: CryptoException, ev: OtrEvent) = sync.syncClients(ev.from) map { _ =>
     clients.getClient(ev.from, ev.sender) foreach { client =>
-      HockeyApp.saveException(e, s"event: $ev, client: $client")
+      HockeyApp.saveException(e, "otr error")
     }
   }
 
@@ -215,7 +215,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
             client.id -> session.encrypt(msgData)
           } recover {
             case e: Throwable =>
-              HockeyApp.saveException(e, s"encryption failed for user: $user, client: $client")
+              HockeyApp.saveException(e, s"encryption failed")
               if (useFakeOnError) Some(client.id -> EncryptionFailedMsg)
               else None
           }

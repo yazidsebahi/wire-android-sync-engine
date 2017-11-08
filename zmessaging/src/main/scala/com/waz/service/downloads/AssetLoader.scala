@@ -158,7 +158,7 @@ class AssetLoaderImpl(context:         Context,
     }.recoverWith {
       case ex: CancelException => CancellableFuture.failed(ex)
       case NonFatal(ex) =>
-        HockeyApp.saveException(ex, s"audio transcoding failed for uri: $uri")
+        HockeyApp.saveException(ex, s"audio transcoding failed for uri")
         CancellableFuture.failed(ex)
     }
   }
@@ -175,7 +175,7 @@ class AssetLoaderImpl(context:         Context,
     }.recoverWith {
       case ex: CancelException => CancellableFuture.failed(ex)
       case ex: Exception =>
-        HockeyApp.saveException(ex, s"video transcoding failed for uri: $uri")
+        HockeyApp.saveException(ex, s"video transcoding failed for uri")
         addStreamToCache(cacheKey, mime, name, openStream(uri))
     }
   }

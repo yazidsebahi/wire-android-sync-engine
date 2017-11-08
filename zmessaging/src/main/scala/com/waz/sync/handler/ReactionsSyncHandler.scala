@@ -45,7 +45,7 @@ class ReactionsSyncHandler(client: MessagesClient, convs: ConversationsContentUp
             Future.successful(SyncResult(error))
         }
       case None =>
-        HockeyApp.saveException(new Exception("postLiking failed, couldn't find conversation"), s"convId: $id, liking: $liking")
+        HockeyApp.saveException(new Exception("postLiking failed, couldn't find conversation"), s"postLiking failed, couldn't find conversation")
         Future.successful(SyncResult.failed())
     }
 }

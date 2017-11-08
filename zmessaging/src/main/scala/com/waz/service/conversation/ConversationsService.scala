@@ -94,7 +94,7 @@ class ConversationsService(context:         Context,
       content.convByRemoteId(rConvId) flatMap {
         case Some(conv) => processUpdateEvent(conv, ev)
         case None if retryCount > 3 =>
-          HockeyApp.saveException(new Exception("No conversation data found for event") with NoStackTrace, s"event: $ev")
+          HockeyApp.saveException(new Exception("No conversation data found for event") with NoStackTrace, "No conversation data found for event")
           successful(())
         case None =>
           ev match {
