@@ -260,15 +260,15 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     @volatile var selfUser: Option[Self] = None
     @volatile var error: Option[ErrorResponse] = None
 
-    api.login(credentials, new LoginListener {
-      override def onFailed(code: Int, message: String, label: String): Unit = {
-        error = Some(impl.ErrorResponse(code, message, label))
-      }
-
-      override def onSuccess(user: Self): Unit = {
-        selfUser = Some(user)
-      }
-    })
+//    api.login(credentials, new LoginListener {
+//      override def onFailed(code: Int, message: String, label: String): Unit = {
+//        error = Some(impl.ErrorResponse(code, message, label))
+//      }
+//
+//      override def onSuccess(user: Self): Unit = {
+//        selfUser = Some(user)
+//      }
+//    })
 
     try {
       awaitUi { error.isDefined || selfUser.isDefined }(15.seconds)

@@ -27,7 +27,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.api.OtrClient.DeleteCallback
 import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
-import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ZMessagingApi}
+import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ErrorResponse, ZMessagingApi}
 import com.waz.content.Preferences.PrefKey
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.ConversationData.ConversationType
@@ -160,28 +160,19 @@ class DeviceActor(val deviceName: String,
       sender ! Echo(msg, deviceName)
 
     case RegisterPhone(phone, code, name, color) =>
-      val senderRef = sender()
-      api.register(CredentialsFactory.phoneCredentials(phone, code), name, AccentColor(color), new RegistrationListener {
-        override def onRegistered(user: Self): Unit = senderRef ! Successful
-        override def onRegistrationFailed(code: Int, message: String, label: String): Unit =
-          senderRef ! Failed(s"unable to register: $code, $message, $label")
-      })
 
     case Login(email, pass) =>
       val senderRef = sender()
       if (api.getSelf.getUser != null) {
         sender ! Failed(s"Process is already logged in as user: ${api.getSelf.getEmail}")
       }
-      api.login(CredentialsFactory.emailCredentials(email, pass), new LoginListener {
-        override def onSuccess(user: Self): Unit = {
+      ZMessaging.currentAccounts.loginEmail(EmailAddress(email), pass).map {
+        case Right(()) =>
           senderRef ! Successful
-        }
-
-        override def onFailed(code: Int, message: String, label: String): Unit = {
+        case Left(ErrorResponse(code, message, label)) =>
           log.info(s"Failed login: $code, $message, $label")
           senderRef ! Failed(s"Failed login: $code, $message, $label")
-        }
-      })
+      }
 
     case SendRequest(userId) =>
       val senderRef = sender()

@@ -29,7 +29,7 @@ import org.scalatest._
 
 import scala.util.Random
 
-@Ignore class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Inspectors with BeforeAndAfter with RobolectricTests with DbLoader {
+class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Inspectors with BeforeAndAfter with RobolectricTests with DbLoader {
   lazy val dbHelper: DBHelper = new ZGlobalDB(Robolectric.application)
 
   after {
