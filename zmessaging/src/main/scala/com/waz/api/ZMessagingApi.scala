@@ -61,8 +61,6 @@ trait ZMessagingApi {
 
   def getGiphy: Giphy
 
-  def getSpotify: Spotify
-
   def getConnectionIndicator: ConnectionIndicator
 
   def getUsernames: Usernames
