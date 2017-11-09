@@ -22,7 +22,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.PermissionProvider
-import com.waz.api.impl.search.Search
 import com.waz.content.Uris
 import com.waz.model._
 import com.waz.service.AccountManager
@@ -50,8 +49,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   private val startTime = System.nanoTime()
 
   private val accounts = ui.accounts
-
-  lazy val cache = new ZCache(ui.global.cache)
 
   accounts.activeAccountManager.onUi { setAccount } (EventContext.Global)
 
@@ -115,10 +112,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getConversations = ui.convs.convsList
 
-  override def search() = new Search
-
-  override def getCache: ZCache = cache
-  
   override def getUser(id: String): User = ui.users.getUser(UserId(id))
 
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)

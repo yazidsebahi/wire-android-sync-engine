@@ -44,13 +44,9 @@ trait ZMessagingApi {
 
   def logout(): Unit
 
-  def search(): Search
-
   def getSelf: Self
 
   def getConversations: ConversationsList
-
-  def getCache: ZCache
 
   def getUser(id: String): User
 
