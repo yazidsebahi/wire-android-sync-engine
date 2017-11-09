@@ -18,13 +18,12 @@
 package com.waz.znet
 
 import com.koushikdutta.async.http.AsyncHttpRequest
-import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.AccountsStorage
 import com.waz.model.{AccountData, AccountId}
-import com.waz.service.ZMessaging
 import com.waz.service.ZMessaging.accountTag
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder}
@@ -44,7 +43,7 @@ trait AccessTokenProvider {
  * Manages authentication token, and dispatches login requests when needed.
  * Will retry login request if unsuccessful.
  */
-class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: LoginClient) extends AccessTokenProvider {
+class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: LoginClient, tracking: TrackingService) extends AccessTokenProvider {
 
   lazy implicit val logTag: LogTag = accountTag[AuthenticationManager](id)
 
@@ -110,7 +109,7 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
                   case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
                     verbose(s"access request failed (label: $label, message: $message), will try login request. token: $token, cookie: $cookie, access resp: $resp")
 
-                    HockeyApp.saveException(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
+                    tracking.exception(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
                     for {
                       _ <- CancellableFuture.lift(wipeCredentials())
                       res <- dispatchLoginRequest()

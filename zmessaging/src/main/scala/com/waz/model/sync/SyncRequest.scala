@@ -17,7 +17,6 @@
  */
 package com.waz.model.sync
 
-import com.waz.HockeyApp
 import com.waz.ZLog.error
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.EphemeralExpiration
@@ -25,6 +24,7 @@ import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.ClientId
 import com.waz.model.{SearchQuery, _}
+import com.waz.service.ZMessaging
 import com.waz.sync.client.{ConversationsClient, UsersClient}
 import com.waz.sync.queue.SyncJobMerger._
 import com.waz.utils._
@@ -358,7 +358,7 @@ object SyncRequest {
       } catch {
         case NonFatal(e) =>
           error(s"Error reading SyncCommand: $cmd", e)
-          HockeyApp.saveException(e, s"Error reading SyncCommand: $cmd")
+          ZMessaging.exceptionEvent(e, s"Error reading SyncCommand: $cmd")
           Unknown
       }
     }

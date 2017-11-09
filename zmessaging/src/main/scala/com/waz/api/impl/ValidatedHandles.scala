@@ -19,12 +19,11 @@ package com.waz.api.impl
 
 import com.waz.api.UsernameValidation
 import com.waz.model.Handle
-import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.ZLog.ImplicitTag._
 
-class ValidatedHandles()(implicit ui: UiModule) extends com.waz.api.ValidatedUsernames with UiObservable{
+class ValidatedHandles()(implicit ui: UiModule) extends com.waz.api.ValidatedUsernames with UiObservable {
   implicit val ec = EventContext.Global
 
   ui.currentZms.flatMap{

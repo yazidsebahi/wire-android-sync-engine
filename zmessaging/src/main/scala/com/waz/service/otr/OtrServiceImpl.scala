@@ -20,7 +20,6 @@ package com.waz.service.otr
 import java.io._
 import javax.crypto.Mac
 
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.cache.{CacheService, LocalData}
@@ -32,6 +31,7 @@ import com.waz.model.otr._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.service.push.PushService
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.OtrClient
 import com.waz.sync.client.OtrClient.EncryptedContent
@@ -56,7 +56,7 @@ trait OtrService {
 class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrClientsService, push: PushService,
                  cryptoBox: CryptoBoxService, members: MembersStorageImpl, convs: ConversationsContentUpdaterImpl,
                  sync: SyncServiceHandle, cache: CacheService, metadata: MetaDataService, clientsStorage : OtrClientsStorage,
-                 prefs: GlobalPreferences) extends OtrService {
+                 prefs: GlobalPreferences, tracking: TrackingService) extends OtrService {
   import EventContext.Implicits.global
   import OtrService._
   import Threading.Implicits.Background
@@ -155,9 +155,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
 
   // update client info and send error report to hockey, we want client info to somehow track originating platform
   private def reportOtrError(e: CryptoException, ev: OtrEvent) = sync.syncClients(ev.from) map { _ =>
-    clients.getClient(ev.from, ev.sender) foreach { client =>
-      HockeyApp.saveException(e, "otr error")
-    }
+    clients.getClient(ev.from, ev.sender) foreach { _ => tracking.exception(e, "otr error") }
   }
 
   def resetSession(conv: ConvId, user: UserId, client: ClientId) =
@@ -215,7 +213,7 @@ class OtrServiceImpl(selfUserId: UserId, clientId: ClientId, val clients: OtrCli
             client.id -> session.encrypt(msgData)
           } recover {
             case e: Throwable =>
-              HockeyApp.saveException(e, s"encryption failed")
+              tracking.exception(e, s"encryption failed")
               if (useFakeOnError) Some(client.id -> EncryptionFailedMsg)
               else None
           }

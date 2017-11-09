@@ -21,7 +21,6 @@ import java.io._
 import java.security.{DigestOutputStream, MessageDigest}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{LogTag, verbose, warn}
 import com.waz.api.NetworkMode
@@ -36,6 +35,7 @@ import com.waz.model.AssetData.{RemoteData, WithExternalUri, WithProxy, WithRemo
 import com.waz.model._
 import com.waz.service.{NetworkModeService, ZMessaging}
 import com.waz.service.assets.AudioTranscoder
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.client.AssetClient
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
@@ -65,7 +65,8 @@ class AssetLoaderImpl(context:         Context,
                       client:          AssetClient,
                       audioTranscoder: AudioTranscoder,
                       videoTranscoder: VideoTranscoder,
-                      cache:           CacheService) extends AssetLoader {
+                      cache:           CacheService,
+                      tracking:        TrackingService) extends AssetLoader {
 
   private lazy val downloadAlways = Option(ZMessaging.currentAccounts).map(_.activeZms).map {
     _.flatMap {
@@ -158,7 +159,7 @@ class AssetLoaderImpl(context:         Context,
     }.recoverWith {
       case ex: CancelException => CancellableFuture.failed(ex)
       case NonFatal(ex) =>
-        HockeyApp.saveException(ex, s"audio transcoding failed for uri")
+        tracking.exception(ex, s"audio transcoding failed for uri")
         CancellableFuture.failed(ex)
     }
   }
@@ -175,7 +176,7 @@ class AssetLoaderImpl(context:         Context,
     }.recoverWith {
       case ex: CancelException => CancellableFuture.failed(ex)
       case ex: Exception =>
-        HockeyApp.saveException(ex, s"video transcoding failed for uri")
+        tracking.exception(ex, s"video transcoding failed for uri")
         addStreamToCache(cacheKey, mime, name, openStream(uri))
     }
   }

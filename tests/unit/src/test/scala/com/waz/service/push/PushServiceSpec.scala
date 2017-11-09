@@ -29,7 +29,7 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
-import com.waz.testutils.{TestBackoff, TestGlobalPreferences, TestUserPreferences}
+import com.waz.testutils.{EmptyTrackingService, TestBackoff, TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -56,6 +56,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val network         = mock[NetworkModeService]
   val lifeCycle       = mock[UiLifeCycle]
   val client          = mock[PushNotificationsClient]
+  val tracking        = new EmptyTrackingService
 
   implicit val ctx = Threading.Background
 
@@ -326,7 +327,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
     }
   }
 
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account1Id, pipeline, websocket, network, lifeCycle, sync)
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account1Id, pipeline, websocket, network, lifeCycle, tracking, sync)
 
   val lastId = Uid("last-id")
   val notJson = s"""

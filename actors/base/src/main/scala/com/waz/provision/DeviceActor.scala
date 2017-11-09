@@ -25,9 +25,8 @@ import akka.actor._
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.waz.api.OtrClient.DeleteCallback
-import com.waz.api.ZMessagingApi.RegistrationListener
 import com.waz.api._
-import com.waz.api.impl.{AccentColor, DoNothingAndProceed, ErrorResponse, ZMessagingApi}
+import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
 import com.waz.content.Preferences.PrefKey
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.model.ConversationData.ConversationType

@@ -18,7 +18,6 @@
 package com.waz.service
 
 import com.softwaremill.macwire._
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
@@ -29,12 +28,13 @@ import com.waz.model.{UserData, _}
 import com.waz.service.AccountsService.{InForeground, LoggedOut}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
+import com.waz.service.tracking.{LoggedOutEvent, TrackingService}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, EventStream, Signal, SourceStream}
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status
@@ -47,7 +47,7 @@ import scala.util.Right
 import scala.util.control.NonFatal
 
 //TODO consider merging with AccountManager
-class UserModule(val userId: UserId, val account: AccountManager) {
+class UserModule(val userId: UserId, val account: AccountManager, tracking: TrackingService) {
   private implicit val dispatcher = account.dispatcher
 
   def context = account.global.context
@@ -132,7 +132,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   otrCurrentClient.map(_.isDefined) { exists =>
     if (hasClient && !exists) {
       info(s"client has been removed on backend, logging out")
-      OnRemovedClient ! id
+      global.trackingService.loggedOut(LoggedOutEvent.RemovedClient, id)
       logoutAndResetClient()
     }
     hasClient = exists
@@ -160,7 +160,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   selfUserData.map(_.exists(_.deleted)) { deleted =>
     if (deleted) {
       info(s"self user was deleted, logging out")
-      OnSelfDeleted ! id
+      global.trackingService.loggedOut(LoggedOutEvent.SelfDeleted, id)
       for {
         _ <- logoutAndResetClient()
         _ =  accounts.accountMap.remove(id)
@@ -178,7 +178,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
 
   auth.onInvalidCredentials.on(dispatcher){ _ =>
-    OnInvalidCredentials ! id
+    global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, id)
     logout(flushCredentials = true)
   }
 
@@ -233,7 +233,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
       if (client.signalingKey.isEmpty) {
         returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
           warn(msg)
-          HockeyApp.saveException(new IllegalStateException(msg), msg)
+          global.trackingService.exception(new IllegalStateException(msg), msg, id)
         }
         Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
       }
@@ -473,8 +473,4 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
 object AccountManager {
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
-
-  val OnRemovedClient: SourceStream[AccountId] = EventStream[AccountId]()
-  val OnSelfDeleted: SourceStream[AccountId] = EventStream[AccountId]()
-  val OnInvalidCredentials: SourceStream[AccountId] = EventStream[AccountId]()
 }

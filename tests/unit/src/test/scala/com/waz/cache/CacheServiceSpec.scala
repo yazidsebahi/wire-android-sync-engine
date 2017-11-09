@@ -22,7 +22,7 @@ import java.io.FileInputStream
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.GlobalDatabase
 import com.waz.model.{CacheKey, Mime}
-import com.waz.testutils.DefaultPatienceConfig
+import com.waz.testutils.{DefaultPatienceConfig, EmptyTrackingService}
 import com.waz.testutils.Matchers._
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
@@ -42,7 +42,7 @@ import scala.concurrent.duration._
 
   lazy val storage = new GlobalDatabase(Robolectric.application)
   lazy val cacheStorage = CacheStorage(storage, Robolectric.application)
-  lazy val service = CacheService(Robolectric.application, storage, cacheStorage)
+  lazy val service = CacheService(Robolectric.application, storage, cacheStorage, new EmptyTrackingService)
 
   after {
     Thread.sleep(1000) // because some operations (deleting) are scheduled on background

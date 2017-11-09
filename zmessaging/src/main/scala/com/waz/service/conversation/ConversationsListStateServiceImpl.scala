@@ -20,7 +20,7 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.api.impl.ConversationsListState
 import com.waz.content.UserPreferences.SelectedConvId
-import com.waz.content.{ConversationStorageImpl, UserPreferences}
+import com.waz.content.{ConversationStorage, UserPreferences}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, ConversationData}
 import com.waz.threading.SerialDispatchQueue
@@ -38,7 +38,7 @@ trait ConversationsListStateService {
 /**
  * Keeps track of general conversation list stats needed for display of conversations lists.
  */
-class ConversationsListStateServiceImpl(convs: ConversationStorageImpl, userPrefs: UserPreferences) extends ConversationsListStateService {
+class ConversationsListStateServiceImpl(convs: ConversationStorage, userPrefs: UserPreferences) extends ConversationsListStateService {
 
   import ConversationsListState.Data
   import com.waz.utils.events.EventContext.Implicits.global

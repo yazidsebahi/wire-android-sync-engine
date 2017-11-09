@@ -18,7 +18,6 @@
 package com.waz.znet
 
 import com.koushikdutta.async.http.server.{AsyncHttpServer, AsyncHttpServerRequest, AsyncHttpServerResponse, HttpServerRequestCallback}
-import com.waz.model.EmailAddress
 import com.waz.service.BackendConfig
 import com.waz.threading.Threading
 import org.scalatest._

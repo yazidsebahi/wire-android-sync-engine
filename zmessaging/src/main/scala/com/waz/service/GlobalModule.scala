@@ -31,6 +31,7 @@ import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService, GlobalCall
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
 import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
+import com.waz.service.tracking.{TrackingService, TrackingServiceImpl}
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.{Entry, Key}
@@ -72,25 +73,27 @@ trait GlobalModule {
   def accountsStorage:      AccountsStorage
   def teamsStorage:         TeamsStorageImpl
   def recordingAndPlayback: GlobalRecordAndPlayService
-  def tempFiles: TempFileService
-  def clientWrapper: Future[ClientWrapper]
-  def client: AsyncClientImpl
-  def globalClient: ZNetClient
-  def imageLoader: ImageLoader
-  def blacklistClient: VersionBlacklistClient
-  def blacklist: VersionBlacklistService
-  def factory: ZMessagingFactory
-  def lifecycle: UiLifeCycle
+  def tempFiles:            TempFileService
+  def clientWrapper:        Future[ClientWrapper]
+  def client:               AsyncClientImpl
+  def globalClient:         ZNetClient
+  def imageLoader:          ImageLoader
+  def blacklistClient:      VersionBlacklistClient
+  def blacklist:            VersionBlacklistService
+  def factory:              ZMessagingFactory
+  def lifecycle:            UiLifeCycle
 
-  def flowmanager:  DefaultFlowManagerService
-  def mediaManager: MediaManagerService
+  def flowmanager:          DefaultFlowManagerService
+  def mediaManager:         MediaManagerService
+
+  def trackingService:      TrackingService
 }
 
 class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extends GlobalModule { global =>
   val prefs:                    GlobalPreferences                = GlobalPreferences(context)
   //trigger initialization of Firebase in onCreate - should prevent problems with Firebase setup
   val googleApi:                GoogleApi                        = new GoogleApiImpl(context, backend, prefs)
-  val lifecycle:                UiLifeCycle                     = new UiLifeCycleImpl()
+  val lifecycle:                UiLifeCycle                      = new UiLifeCycleImpl()
   val network:                  DefaultNetworkModeService        = wire[DefaultNetworkModeService]
   val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
 
@@ -100,7 +103,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   lazy val contextWrapper:      Context                          = Context.wrap(context)
   lazy val storage:             Database                         = new GlobalDatabase(context)
   lazy val metadata:            MetaDataService                  = wire[MetaDataService]
-  lazy val cache:               CacheService                     = CacheService(context, storage)
+  lazy val cache:               CacheService                     = CacheService(context, storage, trackingService)
   lazy val bitmapDecoder:       BitmapDecoder                    = wire[BitmapDecoder]
 
   lazy val trimmingLruCache:    Cache[Key, Entry]                = MemoryImageCache.newTrimmingLru(context)
@@ -145,10 +148,11 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
 
   lazy val factory                                               = new ZMessagingFactory(this)
 
-  lazy val flowmanager: DefaultFlowManagerService                = wire[DefaultFlowManagerService]
+  lazy val flowmanager:         DefaultFlowManagerService        = wire[DefaultFlowManagerService]
   lazy val mediaManager                                          = wire[DefaultMediaManagerService]
 
-
+  private lazy val trackingZmsProvider: TrackingService.ZmsProvider = TrackingService.defaultZmsProvider
+  lazy val trackingService:     TrackingService                  = wire[TrackingServiceImpl]
 
 }
 

@@ -121,7 +121,7 @@ lazy val zmessaging = project
       Deps.spotifyPlayer,
       "org.threeten" % "threetenbp" % "1.3.+" % Provided,
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
-      Deps.hockeyApp % Provided,
+     // Deps.hockeyApp % Provided,
       "net.java.dev.jna" % "jna" % "4.4.0" % Provided,
       "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )

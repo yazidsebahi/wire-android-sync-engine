@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
-import com.waz.model.EmailAddress
 import com.waz.service.{BackendConfig, ZMessaging}
 import com.waz.znet.Response.HttpStatus
 import org.json.JSONObject

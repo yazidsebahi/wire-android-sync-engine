@@ -25,6 +25,7 @@ import com.waz.model.sync.SyncRequest.PostOpenGraphMeta
 import com.waz.service.NetworkModeService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.queue.{SyncContentUpdater, SyncExecutor, SyncScheduler}
+import com.waz.testutils.EmptyTrackingService
 
 import scala.concurrent.Future
 
@@ -34,6 +35,7 @@ class SyncExecutorSpec extends AndroidFreeSpec {
   val content   = mock[SyncContentUpdater]
   val network   = mock[NetworkModeService]
   val handler   = mock[SyncHandler]
+  val tracking  = new EmptyTrackingService
 
 
   scenario("Loading a deleted sync job returns failure") {
@@ -43,7 +45,7 @@ class SyncExecutorSpec extends AndroidFreeSpec {
   }
 
   def getExecutor = {
-    new SyncExecutor(scheduler, content, network, handler)
+    new SyncExecutor(scheduler, content, network, handler, tracking)
   }
 
 }

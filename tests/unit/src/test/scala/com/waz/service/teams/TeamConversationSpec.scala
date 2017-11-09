@@ -106,8 +106,6 @@ class TeamConversationSpec extends AndroidFreeSpec {
   }
 
   def initService: ConversationsUiService = {
-    new ConversationsUiServiceImpl(account, self, null, null, null, messages, null, members, null, convsContent, convsStorage, null, null, sync, null, null)
+    new ConversationsUiServiceImpl(account, self, null, null, null, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
   }
-
-
 }

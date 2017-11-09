@@ -18,16 +18,16 @@
 package com.waz.service.push
 
 import com.waz.RobolectricUtils
-import com.waz.model.otr.ClientId
+//import com.waz.model.otr.ClientId
 import com.waz.service._
 import com.waz.testutils.DefaultPatienceConfig
-import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.utils.events.Signal
-import com.waz.znet.ZNetClient.EmptyClient
+//import com.waz.utils.events.EventContext.Implicits.global
+//import com.waz.utils.events.Signal
+//import com.waz.znet.ZNetClient.EmptyClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest._
-import com.waz.ZLog.ImplicitTag._
+//import com.waz.ZLog.ImplicitTag._
 import com.waz.content.GlobalPreferences
 
 import scala.concurrent.duration._

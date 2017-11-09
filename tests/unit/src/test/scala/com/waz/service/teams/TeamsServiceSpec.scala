@@ -17,7 +17,6 @@
  */
 package com.waz.service.teams
 
-import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model._
 import com.waz.service.SearchKey

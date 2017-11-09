@@ -19,8 +19,6 @@ package com.waz.specs
 
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
-import com.waz.ZLog.{LogTag, error}
-import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.model.AccountId
 import com.waz.service.AccountsService.{AccountState, InForeground, LoggedOut}
 import com.waz.service.{AccountContext, AccountsService, ZMessaging}
@@ -30,7 +28,6 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -75,9 +72,6 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     ZMessaging.clock = clock
 
-//    InternalLog.reset()
-//    InternalLog.add(new SystemLogOutput)
-
     Intent.setUtil(JVMIntentUtil)
 
     Threading.setUi(new SerialDispatchQueue({
@@ -88,14 +82,6 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
       }))
     }, Threading.testUiThreadName))
 
-    HockeyApp.setUtil(Some(new HockeyAppUtil {
-      override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
-        t match {
-          case e: exceptions.TestFailedException => swallowedFailure = Some(e)
-          case _ => error(s"Exception sent to HockeyApp: $description", t)(tag)
-        }
-      }
-    }))
   }
 
   /**

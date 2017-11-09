@@ -26,8 +26,8 @@ import com.github.tomakehurst.wiremock.http.Fault
 import com.waz.RobolectricUtils
 import com.waz.ZLog.LogTag
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.EmailAddress
 import com.waz.service.BackendConfig
+import com.waz.testutils.EmptyTrackingService
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
@@ -55,7 +55,7 @@ import scala.util.Random.nextInt
     startMock()
     reset()
     client = new ZNetClientImpl(None, new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl) {
-      new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort))
+      new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort), new EmptyTrackingService)
 
       override def MaxConcurrentRequests = maxConcurrentRequests
 

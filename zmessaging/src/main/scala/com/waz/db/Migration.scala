@@ -18,8 +18,8 @@
 package com.waz.db
 
 import android.database.sqlite.SQLiteDatabase
-import com.waz.HockeyApp
 import com.waz.ZLog._
+import com.waz.service.ZMessaging
 import com.waz.utils.wrappers.DB
 
 import scala.util.control.NonFatal
@@ -101,7 +101,7 @@ class Migrations(migrations: Migration*) {
           } catch {
             case NonFatal(e) =>
               error(s"Migration failed for $storage, from: $fromVersion to: $toVersion", e)
-              HockeyApp.saveException(e, s"Migration failed for $storage, from: $fromVersion to: $toVersion")
+              ZMessaging.exceptionEvent(e, s"Migration failed for $storage, from: $fromVersion to: $toVersion")
               fallback(storage, db)
           }
       }

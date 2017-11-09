@@ -28,6 +28,7 @@ import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service._
+import com.waz.service.tracking.{MissedPushEvent, ReceivedPushEvent, TrackingService}
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponse}
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
@@ -84,6 +85,7 @@ class PushServiceImpl(context:        Context,
                       webSocket:      WebSocketClientService,
                       network:        NetworkModeService,
                       lifeCycle:      UiLifeCycle,
+                      tracking:       TrackingService,
                       sync:           SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
   import PushService._
 
@@ -91,7 +93,10 @@ class PushServiceImpl(context:        Context,
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
 
   override val onMissedCloudPushNotifications = EventStream[MissedPushes]()
-  override val onFetchedPushNotifications    = EventStream[Seq[ReceivedPushData]]()
+  override val onFetchedPushNotifications     = EventStream[Seq[ReceivedPushData]]()
+
+  onMissedCloudPushNotifications.map(MissedPushEvent)(tracking.track(_, accountId))
+  onFetchedPushNotifications(_.foreach(p => tracking.track(ReceivedPushEvent(p), accountId)))
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val processing = Signal(false)

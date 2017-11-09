@@ -23,6 +23,7 @@ import com.waz.api.Message.Status
 import com.waz.content.ConvMessagesIndex._
 import com.waz.model.MessageData.{MessageDataDao, isUserContent}
 import com.waz.model._
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.{EventStream, RefreshingSignal, Signal, SourceSignal}
@@ -33,7 +34,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class ConvMessagesIndex(conv: ConvId, messages: MessagesStorageImpl, selfUserId: UserId, users: UsersStorage,
-                        convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase, filter: Option[MessageFilter] = None) { self =>
+                        convs: ConversationStorage, msgAndLikes: MessageAndLikesStorage, storage: ZmsDatabase,
+                        tracking: TrackingService, filter: Option[MessageFilter] = None) { self =>
 
   private implicit val tag: LogTag = s"ConvMessagesIndex_$conv"
 
@@ -107,7 +109,6 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorageImpl, selfUserId:
       }
     }
   }.recoverWithLog(reportHockey = true)
-
   def updateLastRead(c: ConversationData) = lastReadTime.mutateOrDefault(_ max c.lastRead, c.lastRead)
 
   private[waz] def loadCursor = CancellableFuture.lift(init) flatMap { _ =>
@@ -124,7 +125,7 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorageImpl, selfUserId:
       verbose(s"index of $time = $readMessagesCount")
       (cursor, order, time, math.max(0, readMessagesCount - 1))
     } ("ConvMessageIndex_loadCursor") map { case (cursor, order, time, lastReadIndex) =>
-      new MessagesCursor(cursor, lastReadIndex, time, msgAndLikes)(order)
+      new MessagesCursor(cursor, lastReadIndex, time, msgAndLikes, tracking)(order)
     }
   }
 

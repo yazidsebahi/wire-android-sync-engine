@@ -28,16 +28,15 @@ import com.waz.api.impl._
 import com.waz.bitmap.BitmapDecoder
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.Threading
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, returning}
-import com.waz.{HockeyApp, api, bitmap}
+import com.waz.{api, bitmap}
 
 import scala.util.Try
 
-class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModule) {
-
-  import Images._
+class Images(context: Context, bitmapLoader: BitmapDecoder, tracking: TrackingService)(implicit ui: UiModule) {
 
   private implicit val dispatcher = Threading.ImageDispatcher
 
@@ -52,7 +51,7 @@ class Images(context: Context, bitmapLoader: BitmapDecoder)(implicit ui: UiModul
 
   def getOrCreateUriImageAsset(uri: URI): api.ImageAsset = {
     if (uri == null || uri.toString == "null") {
-      HockeyApp.saveException(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
+      tracking.exception(new NullPointerException("image uri is null"), "ImageAssetFactory does not accept null uris.")
       ImageAsset.Empty
     } else {
       val asset = AssetData.newImageAssetFromUri(tag = Medium, uri = uri)
