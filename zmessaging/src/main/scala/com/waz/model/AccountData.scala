@@ -308,5 +308,8 @@ object AccountData {
 
     def findLoggedIn()(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Cookie.name} IS NOT NULL", null, null, null, null))
+
+    def findByPendingTeamName(name: String)(implicit db: DB) =
+      iterating(db.query(table.name, null, s"${PendingTeamName.name} = ?", Array(name), null, null, null))
   }
 }

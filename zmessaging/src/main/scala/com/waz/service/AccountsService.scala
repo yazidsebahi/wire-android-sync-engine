@@ -359,6 +359,13 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     } yield req
   }
 
+  def createTeamAccount(teamName: String): Future[AccountId] = {
+    for {
+      acc <- storage.findByPendingTeamName(teamName).map(_.getOrElse(AccountData(pendingTeamName = Some(teamName))))
+      _   <- setAccount(Some(acc.id))
+    } yield acc.id
+  }
+
   private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
     loginClient.login(accountData).future.flatMap {
       case Right((token, cookie)) =>
