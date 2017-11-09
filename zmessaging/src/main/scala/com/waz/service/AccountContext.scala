@@ -38,5 +38,4 @@ class AccountContext(accountId: AccountId, accounts: AccountsService) extends Ev
       verbose("Account context started")
       onContextStart()
   } (EventContext.Global)
-
 }

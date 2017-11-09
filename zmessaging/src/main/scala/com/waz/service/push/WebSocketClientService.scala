@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.AccountId
 import com.waz.model.otr.ClientId
-import com.waz.service.AccountsService.{InBackground, LoggedOut}
+import com.waz.service.AccountsService.{Active, InBackground, LoggedOut}
 import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -74,18 +74,18 @@ class WebSocketClientServiceImpl(context:     Context,
     case NetworkMode.OFFLINE => Signal const false
     case _ => accState.flatMap {
       case LoggedOut => Signal const false
-      case _ => useWebSocketFallback
-    }.flatMap {
-      case true => Signal.const(true)
-      case false =>
-        // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
-        verbose(s"lifecycle no longer active, should stop the client")
-        Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+      case _ => useWebSocketFallback.flatMap {
+        case true => Signal.const(true)
+        case false =>
+          // throttles inactivity notifications to avoid disconnecting on short UI pauses (like activity change)
+          verbose(s"lifecycle no longer active, should stop the client")
+          Signal.future(CancellableFuture.delayed(timeouts.webSocket.inactivityTimeout)(false)).orElse(Signal const true)
+      }
     }
   }
 
   override val client = wsActive.zip(accState) map {
-    case (true, state) =>
+    case (true, state:Active) =>
       debug(s"Active, client: $clientId")
 
       if (prevClient.isEmpty)
@@ -96,7 +96,7 @@ class WebSocketClientServiceImpl(context:     Context,
         com.waz.zms.WebSocketService(context)
       }
       prevClient
-    case (false, _) =>
+    case _ =>
       debug(s"onInactive")
       prevClient foreach (_.close())
       prevClient = None
