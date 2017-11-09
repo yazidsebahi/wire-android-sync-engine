@@ -244,43 +244,30 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
-  def loginPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
+  def loginPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
 
-    def requestCode(shouldCall: Boolean): Future[Either[ErrorResponse, Unit]] = {
-      (if (shouldCall)
-        requestPhoneConfirmationCall(number, KindOfAccess.LOGIN)
-      else
-        requestPhoneConfirmationCode(number, KindOfAccess.LOGIN))
-        .future.map {
+    def requestCode(): Future[Either[ErrorResponse, Unit]] =
+      requestPhoneConfirmationCode(number, KindOfAccess.LOGIN).future.map {
         case Failure(error) => Left(error)
         case PasswordExists => Left(ErrorResponse.PasswordExists)
         case _ => Right(())
       }
-    }
 
     for {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
-      req <- requestCode(shouldCall)
+      req <- requestCode()
       updatedAcc  = acc.copy(pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
       _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
       _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
     } yield req
   }
 
-  def registerPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
-
-    def requestCode(shouldCall: Boolean): Future[ActivateResult] = {
-      if (shouldCall)
-        requestPhoneConfirmationCall(number, KindOfAccess.REGISTRATION).future
-      else
-        requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
-    }
-
+  def registerPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
     for {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
-      req <- requestCode(shouldCall)
+      req <- requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
       updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), code = None, regWaiting = true)
       _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
       _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
