@@ -18,7 +18,7 @@
 package com.waz.db
 
 import com.waz.cache.CacheEntryData.CacheEntryDao
-import com.waz.model.AccountData.AccountDataDao
+import com.waz.model.AccountDataOld.AccountDataDao
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model.{EmailAddress, PhoneNumber, _}
 import com.waz.utils.wrappers.{DB, DBHelper}
@@ -64,8 +64,8 @@ class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Ins
           user.phone shouldBe empty
         }
         AccountDataDao.list shouldEqual Seq(
-          AccountData(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), Right(None), None, Some(EmailAddress("joachim.hofer+001@wearezeta.com")), None, handle = Some(Handle()), None, None, None, Some(Cookie("nK4NNJ7XN9-riGCcJ6YDCIXYEpHSYJWV2L9s3at1brf33Nb5TcFjY341iQHhQ7GjAS8sDgfXNx6NvzmSyXDXBQ==.v=1.k=1.d=1458844442.t=u.l=.u=e222adf6-22a0-4180-b628-936049f0899f.r=ccaae5e6")), userId = Some(userId1), firstLogin = false),
-          AccountData(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), Right(None), None, Some(EmailAddress("joachim.hofer+003@wearezeta.com")), None, handle = Some(Handle()), None, None, None, Some(Cookie("u0mEC2etISwrAAf-_pNwG204HG5-Uf7EIRFFTp1TEqKGcSIXDbFC9_i8PftnKRTWSjUsAbZ-PHVIxS3eZDK-AQ==.v=1.k=1.d=1459026632.t=u.l=.u=9a01b792-42f6-4dee-a3c0-e22179d742f8.r=591684f6")), userId = Some(userId2), firstLogin = false )
+          AccountDataOld(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), Right(None), None, Some(EmailAddress("joachim.hofer+001@wearezeta.com")), None, handle = Some(Handle()), None, None, None, Some(Cookie("nK4NNJ7XN9-riGCcJ6YDCIXYEpHSYJWV2L9s3at1brf33Nb5TcFjY341iQHhQ7GjAS8sDgfXNx6NvzmSyXDXBQ==.v=1.k=1.d=1458844442.t=u.l=.u=e222adf6-22a0-4180-b628-936049f0899f.r=ccaae5e6")), userId = Some(userId1), firstLogin = false),
+          AccountDataOld(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), Right(None), None, Some(EmailAddress("joachim.hofer+003@wearezeta.com")), None, handle = Some(Handle()), None, None, None, Some(Cookie("u0mEC2etISwrAAf-_pNwG204HG5-Uf7EIRFFTp1TEqKGcSIXDbFC9_i8PftnKRTWSjUsAbZ-PHVIxS3eZDK-AQ==.v=1.k=1.d=1459026632.t=u.l=.u=9a01b792-42f6-4dee-a3c0-e22179d742f8.r=591684f6")), userId = Some(userId2), firstLogin = false )
         )
       }
     }
@@ -74,8 +74,8 @@ class ZGlobalDBSpec extends FeatureSpec with Matchers with OptionValues with Ins
       Managed(loadDb("/db/ZGlobal_7.db")) foreach { implicit db: DB =>
         dbHelper.onUpgrade(db, 7, ZGlobalDB.DbVersion)
         AccountDataDao.list shouldEqual Seq(
-          AccountData(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), Right(None), None, Some(EmailAddress("joachim.hofer+001@wearezeta.com")), None, handle = Some(Handle()), None, None, None, Some(Cookie("nK4NNJ7XN9-riGCcJ6YDCIXYEpHSYJWV2L9s3at1brf33Nb5TcFjY341iQHhQ7GjAS8sDgfXNx6NvzmSyXDXBQ==.v=1.k=1.d=1458844442.t=u.l=.u=e222adf6-22a0-4180-b628-936049f0899f.r=ccaae5e6")), userId = Some(userId1), firstLogin = false),
-          AccountData(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), Right(None), None, Some(EmailAddress("joachim.hofer+003@wearezeta.com")), Some(PhoneNumber("+0123456789")), handle = Some(Handle()), None, None, None, Some(Cookie("u0mEC2etISwrAAf-_pNwG204HG5-Uf7EIRFFTp1TEqKGcSIXDbFC9_i8PftnKRTWSjUsAbZ-PHVIxS3eZDK-AQ==.v=1.k=1.d=1459026632.t=u.l=.u=9a01b792-42f6-4dee-a3c0-e22179d742f8.r=591684f6")), userId = Some(userId2), firstLogin = false)
+          AccountDataOld(AccountId("8546c628-c9e8-45d6-82dd-7f6dcb56e171"), Right(None), None, Some(EmailAddress("joachim.hofer+001@wearezeta.com")), None, handle = Some(Handle()), None, None, None, Some(Cookie("nK4NNJ7XN9-riGCcJ6YDCIXYEpHSYJWV2L9s3at1brf33Nb5TcFjY341iQHhQ7GjAS8sDgfXNx6NvzmSyXDXBQ==.v=1.k=1.d=1458844442.t=u.l=.u=e222adf6-22a0-4180-b628-936049f0899f.r=ccaae5e6")), userId = Some(userId1), firstLogin = false),
+          AccountDataOld(AccountId("09621ddd-736f-4ec5-b4b5-d24cbb56b9f3"), Right(None), None, Some(EmailAddress("joachim.hofer+003@wearezeta.com")), Some(PhoneNumber("+0123456789")), handle = Some(Handle()), None, None, None, Some(Cookie("u0mEC2etISwrAAf-_pNwG204HG5-Uf7EIRFFTp1TEqKGcSIXDbFC9_i8PftnKRTWSjUsAbZ-PHVIxS3eZDK-AQ==.v=1.k=1.d=1459026632.t=u.l=.u=9a01b792-42f6-4dee-a3c0-e22179d742f8.r=591684f6")), userId = Some(userId2), firstLogin = false)
         )
       }
     }

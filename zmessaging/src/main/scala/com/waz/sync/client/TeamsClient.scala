@@ -19,7 +19,7 @@ package com.waz.sync.client
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.warn
-import com.waz.model.AccountData.PermissionsMasks
+import com.waz.model.AccountDataOld.PermissionsMasks
 import com.waz.model._
 import com.waz.sync.client.TeamsClient.TeamBindingResponse
 import com.waz.threading.{CancellableFuture, Threading}

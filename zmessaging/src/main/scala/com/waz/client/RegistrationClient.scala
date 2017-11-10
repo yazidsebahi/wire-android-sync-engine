@@ -38,8 +38,8 @@ import org.json.JSONObject
 import scala.concurrent.duration._
 
 trait RegistrationClient {
-  def register(account: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
-  def registerTeamAccount(account: AccountData): ErrorOrResponse[(UserInfo, Option[Cookie])]
+  def register(account: AccountDataOld, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
+  def registerTeamAccount(account: AccountDataOld): ErrorOrResponse[(UserInfo, Option[Cookie])]
 
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit]
   def verifyEmail(email: EmailAddress, code: ConfirmationCode): ErrorOrResponse[Unit]
@@ -52,7 +52,7 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
   import Threading.Implicits.Background
   import com.waz.client.RegistrationClientImpl._
 
-  def register(account: AccountData, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
+  def register(account: AccountDataOld, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
     val json = JsonEncoder { o =>
       o.put("name", name)
       accentId foreach (o.put("accent_id", _))
@@ -75,7 +75,7 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
   }
 
   //TODO merge this method with the above register method when safe to do so
-  override def registerTeamAccount(account: AccountData) = {
+  override def registerTeamAccount(account: AccountDataOld) = {
     import account._
     (name, pendingTeamName, pendingEmail, password, code) match {
       case (Some(n), Some(teamName), Some(e), Some(p), Some(c)) =>

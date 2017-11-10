@@ -47,7 +47,7 @@ class NotificationsAndroidService extends FutureService {
     Option(ZMessaging.currentAccounts) match {
       case Some(accs) =>
         account match {
-          case Some(acc) => accs.getZMessaging(acc).flatMap {
+          case Some(acc) => accs.getZms(acc).flatMap {
             case Some(zms) if ActionClear == intent.getAction =>
               verbose(s"Clearing notifications for account: $acc and conversation:$conversation")
               zms.notifications.removeNotifications(nd => conversation.forall(_ == nd.conv))

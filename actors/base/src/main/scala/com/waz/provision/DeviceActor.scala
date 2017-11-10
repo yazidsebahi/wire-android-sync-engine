@@ -28,6 +28,11 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.LogTag
 import com.waz.api._
 import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
+import android.database.sqlite.SQLiteDatabase
+import com.waz.api.OtrClient.DeleteCallback
+import com.waz.api._
+import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
+import com.waz.content.Preferences.PrefKey
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.log.{InternalLog, LogOutput}
 import com.waz.media.manager.context.IntensityLevel
@@ -40,6 +45,9 @@ import com.waz.service._
 import com.waz.service.call.FlowManagerService
 import com.waz.testutils.Implicits._
 import com.waz.threading._
+import com.waz.service.otr.CryptoBoxService
+import com.waz.testutils.Implicits.{CoreListAsScala, _}
+import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
@@ -117,6 +125,10 @@ class DeviceActor(val deviceName: String,
     override lazy val flowmanager = new FlowManagerService {
       override def flowManager = None
 
+    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(this) {
+      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule, st: StorageModule, cb: CryptoBoxService): ZMessaging =
+        new ZMessaging(teamId, clientId, user, st, cb) {
+
       override def getVideoCaptureDevices = Future.successful(Vector())
 
       override def setVideoCaptureDevice(id: RConvId, deviceId: String) = Future.successful(())
@@ -124,6 +136,7 @@ class DeviceActor(val deviceName: String,
       override def setVideoPreview(view: View) = Future.successful(())
 
       override def setVideoView(id: RConvId, partId: Option[UserId], view: View) = Future.successful(())
+  implicit def zmsDb: SQLiteDatabase = api.account.get.storage.currentValue("actors").get.db.dbHelper.getWritableDatabase
 
       override val cameraFailedSig = Signal[Boolean](false)
     }

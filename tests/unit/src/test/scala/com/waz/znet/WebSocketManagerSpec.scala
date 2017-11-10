@@ -27,7 +27,7 @@ import com.waz.model.AccountId
 import com.waz.testutils.Slow
 import com.waz.threading.CancellableFuture
 import com.waz.utils.{ExponentialBackoff, returning}
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.Response.Status
 import org.java_websocket.WebSocket
 import org.java_websocket.framing.Framedata
@@ -54,10 +54,10 @@ import scala.util.Try
   var manager: WebSocketClient = _
   var connectionCount = 0
 
-  var authResult: Either[Status, Token] = Right(Token("test_token", "Bearer"))
+  var authResult: Either[Status, AccessToken] = Right(AccessToken("test_token", "Bearer"))
   val auth = new AccessTokenProvider {
     override def currentToken() = Future.successful(authResult)
-    override def checkLoggedIn(token: Option[Token]): CancellableFuture[Either[Status, Token]] = CancellableFuture.successful(authResult)
+    override def checkLoggedIn(token: Option[AccessToken]): CancellableFuture[Either[Status, AccessToken]] = CancellableFuture.successful(authResult)
   }
 
   val port = 9982

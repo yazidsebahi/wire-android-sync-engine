@@ -21,14 +21,14 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClient
 import com.waz.client.RegistrationClientImpl.ActivateResult
-import com.waz.content.{AccountsStorage, GlobalPreferences}
+import com.waz.content.{AccountsStorageOld, GlobalPreferences}
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.{TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.returning
-import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.AuthenticationManager.{Cookie, AccessToken}
 import com.waz.znet.{LoginClient, Response}
 import org.scalatest.Inside
 
@@ -36,7 +36,7 @@ import scala.concurrent.Future
 
 class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
-  private val storage      = mock[AccountsStorage]
+  private val storage      = mock[AccountsStorageOld]
   private val phoneNumbers = mock[PhoneNumberService]
   private val regClient    = mock[RegistrationClient]
   private val loginClient  = mock[LoginClient]
@@ -47,6 +47,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     super.beforeEach()
     //prevent migration - can fail tests
     await(prefs.preference(GlobalPreferences.FirstTimeWithTeams) := false)
+    await(prefs.preference(GlobalPreferences.DatabasesRenamed) := true)
   }
 
   feature("Phone registration") {
@@ -57,7 +58,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     scenario("Request for a new phone registration should create a pending account and request a code from backend") {
       val service = getAccountService
 
-      (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountData]))
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountDataOld]))
       (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.REGISTRATION).once().returning(CancellableFuture.successful[ActivateResult](ActivateResult.Success))
       (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, _, creator) =>
 
@@ -75,7 +76,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
     scenario("Request for a phone registration that exists in the db should update the account to pending and request a code from backend") {
       val service = getAccountService
-      var account = AccountData()
+      var account = AccountDataOld()
 
       (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
       (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.REGISTRATION).once().returning(CancellableFuture.successful[ActivateResult](ActivateResult.Success))
@@ -95,7 +96,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
     scenario("Validating a code for registration should update the pending phone to normal and save the confirmation code") {
       val service = getAccountService
-      var account = AccountData(pendingPhone = Some(phoneNumber))
+      var account = AccountDataOld(pendingPhone = Some(phoneNumber))
 
       (storage.get _).expects(*).once().returning(Future.successful(Some(account)))
       (regClient.verifyPhoneNumber _).expects(*, KindOfVerification.PREVERIFY_ON_REGISTRATION).once().returning(CancellableFuture.successful(Right(())))
@@ -115,7 +116,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
     scenario("Registering a name to a phone account should finish the registration") {
       val service = getAccountService
-      var account = AccountData(phone = Some(phoneNumber), code = Some(confirmationCode))
+      var account = AccountDataOld(phone = Some(phoneNumber), code = Some(confirmationCode))
 
       (storage.get _).expects(*).once().returning(Future.successful(Some(account)))
       (regClient.register _).expects(account, *, *).once().returning(CancellableFuture.successful(Right(UserInfo(UserId()), Some(Cookie("")))))
@@ -144,7 +145,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     scenario("Request a login with a new phone number should create an account and set the phone to pending"){
       val service = getAccountService
 
-      (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountData]))
+      (storage.findByPhone _).expects(*).once().returning(Future.successful(Option.empty[AccountDataOld]))
       (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN).once().returning(CancellableFuture.successful(ActivateResult.Success))
       (storage.updateOrCreate _).expects(*, *, *).once().onCall{ (_, _, creator) =>
 
@@ -162,7 +163,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
     scenario("Request a login with an existing phone number in db should update the account and set the phone to pending"){
       val service = getAccountService
-      var account = AccountData().copy(phone = Some(phoneNumber))
+      var account = AccountDataOld().copy(phone = Some(phoneNumber))
 
       (storage.findByPhone _).expects(*).once().returning(Future.successful(Some(account)))
       (regClient.requestPhoneConfirmationCode _).expects(*, KindOfAccess.LOGIN).once().returning(CancellableFuture.successful(ActivateResult.Success))
@@ -182,10 +183,10 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
     scenario("Activate the phone on login should set the pending phone to normal and set the cookie and token"){
       val service = getAccountService
-      var account = AccountData().copy(pendingPhone = Some(phoneNumber))
+      var account = AccountDataOld().copy(pendingPhone = Some(phoneNumber))
 
       val cookie = Cookie("123")
-      val token = Token("1", "2", 3)
+      val token = AccessToken("1", "2", 3)
 
       (storage.get _).expects(account.id).anyNumberOfTimes().returning(Future.successful(Some(account)))
       (loginClient.login _).expects(*).once().returning(CancellableFuture.successful(Right(token, Some(cookie))))
@@ -214,12 +215,12 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     scenario("Attempting registration should send a request with the data and create the appropriate account data") {
 
       val cookie = Cookie("cookie")
-      var account = AccountData()
+      var account = AccountDataOld()
 
       (storage.findByEmail _).expects(email).once().returning(Future.successful(None))
       (regClient.register _).expects(*, name, *).once().returning(CancellableFuture.successful(Right(UserInfo(UserId()), Some(cookie))))
       (storage.updateOrCreate _).expects(*, *, *).once.onCall{ (id, updater, creator) =>
-        updater(AccountData(id)).shouldBe(creator)
+        updater(AccountDataOld(id)).shouldBe(creator)
         account = creator
         Future.successful(creator)
       }
@@ -232,7 +233,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
         if (id == account.id)
         Future.successful(Some(account))
         else
-        Future.successful(Some(AccountData(id)))
+        Future.successful(Some(AccountDataOld(id)))
       }
 
       result(getAccountService.registerEmail(email, password, name)).shouldBe(Right(()))
@@ -254,13 +255,13 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       val service = getAccountService
 
       val cookie = Cookie("cookie")
-      val token = Token("1", "2", 3)
-      var account = AccountData()
+      val token = AccessToken("1", "2", 3)
+      var account = AccountDataOld()
 
       (storage.findByEmail _).expects(email).once().returning(Future.successful(None))
       (loginClient.login _).expects(*).returning(CancellableFuture.successful(Right((token, Some(cookie)))))
       (storage.updateOrCreate _).expects(*, *, *).once.onCall{ (id, updater, creator) =>
-        updater(AccountData(id)).shouldBe(creator)
+        updater(AccountDataOld(id)).shouldBe(creator)
         account = creator
         Future.successful(creator)
       }
@@ -273,7 +274,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
         if (id == account.id)
           Future.successful(Some(account))
         else
-          Future.successful(Some(AccountData(id)))
+          Future.successful(Some(AccountDataOld(id)))
       }
 
       result(service.loginEmail(email, password)).shouldBe(Right(()))
@@ -295,7 +296,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       val teamName = "team_name"
 
       (storage.findByPendingTeamName _).expects(teamName).once().returning(Future.successful(None))
-      (storage.insert _).expects(*).once().onCall { acc: AccountData =>
+      (storage.insert _).expects(*).once().onCall { acc: AccountDataOld =>
         if (!acc.pendingTeamName.contains(teamName)) fail("Team name did not match") else Future.successful(acc)
       }
 
@@ -303,7 +304,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
       val idsMatch = for {
         id <- service.createTeamAccount(teamName)
-        pref <- prefs.preference(GlobalPreferences.CurrentAccountPref).apply()
+        pref <- prefs.preference(GlobalPreferences.CurrentAccountPrefOld).apply()
       } yield pref.contains(id)
 
       result(idsMatch) shouldEqual true
@@ -312,7 +313,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     scenario("Request confirmation code on current account should set pending email if successful") {
       val teamName = "team_name"
 
-      var account = AccountData(id = AccountId(), pendingTeamName = Some(teamName))
+      var account = AccountDataOld(id = AccountId(), pendingTeamName = Some(teamName))
       (storage.findByPendingTeamName _).expects(teamName).once().returning(Future.successful(Some(account)))
 
       val service = getAccountService
@@ -336,7 +337,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       val code = ConfirmationCode("123456")
       val email = EmailAddress("test@test.com")
 
-      var account = AccountData(id = AccountId(), pendingTeamName = Some(teamName), pendingEmail = Some(email))
+      var account = AccountDataOld(id = AccountId(), pendingTeamName = Some(teamName), pendingEmail = Some(email))
       (storage.findByPendingTeamName _).expects(teamName).once().returning(Future.successful(Some(account)))
       val service = getAccountService
       service.createTeamAccount(teamName)
@@ -358,7 +359,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       val code = ConfirmationCode("123456")
       val email = EmailAddress("test@test.com")
 
-      var account = AccountData(id = AccountId(), pendingTeamName = Some(teamName), pendingEmail = Some(email))
+      var account = AccountDataOld(id = AccountId(), pendingTeamName = Some(teamName), pendingEmail = Some(email))
       (storage.findByPendingTeamName _).expects(teamName).once().returning(Future.successful(Some(account)))
       val service = getAccountService
       await(service.createTeamAccount(teamName))
@@ -379,7 +380,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       val pw    = "password"
       val name  = "account_name"
 
-      var account = AccountData(
+      var account = AccountDataOld(
         id              = AccountId(),
         pendingTeamName = Some(teamName),
         name            = Some(name),
@@ -429,7 +430,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       val pw    = "password"
       val name  = "account_name"
 
-      var account = AccountData(
+      var account = AccountDataOld(
         id              = AccountId(),
         pendingTeamName = Some(teamName),
         name            = Some(name),
@@ -470,11 +471,11 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
   scenario("Getting the active account should access the storage") {
     val accountId = AccountId()
 
-    prefs.setValue(GlobalPreferences.CurrentAccountPref, Some(accountId))
+    prefs.setValue(GlobalPreferences.CurrentAccountPrefOld, Some(accountId))
 
     val service = getAccountService
 
-    var account = AccountData(
+    var account = AccountDataOld(
       id              = accountId,
       pendingTeamName = Some("team_name"),
       name            = Some("account_name"),
@@ -499,9 +500,9 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     (globalModule.loginClient _).expects().anyNumberOfTimes.returning(loginClient)
     (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
     (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule) {
-      override def baseStorage(accountId: AccountId) = new StorageModule(null, accountId, "", prefs) {
+      override def baseStorage(userId: UserId) = new StorageModule(null, userId, "", prefs) {
         override lazy val userPrefs = returning(new TestUserPreferences) {
-          _.setValue(GlobalPreferences.CurrentAccountPref, Some(accountId))
+          _.setValue(GlobalPreferences.CurrentAccountPrefOld, Some(userId))
         }
       }
     })
@@ -510,12 +511,12 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
     (phoneNumbers.normalize _).expects(*).anyNumberOfTimes().onCall { p: PhoneNumber => Future.successful(Some(p)) }
 
-    (storage.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty[AccountData]))
+    (storage.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty[AccountDataOld]))
     (storage.updateAll2 _).expects(*, *).anyNumberOfTimes().returning(Future.successful(Seq()))
-    (storage.onChanged _).expects().anyNumberOfTimes().returning(new EventStream[Seq[AccountData]]())
+    (storage.onChanged _).expects().anyNumberOfTimes().returning(new EventStream[Seq[AccountDataOld]]())
     (storage.onDeleted _).expects().anyNumberOfTimes().returning(new EventStream[Seq[AccountId]]())
-    (storage.signal _).expects(*).anyNumberOfTimes().returning(Signal.empty[AccountData])
-    (storage.optSignal _).expects(*).anyNumberOfTimes().returning(Signal.empty[Option[AccountData]])
+    (storage.signal _).expects(*).anyNumberOfTimes().returning(Signal.empty[AccountDataOld])
+    (storage.optSignal _).expects(*).anyNumberOfTimes().returning(Signal.empty[Option[AccountDataOld]])
 
     new AccountsServiceImpl(globalModule)
   }

@@ -20,49 +20,60 @@ package com.waz.model
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials}
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
-import com.waz.model.AccountData.{PermissionsMasks, TriTeamId}
+import com.waz.model.AccountDataOld.{PermissionsMasks, TriTeamId}
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
 import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor, DBProgram}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
-import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.AuthenticationManager.{Cookie, AccessToken}
 import org.json.JSONObject
 
 import scala.collection.mutable
 
 /**
- * Represents a local user account.
- *
- * @param password - will not be stored in db
+  * Each AccountData row in the ZGlobal database represents one logged in user. To be logged in, they must have a cookie. Upon being forcefully
+  * logged out, this entry should just be removed.
+  *
+  * Any information that needs to be deregistered can be kept here (e.g., de-registered cookies, tokens, clients etc)
+  */
+case class AccountData(id:           UserId,
+                       cookie:       Cookie,
+                       accessToken:  Option[AccessToken] = None,
+                       pushToken:    Option[PushToken]   = None)
+
+
+
+
+/**
+ * This account data needs to be maintained for migration purposes - it can be deleted after a while (1 year?)
  */
-case class AccountData(id:              AccountId                       = AccountId(),
-                       teamId:          TriTeamId                       = Left({}),
-                       pendingTeamName: Option[String]                  = None,
-                       email:           Option[EmailAddress]            = None,
-                       phone:           Option[PhoneNumber]             = None,
-                       handle:          Option[Handle]                  = None,
-                       registeredPush:  Option[PushToken]               = None,
-                       pendingEmail:    Option[EmailAddress]            = None,
-                       pendingPhone:    Option[PhoneNumber]             = None,
-                       cookie:          Option[Cookie]                  = None,
-                       password:        Option[String]                  = None,
-                       accessToken:     Option[Token]                   = None,
-                       userId:          Option[UserId]                  = None,
-                       clientId:        Option[ClientId]                = None,
-                       clientRegState:  ClientRegistrationState         = ClientRegistrationState.UNKNOWN,
-                       privateMode:     Boolean                         = false,
-                       regWaiting:      Boolean                         = false,
-                       code:            Option[ConfirmationCode]        = None,
-                       name:            Option[String]                  = None,
-                       firstLogin:      Boolean                         = true,
-                       private val _selfPermissions: Long      = 0,
-                       private val _copyPermissions: Long      = 0
+case class AccountDataOld(id:              AccountId                       = AccountId(),
+                          teamId:          TriTeamId                       = Left({}),
+                          pendingTeamName: Option[String]                  = None,
+                          email:           Option[EmailAddress]            = None,
+                          phone:           Option[PhoneNumber]             = None,
+                          handle:          Option[Handle]                  = None,
+                          registeredPush:  Option[PushToken]               = None,
+                          pendingEmail:    Option[EmailAddress]            = None,
+                          pendingPhone:    Option[PhoneNumber]             = None,
+                          cookie:          Option[Cookie]                  = None,
+                          password:        Option[String]                  = None,
+                          accessToken:     Option[AccessToken]                   = None,
+                          userId:          Option[UserId]                  = None,
+                          clientId:        Option[ClientId]                = None, //DEPRECATED! use the client id (state) stored in userpreferences instead
+                          clientRegState:  String                          = "UNKNOWN", //DEPRECATED! use the client id (state) stored in userpreferences instead
+                          privateMode:     Boolean                         = false,
+                          regWaiting:      Boolean                         = false,
+                          code:            Option[ConfirmationCode]        = None,
+                          name:            Option[String]                  = None,
+                          firstLogin:      Boolean                         = true,
+                          private val _selfPermissions: Long      = 0,
+                          private val _copyPermissions: Long      = 0
                       ) {
 
   override def toString: String =
@@ -80,8 +91,6 @@ case class AccountData(id:              AccountId                       = Accoun
        | password:        In memory?: ${password.isDefined}
        | accessToken:     ${accessToken.take(6)}
        | userId:          $userId
-       | clientId:        $clientId
-       | clientRegState:  $clientRegState
        | privateMode:     $privateMode
        | regWaiting:      $regWaiting
        | code:            $code
@@ -92,8 +101,8 @@ case class AccountData(id:              AccountId                       = Accoun
     """.stripMargin
 
 
-  lazy val selfPermissions = AccountData.decodeBitmask(_selfPermissions)
-  lazy val copyPermissions = AccountData.decodeBitmask(_copyPermissions)
+  lazy val selfPermissions = AccountDataOld.decodeBitmask(_selfPermissions)
+  lazy val copyPermissions = AccountDataOld.decodeBitmask(_copyPermissions)
 
   /**
     * A pending phone that matches the current phone signifies the user is trying to login. In this case, they're account
@@ -155,13 +164,10 @@ case class AccountData(id:              AccountId                       = Accoun
 
   def autoLoginOnRegistration = phone.isDefined
 
-  def updated(user: UserInfo): AccountData =
+  def updated(user: UserInfo): AccountDataOld =
     copy(userId = Some(user.id), email = user.email.orElse(email), pendingEmail = email.fold(pendingEmail)(_ => Option.empty[EmailAddress]), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
 
-  def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
-    copy(userId = userId orElse this.userId, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
-
-  def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
+  def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountDataOld =
     copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
 
   def isTeamAccount: Boolean =
@@ -182,7 +188,7 @@ case class ConfirmationCode(str: String) extends AnyVal {
   override def toString: String = str
 }
 
-object AccountData {
+object AccountDataOld {
 
   //TODO Might be nice to have a TriOption type...
   //Left is undefined, Right(None) is no team, Right(Some()) is a team
@@ -190,15 +196,15 @@ object AccountData {
 
   type PermissionsMasks = (Long, Long) //self and copy permissions
 
-  def apply(credentials: Credentials): AccountData = {
+  def apply(credentials: Credentials): AccountDataOld = {
     val id = AccountId()
     val hash = credentials.maybePassword.map(computeHash(id, _)).getOrElse("")
-    new AccountData(id, Left({}), password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
+    new AccountDataOld(id, Left({}), password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
   }
 
-  def apply(email: EmailAddress, password: String): AccountData = {
+  def apply(email: EmailAddress, password: String): AccountDataOld = {
     val id = AccountId()
-    AccountData(id, Left({}), email = Some(email), password = Some(password), phone = None, handle = None)
+    AccountDataOld(id, Left({}), email = Some(email), password = Some(password), phone = None, handle = None)
   }
 
   type Permission = Permission.Value
@@ -245,7 +251,7 @@ object AccountData {
       }
     }
 
-  implicit object AccountDataDao extends Dao[AccountData, AccountId] {
+  implicit object AccountDataDao extends Dao[AccountDataOld, AccountId] {
     val Id = id[AccountId]('_id, "PRIMARY KEY").apply(_.id)
 
     val Team = Col[TriTeamId]("teamId", "TEXT")(new DbTranslator[TriTeamId] {
@@ -277,10 +283,10 @@ object AccountData {
     val PendingEmail = opt(emailAddress('pending_email))(_.pendingEmail)
     val PendingPhone = opt(phoneNumber('pending_phone))(_.pendingPhone)
     val Cookie = opt(text[Cookie]('cookie, _.str, AuthenticationManager.Cookie))(_.cookie)
-    val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))(_.accessToken)
+    val Token = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))(_.accessToken)
     val UserId = opt(id[UserId]('user_id)).apply(_.userId)
     val ClientId = opt(id[ClientId]('client_id))(_.clientId)
-    val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
+    val ClientRegState = text('reg_state)(_.clientRegState)
     val PrivateMode = bool('private_mode)(_.privateMode)
     val RegWaiting = bool('reg_waiting)(_.regWaiting)
     val Code = opt(text[ConfirmationCode]('code, _.str, ConfirmationCode))(_.code)
@@ -292,7 +298,7 @@ object AccountData {
     override val idCol = Id
     override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, PendingTeamName, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, FirstLogin, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, PendingTeamName, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, FirstLogin, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountDataOld = AccountDataOld(Id, Team, PendingTeamName, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, FirstLogin, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))

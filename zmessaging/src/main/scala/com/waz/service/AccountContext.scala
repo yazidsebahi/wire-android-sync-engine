@@ -18,19 +18,19 @@
 package com.waz.service
 
 import com.waz.ZLog.{LogTag, verbose}
-import com.waz.model.AccountId
+import com.waz.model.{AccountId, UserId}
 import com.waz.service.AccountsService.LoggedOut
 import com.waz.service.ZMessaging.accountTag
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.EventContext
 
-class AccountContext(accountId: AccountId, accounts: AccountsService) extends EventContext {
+class AccountContext(userId: UserId, accounts: AccountsService) extends EventContext {
 
-  implicit val logTag: LogTag = accountTag[AccountContext](accountId)
+  implicit val logTag: LogTag = accountTag[AccountContext](userId)
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "AccountContext")
 
-  accounts.accountState(accountId).on(dispatcher) {
+  accounts.accountState(userId).on(dispatcher) {
     case LoggedOut =>
       verbose("Account context stopped")
       onContextStop()

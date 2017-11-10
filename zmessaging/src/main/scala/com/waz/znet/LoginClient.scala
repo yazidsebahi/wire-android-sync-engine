@@ -21,7 +21,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl
-import com.waz.model.{AccountData, EmailAddress}
+import com.waz.model.{AccountDataOld, EmailAddress}
 import com.waz.service.BackendConfig
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.CancellableFuture.CancelException
@@ -37,8 +37,8 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 trait LoginClient {
-  def access(cookie: Cookie, token: Option[Token]): CancellableFuture[LoginResult]
-  def login(account: AccountData): CancellableFuture[LoginResult]
+  def access(cookie: Cookie, token: Option[AccessToken]): CancellableFuture[LoginResult]
+  def login(account: AccountDataOld): CancellableFuture[LoginResult]
   def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]
 }
 
@@ -59,9 +59,9 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
       math.max(nextRunTime - System.currentTimeMillis(), 0).millis
     }
 
-  override def login(account: AccountData) = throttled(loginNow(account))
+  override def login(account: AccountDataOld) = throttled(loginNow(account))
 
-  override def access(cookie: Cookie, token: Option[Token]) = throttled(accessNow(cookie, token))
+  override def access(cookie: Cookie, token: Option[AccessToken]) = throttled(accessNow(cookie, token))
 
   def throttled(request: => CancellableFuture[LoginResult]): CancellableFuture[LoginResult] = dispatcher {
     loginFuture = loginFuture.recover {
@@ -89,7 +89,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
     loginFuture
   }.flatten
 
-  def loginNow(account: AccountData) = {
+  def loginNow(account: AccountDataOld) = {
     debug(s"trying to login to account: ${account.id}")
     if (account.canLogin) {
       val request = Request.Post(LoginUriStr, loginRequestBody(account), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
@@ -99,7 +99,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
     }
   }
 
-  def accessNow(cookie: Cookie, token: Option[Token]) = {
+  def accessNow(cookie: Cookie, token: Option[AccessToken]) = {
     val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
     val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(backend.baseUrl), headers = headers, timeout = RegistrationClientImpl.timeout)
     client(request) map responseHandler
@@ -121,7 +121,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
   private val responseHandler: PartialFunction[Response, LoginResult] = {
     case Response(SuccessHttpStatus(), JsonObjectResponse(TokenResponse(token, exp, ttype)), responseHeaders) =>
       debug(s"receivedAccessToken: '$token', headers: $responseHeaders")
-      Right((Token(token, ttype, System.currentTimeMillis() + exp * 1000), getCookieFromHeaders(responseHeaders)))
+      Right((AccessToken(token, ttype, System.currentTimeMillis() + exp * 1000), getCookieFromHeaders(responseHeaders)))
     case r @ Response(status, ErrorResponse(code, msg, label), headers) =>
       warn(s"failed login attempt: $r")
       Left((headers(RequestId), ErrorResponse(code, msg, label)))
@@ -131,7 +131,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
 }
 
 object LoginClient {
-  type LoginResult = Either[(Option[String], ErrorResponse), (Token, Option[Cookie])]
+  type LoginResult = Either[(Option[String], ErrorResponse), (AccessToken, Option[Cookie])]
   type AccessToken = (String, Int, String)
 
   val InsufficientCredentials = "insufficient credentials"
@@ -149,7 +149,7 @@ object LoginClient {
 
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
 
-  def loginRequestBody(account: AccountData) = JsonContentEncoder(JsonEncoder(account.addToLoginJson))
+  def loginRequestBody(account: AccountDataOld) = JsonContentEncoder(JsonEncoder(account.addToLoginJson))
 
   def getCookieFromHeaders(headers: Response.Headers): Option[Cookie] = headers(SetCookie) flatMap {
     case header @ CookieHeader(cookie) =>

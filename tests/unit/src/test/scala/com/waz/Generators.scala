@@ -41,7 +41,7 @@ import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
 import com.waz.utils.sha2
 import com.waz.utils.wrappers.URI
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.znet.AuthenticationManager.AccessToken
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen._
 import org.scalacheck._
@@ -293,7 +293,7 @@ object Generators {
 
   lazy val serialCounter: AtomicLong = new AtomicLong()
 
-  implicit lazy val arbToken: Arbitrary[Token] = Arbitrary(resultOf(Token))
+  implicit lazy val arbToken: Arbitrary[AccessToken] = Arbitrary(resultOf(AccessToken))
 
   implicit lazy val arbEmailAddress: Arbitrary[EmailAddress] = Arbitrary(resultOf(EmailAddress))
   implicit lazy val arbPhoneNumber: Arbitrary[PhoneNumber] = Arbitrary(resultOf(PhoneNumber))

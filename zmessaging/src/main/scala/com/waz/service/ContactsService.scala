@@ -63,7 +63,7 @@ trait ContactsService {
 class ContactsServiceImpl(context:        Context,
                           accountId:      AccountId,
                           teamId:         Option[TeamId],
-                          accountStorage: AccountsStorage,
+                          accountStorage: AccountsStorageOld,
                           accounts:       AccountsService,
                           userPrefs:      UserPreferences,
                           users:          UserService,

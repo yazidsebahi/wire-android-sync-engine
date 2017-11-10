@@ -70,7 +70,8 @@ trait GlobalModule {
   def audioTranscoder:      AudioTranscoder
   def loaderService:        AssetLoaderService
   def cacheCleanup:         CacheCleaningService
-  def accountsStorage:      AccountsStorage
+  def accountsStorage:      AccountStorage
+  def accountsStorageOld:   AccountsStorageOld
   def teamsStorage:         TeamsStorage
   def recordingAndPlayback: GlobalRecordAndPlayService
   def tempFiles:            TempFileService
@@ -132,7 +133,8 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
 
   lazy val cacheCleanup                                          = wire[CacheCleaningService]
 
-  lazy val accountsStorage:     AccountsStorage                  = wire[AccountsStorageImpl]
+  lazy val accountsStorage:     AccountStorage                   = wire[AccountStorageImpl]
+  lazy val accountsStorageOld:  AccountsStorageOld               = wire[AccountsStorageOldImpl]
   lazy val teamsStorage:        TeamsStorage                     = wire[TeamsStorageImpl]
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
 

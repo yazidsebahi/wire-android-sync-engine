@@ -21,7 +21,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.ContentChange.{Added, Removed, Updated}
 import com.waz.content._
-import com.waz.model.AccountData.PermissionsMasks
+import com.waz.model.AccountDataOld.PermissionsMasks
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model._
 import com.waz.service.EventScheduler.Stage
@@ -55,7 +55,7 @@ class TeamsServiceImpl(selfUser:           UserId,
                        selfAccount:        AccountId,
                        teamId:             Option[TeamId],
                        teamStorage:        TeamsStorage,
-                       accStorage:         AccountsStorage,
+                       accStorage:         AccountsStorageOld,
                        userStorage:        UsersStorage,
                        convsStorage:       ConversationStorage,
                        convMemberStorage:  MembersStorage,

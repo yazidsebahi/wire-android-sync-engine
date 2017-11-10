@@ -21,7 +21,7 @@ import java.io.IOException
 
 import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.PushEnabledKey
-import com.waz.content.{AccountsStorage, GlobalPreferences}
+import com.waz.content.{AccountsStorageOld, GlobalPreferences}
 import com.waz.model._
 import com.waz.service.AccountsService.{InBackground, InForeground}
 import com.waz.service.{BackendConfig, NetworkModeService, UiLifeCycle}
@@ -40,7 +40,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
 
   val google         = mock[GoogleApi]
   val lifecycle      = mock[UiLifeCycle]
-  val accStorage     = mock[AccountsStorage]
+  val accStorage     = mock[AccountsStorageOld]
   val networkService = mock[NetworkModeService]
   val prefs          = new TestGlobalPreferences()
 
@@ -53,14 +53,14 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
   await(resetToken := false)
 
   val googlePlayAvailable = Signal(false)
-  val accountSignal       = Signal[AccountData]()
+  val accountSignal       = Signal[AccountDataOld]()
 
-  val loggedInAccounts    = Signal(Set.empty[AccountData])
+  val loggedInAccounts    = Signal(Set.empty[AccountDataOld])
 
   val networkMode         = Signal(NetworkMode.WIFI)
 
-  def accountData(accountId: AccountId, token: Option[PushToken]): AccountData = AccountData(accountId, registeredPush = token)
-  def accountData(accountId: AccountId, token: PushToken): AccountData = accountData(accountId, Some(token))
+  def accountData(accountId: AccountId, token: Option[PushToken]): AccountDataOld = AccountDataOld(accountId, registeredPush = token)
+  def accountData(accountId: AccountId, token: PushToken): AccountDataOld = accountData(accountId, Some(token))
 
   feature("Token generation") {
     scenario("Fetches token on init if GCM available") {
@@ -236,7 +236,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
         * So lets make sure we only register the account assigned to our instance. Logging in then with another account
         * shouldn't change the state of this instance.
         */
-      loggedInAccounts ! Set(AccountData())
+      loggedInAccounts ! Set(AccountDataOld())
 
       awaitAllTasks
       result(service.pushActive.filter(_ == false).head)
@@ -392,7 +392,7 @@ class PushTokenServiceSpec extends AndroidFreeSpec {
       Future.successful {
         val account = loggedInAccounts.currentValue("").flatMap(_.find(_.id == id))
 
-        returning(account.fold(Option.empty[(AccountData, AccountData)])(p => Some((p, f(p))))) {
+        returning(account.fold(Option.empty[(AccountDataOld, AccountDataOld)])(p => Some((p, f(p))))) {
           case Some((_, updated)) => loggedInAccounts.mutate { accs =>
             val removed = accs - accs.find(_.id == updated.id).get
             val res = removed + updated

@@ -18,13 +18,13 @@
 package com.waz.znet
 
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.AccountsStorage
-import com.waz.model.{AccountData, AccountId, EmailAddress}
+import com.waz.content.AccountsStorageOld
+import com.waz.model.{AccountDataOld, AccountId, EmailAddress}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.EventContext
 import com.waz.utils.returning
-import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.AuthenticationManager.{Cookie, AccessToken}
 import com.waz.znet.LoginClient.InsufficientCredentials
 import com.waz.znet.Response.{HttpStatus, Status}
 
@@ -34,14 +34,14 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
   val loginClient = mock[LoginClient]
   val accId       = AccountId()
-  val accStorage  = mock[AccountsStorage]
+  val accStorage  = mock[AccountsStorageOld]
 
   feature("Successful logins") {
     scenario("Return authentication token if valid") {
 
-      val token = Token("token", "token", System.currentTimeMillis() + AuthenticationManager.ExpireThreshold + 1000)
+      val token = AccessToken("token", "token", System.currentTimeMillis() + AuthenticationManager.ExpireThreshold + 1000)
 
-      val account = AccountData(accId,
+      val account = AccountDataOld(accId,
         email       = Some(EmailAddress("blah@blah.com")),
         password    = Some("password"),
         accessToken = Some(token)
@@ -57,10 +57,10 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
       val cookie = Cookie("cookie")
 
-      val oldToken = Token("token", "token", System.currentTimeMillis())
-      val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
+      val oldToken = AccessToken("token", "token", System.currentTimeMillis())
+      val newToken = AccessToken("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
-      val oldAccount = AccountData(accId,
+      val oldAccount = AccountDataOld(accId,
         email       = Some(EmailAddress("blah@blah.com")),
         password    = Some("password"),
         accessToken = Some(oldToken),
@@ -87,12 +87,12 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       val oldCookie = Cookie("oldCookie")
       val newCookie = Cookie("newCookie")
 
-      val oldToken = Token("token", "token", System.currentTimeMillis())
-      val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
+      val oldToken = AccessToken("token", "token", System.currentTimeMillis())
+      val newToken = AccessToken("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
       val updateDispatcher = new SerialDispatchQueue()
 
-      var account = AccountData(accId,
+      var account = AccountDataOld(accId,
         email       = Some(EmailAddress("blah@blah.com")),
         password    = Some("password"),
         accessToken = Some(oldToken),
@@ -120,12 +120,12 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
     scenario("Multiple calls to access should only trigger at most one request") {
       val cookie = Cookie("cookie")
 
-      val oldToken = Token("token", "token", System.currentTimeMillis())
-      val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
+      val oldToken = AccessToken("token", "token", System.currentTimeMillis())
+      val newToken = AccessToken("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
       val updateDispatcher = new SerialDispatchQueue()
 
-      var account = AccountData(accId,
+      var account = AccountDataOld(accId,
         email       = Some(EmailAddress("blah@blah.com")),
         password    = Some("password"),
         accessToken = Some(oldToken),
@@ -157,11 +157,11 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
       val cookie = Cookie("cookie")
 
-      val oldToken = Token("token", "token", System.currentTimeMillis())
+      val oldToken = AccessToken("token", "token", System.currentTimeMillis())
 
       val updateDispatcher = new SerialDispatchQueue()
 
-      var account = AccountData(accId,
+      var account = AccountDataOld(accId,
         email       = Some(EmailAddress("blah@blah.com")),
         password    = None,
         accessToken = Some(oldToken),
@@ -196,12 +196,12 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
       val cookie = Cookie("cookie")
 
-      val oldToken = Token("token", "token", System.currentTimeMillis())
-      val newToken = Token("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
+      val oldToken = AccessToken("token", "token", System.currentTimeMillis())
+      val newToken = AccessToken("newToken", "token", System.currentTimeMillis() + 15 * 60 * 1000L)
 
       val updateDispatcher = new SerialDispatchQueue()
 
-      var account = AccountData(accId,
+      var account = AccountDataOld(accId,
         email       = Some(EmailAddress("blah@blah.com")),
         password    = None,
         accessToken = Some(oldToken),

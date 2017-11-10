@@ -21,13 +21,14 @@ import android.content.Context
 import android.location.Geocoder
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.ClientRegistrationState._
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.{ClientRegistrationState, Verification, ZmsVersion}
+import com.waz.api.{Verification, ZmsVersion}
 import com.waz.content.UserPreferences.ClientRegVersion
 import com.waz.content.{OtrClientsStorage, UserPreferences}
 import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
 import com.waz.model.{AccountId, UserId}
+import com.waz.service.AccountManager.ClientRegistrationState
+import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, PasswordMissing, Registered}
 import com.waz.service.otr._
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient
@@ -41,7 +42,7 @@ import scala.concurrent.Future
 
 trait OtrClientsSyncHandler {
   def syncSelfClients(): Future[SyncResult]
-  def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]]
+  def registerClient(password: Option[String]): Future[Either[ErrorResponse, ClientRegistrationState]]
   def syncClients(user: UserId): Future[SyncResult]
   def postLabel(id: ClientId, label: String): Future[SyncResult]
   def syncPreKeys(clients: Map[UserId, Seq[ClientId]]): Future[SyncResult]
@@ -73,7 +74,7 @@ class OtrClientsSyncHandlerImpl(context: Context,
   // this can be used to detect problematic version updates
   private lazy val clientRegVersion = userPrefs.preference(ClientRegVersion)
 
-  def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]] = Serialized.future("sync-self-clients", this) {
+  def registerClient(password: Option[String]): Future[Either[ErrorResponse, ClientRegistrationState]] = Serialized.future("sync-self-clients", this) {
     cryptoBox.createClient() flatMap {
       case None => Future successful Left(ErrorResponse.internalError("CryptoBox missing"))
       case Some((c, lastKey, keys)) =>
@@ -82,13 +83,13 @@ class OtrClientsSyncHandlerImpl(context: Context,
             for {
               _ <- clientRegVersion := ZmsVersion.ZMS_MAJOR_VERSION
               _ <- otrClients.updateUserClients(userId, Seq(c.copy(id = cl.id).updated(cl)))
-            } yield Right((REGISTERED, Some(cl)))
+            } yield Right(Registered(cl.id))
           case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
             warn(s"client registration not allowed: $error, password missing")
-            Future successful Right((PASSWORD_MISSING, None))
+            Future successful Right(PasswordMissing)
           case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
             warn(s"client registration not allowed: $error")
-            Future successful Right((LIMIT_REACHED, None))
+            Future successful Right(LimitReached)
           case Left(error) =>
             Future.successful(Left(error))
         }

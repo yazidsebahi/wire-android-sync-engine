@@ -20,14 +20,14 @@ package com.waz.znet
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.AccountsStorage
-import com.waz.model.{AccountData, AccountId}
+import com.waz.content.AccountsStorageOld
+import com.waz.model.{AccountDataOld, AccountId}
 import com.waz.service.ZMessaging.accountTag
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder}
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.LoginClient.{InsufficientCredentials, LoginResult}
 import com.waz.znet.Response._
 import org.json.JSONObject
@@ -36,15 +36,15 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 
 trait AccessTokenProvider {
-  def currentToken(): Future[Either[Status, Token]]
-  def checkLoggedIn(token: Option[Token]): CancellableFuture[Either[Status, Token]]
+  def currentToken(): Future[Either[Status, AccessToken]]
+  def checkLoggedIn(token: Option[AccessToken]): CancellableFuture[Either[Status, AccessToken]]
 }
 
 /**
  * Manages authentication token, and dispatches login requests when needed.
  * Will retry login request if unsuccessful.
  */
-class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: LoginClient, tracking: TrackingService) extends AccessTokenProvider {
+class AuthenticationManager(id: AccountId, accStorage: AccountsStorageOld, client: LoginClient, tracking: TrackingService) extends AccessTokenProvider {
 
   lazy implicit val logTag: LogTag = accountTag[AuthenticationManager](id)
 
@@ -61,13 +61,13 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
 
   private def account = withAccount(identity)
 
-  private def withAccount[A](f: (AccountData) => A): Future[A] = accStorage.get(id).map {
+  private def withAccount[A](f: (AccountDataOld) => A): Future[A] = accStorage.get(id).map {
     case Some(acc) => f(acc)
     case _         => throw new IllegalStateException(s"Could not find matching account for: $id")
   }
 
   //Only performs safe update - never wipes either the cookie or the token.
-  private def updateCredentials(token: Option[Token] = None, cookie: Option[Cookie] = None) =
+  private def updateCredentials(token: Option[AccessToken] = None, cookie: Option[Cookie] = None) =
     accStorage.update(id, acc => acc.copy(accessToken = if (token.isDefined) token else acc.accessToken, cookie = if (cookie.isDefined) cookie else acc.cookie))
 
 
@@ -77,11 +77,11 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
   /**
    * Last login request result. Used to make sure we never send several concurrent login requests.
    */
-  private var loginFuture: CancellableFuture[Either[Status, Token]] = CancellableFuture.lift(token.map { _.fold[Either[Status, Token]](Left(Cancelled))(Right(_)) })
+  private var loginFuture: CancellableFuture[Either[Status, AccessToken]] = CancellableFuture.lift(token.map { _.fold[Either[Status, AccessToken]](Left(Cancelled))(Right(_)) })
 
   def invalidateToken() = token.map(_.foreach(t => updateCredentials(Some(t.copy(expiresAt = 0)))))
 
-  def isExpired(token: Token) = token.expiresAt - ExpireThreshold < System.currentTimeMillis()
+  def isExpired(token: AccessToken) = token.expiresAt - ExpireThreshold < System.currentTimeMillis()
 
   def close() = dispatcher {
     closed = true
@@ -110,7 +110,7 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
   /**
     * Forces an access request to check if the current cookie is valid. Can be used to see if a password reset was successful
     */
-  override def checkLoggedIn(token: Option[Token]) =
+  override def checkLoggedIn(token: Option[AccessToken]) =
     CancellableFuture.lift(cookie).flatMap { cookie =>
       debug(s"Non existent or potentially expired token: $token, will attempt to refresh with cookie: $cookie")
       cookie match {
@@ -129,7 +129,7 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
       }
     }
 
-  private def dispatchLoginRequest(): CancellableFuture[Either[Status, Token]] =
+  private def dispatchLoginRequest(): CancellableFuture[Either[Status, AccessToken]] =
     CancellableFuture.lift(account).flatMap { acc =>
       dispatchRequest(client.login(acc)) {
         case Left((_, resp)) if resp.code == Status.Forbidden || resp.message == InsufficientCredentials =>
@@ -139,7 +139,7 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
       }
     }
 
-  private def dispatchRequest(request: => CancellableFuture[LoginResult], retryCount: Int = 0)(handler: ResponseHandler): CancellableFuture[Either[Status, Token]] =
+  private def dispatchRequest(request: => CancellableFuture[LoginResult], retryCount: Int = 0)(handler: ResponseHandler): CancellableFuture[Either[Status, AccessToken]] =
     request flatMap handler.orElse {
       case Right((token, cookie)) =>
         debug(s"receivedAccessToken: '$token'")
@@ -168,7 +168,7 @@ object AuthenticationManager {
   val MaxRetryCount = 3
   val ExpireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
 
-  type ResponseHandler = PartialFunction[LoginResult, CancellableFuture[Either[Status, Token]]]
+  type ResponseHandler = PartialFunction[LoginResult, CancellableFuture[Either[Status, AccessToken]]]
 
   case class Cookie(str: String) {
 
@@ -182,29 +182,29 @@ object AuthenticationManager {
     override def toString = s"${str.take(10)}, exp: $expiry, isValid: $isValid"
   }
 
-  case class Token(accessToken: String, tokenType: String, expiresAt: Long = 0) {
-    val headers = Map(Token.AuthorizationHeader -> s"$tokenType $accessToken")
-    def prepare(req: AsyncHttpRequest) = req.addHeader(Token.AuthorizationHeader, s"$tokenType $accessToken")
+  case class AccessToken(accessToken: String, tokenType: String, expiresAt: Long = 0) {
+    val headers = Map(AccessToken.AuthorizationHeader -> s"$tokenType $accessToken")
+    def prepare(req: AsyncHttpRequest) = req.addHeader(AccessToken.AuthorizationHeader, s"$tokenType $accessToken")
 
     def isValid = expiresAt > System.currentTimeMillis()
 
     override def toString = s"${accessToken.take(10)}, exp: $expiresAt, isValid: $isValid"
   }
 
-  object Token extends ((String, String, Long) => Token ){
+  object AccessToken extends ((String, String, Long) => AccessToken ){
     val AuthorizationHeader = "Authorization"
 
-    implicit lazy val Encoder: JsonEncoder[Token] = new JsonEncoder[Token] {
-      override def apply(v: Token): JSONObject = JsonEncoder { o =>
+    implicit lazy val Encoder: JsonEncoder[AccessToken] = new JsonEncoder[AccessToken] {
+      override def apply(v: AccessToken): JSONObject = JsonEncoder { o =>
         o.put("token", v.accessToken)
         o.put("type", v.tokenType)
         o.put("expires", v.expiresAt)
       }
     }
 
-    implicit lazy val Decoder: JsonDecoder[Token] = new JsonDecoder[Token] {
+    implicit lazy val Decoder: JsonDecoder[AccessToken] = new JsonDecoder[AccessToken] {
       import JsonDecoder._
-      override def apply(implicit js: JSONObject): Token = Token('token, 'type, 'expires)
+      override def apply(implicit js: JSONObject): AccessToken = AccessToken('token, 'type, 'expires)
     }
   }
 }

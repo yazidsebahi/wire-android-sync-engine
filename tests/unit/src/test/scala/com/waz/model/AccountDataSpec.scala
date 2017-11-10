@@ -29,7 +29,7 @@ class AccountDataSpec extends AndroidFreeSpec {
 
   feature("JSON credentials") {
     scenario("Login credentials should use email if both email and password are present") {
-      val account = AccountData(email = Some(email), password = Some(password))
+      val account = AccountDataOld(email = Some(email), password = Some(password))
       val json = JsonEncoder(account.addToLoginJson)
 
       json.get("email").shouldBe(email.str)
@@ -37,7 +37,7 @@ class AccountDataSpec extends AndroidFreeSpec {
     }
 
     scenario("Login credentials should use phone if phone and code are present") {
-      val account = AccountData(phone = Some(phone), code = Some(code))
+      val account = AccountDataOld(phone = Some(phone), code = Some(code))
       val json = JsonEncoder(account.addToLoginJson)
 
       json.get("phone").shouldBe(phone.str)
@@ -45,7 +45,7 @@ class AccountDataSpec extends AndroidFreeSpec {
     }
 
     scenario("When all is present, email takes precedence") {
-      val account = AccountData(email = Some(email), password = Some(password), phone = Some(phone), code = Some(code))
+      val account = AccountDataOld(email = Some(email), password = Some(password), phone = Some(phone), code = Some(code))
       val json = JsonEncoder(account.addToLoginJson)
 
       json.get("email").shouldBe(email.str)
@@ -53,7 +53,7 @@ class AccountDataSpec extends AndroidFreeSpec {
     }
 
     scenario("Email with no password isn't used") {
-      val account = AccountData(email = Some(email), phone = Some(phone), code = Some(code))
+      val account = AccountDataOld(email = Some(email), phone = Some(phone), code = Some(code))
       val json = JsonEncoder(account.addToLoginJson)
 
       json.get("phone").shouldBe(phone.str)

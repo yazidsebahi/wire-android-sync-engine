@@ -91,7 +91,7 @@ class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
   def markAsDisplayed(accountId: AccountId, nots: Seq[NotId]): Future[Any] = {
     Option(ZMessaging.currentAccounts) match {
       case Some(accountsService) =>
-        accountsService.getZMessaging(accountId).flatMap {
+        accountsService.getZms(accountId).flatMap {
           case Some(zms) => zms.notifications.markAsDisplayed(nots)
           case None      => Future.successful({})
         }

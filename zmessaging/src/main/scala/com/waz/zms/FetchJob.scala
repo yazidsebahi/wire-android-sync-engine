@@ -43,7 +43,7 @@ class FetchJob extends Job {
     verbose(s"onStartJob, account: $account")
     def syncAccount(accountId: AccountId): Future[Unit] =
       for {
-        Some(zms) <- ZMessaging.accountsService.flatMap(_.getZMessaging(accountId))
+        Some(zms) <- ZMessaging.accountsService.flatMap(_.getZms(accountId))
         _ <- zms.push.syncHistory("fetch job", withRetries = false)
       } yield {}
 

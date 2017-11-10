@@ -55,9 +55,9 @@ class ZMessagingFactory(global: GlobalModule) {
 
   implicit val tracking = global.trackingService
 
-  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
+  def baseStorage(userId: UserId) = new StorageModule(global.context, userId, "", global.prefs)
 
-  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient, tracking)
+  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorageOld, global.loginClient, tracking)
 
   def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
@@ -67,15 +67,15 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
 
-  def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.userPrefs)
+  def cryptobox(userId: UserId, storage: StorageModule) = new CryptoBoxService(global.context, userId, global.metadata, storage.userPrefs)
 
   def userModule(userId: UserId, account: AccountManager) = wire[UserModule]
 
-  def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
+  def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule, storage: StorageModule, cryptoBox: CryptoBoxService) = wire[ZMessaging]
 }
 
-class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
-  lazy val db                                         = new ZmsDatabase(accountId, context, dbPrefix)
+class StorageModule(context: Context, val userId: UserId, dbPrefix: String, globalPreferences: GlobalPreferences) {
+  lazy val db                                         = new ZmsDatabase(userId, context, dbPrefix)
   lazy val userPrefs                                  = UserPreferences.apply(context, db, globalPreferences)
   lazy val usersStorage:      UsersStorage        = wire[UsersStorageImpl]
   lazy val otrClientsStorage: OtrClientsStorage       = wire[OtrClientsStorageImpl]
@@ -90,24 +90,21 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, gl
 }
 
 
-class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userModule: UserModule) {
+class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userModule: UserModule, val storage: StorageModule, val cryptoBox: CryptoBoxService) {
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
 
   val account    = userModule.account
   val global     = account.global
-  val selfUserId = userModule.userId
+  val selfUserId = account.id
 
-  val accountId  = account.id
   val auth       = account.auth
   val zNetClient = account.netClient
-  val storage    = account.storage
   val lifecycle  = global.lifecycle
 
   lazy val accounts             = ZMessaging.currentAccounts
   implicit lazy val evContext   = userModule.accountContext
-  lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync
   lazy val syncHandler          = userModule.syncHandler
   lazy val otrClientsService    = userModule.clientsService
@@ -132,7 +129,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def network           = global.network
   def blacklist         = global.blacklist
   def backend           = global.backend
-  def accountsStorage   = global.accountsStorage
+  def accountsStorage   = global.accountsStorageOld
   def teamsStorage      = global.teamsStorage
   def videoTranscoder   = global.videoTranscoder
   def audioTranscader   = global.audioTranscoder
@@ -316,7 +313,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
 object ZMessaging { self =>
 
-  def accountTag[A: reflect.Manifest](accountId: AccountId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${accountId.str.take(8)}"
+  def accountTag[A: reflect.Manifest](userId: UserId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${userId.str.take(8)}"
 
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
 

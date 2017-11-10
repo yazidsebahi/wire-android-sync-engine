@@ -22,8 +22,8 @@ import java.io.IOException
 import com.waz.ZLog
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
-import com.waz.content.GlobalPreferences.{CurrentAccountPref, PushEnabledKey}
-import com.waz.content.{AccountsStorage, GlobalPreferences}
+import com.waz.content.GlobalPreferences.{CurrentAccountPrefOld, PushEnabledKey}
+import com.waz.content.{AccountsStorageOld, GlobalPreferences}
 import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
 import com.waz.service.AccountsService.{Active, InForeground}
 import com.waz.service.ZMessaging.accountTag
@@ -47,7 +47,7 @@ class PushTokenService(googleApi:    GoogleApi,
                        prefs:        GlobalPreferences,
                        accountId:    AccountId,
                        accounts:     AccountsService,
-                       accStorage:   AccountsStorage,
+                       accStorage:   AccountsStorageOld,
                        sync:         SyncServiceHandle)(implicit accountContext: AccountContext) {
 
   implicit lazy val logTag: LogTag = accountTag[PushTokenService](accountId)
@@ -55,7 +55,7 @@ class PushTokenService(googleApi:    GoogleApi,
   implicit val dispatcher = globalToken.dispatcher
 
   val pushEnabled    = prefs.preference(PushEnabledKey)
-  val currentAccount = prefs.preference(CurrentAccountPref)
+  val currentAccount = prefs.preference(CurrentAccountPrefOld)
   val currentToken   = globalToken.currentToken
 
   private val account = accStorage.signal(accountId)
