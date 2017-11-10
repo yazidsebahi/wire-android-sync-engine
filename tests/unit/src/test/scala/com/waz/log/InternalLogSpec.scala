@@ -164,7 +164,6 @@ class InternalLogSpec extends AndroidFreeSpec {
   feature("connecting with ZLog") {
 
     scenario("receives logs written to ZLog") {
-      ZmsVersion.DEBUG shouldEqual(true)
       val log = new BufferedLogOutput(tempDir)
       InternalLog.add(log)
       log.empty shouldEqual(true)
