@@ -17,15 +17,18 @@
  */
 package com.waz.service
 
+import java.io.File
+
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Invitations._
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.impl._
-import com.waz.api.{ClientRegistrationState, KindOfAccess, KindOfVerification}
+import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
-import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
+import com.waz.content.GlobalPreferences.{CurrentAccountPref, DatabasesRenamed, FirstTimeWithTeams}
+import com.waz.content.UserPreferences
 import com.waz.model._
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -80,18 +83,79 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  private val firstTimePref = prefs.preference(FirstTimeWithTeams)
+  private val firstTimeWithTeamsPref = prefs.preference(FirstTimeWithTeams)
+  private val databasesRenamedPref = prefs.preference(DatabasesRenamed)
+
+  private val migrationDone = for {
+    first   <- firstTimeWithTeamsPref.signal
+    renamed <- databasesRenamedPref.signal
+  } yield !first && renamed
 
   val activeAccountPref = prefs.preference(CurrentAccountPref)
 
-  val loggedInAccounts = firstTimePref.signal.flatMap {
+  //TODO can be removed after a (very long) while
+  private val migration = databasesRenamedPref().flatMap {
+    case true => Future.successful({}) //databases have been renamed - nothing to do.
     case false =>
+      for {
+        accs <- storage.list()
+        _ = accs.foreach { acc =>
+          acc.userId.foreach { userId =>
+            //migrate the databases
+            verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
+
+            val dbFileOld = context.getDatabasePath(acc.id.str)
+
+            val exts = Seq("", "-wal", "-shm", "-journal")
+
+            val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
+
+            val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
+              f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
+            }.forall(identity)
+
+            //migrate cryptobox dirs
+            val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
+            val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
+            val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
+
+            verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
+          }
+        }
+        //copy the client ids
+        _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
+          import com.waz.service.AccountManager.ClientRegistrationState._
+          val state = (acc.clientId, acc.clientRegState) match {
+            case (Some(id), _)           => Registered(id)
+            case (_, "UNKNOWN")          => Unregistered
+            case (_, "PASSWORD_MISSING") => PasswordMissing
+            case (_, "LIMIT_REACHED")    => LimitReached
+            case _                       =>
+              error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
+              Unregistered
+          }
+
+          global.factory.baseStorage(acc.userId.get).userPrefs.preference(UserPreferences.SelfClient) := state
+        })
+        //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
+        _ <- firstTimeWithTeamsPref().flatMap {
+          case false => Future.successful(accs.collect { case acc if acc.cookie.isEmpty => acc.id })
+          case true => activeAccountPref().map(cur => accs.map(_.id).filterNot(cur.contains))
+        }.flatMap(storage.removeAll)
+        //migration done! set the prefs so it doesn't happen again
+        _ <- firstTimeWithTeamsPref := false
+        _ <- databasesRenamedPref   := true
+      } yield {}
+  }
+
+  val loggedInAccounts = migrationDone.flatMap {
+    case true =>
       val changes = EventStream.union(
         storage.onChanged.map(_.map(_.id)),
         storage.onDeleted
       ).map(_.toSet)
       new RefreshingSignal[Set[AccountData], Set[AccountId]](CancellableFuture.lift(storage.findLoggedIn().map(_.toSet)), changes)
-    case true => Signal.const(Set.empty[AccountData])
+    case false => Signal.const(Set.empty[AccountData])
   }
 
   val zmsInstances = (for {
@@ -150,7 +214,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None      => Future successful None
   }
 
-  private[service] def getOrCreateAccountManager(accountId: AccountId) = flushOtherCredentials.map { _ =>
+  private[service] def getOrCreateAccountManager(accountId: AccountId) = migration.map { _ =>
     verbose(s"getOrCreateAccountManager: $accountId")
     accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
   }
@@ -172,11 +236,13 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   def logout(account: AccountId, flushCredentials: Boolean) = {
-    activeAccountPref() flatMap { id =>
+    getActiveAccountManager.flatMap { accManager =>
+      val id = accManager.map(_.id)
         for {
-          otherAccounts <- loggedInAccounts.map(_.filter(acc => !id.contains(acc.id) && acc.clientRegState == ClientRegistrationState.REGISTERED).map(_.id)).head
+          client <- accManager.fold2(Future.successful(None), _.clientId.head)
+          otherAccounts <- loggedInAccounts.map(_.filter(acc => !id.contains(acc.id) && client.isDefined).map(_.id)).head
           _ <- if (id.contains(account)) setAccount(if (flushCredentials) otherAccounts.headOption else None) else Future.successful(())
-          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None)) else Future.successful({})
+          _ <- if (flushCredentials) storage.remove(account) else Future.successful({})
         } yield {}
     }
   }
@@ -184,7 +250,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   def removeCurrentAccount(): Future[Unit] = activeAccountManager.head flatMap {
     case Some(account) =>
       for {
-        _ <- storage.update(account.id, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None, clientRegState = ClientRegistrationState.UNKNOWN, code = None))
+        _ <- storage.remove(account.id)
         _ <- setAccount(None)
       } yield {}
     case None =>
@@ -229,24 +295,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     CancellableFuture.lift(phoneNumbers.normalize(phone.phone)) flatMap { normalizedPhone =>
       regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification)
     }
-
-  //TODO can be removed after a while
-  private val flushOtherCredentials = {
-    firstTimePref().flatMap {
-      case false => Future.successful({})
-      case true  =>
-        for {
-          cur <- activeAccountPref()
-          accs <- storage.list()
-          _ <- {
-            val withoutCurrent = accs.map(_.id).filterNot(cur.contains)
-            verbose(s"Flushing accounts: curr: $cur, others: $withoutCurrent")
-            storage.updateAll2(withoutCurrent, _.copy(cookie = None, accessToken = None, password = None, registeredPush = None))
-          }
-          _ <- firstTimePref.update(false)
-        } yield {}
-    }
-  }
 
   def loginPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
 

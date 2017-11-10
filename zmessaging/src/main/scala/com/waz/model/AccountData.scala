@@ -20,7 +20,6 @@ package com.waz.model
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.ClientRegistrationState
 import com.waz.api.impl.{Credentials, EmailCredentials}
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
@@ -54,8 +53,8 @@ case class AccountData(id:              AccountId                       = Accoun
                        password:        Option[String]                  = None,
                        accessToken:     Option[Token]                   = None,
                        userId:          Option[UserId]                  = None,
-                       clientId:        Option[ClientId]                = None,
-                       clientRegState:  ClientRegistrationState         = ClientRegistrationState.UNKNOWN,
+                       clientId:        Option[ClientId]                = None, //DEPRECATED! use the client id (state) stored in userpreferences instead
+                       clientRegState:  String                          = "UNKNOWN", //DEPRECATED! use the client id (state) stored in userpreferences instead
                        privateMode:     Boolean                         = false,
                        regWaiting:      Boolean                         = false,
                        code:            Option[ConfirmationCode]        = None,
@@ -81,8 +80,6 @@ case class AccountData(id:              AccountId                       = Accoun
        | password:        In memory?: ${password.isDefined}
        | accessToken:     ${accessToken.take(6)}
        | userId:          $userId
-       | clientId:        $clientId
-       | clientRegState:  $clientRegState
        | privateMode:     $privateMode
        | regWaiting:      $regWaiting
        | code:            $code
@@ -160,9 +157,6 @@ case class AccountData(id:              AccountId                       = Accoun
 
   def updated(user: UserInfo): AccountData =
     copy(userId = Some(user.id), email = user.email.orElse(email), pendingEmail = email.fold(pendingEmail)(_ => Option.empty[EmailAddress]), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
-
-  def updated(userId: Option[UserId], activated: Boolean, clientId: Option[ClientId], clientRegState: ClientRegistrationState): AccountData =
-    copy(userId = userId orElse this.userId, clientId = clientId orElse this.clientId, clientRegState = clientRegState)
 
   def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
     copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
@@ -283,7 +277,7 @@ object AccountData {
     val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))(_.accessToken)
     val UserId = opt(id[UserId]('user_id)).apply(_.userId)
     val ClientId = opt(id[ClientId]('client_id))(_.clientId)
-    val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)(_.clientRegState)
+    val ClientRegState = text('reg_state)(_.clientRegState)
     val PrivateMode = bool('private_mode)(_.privateMode)
     val RegWaiting = bool('reg_waiting)(_.regWaiting)
     val Code = opt(text[ConfirmationCode]('code, _.str, ConfirmationCode))(_.code)

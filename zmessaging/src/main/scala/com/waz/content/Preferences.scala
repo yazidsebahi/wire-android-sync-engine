@@ -25,6 +25,8 @@ import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
+import com.waz.model.otr.ClientId
+import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -114,6 +116,19 @@ object Preferences {
 
       //TODO use an enumcodec somehow
       implicit lazy val IntensityLevelCodec = apply[IntensityLevel](_.toString, IntensityLevel.valueOf, IntensityLevel.FULL)
+
+      import com.waz.service.AccountManager.ClientRegistrationState._
+      implicit lazy val SelfClientIdCodec = apply[ClientRegistrationState] ({
+        case Unregistered    => "Unregistered"
+        case PasswordMissing => "PasswordMissing"
+        case LimitReached    => "LimitReached"
+        case Registered(id)  => id.str
+      }, {
+        case "Unregistered"    => Unregistered
+        case "PasswordMissing" => PasswordMissing
+        case "LimitReached"    => LimitReached
+        case id                => Registered(ClientId(id))
+      }, Unregistered)
     }
   }
 
@@ -309,6 +324,7 @@ object GlobalPreferences {
 
   lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
+  lazy val DatabasesRenamed   = PrefKey[Boolean]("databases_renamed", customDefault = false)
 
   lazy val BackendDrift       = PrefKey[Duration]("backend_drift")
 
@@ -343,6 +359,8 @@ object UserPreferences {
 
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
+
+  lazy val SelfClient               = PrefKey[ClientRegistrationState]("self_client")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
