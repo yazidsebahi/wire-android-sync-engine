@@ -95,7 +95,12 @@ case class AccountData(id:              AccountId                       = Accoun
   lazy val selfPermissions = AccountData.decodeBitmask(_selfPermissions)
   lazy val copyPermissions = AccountData.decodeBitmask(_copyPermissions)
 
-  def verified = phone.isDefined || email.isDefined
+  /**
+    * A pending phone that matches the current phone signifies the user is trying to login. In this case, they're account
+    * needs to be re-verified
+    */
+  def verified =
+    (phone.isDefined && pendingPhone != phone) || email.isDefined
 
   def authorized(credentials: Credentials) = credentials match {
     case EmailCredentials(e, Some(passwd), _) if pendingEmail.contains(e) || email.contains(e) =>

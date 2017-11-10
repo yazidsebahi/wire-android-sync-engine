@@ -25,6 +25,7 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.EventContext
 import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.LoginClient.InsufficientCredentials
 import com.waz.znet.Response.{HttpStatus, Status}
 
 import scala.concurrent.Future
@@ -179,12 +180,14 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
 
       (loginClient.access _).expects(cookie, Some(oldToken)).returning(CancellableFuture.successful(Left((Option(""), ErrorResponse(Status.Forbidden, "", "")))))
 
+      (loginClient.login _).expects(account.copy(cookie = None, accessToken = None)).once().returning(CancellableFuture.successful(Left((None, ErrorResponse.internalError(InsufficientCredentials)))))
+
       val manager = getManager
 
       var logoutCalled = false
       manager.onInvalidCredentials(_ => logoutCalled = true)(EventContext.Global)
 
-      result(manager.currentToken()) shouldEqual Left(HttpStatus(401, "Password missing in dispatchLoginRequest"))
+      result(manager.currentToken()) shouldEqual Left(HttpStatus(499, LoginClient.InsufficientCredentials))
       logoutCalled shouldEqual true
     }
   }

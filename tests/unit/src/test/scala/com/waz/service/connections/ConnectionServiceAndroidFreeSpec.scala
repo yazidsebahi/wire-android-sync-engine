@@ -38,7 +38,6 @@ import scala.concurrent.Future
 
 class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
 
-  implicit val eventContext = EventContext.Implicits.global
   implicit val executionContext = new SerialDispatchQueue(name = "ConnectionServiceAndroidFreeSpec")
 
   val push            = mock[PushService]

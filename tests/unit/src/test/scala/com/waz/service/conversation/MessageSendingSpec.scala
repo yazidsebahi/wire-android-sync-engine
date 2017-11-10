@@ -17,13 +17,7 @@
  */
 package com.waz.service.conversation
 
-import java.util.Date
-
-import android.graphics.BitmapFactory
-import com.waz._
-import com.waz.api.Message.Status
-import com.waz.api.MessageContent.Image
-import com.waz.api.{Message, MessageContent}
+import com.waz.api.Message
 import com.waz.content.{AssetsStorage, ConversationStorage, MembersStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Text
@@ -33,26 +27,14 @@ import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
-import com.waz.testutils.Matchers._
-import com.waz.testutils._
 import com.waz.threading.Threading
-import com.waz.utils.IoUtils.{toByteArray, withResource}
-import com.waz.utils._
-import com.waz.utils.events.EventContext
-import com.waz.utils.wrappers.DB
-import org.robolectric.shadows.ShadowLog
-import org.scalatest.BeforeAndAfter
-import org.threeten.bp.Instant
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import scala.util.Random
-import scala.collection.mutable
+import scala.concurrent.{Await, Future}
 
 class MessageSendingSpec extends AndroidFreeSpec { test =>
   implicit lazy val dispatcher = Threading.Background
 
-  val accountId = AccountId()
   lazy val selfUser = UserData("self user")
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
   
@@ -69,11 +51,11 @@ class MessageSendingSpec extends AndroidFreeSpec { test =>
                            network:         NetworkModeService           = stub[NetworkModeService],
                            convs:           ConversationsService         = null, //stub[ConversationsService],
                            sync:            SyncServiceHandle            = stub[SyncServiceHandle],
-                           lifecycle:       ZmsLifeCycle                 = stub[ZmsLifeCycle],
+                           lifecycle:       UiLifeCycle                  = stub[UiLifeCycle],
                            errors:          ErrorsService                = null //stub[ErrorsService]
-  ) = new ConversationsUiServiceImpl(accountId,
+  ) = new ConversationsUiServiceImpl(account1Id,
     UserId(), assets, users, usersStorage, messages, messagesContent, members,
-    assetStorage, convsContent, convStorage, network, convs, sync, lifecycle, errors
+    assetStorage, convsContent, convStorage, network, convs, sync, accounts, errors
   )
 
   feature("Text messages") {

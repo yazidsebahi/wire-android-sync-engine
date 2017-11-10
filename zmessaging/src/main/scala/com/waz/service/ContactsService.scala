@@ -29,15 +29,16 @@ import android.provider.ContactsContract.DisplayNameSources._
 import android.provider.{BaseColumns, ContactsContract}
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.waz.PermissionsService
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.Permission.READ_CONTACTS
 import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
-import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
+import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
+import com.waz.service.AccountsService.InForeground
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.Locales.{currentLocaleOrdering, sortWithCurrentLocale}
@@ -53,20 +54,30 @@ import scala.concurrent.duration._
 import scala.util.Success
 import scala.util.control.NoStackTrace
 
-class ContactsService(context: Context, accountId: AccountId, teamId: Option[TeamId], accountStorage: AccountsStorage, lifecycle: ZmsLifeCycle,
-                      userPrefs: UserPreferences, users: UserServiceImpl, usersStorage: UsersStorageImpl,
-                      timeouts: Timeouts, phoneNumbers: PhoneNumberService, storage: ZmsDatabase, sync: SyncServiceHandle,
-                      convs: ConversationStorageImpl, permissions: PermissionsService) {
+class ContactsService(context:        Context,
+                      accountId:      AccountId,
+                      teamId:         Option[TeamId],
+                      accountStorage: AccountsStorage,
+                      accounts:       AccountsService,
+                      userPrefs:      UserPreferences,
+                      users:          UserServiceImpl,
+                      usersStorage:   UsersStorageImpl,
+                      timeouts:       Timeouts,
+                      phoneNumbers:   PhoneNumberService,
+                      storage:        ZmsDatabase,
+                      sync:           SyncServiceHandle,
+                      convs:          ConversationStorageImpl,
+                      permissions:    PermissionsService) {
 
   import ContactsService._
   import EventContext.Implicits.global
   import Threading.Implicits.Background
   import timeouts.contacts._
 
-  lifecycle.accInForeground(accountId).on(Background) {
-    case true => requestUploadIfNeeded()
+  accounts.accountState(accountId).on(Background) {
+    case InForeground => requestUploadIfNeeded()
     case _ =>
-  }(lifecycle)
+  }
 
   contactsObserver.onChanged.on(Background) { _ =>
     verbose("contacts provider signaled change; marking contacts list for reload")
@@ -126,7 +137,7 @@ class ContactsService(context: Context, accountId: AccountId, teamId: Option[Tea
       markContactsDirty()
       updateContactsAndMatches()
       storage(AddressBook.save(AddressBook.Empty)(_))
-  }(lifecycle)
+  }
 
   private def shareContactsPreferred = shareContactsPref().map(teamId.isEmpty && _)
   private def shareContactsPermissionGranted = teamId.isEmpty && permissions.isGranted(READ_CONTACTS)

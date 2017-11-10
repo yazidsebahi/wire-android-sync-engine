@@ -23,7 +23,7 @@ import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.AccountsStorage
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
-import com.waz.testutils.TestGlobalPreferences
+import com.waz.testutils.{TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.{EventStream, Signal}
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
@@ -34,10 +34,10 @@ import scala.concurrent.Future
 class AccountsServiceSpec extends AndroidFreeSpec {
 
   private val globalModule = mock[GlobalModule]
-  private val storage = mock[AccountsStorage]
+  private val storage      = mock[AccountsStorage]
   private val phoneNumbers = mock[PhoneNumberService]
-  private val regClient = mock[RegistrationClient]
-  private val loginClient = mock[LoginClient]
+  private val regClient    = mock[RegistrationClient]
+  private val loginClient  = mock[LoginClient]
 
   feature("Phone registration") {
 
@@ -163,7 +163,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
 
       result(service.loginPhone(phoneNumber)).shouldBe(Right(()))
 
-      account.phone.shouldBe(None)
+      account.phone.shouldBe(Some(phoneNumber))
       account.pendingPhone.shouldBe(Some(phoneNumber))
       account.regWaiting.shouldBe(false)
       account.code.shouldBe(None)
@@ -202,7 +202,6 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     val password = "12345678"
 
     scenario("Attempting registration should send a request with the data and create the appropriate account data") {
-      val service = getAccountService
 
       val cookie = Cookie("cookie")
       var account = AccountData()
@@ -221,12 +220,12 @@ class AccountsServiceSpec extends AndroidFreeSpec {
       }
       (storage.get _).expects(*).anyNumberOfTimes().onCall{ (id: AccountId) =>
         if (id == account.id)
-          Future.successful(Some(account))
+        Future.successful(Some(account))
         else
-          Future.successful(Some(AccountData(id)))
+        Future.successful(Some(AccountData(id)))
       }
 
-      result(service.registerEmail(email, password, name)).shouldBe(Right(()))
+      result(getAccountService.registerEmail(email, password, name)).shouldBe(Right(()))
 
       account.pendingEmail.shouldBe(Some(email))
       account.email.shouldBe(None)
@@ -279,7 +278,7 @@ class AccountsServiceSpec extends AndroidFreeSpec {
 
   }
 
-  def getAccountService: AccountsService = {
+  def getAccountService: AccountsServiceImpl = {
     val prefs = new TestGlobalPreferences()
 
     (globalModule.accountsStorage _).expects().anyNumberOfTimes.returning(storage)
@@ -287,9 +286,13 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     (globalModule.regClient _).expects().anyNumberOfTimes.returning(regClient)
     (globalModule.loginClient _).expects().anyNumberOfTimes.returning(loginClient)
     (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
-    (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule))
+    (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule) {
+      override def baseStorage(accountId: AccountId) = new StorageModule(null, accountId, "", prefs) {
+        override lazy val userPrefs = new TestUserPreferences
+      }
+    })
     (globalModule.context _).expects().anyNumberOfTimes().returning(null)
-    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new ZmsLifeCycleImpl)
+    (globalModule.lifecycle _).expects().anyNumberOfTimes().returning(new UiLifeCycleImpl)
 
     (phoneNumbers.normalize _).expects(*).anyNumberOfTimes().onCall { p: PhoneNumber => Future.successful(Some(p)) }
 
@@ -300,6 +303,6 @@ class AccountsServiceSpec extends AndroidFreeSpec {
     (storage.signal _).expects(*).anyNumberOfTimes().returning(Signal.empty[AccountData])
     (storage.optSignal _).expects(*).anyNumberOfTimes().returning(Signal.empty[Option[AccountData]])
 
-    new AccountsService(globalModule)
+    new AccountsServiceImpl(globalModule)
   }
 }

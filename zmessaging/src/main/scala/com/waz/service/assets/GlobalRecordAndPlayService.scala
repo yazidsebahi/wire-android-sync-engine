@@ -22,8 +22,8 @@ import java.io.{File, FileNotFoundException}
 import android.content.{BroadcastReceiver, Context, Intent, IntentFilter}
 import android.media.AudioManager
 import android.telephony.TelephonyManager
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.ErrorType._
 import com.waz.api.impl.AudioAssetForUpload
@@ -31,9 +31,10 @@ import com.waz.api.{AudioEffect, ErrorType}
 import com.waz.audioeffect.{AudioEffect => AVSEffect}
 import com.waz.cache.{CacheEntry, CacheService, Expiration}
 import com.waz.model._
+import com.waz.service.AccountsService.InForeground
 import com.waz.service.assets.AudioLevels.peakLoudness
 import com.waz.service.media.SpotifyMediaService.Authentication
-import com.waz.service.{ErrorsService, ZmsLifeCycle}
+import com.waz.service.{AccountsService, ErrorsService}
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.{ClockSignal, EventContext, EventStream, Signal}
@@ -47,7 +48,10 @@ import scala.concurrent.{Future, Promise}
 import scala.util.Failure
 import scala.util.control.{NoStackTrace, NonFatal}
 
-class RecordAndPlayService(accountId: AccountId, globalService: GlobalRecordAndPlayService, errors: ErrorsService, lifecycle: ZmsLifeCycle) {
+class RecordAndPlayService(accountId:     AccountId,
+                           globalService: GlobalRecordAndPlayService,
+                           errors:        ErrorsService,
+                           accounts:      AccountsService) {
   import EventContext.Implicits.global
   import Threading.Implicits.Background
 
@@ -55,7 +59,7 @@ class RecordAndPlayService(accountId: AccountId, globalService: GlobalRecordAndP
     err.tpe.foreach { tpe => errors.addErrorWhenActive(ErrorData(Uid(), tpe, responseMessage = err.message)) }
   }
 
-  lifecycle.accInForeground(accountId).onChanged.on(Background) {
+  accounts.accountState(accountId).map(_ == InForeground).onChanged.on(Background) {
     case false => globalService.AudioFocusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
     case true =>
   }(EventContext.Global)

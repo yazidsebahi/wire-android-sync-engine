@@ -43,7 +43,6 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
-import com.waz.utils.events.EventContext
 import com.waz.utils.wrappers.AndroidContext
 import com.waz.zms.FetchJob
 import com.waz.znet._
@@ -94,24 +93,19 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
-  private implicit val ev = EventContext.Global
 
   val account    = userModule.account
   val global     = account.global
-
-  //TODO - eventually remove and use the AccountsService directly where needed - currently hard to mock.
-  val loggedInAccoutns = ZMessaging._accounts.loggedInAccounts.map(_.map(_.id).toSet)
-
   val selfUserId = userModule.userId
 
   val accountId  = account.id
-
   val auth       = account.auth
   val zNetClient = account.netClient
   val storage    = account.storage
   val lifecycle  = global.lifecycle
 
   lazy val accounts             = ZMessaging.currentAccounts
+  implicit lazy val evContext   = userModule.accountContext
   lazy val cryptoBox            = account.cryptoBox
   lazy val sync                 = userModule.sync
   lazy val syncHandler          = userModule.syncHandler
@@ -319,6 +313,9 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 }
 
 object ZMessaging { self =>
+
+  def accountTag[A: reflect.Manifest](accountId: AccountId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${accountId.str.take(8)}"
+
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
 
   private[waz] var context: Context = _
@@ -336,19 +333,19 @@ object ZMessaging { self =>
   def useProdBackend(): Unit = useBackend(BackendConfig.ProdBackend)
 
   private lazy val _global: GlobalModuleImpl = new GlobalModuleImpl(context, backend)
-  private lazy val _accounts: AccountsService = new AccountsService(_global)
+  private lazy val _accounts: AccountsServiceImpl = new AccountsServiceImpl(_global)
   private lazy val ui: UiModule = new UiModule(_accounts)
 
   //Try to avoid using these - map from the futures instead.
   private [waz] var currentUi: UiModule = _
   private [waz] var currentGlobal: GlobalModuleImpl = _
-  var currentAccounts: AccountsService = _
+  var currentAccounts: AccountsServiceImpl = _
 
   private lazy val globalReady = Promise[GlobalModule]()
-  private lazy val accsReady = Promise[AccountsService]()
+  private lazy val accsReady = Promise[AccountsServiceImpl]()
 
   lazy val globalModule:    Future[GlobalModule]    = globalReady.future
-  lazy val accountsService: Future[AccountsService] = accsReady.future
+  lazy val accountsService: Future[AccountsServiceImpl] = accsReady.future
 
   def onCreate(context: Context) = {
     Threading.assertUiThread()

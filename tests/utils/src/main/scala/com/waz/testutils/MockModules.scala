@@ -64,7 +64,7 @@ class MockZMessagingFactory(global: MockGlobalModule) extends ZMessagingFactory(
   override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging = super.zmessaging(teamId, clientId, user)
 }
 
-class MockAccountsService(global: GlobalModuleImpl = new MockGlobalModule) extends AccountsService(global) {
+class MockAccountsService(global: GlobalModuleImpl = new MockGlobalModule) extends AccountsServiceImpl(global) {
 
   if (ZMessaging.currentAccounts == null) ZMessaging.currentAccounts = this
 
@@ -73,7 +73,7 @@ class MockAccountsService(global: GlobalModuleImpl = new MockGlobalModule) exten
   }
 }
 
-class MockAccountManager(val accounts: AccountsService = new MockAccountsService)(implicit ec: EventContext = EventContext.Global) extends AccountManager(AccountId(), accounts.global, accounts) {
+class MockAccountManager(override val accounts: AccountsServiceImpl = new MockAccountsService)(implicit ec: EventContext = EventContext.Global) extends AccountManager(AccountId(), accounts.global, accounts) {
   accounts.accountMap.put(id, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
@@ -115,7 +115,7 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
     }
   }
 
-  override lazy val websocket: WebSocketClientService = new WebSocketClientServiceImpl(context, accountId, lifecycle, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
+  override lazy val websocket: WebSocketClientService = new WebSocketClientServiceImpl(context, accountId, accounts, zNetClient, auth, network, backend, clientId, timeouts, pushToken) {
     override private[waz] def createWebSocketClient(clientId: ClientId): WebSocketClient = new WebSocketClient(context, accountId, zNetClient.client.asInstanceOf[AsyncClientImpl], Uri.parse("http://"), auth) {
       override protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.failed(new Exception("mock"))
     }
@@ -174,7 +174,7 @@ class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockU
 
 object MockUiModule {
 
-  def apply(accounts: AccountsService): UiModule = returning(new UiModule(accounts)) { ui =>
+  def apply(accounts: AccountsServiceImpl): UiModule = returning(new UiModule(accounts)) { ui =>
     ZMessaging.currentUi = ui
   }
 

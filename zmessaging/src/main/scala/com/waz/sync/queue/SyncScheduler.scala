@@ -22,16 +22,17 @@ import java.io.PrintWriter
 import android.app.{AlarmManager, PendingIntent}
 import android.content.Context.ALARM_SERVICE
 import android.support.v4.content.WakefulBroadcastReceiver
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
-import com.waz.service.{NetworkModeService, ZmsLifeCycle}
+import com.waz.service.AccountsService.{Active, LoggedOut}
+import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.utils.wrappers.Context
 import com.waz.zms.SyncService
@@ -57,9 +58,16 @@ trait SyncScheduler {
   def reportString: Future[String]
 }
 
-class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: SyncContentUpdater, val network: NetworkModeService, service: SyncRequestServiceImpl, handler: => SyncHandler, lifecycle: ZmsLifeCycle) extends SyncScheduler {
+class SyncSchedulerImpl(context:     Context,
+                        accountId:   AccountId,
+                        val content: SyncContentUpdater,
+                        val network: NetworkModeService,
+                        service:     SyncRequestServiceImpl,
+                        handler:     => SyncHandler,
+                        accounts:    AccountsService)
+                       (implicit accountContext: AccountContext) extends SyncScheduler {
 
-  import EventContext.Implicits.global
+
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncSchedulerQueue")
 
@@ -102,9 +110,9 @@ class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: Syn
       }
   }
 
-  lifecycle.accLoggedIn(accountId).on(dispatcher) {
-    case true => waitEntries.foreach(_._2.onRestart())
-    case false =>
+  accounts.accountState(accountId).on(dispatcher) {
+    case _: Active => waitEntries.foreach(_._2.onRestart())
+    case _ =>
   }
 
   network.networkMode.on(dispatcher) {
@@ -157,9 +165,15 @@ class SyncSchedulerImpl(context: Context, accountId: AccountId, val content: Syn
 
     val entry = new WaitEntry(job)
     waitEntries.put(job.id, entry)
-    entry.future onComplete { _ => waitEntries -= job.id }
 
-    countWaiting(job.id, getStartTime(job))(entry.future) flatMap { _ =>
+    val jobReady = for {
+      _ <- accounts.accountState(accountId).filter(_ != LoggedOut).head
+      _ <- entry.future
+    } yield {}
+
+    jobReady.onComplete(_ => waitEntries -= job.id)
+
+    countWaiting(job.id, getStartTime(job))(jobReady) flatMap { _ =>
       returning(f)(_.onComplete(_ => queue.release()))
     }
   }

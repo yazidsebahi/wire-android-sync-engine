@@ -98,7 +98,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     override lazy val factory: ZMessagingFactory = zmessagingFactory
   }
 
-  lazy val accounts = new AccountsService(globalModule)
+  lazy val accounts = new AccountsServiceImpl(globalModule)
 
   implicit lazy val ui = returning(new UiModule(accounts)) { ZMessaging.currentUi = _ }
 
@@ -170,7 +170,6 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
     val zms = ZMessaging.currentUi.currentZms.collect { case Some(z) => z }
     zms.map(_.notifications).flatMap(_.notifications)(notificationsSpy.gcms :+= _)
-    zms.flatMap(_.lifecycle.uiActive)(notificationsSpy.uiActive = _)
   }
 
   override protected def beforeEach(): Unit = {

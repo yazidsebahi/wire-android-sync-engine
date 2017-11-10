@@ -29,7 +29,6 @@ class ButtonSignalSpec extends AndroidFreeSpec {
 
     val button = ButtonSignal(service, buttonState) {
       (s, state) => {
-        println(s"$s called, changing button state: $state")
         buttonState ! !state
       }
     }.disableAutowiring()
@@ -47,7 +46,6 @@ class ButtonSignalSpec extends AndroidFreeSpec {
 
     val button = ButtonSignal(service, buttonState) {
       (s, state) => {
-        println(s"$s called, changing button state: $state")
         buttonState ! !state
       }
     }

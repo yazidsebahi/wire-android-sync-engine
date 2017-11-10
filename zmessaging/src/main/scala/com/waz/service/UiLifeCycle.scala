@@ -15,32 +15,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api;
+package com.waz.service
 
-public interface NotificationsHandler {
+import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.events.Signal
 
-    enum NotificationType {
-        CONNECT_REQUEST,
-        CONNECT_ACCEPTED,
-        CONTACT_JOIN,
-        ASSET,
-        ANY_ASSET,
-        VIDEO_ASSET,
-        AUDIO_ASSET,
-        TEXT,
-        MEMBER_JOIN,
-        MEMBER_LEAVE,
-        RENAME,
-        KNOCK,
-        MISSED_CALL,
-        LIKE,
-        LOCATION,
-        MESSAGE_SENDING_FAILED;
+trait UiLifeCycle {
+  //App is in the foregound
+  def uiActive: Signal[Boolean]
 
-        public enum LikedContent {
-            TEXT_OR_URL, // the text or URL is contained in #getMessage in this case
-            PICTURE,
-            OTHER
-        }
-    }
+  def acquireUi(): Unit
+  def releaseUi(): Unit
+}
+
+class UiLifeCycleImpl extends UiLifeCycle {
+
+  private implicit val dispatcher = new SerialDispatchQueue(name = "LifeCycleDispatcher")
+
+  private val uiCount = Signal(0)
+
+  override val uiActive = uiCount.map(_ > 0)
+
+  def acquireUi(): Unit = uiCount.mutate(_ + 1, dispatcher)
+  def releaseUi(): Unit = uiCount.mutate({ u =>
+    assert(u > 0, "Ui count should be greater than 0 before being released")
+    u - 1
+  }, dispatcher)
+
 }

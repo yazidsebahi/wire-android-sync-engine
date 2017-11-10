@@ -21,7 +21,7 @@ import com.waz.api.Message
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.service.ZmsLifeCycle
+import com.waz.service.UiLifeCycle
 import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.{GlobalNotificationsService, NotificationService, PushService}
 import com.waz.specs.AndroidFreeSpec
@@ -40,7 +40,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
   val account   = AccountId()
   val self      = UserId()
   val messages  = mock[MessagesStorage]
-  val lifeCycle = mock[ZmsLifeCycle]
+  val lifeCycle = mock[UiLifeCycle]
   val storage   = mock[NotificationStorage]
   val users     = mock[UsersStorage]
   val convs     = mock[ConversationStorage]

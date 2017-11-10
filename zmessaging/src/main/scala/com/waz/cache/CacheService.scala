@@ -131,7 +131,7 @@ class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheS
         case Failure(c: CancelException) =>
           Future.failed(c)
         case Failure(e) =>
-          HockeyApp.saveException(e, s"addStream($key) failed")
+          HockeyApp.saveException(e, s"addStream failed")
           Future.failed(e)
       }
     }
@@ -142,7 +142,7 @@ class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheS
         if (moveFile) src.delete()
         add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
       case Failure(e) =>
-        HockeyApp.saveException(e, s"addFile($key) failed")
+        HockeyApp.saveException(e, s"addFile failed")
         throw new Exception(s"addFile($key) failed", e)
     }
 

@@ -40,7 +40,7 @@ trait NetworkModeService {
   def isDeviceIdleMode: Boolean
 }
 
-class DefaultNetworkModeService(context: Context, zmsLifeCycle: ZmsLifeCycle) extends NetworkModeService {
+class DefaultNetworkModeService(context: Context, lifeCycle: UiLifeCycle) extends NetworkModeService {
   import NetworkModeService._
 
   private implicit val ev = EventContext.Global
@@ -50,7 +50,7 @@ class DefaultNetworkModeService(context: Context, zmsLifeCycle: ZmsLifeCycle) ex
 
   override val networkMode = returning(Signal[NetworkMode](NetworkMode.UNKNOWN)) { _.disableAutowiring() }
 
-  zmsLifeCycle.uiActive {
+  lifeCycle.uiActive {
     case true => updateNetworkMode()
     case _    => //
   }

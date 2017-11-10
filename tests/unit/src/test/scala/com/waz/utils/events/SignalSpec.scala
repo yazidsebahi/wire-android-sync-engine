@@ -33,8 +33,6 @@ import scala.concurrent.duration._
 class SignalSpec extends AndroidFreeSpec {
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  implicit val ec: EventContext = EventContext.Global
-
   var received = Seq[Int]()
   val capture = (value: Int) => received = received :+ value
 

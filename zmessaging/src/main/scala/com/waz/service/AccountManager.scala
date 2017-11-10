@@ -26,6 +26,7 @@ import com.waz.api.impl._
 import com.waz.content.UserPreferences.ShouldSyncInitial
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{UserData, _}
+import com.waz.service.AccountsService.{InForeground, LoggedOut}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.sync._
@@ -65,9 +66,11 @@ class UserModule(val userId: UserId, val account: AccountManager) {
   def lifecycle = account.global.lifecycle
   def cryptoBox = account.cryptoBox
   def reporting = account.global.reporting
+  def accountService = account.accounts
 
   lazy val otrClient = new OtrClient(account.netClient)
 
+  implicit lazy val accountContext: AccountContext      = new AccountContext(accountId, accountService)
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
@@ -100,7 +103,7 @@ class UserModule(val userId: UserId, val account: AccountManager) {
   }
 }
 
-class AccountManager(val id: AccountId, val global: GlobalModule, accounts: AccountsService)(implicit ec: EventContext) { self =>
+class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: AccountsServiceImpl)(implicit ec: EventContext) { self =>
   import AccountManager._
   implicit val dispatcher = new SerialDispatchQueue()
   verbose(s"Creating for: $id")
@@ -217,7 +220,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   for {
     acc      <- accountData if acc.verified
-    loggedIn <- global.lifecycle.accLoggedIn(id)
+    loggedIn <- accounts.accountState(id).map(_ != LoggedOut)
     client   <- otrCurrentClient
     _        <- otrClients.map(_.size)
   } {
@@ -239,12 +242,12 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
 
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 
-  private val shouldAwaitActivation = lifecycle.accInForeground(id).zip(accountsStorage.optSignal(id)) map {
-    case (true, Some(acc)) => !acc.verified && acc.password.isDefined && (acc.pendingPhone.isDefined || acc.pendingEmail.isDefined)
-    case _ => false
-  }
-
-  shouldAwaitActivation.on(dispatcher) {
+  (for {
+    true      <- accounts.accountState(id).map(_ == InForeground)
+    Some(acc) <- accountsStorage.optSignal(id)
+  } yield
+    !acc.verified && acc.password.isDefined && (acc.pendingPhone.isDefined || acc.pendingEmail.isDefined)
+  ).orElse(Signal.const(false)).on(dispatcher) {
     case true   => awaitActivationFuture = awaitActivationFuture.recover { case _: Throwable => () } flatMap { _ => awaitActivation(0) }
     case false  => awaitActivationFuture.cancel()("stop_await_activate")
   }
@@ -438,7 +441,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, accounts: Acco
       case None => CancellableFuture successful None
       case Some(data) if data.verified => CancellableFuture successful Some(data)
       case Some(data) =>
-        CancellableFuture.lift(lifecycle.accInForeground(id).head).flatMap {
+        CancellableFuture.lift(accounts.accountState(id).map(_ == InForeground).head).flatMap {
           case true => CancellableFuture.lift(activate(data.id)).flatMap {
             case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
             case _ =>

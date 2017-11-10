@@ -88,7 +88,7 @@ import scala.concurrent.duration._
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(_, NotificationType.CONNECT_REQUEST, _, "hello", _, Some("other user"), Some("other user"), false, _, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.CONNECT_REQUEST, _, "hello", _, Some("other user"), Some("other user"), _, false, _, _, _, _)) => true
         }
       }
     }
@@ -99,7 +99,7 @@ import scala.concurrent.duration._
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(_, NotificationType.CONTACT_JOIN, _, _, _, _, _, false, _, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.CONTACT_JOIN, _, _, _, _, _, _, false, _, _, _, _)) => true
         }
       }
     }
@@ -112,7 +112,7 @@ import scala.concurrent.duration._
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(_, NotificationType.TEXT, _, "test name", `convId`, _, _, false, true, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.TEXT, _, "test name", `convId`, _, _, _, false, true, _, _, _)) => true
         }
       }
     }
@@ -125,7 +125,7 @@ import scala.concurrent.duration._
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(_, NotificationType.ANY_ASSET, _, _, `convId`, _, _, false, _, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.ANY_ASSET, _, _, `convId`, _, _, _, false, _, _, _, _)) => true
         }
       }
     }
@@ -140,7 +140,7 @@ import scala.concurrent.duration._
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(_, NotificationType.TEXT, _, "meep", `groupId`, Some("group conv"), _, true, _, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.TEXT, _, "meep", `groupId`, Some("group conv"), _, _, true, _, _, _, _)) => true
         }
       }
     }
@@ -240,7 +240,7 @@ import scala.concurrent.duration._
 
       withDelay {
         currentNotifications should beMatching {
-          case Seq(NotificationInfo(_, NotificationType.TEXT, _, _, `groupId`, Some("group conv"), _, true, _, _, _, _)) => true
+          case Seq(NotificationInfo(_, NotificationType.TEXT, _, _, `groupId`, Some("group conv"), _, _, true, _, _, _, _)) => true
         }
       }
     }
