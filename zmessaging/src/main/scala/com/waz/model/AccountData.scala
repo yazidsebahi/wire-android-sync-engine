@@ -18,10 +18,10 @@
 package com.waz.model
 
 import android.util.Base64
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
-import com.waz.api.impl.{Credentials, EmailCredentials, PhoneCredentials}
+import com.waz.api.impl.{Credentials, EmailCredentials}
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
 import com.waz.model.AccountData.{PermissionsMasks, TriTeamId}
@@ -43,6 +43,7 @@ import scala.collection.mutable
  */
 case class AccountData(id:              AccountId                       = AccountId(),
                        teamId:          TriTeamId                       = Left({}),
+                       pendingTeamName: Option[String]                  = None,
                        email:           Option[EmailAddress]            = None,
                        phone:           Option[PhoneNumber]             = None,
                        handle:          Option[Handle]                  = None,
@@ -69,6 +70,7 @@ case class AccountData(id:              AccountId                       = Accoun
     s"""AccountData:
        | id:              $id
        | teamId:          $teamId
+       | pendingTeamName: $pendingTeamName
        | email:           $email
        | phone:           $phone
        | handle:          $handle
@@ -199,7 +201,7 @@ object AccountData {
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()
-    AccountData(id, Left({}), Some(email), password = Some(password), phone = None, handle = None)
+    AccountData(id, Left({}), email = Some(email), password = Some(password), phone = None, handle = None)
   }
 
   type Permission = Permission.Value
@@ -270,6 +272,7 @@ object AccountData {
         }
     }).apply(_.teamId)
 
+    val PendingTeamName = opt(text('pending_team_name))(_.pendingTeamName)
     val Email = opt(emailAddress('email))(_.email)
     val Phone = opt(phoneNumber('phone))(_.phone)
     val Handle = opt(handle('handle))(_.handle)
@@ -291,9 +294,9 @@ object AccountData {
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, PendingTeamName, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, PendingTeamName, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))
@@ -305,5 +308,8 @@ object AccountData {
 
     def findLoggedIn()(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Cookie.name} IS NOT NULL", null, null, null, null))
+
+    def findByPendingTeamName(name: String)(implicit db: DB) =
+      iterating(db.query(table.name, null, s"${PendingTeamName.name} = ?", Array(name), null, null, null))
   }
 }

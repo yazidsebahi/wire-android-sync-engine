@@ -20,6 +20,7 @@ package com.waz.service
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Invitations._
+import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.impl._
 import com.waz.api.{ClientRegistrationState, KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
@@ -30,6 +31,7 @@ import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.{RichOption, returning}
+import com.waz.znet.Response
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
@@ -57,6 +59,8 @@ object AccountsService {
   trait Active extends AccountState
   case object InBackground extends Active
   case object InForeground extends Active
+
+  val NoEmailSetWarning = "Account does not have email set - can't request activation code"
 }
 
 class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
@@ -244,43 +248,30 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
-  def loginPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
+  def loginPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
 
-    def requestCode(shouldCall: Boolean): Future[Either[ErrorResponse, Unit]] = {
-      (if (shouldCall)
-        requestPhoneConfirmationCall(number, KindOfAccess.LOGIN)
-      else
-        requestPhoneConfirmationCode(number, KindOfAccess.LOGIN))
-        .future.map {
+    def requestCode(): Future[Either[ErrorResponse, Unit]] =
+      requestPhoneConfirmationCode(number, KindOfAccess.LOGIN).future.map {
         case Failure(error) => Left(error)
         case PasswordExists => Left(ErrorResponse.PasswordExists)
         case _ => Right(())
       }
-    }
 
     for {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
-      req <- requestCode(shouldCall)
+      req <- requestCode()
       updatedAcc  = acc.copy(pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
       _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
       _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
     } yield req
   }
 
-  def registerPhone(number: PhoneNumber, shouldCall: Boolean = false): Future[Either[ErrorResponse, Unit]] = {
-
-    def requestCode(shouldCall: Boolean): Future[ActivateResult] = {
-      if (shouldCall)
-        requestPhoneConfirmationCall(number, KindOfAccess.REGISTRATION).future
-      else
-        requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
-    }
-
+  def registerPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
     for {
       normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
       acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
-      req <- requestCode(shouldCall)
+      req <- requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
       updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), code = None, regWaiting = true)
       _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
       _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
@@ -357,6 +348,82 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
       _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(pendingEmail = Some(emailAddress))) else Future.successful(())
     } yield req
+  }
+
+  /**
+    * Methods for the new "creating a team" flow.
+    * TODO - we should integrate these better with other registration methods
+    * We will leave them separate for now to reduce the risk of breaking other entry points
+    */
+  def createTeamAccount(teamName: String): Future[AccountId] = {
+    for {
+      acc <- storage.findByPendingTeamName(teamName).flatMap {
+        case Some(a) => Future.successful(a)
+        case None    => storage.insert(AccountData(pendingTeamName = Some(teamName)))
+      }
+      _   <- setAccount(Some(acc.id))
+    } yield acc.id
+  }
+
+  def updateCurrentAccount(f: AccountData => AccountData): Future[Unit] = {
+    activeAccountPref().flatMap {
+      case Some(id) => storage.update(id, f).map(_ => ())
+      case _ => throw new IllegalStateException("No current account set")
+    }
+  }
+
+  //For team flow only (for now) - applies to current active account
+  def requestActivationCode(email: EmailAddress): ErrorOr[Unit] =
+    regClient.requestEmailConfirmationCode(email).future.flatMap {
+      case ActivateResult.Success => updateCurrentAccount(_.copy(pendingEmail = Some(email))).map(_ => Right(()))
+      case ActivateResult.PasswordExists => Future.successful(Left(internalError("password exists for email activation - this shouldn't happen")))
+      case ActivateResult.Failure(err) => Future.successful(Left(err))
+    }
+
+  //For team flow only (for now) - applies to current active account
+  def verify(code: ConfirmationCode): ErrorOr[Unit] = withActiveAccount { acc =>
+    acc.pendingEmail match {
+      case Some(e) => for {
+        res <- regClient.verifyEmail(e, code).future
+        _   <- res match {
+          case Right(()) => updateCurrentAccount(_.copy(code = Some(code)))
+          case _ => Future.successful(())
+        }
+      } yield res
+      case _ => Future.successful(Left(internalError(s"Current account: ${acc.id} does not have a pending email address. First request an activation code and provide an email address")))
+    }
+  }
+
+  //For team flow only (for now) - applies to current active account
+  def register(): ErrorOr[Unit] = {
+    withActiveAccount { acc =>
+      regClient.registerTeamAccount(acc).future.flatMap {
+        case Right((userInfo, cookie)) =>
+          verbose(s"register($acc) done, id: ${acc.id}, user: $userInfo, cookie: $cookie")
+          storage.update(acc.id,
+            _.updated(userInfo).copy(
+              cookie          = cookie,
+              regWaiting      = false,
+              code            = None,
+              firstLogin      = false,
+              email           = acc.pendingEmail,
+              pendingEmail    = None,
+              pendingTeamName = None
+            )).map(_ => Right(()))
+        case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
+          info(s"register($acc.id) failed: invalid-code")
+          storage.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))
+        case Left(error) =>
+          info(s"register($acc.id) failed: $error")
+          Future successful Left(error)
+    }}
+  }
+
+  private def withActiveAccount[A](f: AccountData => Future[A]): Future[A] = {
+    for {
+      acc <- getActiveAccount.map(_.getOrElse(throw new IllegalStateException("No current account set")))
+      res <- f(acc)
+    } yield res
   }
 
   private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
