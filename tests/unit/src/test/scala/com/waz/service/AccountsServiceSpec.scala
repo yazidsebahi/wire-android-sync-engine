@@ -43,6 +43,12 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
   val prefs = new TestGlobalPreferences()
 
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    //prevent migration - can fail tests
+    await(prefs.preference(GlobalPreferences.FirstTimeWithTeams) := false)
+  }
+
   feature("Phone registration") {
 
     val phoneNumber = PhoneNumber("+0918273465")
@@ -355,7 +361,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       var account = AccountData(id = AccountId(), pendingTeamName = Some(teamName), pendingEmail = Some(email))
       (storage.findByPendingTeamName _).expects(teamName).once().returning(Future.successful(Some(account)))
       val service = getAccountService
-      service.createTeamAccount(teamName)
+      await(service.createTeamAccount(teamName))
 
       (storage.get _).expects(account.id).returning(Future.successful(Some(account)))
       (storage.update _).expects(account.id, *).never()

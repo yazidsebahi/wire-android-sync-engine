@@ -22,7 +22,7 @@ import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 import com.waz.ZLog.{LogTag, error}
 import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.model.AccountId
-import com.waz.service.AccountsService.{AccountState, InBackground, InForeground, LoggedOut}
+import com.waz.service.AccountsService.{AccountState, InForeground, LoggedOut}
 import com.waz.service.{AccountContext, AccountsService, ZMessaging}
 import com.waz.testutils.TestClock
 import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
