@@ -129,6 +129,12 @@ object Preferences {
         case "LimitReached"    => LimitReached
         case id                => Registered(ClientId(id))
       }, Unregistered)
+
+      implicit lazy val PendingAccountCode = apply[PendingAccount] (
+        { PendingAccount.encoder(_).toString },
+        { str => PendingAccount.decoder(new JSONObject(str)) },
+        PendingAccount()
+      )
     }
   }
 
@@ -322,6 +328,7 @@ object GlobalPreferences {
     returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
   }
 
+  lazy val PendingAccountPref = PrefKey[Option[PendingAccount]]("pending_account")
   lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
   lazy val DatabasesRenamed   = PrefKey[Boolean]("databases_renamed", customDefault = false)

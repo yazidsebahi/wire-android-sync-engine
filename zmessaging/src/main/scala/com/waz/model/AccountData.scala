@@ -35,6 +35,68 @@ import org.json.JSONObject
 
 import scala.collection.mutable
 
+
+/**
+  * Represents a user account prior to a successful registration or login with the backend. After either a successful login
+  * or registration, the information here should be cleared
+  *
+  * @param code will not be persisted
+  * @param password will not be persisted
+  *
+  * //TODO invitations?
+  */
+case class PendingAccount(teamName: Option[String]           = None,
+                          email:    Option[EmailAddress]     = None,
+                          handle:   Option[Handle]           = None,
+                          phone:    Option[PhoneNumber]      = None,
+                          name:     Option[String]           = None,
+                          code:     Option[ConfirmationCode] = None,
+                          password: Option[String]           = None) {
+
+  override def toString: String =
+    s"""PendingAccount:
+       | teamName:        $teamName
+       | email:           $email
+       | phone:           $phone
+       | handle:          $handle
+       | name:            $name
+       | password:        In memory?: ${password.isDefined}
+       | code:            $code
+    """.stripMargin
+
+  def canLogin: Boolean =
+    (email.isDefined && password.isDefined) ||
+    (handle.isDefined && password.isDefined) ||
+    (phone.isDefined && code.isDefined)
+}
+
+object PendingAccount {
+
+  def apply(acc: AccountData): PendingAccount = PendingAccount(
+    email     = acc.email,
+    handle    = acc.handle,
+    phone     = acc.phone,
+    name      = acc.name,
+    password  = acc.password
+  )
+
+  implicit lazy val encoder: JsonEncoder[PendingAccount] = new JsonEncoder[PendingAccount] {
+    override def apply(acc: PendingAccount) = JsonEncoder { o =>
+      acc.teamName foreach(v => o.put("email",     v))
+      acc.email    foreach(v => o.put("team_name", v.str))
+      acc.handle   foreach(v => o.put("handle",    v.string))
+      acc.phone    foreach(v => o.put("phone",     v.str))
+      acc.name     foreach(v => o.put("name",      v))
+    }
+  }
+
+  implicit lazy val decoder: JsonDecoder[PendingAccount] = new JsonDecoder[PendingAccount] {
+    import JsonDecoder._
+    override def apply(implicit js: JSONObject) =
+      PendingAccount('team_name, 'email, 'handle, 'phone)
+  }
+}
+
 /**
  * Represents a local user account.
  *
@@ -126,9 +188,6 @@ case class AccountData(id:              AccountId                       = Accoun
       (phone.orElse(pendingPhone).isDefined && code.isDefined)
   }
 
-  def addToLoginJson(o: JSONObject) =
-    addCredentialsToJson(o)
-
   def addToRegistrationJson(o: JSONObject) =
     addCredentialsToJson(o, isLogin = !regWaiting)
 
@@ -192,6 +251,15 @@ object AccountData {
     val hash = credentials.maybePassword.map(computeHash(id, _)).getOrElse("")
     new AccountData(id, Left({}), password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
   }
+
+  def apply(p: PendingAccount): AccountData =
+    AccountData(
+      email     = p.email,
+      handle    = p.handle,
+      phone     = p.phone,
+      name      = p.name,
+      password  = p.password
+    )
 
   def apply(email: EmailAddress, password: String): AccountData = {
     val id = AccountId()

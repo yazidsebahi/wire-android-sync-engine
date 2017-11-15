@@ -27,7 +27,7 @@ import com.waz.api.impl._
 import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
-import com.waz.content.GlobalPreferences.{CurrentAccountPref, DatabasesRenamed, FirstTimeWithTeams}
+import com.waz.content.GlobalPreferences.{CurrentAccountPref, DatabasesRenamed, FirstTimeWithTeams, PendingAccountPref}
 import com.waz.content.UserPreferences
 import com.waz.model._
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
@@ -91,9 +91,13 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     renamed <- databasesRenamedPref.signal
   } yield !first && renamed
 
+  private val pendingAccountPref = prefs.preference(PendingAccountPref)
+  val pendingAccount = pendingAccountPref.signal
+
   val activeAccountPref = prefs.preference(CurrentAccountPref)
 
   //TODO can be removed after a (very long) while
+  //TODO - test what happens if a user has 2 databases...
   private val migration = databasesRenamedPref().flatMap {
     case true => Future.successful({}) //databases have been renamed - nothing to do.
     case false =>
@@ -373,18 +377,24 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   def loginEmail(emailAddress: EmailAddress, password: String): Future[Either[ErrorResponse, Unit]] = {
     for {
-      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
-      loginAcc = acc.copy(email = Some(emailAddress), password = Some(password))
-      _ <- storage.updateOrCreate(loginAcc.id, _ => loginAcc, loginAcc)
-      req <- loginOnBackend(loginAcc)
-      _ <- req match {
-        case Right (_) =>
-          switchAccount(acc.id)
-        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-          storage.update(loginAcc.id, _.copy(pendingEmail = Some(emailAddress))).map(_ => ())
-        case _ => Future.successful(())
+      pending <- storage.findByEmail(emailAddress).map { //TODO what to do if the email address has changed
+        case Some(_) => throw new IllegalStateException("Already have an account - should just log back in") //TODO!!
+        case None    => PendingAccount(email = Some(emailAddress), password = Some(password))
       }
-    } yield req
+      req <- loginClient.login(pending).future
+      res <- req match {
+        case Right((token, cookie)) =>
+          for {
+            id <- storage.insert(AccountData(pending).copy(accessToken = Some(token), cookie = cookie)).map(_.id)
+            _  <- pendingAccountPref := None
+            _  <- switchAccount(id)
+          } yield Right({})
+
+        case Left((_, err@ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
+          (pendingAccountPref := Some(pending)).map(_ => Left(err))
+        case Left((_, err)) => Future.successful(Left(err)) //TODO - what should we do here...
+      }
+    } yield res
   }
 
   def registerEmail(emailAddress: EmailAddress, password: String, name: String): Future[Either[ErrorResponse, Unit]] = {
@@ -396,6 +406,13 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
       _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(pendingEmail = Some(emailAddress))) else Future.successful(())
     } yield req
+  }
+
+  def updatePendingAccount(f: PendingAccount => PendingAccount): Future[Unit] = {
+    pendingAccountPref.mutate {
+      case Some(acc) => Some(f(acc))
+      case _ => throw new IllegalStateException("No pending account set")
+    }
   }
 
   /**
@@ -475,16 +492,17 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
-    loginClient.login(accountData).future.flatMap {
-      case Right((token, cookie)) =>
-        storage.update(accountData.id, _.copy(accessToken = Some(token), cookie = cookie, code = None)).map(_ => Right(()))
-      case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-        verbose(s"account pending activation: ($accountData), $error")
-        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
-      case Left((_, error)) =>
-        verbose(s"login failed: $error")
-        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
-    }
+//    loginClient.login(accountData).future.flatMap {
+//      case Right((token, cookie)) =>
+//        storage.update(accountData.id, _.copy(accessToken = Some(token), cookie = cookie, code = None)).map(_ => Right(()))
+//      case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
+//        verbose(s"account pending activation: ($accountData), $error")
+//        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
+//      case Left((_, error)) =>
+//        verbose(s"login failed: $error")
+//        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
+//    }
+    Future.successful(Right(()))
   }
 
   private def registerOnBackend(accountData: AccountData, name: String): Future[Either[ErrorResponse, Unit]] = {

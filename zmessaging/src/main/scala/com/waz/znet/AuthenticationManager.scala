@@ -22,8 +22,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.AccountsStorage
-import com.waz.model.{AccountData, AccountId}
-import com.waz.service.ZMessaging
+import com.waz.model.{AccountData, AccountId, PendingAccount}
 import com.waz.service.ZMessaging.accountTag
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.EventStream
@@ -127,7 +126,7 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
 
   private def dispatchLoginRequest(): CancellableFuture[Either[Status, Token]] =
     CancellableFuture.lift(account).flatMap { acc =>
-      dispatchRequest(client.login(acc)) {
+      dispatchRequest(client.login(PendingAccount(acc))) {
         case Left((_, resp)) if resp.code == Status.Forbidden || resp.message == InsufficientCredentials =>
           debug(s"login request failed with: $resp")
           onInvalidCredentials ! {}

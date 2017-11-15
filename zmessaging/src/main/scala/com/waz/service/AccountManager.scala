@@ -205,7 +205,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncPref := false)
 
   val zmessaging = (for {
-    Some(cId)  <- clientId
     aId        <- accountData.map(_.id)
     _          <- Signal.future(updateSelfTeam(aId))
     Right(tId) <- accountData.map(_.teamId)
@@ -213,6 +212,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     um         <- userModule
     cb         <- cryptoBox
     Some(_)    <- Signal.future(cb.cryptoBox)
+    Some(cId)  <- clientId
   } yield {
     verbose(s"Creating new ZMessaging instance, for $um, $cId, $tId, service: $this")
     _zmessaging = _zmessaging orElse LoggedTry(global.factory.zmessaging(tId, cId, um, st, cb)).toOption
@@ -428,7 +428,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     global.accountsStorage.get(accountId).flatMap {
       case Some(account) =>
         if (account.verified && !account.regWaiting) Future successful Right(account)
-        else global.loginClient.login(account).future flatMap {
+        else global.loginClient.login(PendingAccount(account)).future flatMap {
           case Right((token, cookie)) =>
             for {
               Some((_, acc)) <- global.accountsStorage.update(id, _.updatedNonPending.copy(cookie = cookie, accessToken = Some(token)))

@@ -56,7 +56,6 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
   override lazy val factory = new MockZMessagingFactory(this)
 
   override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
-    override def login(account: AccountData) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
 }
