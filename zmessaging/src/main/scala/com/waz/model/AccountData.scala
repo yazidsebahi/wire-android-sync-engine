@@ -23,7 +23,7 @@ import com.waz.ZLog._
 import com.waz.api.impl.{Credentials, EmailCredentials}
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
-import com.waz.model.AccountData.{PermissionsMasks, TriTeamId}
+import com.waz.model.AccountData.TriTeamId
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
@@ -51,7 +51,8 @@ case class PendingAccount(teamName: Option[String]           = None,
                           phone:    Option[PhoneNumber]      = None,
                           name:     Option[String]           = None,
                           code:     Option[ConfirmationCode] = None,
-                          password: Option[String]           = None) {
+                          password: Option[String]           = None,
+                         ) {
 
   override def toString: String =
     s"""PendingAccount:
@@ -94,6 +95,38 @@ object PendingAccount {
     import JsonDecoder._
     override def apply(implicit js: JSONObject) =
       PendingAccount('team_name, 'email, 'handle, 'phone)
+  }
+}
+
+/**
+  * Should only contain data that might need to exist beyond the life/scope of the user database (for cleanup or for
+  * managing all accounts on the device, for example)
+  */
+case class AccountDataNew(userId:      UserId,
+                          cookie:      Cookie,
+                          accessToken: Token,
+                          pushToken:   Option[PushToken]) {
+
+  override def toString: String =
+    s"""AccountData:
+       | userId:          $userId
+       | cookie:          $cookie
+       | accessToken:     $accessToken
+       | pushToken:       $pushToken
+    """.stripMargin
+}
+
+object AccountDataNew {
+  implicit object AccountDataNewDao extends Dao[AccountDataNew, UserId] {
+    val UserId      = id[UserId]        ('user_id, "PRIMARY KEY").apply(_.userId)
+    val Cookie      = text[Cookie]      ('cookie, _.str, AuthenticationManager.Cookie)(_.cookie)
+    val AccessToken = text[Token]       ('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token])(_.accessToken)
+    val PushToken   = opt(id[PushToken] ('registered_push))(_.pushToken)
+
+    override val idCol = UserId
+    override val table = Table("Accounts_new", UserId, Cookie, AccessToken, PushToken)
+
+    override def apply(implicit cursor: DBCursor): AccountDataNew = AccountDataNew(UserId, Cookie, AccessToken, PushToken)
   }
 }
 
@@ -216,9 +249,6 @@ case class AccountData(id:              AccountId                       = Accoun
 
   def updated(user: UserInfo): AccountData =
     copy(userId = Some(user.id), email = user.email.orElse(email), pendingEmail = email.fold(pendingEmail)(_ => Option.empty[EmailAddress]), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
-
-  def withTeam(teamId: Option[TeamId], permissions: Option[PermissionsMasks]): AccountData =
-    copy(teamId = Right(teamId), _selfPermissions = permissions.map(_._1).getOrElse(0), _copyPermissions = permissions.map(_._2).getOrElse(0))
 
   def isTeamAccount: Boolean =
     teamId.fold(_ => false, _.isDefined)

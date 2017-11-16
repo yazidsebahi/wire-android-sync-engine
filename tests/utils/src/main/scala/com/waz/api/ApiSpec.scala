@@ -206,24 +206,24 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
   }
 
   protected def logoutAndDestroy(): Unit = {
-    var maybeZms = Await.result(api.ui.getCurrent, 5.seconds)
-    api.logout()
-    pauseApi()
-    api.onDestroy()
-    deleteUserAfterLogout()
-    awaitUi(500.millis)
-    maybeZms.foreach { zms =>
-      awaitUi(zms.websocket.connected.currentValue.forall(_ == false), "websocket connection should be disconnected")
-      zms.storage.db.close()
-      zms.global.storage.close()
-      api.ui.uiCache.clear()
-    }
-    accounts.activeAccountPref := None
-    accounts.accountMap.clear()
-    api = null
-    ZMessaging.context = null
-    maybeZms = null
-    System.gc()
+//    var maybeZms = Await.result(api.ui.getCurrent, 5.seconds)
+//    api.logout()
+//    pauseApi()
+//    api.onDestroy()
+//    deleteUserAfterLogout()
+//    awaitUi(500.millis)
+//    maybeZms.foreach { zms =>
+//      awaitUi(zms.websocket.connected.currentValue.forall(_ == false), "websocket connection should be disconnected")
+//      zms.storage.db.close()
+//      zms.global.storage.close()
+//      api.ui.uiCache.clear()
+//    }
+//    accounts.activeAccountPref := None
+//    accounts.accountMap.clear()
+//    api = null
+//    ZMessaging.context = null
+//    maybeZms = null
+//    System.gc()
   }
 
   def deleteUserAfterLogout(): Unit = Await.result(globalModule.storage(AccountDataDao.deleteForEmail(EmailAddress(email))(_)), 10.seconds)

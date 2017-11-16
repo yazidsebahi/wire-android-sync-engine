@@ -22,7 +22,7 @@ import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
-import com.waz.content.UserPreferences.{SelfClient, ShouldSyncInitial}
+import com.waz.content.UserPreferences._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{UserData, _}
 import com.waz.service.AccountManager.ClientRegistrationState.Unregistered
@@ -95,7 +95,7 @@ class UserModule(val userId: UserId, val account: AccountManager) {
               if (state.clientId.isEmpty) {
                 sync.syncSelfClients()
               }
-              account.setClientState(state).map(_ => Right(()))
+              (account.clientStatePref := state).map(_ => Right(()))
             case Left(err) =>
               error(s"client registration failed: $err")
               Future.successful(Left(err))
@@ -105,26 +105,27 @@ class UserModule(val userId: UserId, val account: AccountManager) {
   }
 }
 
-class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: AccountsServiceImpl)(implicit ec: EventContext) { self =>
+class AccountManager(account: AccountDataNew, val global: GlobalModule, val accounts: AccountsServiceImpl)(implicit ec: EventContext) { self =>
   import AccountManager._
   implicit val dispatcher = new SerialDispatchQueue()
-  verbose(s"Creating for: $id")
 
-  val accountData = global.accountsStorage.signal(id)
+  val userId = account.userId
+  verbose(s"Creating for: $userId")
 
-  val storage: Signal[StorageModule] = accountData.collect { case acc if acc.userId.isDefined => acc.userId.get }.map(global.factory.baseStorage)
+  val storage = global.factory.baseStorage(userId)
 
-  val clientState = storage.flatMap(_.userPrefs.preference(SelfClient).signal)
+  val userPrefs = storage.userPrefs
 
-  val clientId = clientState.map(_.clientId)
+  val teamIdSetPref = userPrefs.preference(TeamIdSet)
+  val selfPermsPref = userPrefs.preference(SelfPermissionsKey)
+  val copyPermsPref = userPrefs.preference(CopyPermissionsKey)
 
-  val userId = accountData.map(_.userId)
+  val clientStatePref = userPrefs.preference(SelfClient)
+  val clientId = clientStatePref.signal.map(_.clientId)
 
-  private val otrClients = storage.flatMap { st =>
-    st.otrClientsStorage.signal(st.userId)
-      .map(_.clients.values.toSet)
-      .orElse(Signal.const(Set.empty[Client]))
-  }
+  private val otrClients = storage.otrClientsStorage.signal(userId)
+    .map(_.clients.values.toSet)
+    .orElse(Signal.const(Set.empty[Client]))
 
   // listen to client changes, logout and delete cryptobox if current client is removed
   private val otrCurrentClient = clientId.flatMap {
@@ -136,86 +137,58 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   otrCurrentClient.map(_.isDefined) { exists =>
     if (hasClient && !exists) {
       info(s"client has been removed on backend, logging out")
-      OnRemovedClient ! id
+      OnRemovedClient ! userId
       logoutAndResetClient()
     }
     hasClient = exists
   }
 
-  accountData.onChanged { acc =>
-    acc.userId.foreach { uId =>
-      storage.head.flatMap(_.usersStorage.updateOrCreate(uId, identity, UserData(uId, None, "", acc.email, acc.phone, searchKey = SearchKey(""), connection = UserData.ConnectionStatus.Self, handle = acc.handle)))
-    }
-  }
+  updateSelfTeam()
 
-  private val selfUserData = storage.flatMap(st => st.usersStorage.signal(st.userId))
-
-  // listen to user data changes, update account email/phone if self user data is changed
-  selfUserData.map(user => (user.email, user.phone)) { case (email, phone) =>
-    verbose(s"self user data changed, email: $email, phone: $phone")
-    global.accountsStorage.update(id, { acc =>
-      if (acc.pendingPhone == phone) {
-        acc.copy(email = email)
-      } else {
-        acc.copy(email = email, phone = phone)
-      }
-    })
-  }
+  private val selfUserData = storage.usersStorage.signal(userId)
 
   selfUserData.map(_.deleted) { deleted =>
     if (deleted) {
       info(s"self user was deleted, logging out")
-      OnSelfDeleted ! id
+      OnSelfDeleted ! userId
       for {
         _ <- logoutAndResetClient()
-        _ =  accounts.accountMap.remove(id)
-        _ <- global.accountsStorage.remove(id)
+        _ =  accounts.accountMap.remove(userId)
+        _ <- global.accountsStorageNew.remove(userId)
       // TODO: delete database, account was deleted
       } yield ()
     }
   }
 
-  lazy val cryptoBox          = storage.map(st => global.factory.cryptobox(st.userId, st))
-  lazy val auth               = global.factory.auth(id)
-  lazy val netClient          = global.factory.client(id, auth)
+  lazy val cryptoBox          = global.factory.cryptobox(userId, storage)
+  lazy val auth               = global.factory.auth(userId)
+  lazy val netClient          = global.factory.client(auth)
   lazy val usersClient        = global.factory.usersClient(netClient)
   lazy val teamsClient        = global.factory.teamsClient(netClient)
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
+  lazy val userModule         = global.factory.userModule(userId, this)
 
-  auth.onInvalidCredentials.on(dispatcher){ _ =>
-    OnInvalidCredentials ! id
+  global.accountsStorageNew.onDeleted.filter(_.contains(userId)).on(dispatcher) { _ =>
+    ExpiredCookie ! userId
     logout(flushCredentials = true)
-  }
-
-  @volatile private var _userModule = Option.empty[UserModule]
-
-  lazy val userModule = userId collect {
-    case Some(user) =>
-      _userModule = Some(_userModule.getOrElse(global.factory.userModule(user, this)))
-      _userModule.get
   }
 
   // logged in zmessaging instance
   @volatile private var _zmessaging = Option.empty[ZMessaging]
 
-  for {
-    shouldSyncPref <- storage.map(_.userPrefs.preference(ShouldSyncInitial))
-    um             <- userModule
-    shouldSync     <- shouldSyncPref.signal
-  } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncPref := false)
+  lazy val shouldSyncPref = storage.userPrefs.preference(ShouldSyncInitial)
+  shouldSyncPref.signal.onChanged.filter(_ == true) { _ =>
+    userModule.sync.performFullSync().flatMap(_ => shouldSyncPref := false)
+  }
 
   val zmessaging = (for {
-    aId        <- accountData.map(_.id)
-    _          <- Signal.future(updateSelfTeam(aId))
-    Right(tId) <- accountData.map(_.teamId)
-    st         <- storage //wait until storage is defined, cryptobox and user module need this...
-    um         <- userModule
-    cb         <- cryptoBox
-    Some(_)    <- Signal.future(cb.cryptoBox)
+    true       <- teamIdSetPref.signal
+    tId        <- storage.usersStorage.signal(userId).map(_.teamId)
+    Some(_)    <- Signal.future(cryptoBox.cryptoBox)
     Some(cId)  <- clientId
   } yield {
-    verbose(s"Creating new ZMessaging instance, for $um, $cId, $tId, service: $this")
-    _zmessaging = _zmessaging orElse LoggedTry(global.factory.zmessaging(tId, cId, um, st, cb)).toOption
+    verbose(s"Creating new ZMessaging instance, for $userId, $cId, $tId, service: $this")
+    _zmessaging = _zmessaging orElse LoggedTry(global.factory.zmessaging(tId, cId, userModule, storage, cryptoBox)).toOption
     _zmessaging
   }).orElse(Signal const Option.empty[ZMessaging])
 
@@ -254,7 +227,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   }
 
   def logout(flushCredentials: Boolean): Future[Unit] = {
-    verbose(s"logout($id, flushCredentials: $flushCredentials)")
+    verbose(s"logout($userId, flushCredentials: $flushCredentials)")
     accounts.logout(id, flushCredentials)
   }
 
@@ -262,7 +235,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     case Some(zms) => Future successful Some(zms)
     case None =>
       Serialized.future(this) {
-        global.accountsStorage.get(id) flatMap {
+        global.accountsStorageNew.get(id) flatMap {
           case Some(acc) if acc.cookie.isEmpty =>
             verbose(s"account data has no cookie, user not logged in: $acc")
             Future successful None
@@ -316,13 +289,12 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
   def fingerprintSignal(uId: UserId, cId: ClientId): Signal[Option[Array[Byte]]] =
     for {
-      selfId       <- userId
       selfClientId <- clientId
       fingerprint  <-
-        if (selfId.contains(uId) && selfClientId.contains(cId))
-          cryptoBox.flatMap { cb => Signal.future(cb(Future successful _.getLocalFingerprint)) }
+        if (userId == uId && selfClientId.contains(cId))
+          Signal.future(cryptoBox(Future successful _.getLocalFingerprint))
         else
-          cryptoBox.flatMap(_.sessions.remoteFingerprint(sessionId(uId, cId)))
+          cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
 
   private def updateSelfAccountAndUser(acc: AccountData => AccountData, user: UserData => UserData) = {
@@ -333,45 +305,28 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     } yield {}
   }
 
-  private def updateSelfTeam(accountId: AccountId): ErrorOr[Unit] = global.accountsStorage.get(accountId).flatMap {
-    case Some(account) => account.teamId match {
-
-      case Right(teamId) => teamId match {
-        case Some(_) => //team members should be un-searchable (i.e., in privateMode) which is already set by default on BE
-          accountsStorage.update(accountId, _.copy(privateMode = true)).map(_ => Right(()))
-        case None => Future.successful(Right(())) //no team account - don't worry about privateMode
-      }
-
-      case Left(_) => teamsClient.findSelfTeam().future flatMap {
-        case Right(teamOpt) =>
-          val updateUsers = (teamOpt, account.userId) match {
-            case (Some(t), Some(uId)) => storage.head.flatMap(_.usersStorage.update(uId, _.updated(Some(t.id))).map(_ => {}))
-            case _ => Future.successful({})
-          }
-
-          val updateTeams = teamOpt match {
-            case Some(t) => global.teamsStorage.updateOrCreate(t.id, _ => t, t)
-            case _ => Future.successful({})
-          }
-
-          val fetchPermissions = (teamOpt, account.userId) match {
-            case (Some(t), Some(u)) => teamsClient.getPermissions(t.id, u).map {
-              case Right(p) => Some(p)
-              case Left(_) => None
-            }.future
-            case _ => Future.successful(None)
-          }
-
-          for {
-            _ <- updateUsers
-            _ <- updateTeams
-            p <- fetchPermissions
-            _ <- global.accountsStorage.update(id, _.withTeam(teamOpt.map(_.id), p))
-          } yield Right({})
-        case Left(err) => Future.successful(Left(err))
-      }
+  private def updateSelfTeam(): ErrorOr[Unit] = teamIdSetPref.apply().flatMap {
+    case true  => Future.successful(Right({}))
+    case false => teamsClient.findSelfTeam().future flatMap {
+      case Right(teamOpt) =>
+        for {
+          _ <- teamOpt.fold2(Future.successful({}), team =>
+            for {
+              _ <- storage.usersStorage.update(userId, _.copy(teamId = Some(team.id))).map(_ => {})
+              _ <- global.teamsStorage.updateOrCreate(team.id, _ => team, team)
+              _ <- teamsClient.getPermissions(team.id, userId).future.flatMap {
+                case Right((self, copy)) =>
+                  for {
+                    _ <- selfPermsPref := self
+                    _ <- copyPermsPref := copy
+                  } yield {}
+                case Left(_) => Future.successful({})
+              }
+            } yield {})
+          _ <- teamIdSetPref := true
+        } yield Right({})
+      case Left(err) => Future.successful(Left(err))
     }
-    case _ => Future.successful(Left(ErrorResponse.InternalError))
   }
 
   def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
@@ -385,8 +340,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
             case Right(userInfo) =>
               verbose(s"got self user info: $userInfo")
               for {
-                _ <- storage.head.flatMap(_.assetsStorage.mergeOrCreateAsset(userInfo.mediumPicture))
-                _ <- storage.head.flatMap(_.usersStorage.updateOrCreate(userInfo.id, _.updated(userInfo).copy(syncTimestamp = System.currentTimeMillis()), UserData(userInfo).copy(connection = UserData.ConnectionStatus.Self, syncTimestamp = System.currentTimeMillis())))
+                _ <- storage.assetsStorage.mergeOrCreateAsset(userInfo.mediumPicture)
+                _ <- storage.usersStorage.updateOrCreate(userInfo.id, _.updated(userInfo).copy(syncTimestamp = System.currentTimeMillis()), UserData(userInfo).copy(connection = UserData.ConnectionStatus.Self, syncTimestamp = System.currentTimeMillis()))
                 _ <- global.accountsStorage.update(id, _.updated(userInfo))
               } yield Right({})
             case Left(err) =>
@@ -397,20 +352,19 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
       }
 
     def checkCryptoBox =
-      cryptoBox.head.flatMap(_.cryptoBox flatMap {
+      cryptoBox.cryptoBox.flatMap {
         case Some(cb) => Future successful Some(cb)
         case None =>
           _zmessaging = None
           for {
-            _ <- setClientState(Unregistered)
-            _ <- cryptoBox.head.flatMap(_.deleteCryptoBox())
-            res <- cryptoBox.head.flatMap(_.cryptoBox)
+            _ <- clientStatePref := Unregistered
+            _ <- cryptoBox.deleteCryptoBox()
+            res <- cryptoBox.cryptoBox
           } yield res
-      })
+      }
 
     (for {
       Some(_)      <- checkCryptoBox
-      Right(_)     <- activate(id)
       Right(_)     <- updateSelfUser(id)
       Right(_)     <- userModule.head.flatMap(_.ensureClientRegistered(id))
       Right(_)     <- updateSelfTeam(id)
@@ -424,45 +378,48 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
       }
   }
 
-  private def activate(accountId: AccountId): ErrorOr[AccountData] =
-    global.accountsStorage.get(accountId).flatMap {
-      case Some(account) =>
-        if (account.verified && !account.regWaiting) Future successful Right(account)
-        else global.loginClient.login(PendingAccount(account)).future flatMap {
-          case Right((token, cookie)) =>
-            for {
-              Some((_, acc)) <- global.accountsStorage.update(id, _.updatedNonPending.copy(cookie = cookie, accessToken = Some(token)))
-            } yield Right(acc)
-          case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-            global.accountsStorage.update(accountId, _.updatedPending).collect { case Some((_, acc)) => Left(ErrorResponse(Status.Forbidden, "", "pending-activation"))}
-          case Left((_, err)) =>
-            verbose(s"activate failed: $err")
-            Future.successful(Left(err))
-        }
-      case None => Future.successful(Left(ErrorResponse.internalError(s"no account for $accountId")))
-    }
+//  TODO move to AccountsService
+//  private def activate(accountId: AccountId): ErrorOr[AccountData] =
+//    global.accountsStorage.get(accountId).flatMap {
+//      case Some(account) =>
+//        if (account.verified && !account.regWaiting) Future successful Right(account)
+//        else global.loginClient.login(PendingAccount(account)).future flatMap {
+//          case Right((token, cookie)) =>
+//            for {
+//              Some((_, acc)) <- global.accountsStorage.update(id, _.updatedNonPending.copy(cookie = cookie, accessToken = Some(token)))
+//            } yield Right(acc)
+//          case Left((_, ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
+//            global.accountsStorage.update(accountId, _.updatedPending).collect { case Some((_, acc)) => Left(ErrorResponse(Status.Forbidden, "", "pending-activation"))}
+//          case Left((_, err)) =>
+//            verbose(s"activate failed: $err")
+//            Future.successful(Left(err))
+//        }
+//      case None => Future.successful(Left(ErrorResponse.internalError(s"no account for $accountId")))
+//    }
 
-  private def awaitActivation(retry: Int = 0): CancellableFuture[Option[AccountData]] =
-    CancellableFuture lift global.accountsStorage.get(id) flatMap {
-      case None => CancellableFuture successful None
-      case Some(data) if data.verified => CancellableFuture successful Some(data)
-      case Some(data) =>
-        CancellableFuture.lift(accounts.accountState(id).map(_ == InForeground).head).flatMap {
-          case true => CancellableFuture.lift(activate(data.id)).flatMap {
-            case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
-            case _ =>
-              CancellableFuture.delay(ActivationThrottling.delay(retry)) flatMap { _ => awaitActivation(retry + 1) }
-          }
-          case false => CancellableFuture.successful(None)
-        }
-    }
+
+  // TODO move to AccountsService
+//  private def awaitActivation(retry: Int = 0): CancellableFuture[Option[AccountData]] =
+//    CancellableFuture lift global.accountsStorage.get(id) flatMap {
+//      case None => CancellableFuture successful None
+//      case Some(data) if data.verified => CancellableFuture successful Some(data)
+//      case Some(data) =>
+//        CancellableFuture.lift(accounts.accountState(id).map(_ == InForeground).head).flatMap {
+//          case true => CancellableFuture.lift(activate(data.id)).flatMap {
+//            case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
+//            case _ =>
+//              CancellableFuture.delay(ActivationThrottling.delay(retry)) flatMap { _ => awaitActivation(retry + 1) }
+//          }
+//          case false => CancellableFuture.successful(None)
+//        }
+//    }
 
   private def logoutAndResetClient() =
     for {
       _ <- logout(flushCredentials = true)
-      _ <- cryptoBox.head.flatMap(_.deleteCryptoBox())
+      _ <- cryptoBox.deleteCryptoBox()
       _ =  _zmessaging = None // drop zmessaging instance, we need to create fresh one with new clientId // FIXME: dropped instance will still be active and using the same ZmsLifecycle instance
-      _ <- setClientState(Unregistered)
+      _ <- clientStatePref := Unregistered
     } yield ()
 }
 
@@ -483,7 +440,7 @@ object AccountManager {
 
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
 
-  val OnRemovedClient: SourceStream[AccountId] = EventStream[AccountId]()
-  val OnSelfDeleted: SourceStream[AccountId] = EventStream[AccountId]()
-  val OnInvalidCredentials: SourceStream[AccountId] = EventStream[AccountId]()
+  val OnRemovedClient: SourceStream[UserId] = EventStream[UserId]()
+  val OnSelfDeleted: SourceStream[UserId] = EventStream[UserId]()
+  val ExpiredCookie: SourceStream[UserId] = EventStream[UserId]()
 }

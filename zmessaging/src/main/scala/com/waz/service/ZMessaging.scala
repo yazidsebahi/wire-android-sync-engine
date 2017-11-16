@@ -56,9 +56,9 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def baseStorage(userId: UserId) = new StorageModule(global.context, userId, "", global.prefs)
 
-  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
+  def auth(userId: UserId) = new AuthenticationManager(userId, global.accountsStorageNew, global.loginClient)
 
-  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
+  def client(auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -73,7 +73,7 @@ class ZMessagingFactory(global: GlobalModule) {
   def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule, storage: StorageModule, cryptoBox: CryptoBoxService) = wire[ZMessaging]
 }
 
-class StorageModule(context: Context, val userId: UserId, dbPrefix: String, globalPreferences: GlobalPreferences) {
+class StorageModule(context: Context, userId: UserId, dbPrefix: String, globalPreferences: GlobalPreferences) {
   lazy val db                                     = new ZmsDatabase(userId, context, dbPrefix)
   lazy val userPrefs                              = UserPreferences.apply(context, db, globalPreferences)
   lazy val usersStorage                           = wire[UsersStorageImpl]
@@ -312,7 +312,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
 object ZMessaging { self =>
 
-  def accountTag[A: reflect.Manifest](accountId: AccountId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${accountId.str.take(8)}"
+  def accountTag[A: reflect.Manifest](userId: UserId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${userId.str.take(8)}"
 
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
 

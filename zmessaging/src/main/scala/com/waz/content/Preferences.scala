@@ -329,7 +329,7 @@ object GlobalPreferences {
   }
 
   lazy val PendingAccountPref = PrefKey[Option[PendingAccount]]("pending_account")
-  lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
+  lazy val CurrentAccountPref = PrefKey[Option[UserId]]("CurrentUserPref")
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
   lazy val DatabasesRenamed   = PrefKey[Boolean]("databases_renamed", customDefault = false)
 
@@ -368,6 +368,10 @@ object UserPreferences {
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
   lazy val SelfClient               = PrefKey[ClientRegistrationState]("self_client")
+
+  lazy val TeamIdSet                = PrefKey[Boolean]("team_id_set")
+  lazy val SelfPermissionsKey       = PrefKey[Long]("self_permissions")
+  lazy val CopyPermissionsKey       = PrefKey[Long]("copy_permissions")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")

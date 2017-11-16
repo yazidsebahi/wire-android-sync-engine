@@ -30,9 +30,10 @@ import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordEx
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, DatabasesRenamed, FirstTimeWithTeams, PendingAccountPref}
 import com.waz.content.UserPreferences
 import com.waz.model._
+import com.waz.service.AccountManager.ExpiredCookie
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
+import com.waz.utils.events._
 import com.waz.utils.{RichOption, returning}
 import com.waz.znet.Response
 import com.waz.znet.Response.Status
@@ -44,11 +45,9 @@ import scala.concurrent.Future
 trait AccountsService {
   import AccountsService._
 
-  def accountState(accId: AccountId): Signal[AccountState]
+  def accountState(userId: UserId): Signal[AccountState]
 
-  def loggedInAccounts: Signal[Set[AccountData]]
-
-  def loggedInAccountIds: Signal[Set[AccountId]] = loggedInAccounts.map(_.map(_.id))
+  def loggedInAccounts: Signal[Set[UserId]]
 
   def activeZms: Signal[Option[ZMessaging]]
 
@@ -74,11 +73,12 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   private[waz] implicit val ec: EventContext = EventContext.Global
 
-  private[waz] val accountMap = new mutable.HashMap[AccountId, AccountManager]()
+  private[waz] val accountMap = new mutable.HashMap[UserId, AccountManager]()
 
   lazy val context  = global.context
   val prefs         = global.prefs
   val storage       = global.accountsStorage
+  val storageNew    = global.accountsStorageNew
   val phoneNumbers  = global.phoneNumbers
   val regClient     = global.regClient
   val loginClient   = global.loginClient
@@ -155,15 +155,15 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val loggedInAccounts = migrationDone.flatMap {
     case true =>
       val changes = EventStream.union(
-        storage.onChanged.map(_.map(_.id)),
-        storage.onDeleted
-      ).map(_.toSet)
-      new RefreshingSignal[Set[AccountData], Set[AccountId]](CancellableFuture.lift(storage.findLoggedIn().map(_.toSet)), changes)
-    case false => Signal.const(Set.empty[AccountData])
+        storageNew.onChanged.map(_.map(_.userId)),
+        storageNew.onDeleted
+      )
+      new RefreshingSignal[Set[UserId], Seq[UserId]](CancellableFuture.lift(storageNew.list().map(_.map(_.userId).toSet)), changes)
+    case false => Signal.const(Set.empty[UserId])
   }
 
   val zmsInstances = (for {
-    ids <- loggedInAccounts.map(_.map(_.id))
+    ids <- loggedInAccounts
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
     zs  <- Signal.sequence(ams.map(_.zmessaging).toSeq: _*)
   } yield
@@ -171,26 +171,21 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
 
-  @volatile private var accountStateSignals = Map.empty[AccountId, Signal[AccountState]]
-  override def accountState(accountId: AccountId) = {
+  @volatile private var accountStateSignals = Map.empty[UserId, Signal[AccountState]]
+  override def accountState(userId: UserId) = {
 
     lazy val newSignal: Signal[AccountState] = for {
-      selected <- activeAccountPref.signal.map(_.contains(accountId))
-      loggedIn <- loggedInAccountIds.map(_.contains(accountId))
+      selected <- activeAccountPref.signal.map(_.contains(userId))
+      loggedIn <- loggedInAccounts.map(_.contains(userId))
       uiActive <- global.lifecycle.uiActive
     } yield
       returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
-        verbose(s"account state changed: $accountId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
+        verbose(s"account state changed: $userId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
       }
 
-    accountStateSignals.getOrElse(accountId, returning(newSignal) { sig =>
-      accountStateSignals += accountId -> sig
+    accountStateSignals.getOrElse(userId, returning(newSignal) { sig =>
+      accountStateSignals += userId -> sig
     })
-  }
-
-  lazy val activeAccount = activeAccountPref.signal.flatMap[Option[AccountData]] {
-    case None     => Signal.const(None)
-    case Some(id) => storage.optSignal(id)
   }
 
   lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
@@ -203,11 +198,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None          => Signal.const(None)
   }
 
-  def getActiveAccount = activeAccountPref() flatMap {
-    case None     => Future successful None
-    case Some(id) => storage.get(id)
-  }
-
   def getActiveAccountManager = activeAccountPref() flatMap {
     case Some(id) => getOrCreateAccountManager(id) map (Some(_))
     case _        => Future successful None
@@ -218,13 +208,13 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None      => Future successful None
   }
 
-  private[service] def getOrCreateAccountManager(accountId: AccountId) = migration.map { _ =>
-    verbose(s"getOrCreateAccountManager: $accountId")
-    accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
+  private[service] def getOrCreateAccountManager(userId: UserId) = migration.map { _ =>
+    verbose(s"getOrCreateAccountManager: $userId")
+    accountMap.getOrElseUpdate(userId, new AccountManager(accountId, global, this))
   }
 
   //TODO - why would we ever NOT want to create the account manager if there is a AccountId available for it?
-  def getAccountManager(id: AccountId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
+  def getAccountManager(id: UserId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
     case Some(acc) =>
       verbose(s"getAccountManager($acc)")
       getOrCreateAccountManager(id) map (Some(_))
@@ -232,11 +222,16 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       Future successful None
   }
 
-  def getZMessaging(id: AccountId): Future[Option[ZMessaging]] = getOrCreateAccountManager(id).flatMap(_.getZMessaging)
+  def getZMessaging(id: UserId): Future[Option[ZMessaging]] = getOrCreateAccountManager(id).flatMap(_.getZMessaging)
 
   def logout(flushCredentials: Boolean) = activeAccountManager.head flatMap {
     case Some(account) => account.logout(flushCredentials)
     case None          => Future.successful(())
+  }
+
+  global.accountsStorageNew.onDeleted.on(dispatcher) { users =>
+    ExpiredCookie ! userId
+    logout(flushCredentials = true)
   }
 
   def logout(account: AccountId, flushCredentials: Boolean) = {
@@ -446,52 +441,54 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
 
   //For team flow only (for now) - applies to current active account
-  def verify(code: ConfirmationCode): ErrorOr[Unit] = withActiveAccount { acc =>
-    acc.pendingEmail match {
-      case Some(e) => for {
-        res <- regClient.verifyEmail(e, code).future
-        _   <- res match {
-          case Right(()) => updateCurrentAccount(_.copy(code = Some(code)))
-          case _ => Future.successful(())
-        }
-      } yield res
-      case _ => Future.successful(Left(internalError(s"Current account: ${acc.id} does not have a pending email address. First request an activation code and provide an email address")))
-    }
+  def verify(code: ConfirmationCode): ErrorOr[Unit] = {
+
+    Future.successful(Left(internalError("Needs to be re-implemented")))
+
+//    withActiveAccount { acc =>
+//      acc.pendingEmail match {
+//        case Some(e) => for {
+//          res <- regClient.verifyEmail(e, code).future
+//          _   <- res match {
+//            case Right(()) => updateCurrentAccount(_.copy(code = Some(code)))
+//            case _ => Future.successful(())
+//          }
+//        } yield res
+//        case _ => Future.successful(Left(internalError(s"Current account: ${acc.id} does not have a pending email address. First request an activation code and provide an email address")))
+//      }
+//    }
   }
 
   //For team flow only (for now) - applies to current active account
   def register(): ErrorOr[Unit] = {
-    withActiveAccount { acc =>
-      regClient.registerTeamAccount(acc).future.flatMap {
-        case Right((userInfo, cookie)) =>
-          verbose(s"register($acc) done, id: ${acc.id}, user: $userInfo, cookie: $cookie")
-          storage.update(acc.id,
-            _.updated(userInfo).copy(
-              cookie          = cookie,
-              regWaiting      = false,
-              code            = None,
-              firstLogin      = false,
-              email           = acc.pendingEmail,
-              pendingEmail    = None,
-              pendingTeamName = None
-            )).map(_ => Right(()))
-        case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
-          info(s"register($acc.id) failed: invalid-code")
-          storage.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))
-        case Left(error) =>
-          info(s"register($acc.id) failed: $error")
-          Future successful Left(error)
-    }}
+
+    Future.successful(Left(internalError("Needs to be re-implemented")))
+
+//    withActiveAccount { acc =>
+//      regClient.registerTeamAccount(acc).future.flatMap {
+//        case Right((userInfo, cookie)) =>
+//          verbose(s"register($acc) done, id: ${acc.id}, user: $userInfo, cookie: $cookie")
+//          storage.update(acc.id,
+//            _.updated(userInfo).copy(
+//              cookie          = cookie,
+//              regWaiting      = false,
+//              code            = None,
+//              firstLogin      = false,
+//              email           = acc.pendingEmail,
+//              pendingEmail    = None,
+//              pendingTeamName = None
+//            )).map(_ => Right(()))
+//        case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
+//          info(s"register($acc.id) failed: invalid-code")
+//          storage.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))
+//        case Left(error) =>
+//          info(s"register($acc.id) failed: $error")
+//          Future successful Left(error)
+//    }}
   }
 
-  private def withActiveAccount[A](f: AccountData => Future[A]): Future[A] = {
-    for {
-      acc <- getActiveAccount.map(_.getOrElse(throw new IllegalStateException("No current account set")))
-      res <- f(acc)
-    } yield res
-  }
-
-  private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
+  private def loginOnBackend(accountData: AccountData): ErrorOr[Unit] = {
+    Future.successful(Left(internalError("Needs to be re-implemented")))
 //    loginClient.login(accountData).future.flatMap {
 //      case Right((token, cookie)) =>
 //        storage.update(accountData.id, _.copy(accessToken = Some(token), cookie = cookie, code = None)).map(_ => Right(()))
@@ -502,7 +499,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 //        verbose(s"login failed: $error")
 //        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
 //    }
-    Future.successful(Right(()))
   }
 
   private def registerOnBackend(accountData: AccountData, name: String): Future[Either[ErrorResponse, Unit]] = {
