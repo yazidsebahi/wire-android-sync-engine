@@ -69,11 +69,6 @@ class UsersClient(netClient: ZNetClient) {
     case Response(SuccessHttpStatus(), resp, _) => Right(())
   }
 
-  def getSearchable: ErrorOrResponse[Boolean] =
-    netClient.withErrorHandling("setSearchable", Request.Get(SearchablePath)) {
-      case Response(HttpStatus(Success, _), JsonObjectResponse(o), _) => JsonDecoder.decodeBool('searchable)(o)
-    }
-
   def setSearchable(searchable: Boolean): ErrorOrResponse[Unit] = {
     val req = Request.Put(SearchablePath, JsonContentEncoder(JsonEncoder(_.put("searchable", searchable))))
     netClient.withErrorHandling("setSearchable", req) {
