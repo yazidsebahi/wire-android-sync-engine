@@ -18,13 +18,15 @@
 package com.waz.sync.client
 
 import com.waz.HockeyApp.NoReporting
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
-import com.waz.znet.Response.{ErrorStatus, SuccessHttpStatus}
+import com.waz.znet.ContentEncoder.JsonContentEncoder
+import com.waz.znet.Response.Status.Success
+import com.waz.znet.Response.{ErrorStatus, HttpStatus, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import com.waz.znet.{JsonArrayResponse, JsonObjectResponse, _}
 import org.json.JSONObject
@@ -67,14 +69,29 @@ class UsersClient(netClient: ZNetClient) {
     case Response(SuccessHttpStatus(), resp, _) => Right(())
   }
 
-  def usersPath(ids: Seq[UserId]) = Request.query(UsersPath, "ids" -> ids.mkString(","))
+  def getSearchable: ErrorOrResponse[Boolean] =
+    netClient.withErrorHandling("setSearchable", Request.Get(SearchablePath)) {
+      case Response(HttpStatus(Success, _), JsonObjectResponse(o), _) => JsonDecoder.decodeBool('searchable)(o)
+    }
+
+  def setSearchable(searchable: Boolean): ErrorOrResponse[Unit] = {
+    val req = Request.Put(SearchablePath, JsonContentEncoder(JsonEncoder(_.put("searchable", searchable))))
+    netClient.withErrorHandling("setSearchable", req) {
+      case Response(HttpStatus(Success, _), _, _) =>
+        debug(s"Searchable status updated: $searchable")
+        Right(())
+    }
+  }
 }
 
 object UsersClient {
   val UsersPath = "/users"
   val SelfPath = "/self"
   val ConnectionsPath = "/self/connections"
+  val SearchablePath = "/self/searchable"
   val IdsCountThreshold = 45
+
+  def usersPath(ids: Seq[UserId]) = Request.query(UsersPath, "ids" -> ids.mkString(","))
 
   object UserResponseExtractor {
     def unapplySeq(resp: ResponseContent): Option[Seq[UserInfo]] = resp match {

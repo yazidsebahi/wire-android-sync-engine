@@ -331,7 +331,27 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
   private def updateSelfTeam(accountId: AccountId): ErrorOr[Unit] = accountsStorage.get(accountId).flatMap {
     case Some(account) => account.teamId match {
-      case Right(_) => Future.successful(Right({}))
+
+      case Right(teamId) => teamId match {
+        case Some(_) => //team members should be un-searchable (i.e., in privateMode)
+          if (account.privateMode) Future.successful(Right(())) //already on, nothing to do.
+          else usersClient.getSearchable.future.flatMap {
+            case Right(searchable) =>
+              def update = accountsStorage.update(accountId, _.copy(privateMode = true)).map(_ => Right(()))
+              if (searchable) usersClient.setSearchable(searchable = false).future.flatMap {
+                case Right(()) => update //successfully set not-searchable update local state
+                case Left(err) =>
+                  error(s"Unable to update searchable state - will try again another time $err")
+                  Future.successful(Left(err))
+              }
+              else update //already not-searchable, update local state
+            case Left(err) =>
+              error(s"Unable to check searchable state - will leave until another time: $err")
+              Future.successful(Left(err))
+          }
+        case None => Future.successful(Right(())) //no team account - don't worry about privateMode
+      }
+
       case Left(_) => teamsClient.findSelfTeam().future flatMap {
         case Right(teamOpt) =>
           val updateUsers = (teamOpt, account.userId) match {
@@ -363,7 +383,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     }
     case _ => Future.successful(Left(ErrorResponse.InternalError))
   }
-
 
   def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")
