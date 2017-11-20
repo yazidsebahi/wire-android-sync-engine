@@ -75,13 +75,6 @@ public interface IConversation extends UiObservable, Parcelable {
     String getName();
 
     /*
-        Three modes are provided ME, SINGLE, GROUP and this indicates ME
-    */
-    boolean isMe();
-
-    boolean isOtto();
-
-    /*
         Is this user also a member in this conversation, so far I know
         that the user doesn't have an option to mute the conversation
     */
@@ -94,47 +87,14 @@ public interface IConversation extends UiObservable, Parcelable {
      */
     User getOtherParticipant();
 
-    /*
-        Returns the number of messages that are unread in this conversation
-    */
-    int getUnreadCount();
-
-    /*
-        Returns the number of messages that failed to sync (and user didn't see them yet) in this conversation.
-     */
-    int getFailedCount();
-
-    /*
-        Indicates if the user choose to archive this conversation
-    */
-    boolean isArchived();
-
-    /*
-        Indicates if the user doesnt want a HeadView in the message stream
-        or Push notifications
-    */
-    boolean isMuted();
-
+    // used by DeviceActor
     void setArchived(boolean archived);
-
     void setMuted(boolean muted);
-
+    void clear();
     /*
         Returns a background image for this conversation
      */
     ImageAsset getBackground();
-
-    void sendMessage(MessageContent msg);
-
-    /*
-        Set conversation name
-    */
-    void setConversationName(String name);
-
-    /*
-        True if you are one of the current participants
-    */
-    boolean isActive();
 
     /**
      * Conversation verification state.
@@ -143,44 +103,6 @@ public interface IConversation extends UiObservable, Parcelable {
      */
     Verification getVerified();
 
-    /**
-     * Returns true if conversation has unread missed call message.
-     */
-    boolean hasMissedCall();
-
-    /**
-     * Adds members to the conversation.
-     */
-    void addMembers(Iterable<? extends User> users);
-
-    /**
-     * Removes members from conversation.
-     */
-    void removeMember(User user);
-
-    /**
-     * Removes current user from conversation (like calling removeMembers with self user) and archives the conversation.
-     */
-    void leave();
-
-    void knock();
-
-    /**
-     * Returns last incoming knock message for this conversation, can be null if there is no recent knock.
-     * This can be used to display animations for ongoing knocks in conversations list.
-     */
-    Message getIncomingKnock();
-
     InputStateIndicator getInputStateIndicator();
 
-    /** Deletes the content / history of this conversation for this user and archives it. */
-    void clear();
-
-    boolean isSelected();
-
-    boolean isEphemeral();
-
-    EphemeralExpiration getEphemeralExpiration();
-
-    void setEphemeralExpiration(EphemeralExpiration expiration);
 }

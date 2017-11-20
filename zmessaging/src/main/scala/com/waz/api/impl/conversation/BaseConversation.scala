@@ -22,14 +22,13 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.impl._
-import com.waz.api.{EphemeralExpiration, IConversation, MessageContent, Verification}
+import com.waz.api.{IConversation, MessageContent, Verification}
 import com.waz.content.Uris
 import com.waz.model.ConversationData
 import com.waz.service.ZMessaging
 import com.waz.ui.{SignalLoading, UiModule}
 import com.waz.utils.JsonEncoder
 
-import scala.collection.JavaConverters._
 import scala.util.Try
 
 abstract class BaseConversation(implicit ui: UiModule) extends IConversation with UiObservable with SignalLoading {
@@ -76,53 +75,18 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
 
   def getType = data.convType
 
-  def isMuted = data.muted
-
-  def isArchived = data.archived
-
-  override def isSelected = selected
-
   def getUsers = ui.cached(Uris.ConvMembersUri(id), new MembersList(id))
-
-  override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
-
-  override def getEphemeralExpiration = data.ephemeral
-
-  override def setEphemeralExpiration(expiration: EphemeralExpiration): Unit =
-    ui.zms.flatMapFuture { _.convsUi.setEphemeral(id, expiration) }
 
   override def isMemberOfConversation: Boolean = data.isActive
 
-  override def hasMissedCall: Boolean = data.missedCallMessage.isDefined
-
-  override def getUnreadCount: Int = data.unreadCount.messages
-
-  override def getFailedCount: Int = data.failedCount
-
-  override def isMe: Boolean = data.convType == SELF
-
+  // used by DeviceActor
   override def setArchived(archived: Boolean): Unit = conversations.setArchived(id, archived)
-
   override def setMuted(muted: Boolean): Unit = conversations.setMuted(id, muted)
-
-  override def sendMessage(msg: MessageContent): Unit = {
-    debug(s"sendMessage $msg")
-    conversations.sendMessage(id, msg)
-  }
+  override def clear(): Unit = conversations.clear(id)
 
   override def getBackground = ImageAsset.Empty
 
-  def isActive = data.isActive
-
   override def getVerified: Verification = data.verified
-
-  def setConversationName(name: String) = conversations.setName(id, name.trim)
-
-  override def addMembers(users: java.lang.Iterable[_ <: api.User]): Unit = conversations.addMembers(id, users.asScala.toList)
-
-  override def removeMember(user: api.User): Unit = conversations.removeMember(id, user)
-
-  override def leave(): Unit = conversations.leave(id)
 
   override def getOtherParticipant: api.User = {
     if ((data ne ConversationData.Empty) && data.convType != ONE_TO_ONE && data.convType != WAIT_FOR_CONNECTION && data.convType != INCOMING_CONNECTION)
@@ -131,13 +95,7 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
     ui.getOtherParticipantForOneToOneConv(id)
   }
 
-  override def knock(): Unit = conversations.knock(id)
-
-  override def getIncomingKnock: Message = data.incomingKnockMessage.map(ui.messages.cachedOrNew).orNull
-
   override def getInputStateIndicator: InputStateIndicator = ui.cached(Uris.InputStateIndicatorUri(id), new InputStateIndicator(id))
-
-  override def clear(): Unit = conversations.clear(id)
 
   override def toString: String = s"Conversation($id, $name, $data)"
 
