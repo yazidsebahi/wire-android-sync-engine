@@ -288,7 +288,7 @@ class CallingService(val selfUserId:      UserId,
         if (isGroup) Future.successful(Set(selfUserId))
         else if (conv.team.isEmpty) Future.successful(Set(UserId(conv.id.str)))
         else members.getByConvs(Set(conv.id)).map(_.map(_.userId).filter(_ != selfUserId).toSet)
-      vbr = true // TODO reintroduce when ready... again .... <- userPrefs.preference(UserPreferences.VBREnabled).apply()
+      vbr <- userPrefs.preference(UserPreferences.VBREnabled).apply()
     } yield {
       profile.activeCall match {
         case Some(call) if call.convId == convId =>

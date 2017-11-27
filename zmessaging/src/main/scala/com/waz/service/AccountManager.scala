@@ -331,7 +331,13 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
   private def updateSelfTeam(accountId: AccountId): ErrorOr[Unit] = accountsStorage.get(accountId).flatMap {
     case Some(account) => account.teamId match {
-      case Right(_) => Future.successful(Right({}))
+
+      case Right(teamId) => teamId match {
+        case Some(_) => //team members should be un-searchable (i.e., in privateMode) which is already set by default on BE
+          accountsStorage.update(accountId, _.copy(privateMode = true)).map(_ => Right(()))
+        case None => Future.successful(Right(())) //no team account - don't worry about privateMode
+      }
+
       case Left(_) => teamsClient.findSelfTeam().future flatMap {
         case Right(teamOpt) =>
           val updateUsers = (teamOpt, account.userId) match {
@@ -363,7 +369,6 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     }
     case _ => Future.successful(Left(ErrorResponse.InternalError))
   }
-
 
   def ensureFullyRegistered(): Future[Either[ErrorResponse, AccountData]] = {
     verbose(s"ensureFullyRegistered()")

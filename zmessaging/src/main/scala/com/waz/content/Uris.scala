@@ -32,13 +32,9 @@ object Uris {
   val MessagesRootUri = Uri.parse(s"$Base/msgs")
   val UsersUri = Uri.parse(s"$Base/users")
   val ErrorsUri = Uri.parse(s"$Base/errors")
-  val TrackingUri = Uri.parse(s"$Base/tracking")
-  val LoggingUri = Uri.parse(s"$Base/logging")
   val ConvMembersRootUri = Uri.parse(s"$Base/members")
   val ConnectionsRootUri = Uri.parse(s"$Base/conn")
-  val UserSearchUri = UsersUri.buildUpon().appendPath("search").build()
   val ContactsUri = Uri.parse(s"$Base/contacts")
-  val SpotifyUri = Uri.parse(s"$Base/spotify")
 
   def ConversationUri(convId: ConvId): Uri = ConversationsUri.buildUpon().appendEncodedPath(convId.toString).build()
 

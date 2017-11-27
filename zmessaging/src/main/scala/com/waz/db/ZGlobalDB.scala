@@ -52,7 +52,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 20
+  val DbVersion = 21
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao, TeamDataDoa)
 
@@ -111,6 +111,9 @@ object ZGlobalDB {
       },
       Migration(19, 20) { db =>
         AccountDataMigration.v20(db)
+      },
+      Migration(20, 21) { db =>
+        db.execSQL("ALTER TABLE Accounts ADD COLUMN pending_team_name TEXT DEFAULT NULL")
       }
     )
 

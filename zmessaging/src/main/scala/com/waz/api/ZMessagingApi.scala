@@ -18,24 +18,12 @@
 package com.waz.api
 
 import android.content.Context
-import com.waz.api.ZMessagingApi.PhoneConfirmationCodeRequestListener
 
 object ZMessagingApi {
 
   trait RegistrationListener {
     def onRegistered(user: Self): Unit
     def onRegistrationFailed(code: Int, message: String, label: String): Unit
-  }
-
-  trait PhoneConfirmationCodeRequestListener {
-    def onConfirmationCodeSent(kindOfAccess: KindOfAccess): Unit
-    def onPasswordExists(kindOfAccess: KindOfAccess): Unit
-    def onConfirmationCodeSendingFailed(kindOfAccess: KindOfAccess, code: Int, message: String, label: String): Unit
-  }
-
-  trait PhoneNumberVerificationListener {
-    def onVerified(kindOfVerification: KindOfVerification): Unit
-    def onVerificationFailed(kindOfVerification: KindOfVerification, code: Int, message: String, label: String): Unit
   }
 }
 
@@ -54,34 +42,11 @@ trait ZMessagingApi {
   def setPermissionProvider(p: PermissionProvider): Unit
   def removePermissionProvider(p: PermissionProvider): Unit
 
-  def login(credentials: Credentials, listener: LoginListener): Unit
-
   def logout(): Unit
-
-  def register(credentials: Credentials, name: String, accent: AccentColor, listener: ZMessagingApi.RegistrationListener): Unit
-
-  /**
-   * Request a confirmation code for a given phone number. The code will be sent to the given phone number via SMS.
-   * This can be used during registration as well as login. If this is called during registration, but the phone is already
-   * registered, or if this is called during login, but the phone is not yet registered, this will fail with a conflict (HTTP status 409).
-   */
-  def requestPhoneConfirmationCode(phoneNumber: String, kindOfAccess: KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit
-
-  def requestPhoneConfirmationCall(phoneNumber: String, kindOfAccess: KindOfAccess, listener: PhoneConfirmationCodeRequestListener): Unit
-
-  /**
-   * Verify that the given combination of a phone number and a confirmation code is valid. Used either in the registration process, in order to
-   * pre-verify the phone number even before the user entered a name and proper registration starts, or when the user adds/changes her phone number later on.
-   */
-  def verifyPhoneNumber(phoneNumber: String, confirmationCode: String, kindOfVerification: KindOfVerification, listener: ZMessagingApi.PhoneNumberVerificationListener): Unit
-
-  def search(): Search
 
   def getSelf: Self
 
   def getConversations: ConversationsList
-
-  def getCache: ZCache
 
   def getUser(id: String): User
 
@@ -95,8 +60,6 @@ trait ZMessagingApi {
   def getErrors: ErrorsList
 
   def getGiphy: Giphy
-
-  def getSpotify: Spotify
 
   def getConnectionIndicator: ConnectionIndicator
 

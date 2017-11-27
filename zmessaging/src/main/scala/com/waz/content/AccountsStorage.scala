@@ -29,6 +29,7 @@ import scala.concurrent.Future
 trait AccountsStorage extends CachedStorage[AccountId, AccountData] {
   def findByEmail(email: EmailAddress): Future[Option[AccountData]]
   def findByPhone(phone: PhoneNumber): Future[Option[AccountData]]
+  def findByPendingTeamName(name: String): Future[Option[AccountData]]
   def find(credentials: Credentials): Future[Option[AccountData]]
   def findLoggedIn(): Future[Seq[AccountData]]
 }
@@ -47,4 +48,6 @@ class AccountsStorageImpl(context: Context, storage: Database) extends CachedSto
   }
 
   def findLoggedIn() = find(_.cookie.isDefined, AccountDataDao.findLoggedIn()(_), identity)
+
+  def findByPendingTeamName(name: String) = find(ac => ac.pendingTeamName.contains(name), AccountDataDao.findByPendingTeamName(name)(_), identity).map(_.headOption)
 }
