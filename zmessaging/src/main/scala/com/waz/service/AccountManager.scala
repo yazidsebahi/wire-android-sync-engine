@@ -333,14 +333,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     case Some(account) => account.teamId match {
 
       case Right(teamId) => teamId match {
-        case Some(_) => //team members should be un-searchable (i.e., in privateMode)
-          if (account.privateMode) Future.successful(Right(())) //already on, nothing to do.
-          else usersClient.setSearchable(searchable = false).future.flatMap {
-            case Right(()) => accountsStorage.update(accountId, _.copy(privateMode = true)).map(_ => Right(()))
-            case Left(err) =>
-              error(s"Unable to update searchable state - will try again another time $err")
-              Future.successful(Left(err))
-          }
+        case Some(_) => //team members should be un-searchable (i.e., in privateMode) which is already set by default on BE
+          accountsStorage.update(accountId, _.copy(privateMode = true)).map(_ => Right(()))
         case None => Future.successful(Right(())) //no team account - don't worry about privateMode
       }
 
