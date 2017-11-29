@@ -23,14 +23,13 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.ConversationsList.{ConversationCallback, VerificationStateCallback}
 import com.waz.api.impl.ConversationsListState.Data
-import com.waz.api.impl.conversation.{BaseConversationsList, SelfConversation}
-import com.waz.api.{IConversation, LoadHandle}
+import com.waz.api.impl.conversation.BaseConversationsList
+import com.waz.api.IConversation
 import com.waz.content.Uris
-import com.waz.content.Uris.{SelfConversationUri, SyncIndicatorUri}
+import com.waz.content.Uris.SyncIndicatorUri
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.sync.SyncCommand
 import com.waz.model.{ConvId, ConversationData}
-import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.ui._
 import com.waz.utils.RichFuture
@@ -50,25 +49,6 @@ class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList
     if (filter == RegularListFilter) ui.cached(ArchivedUri, new SearchableConversationsList(conversations, ArchivedListFilter))
     else ui.cached(EstablishedArchivedUri, new SearchableConversationsList(conversations, EstablishedArchivedListFilter))
 
-  lazy val selectedConversation: UiSignal[IConversation] = {
-    def signal(zms: ZMessaging) = for {
-      convId <- zms.convsStats.selectedConversationId
-      // check if conv exists, we also want this signal to be changed when conv is removed, XXX: this could be simpler if convStorage provided nicer signals
-      conv <- zms.convsContent.conversationsSignal.map { _.conversations.find(c => convId.contains(c.id)) }
-    } yield conv.filterNot(_.hidden)
-
-    UiSignal.mapped[IConversation, Option[ConversationData]](signal, _.map(ui.convs.getConversation).orNull)
-  }
-
-  override def setSelectedConversation(conv: IConversation): Unit = conv match {
-    case c: Conversation =>
-      selectedConversation.set(ui.convs.getConversation(c.data))
-      ui.zms(_.convsStats.selectConversation(Some(c.id)))
-    case _ =>
-      selectedConversation.set(null)
-      ui.zms(_.convsStats.selectConversation(None))
-  }
-
   override protected val conversations: Conversations = ui.convs
 
   override def createGroupConversation(users: Seq[api.User], callback: ConversationCallback): Unit =
@@ -76,14 +56,7 @@ class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList
       callback.onConversationsFound(Seq(conversations.getConversation(conv).asInstanceOf[IConversation]).asJava)
     } (Threading.Ui) .recoverWithLog()
 
-  override def getSelfConversation: IConversation = ui.cached(SelfConversationUri, new SelfConversation)
-
   override def getConversation(id: String): IConversation = conversations.convById(ConvId(id))
-
-  override def getConversation(id: String, callback: ConversationCallback): LoadHandle =
-    FutureLoadHandle(conversations.getConversation(ConvId(id))) { conv =>
-      callback.onConversationsFound(conv.toList.asInstanceOf[Seq[IConversation]].asJava)
-    }
 
   override def getSyncIndicator = ui.cached(SyncIndicatorUri(Uris.ConversationsUri), new SyncIndicator(SyncCommand.SyncConversations, SyncCommand.SyncSelf, SyncCommand.SyncConnections))
 

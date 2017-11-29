@@ -41,16 +41,8 @@ object ConversationsList {
 }
 
 trait ConversationsList extends CoreList[IConversation] with EventualReadiness {
-  def getSelfConversation: IConversation
-
-  def selectedConversation: UiSignal[IConversation]
-  def setSelectedConversation(conv: IConversation): Unit
-
-  @Deprecated // use getConversation with callback
+  @Deprecated // remove when not used anymore
   def getConversation(id: String): IConversation
-
-  def getConversation(id: String, callback: ConversationsList.ConversationCallback): LoadHandle
-  def getConversationIndex(id: String): Int
 
   def createGroupConversation(users: Seq[User], callback: ConversationsList.ConversationCallback): Unit
 
