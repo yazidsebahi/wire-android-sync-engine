@@ -358,7 +358,6 @@ object ZMessaging { self =>
 
     if (this.currentUi == null) {
       this.context = context.getApplicationContext
-      //Constants.loadFromContext(context)
       currentUi = ui
       currentGlobal = _global
       currentAccounts = _accounts

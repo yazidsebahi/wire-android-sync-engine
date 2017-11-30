@@ -118,12 +118,5 @@ class TrackingServiceSpec extends AndroidFreeSpec {
     }
   }
 
-  /*
-  def loggedOut(reason: String, accountId: AccountId): Unit
-  def optOut(enabled: Boolean): Unit
-  def contribution(action: ContributionEvent.Action): Unit
-  def exception(e: Throwable, description: String): Unit
-  def exception(e: Throwable, description: String, accountId: AccountId): Unit
-  def crash(e: Throwable): Unit
-*/
+
 }

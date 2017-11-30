@@ -37,8 +37,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest._
 //import org.threeten.bp.Instant
 
-//import scala.concurrent.duration._
-//import scala.concurrent.{Await, Future, Promise}
+
 
 @Ignore class SyncRequestServiceImplSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
 //  import com.waz.threading.Threading.Implicits.Background

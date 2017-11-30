@@ -82,18 +82,14 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
       track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e)))
   }
 
-  def exception(e: Throwable, description: String, accountId: AccountId): Unit = e match {
-    case _: NoReporting =>
-    case _ =>
-      val cause = rootCause(e)
-      track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e)), accountId)
+  def exception(e: Throwable, description: String, accountId: AccountId): Unit = {
+    val cause = rootCause(e)
+    track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e)), accountId)
   }
 
-  def crash(e: Throwable): Unit = e match {
-    case _: NoReporting =>
-    case _ =>
-      val cause = rootCause(e)
-      track(CrashEvent(cause.getClass.getSimpleName, details(cause), throwable = Some(e)))
+  def crash(e: Throwable): Unit = {
+    val cause = rootCause(e)
+    track(CrashEvent(cause.getClass.getSimpleName, details(cause), throwable = Some(e)))
   }
 
   @tailrec
