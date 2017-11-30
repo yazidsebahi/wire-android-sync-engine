@@ -19,7 +19,6 @@ package com.waz.service.conversation
 
 import android.content.Context
 import com.softwaremill.macwire._
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ErrorType
@@ -30,6 +29,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.threading.Threading
@@ -55,7 +55,8 @@ class ConversationsService(context:         Context,
                            messages:        MessagesServiceImpl,
                            msgContent:      MessagesContentUpdater,
                            userPrefs:       UserPreferences,
-                           eventScheduler:  => EventScheduler) {
+                           eventScheduler:  => EventScheduler,
+                           tracking:        TrackingService) {
 
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
@@ -94,7 +95,7 @@ class ConversationsService(context:         Context,
       content.convByRemoteId(rConvId) flatMap {
         case Some(conv) => processUpdateEvent(conv, ev)
         case None if retryCount > 3 =>
-          HockeyApp.saveException(new Exception("No conversation data found for event") with NoStackTrace, "No conversation data found for event")
+          tracking.exception(new Exception("No conversation data found for event") with NoStackTrace, "No conversation data found for event")
           successful(())
         case None =>
           ev match {

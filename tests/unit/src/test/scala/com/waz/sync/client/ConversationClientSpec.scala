@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConversationData, _}
+import com.waz.model.Event
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.threading.CancellableFuture

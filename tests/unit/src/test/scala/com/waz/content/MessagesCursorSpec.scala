@@ -24,7 +24,7 @@ import com.waz.api.Message
 import com.waz.content.MessagesCursor.Entry
 import com.waz.model._
 import com.waz.service.messages.MessageAndLikes
-import com.waz.testutils.MockZMessaging
+import com.waz.testutils.{EmptyTrackingService, MockZMessaging}
 import com.waz.threading.SerialDispatchQueue
 import org.scalacheck.Gen._
 import org.scalacheck.{Arbitrary, _}
@@ -154,7 +154,7 @@ import scala.concurrent.duration._
   feature("MessagesCursor.apply") {
 
     scenario("load all messages sequentially") {
-      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader)
+      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader, new EmptyTrackingService)
 
       items.zipWithIndex foreach { case (e, i) =>
         cursor(i).message.id shouldEqual e.id
@@ -162,7 +162,7 @@ import scala.concurrent.duration._
     }
 
     scenario("get random items from cursor") {
-      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader)
+      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader, new EmptyTrackingService)
 
       forAll(Gen.choose(0, items.size - 1)) { index: Int =>
         cursor.apply(index).message.id shouldEqual items(index).id
@@ -173,7 +173,7 @@ import scala.concurrent.duration._
   feature("MessagesCursor.indexOf") {
 
     scenario("get index of entries") {
-      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader)
+      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader, new EmptyTrackingService)
 
       items.zipWithIndex foreach { case (e, i) =>
         cursor.indexOf(e.time) shouldEqual i
@@ -181,7 +181,7 @@ import scala.concurrent.duration._
     }
 
     scenario("get index of random entry") {
-      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader)
+      val cursor = new MessagesCursor(createCursor(items), 0, Instant.EPOCH, msgLoader, new EmptyTrackingService)
       cursor(0)
 
       forAll(Gen.choose(0, items.size - 1)) { index: Int =>

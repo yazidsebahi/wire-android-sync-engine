@@ -34,8 +34,6 @@ import com.waz.service.push.NotificationService.NotificationInfo
 import com.waz.testutils.Matchers._
 import com.waz.testutils._
 import com.waz.utils.events.EventContext
-import com.waz.zms.FCMHandlerService.DecryptedNotification
-import org.json.JSONObject
 import org.robolectric.shadows.ShadowLog
 import org.scalatest._
 import org.scalatest.prop.PropertyChecks

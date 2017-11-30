@@ -61,11 +61,9 @@ class TypingService(accountId:     AccountId,
 
   def typingUsers(conv: ConvId) = new AggregatingSignal[IndexedSeq[TypingUser], IndexedSeq[UserId]](onTypingChanged.filter(_._1 == conv).map(_._2), Future { typing(conv).map(_.id) }, { (_, updated) => updated.map(_.id) })
 
-  def handleTypingEvent(e: TypingEvent): Future[Unit] = {
-    conversations.getByRemoteId(e.convId) map {
-      case Some(conv) => setUserTyping(conv.id, e.from, e.time, e.isTyping)
-      case None => warn(s"Conversation ${e.convId} not found, ignoring.")
-    }
+  def handleTypingEvent(e: TypingEvent): Future[Unit] = conversations.getByRemoteId(e.convId) map {
+    case Some(conv) => setUserTyping(conv.id, e.from, e.time, e.isTyping)
+    case None => warn(s"Conversation ${e.convId} not found, ignoring.")
   }
 
   def selfChangedInput(conv: ConvId): Future[Unit] = Future {

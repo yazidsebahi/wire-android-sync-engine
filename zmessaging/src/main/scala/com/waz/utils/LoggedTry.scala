@@ -17,9 +17,10 @@
  */
 package com.waz.utils
 
-import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog._
-import com.waz.{HockeyApp, ZLog, utils}
+import com.waz.service.tracking.TrackingService
+import com.waz.service.tracking.TrackingService.NoReporting
+import com.waz.{ZLog, utils}
 
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -32,11 +33,11 @@ object LoggedTry {
   def errorHandler[A](reportHockey: Boolean = false)(implicit tag: LogTag): PartialFunction[Throwable, Try[A]] = {
     case NonFatal(e) =>
       ZLog.warn("logged try failed", e)
-      if (reportHockey || utils.isTest ) HockeyApp.saveException(e, "logged try failed (non-fatal)")
+      if (reportHockey || utils.isTest ) TrackingService.exception(e, "logged try failed (non-fatal)")
       Failure(e)
     case e: Throwable =>
       ZLog.error("logged try got fatal error", e)
-      if (reportHockey || utils.isTest) HockeyApp.saveException(e, "logged try failed (fatal)")
+      if (reportHockey || utils.isTest) TrackingService.exception(e, "logged try failed (fatal)")
       Failure(BoxedError(e))
   }
 }

@@ -28,6 +28,7 @@ import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncReque
 import com.waz.service._
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.queue.{ConvLock, SyncContentUpdaterImpl}
+import com.waz.testutils.EmptyTrackingService
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Context, DB}
@@ -43,6 +44,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
   val network   = mock[NetworkModeService]
   val sync      = mock[SyncHandler]
   val reporting = mock[ReportingService]
+  val tracking  = new EmptyTrackingService
 
   val timeouts = new Timeouts
 
@@ -77,7 +79,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
 
     val content = new SyncContentUpdaterImpl(db)
-    val service = new SyncRequestServiceImpl(context, account1Id, content, network, sync, reporting, accounts)
+    val service = new SyncRequestServiceImpl(context, account1Id, content, network, sync, reporting, accounts, tracking)
     (new AndroidSyncServiceHandle(service, timeouts), service)
   }
 }

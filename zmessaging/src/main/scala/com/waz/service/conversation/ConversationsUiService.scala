@@ -34,10 +34,12 @@ import com.waz.service.AccountsService.InForeground
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.service.tracking.{ContributionEvent, TrackingService}
+import com.waz.service.tracking.TrackingService.AssetTrackingData
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
-import com.waz.utils.events.EventStream
+import com.waz.utils.events.{EventContext, EventStream}
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{RichInstant, _}
 import org.threeten.bp.Instant
@@ -94,6 +96,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
                                  users:           UserService,
                                  usersStorage:    UsersStorage,
                                  messages:        MessagesService,
+                                 messagesStorage: MessagesStorage,
                                  messagesContent: MessagesContentUpdater,
                                  members:         MembersStorage,
                                  assetStorage:    AssetsStorage,
@@ -103,6 +106,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
                                  convs:           ConversationsService,
                                  sync:            SyncServiceHandle,
                                  accounts:        AccountsService,
+                                 tracking:        TrackingService,
                                  errors:          ErrorsService) extends ConversationsUiService {
   import ConversationsUiService._
   import Threading.Implicits.Background
@@ -110,6 +114,23 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   override val assetUploadStarted   = EventStream[AssetData]()
   override val assetUploadCancelled = EventStream[Mime]() //size, mime
   override val assetUploadFailed    = EventStream[ErrorResponse]()
+
+  assetUploadStarted.map(_.id) {
+    assetTrackingData(_).map {
+      case AssetTrackingData(convType, withOtto, exp, assetSize, m) =>
+        tracking.track(ContributionEvent(ContributionEvent.fromMime(m), convType, exp, withOtto), accountId)
+    }
+  }(EventContext.Global)
+
+  private def assetTrackingData(id: AssetId): Future[AssetTrackingData] = {
+    for {
+      Some(msg) <- messagesStorage.get(MessageId(id.str))
+      Some(conv) <- convsContent.convById(msg.convId)
+      Some(asset) <- assetStorage.get(id)
+      convType <- TrackingService.convType(conv, members)
+      isBot <- TrackingService.isBot(conv, usersStorage)
+    } yield AssetTrackingData(convType, isBot, msg.ephemeral, asset.size, asset.mime)
+  }
 
   @Deprecated
   override def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = content match {

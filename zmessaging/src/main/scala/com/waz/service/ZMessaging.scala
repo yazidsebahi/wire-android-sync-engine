@@ -46,7 +46,6 @@ import com.waz.utils.Locales
 import com.waz.utils.wrappers.AndroidContext
 import com.waz.zms.FetchJob
 import com.waz.znet._
-import net.hockeyapp.android.{Constants, ExceptionHandler}
 import org.threeten.bp.{Clock, Instant}
 
 import scala.concurrent.{Future, Promise}
@@ -54,9 +53,11 @@ import scala.util.Try
 
 class ZMessagingFactory(global: GlobalModule) {
 
+  implicit val tracking = global.trackingService
+
   def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
 
-  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient)
+  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient, tracking)
 
   def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
@@ -141,6 +142,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def flowmanager       = global.flowmanager
   def mediamanager      = global.mediaManager
   def gNotifcations     = global.notifications
+  def tracking          = global.trackingService
 
   def db                = storage.db
   def userPrefs         = storage.userPrefs
@@ -341,18 +343,21 @@ object ZMessaging { self =>
   private [waz] var currentGlobal: GlobalModuleImpl = _
   var currentAccounts: AccountsServiceImpl = _
 
+  def getCurrentGlobal(): GlobalModule = currentGlobal // for Java
+
   private lazy val globalReady = Promise[GlobalModule]()
   private lazy val accsReady = Promise[AccountsServiceImpl]()
 
   lazy val globalModule:    Future[GlobalModule]    = globalReady.future
   lazy val accountsService: Future[AccountsServiceImpl] = accsReady.future
 
+  def exceptionEvent(e: Throwable, description: String): Future[Unit] = globalModule.map(_.trackingService.exception(e, description))(Threading.Background)
+
   def onCreate(context: Context) = {
     Threading.assertUiThread()
 
     if (this.currentUi == null) {
       this.context = context.getApplicationContext
-      Constants.loadFromContext(context)
       currentUi = ui
       currentGlobal = _global
       currentAccounts = _accounts
@@ -375,7 +380,7 @@ object ZMessaging { self =>
     case ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN |
          ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW |
          ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL =>
-      ExceptionHandler.saveException(new RuntimeException(s"onTrimMemory($level)"), null, null)
+      exceptionEvent(new RuntimeException(s"onTrimMemory($level)"), null)
       Threading.Background {
         currentGlobal.cache.deleteExpired()
         currentGlobal.imageCache.clear()

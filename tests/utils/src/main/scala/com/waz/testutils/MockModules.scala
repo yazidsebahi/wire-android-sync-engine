@@ -37,7 +37,6 @@ import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.ZNetClient.{EmptyAsyncClientImpl, ErrorOrResponse}
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
-import net.hockeyapp.android.Constants
 import org.robolectric.Robolectric
 
 import scala.concurrent.duration._
@@ -51,10 +50,9 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
 
   ZMessaging.context = context
   if (ZMessaging.currentGlobal == null) ZMessaging.currentGlobal = this
-  Constants.loadFromContext(context)
   override lazy val factory = new MockZMessagingFactory(this)
 
-  override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend) {
+  override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend, new EmptyTrackingService) {
     override def login(account: AccountData) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
@@ -86,7 +84,7 @@ class MockAccountManager(override val accounts: AccountsServiceImpl = new MockAc
   }
 }
 
-class MockUserModule(val mockAccount: MockAccountManager = new MockAccountManager(), userId: UserId = UserId()) extends UserModule(userId, mockAccount)
+class MockUserModule(val mockAccount: MockAccountManager = new MockAccountManager(), userId: UserId = UserId()) extends UserModule(userId, mockAccount, new EmptyTrackingService)
 
 class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId: Option[TeamId] = None, clientId: ClientId = ClientId()) extends ZMessaging(teamId, clientId, mockUser) { zms =>
   def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), None, ClientId())

@@ -18,13 +18,14 @@
 package com.waz.service.conversation
 
 import com.waz.api.Message
-import com.waz.content.{AssetsStorage, ConversationStorage, MembersStorage, UsersStorage}
+import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Text
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.service.tracking.TrackingService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -38,11 +39,11 @@ class MessageSendingSpec extends AndroidFreeSpec { test =>
   lazy val selfUser = UserData("self user")
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
   
-  private def stubService(
-                           assets:          AssetService                 = stub[AssetService],
+  private def stubService( assets:          AssetService                 = stub[AssetService],
                            users:           UserService                  = stub[UserService],
                            usersStorage:    UsersStorage                 = stub[UsersStorage],
                            messages:        MessagesService              = stub[MessagesService],
+                           messagesStorage: MessagesStorage              = stub[MessagesStorage],
                            messagesContent: MessagesContentUpdater       = null, //stub[MessagesContentUpdater],
                            members:         MembersStorage               = stub[MembersStorage],
                            assetStorage:    AssetsStorage                = null, //stub[AssetsStorage],
@@ -51,11 +52,11 @@ class MessageSendingSpec extends AndroidFreeSpec { test =>
                            network:         NetworkModeService           = stub[NetworkModeService],
                            convs:           ConversationsService         = null, //stub[ConversationsService],
                            sync:            SyncServiceHandle            = stub[SyncServiceHandle],
-                           lifecycle:       UiLifeCycle                  = stub[UiLifeCycle],
+                           tracking:        TrackingService              = stub[TrackingService],
                            errors:          ErrorsService                = null //stub[ErrorsService]
-  ) = new ConversationsUiServiceImpl(account1Id,
-    UserId(), assets, users, usersStorage, messages, messagesContent, members,
-    assetStorage, convsContent, convStorage, network, convs, sync, accounts, errors
+  ) = new ConversationsUiServiceImpl(AccountId(),
+    UserId(), assets, users, usersStorage, messages, messagesStorage, messagesContent, members,
+    assetStorage, convsContent, convStorage, network, convs, sync, accounts, tracking, errors
   )
 
   feature("Text messages") {

@@ -21,6 +21,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.content.AccountsStorage
 import com.waz.model.{AccountData, AccountId, EmailAddress}
 import com.waz.specs.AndroidFreeSpec
+import com.waz.testutils.EmptyTrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.EventContext
 import com.waz.utils.returning
@@ -35,7 +36,7 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
   val loginClient = mock[LoginClient]
   val accId       = AccountId()
   val accStorage  = mock[AccountsStorage]
-
+  val tracking    = new EmptyTrackingService
 
   feature("Successful logins") {
     scenario("Return authentication token if valid") {
@@ -233,5 +234,5 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
     }
   }
 
-  def getManager = new AuthenticationManager(accId, accStorage, loginClient)
+  def getManager = new AuthenticationManager(accId, accStorage, loginClient, tracking)
 }

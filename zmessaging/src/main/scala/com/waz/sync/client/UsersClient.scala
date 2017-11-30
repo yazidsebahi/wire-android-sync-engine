@@ -17,11 +17,11 @@
  */
 package com.waz.sync.client
 
-import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
+import com.waz.service.tracking.TrackingService.NoReporting
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.ContentEncoder.JsonContentEncoder

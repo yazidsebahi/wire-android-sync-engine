@@ -17,28 +17,27 @@
  */
 package com.waz.sync
 
-import java.util.Date
-import java.util.concurrent.ConcurrentLinkedQueue
+//import java.util.Date
+//import java.util.concurrent.ConcurrentLinkedQueue
 
 import com.waz.RobolectricUtils
-import com.waz.api.{NetworkMode, SyncState}
-import com.waz.model._
-import com.waz.model.sync.SyncJob.Priority
-import com.waz.model.sync.SyncRequest._
-import com.waz.model.sync.{SyncCommand => Cmd, _}
-import com.waz.sync.queue.ConvLock
-import com.waz.testutils.Matchers._
-import com.waz.testutils.{MockUserModule, MockZMessaging}
-import org.robolectric.Robolectric
-import org.robolectric.shadows.ShadowLog
+//import com.waz.api.{NetworkMode, SyncState}
+//import com.waz.model._
+//import com.waz.model.sync.SyncJob.Priority
+//import com.waz.model.sync.SyncRequest._
+//import com.waz.model.sync.{SyncCommand => Cmd, _}
+//import com.waz.sync.queue.ConvLock
+//import com.waz.testutils.Matchers._
+//import com.waz.testutils.{MockUserModule, MockZMessaging}
+//import org.robolectric.Robolectric
+//import org.robolectric.shadows.ShadowLog
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.matchers.Matcher
+//import org.scalatest.matchers.Matcher
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest._
-import org.threeten.bp.Instant
+//import org.threeten.bp.Instant
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
+
 
 @Ignore class SyncRequestServiceImplSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with GeneratorDrivenPropertyChecks with ScalaFutures { test =>
 //  import com.waz.threading.Threading.Implicits.Background

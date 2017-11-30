@@ -17,13 +17,13 @@
  */
 package com.waz.znet
 
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl
 import com.waz.model.{AccountData, EmailAddress}
 import com.waz.service.BackendConfig
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.{ExponentialBackoff, JsonEncoder}
@@ -42,7 +42,7 @@ trait LoginClient {
   def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]
 }
 
-class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends LoginClient {
+class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: TrackingService) extends LoginClient {
   import com.waz.znet.LoginClient._
   private implicit val dispatcher = new SerialDispatchQueue(name = "LoginClient")
 
@@ -67,7 +67,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig) extends Login
     loginFuture = loginFuture.recover {
       case e: CancelException => Left(ErrorResponse.Cancelled)
       case ex: Throwable =>
-        HockeyApp.saveException(ex, "Unexpected error when trying to log in.")
+        tracking.exception(ex, "Unexpected error when trying to log in.")
         Left(ErrorResponse.internalError("Unexpected error when trying to log in: " + ex.getMessage))
     } flatMap { _ =>
       verbose(s"throttling, delay: $requestDelay")
