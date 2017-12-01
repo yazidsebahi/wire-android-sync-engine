@@ -120,6 +120,9 @@ object TrackingService {
   def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit =
     ZMessaging.globalModule.map(_.trackingService.exception(e, description, accountId))
 
+  def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit =
+    ZMessaging.globalModule.map(_.trackingService.track(event, accountId))
+
   trait NoReporting { self: Throwable => }
 
   private[waz] def isBot(conv: ConversationData, users: UsersStorage): Future[Boolean] =
